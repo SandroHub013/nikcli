@@ -1448,13 +1448,11 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             use tauri::Manager;
-            // A bot's gateway is on: the window goes, ADE stays in the tray (G11).
+            // A bot's gateway is on: the window goes, ADE stays in the tray (G11), once the page is asked.
             let app = target.app_handle();
             if tray::hides_on_close(app.state::<gateway::Gateway>().any_on(), app.state::<tray::Tray>().quitting()) {
                 api.prevent_close();
-                if let Err(err) = target.hide() {
-                    eprintln!("ADE: la finestra non si nasconde: {err}");
-                }
+                tray::request_hide(app);
                 return;
             }
             match manager.on_close_requested() {
@@ -2113,6 +2111,8 @@ pub fn run() {
             ade_confirm_close,
             ade_cancel_close,
             ade_close_ack,
+            tray::ade_tray_take,
+            tray::ade_hide_to_tray,
             write_clipboard,
             secrets::secret_list,
             secrets::secret_save,

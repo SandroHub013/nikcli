@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { createListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
 
 function world() {
-  const state = { at: 0, locked: false, wanted: true, listening: true, paused: false, halted: false, calls: [] as string[] }
+  const state = { at: 0, locked: false, hidden: false, wanted: true, listening: true, paused: false, halted: false, calls: [] as string[] }
   const guard = createListenGuard({
     now: () => state.at,
     isLocked: async () => state.locked,
+    isHidden: () => state.hidden,
     shouldListen: () => state.wanted,
     isListening: () => state.listening,
     isPaused: () => state.paused,
@@ -128,5 +129,21 @@ describe("listening that stopped itself to stop spending", () => {
     state.halted = false
     await tick()
     expect(state.calls).toEqual(["resume"])
+  })
+
+  /* G11 review, M1: no microphone open in a window hidden in the tray. */
+  test("hidden in the tray, listening closes and stays closed; it comes back with the window", async () => {
+    const { state, tick } = world()
+    state.hidden = true
+    await tick()
+    expect(state.calls).toEqual(["pause"])
+    expect(state.listening).toBe(false)
+    await tick()
+    await tick()
+    expect(state.calls).toEqual(["pause"])
+    state.hidden = false
+    await tick()
+    expect(state.calls).toEqual(["pause", "resume"])
+    expect(state.listening).toBe(true)
   })
 })

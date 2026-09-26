@@ -430,6 +430,13 @@ export const it = {
     `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
+  "tray.hide.working": (count: number) =>
+    `Un gateway è acceso: ADE va nella tray e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
+  "tray.hide.keepSessions": "Nascondi, le sessioni continuano",
+  "tray.hide.closeSessions": "Chiudi le sessioni e nascondi",
+  "tray.hide.cancel": "Annulla",
+  "tray.hide.notice":
+    "ADE resta nella tray finché un gateway è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
   "bell.dismiss": "Scarta",
 
