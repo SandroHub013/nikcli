@@ -198,6 +198,35 @@ describe("a sheet on Kobalte's Dialog", () => {
     expect(document.activeElement).toBe(terminal)
   })
 
+  test("around a panel with its own box and title (Settings): a bare frame, named by that title", async () => {
+    const root = document.createElement("div")
+    document.body.append(root)
+    let panel: HTMLDivElement | undefined
+    cleanup = render(
+      () =>
+        createComponent(Sheet, {
+          component: "voice-settings-overlay",
+          onClose: () => {},
+          surface: false,
+          labelledBy: "voice-panel-title",
+          ref: (element: HTMLDivElement) => (panel = element),
+          mount: root,
+          get children() {
+            const own = document.createElement("div")
+            own.innerHTML = '<h2 id="voice-panel-title">Impostazioni</h2><button>Fatto</button>'
+            return own
+          },
+        }),
+      root,
+    )
+    await tick()
+    expect(panel!.getAttribute("role")).toBe("dialog")
+    expect(panel!.getAttribute("aria-modal")).toBe("true")
+    expect(panel!.getAttribute("aria-labelledby")).toBe("voice-panel-title")
+    expect(panel!.getAttribute("data-layout")).toBe("frame")
+    expect(panel!.contains(document.activeElement)).toBe(true)
+  })
+
   test("it is a modal dialog named by its title, drawn as ADE's overlay and surface", async () => {
     const { panel, root } = await openSheet()
     expect(panel.getAttribute("role")).toBe("dialog")

@@ -25,6 +25,7 @@ import {
 } from "../settings/reply-voices"
 import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
 import { InstallBar, VoicePackBox } from "./voice-pack-box"
+import { panelEscape, panelFrame, panelListensEarly, panelTrapsTab } from "./panel-keys"
 import {
   createEffect,
   createMemo,
@@ -182,6 +183,12 @@ export interface VoiceSettingsPanelProps {
   subtitle?: string
   /** Whether the panel is rendered as a standalone inline component rather than an overlay dialog. */
   inline?: boolean
+  /**
+   * The host draws the dialog around the panel (ADE's Sheet): its overlay,
+   * focus trap, Escape and press outside are the host's, and the panel draws
+   * none of its own. See `panel-keys.ts`.
+   */
+  framed?: boolean
   /** Optional additional CSS class names. */
   class?: string
   /** Optional initial section ID to activate when opening the panel. */
@@ -385,6 +392,7 @@ function radioGroupKeys(apply: (value: string) => void) {
 }
 
 export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
+  const frame = () => panelFrame(props)
   const platform = getPlatform()
   let panelRef: HTMLDivElement | undefined
   let bodyRef: HTMLDivElement | undefined
@@ -655,7 +663,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     ) {
       updateSettings({ activation: DEFAULT_VOICE_SETTINGS.activation })
     }
-    if (!props.inline && panelRef) {
+    // Framed, the host's dialog takes the focus.
+    if (frame() === "standalone" && panelRef) {
       panelRef.focus()
     }
   })
@@ -721,7 +730,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   // Global keyboard listener for modal Escape and shortcut recording cancellation
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
-      if (recordingField() !== null) {
+      const action = panelEscape({
+        frame: frame(),
+        recording: recordingField() !== null,
+        resetArmed: resetArmed(),
+        closable: Boolean(props.onClose),
+      })
+      if (action === "stop-recording") {
         e.preventDefault()
         e.stopPropagation()
         setRecordingField(null)
@@ -731,20 +746,20 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         return
       }
 
-      if (resetArmed()) {
+      if (action === "disarm") {
         e.preventDefault()
         setResetArmed(false)
         return
       }
 
-      if (!props.inline && props.onClose) {
+      if (action === "close") {
         e.preventDefault()
-        props.onClose()
+        props.onClose?.()
       }
     }
 
     // Modal focus trap when rendered as overlay
-    if (!props.inline && e.key === "Tab" && panelRef) {
+    if (panelTrapsTab(frame()) && e.key === "Tab" && panelRef) {
       const focusable = Array.from(
         panelRef.querySelectorAll<HTMLElement>(
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -765,10 +780,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   }
 
   createEffect(() => {
-    if (typeof window !== "undefined") {
-      window.addEventListener("keydown", handleGlobalKeyDown)
-      onCleanup(() => window.removeEventListener("keydown", handleGlobalKeyDown))
+    if (typeof window === "undefined") return
+    // Framed: before the host's dialog, which would close under the recorder.
+    if (panelListensEarly(frame())) {
+      document.addEventListener("keydown", handleGlobalKeyDown, true)
+      onCleanup(() => document.removeEventListener("keydown", handleGlobalKeyDown, true))
+      return
     }
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    onCleanup(() => window.removeEventListener("keydown", handleGlobalKeyDown))
   })
 
   /**
@@ -1011,10 +1031,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       data-inline={props.inline ? "true" : undefined}
       data-status={engineStatus().tone}
       class={props.class}
-      role={props.inline ? "region" : "dialog"}
-      aria-modal={props.inline ? undefined : "true"}
-      aria-labelledby="voice-panel-title"
-      tabIndex={props.inline ? undefined : -1}
+      // Framed, the host's dialog is the dialog, named by this panel's title.
+      role={frame() === "standalone" ? "dialog" : frame() === "inline" ? "region" : undefined}
+      aria-modal={frame() === "standalone" ? "true" : undefined}
+      aria-labelledby={frame() === "framed" ? undefined : "voice-panel-title"}
+      tabIndex={frame() === "standalone" ? -1 : undefined}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
@@ -2733,7 +2754,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
   return (
     <Show
-      when={!props.inline}
+      when={frame() === "standalone"}
       fallback={renderPanel()}
     >
       <div

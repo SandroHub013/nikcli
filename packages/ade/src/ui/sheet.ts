@@ -35,6 +35,13 @@ export interface SheetProps {
   readonly onKeyDown?: JSX.EventHandler<HTMLDivElement, KeyboardEvent>
   /** Where it renders; the shell by default. */
   readonly mount?: Node
+  /**
+   * `false` for a panel that draws its own box (the settings panel, from the
+   * voice package): the dialog is then a bare frame around it, not a surface.
+   */
+  readonly surface?: boolean
+  /** The id of the title, for a panel whose title is not a `SheetTitle`. */
+  readonly labelledBy?: string
 }
 
 /** The shell, where the theme's tokens are; `body` outside ADE (the tests). */
@@ -44,7 +51,7 @@ function shell(): Node | undefined {
 }
 
 export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
-  const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "children"])
+  const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "surface", "labelledBy", "children"])
   // What had the focus before: the button, the palette, the terminal. It gets it back.
   let opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
   let panel: HTMLDivElement | undefined
@@ -104,7 +111,12 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
             },
             get children() {
               return createComponent(Dialog.Content, {
-                "data-layout": "surface",
+                get "data-layout"() {
+                  return own.surface === false ? "frame" : "surface"
+                },
+                get "aria-labelledby"() {
+                  return own.labelledBy
+                },
                 get "data-size"() {
                   return own.size ?? "md"
                 },

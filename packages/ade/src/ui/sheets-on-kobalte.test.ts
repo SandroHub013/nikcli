@@ -23,4 +23,16 @@ describe("lint: the sheets are Kobalte dialogs", () => {
       expect([file, view.includes("<Overlay") || view.includes("<Surface")]).toEqual([file, false])
     }
   })
+
+  test("lint: the Settings panel is framed by a Sheet, named by the panel's own title", () => {
+    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const start = workbench.indexOf('<Sheet component="voice-settings-overlay"')
+    expect(start).toBeGreaterThan(-1)
+    const end = workbench.indexOf("</Sheet>", start)
+    expect(end).toBeGreaterThan(start)
+    const sheet = workbench.slice(start, end)
+    expect(sheet.includes('labelledBy="voice-panel-title"')).toBe(true)
+    expect(sheet.includes("surface={false}")).toBe(true)
+    expect(/<VoiceSettingsPanel\s+framed\b/.test(sheet)).toBe(true)
+  })
 })
