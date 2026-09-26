@@ -393,10 +393,27 @@ fn install_voice(
     let voice_files: [(&Download, PathBuf); 2] = [(&wanted.config, config), (&wanted.model, model)];
     let files_total = 3;
 
+    /*
+     * And the size of the two of them, only where it is the whole story.
+     *
+     * A cold install fetches the runtime as well, and those bytes are published
+     * like the others, so a total that counted only the voice's two files is a
+     * bar that reaches its end during the runtime and then walks past it — which
+     * is the first install, the one everybody sees. A runtime already in place
+     * means the bytes leaving are the two files and nothing else, and then the
+     * total is exact.
+     *
+     * So: no runtime, no total. The panel draws by files, which is what
+     * `InstallProgress` says a `None` total means — nothing to draw, not nothing
+     * downloaded. The alternative, pinning the runtime's size, is a fourth
+     * number to keep right for a bar that files already count.
+     */
+    let bytes_total = if runtime_ready(root) { bytes_pending(&voice_files) } else { None };
+
     // The lock is already held here, and the state comes after it: see `hold`.
     // And the budget starts now, because an install that waited its turn has
     // not spent any of its time.
-    let install = installer.begin(slot, files_total, bytes_pending(&voice_files), Instant::now() + installer.deadline());
+    let install = installer.begin(slot, files_total, bytes_total, Instant::now() + installer.deadline());
     // Closed however this ends: `running` is read by the panel, and an install
     // that is over must not leave it true.
     let mut closed = Closed { install: &install, closed: false };
@@ -1786,6 +1803,62 @@ mod tests {
     }
 
     #[test]
+    fn a_cold_install_has_no_byte_total_because_the_runtime_bytes_are_published_too() {
+        let root = test_root("totale-a-freddo");
+        let installer = Installer::default();
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        // A freddo l'install parte dall'archivio del runtime, e quei byte vengono
+        // pubblicati come gli altri. Un totale che contasse solo i due file della
+        // voce farebbe camminare la barra oltre il proprio fondo, che è il 100%
+        // che l'utente vede alla prima installazione. L'esito qui è un errore —
+        // l'archivio finto non si lascia scompattare — e non è quello che il
+        // test guarda: quello che guarda è lo stato pubblicato prima.
+        let _ = install_voice(
+            &installer,
+            &slot,
+            &root,
+            wanted_voice("ugo"),
+            &Scripted::new(vec![9_u8; 4096], Ending::Whole),
+            &FingerprintInProcess,
+        );
+        let after = installer.progress_of(PIPER);
+        assert_eq!(after.bytes_total, None, "a freddo il totale dei byte non è noto: il pannello disegna per file");
+        assert!(after.bytes_done > 0, "i byte scaricati sono pubblicati anche senza un totale");
+        assert_eq!(after.files_total, 3, "i file si contano sempre");
+    }
+
+    #[test]
+    fn a_warm_install_keeps_the_total_and_never_passes_it() {
+        let root = root_with_runtime("totale-a-caldo");
+        let installer = Installer::default();
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        // Runtime presente e voce già scaricata: l'install non ha niente da
+        // prendere, e i due file sono già al loro posto. Il totale è la somma di
+        // quello che manca, che qui è zero — ed è questo che distingue il ramo
+        // caldo da quello freddo, dove il totale è ignoto.
+        let model = model_path(&root, "ugo");
+        std::fs::create_dir_all(model.parent().unwrap()).unwrap();
+        std::fs::write(&model, b"gia' qui").unwrap();
+        std::fs::write(model.with_extension("onnx.json"), b"gia' qui").unwrap();
+        let outcome = install_voice(
+            &installer,
+            &slot,
+            &root,
+            wanted_voice("ugo"),
+            &Scripted::new(vec![3_u8; 32], Ending::Whole),
+            &FingerprintInProcess,
+        );
+        assert!(outcome.is_ok(), "a caldo, con tutto già in posto, l'install è una no-op");
+        let after = installer.progress_of(PIPER);
+        let total = after.bytes_total.expect("a caldo i byte si contano");
+        assert!(after.bytes_done <= total, "{} byte su un totale di {total}", after.bytes_done);
+        assert_eq!(after.files_done, after.files_total, "la barra arriva in fondo");
+        assert!(!after.running);
+    }
+
+    #[test]
     fn with_the_runtime_already_there_the_bar_reaches_the_end_and_knows_its_bytes() {
         let root = root_with_runtime("runtime-pronto");
         let installer = Installer::default();
@@ -2070,6 +2143,13 @@ mod tests {
         assert!(!installer.cancel_of("kokoro"), "non c'è installazione in corso da fermare");
         // And it does not leave a cancelled mark on the next one.
         assert!(!installer.progress_of("kokoro").cancelled);
+    }
+
+    /// The voice the panel would have installed, out of the catalog the app
+    /// ships: what the panel names is a catalog voice, and the install reads its
+    /// two files by name.
+    fn wanted_voice(id: &str) -> &'static Voice {
+        VOICES.iter().find(|voice| voice.id == id).expect("una voce del catalogo")
     }
 
     /// A voice of the catalog's shape whose two files are `body`, digests
