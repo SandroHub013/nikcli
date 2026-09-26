@@ -143,13 +143,31 @@
 }
 
 [data-slot="chip-option"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-3);
   padding: var(--ade-space-2) var(--ade-space-4);
   color: var(--ade-text-soft);
   font-size: var(--ade-font-sm);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+[data-slot="chip-option-label"] {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+}
+
+/* The provider, on the right of every row: quieter than the name. */
+[data-slot="chip-option-detail"] {
+  flex: none;
+  margin-left: auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
 }
 
 [data-slot="chip-option"][data-active] {

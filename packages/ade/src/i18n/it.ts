@@ -1348,7 +1348,6 @@ export const it = {
   // Chat
   "chat.model.label": "Modello",
   "chat.model.free": "gratis",
-  "picker.paid": "a consumo",
   "picker.search": "Cerca un modello",
   "picker.recent": "Recenti",
   "picker.free": "Gratuiti",
@@ -1361,6 +1360,8 @@ export const it = {
   "picker.retry": "Riprova",
   "picker.effort": "Sforzo",
   "picker.effortDefault": "predefinito",
+  "effort.none": "nessuno",
+  "effort.thinking": "ragionamento",
   "effort.minimal": "minimo",
   "effort.low": "basso",
   "effort.medium": "medio",

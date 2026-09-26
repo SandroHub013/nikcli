@@ -450,19 +450,19 @@ describe("formatModelPrice and formatModelLabel", () => {
   test("formats free models in Italian as gratis", () => {
     setLocalePreference("it")
     expect(formatModelPrice({ input: 0, output: 0 }, true)).toBe("gratis")
-    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash (gratis)")
+    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash · gratis")
   })
 
   test("formats free models in English as free", () => {
     setLocalePreference("en")
     expect(formatModelPrice({ input: 0, output: 0 }, true)).toBe("free")
-    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash (free)")
+    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash · free")
     setLocalePreference("it")
   })
 
   test("formats paid models with input and output $/M tokens", () => {
     expect(formatModelPrice({ input: 3, output: 15 }, false)).toBe("$3/$15 /M")
-    expect(formatModelLabel("Claude Sonnet", { input: 3, output: 15 }, false)).toBe("Claude Sonnet ($3/$15 /M)")
+    expect(formatModelLabel("Claude Sonnet", { input: 3, output: 15 }, false)).toBe("Claude Sonnet · $3/$15 /M")
   })
 
   test("formats paid models with equal input and output price", () => {
@@ -474,10 +474,10 @@ describe("formatModelPrice and formatModelLabel", () => {
     // A hosted provider that prices at 0 and bills by characters instead: the
     // dash says the price is not per token, without claiming it is free.
     expect(formatModelPrice({ input: 0, output: 0 }, false)).toBe("—")
-    expect(formatModelLabel("Kilo 7B", { input: 0, output: 0 }, false)).toBe("Kilo 7B (—)")
+    expect(formatModelLabel("Kilo 7B", { input: 0, output: 0 }, false)).toBe("Kilo 7B · —")
     // No price data at all is not a price of zero.
     expect(formatModelPrice(undefined, false)).toBe("—")
-    expect(formatModelLabel("Sconosciuto", undefined, false)).toBe("Sconosciuto (—)")
+    expect(formatModelLabel("Sconosciuto", undefined, false)).toBe("Sconosciuto · —")
   })
 })
 
@@ -495,7 +495,7 @@ describe("modelsFromProviderList (C3)", () => {
     expect(paidModel?.label).toContain("$3/$15 /M")
 
     const freeModel = models.find((m) => m.id === "google/gemini-2.5-flash:free")
-    expect(freeModel?.label).toContain("(gratis)")
+    expect(freeModel?.label).toContain("· gratis")
   })
 
   test("in ADE Test mode includes ONLY free models (never a paid model)", () => {
@@ -513,7 +513,7 @@ describe("modelsFromProviderList (C3)", () => {
     setLocalePreference("en")
     const models = modelsFromProviderList(mockProviderList, { isTest: true })
     const freeModel = models.find((m) => m.id === "google/gemini-2.5-flash:free")
-    expect(freeModel?.label).toContain("(free)")
+    expect(freeModel?.label).toContain("· free")
     setLocalePreference("it")
   })
 

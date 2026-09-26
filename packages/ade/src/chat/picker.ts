@@ -63,7 +63,14 @@ export function pickerSections(input: {
 
 export type ChipMenuItem =
   | { readonly kind: "group"; readonly label: string }
-  | { readonly kind: "option"; readonly value: string; readonly label: string; readonly hint?: string }
+  | {
+      readonly kind: "option"
+      readonly value: string
+      readonly label: string
+      readonly hint?: string
+      /** Said apart, on the right of the row: a model's provider. */
+      readonly detail?: string
+    }
 
 /**
  * The model menu's lines, in order: the default, a kept value the catalog
@@ -87,6 +94,8 @@ export function modelMenuItems(input: {
     value: serializeModelRef(model),
     label: model.label,
     hint: `${model.providerName} · ${serializeModelRef(model)}`,
+    // On every row, not only where a name repeats (model-picker review, BASSO c).
+    detail: model.providerName,
   })
   const group = (label: string, models: readonly ChatModelChoice[]): readonly ChipMenuItem[] =>
     models.length ? [{ kind: "group", label }, ...models.map(option)] : []
@@ -119,9 +128,9 @@ export function moveActive(values: readonly string[], active: string | undefined
   return values[(at + step + values.length) % values.length]
 }
 
-/** What the chip says of a model: its name, and whether it is free. */
+/** What the chip says of a model: the same line as the menu's, «Qwen3 Coder · gratis». */
 export function modelChipLabel(model: ChatModelChoice): string {
-  return `${model.name} · ${model.free ? t("chat.model.free") : t("picker.paid")}`
+  return model.label
 }
 
 /**
@@ -154,7 +163,12 @@ export function hasEfforts(variants: readonly string[] | undefined): boolean {
   return (variants?.length ?? 0) > 0
 }
 
-const EFFORT_NAMES: Readonly<Record<string, "effort.minimal" | "effort.low" | "effort.medium" | "effort.high" | "effort.xhigh" | "effort.max">> = {
+type EffortKey = "effort.none" | "effort.minimal" | "effort.low" | "effort.medium" | "effort.high" | "effort.xhigh" | "effort.max" | "effort.thinking"
+
+/* The ids nikcli's models use, in words (model-picker review, BASSO a): «none» and «thinking» were shown raw. */
+const EFFORT_NAMES: Readonly<Record<string, EffortKey>> = {
+  none: "effort.none",
+  thinking: "effort.thinking",
   minimal: "effort.minimal",
   low: "effort.low",
   medium: "effort.medium",

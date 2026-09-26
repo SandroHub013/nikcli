@@ -66,7 +66,7 @@ describe("the catalog from /config/providers", () => {
     expect(models.map((model) => model.id)).toEqual(["qwen/qwen3-coder:free", "nvidia/nemotron:free", "anthropic/claude-sonnet-5"])
     const [qwen, nemotron, sonnet] = models
     expect(qwen).toMatchObject({ name: "Qwen3 Coder", free: true, context: 262_000, reasoning: true, tools: true, variants: ["low", "medium", "high"] })
-    expect(qwen!.label).toBe(`Qwen3 Coder (${t("chat.model.free")})`)
+    expect(qwen!.label).toBe(`Qwen3 Coder · ${t("chat.model.free")}`)
     expect(nemotron).toMatchObject({ name: "Nemotron", free: true, reasoning: false, variants: [] })
     expect(sonnet).toMatchObject({ free: false, variants: ["high"] })
     expect(JSON.stringify(models)).not.toContain("sk-finta")
@@ -143,7 +143,8 @@ describe("the Chat reads the one catalog", () => {
 })
 
 describe("models of one name", () => {
-  test("told apart by their provider, the others left as they are", () => {
+  /* Model-picker review, BASSO c: the provider is on every row of the menu (`picker.test.ts`), not glued to repeated names. */
+  test("keep their name; the menu tells them apart by the provider it shows on every row", () => {
     const configured = {
       providers: [
         { id: "opencode", name: "OpenCode Zen", models: { "nemotron-free": { id: "nemotron-free", name: "Nemotron 3 Ultra", cost: { input: 0, output: 0 } } } },
@@ -151,11 +152,9 @@ describe("models of one name", () => {
       ],
       default: {},
     } as unknown as ConfigProviders
-    expect(modelsFromConfigProviders(configured).map((model) => model.name)).toEqual([
-      "Nemotron 3 Ultra · OpenCode Zen",
-      "Nemotron 3 Ultra · OpenRouter",
-      "Solo",
-    ])
-    expect(modelsFromConfigProviders(configured)[1]!.label).toBe(`Nemotron 3 Ultra · OpenRouter (${t("chat.model.free")})`)
+    const models = modelsFromConfigProviders(configured)
+    expect(models.map((model) => model.name)).toEqual(["Nemotron 3 Ultra", "Nemotron 3 Ultra", "Solo"])
+    expect(models.map((model) => model.providerName)).toEqual(["OpenCode Zen", "OpenRouter", "OpenRouter"])
+    expect(models[1]!.label).toBe(`Nemotron 3 Ultra · ${t("chat.model.free")}`)
   })
 })

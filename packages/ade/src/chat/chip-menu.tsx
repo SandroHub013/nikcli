@@ -183,7 +183,10 @@ export function ChipMenu(props: ChipMenuProps) {
                     onPointerEnter={() => setActive(item.value)}
                     onClick={() => choose(item.value)}
                   >
-                    {item.label}
+                    <span data-slot="chip-option-label">{item.label}</span>
+                    <Show when={item.detail}>
+                      <span data-slot="chip-option-detail">{item.detail}</span>
+                    </Show>
                   </li>
                 )
               }

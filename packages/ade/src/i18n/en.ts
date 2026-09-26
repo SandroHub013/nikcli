@@ -1337,7 +1337,6 @@ export const en: Messages = {
   // Chat
   "chat.model.label": "Model",
   "chat.model.free": "free",
-  "picker.paid": "pay per use",
   "picker.search": "Search models",
   "picker.recent": "Recent",
   "picker.free": "Free",
@@ -1350,6 +1349,8 @@ export const en: Messages = {
   "picker.retry": "Retry",
   "picker.effort": "Effort",
   "picker.effortDefault": "default",
+  "effort.none": "none",
+  "effort.thinking": "thinking",
   "effort.minimal": "minimal",
   "effort.low": "low",
   "effort.medium": "medium",

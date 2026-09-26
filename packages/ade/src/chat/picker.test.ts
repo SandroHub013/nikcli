@@ -21,7 +21,7 @@ const model = (providerID: string, modelID: string, name: string, free: boolean)
   name,
   providerName: providerID === "openrouter" ? "OpenRouter" : "OpenCode Zen",
   free,
-  label: `${name} (${free ? "gratis" : "$3/M"})`,
+  label: `${name} · ${free ? "gratis" : "$3/M"}`,
 })
 
 const QWEN = model("openrouter", "qwen/qwen3-coder:free", "Qwen3 Coder", true)
@@ -84,9 +84,9 @@ describe("the model menu's sections", () => {
       { kind: "option", value: "", label: "predefinito di nikcli" },
       { kind: "option", value: "openrouter/old/model:free", label: "«openrouter/old/model:free»", hint: "openrouter/old/model:free" },
       { kind: "group", label: t("picker.recent") },
-      { kind: "option", value: "openrouter/qwen/qwen3-coder:free", label: QWEN.label, hint: "OpenRouter · openrouter/qwen/qwen3-coder:free" },
+      { kind: "option", value: "openrouter/qwen/qwen3-coder:free", label: QWEN.label, hint: "OpenRouter · openrouter/qwen/qwen3-coder:free", detail: "OpenRouter" },
       { kind: "group", label: t("picker.paidGroup") },
-      { kind: "option", value: "openrouter/anthropic/claude-sonnet-5", label: SONNET.label, hint: "OpenRouter · openrouter/anthropic/claude-sonnet-5" },
+      { kind: "option", value: "openrouter/anthropic/claude-sonnet-5", label: SONNET.label, hint: "OpenRouter · openrouter/anthropic/claude-sonnet-5", detail: "OpenRouter" },
     ])
   })
 
@@ -126,9 +126,12 @@ describe("the keys in the menu", () => {
 })
 
 describe("what the chip says", () => {
-  test("the model's name and whether it is free; a value the list lacks as the fallback reads it", () => {
-    expect(modelChipLabel(QWEN)).toBe(`Qwen3 Coder · ${t("chat.model.free")}`)
-    expect(modelChipLabel(SONNET)).toBe(`Claude Sonnet 5 · ${t("picker.paid")}`)
+  /* Model-picker review, BASSO b: one form in the chip and in the menu, no brackets. */
+  test("the model as the menu says it; a value the list lacks as the fallback reads it", () => {
+    expect(modelChipLabel(QWEN)).toBe("Qwen3 Coder · gratis")
+    expect(modelChipLabel(SONNET)).toBe(SONNET.label)
+    const items = modelMenuItems({ sections: pickerSections({ models: [QWEN] }), models: [QWEN] })
+    expect(items.some((item) => item.kind === "option" && item.label === modelChipLabel(QWEN))).toBe(true)
     const fallback = (value: string) => `id ${value}`
     expect(chipText("openrouter/qwen/qwen3-coder:free", ALL, fallback, "predefinito")).toBe(modelChipLabel(QWEN))
     // The catalog not read yet, or failed: the current model all the same, never an empty chip.
@@ -152,9 +155,22 @@ describe("the effort chip", () => {
     expect(hasEfforts(undefined)).toBe(false)
   })
 
-  test("the usual levels in the user's language, a model's own name as it is", () => {
+  /* Model-picker review, BASSO a: «none» and «thinking» were shown raw. */
+  test("the levels nikcli's models use in the user's language; an unknown one as it is", () => {
     expect(effortLabel("medium")).toBe(t("effort.medium"))
     expect(effortLabel("xhigh")).toBe(t("effort.xhigh"))
-    expect(effortLabel("thinking")).toBe("thinking")
+    expect(effortLabel("none")).toBe(t("effort.none"))
+    expect(effortLabel("thinking")).toBe(t("effort.thinking"))
+    expect(effortLabel("none")).not.toBe("none")
+    expect(effortLabel("turbo-9")).toBe("turbo-9")
+  })
+
+  /* Model-picker review, BASSO c: the provider on every row, not only where a name repeats. */
+  test("every model row says its provider apart", () => {
+    const zen = { ...QWEN, providerID: "opencode", modelID: "qwen3", providerName: "OpenCode Zen" }
+    const items = modelMenuItems({ sections: pickerSections({ models: [QWEN, zen, GEMMA] }), models: [QWEN, zen, GEMMA] })
+    const rows = items.filter((item) => item.kind === "option")
+    expect(rows.map((row) => (row.kind === "option" ? row.detail : undefined))).toEqual(["OpenRouter", "OpenCode Zen", "OpenRouter"])
+    expect(rows.map((row) => (row.kind === "option" ? row.label : undefined))).toEqual([QWEN.label, QWEN.label, GEMMA.label])
   })
 })
