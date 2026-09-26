@@ -545,6 +545,8 @@ export const en: Messages = {
   "gateway.retrust": (name) =>
     `The bot «${name}» or its project's configuration changed since you approved them: open ADE on the computer, approve them again, then write to me.`,
   "gateway.noProject": "This gateway has no project: in ADE switch it off and on again, choosing one.",
+  "gateway.noProxy":
+    "On Discord the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Discord bot will not get there. Telegram has no such problem.",
   "gateway.ownerOnly": (runner) => `This bot runs on ${runner} with the owner's account: it answers the owner only.`,
   "gateway.empty": "The turn ended without an answer.",
   "gateway.failed": (problem) => `The turn did not work: ${problem}`,
