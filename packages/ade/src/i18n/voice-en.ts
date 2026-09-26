@@ -171,6 +171,8 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.kokoro.licence": "Kokoro-82M model, Apache-2.0.",
   "vui.replies.kokoroItalian": "The Kokoro voices are English: a reply in Italian is read by Ugo or Paola, of the same gender.",
   "vui.replies.test": "Try the voice",
+  "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
+  "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
   "vui.pack.installing": "Installing",
   "vui.pack.bytesOf": (done, total, percent) => `${done} of ${total} (${percent}%)`,
   "vui.pack.cancel": "Cancel",

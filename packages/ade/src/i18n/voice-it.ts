@@ -172,6 +172,8 @@ export const voiceIt = {
   "vui.reply.kokoro.licence": "Modello Kokoro-82M, Apache-2.0.",
   "vui.replies.kokoroItalian": "Le voci Kokoro sono inglesi: una risposta in italiano la legge Ugo o Paola, dello stesso genere.",
   "vui.replies.test": "Prova la voce",
+  "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
+  "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
   "vui.pack.installing": "Installazione in corso",
   "vui.pack.bytesOf": (done: string, total: string, percent: string) => `${done} di ${total} (${percent}%)`,
   "vui.pack.cancel": "Annulla",

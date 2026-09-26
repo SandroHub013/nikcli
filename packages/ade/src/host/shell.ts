@@ -217,6 +217,19 @@ export interface Host {
   ttsPiperStop?: () => Promise<{ busy: boolean }>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
+  /** K3: how the install of a provider's files is going, running or just ended. */
+  ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
+  /** K3: stops the install under way for a provider; whether there was one. */
+  ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
+  /**
+   * K4b: a local provider's pack. Undefined: this build cannot run it — the
+   * command is not there yet, or the host says it is not supported.
+   */
+  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
+  /** K4b: downloads a provider's pack, checked against pinned digests. */
+  ttsLocalInstall?: (provider: string) => Promise<void>
+  /** K4b: removes a provider's pack from disk. */
+  ttsLocalDelete?: (provider: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -352,6 +365,7 @@ export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
+import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 
@@ -681,6 +695,38 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsOpenVoiceSource(voice) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_open_voice_source", { voiceId: voice })
+    },
+
+    async ttsInstallStatus(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<InstallProgress>("tts_install_status", { provider })
+    },
+
+    async ttsInstallCancel(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ cancelled: boolean }>("tts_install_cancel", { provider })
+    },
+
+    /*
+     * The names are K4b's: `tts_local_*` with the provider as a parameter
+     * (Kokoro plan, K4). Until that is in the build the command is missing,
+     * the call fails, and the panel says Kokoro is not available here.
+     */
+    async ttsLocalStatus(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      const status = await invoke<{ supported?: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })
+      if (status.supported === false) return undefined
+      return { installed: Boolean(status.installed), ...(typeof status.sizeBytes === "number" ? { sizeBytes: status.sizeBytes } : {}) }
+    },
+
+    async ttsLocalInstall(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_install", { provider })
+    },
+
+    async ttsLocalDelete(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_delete", { provider })
     },
 
     async ttsPiperSpeak(voice, text, token, lang) {
