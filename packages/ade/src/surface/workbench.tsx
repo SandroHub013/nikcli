@@ -49,6 +49,7 @@ import {
   planFork,
   planLastHere,
   planMint,
+  startingState,
   mintMark,
   MintLedger,
   lastHereBesideMints,
@@ -6539,15 +6540,15 @@ export function Workbench() {
      * they make it in the terminal like anywhere else. The worktree board still
      * lists and integrates the trees that exist — it just stops making them.
      */
+    const starting = startingState({ task, resumed, typeIntoResumed })
     try {
-      const hasTask = Boolean(task.trim())
       setWb(w => updatePane(w, paneId, {
         cwd: workDir,
         tree: launched?.worktree && launched.tree
           ? launched.tree
           : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
-        status: hasTask ? "working" : "idle",
-        activity: resumed ? "resumed" : (hasTask ? "running" : "ready"),
+        status: starting.status,
+        activity: starting.activity,
         // Saved, so the next start can read what this spawn reported last.
         linkNonce: nonce,
         // Another conversation than the one followed: its folder no longer applies.
@@ -6745,7 +6746,7 @@ export function Workbench() {
       // Not typed when the session was resumed: the agent already has the
       // thread, and sending the original prompt again would ask for the whole
       // job a second time.
-      if (task.trim() && (!resumed || typeIntoResumed)) {
+      if (starting.typesTask) {
         const startedAt = Date.now()
         const poll = setInterval(() => {
           // The pane was closed, or the process died, while we were waiting.

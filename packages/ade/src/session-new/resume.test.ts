@@ -23,6 +23,7 @@ import {
   MintLedger,
   lastHereBesideMints,
   mintMark,
+  startingState,
 } from "./resume"
 
 describe("planStart", () => {
@@ -653,5 +654,47 @@ describe("a conversation minted for another open pane is not «here»", () => {
     expect(workbench).toContain("const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`")
     expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .map((pane) => mintMark(pane.id))")
     expect(workbench).toContain("planLastHere(agentId, cwd, excluded, marks)")
+  })
+})
+
+/*
+ * Prova dal vivo 7, 1b rifatta: the live pane, with a task, reopened its own
+ * conversation and was not handed the task again, yet it started "working";
+ * its terminal went quiet and it became «Disponibile», not «Sessione ripresa».
+ */
+describe("a resumed start that types nothing is idle, and says it was resumed", () => {
+  test("resumed with a task that is not typed: idle, resumed", () => {
+    expect(startingState({ task: "Rispondi OK.", resumed: true, typeIntoResumed: false })).toEqual({
+      typesTask: false,
+      status: "idle",
+      activity: "resumed",
+    })
+  })
+
+  test("the other starts keep what they said", () => {
+    expect(startingState({ task: "", resumed: true, typeIntoResumed: false })).toMatchObject({ status: "idle", activity: "resumed" })
+    expect(startingState({ task: "Rispondi OK.", resumed: true, typeIntoResumed: true })).toEqual({
+      typesTask: true,
+      status: "working",
+      activity: "resumed",
+    })
+    expect(startingState({ task: "Rispondi OK.", resumed: false, typeIntoResumed: false })).toEqual({
+      typesTask: true,
+      status: "working",
+      activity: "running",
+    })
+    expect(startingState({ task: "  ", resumed: false, typeIntoResumed: false })).toEqual({
+      typesTask: false,
+      status: "idle",
+      activity: "ready",
+    })
+  })
+
+  test("the workbench sets the pane and types the task by the same rule", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const starting = startingState({ task, resumed, typeIntoResumed })")
+    expect(workbench).toContain("status: starting.status,")
+    expect(workbench).toContain("if (starting.typesTask) {")
+    expect(workbench).not.toContain('status: hasTask ? "working" : "idle",')
   })
 })

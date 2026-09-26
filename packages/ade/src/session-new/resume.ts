@@ -560,6 +560,28 @@ export function lastTakenFor<P extends { id: string; agent?: string; model?: str
  * never said at a restart, and the folder was forgotten at every one
  * (lettura di Mimo, F4).
  */
+/**
+ * Whether a start types its task, and what the pane says it is doing then.
+ *
+ * A resumed conversation is not handed its task again (the agent already has
+ * the thread) unless the user has just written it. The pane's status followed
+ * the task alone: a resumed pane with a task was "working" with nothing
+ * typed, and once its terminal went quiet the quiet check turned it into
+ * "Disponibile", losing «Sessione ripresa» (prova dal vivo 7, 1b rifatta).
+ */
+export function startingState(input: { task: string; resumed: boolean; typeIntoResumed: boolean }): {
+  typesTask: boolean
+  status: "working" | "idle"
+  activity: "resumed" | "running" | "ready"
+} {
+  const typesTask = Boolean(input.task.trim()) && (!input.resumed || input.typeIntoResumed)
+  return {
+    typesTask,
+    status: typesTask ? "working" : "idle",
+    activity: input.resumed ? "resumed" : typesTask ? "running" : "ready",
+  }
+}
+
 export function openedConversation(plan: ResumePlan | undefined, minted: string | undefined, saved: string | undefined): string | undefined {
   if (minted) return minted
   return plan?.kind === "resume" && plan.via === "id" ? saved : undefined
