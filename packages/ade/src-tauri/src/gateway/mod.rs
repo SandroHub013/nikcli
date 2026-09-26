@@ -13,6 +13,7 @@
 mod adapter;
 mod authz;
 mod chunk;
+mod discord;
 mod hub;
 mod known;
 mod markdown_v2;
@@ -111,11 +112,13 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     Ok(state.0.get_or_init(|| Arc::new(made)).clone())
 }
 
-/// The adapter for `platform`, reading on from `cursor`. Discord and Slack
-/// come in their own pieces.
+/// The adapter for `platform`, reading on from `cursor`. Slack comes in
+/// its own piece.
 fn adapter_for(platform: Platform, token: &str, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     match platform {
         Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(token, cursor)?)),
+        // `new` already hands back a reference, as the socket task keeps one too.
+        Platform::Discord => Ok(discord::Discord::new(token, cursor)? as Arc<dyn Adapter>),
         other => Err(format!("il gateway per {} non è ancora disponibile", other.id())),
     }
 }
