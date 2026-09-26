@@ -404,6 +404,22 @@ export function resumePromise(input: {
 }
 
 /**
+ * Whether ADE has to tell the user that a conversation of this agent is gone.
+ *
+ * Only an agent that keeps conversations can have lost one. A plain terminal is
+ * in the table with no recipe, so `resumePromise` answers `none` for one
+ * because there was never a conversation to reopen — and the strip announcing a
+ * lost one says the opposite of the truth. It showed on every Terminal pane.
+ */
+export function lostConversation(
+  agentId: string,
+  promise: "exact" | "last" | "none",
+  resumed: boolean,
+): boolean {
+  return !resumed && promise === "none" && RESUME[agentId] !== undefined
+}
+
+/**
  * A conversation id, in the form every one of these CLIs asks for.
  *
  * `crypto.randomUUID` and not a counter: the id is handed to a program that

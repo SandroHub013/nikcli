@@ -119,6 +119,8 @@ export const voiceEn: VoiceMessages = {
   "vui.panel.title": "Voice control panel",
   "vui.panel.subtitle": "Mode, activation, shortcuts and speech engines",
   "vui.panel.close": "Close settings (Esc)",
+  "vui.panel.resetVoice": "Reset the voice",
+  "vui.panel.resetVoiceConfirm": "Confirm?",
   "vui.panel.sections": "Settings sections",
   "vui.mode.title": "Default mode",
   "vui.mode.desc": "The assistant and dictation are two separate things, both available: pick one with the orb or the microphone in the bar, or with its shortcut. Here you only choose which one starts when the microphone opens without saying which.",

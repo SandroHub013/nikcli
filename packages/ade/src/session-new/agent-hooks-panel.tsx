@@ -95,6 +95,10 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   <p data-slot="hook-note">{t("hooks.plugin")}</p>
                 </Show>
 
+                <Show when={state()?.foreign}>
+                  <p data-slot="hook-note">{t("hooks.foreign")}</p>
+                </Show>
+
                 <Show when={state()?.outdated}>
                   <p data-slot="hook-note">{t("hooks.outdated")}</p>
                 </Show>
@@ -112,6 +116,10 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   <p data-slot="hook-note">{state()?.error}</p>
                 </Show>
 
+                {/* Somebody else's ADE wrote this one. Which ADE is older is not
+                    knowable from here, so this build does not offer to change it:
+                    on a test build that would rewrite the official ADE's hooks. */}
+                <Show when={!state()?.foreign}>
                 <div data-slot="hook-actions">
                   <button
                     type="button"
@@ -132,6 +140,7 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     </button>
                   </Show>
                 </div>
+                </Show>
               </li>
             )
           }}

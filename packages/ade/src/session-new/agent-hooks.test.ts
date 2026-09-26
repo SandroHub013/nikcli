@@ -726,6 +726,34 @@ describe("an earlier ADE's hook script", () => {
     expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
   })
 
+  test("on a test build the script is the official ADE's: said to be foreign, and left alone", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    // The official ADE's script, on disk, where the user's Claude sessions read it.
+    state.digest = sha("# lo script dell'ADE ufficiale")
+    // What `dev.tsx` sets for ADE Test.
+    document.documentElement.dataset.adeBuild = "test"
+    try {
+      const status = await readHookStatus(host, claude)
+      // Named as another build's, and NOT as this one's to update: on a test
+      // build that would rewrite the official ADE's hooks.
+      expect(status).toMatchObject({ installed: true, foreign: true })
+      expect(status.outdated).toBeUndefined()
+    } finally {
+      delete document.documentElement.dataset.adeBuild
+    }
+  })
+
+  test("on a release build the same script is an earlier ADE's, and the update is offered", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    state.digest = sha("# lo script di un ADE precedente")
+    // No `adeBuild`: the official ADE, where an older hook is this ADE's to update.
+    const status = await readHookStatus(host, claude)
+    expect(status).toMatchObject({ installed: true, outdated: true })
+    expect(status.foreign).toBeUndefined()
+  })
+
   test("this version's script with a configuration to bring up to date is still written: no dialog comes of that", async () => {
     const oldConfig = JSON.stringify({
       hooks: { SessionStart: [{ matcher: "startup|resume|clear", hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }] }] },

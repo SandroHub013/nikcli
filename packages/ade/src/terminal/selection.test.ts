@@ -247,8 +247,12 @@ describe("terminal selection & copy (S50)", () => {
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
     const setup = (selected: boolean) => {
       const listeners: Array<() => void> = []
+      let isSelected = selected
       const terminal = {
-        hasSelection: () => selected,
+        hasSelection: () => isSelected,
+        clearSelection: () => {
+          isSelected = false
+        },
         onSelectionChange: (listener: () => void) => {
           listeners.push(listener)
           return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) }
@@ -266,7 +270,7 @@ describe("terminal selection & copy (S50)", () => {
         if (selected) for (const listener of [...listeners]) listener()
         await tick()
       }
-      return { drag, copies: () => copies, stop }
+      return { drag, copies: () => copies, stop, selected: () => isSelected }
     }
 
     it("copies once when the selection is reported after the release", async () => {
@@ -279,6 +283,14 @@ describe("terminal selection & copy (S50)", () => {
       const { drag, copies } = setup(false)
       await drag()
       expect(copies()).toBe(0)
+    })
+
+    it("takes the selection away once it has been copied", async () => {
+      const { drag, selected } = setup(true)
+      await drag()
+      // Left standing, a resize repainted the block over different text and
+      // only Ctrl+C cleared it, which is what the key path always did.
+      expect(selected()).toBe(false)
     })
 
     it("stops listening when detached", async () => {
