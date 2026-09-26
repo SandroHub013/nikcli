@@ -312,7 +312,7 @@ describe("preview type security detection and path resolution", () => {
   })
 })
 
-describe("top bar narrow window layout and 420px document scrollWidth", () => {
+describe("top bar narrow window layout, and what the eye has to check", () => {
   test("lint: under 1100px the queue buttons keep the vial and the pill, and the project's facts go in the «i»", () => {
     const css = readFileSync(join(__dirname, "../dev.css"), "utf-8")
     const narrow = css.slice(css.indexOf("@media (max-width: 1099.98px)"))
@@ -351,85 +351,34 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     expect(sourceIndex).toBeGreaterThan(wrapCloseIndex)
   })
 
-  test("at 420px window width, document scrollWidth is exactly 420 both with and without proposals", () => {
-    const windowWidth = 420
-    const sidebarWidth = 200 // When sidebar is open on the left
-
-    // Geometry of topbar elements at 420px:
-    // Left group (NikLogo 30px + ProjectBar ~80px + gaps)
-    const leftGroupWidth = 120
-
-    // Center group with compact tab padding (6px per side vs 10px):
-    // 4 tabs (Agenti ~48px, Codice ~46px, Bot ~30px, Chat ~36px) = 160px
-    const tabsWidth = 160
-    const paletteBtnWidth = 24
-    const centerGaps = 2 * 3
-
-    // Window controls and end side group geometry:
-    // Top bar width is 420px, right padding is 6px (--ade-space-3)
-    const barPaddingRight = 6
-    // In narrow mode, ade-window-controls margin-right is calc(-1 * var(--ade-space-3)) = -6px
-    const windowControlsMarginRight = -6
-    // End group right boundary in the document:
-    // With margin-right matching padding-right, the controls flush with the outer 420px container
-    const windowControlsRight = windowWidth - barPaddingRight - windowControlsMarginRight
-    expect(windowControlsRight).toBe(420)
-
-    // Previous bug check: if margin-right had remained -12px (desktop default) while padding was 6px:
-    const prevBuggyRight = windowWidth - barPaddingRight - (-12)
-    expect(prevBuggyRight).toBe(426) // Document measured 426px due to 6px mismatch
-
-    // Case 1: Without proposals (designWaiting = 0)
-    const centerWidthWithoutProposals = tabsWidth + paletteBtnWidth + centerGaps
-    // Centered over session area: left offset = 200 + (420 - 200)/2 = 310px
-    // But constrained by max-width: calc(100% - 16px) => 404px max right bound
-    const centerStartWithout = Math.max(leftGroupWidth + 8, Math.min(310 - centerWidthWithoutProposals / 2, windowWidth - centerWidthWithoutProposals - 8))
-    const centerEndWithout = centerStartWithout + centerWidthWithoutProposals
-    expect(centerEndWithout).toBeLessThanOrEqual(windowWidth)
-
-    // Case 2: With proposals (designWaiting = 1)
-    // Pastiglia is compact 22px icon button with count badge on top-right, margin: 0
-    const compactBadgeWidth = 22
-    const centerWidthWithProposals = centerWidthWithoutProposals + compactBadgeWidth + 2 // 2px gap
-    const centerStartWith = Math.max(leftGroupWidth + 8, Math.min(310 - centerWidthWithProposals / 2, windowWidth - centerWidthWithProposals - 8))
-    const centerEndWith = centerStartWith + centerWidthWithProposals
-    expect(centerEndWith).toBeLessThanOrEqual(windowWidth)
-    // Pastiglia stays comfortably within 420px (between 401px and 414px)
-    expect(centerEndWith).toBeGreaterThan(400)
-    expect(centerEndWith).toBeLessThanOrEqual(415)
-
-    // Compute document scrollWidth taking into account all children:
-    // Left group, Center group (with or without proposals), and Window Controls
-    const computeDocumentScrollWidth = (withProposals: boolean) => {
-      const centerRight = withProposals ? centerEndWith : centerEndWithout
-      return Math.max(windowWidth, centerRight, windowControlsRight)
-    }
-
-    // Set scrollWidth property on document.documentElement for the test assertion
-    const doc = typeof document !== "undefined" ? document : ((globalThis as unknown as { document: { documentElement: object } }).document = { documentElement: {} } as unknown as Document)
-    const origScrollWidth = Object.getOwnPropertyDescriptor(doc.documentElement, "scrollWidth")
-
-    try {
-      // Test without proposals: document scrollWidth must be exactly 420px
-      Object.defineProperty(doc.documentElement, "scrollWidth", {
-        configurable: true,
-        get: () => computeDocumentScrollWidth(false),
-      })
-      expect(doc.documentElement.scrollWidth).toBe(420)
-
-      // Test WITH proposals: document scrollWidth must be exactly 420px
-      Object.defineProperty(doc.documentElement, "scrollWidth", {
-        configurable: true,
-        get: () => computeDocumentScrollWidth(true),
-      })
-      expect(doc.documentElement.scrollWidth).toBe(420)
-    } finally {
-      if (origScrollWidth) {
-        Object.defineProperty(doc.documentElement, "scrollWidth", origScrollWidth)
-      } else {
-        delete (doc.documentElement as unknown as { scrollWidth?: unknown }).scrollWidth
-      }
-    }
+  /*
+   * The 426px overflow of 0.6.x. Under 640px the window controls hang past the
+   * right edge unless the bar's horizontal padding and their negative
+   * margin-right are the same distance: the padding reserves the room the
+   * negative margin then hands back. `--ade-space-3` is 6px and
+   * `--ade-space-6` is 12px, which is exactly how the two drifted apart.
+   *
+   * What this is not is a measurement, and the reason is worth writing down.
+   * happy-dom has no box model: in `bun test` `scrollWidth`, `offsetWidth` and
+   * `getBoundingClientRect()` all answer 0, checked even for a 900px child
+   * inside a 420px parent. So `document.scrollWidth` cannot be read here at
+   * all, and the test that stood in this place declared 6px, 120px and 160px,
+   * then overwrote `scrollWidth` with its own arithmetic and read it back. It
+   * compared its numbers with themselves: every value in the stylesheet could
+   * change and it would stay green.
+   *
+   * Whether the bar really fits is a thing for the eye (rule 21): Verifiche's
+   * screenshots at 900 and 1400px, light and dark, with the bar focused.
+   */
+  test("lint: under 640px the bar's padding and the window controls' margin are one distance", () => {
+    const dev = readFileSync(join(__dirname, "../dev.css"), "utf-8")
+    const narrow = /@media\s*\(max-width:\s*640px\)\s*\{([\s\S]*?)\n\}/.exec(dev)?.[1]
+    expect([narrow !== undefined]).toEqual([true])
+    const bar = /\[data-slot="ade-bar"\]\s*\{([^}]*)\}/.exec(narrow!)?.[1] ?? ""
+    const controls = /\[data-slot="ade-window-controls"\]\s*\{([^}]*)\}/.exec(narrow!)?.[1] ?? ""
+    const padding = /padding:\s*0\s+var\((--ade-space-\d+)\)/.exec(bar)?.[1]
+    const margin = /margin-right:\s*calc\(-1\s*\*\s*var\((--ade-space-\d+)\)/.exec(controls)?.[1]
+    expect([padding, margin, padding !== undefined && padding === margin]).toEqual([padding, margin, true])
   })
 })
 
