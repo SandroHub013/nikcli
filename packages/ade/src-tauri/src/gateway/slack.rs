@@ -963,6 +963,12 @@ impl Adapter for Slack {
         self.inner.send_all(chat, text, None).await
     }
 
+    /// What Slack had its ack for and nobody read yet. A read under way holds
+    /// the inbox; then it is not counted, since it is being read.
+    fn unread(&self) -> usize {
+        self.inbox.try_lock().map(|inbox| inbox.len()).unwrap_or(0)
+    }
+
     async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
         self.inner.send_all(chat, text, Some(buttons)).await
     }
@@ -1756,6 +1762,8 @@ mod tests {
         eventually("il secondo socket", || socket.connections().len() == 2).await;
         let acks = socket.acks().len();
         assert!(acks < 300, "confermate {acks} buste: anche quelle che non poteva tenere");
+        // What was confirmed and not read is what a stop would leave: counted for the log.
+        assert!(slack.unread() >= 250, "in attesa: {}", slack.unread());
     }
 
     #[tokio::test]

@@ -158,6 +158,12 @@ pub trait Adapter: Send + Sync {
     fn cursor(&self) -> Option<String> {
         None
     }
+    /// Messages already confirmed to the platform and still waiting here to
+    /// be read: a stop leaves them behind, and a platform without a cursor
+    /// does not send them again. Only counted, for the log.
+    fn unread(&self) -> usize {
+        0
+    }
     /// Changes `message` to `text`. What does not fit in one message goes on
     /// in new ones after it; returns the id of the message that now holds the
     /// end of the text, for an answer that keeps growing to be edited there.
@@ -191,6 +197,8 @@ pub mod fake {
         pub receives: std::sync::atomic::AtomicUsize,
         /// What `cursor` reports: the tests set it with each batch.
         pub position: Mutex<Option<String>>,
+        /// What `unread` reports.
+        pub waiting: std::sync::atomic::AtomicUsize,
     }
 
     pub type Feed = mpsc::UnboundedSender<Result<Vec<Inbound>, AdapterError>>;
@@ -206,6 +214,7 @@ pub mod fake {
                 buttons: Mutex::new(Vec::new()),
                 receives: std::sync::atomic::AtomicUsize::new(0),
                 position: Mutex::new(None),
+                waiting: std::sync::atomic::AtomicUsize::new(0),
             };
             (std::sync::Arc::new(adapter), tx)
         }
@@ -243,6 +252,9 @@ pub mod fake {
         }
         fn cursor(&self) -> Option<String> {
             self.position.lock().unwrap().clone()
+        }
+        fn unread(&self) -> usize {
+            self.waiting.load(std::sync::atomic::Ordering::SeqCst)
         }
         async fn whoami(&self) -> Result<String, AdapterError> {
             Ok("@finto_bot\u{202e}".into())

@@ -810,6 +810,8 @@ impl Task {
 
     async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
         let mut pause = self.backoff.0;
+        // A batch read and not handed on when the loop ended.
+        let mut left_behind = 0;
         loop {
             // Nobody listens yet (ADE opening, the page reloading): nothing is read.
             if !listening(&mut stopped, &mut ready).await {
@@ -820,8 +822,15 @@ impl Task {
                 _ = stopped.changed() => break,
                 read = self.adapter.receive() => read,
             };
-            // Stopped while the batch came in: it is the next adapter's to hand on.
+            /*
+             * Stopped while the batch came in: a platform with a cursor
+             * (Telegram) gives it again to the next adapter, from the position
+             * saved before it. One without (Slack) does not: it had its ack,
+             * and the batch is lost. Counted in the log below, not handed on to
+             * a gateway that was switched off (G10 review, 6).
+             */
             if *stopped.borrow() {
+                left_behind = read.as_ref().map(Vec::len).unwrap_or(0);
                 break;
             }
             match read {
@@ -835,6 +844,7 @@ impl Task {
                     }
                     // The page may have reloaded during a long poll: the batch waits for it.
                     if !batch.is_empty() && !listening(&mut stopped, &mut ready).await {
+                        left_behind = batch.len();
                         break;
                     }
                     for message in batch {
@@ -867,6 +877,20 @@ impl Task {
                     break;
                 }
             }
+        }
+        self.count_left_behind(left_behind);
+    }
+
+    /// How many messages the platform confirmed and this gateway did not hand
+    /// on, said in the log when it ends: a number, never their text. Nothing
+    /// for a platform with a cursor, which sends them again.
+    fn count_left_behind(&self, in_hand: usize) {
+        if self.adapter.cursor().is_some() {
+            return;
+        }
+        let left = in_hand + self.adapter.unread();
+        if left > 0 {
+            self.env.log(&format!("{}: fermato con {left} messaggi già confermati e non consegnati: la piattaforma non li rimanda", self.tag()));
         }
     }
 
@@ -1586,6 +1610,28 @@ mod tests {
         let again = "666666666:ANCORA-token-di-prova_AbCdEfGhIjKl";
         assert!(s.hub.set_token(third, Platform::Fake, again).is_err());
         assert!(s.hub.token(third, Platform::Fake).unwrap().is_none(), "voce orfana nel portachiavi");
+    }
+
+    #[tokio::test]
+    async fn a_stop_says_how_many_confirmed_messages_it_leaves() {
+        let s = setup("left-behind");
+        let (adapter, _feed) = start(&s);
+        eventually("la prima lettura", || adapter.receives.load(std::sync::atomic::Ordering::SeqCst) > 0).await;
+        adapter.waiting.store(3, std::sync::atomic::Ordering::SeqCst);
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        let said = || s.env.log.lock().unwrap().iter().any(|line| line.contains("3 messaggi già confermati"));
+        eventually("la riga nel log", said).await;
+        // A number only: no text of any message.
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("ciao")));
+        // A platform with a cursor gives them again: nothing to say.
+        let t = setup("left-behind-cursor");
+        let (kept, _feed) = start(&t);
+        eventually("la prima lettura", || kept.receives.load(std::sync::atomic::Ordering::SeqCst) > 0).await;
+        *kept.position.lock().unwrap() = Some("42".into());
+        kept.waiting.store(3, std::sync::atomic::Ordering::SeqCst);
+        t.hub.stop(BOT, Platform::Fake).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(t.env.log.lock().unwrap().iter().all(|line| !line.contains("già confermati")));
     }
 
     #[tokio::test]
