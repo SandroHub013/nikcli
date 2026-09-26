@@ -736,3 +736,22 @@ describe("catalogHasModel", () => {
     expect(catalogHasModel({ all: [] } as unknown as ProviderList, { providerID: "openrouter", modelID: "x" })).toBeUndefined()
   })
 })
+
+/* Modello assente review, M1: the menu offers only what the send accepts. */
+describe("the selector and the send look at the same list", () => {
+  test("a provider without a key is not in the menu; a list without `connected` is not filtered", () => {
+    const list = {
+      all: [
+        { id: "openrouter", name: "OpenRouter", models: { "a/b:free": { id: "a/b:free", name: "B" } } },
+        { id: "bothub", name: "BotHub", models: { "gemma:free": { id: "gemma:free", name: "Gemma" } } },
+      ],
+      default: {},
+      connected: ["openrouter"],
+    } as unknown as ProviderList
+    const offered = modelsFromProviderList(list)
+    expect(offered.map((m) => `${m.providerID}/${m.modelID}`)).toEqual(["openrouter/a/b:free"])
+    for (const choice of offered) expect(catalogHasModel(list, choice)).toBe(true)
+    const { connected: _none, ...unknown } = list
+    expect(modelsFromProviderList(unknown as unknown as ProviderList)).toHaveLength(2)
+  })
+})

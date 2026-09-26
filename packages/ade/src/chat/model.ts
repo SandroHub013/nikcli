@@ -196,7 +196,13 @@ export interface ModelListOptions {
 
 /**
  * Extracts and filters selectable models from `provider.list`: the chat
- * models, and in ADE Test (`options.isTest === true`) only the free ones.
+ * models of the connected providers, and in ADE Test (`options.isTest ===
+ * true`) only the free ones.
+ *
+ * `all` is the whole models.dev registry, providers with no key included;
+ * the server runs only the connected ones, and `catalogHasModel` refuses the
+ * rest before a prompt. So the menu offers what the send accepts (modello
+ * assente review, M1). A list without `connected` is not filtered.
  */
 export function modelsFromProviderList(
   providerList?: ProviderList | null,
@@ -207,10 +213,12 @@ export function modelsFromProviderList(
   }
 
   const isTest = options?.isTest ?? false
+  const connected = Array.isArray(providerList.connected) ? new Set(providerList.connected) : undefined
   const result: ChatModelChoice[] = []
 
   for (const provider of providerList.all) {
     if (!provider || !provider.models) continue
+    if (connected && !connected.has(provider.id)) continue
     for (const [id, model] of Object.entries(provider.models)) {
       if (!model || model.status === "deprecated") continue
       // The Chat asks a model for text and for tool calls: a text-to-speech or
