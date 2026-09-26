@@ -1411,6 +1411,8 @@ export const en: Messages = {
   "bots.routine.mode.key": "API key",
   "bots.routine.mode.free": "free model",
   "bots.routine.mode.paid": "paid model",
+  "bots.routine.refused": (permission: string, patterns: string) =>
+    `Refused: the routine asked for «${permission}» (${patterns}) and nobody can answer.`,
   "bots.routine.thread": "Routine: the message below went on its own, without a shell.",
   "bots.routine.problem.notAllowed": "this runner cannot run routines",
   "bots.routine.problem.prompt": "Write what the routine should do.",

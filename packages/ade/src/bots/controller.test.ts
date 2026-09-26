@@ -456,6 +456,23 @@ describe("a routine's run", () => {
     expect(m.flags[1]).toEqual(["bot-ask-shell"])
   })
 
+  test("whatever nikcli asks during a routine is refused at once (review, BASSO 1)", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    const turn = p.turns.routine(nikcli, "fai il punto")
+    await tick()
+    m.print(menu("edit", "src/index.ts"))
+    p.quiet()
+    expect(m.writes).toEqual([REJECT])
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    expect(p.talk(nikcli.path).messages.at(-1)?.text).toContain("nessuno può rispondere")
+    // Nothing waits on the question: no expiry left behind.
+    expect(p.timers.filter((timer) => !timer.cancelled && timer.ms !== MENU_QUIET_MS)).toEqual([])
+    m.exit(0)
+    await turn!.result
+  })
+
   test("Claude Code is refused the shell for a routine, not in the panel", async () => {
     const m = machine()
     const p = panel(m)

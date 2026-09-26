@@ -168,7 +168,14 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         const before = deps.talkOf(path).permission
         deps.update(path, (talk) => noticePermission(talk, seen, now()))
         const asked = deps.talkOf(path).permission
-        if (asked && asked !== before) settle(bot, turn, asked)
+        if (!asked || asked === before) return
+        /*
+         * Nobody is there to answer a routine (B11 review, BASSO 1): whatever
+         * nikcli asks is refused at once, not left on a menu until the turn
+         * runs out of time.
+         */
+        if (routine) return reply(path, turn, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
+        settle(bot, turn, asked)
       },
     })
     const request: TurnRequest = {

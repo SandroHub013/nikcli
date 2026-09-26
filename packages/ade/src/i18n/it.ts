@@ -1422,6 +1422,8 @@ export const it = {
   "bots.routine.mode.key": "chiave API",
   "bots.routine.mode.free": "modello gratuito",
   "bots.routine.mode.paid": "modello a pagamento",
+  "bots.routine.refused": (permission: string, patterns: string) =>
+    `Rifiutato: la routine ha chiesto «${permission}» (${patterns}) e nessuno può rispondere.`,
   "bots.routine.thread": "Routine: il messaggio qui sotto è partito da solo, senza shell.",
   "bots.routine.problem.notAllowed": "questo runner non può eseguire routine",
   "bots.routine.problem.prompt": "Scrivi che cosa deve fare la routine.",
