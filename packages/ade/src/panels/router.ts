@@ -185,7 +185,12 @@ export interface PendingPanelReplies<S> {
   queue(paneId: string, session: S, text: string, now?: number): void
   /** Takes one answer out, so the round sending it cannot send it twice. True when it was there. */
   take(paneId: string, text: string): boolean
-  /** Puts an answer back after a try that did not give it, keeping the age it was made at. */
+  /**
+   * Puts an answer back after a try that did not give it, keeping the age it was
+   * made at **and the place that age puts it in**: the round sends waiting answers
+   * in the order they were made, so an answer restored to the back would be
+   * overtaken by the ones asked after it.
+   */
   restore(paneId: string, session: S, text: string, at: number): void
   /**
    * The answers still young enough to send, and how many were too old and are now
@@ -235,8 +240,23 @@ export function createPendingPanelReplies<S>(): PendingPanelReplies<S> {
       if (entry?.waits.some((wait) => wait.text === text)) return
       // The entry may be gone: taking the last answer out empties it, and this is
       // that answer coming back because the try did not give it.
-      if (entry) entry.waits.push({ text, at })
-      else entries.set(paneId, { session, waits: [{ text, at }] })
+      if (!entry) {
+        entries.set(paneId, { session, waits: [{ text, at }] })
+        return
+      }
+      /*
+       * Back where it was made, and not at the end of the list.
+       *
+       * Appending looks harmless and is not: a held answer goes to the back, so
+       * the round after this one sends the answers asked *after* it first, and
+       * the agent reads the reply to its second question before the reply to its
+       * first. Stopping the round at the first held answer only postpones that by
+       * one round — the order has to be put back here as well, or the break just
+       * moves the inversion instead of removing it.
+       */
+      const later = entry.waits.findIndex((wait) => wait.at > at)
+      if (later < 0) entry.waits.push({ text, at })
+      else entry.waits.splice(later, 0, { text, at })
     },
     claim(paneId, now = Date.now()) {
       const entry = entries.get(paneId)

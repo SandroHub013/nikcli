@@ -373,7 +373,7 @@ describe("l'ordine delle risposte di un pannello", () => {
     expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
   })
 
-  test("una risposta trattenuta torna in fondo, ed e' per questo che il giro si ferma (BASSO 2)", () => {
+  test("una risposta trattenuta torna al suo posto, non in fondo (BASSO 2)", () => {
     const store = createPendingPanelReplies<{ id: string }>()
     store.queue("p1", first, "A", now)
     store.queue("p1", first, "B", now + 1)
@@ -381,12 +381,18 @@ describe("l'ordine delle risposte di un pannello", () => {
     // The round takes the first and cannot give it: a prompt opened again.
     store.take("p1", "A")
     store.restore("p1", first, "A", waits[0]!.at)
-    // A is at the end now, so B going through would arrive before it — which is
-    // what the `break` in `flushPanelReplies` prevents. This is the state that
-    // makes the break necessary, and the reason the `break` is not optional.
-    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["B", "A"])
-    // The next round starts from the top again, and the order it writes is the
-    // order on the pane: the held one, because it is first to be tried.
-    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["B", "A"])
+    // Back where it was made, and not at the end. Appending here looks harmless
+    // and is the same inversion the break was meant to stop: the round after this
+    // one would send B first, and the agent would read the answer to its second
+    // question before the answer to its first. The break only puts the inversion
+    // off by a round, so the order has to be restored here too.
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // And the ages are still the ages: an answer is not kept alive by trying, and
+    // a later one does not jump ahead of it by being restored.
+    expect(store.waiting("p1").map((wait) => wait.at)).toEqual([now, now + 1])
+    // The next round finds the same order, so the held one is the first tried
+    // again — and the break stops the round there, rather than sending B off
+    // while A is still unanswered.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
   })
 })

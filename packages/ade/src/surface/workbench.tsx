@@ -1677,12 +1677,14 @@ export function Workbench() {
         const outcome = await typeLineOutcome(session, wait.text, { unlessBusy: true })
         if (deliveryResult(outcome, running.get(paneId) === session) !== "held") continue
         // Not given — a prompt opened again, or the user is typing: back in the
-        // waiting, still as old as it was, so it cannot be kept alive by trying.
+        // waiting, still as old as it was, so it cannot be kept alive by trying,
+        // and in the place that age puts it, so the answers asked after it do not
+        // overtake it (`restore`).
         pendingPanelReplies.restore(paneId, session, wait.text, wait.at)
-        // And the round stops here. This answer is back at the end of the list, so
-        // a later one that went through would arrive before it, and the agent
-        // would read them in the wrong order: the answer to its second question
-        // before the answer to its first. The next round starts from it again.
+        // And the round stops here, which is the other half of the same thing:
+        // `restore` puts the order back for the next round, and this stops the
+        // one after it from sending a later answer off while this one is still
+        // unanswered. Either alone leaves an inversion, one round apart.
         break
       }
     }
