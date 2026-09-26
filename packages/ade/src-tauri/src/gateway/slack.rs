@@ -33,6 +33,10 @@
 //!   (<https://docs.slack.dev/messaging/formatting-message-text>), so a reply
 //!   that says `<!channel>` shows it and rings nothing.
 //! - A 429 waits the `Retry-After` asked (a minute at most) and tries again.
+//! - The chat commands are slash commands. Slack takes a message that starts
+//!   with `/` for a command of an app and never sends it as a message, so
+//!   `/ferma` typed to the bot reaches it only because the manifest registers
+//!   it; it arrives in a `slash_commands` envelope and goes on as its text.
 //!
 //! The tokens are in the `Authorization` header, never in a URL. Errors are
 //! built without them, and the hub hides them again anyway.
@@ -67,9 +71,19 @@ const USER_AGENT: &str = concat!("nikcli-ade/", env!("CARGO_PKG_VERSION"), " (ga
 
 /// The bot scopes this adapter uses, and the only ones the manifest asks for:
 /// the four `*:history` receive the four message events below, `chat:write`
-/// sends and edits, `users:read` gives a sender's name. `connections:write` is
-/// not here: it belongs to the App-Level Token, not to the bot.
-pub const BOT_SCOPES: &[&str] = &["channels:history", "chat:write", "groups:history", "im:history", "mpim:history", "users:read"];
+/// sends and edits, `commands` brings the slash commands, `users:read` gives a
+/// sender's name. `connections:write` is not here: it belongs to the App-Level
+/// Token, not to the bot.
+pub const BOT_SCOPES: &[&str] =
+    &["channels:history", "chat:write", "commands", "groups:history", "im:history", "mpim:history", "users:read"];
+
+/// The chat commands (`policy.ts`), registered as the app's slash commands.
+pub const SLASH_COMMANDS: &[(&str, &str)] = &[
+    ("/nuova", "Ricomincia la conversazione con il bot"),
+    ("/ferma", "Ferma il turno in corso e svuota la coda"),
+    ("/stato", "Dice cosa sta facendo il bot"),
+    ("/aiuto", "Mostra i comandi del bot"),
+];
 
 /// The events the manifest subscribes to. `app_mention` is left out on
 /// purpose: a message that names the bot in a channel already arrives as
@@ -84,11 +98,16 @@ pub fn manifest(name: &str) -> String {
     // Slack takes an app name of 35 characters at most.
     let short: String = cleaned.trim().chars().take(35).collect();
     let name = if short.trim().is_empty() { "ADE bot".to_string() } else { short.trim().to_string() };
+    let commands: Vec<Value> = SLASH_COMMANDS
+        .iter()
+        .map(|(command, description)| json!({ "command": command, "description": description, "should_escape": false }))
+        .collect();
     let manifest = json!({
         "display_information": { "name": name, "description": "Un bot di ADE" },
         "features": {
             "app_home": { "messages_tab_enabled": true, "messages_tab_read_only_enabled": false },
             "bot_user": { "display_name": name, "always_online": true },
+            "slash_commands": commands,
         },
         "oauth_config": { "scopes": { "bot": BOT_SCOPES } },
         "settings": {
@@ -331,6 +350,32 @@ fn to_press(payload: &Value) -> Option<Inbound> {
         sender: Sender { id: user["id"].as_str()?.to_string(), name: name.to_string(), is_bot: false },
         text: data.to_string(),
         button: true,
+    })
+}
+
+/// One of the chat commands, from a `slash_commands` envelope: its text is the
+/// command, with what was typed after it. A command is addressed to the bot by
+/// its nature, so in a channel it counts as naming it.
+fn to_command(payload: &Value) -> Option<Inbound> {
+    let command = payload["command"].as_str()?;
+    if !SLASH_COMMANDS.iter().any(|(known, _)| *known == command) {
+        return None;
+    }
+    let chat = payload["channel_id"].as_str()?;
+    let rest = payload["text"].as_str().unwrap_or_default().trim();
+    let text = if rest.is_empty() { command.to_string() } else { format!("{command} {}", unescape(rest)) };
+    Some(Inbound {
+        id: payload["trigger_id"].as_str()?.to_string(),
+        chat: chat.to_string(),
+        private: chat.starts_with('D'),
+        mentioned: true,
+        sender: Sender {
+            id: payload["user_id"].as_str()?.to_string(),
+            name: payload["user_name"].as_str().unwrap_or_default().to_string(),
+            is_bot: false,
+        },
+        text,
+        button: false,
     })
 }
 
@@ -640,6 +685,7 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
                     },
                     "events_api" => inner.event(&frame["payload"]).await,
                     "interactive" => to_press(&frame["payload"]),
+                    "slash_commands" => to_command(&frame["payload"]),
                     _ => None,
                 };
                 if let Some(inbound) = handed {
@@ -824,7 +870,7 @@ mod tests {
     const BOT_TOKEN: &str = "xoxb-FINTO-0000000000-token-del-bot";
     const APP_TOKEN: &str = "xapp-1-FINTO-0000000000-token-app";
     const BOT: &str = "UBOT42";
-    const ALL_SCOPES: &str = "channels:history,chat:write,groups:history,im:history,mpim:history,users:read";
+    const ALL_SCOPES: &str = "channels:history,chat:write,commands,groups:history,im:history,mpim:history,users:read";
 
     #[derive(Clone)]
     struct Reply {
@@ -1240,6 +1286,43 @@ mod tests {
         assert!(to_press(&json!({ "type": "view_submission" })).is_none());
     }
 
+    #[test]
+    fn a_chat_command_arrives_as_a_slash_command_and_goes_on_as_its_text() {
+        let payload = json!({
+            "command": "/ferma", "text": "", "trigger_id": "T1", "user_id": "U1", "user_name": "qualcuno",
+            "channel_id": "D1", "team_id": "W1",
+        });
+        let command = to_command(&payload).expect("comando");
+        assert_eq!((command.text.as_str(), command.chat.as_str(), command.sender.id.as_str()), ("/ferma", "D1", "U1"));
+        assert!(command.private && admits(&command));
+        // In a channel a command is addressed to the bot, as a mention is.
+        let in_channel = to_command(&json!({ "command": "/stato", "trigger_id": "T2", "user_id": "U1", "channel_id": "C1" })).expect("comando");
+        assert!(!in_channel.private && admits(&in_channel));
+        let with_words = to_command(&json!({ "command": "/nuova", "text": "a &lt; b", "trigger_id": "T3", "user_id": "U1", "channel_id": "D1" }))
+            .expect("comando");
+        assert_eq!(with_words.text, "/nuova a < b");
+        // Another app's command is not ours.
+        assert!(to_command(&json!({ "command": "/giphy", "trigger_id": "T4", "user_id": "U1", "channel_id": "D1" })).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_slash_command_envelope_is_acknowledged_and_handed_on() {
+        let socket = FakeSocket::start(
+            vec![vec![
+                hello(),
+                text(json!({
+                    "envelope_id": "s1", "type": "slash_commands", "accepts_response_payload": true,
+                    "payload": { "command": "/aiuto", "text": "", "trigger_id": "T9", "user_id": "U9", "user_name": "qualcuno", "channel_id": "D9" },
+                })),
+            ]],
+            800,
+        );
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        assert_eq!(slack.receive().await.expect("letto")[0].text, "/aiuto");
+        eventually("l'ack", || socket.acks() == vec!["s1".to_string()]).await;
+    }
+
     /* The doctor. */
 
     #[tokio::test]
@@ -1286,6 +1369,9 @@ mod tests {
             parsed["settings"]["event_subscriptions"]["bot_events"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert_eq!(events, BOT_EVENTS);
         assert!(!events.contains(&"app_mention"), "una menzione arriverebbe due volte");
+        let commands: Vec<&str> =
+            parsed["features"]["slash_commands"].as_array().unwrap().iter().filter_map(|c| c["command"].as_str()).collect();
+        assert_eq!(commands, ["/nuova", "/ferma", "/stato", "/aiuto"]);
         assert_eq!(parsed["settings"]["socket_mode_enabled"], true);
         assert_eq!(parsed["features"]["app_home"]["messages_tab_enabled"], true);
         assert_eq!(parsed["display_information"]["name"], "Aiuto");
