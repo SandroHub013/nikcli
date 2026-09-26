@@ -789,7 +789,7 @@
 }
 
 [data-slot="chat-option"][aria-pressed="true"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   color: var(--ade-text);
 }
 
