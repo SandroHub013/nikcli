@@ -43,6 +43,12 @@ function fakeServer() {
     status: {} as Record<string, object>,
     /** Holds the answer to GET /session/status until it settles. */
     statusGate: undefined as Promise<void> | undefined,
+    /** The catalog: the free model the tests send, on a connected OpenRouter. */
+    providers: {
+      all: [{ id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } }],
+      default: {},
+      connected: ["openrouter"],
+    } as object | undefined,
   }
   const reply = (onEvent: (event: ProxyEvent) => void, status: number, body?: unknown) =>
     setTimeout(() => {
@@ -85,7 +91,10 @@ function fakeServer() {
         const status = routes.status
         void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
       }
-      else if (request.method === "GET" && path === "/provider") reply(onEvent, 200, { all: [], default: {}, connected: [] })
+      else if (request.method === "GET" && path === "/provider") {
+        if (routes.providers) reply(onEvent, 200, routes.providers)
+        else reply(onEvent, 500, { error: "catalogo non disponibile" })
+      }
       else if (request.method === "GET" && path === "/agent") reply(onEvent, 200, [{ name: "build", mode: "primary" }])
       else if (request.method === "GET" && path === "/config") reply(onEvent, 200, { model: "openrouter/x:free" })
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
@@ -412,6 +421,35 @@ describe("the chat's store", () => {
     expect(JSON.parse(prompt[0]!.body!)).toMatchObject({ parts: [{ type: "text", text: "Ciao" }], model: FREE })
     await store.abort(id)
     expect(server.calls("POST", /^\/session\/ses_nuova\/abort$/)).toHaveLength(1)
+  })
+
+  /* A model the server does not have: said before anything is sent, not a turn that never answers. */
+  test("a model missing from the catalog, or whose provider is not connected, is refused before anything is sent", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const gone = { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" }
+    const refused = await store.send(undefined, "Ciao", gone).then(() => undefined, (error: unknown) => error)
+    expect(refused).toBeInstanceOf(Error)
+    expect((refused as Error).message).toBe(t("chat.model.missing", "openrouter/nex-agi/nex-n2.5-mini:free"))
+    const elsewhere = { providerID: "anthropic", modelID: "claude-x" }
+    const notConnected = await store.send("ses_1", "Ciao", elsewhere).then(() => undefined, (error: unknown) => error)
+    expect((notConnected as Error).message).toBe(t("chat.model.missing", "anthropic/claude-x"))
+    expect(server.calls("POST", /^\/session$/)).toHaveLength(0)
+    expect(server.calls("POST", /\/prompt_async$/)).toHaveLength(0)
+    // The one it has goes.
+    expect(await store.send(undefined, "Ciao", FREE)).toBe("ses_nuova")
+  })
+
+  test("a catalog that cannot be read does not stop the message: the server decides", async () => {
+    const server = fakeServer()
+    server.routes.providers = undefined
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    expect(await store.send(undefined, "Ciao", { providerID: "openrouter", modelID: "qualunque:free" })).toBe("ses_nuova")
+    expect(server.calls("POST", /\/prompt_async$/)).toHaveLength(1)
   })
 
   /* C5: the chat's rules, and the answers that reach the server. */

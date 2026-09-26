@@ -1303,6 +1303,8 @@ export const it = {
   "chat.model.free": "gratis",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
+  "chat.model.missing": (model: string) =>
+    `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.new": "Nuova conversazione",

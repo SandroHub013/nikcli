@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 
 import {
   agentsFromList,
+  catalogHasModel,
   defaultAgentChoice,
   defaultModelChoice,
   formatModelLabel,
@@ -710,5 +711,28 @@ describe("Model identity and ModelRef (C3 - Point 5)", () => {
     expect(choice).toBeDefined()
     expect(choice!.providerID).toBe("nikcli")
     expect(choice!.modelID).toBe("google/gemini-2.5-flash:free")
+  })
+})
+
+describe("catalogHasModel", () => {
+  const list = {
+    all: [
+      { id: "openrouter", name: "OpenRouter", models: { "nvidia/nemotron-3.5-lightning:free": { id: "nvidia/nemotron-3.5-lightning:free" } } },
+      { id: "anthropic", name: "Anthropic", models: { "claude-x": { id: "claude-x" } } },
+    ],
+    default: {},
+    connected: ["openrouter"],
+  } as unknown as ProviderList
+
+  test("a model of a connected provider is there; one that left, or of a provider not connected, is not", () => {
+    expect(catalogHasModel(list, { providerID: "openrouter", modelID: "nvidia/nemotron-3.5-lightning:free" })).toBe(true)
+    expect(catalogHasModel(list, { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" })).toBe(false)
+    expect(catalogHasModel(list, { providerID: "anthropic", modelID: "claude-x" })).toBe(false)
+    expect(catalogHasModel(list, { providerID: "openrouter", modelID: "constructor" })).toBe(false)
+  })
+
+  test("no catalog, or one without its lists, is not known: the server decides", () => {
+    expect(catalogHasModel(undefined, { providerID: "openrouter", modelID: "x" })).toBeUndefined()
+    expect(catalogHasModel({ all: [] } as unknown as ProviderList, { providerID: "openrouter", modelID: "x" })).toBeUndefined()
   })
 })

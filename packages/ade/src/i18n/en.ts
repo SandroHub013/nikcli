@@ -1292,6 +1292,8 @@ export const en: Messages = {
   "chat.model.free": "free",
   "chat.model.choose": "Choose a model",
   "chat.model.none": "No models available",
+  "chat.model.missing": (model) =>
+    `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. Nothing was sent: choose another one.`,
   "chat.agent.label": "Agent",
   "chat.agent.none": "No agents available",
   "chat.new": "New conversation",

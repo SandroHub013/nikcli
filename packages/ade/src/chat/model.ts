@@ -64,6 +64,22 @@ export function parseModelRef(raw?: string | null): ModelRef | undefined {
 }
 
 /**
+ * Whether the server can run `ref`: its provider is connected and has the
+ * model. `undefined` when the catalog is not known, and the server decides.
+ *
+ * Checked before a prompt because a model the server does not have ends the
+ * turn without a word: nikcli 1.398 fails it with a `ModelNotFoundError` that
+ * has no message and publishes no error, so the answer simply never comes.
+ * Models do leave the catalog: `nex-agi/nex-n2.5-mini:free` did.
+ */
+export function catalogHasModel(list: ProviderList | null | undefined, ref: ModelRef): boolean | undefined {
+  if (!list || !Array.isArray(list.all) || !Array.isArray(list.connected)) return undefined
+  if (!list.connected.includes(ref.providerID)) return false
+  const models = list.all.find((provider) => provider?.id === ref.providerID)?.models ?? {}
+  return Object.hasOwn(models, ref.modelID) || Object.values(models).some((model) => model?.id === ref.modelID)
+}
+
+/**
  * Providers that run on the user's own machine, where a cost of 0 means the
  * hardware is already paid for. A hosted provider with a cost of 0 is not free
  * of charge: ElevenLabs and the kilo/* families price most of their catalogue

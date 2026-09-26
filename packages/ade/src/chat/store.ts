@@ -46,6 +46,7 @@ import {
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { insideProject, isEnvFile, pathOfFileUrl } from "./attachments"
+import { catalogHasModel, serializeModelRef } from "./model"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -77,7 +78,8 @@ export interface ChatStore {
    * events. A session made elsewhere is refused with `ForeignSession`.
    * `agent` is the one chosen in the chat; without it the server's default.
    * `files` go with the text; each must be a file of the open folder
-   * (`attachments.ts`), or nothing is sent at all.
+   * (`attachments.ts`), or nothing is sent at all. Nor is anything sent for
+   * a model the server's catalog does not have (`catalogHasModel`).
    */
   send(
     sessionID: string | undefined,
@@ -220,6 +222,19 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     }
   }
 
+  async function catalog(): Promise<ChatCatalog> {
+    const connection = opened()
+    const mine = generation
+    if (catalogLoad?.mine !== mine) {
+      const promise = loadChatCatalog(connection.client).then((catalog) => {
+        if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
+        return catalog
+      })
+      catalogLoad = { mine, promise }
+    }
+    return catalogLoad.promise
+  }
+
   const refuse = (mine: number, error: unknown) => {
     if (mine !== generation) return
     setState({ status: "refused", problem: error instanceof Error ? error.message : undefined })
@@ -357,7 +372,11 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     close,
     async send(sessionID, text, model, agent, files = []) {
       const connection = opened()
+      const mine = generation
       const folder = state.directory ?? ""
+      // A model the server does not have would end the turn without a word: said here instead.
+      const known = catalogHasModel((await catalog()).providerList, model)
+      if (known === false) throw new Error(t("chat.model.missing", serializeModelRef(model)))
       for (const file of files) {
         const path = pathOfFileUrl(file.url)
         if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
@@ -368,7 +387,6 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
         if (check === "env") throw new Error(t("chat.attach.env", path))
         if (check !== "ok") throw new Error(t("chat.attach.outside", path))
       }
-      const mine = generation
       let id = sessionID
       if (!id) {
         const created = await connection.client.session.create({ title: titleFrom(text), permission: [...CHAT_PERMISSION] })
@@ -416,18 +434,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const found = await opened().client.find.files({ query, type: "file", limit: 20 })
       return Array.isArray(found.data) ? found.data.filter((path): path is string => typeof path === "string") : []
     },
-    async catalog() {
-      const connection = opened()
-      const mine = generation
-      if (catalogLoad?.mine !== mine) {
-        const promise = loadChatCatalog(connection.client).then((catalog) => {
-          if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
-          return catalog
-        })
-        catalogLoad = { mine, promise }
-      }
-      return catalogLoad.promise
-    },
+    catalog,
   }
 }
 
