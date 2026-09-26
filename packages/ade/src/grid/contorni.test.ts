@@ -215,22 +215,31 @@ describe("lint: no pane draws its focus in accent", () => {
  *   `box-shadow: inset 0 -1.5px 0 var(--ade-accent)`. It says «you are typing
  *   here» for as long as the rename lasts, and vanishes after it.
  */
-describe("lint: the accents that are not contours stay", () => {
-  test("lint: the drop zone and the rename underline are the only two left in the panes' sheets", () => {
-    const left: string[] = [];
-    for (const file of ["index.css", "grid/pane.css"]) {
-      sheet(file).walkDecls((decl) => {
-        if (!CONTOUR.test(decl.prop) || !/var\(--ade-accent/.test(decl.value))
-          return;
-        const selector =
-          decl.parent?.type === "rule"
-            ? (decl.parent as postcss.Rule).selector
-            : "";
-        if (/drop|drag/.test(selector) || /pane-title-input/.test(selector))
-          return;
-        left.push(`${file} ${decl.prop} in ${selector}`);
+describe("lint: no accent outline, in any sheet of packages/ade", () => {
+  test("lint: an accent border, outline or shadow only sits on an accent fill", () => {
+    // Every sheet, not the panes' three: the rule is the user's, and it is not a
+    // per-file habit. On the parsed sheet, so a reformat cannot hide one.
+    const offenders: string[] = [];
+    for (const entry of Array.from(new Bun.Glob("**/*.css").scanSync(src))) {
+      const file = entry.replace(/\\/g, "/");
+      sheet(file).walkRules((rule) => {
+        const decls = new Map<string, string>();
+        for (const node of rule.nodes) {
+          if (node.type === "decl") decls.set(node.prop, node.value.trim());
+        }
+        const fill = `${decls.get("background") ?? ""} ${decls.get("background-color") ?? ""}`;
+        for (const prop of decls.keys()) {
+          if (!CONTOUR.test(prop)) continue;
+          const value = decls.get(prop) ?? "";
+          if (!/var\(--ade-accent/.test(value)) continue;
+          // A border the colour of the fill it sits on is that same surface seen
+          // edge-on, not a contour: anything else would draw a seam inside a
+          // solid chip. So the fill decides, and the border follows it.
+          if (/var\(--ade-accent/.test(fill)) continue;
+          offenders.push(`${file} ${prop}: ${value} in ${rule.selector}`);
+        }
       });
     }
-    expect(left).toEqual([]);
+    expect(offenders).toEqual([]);
   });
 });
