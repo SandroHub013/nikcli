@@ -364,8 +364,15 @@ impl Hub {
                 platforms.push(link.platform);
             }
         }
-        for platform in platforms {
-            self.clear_token(bot, platform)?;
+        // Every platform is tried, whatever failed before it: one keychain
+        // error must not leave the next platforms with their tokens.
+        let failed: Vec<String> = platforms
+            .into_iter()
+            .filter_map(|platform| self.clear_token(bot, platform).err().map(|error| format!("{}: {error}", platform.label())))
+            .collect();
+        if !failed.is_empty() {
+            // The links stay, token hashes and all, until a new try removes what is left.
+            return Err(failed.join("; "));
         }
         self.store.forget(bot)
     }
@@ -961,8 +968,9 @@ mod tests {
     const KEY: &str = "sk-finta-chiave-0123456789";
     const BOT: &str = "C:/progetto/.nikcli/agent/aiuto.md";
 
+    /// The keychain in memory; a delete of a name that starts with one in `.1` fails.
     #[derive(Default)]
-    struct MapVault(Mutex<BTreeMap<(String, String), String>>);
+    struct MapVault(Mutex<BTreeMap<(String, String), String>>, Mutex<Vec<String>>);
     impl Vault for MapVault {
         fn get(&self, service: &str, name: &str) -> Result<Option<String>, String> {
             Ok(self.0.lock().unwrap().get(&(service.into(), name.into())).cloned())
@@ -972,6 +980,9 @@ mod tests {
             Ok(())
         }
         fn delete(&self, service: &str, name: &str) -> Result<(), String> {
+            if self.1.lock().unwrap().iter().any(|prefix| name.starts_with(prefix.as_str())) {
+                return Err("portachiavi non disponibile".into());
+            }
             self.0.lock().unwrap().remove(&(service.into(), name.into()));
             Ok(())
         }
@@ -1501,6 +1512,28 @@ mod tests {
         s.hub.set_token(other, Platform::Fake, "987654321:ALTRO-token-di-prova_AbCdEfGhIj").unwrap();
         s.hub.forget_bot(BOT).unwrap();
         assert!(s.hub.status().iter().any(|link| link.bot == other && link.has_token));
+    }
+
+    #[tokio::test]
+    async fn a_failed_platform_does_not_stop_the_others_and_is_named() {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-forget-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let vault = Arc::new(MapVault::default());
+        let s = setup_with(dir.join("state.json"), vault.clone());
+        authorize(&s, "42");
+        let _started = start(&s);
+        // Discord's delete fails; the Fake platform comes after it in the list.
+        vault.1.lock().unwrap().push("discord:".into());
+        let error = s.hub.forget_bot(BOT).unwrap_err();
+        assert!(error.contains("Discord"), "l'errore non nomina la piattaforma: {error}");
+        assert!(!error.contains("Telegram") && !error.contains("Fake"), "nomina piattaforme riuscite: {error}");
+        assert!(s.hub.token(BOT, Platform::Fake).unwrap().is_none(), "dopo il fallimento di Discord il resto non e' stato tolto");
+        assert!(s.hub.links().is_empty(), "il gateway gira ancora");
+        // The links stay until everything is gone: a new try finishes the work.
+        assert!(s.hub.status().iter().any(|link| link.bot == BOT), "il collegamento e' sparito prima del tempo");
+        vault.1.lock().unwrap().clear();
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(s.hub.status().iter().all(|link| link.bot != BOT));
     }
 
     #[tokio::test]

@@ -1660,7 +1660,8 @@ export const en: Messages = {
   "bots.store.noRead": "This host cannot read files.",
   "bots.store.noDir": "This host cannot read folders.",
   "bots.store.hostMissing": "No host.",
-  "bots.store.gatewayKept": (error) => `Could not remove this bot's tokens and gateways (${error}): the bot is not deleted.`,
+  "bots.store.gatewayKept": (error) =>
+    `Could not remove this bot's tokens and gateways (${error}): the bot is not deleted. Try again: it removes what is left.`,
   "bots.store.nikcliExited": (code) => `nikcli exited with code ${code}.`,
   "bots.store.unknownCode": "unknown",
   "bots.spend.plan": "subscription",

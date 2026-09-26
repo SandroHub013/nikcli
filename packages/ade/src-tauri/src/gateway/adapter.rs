@@ -32,6 +32,17 @@ impl Platform {
         }
     }
 
+    /// The platform's name as people write it, for a message that names it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Platform::Telegram => "Telegram",
+            Platform::Discord => "Discord",
+            Platform::Slack => "Slack",
+            #[cfg(test)]
+            Platform::Fake => "Fake",
+        }
+    }
+
     /// Slack reads through a socket opened with a second secret, the
     /// App-Level Token (`xapp-`), besides the bot's token (`xoxb-`) that
     /// every other call uses. The other platforms need one token only.
