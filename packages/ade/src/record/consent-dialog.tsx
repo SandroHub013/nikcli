@@ -12,7 +12,12 @@ import { t } from "../i18n"
  * turns it on for this take. Esc, a click outside and «No» all refuse, because
  * the safe answer must be the one you get by doing nothing.
  */
-export function RecordConsentDialog(props: { target: RecordTarget; onAnswer: (answer: RecordConsent) => void }) {
+export function RecordConsentDialog(props: {
+  target: RecordTarget
+  /** The session that asks, by name: the question says who, not «un agente». */
+  asker?: string
+  onAnswer: (answer: RecordConsent) => void
+}) {
   const [mic, setMic] = createSignal(false)
   const refuse = () => props.onAnswer({ allowed: false, mic: false })
   const what = () => (props.target.kind === "pane" ? t("record.consent.pane", props.target.paneId) : t("record.consent.window"))
@@ -30,7 +35,7 @@ export function RecordConsentDialog(props: { target: RecordTarget; onAnswer: (an
           <strong>{t("record.consent.title")}</strong>
         </header>
         <div data-slot="record-consent-body">
-          <p>{t("record.consent.ask", what())}</p>
+          <p>{props.asker ? t("record.consent.askBy", props.asker, what()) : t("record.consent.ask", what())}</p>
           <p data-slot="record-consent-note">
             {t("record.consent.note")}
           </p>

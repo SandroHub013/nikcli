@@ -22,8 +22,9 @@ import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
+import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
-import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
+import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
   checkName,
@@ -308,7 +309,6 @@ import {
   formatFallbackLine,
   formatHandoff,
   handoffOutcome,
-  nativeLaunchArgs,
   parseHandoffs,
   parseNativeSessions,
   routeFor,
@@ -328,7 +328,7 @@ import {
   withMemoryEntry,
   type TokenUsage,
 } from "../session/shared"
-import { displayArgs, introArgs, introText, withIntro } from "../session-new/intro"
+import { displayArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -769,11 +769,33 @@ export function Workbench() {
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
   }
   const keysHost = (): KeysHost | undefined => (keysAvailable() ? keysService : undefined)
-  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string }>()
+
+  /** The session that wrote a request, by name: the questions say who asks. */
+  const askerOf = (from: string | undefined): string | undefined => {
+    const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+    return pane?.title || undefined
+  }
+
+  /*
+   * A panel opening a page that is not this machine's, on the user's yes:
+   * once per request, never remembered (review of review-alti, 1.3). A file
+   * an agent shows can carry «@ade browser open …» as well as the agent can.
+   */
+  const confirmOpen = (panel: "browser" | "app", url: string, from: string | undefined) =>
+    askYesNo(t(panel === "browser" ? "panels.consent.browser" : "panels.consent.app", askerOf(from) ?? t("panels.consent.someone"), url), {
+      ok: t("panels.consent.allow"),
+      cancel: t("panels.consent.deny"),
+    })
+  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string; asker?: KeyAsker }>()
   panels.register("keys", {
     verbs: KEYS_VERBS,
-    run: (request) => {
-      return runKeysCommand({ list: keysService.list, ask: (env, reason) => setKeyRequest({ env, reason }) }, request).catch(
+    run: (request, from) => {
+      // Who asks, for the dialog: the pane's name and its agent.
+      const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+      const agentId = pane?.agent ?? pane?.model
+      const asker = pane && agentId ? { title: pane.title, agentId } : undefined
+      const ask = (env: string, reason: string) => setKeyRequest({ env, reason, ...(asker ? { asker } : {}) })
+      return runKeysCommand({ list: keysService.list, ask }, request).catch(
         (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
       )
     },
@@ -822,6 +844,7 @@ export function Workbench() {
           openPane: (url, owner) => openOwnedBrowser(url, owner, false),
           navigate: (paneId, url) => setWb((w) => updatePane(w, paneId, { browserUrl: url })),
           controller: (paneId) => browserControllers.get(paneId),
+          confirmOpen: (url) => confirmOpen("browser", url, from),
         },
         request,
         from,
@@ -986,14 +1009,16 @@ export function Workbench() {
   /** An agent's take waits here for the user's answer. */
   const [recordAsk, setRecordAsk] = createSignal<{
     target: Parameters<typeof recorder.start>[0]
+    asker?: string
     answer: (consent: RecordConsent) => void
   }>()
-  const confirmRecording = (target: Parameters<typeof recorder.start>[0]) =>
+  const confirmRecording = (target: Parameters<typeof recorder.start>[0], asker: string | undefined) =>
     new Promise<RecordConsent>((resolve) => {
       // One question at a time: a second agent asking meanwhile is refused.
       if (recordAsk()) return resolve({ allowed: false, mic: false })
       setRecordAsk({
         target,
+        ...(asker ? { asker } : {}),
         answer: (consent) => {
           setRecordAsk(undefined)
           resolve(consent)
@@ -1067,7 +1092,7 @@ export function Workbench() {
 
   panels.register("record", {
     verbs: RECORD_VERBS,
-    run: (request) =>
+    run: (request, from) =>
       runRecordRequest(request, {
         confirm: confirmRecording,
         start: (target, options) => startRecording(target, { mic: options.mic === true, language: options.language }),
@@ -1090,7 +1115,7 @@ export function Workbench() {
           const now = recordState()
           return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
         },
-      }).catch((failure: unknown) => ({
+      }, askerOf(from)).catch((failure: unknown) => ({
         ok: false as const,
         reason: failure instanceof Error ? failure.message : String(failure),
       })),
@@ -6366,7 +6391,8 @@ export function Workbench() {
   const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
     const agentId = given.agent ?? given.model
     // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
-    if (given.signIn) return startProcess(given.id, agentId, "", undefined, [...given.signIn])
+    const restart = restartOf(given)
+    if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])
     const reported = await adoptLastReport(given)
     let pane = reported ? { ...given, resumeId: reported } : given
     // Another open pane holds this conversation (ripristino review, point 1): it stays there.
@@ -6599,13 +6625,8 @@ export function Workbench() {
     }
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
-    const extraArgs = [
-      ...introArgs(agentId, introText(agentId, modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
-      ...nativeLaunchArgs(agentId, paneTitle),
-      ...(launched?.spawnArgs ?? []),
-      ...opening.args,
-      ...(extra ?? []),
-    ]
+    // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
+    const extraArgs = startArgsFor(agentId, launched, { title: paneTitle, opening: opening.args, ...(extra ? { extra } : {}) })
     const mintedId = opening.resumeId
     const openedId = openedConversation(resume, mintedId, launched?.resumeId)
 
@@ -7294,6 +7315,7 @@ export function Workbench() {
       getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
     guessServers,
+    confirmOpen,
     decisions: decisionsHub,
     design: designHub,
     panels,
@@ -7823,7 +7845,13 @@ export function Workbench() {
         />
 
         <Show when={recordAsk()}>
-          {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+          {(ask) => (
+            <RecordConsentDialog
+              target={ask().target}
+              {...(ask().asker ? { asker: ask().asker } : {})}
+              onAnswer={(consent) => ask().answer(consent)}
+            />
+          )}
         </Show>
 
         <Show when={updateAsk()}>
@@ -7994,6 +8022,7 @@ export function Workbench() {
           agents={AGENTS}
           env={keyRequest()!.env}
           reason={keyRequest()!.reason}
+          {...(keyRequest()!.asker ? { asker: keyRequest()!.asker } : {})}
           onClose={() => setKeyRequest(undefined)}
         />
       </Show>

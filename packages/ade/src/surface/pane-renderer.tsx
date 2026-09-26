@@ -114,6 +114,8 @@ export interface PaneRendererDeps {
   typeAsUser: (id: string, text: string) => void
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
+  /** The user's yes to a panel opening a page that is not this machine's, for session `from`. */
+  confirmOpen: (panel: "browser" | "app", url: string, from: string | undefined) => Promise<boolean>
   pluginRuntime: AdePluginRuntime
   /** Each mounted browser pane's controls, for `@ade browser …`. */
   browserControllers: Map<string, BrowserController>
@@ -389,7 +391,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           if (controller) {
             stacks.app.push(current().id, {
               verbs: SIMULATOR_VERBS,
-              run: (request) => runSimulatorCommand(controller, request),
+              run: (request, from) => runSimulatorCommand(controller, request, (url) => deps.confirmOpen("app", url, from)),
             })
             deps.announceToAll("app")
           } else {

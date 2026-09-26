@@ -60,8 +60,9 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
   test("lint: a sign-in pane keeps signIn, and reopen runs it before planning a resume (ALTO 5)", () => {
     expect(body("const openLoginSession = ")).toContain("signIn: [...runner.login]")
     const reopen = body("const reopenPane = async ")
-    expect(reopen).toContain("if (given.signIn) return startProcess(given.id, agentId, \"\", undefined, [...given.signIn])")
+    expect(reopen).toContain('if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])')
     // Before anything that would plan a resume of a conversation it does not have.
-    expect(reopen.indexOf("given.signIn")).toBeLessThan(reopen.indexOf("planResume"))
+    expect(reopen.indexOf("restartOf(given)")).toBeGreaterThan(-1)
+    expect(reopen.indexOf("restartOf(given)")).toBeLessThan(reopen.indexOf("planResume"))
   })
 })

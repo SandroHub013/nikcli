@@ -6,6 +6,7 @@
  */
 
 import type { PanelOutcome, PanelRequest } from "../panels/protocol"
+import { DENIED, isLocalAddress } from "../panels/consent"
 import {
   DEVICES,
   describeSimulator,
@@ -25,13 +26,22 @@ export interface SimulatorController {
   reload(): Promise<boolean>
 }
 
-export async function runSimulatorCommand(controller: SimulatorController, request: PanelRequest): Promise<PanelOutcome> {
+/**
+ * `confirmOpen`: the user's yes to an app that is not served by this
+ * machine, asked once per request (`panels/consent.ts`).
+ */
+export async function runSimulatorCommand(
+  controller: SimulatorController,
+  request: PanelRequest,
+  confirmOpen: (url: string) => Promise<boolean>,
+): Promise<PanelOutcome> {
   const argument = request.args.join(" ")
 
   switch (request.verb) {
     case "open": {
       const url = parseAppUrl(argument)
       if (!url) return fail("URL non valido; es. 5173, localhost:8081 o http://127.0.0.1:3000")
+      if (!isLocalAddress(url) && !(await confirmOpen(url))) return fail(DENIED)
       try {
         const reachable = await controller.open(url)
         const described = describeSimulator(controller.state())

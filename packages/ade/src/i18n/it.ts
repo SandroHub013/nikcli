@@ -1079,6 +1079,10 @@ export const it = {
   "keys.saving": "Salvo…",
   "keys.request": "Chiave richiesta",
   "keys.request.title": (env: string) => `Una sessione chiede la chiave ${env}`,
+  "keys.request.from": (pane: string, agent: string, env: string) => `«${pane}» (${agent}) chiede la chiave ${env}`,
+  "keys.request.says": "L'agente scrive:",
+  "keys.request.goes": (agent: string) =>
+    `Resta nel portachiavi del sistema e va a ${agent}, che la riceve al prossimo avvio della sessione. Puoi anche ignorare la richiesta.`,
   "keys.request.hint": "Resta nel portachiavi del sistema; la sessione la riceve al prossimo avvio. Puoi anche ignorare la richiesta.",
 
   // Video, 3D model, simulator, recording, remote, quota
@@ -1112,6 +1116,14 @@ export const it = {
   "record.consent.label": "Registrazione chiesta da un agente",
   "record.consent.title": "Registrare un video?",
   "record.consent.ask": (what: string) => `Un agente chiede di registrare ${what}.`,
+  "record.consent.askBy": (who: string, what: string) => `«${who}» chiede di registrare ${what}.`,
+  "panels.consent.browser": (who: string, url: string) =>
+    `«${who}» chiede di aprire nel suo pannello web:\n\n${url}\n\nNon è un indirizzo di questo computer. Consentire, solo per questa volta?`,
+  "panels.consent.app": (who: string, url: string) =>
+    `«${who}» chiede di aprire nel simulatore:\n\n${url}\n\nNon è un indirizzo di questo computer. Consentire, solo per questa volta?`,
+  "panels.consent.someone": "Un agente",
+  "panels.consent.allow": "Consenti",
+  "panels.consent.deny": "Nega",
   "record.consent.note": "Il video riprende tutto quello che appare finché non la fermi dal pulsante REC. I campi con chiavi e password vengono oscurati.",
   "record.consent.mic": "Registra anche il microfono",
   "record.consent.no": "No",

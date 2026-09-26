@@ -53,9 +53,10 @@ describe("planSend", () => {
 })
 
 describe("@ade browser", () => {
-  function makeHost(sessions: BrowserOwner[] = [{ id: "n1-1", title: "Claude" }]) {
+  function makeHost(sessions: BrowserOwner[] = [{ id: "n1-1", title: "Claude" }], answer = false) {
     const panes: { id: string; title: string; owner: string; url: string }[] = []
     const calls: string[] = []
+    const questions: string[] = []
     const controller: BrowserController = {
       reload: () => calls.push("reload"),
       setInspect: (on) => calls.push(`inspect ${on}`),
@@ -74,8 +75,12 @@ describe("@ade browser", () => {
         panes.find((pane) => pane.id === id)!.url = url
       },
       controller: () => (visible ? controller : undefined),
+      confirmOpen: async (url, owner) => {
+        questions.push(`${owner.title} ${url}`)
+        return answer
+      },
     }
-    return { host, panes, calls, hide: () => (visible = false) }
+    return { host, panes, calls, questions, hide: () => (visible = false) }
   }
   const run = (host: BrowserCommandHost, line: string, from?: string) =>
     runBrowserCommand(host, parseRequest(line)!, from)
@@ -85,6 +90,33 @@ describe("@ade browser", () => {
     const outcome = await run(host, "@ade browser open :5173", "n1-1")
     expect(outcome).toEqual({ ok: true, detail: "aperto «Browser» su http://localhost:5173, legato a te" })
     expect(panes).toEqual([{ id: "b1", title: "Browser", owner: "n1-1", url: "http://localhost:5173" }])
+  })
+
+  /* Review of review-alti, 1.3: a page that is not this machine's opens only on the user's yes. */
+  test("open of a page that is not local asks, naming the session, and a no opens nothing", async () => {
+    const { host, panes, questions } = makeHost()
+    const outcome = await run(host, "@ade browser open https://evil.example/login", "n1-1")
+    expect(outcome).toEqual({ ok: false, reason: "negato dall'utente" })
+    expect(questions).toEqual(["Claude https://evil.example/login"])
+    expect(panes).toEqual([])
+  })
+
+  test("a yes opens it, and counts for that request only", async () => {
+    const { host, panes, questions } = makeHost(undefined, true)
+    expect((await run(host, "@ade browser open https://example.com", "n1-1")).ok).toBe(true)
+    expect((await run(host, "@ade browser open https://example.com/other", "n1-1")).ok).toBe(true)
+    expect(questions).toHaveLength(2)
+    expect(panes[0]!.url).toBe("https://example.com/other")
+  })
+
+  test("a dev server on this machine opens without asking; a name that only looks local asks", async () => {
+    const { host, questions } = makeHost()
+    for (const line of ["open 3000/x", "open :5173", "open localhost:8080", "open http://127.0.0.1:9000", "open http://[::1]:4000"]) {
+      expect((await run(host, `@ade browser ${line}`, "n1-1")).ok).toBe(true)
+    }
+    expect(questions).toEqual([])
+    expect((await run(host, "@ade browser open http://localhost.evil.example", "n1-1")).ok).toBe(false)
+    expect(questions).toHaveLength(1)
   })
 
   test("open again moves the session's own pane instead of opening another", async () => {

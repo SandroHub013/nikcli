@@ -37,6 +37,20 @@ function deps(overrides: Partial<RecordPanelDeps> = {}) {
 }
 
 describe("record/record-panel", () => {
+  /* Review of review-alti, 1.3: every take asks, and says who asks. */
+  test("the question names the session that asks", async () => {
+    const askers: (string | undefined)[] = []
+    const { deps: d } = deps({
+      confirm: async (_target, asker) => {
+        askers.push(asker)
+        return { allowed: false, mic: false }
+      },
+    })
+    await runRecordRequest(ask("@ade record start"), d, "Sessione 2 — Claude Code")
+    await runRecordRequest(ask("@ade record start"), d)
+    expect(askers).toEqual(["Sessione 2 — Claude Code", undefined])
+  })
+
   test("an agent records the window with one line", async () => {
     const { deps: d, targets } = deps()
     expect(await runRecordRequest(ask("@ade record start"), d)).toEqual({
@@ -50,7 +64,7 @@ describe("record/record-panel", () => {
     const { deps: d, targets, asked } = deps({ confirm: async () => ({ allowed: false, mic: true }) })
     const outcome = await runRecordRequest(ask("@ade record start"), d)
     expect(outcome.ok).toBe(false)
-    expect(!outcome.ok && outcome.reason).toContain("non ha acconsentito")
+    expect(outcome).toEqual({ ok: false, reason: "negato dall'utente" })
     expect(targets).toEqual([])
     expect(asked).toEqual([])
     const { deps: again, asked: askedAgain, targets: started } = deps()
