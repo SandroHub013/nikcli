@@ -40,3 +40,63 @@ export function terminalBox(style: Pick<CSSStyleDeclaration, "getPropertyValue">
     borderBottom: px("border-bottom-width"),
   }
 }
+
+/*
+ * And again when the cell changes without the box changing (Verifiche,
+ * pannello-righe-scatti, BASSO 1): moved to a screen of another scale, a
+ * window keeps its logical size, so the box's ResizeObserver says nothing,
+ * but the cell goes from 17.61 to 18 px and 21 rows ran 7 px past the box.
+ */
+
+interface Subscription {
+  dispose(): void
+}
+
+/** The part of xterm's private render service this reads: the same one `cellHeightOf` reads. */
+interface CellSource {
+  readonly _core?: { readonly _renderService?: { readonly onDimensionsChange?: (listener: () => void) => Subscription } }
+}
+
+/** The part of `window` the fallback needs. */
+export interface ScaleWindow {
+  readonly devicePixelRatio: number
+  matchMedia(query: string): { addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void }
+  requestAnimationFrame(callback: () => void): number
+}
+
+/**
+ * Calls `changed` whenever the terminal's cell may have changed size; returns
+ * the unsubscribe.
+ *
+ * Two signals, because xterm 6 gives none for a new scale:
+ * `onDimensionsChange` fires on a resize and on an option change (a font),
+ * not on a change of the device pixel ratio, which xterm handles on its own
+ * (`handleDevicePixelRatioChange`, read in xterm.mjs). So the scale is watched
+ * here too, with the same media query xterm uses, and `changed` waits a frame
+ * for xterm to have measured the new cell.
+ */
+export function watchCellSize(terminal: unknown, changed: () => void, win?: ScaleWindow): () => void {
+  const service = (terminal as CellSource)._core?._renderService
+  const subscription = typeof service?.onDimensionsChange === "function" ? service.onDimensionsChange.call(service, changed) : undefined
+  let stopped = false
+  let query: ReturnType<ScaleWindow["matchMedia"]> | undefined
+  const listen = () => {
+    if (!win) return
+    query = win.matchMedia(`(resolution: ${win.devicePixelRatio}dppx)`)
+    query.addEventListener("change", onChange)
+  }
+  function onChange() {
+    query?.removeEventListener("change", onChange)
+    if (stopped) return
+    listen()
+    win!.requestAnimationFrame(() => {
+      if (!stopped) changed()
+    })
+  }
+  listen()
+  return () => {
+    stopped = true
+    subscription?.dispose()
+    query?.removeEventListener("change", onChange)
+  }
+}
