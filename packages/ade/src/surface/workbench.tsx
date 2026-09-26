@@ -722,7 +722,7 @@ export function Workbench() {
    */
   const announcePanels = (paneId: string, panel: string) => {
     if (!running.has(paneId)) return
-    for (const line of panels.greeting(panel)) appendLine(paneId, line, "note")
+    for (const line of panels.greeting(panel)) appendLine(paneId, line, "note", "ade")
   }
 
   /*
@@ -1253,7 +1253,7 @@ export function Workbench() {
         if ((await deliverText(host, target.id, item.text ?? deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, { id: target.id, title: target.title }, Date.now()))
-        appendLine(target.id, item.kind === "riaperta" ? t("decisions.reopened.delivered", decision.k) : t("decisions.delivered", decision.k), "note")
+        appendLine(target.id, item.kind === "riaperta" ? t("decisions.reopened.delivered", decision.k) : t("decisions.delivered", decision.k), "note", "ade")
       }
     } finally {
       deliveringDecisions = false
@@ -1385,6 +1385,7 @@ export function Workbench() {
             ? t("design.reopened.delivered", proposal.k)
             : t("design.delivery.done", target.title, formatDesignMoment(Date.now(), new Date())),
           "note",
+          "ade",
         )
       }
     } finally {
@@ -1579,10 +1580,10 @@ export function Workbench() {
     const handled = await panels.handle(line, paneId)
     if (!handled) return
     // A skipped line is said in the transcript only: typed back, the TUI would redraw it.
-    if ("skipped" in handled) return appendLine(paneId, handled.skipped, "note")
+    if ("skipped" in handled) return appendLine(paneId, handled.skipped, "note", "ade")
     // Written to the transcript too, because what an agent did to a panel is
     // something the user has to be able to see afterwards.
-    appendLine(paneId, handled.reply, "note")
+    appendLine(paneId, handled.reply, "note", "ade")
     panels.typed(paneId, handled.reply)
     running.get(paneId)?.write(asSubmittedLine(handled.reply))
   }
@@ -1621,7 +1622,7 @@ export function Workbench() {
     const failure = await host.writeTextFile(details, formatRequestDetails(request, { at, shot }))
     if (failure) return { ok: false, reason: failure }
     heldLines.push({ paneId: to, text: formatRequestLine(request, details) })
-    appendLine(to, t("note.browserRequest", request.paneTitle), "note")
+    appendLine(to, t("note.browserRequest", request.paneTitle), "note", "ade")
     return { ok: true }
   }
 
@@ -1764,7 +1765,7 @@ export function Workbench() {
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
     }
-    if (paneId !== undefined && outcome === "typed-no-enter") appendLine(paneId, t("note.enterHeld"), "note")
+    if (paneId !== undefined && outcome === "typed-no-enter") appendLine(paneId, t("note.enterHeld"), "note", "ade")
     return outcome
   }
 
@@ -1820,7 +1821,7 @@ export function Workbench() {
         if (check === "resend") {
           // Not over a prompt (B1 bis), not into the user's draft, and in the pane's queue (`enterAgain`).
           if (!(await pressAgain(paneId, session))) return
-          appendLine(paneId, t("note.resent"), "note")
+          appendLine(paneId, t("note.resent"), "note", "ade")
           break
         }
       }
@@ -1884,8 +1885,8 @@ export function Workbench() {
       ...(handoff.full ? { full: formatFallbackLine(handoff.full, reason) } : {}),
       inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from },
     })
-    appendLine(handoff.paneId, t("note.viaFallback", reason), "note")
-    if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note")
+    appendLine(handoff.paneId, t("note.viaFallback", reason), "note", "ade")
+    if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note", "ade")
   }
 
   /** Closes the handoffs the sender confirmed, the hook showed, or the clock ran out on. */
@@ -1920,8 +1921,8 @@ export function Workbench() {
         request.acked = true
         saveRequests()
       }
-      appendLine(handoff.paneId, t("note.viaNativeAck"), "note")
-      if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaNativeAck"), "note")
+      appendLine(handoff.paneId, t("note.viaNativeAck"), "note", "ade")
+      if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaNativeAck"), "note", "ade")
     }
   }
 
@@ -2132,7 +2133,7 @@ export function Workbench() {
     // Given even when a prompt held its Enter back; the sender is told it is waiting.
     const given = (outcome: LineOutcome, stored = false) => {
       if (outcome === "typed-no-enter" && meta.from) {
-        appendLine(meta.from, t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId), "note")
+        appendLine(meta.from, t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId), "note", "ade")
       }
       return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
@@ -2171,7 +2172,7 @@ export function Workbench() {
          */
         inboxPending.splice(inboxPending.indexOf(entry), 1)
         const reader = mailPanes().find((pane) => pane.id === entry.paneId)
-        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note")
+        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
         if (entry.kind === "ask" || entry.kind === "spawn") {
           if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
         } else {
@@ -2199,7 +2200,7 @@ export function Workbench() {
         entry.rings += 1
         entry.ringAt = now
         void typeLine(session, formatBell(entry, panes.find((pane) => pane.id === entry.from), entry.chars))
-        appendLine(entry.paneId, t("note.rang", entry.rings), "note")
+        appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
       } else {
         inboxPending.splice(inboxPending.indexOf(entry), 1)
         if (action === "warn") {
@@ -2676,7 +2677,7 @@ export function Workbench() {
         if (request.from && running.has(request.from)) {
           heldLines.push({ paneId: request.from, text: formatWedged(request, panes.find((pane) => pane.id === request.to), now) })
         }
-        appendLine(request.to, t("pane.maybeStuck", request.id), "note")
+        appendLine(request.to, t("pane.maybeStuck", request.id), "note", "ade")
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
@@ -2705,7 +2706,7 @@ export function Workbench() {
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         void ringAgain(request, () => pressAgain(request.to, session), saveRequests).then((pressed) => {
-          if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note")
+          if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note", "ade")
         })
         continue
       }
@@ -2717,7 +2718,7 @@ export function Workbench() {
         request.nudgedAt = now
         saveRequests()
         void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessBusy: true }).then((typed) => {
-          if (typed) return appendLine(request.to, t("note.nudged", request.id), "note")
+          if (typed) return appendLine(request.to, t("note.nudged", request.id), "note", "ade")
           if (request.nudgedAt !== now) return
           request.nudges = before.nudges
           request.nudgedAt = before.nudgedAt
@@ -2768,8 +2769,8 @@ export function Workbench() {
       openRequests.set(id, { id, kind: "ask", from: message.from, to: target.id, at: Date.now(), brief: briefOf(message.text), via: "digitata", ...(message.budget ? { budget: message.budget } : {}) })
       saveRequests()
     }
-    appendLine(target.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
-    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note")
+    appendLine(target.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note", "ade")
+    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note", "ade")
     heldStates.delete(id)
     // Held before, for a turn that has ended since: its sender was answered then, and stopped listening.
     if (!held.delete(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
@@ -2863,8 +2864,8 @@ export function Workbench() {
         return true
       }
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
-      if (sender) appendLine(sender.id, (caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref)), "note")
-      if (caller) appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+      if (sender) appendLine(sender.id, (caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref)), "note", "ade")
+      if (caller) appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note", "ade")
       await answer(
         `ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}` +
           (request?.autoClose ? " — se non ha lavoro da integrare questa sessione ora si chiude" : " — la sessione resta aperta per i seguiti"),
@@ -2890,8 +2891,8 @@ export function Workbench() {
         setTimeout(() => {
           void closeTree(host, request.to, false).then((outcome) => {
             const note = "error" in outcome ? t("note.keptOpen", outcome.error) : t("note.closedAfterReply", outcome.closed.join(", "))
-            appendLine(request.to, note, "note")
-            if (caller) appendLine(caller.id, note, "note")
+            appendLine(request.to, note, "note", "ade")
+            if (caller) appendLine(caller.id, note, "note", "ade")
           })
         }, AUTO_CLOSE_DELAY_MS)
       }
@@ -2913,7 +2914,7 @@ export function Workbench() {
       const caller = panes.find((pane) => pane.id === request.from)
       const line = formatUpdate(request.id, message.state, message.text, sender)
       await host.mailboxState?.(request.id, line, "update").catch(() => {})
-      if (caller) appendLine(caller.id, t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text), "note")
+      if (caller) appendLine(caller.id, t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text), "note", "ade")
       const elapsed = formatElapsed(request, Date.now())
       await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta${elapsed ? `; ${elapsed}` : ""}`)
       // Nobody woke on it: typed into the caller, which is not waiting any more.
@@ -3029,7 +3030,7 @@ export function Workbench() {
         return true
       }
       await excludeAdeResults(host, owner.root)
-      appendLine(sender.id, t("note.memory", entry.line.trim()), "note")
+      appendLine(sender.id, t("note.memory", entry.line.trim()), "note", "ade")
       await answer(memoryAddReply(path, next.length))
       return true
     }
@@ -3288,7 +3289,7 @@ export function Workbench() {
         spawnedBy.set(created.id, message.from)
         saveSpawned()
       }
-      if (sender) appendLine(sender.id, t("note.subagent", created.title), "note")
+      if (sender) appendLine(sender.id, t("note.subagent", created.title), "note", "ade")
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
@@ -3327,7 +3328,7 @@ export function Workbench() {
       session.write(interruptKeys(pane?.agent ?? pane?.model))
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
-      appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note")
+      appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note", "ade")
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await answer(
@@ -3388,7 +3389,7 @@ export function Workbench() {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
         if (updated) void reopen(updated)
       }
-      appendLine(pane.id, t(message.fresh ? "note.restartedFresh" : "note.restarted", sender?.title ?? t("note.someSession"), message.model ?? ""), "note")
+      appendLine(pane.id, t(message.fresh ? "note.restartedFresh" : "note.restarted", sender?.title ?? t("note.someSession"), message.model ?? ""), "note", "ade")
       // The note is typed once the new process is up, like any held line; given up after a minute.
       const noteText = `[Nota di ripresa da ${sender?.title ?? "una sessione"}]: ${message.note.trim()}`
       const waitStart = Date.now()
@@ -3481,11 +3482,11 @@ export function Workbench() {
         saveRequests()
       }
       const ask = message.kind === "ask"
-      appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
-      appendLine(target.pane.id, t("note.viaNative", route.name), "note")
+      appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note", "ade")
+      appendLine(target.pane.id, t("note.viaNative", route.name), "note", "ade")
       if (sender) {
-        appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
-        appendLine(sender.id, t("note.viaNative", route.name), "note")
+        appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note", "ade")
+        appendLine(sender.id, t("note.viaNative", route.name), "note", "ade")
       }
       held.delete(id)
       handoffs.set(id, { paneId: target.pane.id, line, full, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
@@ -3555,12 +3556,12 @@ export function Workbench() {
       saveRequests()
     }
     const ask = message.kind === "ask"
-    appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+    appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note", "ade")
     // Typed: say so, and why the CLI's channel was not used, so a message that
     // went missing can be looked for where it actually went.
-    appendLine(target.pane.id, t("note.viaTyped", route.reason), "note")
-    if (sender && sender.id !== target.pane.id && running.has(sender.id)) appendLine(sender.id, t("note.viaTyped", route.reason), "note")
-    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
+    appendLine(target.pane.id, t("note.viaTyped", route.reason), "note", "ade")
+    if (sender && sender.id !== target.pane.id && running.has(sender.id)) appendLine(sender.id, t("note.viaTyped", route.reason), "note", "ade")
+    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note", "ade")
     // A held message's sender was answered when it was held, and has stopped listening since.
     if (held.delete(id)) return true
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
@@ -5723,7 +5724,7 @@ export function Workbench() {
 
   const openLink = async (paneId: string, request: LinkRequest) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    const say = (text: string) => (hasTerminal(paneId) ? noteInTerminal(paneId, text) : appendLine(paneId, text, "note"))
+    const say = (text: string) => (hasTerminal(paneId) ? noteInTerminal(paneId, text) : appendLine(paneId, text, "note", "ade"))
     if (request.kind === "url") {
       if (!request.external) {
         openOwnedBrowser(request.target, { id: paneId, title: pane?.title ?? "" }, true)
@@ -6184,7 +6185,7 @@ export function Workbench() {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !offersSuspend(pane)) return
     const refuse = (check: SuspendCheck) => {
-      if (!check.ok) appendLine(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])), "note")
+      if (!check.ok) appendLine(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])), "note", "ade")
     }
     const missing = await conversationMissing(pane.agent ?? pane.model, pane.resumeId, pane.cwd)
     const first = canSuspend(pane, suspendContext(pane, missing))
@@ -6208,12 +6209,12 @@ export function Workbench() {
       // Tracked again, so the mark goes; but deaf (see `stopForSuspend`), so the note asks for the pane to be closed and reopened.
       setWb((w) => updatePane(w, paneId, { suspended: undefined }))
       saveSuspendedMail()
-      appendLine(paneId, t("note.suspendKillFailed"), "note")
+      appendLine(paneId, t("note.suspendKillFailed"), "note", "ade")
       return
     }
     forgetQuiet(paneId)
     setWb((w) => updatePane(w, paneId, { activity: "suspended" }))
-    appendLine(paneId, t("note.suspended"), "note")
+    appendLine(paneId, t("note.suspended"), "note", "ade")
   }
 
   /**
@@ -6227,7 +6228,7 @@ export function Workbench() {
     if (!pane?.suspended) return
     await reopen(pane)
     if (!running.has(paneId)) {
-      appendLine(paneId, t("note.resumeFailed"), "note")
+      appendLine(paneId, t("note.resumeFailed"), "note", "ade")
       return
     }
     setWb((w) => updatePane(w, paneId, { suspended: undefined }))
@@ -6279,7 +6280,7 @@ export function Workbench() {
       : undefined
     if (gone) {
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
-      appendLine(paneId, t("project.missing", gone), "note")
+      appendLine(paneId, t("project.missing", gone), "note", "ade")
       return
     }
     if (wb().panes.some((pane) => pane.id === paneId && pane.gone)) setWb((w) => updatePane(w, paneId, { gone: undefined }))
@@ -6457,9 +6458,9 @@ export function Workbench() {
         try {
           const assigned = await host.assignedSecrets(agent.command)
           secretNames = assigned.map((key) => key.name)
-          if (assigned.length > 0) appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note")
+          if (assigned.length > 0) appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note", "ade")
         } catch (failure) {
-          appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note")
+          appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note", "ade")
         }
       }
 
@@ -6679,7 +6680,7 @@ export function Workbench() {
             paneId,
             t("task.notSent"),
           )
-          appendLine(paneId, t("task.notSent.short"), "note")
+          appendLine(paneId, t("task.notSent.short"), "note", "ade")
         }, 100)
         openingPolls.add(poll)
       }

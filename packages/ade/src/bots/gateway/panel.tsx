@@ -255,7 +255,7 @@ export function GatewaySection(props: {
       {/* Who may write, and who asks to. */}
       <div data-slot="gateway-block">
         <span data-slot="gateway-subtitle">{t("gateway.panel.authorized")}</span>
-        <Show when={panel.pairing().authorized.length > 0} fallback={<p data-slot="bots-hint">{t("gateway.panel.nobody")}</p>}>
+        <Show when={panel.pairing().authorized.length > 0} fallback={<p data-slot="bots-hint">{said(t("gateway.panel.nobody"), t("gateway.panel.nobodyDiscord"), t("gateway.panel.nobodySlack"))}</p>}>
           <ul data-slot="gateway-list">
             <For each={panel.pairing().authorized}>
               {(account) => (
@@ -343,7 +343,9 @@ export function GatewaySection(props: {
       <div data-slot="gateway-block">
         <span data-slot="gateway-subtitle">{t("gateway.panel.remote")}</span>
         <Show when={panel.offersRemote()} fallback={<p data-slot="bots-hint">{t("gateway.panel.remoteNever", runnerById(props.bot.runner).label)}</p>}>
-          <p data-slot="bots-hint">{panel.remote().commands ? t("gateway.panel.remoteOn") : t("gateway.panel.remoteOff")}</p>
+          <p data-slot="bots-hint">{panel.remote().commands
+              ? said(t("gateway.panel.remoteOn"), t("gateway.panel.remoteOnDiscord"), t("gateway.panel.remoteOnSlack"))
+              : t("gateway.panel.remoteOff")}</p>
           <Show
             when={panel.confirmingRemote()}
             fallback={
@@ -362,7 +364,9 @@ export function GatewaySection(props: {
             }
           >
             <div data-slot="gateway-confirm">
-              <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.remoteWhat")}</p>
+              <p data-slot="bots-hint" data-state="warn">
+                {said(t("gateway.panel.remoteWhat"), t("gateway.panel.remoteWhatDiscord"), t("gateway.panel.remoteWhatSlack"))}
+              </p>
               <div data-slot="gateway-row">
                 <button type="button" data-slot="bots-btn" onClick={() => panel.cancelRemote()}>
                   {t("gateway.panel.cancel")}

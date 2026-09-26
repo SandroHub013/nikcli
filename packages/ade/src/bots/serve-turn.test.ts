@@ -5,7 +5,7 @@ import type { ChatEvent } from "../chat/events"
 import type { NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
-import { botPermission } from "./serve-rules"
+import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
 import { agentProblem, catalogCache, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
@@ -223,7 +223,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const fake = server({ events: FIRST, session: FIRST_SESSION })
     const fresh = thread()
     await runServeTurn(panel({ onChange: fresh.onChange }), fake.deps).result
-    expect(fake.calls.created.map((made) => made.permission)).toEqual([botPermission("ask")])
+    expect(fake.calls.created.map((made) => made.permission)).toEqual([[BOT_SESSION_MARK, ...botPermission("ask")]])
     expect(fresh.talk.sessionId).toBe(FIRST_SESSION)
     expect(fresh.talk.messages.some((message) => message.text === t("bots.serve.newSession"))).toBe(false)
 
@@ -265,7 +265,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
       const fake = server({ events: FIRST, session: FIRST_SESSION })
       const mine = thread()
       await runServeTurn(panel({ ...extra, sessionId: "ses_panel", onChange: mine.onChange }), fake.deps).result
-      expect([profile, fake.calls.created[0]?.permission]).toEqual([profile, botPermission(profile as never)])
+      expect([profile, fake.calls.created[0]?.permission]).toEqual([profile, [BOT_SESSION_MARK, ...botPermission(profile as never)]])
       if (extra.unattended) {
         expect(mine.talk.sessionId).toBeUndefined()
         expect(mine.talk.messages.some((message) => message.text === t("bots.serve.newSession"))).toBe(false)

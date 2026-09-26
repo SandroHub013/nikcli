@@ -69,6 +69,11 @@ export interface Talk {
    * a reload ends the turn. Usage lands in `byMode` under this name.
    */
   readonly turnMode?: TalkSpend | undefined
+  /**
+   * The turn started `metered` and a :free model made it free: a cost above
+   * zero that arrives later puts it back. Not stored, like `turnMode`.
+   */
+  readonly turnFreedFrom?: TalkSpend | undefined
   /** Tokens and cost of the thread, split by how each turn was paid for. */
   readonly byMode?: Readonly<Partial<Record<TalkSpend, ModeTotal>>>
   /** Usage of the turn under way, until its result. Not stored. */
@@ -176,7 +181,10 @@ function rememberModel(talk: Talk, model: string | undefined): Talk {
    * a :free model summed as «a consumo»). The test is `isFreeModel`'s, in
    * runners.ts, which imports this file.
    */
-  if (talk.turnMode === "metered" && /:free$/i.test(named)) return spentAs(remembered, "free")
+  // Only while nothing was paid: a cost above zero is a router's fallback on a paid model, and stays «a consumo».
+  if (talk.turnMode === "metered" && pending.costUsd === 0 && /:free$/i.test(named)) {
+    return { ...spentAs(remembered, "free"), turnFreedFrom: "metered" }
+  }
   return remembered
 }
 
@@ -213,6 +221,10 @@ function addMode(byMode: Talk["byMode"], mode: TalkSpend, tokens: number, costUs
 
 /** Adds this event's usage to the turn under way, and keeps it when the turn ends. */
 export function noteTurnUsage(talk: Talk, tokens: number, costUsd: number, close: boolean): Talk {
+  // Made free by its model's name, and then it cost something: it was paid after all.
+  if (costUsd > 0 && talk.turnMode === "free" && talk.turnFreedFrom) {
+    talk = { ...spentAs(talk, talk.turnFreedFrom), turnFreedFrom: undefined }
+  }
   const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
   const next = { ...pending, tokens: pending.tokens + tokens, costUsd: pending.costUsd + costUsd }
   const byMode = talk.turnMode ? addMode(talk.byMode, talk.turnMode, tokens, costUsd) : talk.byMode
@@ -257,6 +269,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     // One limit must not mark every later turn, including one reloaded from disk.
     limited: undefined,
     turnMode: undefined,
+    turnFreedFrom: undefined,
     pendingTurn: { tokens: 0, costUsd: 0 },
   }
 }

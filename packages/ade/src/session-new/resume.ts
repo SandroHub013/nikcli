@@ -1,3 +1,5 @@
+import { isBotSession } from "../bots/serve-rules"
+
 /**
  * Bringing a session back, and not just a pane that looks like one.
  *
@@ -197,6 +199,8 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
         typeof entry["id"] === "string" &&
         /^ses_[A-Za-z0-9]{8,64}$/.test(entry["id"]) &&
         !entry["parentID"] &&
+        // A bot's conversation is the bot's, however recent: not a pane's to take.
+        !isBotSession(entry) &&
         typeof entry["directory"] === "string" &&
         sameDir(entry["directory"], cwd) &&
         !taken.has(entry["id"]),

@@ -8,7 +8,7 @@ import { createBotTurns } from "./controller"
 import type { AgentFile } from "./nikcli"
 import { admitProject } from "./project-trust"
 import { runRoutine } from "./routine"
-import { botPermission } from "./serve-rules"
+import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
 import { permissionAnswerer } from "./gateway/approval"
 import { appServeTurnDeps, runBotTurn, runServeTurn, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type Talk } from "./talk"
@@ -441,7 +441,7 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     expect(turns.routine(free, "controlla i log", "C:/progetto", { free: true, maxCostUsd: 0 })).toBeDefined()
     await until(() => fake.prompts.length === 1)
     expect(fake.connects).toEqual([false])
-    expect(fake.created).toEqual([botPermission("read-only")])
+    expect(fake.created).toEqual([[BOT_SESSION_MARK, ...botPermission("read-only")]])
     fake.push(status("busy"), asked("per_r", "ls"))
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_r", "reject"])
