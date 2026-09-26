@@ -156,3 +156,23 @@ export async function nikcliModelVariants(
 export function botModelLabel(id: string): string {
   return isFreeModel({ id }) ? formatModelLabel(id, undefined, true) : id
 }
+
+/**
+ * Whether nikcli's catalog of the model's provider no longer lists it: a
+ * model taken out of it (nex-n2.5-mini:free) makes nikcli answer mute, with
+ * «prompt loop failed». Undefined when the catalog cannot be read, is empty,
+ * or the name has no provider: not knowing.
+ */
+export async function modelGone(model: string, load: (provider: string) => Promise<string>): Promise<boolean | undefined> {
+  const name = model.trim()
+  const slash = name.indexOf("/")
+  if (slash <= 0) return undefined
+  let listed: ReadonlyMap<string, CatalogModel>
+  try {
+    listed = parseModelCatalog(await load(name.slice(0, slash)))
+  } catch {
+    return undefined
+  }
+  if (listed.size === 0) return undefined
+  return !listed.has(name)
+}

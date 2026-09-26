@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { t } from "../i18n"
 import type { ChatModelChoice } from "./model"
 import {
@@ -7,10 +9,12 @@ import {
   effortValue,
   hasEfforts,
   modelChipLabel,
+  modelGoneFrom,
   modelMenuItems,
   moveActive,
   pickerSections,
   pickerValues,
+  readableModelName,
   searchModels,
 } from "./picker"
 
@@ -172,5 +176,43 @@ describe("the effort chip", () => {
     const rows = items.filter((item) => item.kind === "option")
     expect(rows.map((row) => (row.kind === "option" ? row.detail : undefined))).toEqual(["OpenRouter", "OpenCode Zen", "OpenRouter"])
     expect(rows.map((row) => (row.kind === "option" ? row.label : undefined))).toEqual([QWEN.label, QWEN.label, GEMMA.label])
+  })
+})
+
+/*
+ * Review of bot-riquadro, a: a model that left the catalog showed its raw id
+ * on the chip and the card («openrouter/nex-agi/nex-n2.5-mini:free · gratis»),
+ * and nikcli then answers mute. Its name in words, and why.
+ */
+describe("a model the catalog no longer has", () => {
+  test("its id reads as a name: the last part, no suffix, in words", () => {
+    expect(readableModelName("openrouter/nex-agi/nex-n2.5-mini:free")).toBe("Nex N2.5 Mini")
+    expect(readableModelName("openrouter/google/gemma-4-31b-it:free")).toBe("Gemma 4 31B It")
+    expect(readableModelName("opencode/big-pickle")).toBe("Big Pickle")
+    expect(readableModelName("sonnet")).toBe("Sonnet")
+  })
+
+  test("the chip says it by name, as no longer available", () => {
+    expect(t("picker.gone", readableModelName("openrouter/nex-agi/nex-n2.5-mini:free"))).toBe("Nex N2.5 Mini · non più disponibile")
+    expect(t("picker.goneTitle", "openrouter/nex-agi/nex-n2.5-mini:free")).toContain("scegline un altro")
+  })
+
+  test("once the list is read, a value it lacks is gone; unread, empty or no value: not known", () => {
+    const listed = [model("openrouter", "google/gemma-4-31b-it:free", "Gemma 4 31B", true)]
+    expect(modelGoneFrom("openrouter/nex-agi/nex-n2.5-mini:free", { kind: "ready", models: listed })).toBe(true)
+    expect(modelGoneFrom("openrouter/google/gemma-4-31b-it:free", { kind: "ready", models: listed })).toBe(false)
+    expect(modelGoneFrom("openrouter/nex-agi/nex-n2.5-mini:free", { kind: "loading" })).toBe(false)
+    expect(modelGoneFrom("openrouter/nex-agi/nex-n2.5-mini:free", { kind: "ready", models: [] })).toBe(false)
+    expect(modelGoneFrom("", { kind: "ready", models: listed })).toBe(false)
+  })
+
+  test("lint: the model chip shows a gone model by name and in the warning's tone, the id only in its tooltip", () => {
+    const view = readFileSync(join(import.meta.dir, "model-picker.tsx"), "utf8")
+    expect(view).toContain('? goneLabel(props.value)')
+    expect(view).toContain('title: t("picker.goneTitle", props.value), tone: "warn" as const')
+    expect(view).toContain("props.state ? modelGoneFrom(props.value, props.state) : false")
+    const menu = readFileSync(join(import.meta.dir, "chip-menu.tsx"), "utf8")
+    expect(menu).toContain("title={props.title ?? props.text}")
+    expect(menu).toContain("data-tone={props.tone}")
   })
 })

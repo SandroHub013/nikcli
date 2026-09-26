@@ -22,13 +22,16 @@ function rule(slot: string): Record<string, string> {
 }
 
 describe("the bot's composer", () => {
-  test("the field keeps a width to write in", () => {
+  // Since pezzo 4 the box is a column: the field on top, the chips, the caption and Invia in a row under it.
+  test("lint: the field has the box's whole line to write in, over the row", () => {
+    expect(rule("bots-composer")["flex-direction"]).toBe("column")
     const field = rule("bots-composer-field")
-    expect(field["min-width"]).toMatch(/rem/)
-    expect(field["flex"]).toBe("1 1 auto")
+    expect(field["width"]).toBe("100%")
+    expect(field["flex"]).toBe("0 0 auto")
+    expect(rule("bots-composer-row")["flex-wrap"]).toBe("wrap")
   })
 
-  test("in a narrow thread the caption has a line of its own, and the field the one above", () => {
+  test("lint: in a narrow thread the caption has a line of its own under the chips, and the chips give way", () => {
     // 14rem is 168 px here: the root font is 12 px, and beside a caption of seven lines that was the field.
     expect(rule("bots-thread")["container-type"]).toBe("inline-size")
     const narrow = /@container \(max-width: (\d+)px\) \{([\s\S]*?)\n\}/.exec(css)
@@ -38,15 +41,15 @@ describe("the bot's composer", () => {
       const match = new RegExp(`\\[data-slot="${slot}"\\]\\s*\\{([^}]*)\\}`).exec(narrow![2]!)
       return match?.[1] ?? ""
     }
-    expect(inside("bots-composer")).toContain("flex-wrap: wrap")
-    expect(inside("bots-composer-field")).toContain("flex-basis: 0")
+    expect(narrow![2]).toContain('[data-slot="bots-composer-row"] [data-slot="chip"]')
+    expect(narrow![2]).toContain("max-width: 12rem")
     // After the button, on the whole line.
     expect(inside("bots-composer-cap")).toContain("order: 1")
     expect(inside("bots-composer-cap")).toContain("flex-basis: 100%")
     expect(inside("bots-composer-cap")).toContain("max-width: none")
   })
 
-  test("the caption gives way: it shrinks, wraps and has a ceiling", () => {
+  test("lint: the caption gives way: it shrinks, wraps and has a ceiling", () => {
     const cap = rule("bots-composer-cap")
     expect(cap["flex"]).toBe("0 1 auto")
     expect(cap["min-width"]).toBe("0")

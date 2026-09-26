@@ -42,7 +42,7 @@ import { generationSpend, runnerAccount, runnerById, RUNNERS, spendKind, spendLi
 import { PLAN_RUNNERS, routineModeOf } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
-import { submitDraft } from "./composer"
+import { effortChange, modelChange, runnerModelItems, submitDraft } from "./composer"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runBotTurn } from "./serve-turn"
 import {
@@ -58,6 +58,7 @@ import {
   readBotText,
   resolveRoots,
   updateBot,
+  type BotChanges,
   type BotRoots,
 } from "./store"
 import {
@@ -92,7 +93,7 @@ import {
   type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants } from "./catalog"
+import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
 import { effortChoices, effortToSave } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
@@ -116,6 +117,8 @@ import { appChatStore } from "../chat/store"
 import "./bots.css"
 import { ModelPicker } from "../chat/model-picker"
 import { EffortPicker } from "../chat/effort-picker"
+import { ChipMenu } from "../chat/chip-menu"
+import { readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 
 /*
@@ -978,6 +981,14 @@ export function BotsMain(props: BotsMainProps) {
               onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
               onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
+              models={models()}
+              catalog={catalog}
+              onSettings={async (changes) => {
+                // The form's save: the file, then the roster read again.
+                const problem = await updateBot(bot(), changes)
+                if (!problem) reload()
+                return problem
+              }}
             />
           )}
         </Show>
@@ -1132,6 +1143,11 @@ function Thread(props: {
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
   onGrant: () => void
   onStop: () => void
+  /** The catalog, as the card's form reads it: when the model chip opens. */
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
+  /** A chip's choice, saved as the form saves it; resolves to the problem, if any. */
+  onSettings: (changes: BotChanges) => Promise<string | undefined>
 }) {
   const [draft, setDraft] = createSignal("")
   let scroller: HTMLDivElement | undefined
@@ -1161,6 +1177,42 @@ function Thread(props: {
   }
 
   const subagent = () => props.bot.mode === "subagent"
+
+  /*
+   * The model and effort chips (composer-chip, pezzo 4). A choice shows at
+   * once and is written to the bot's file; the file is the truth, so the
+   * chip goes back to it when it changes, or when the save fails.
+   */
+  const [shown, setShown] = createSignal<{ readonly model: string; readonly effort: string }>()
+  const [chipProblem, setChipProblem] = createSignal<string>()
+  createEffect(on(() => [props.bot.path, props.bot.model, props.bot.effort], () => setShown(undefined)))
+  createEffect(on(() => props.bot.path, () => setChipProblem(undefined)))
+  const runner = createMemo(() => runnerById(props.bot.runner))
+  const model = () => shown()?.model ?? props.bot.model ?? ""
+  const effort = () => shown()?.effort ?? props.bot.effort ?? ""
+  const efforts = createEfforts(() => ({ runner: props.bot.runner, model: model(), effort: effort(), models: props.models }))
+  const gone = createGone(() => ({ runner: props.bot.runner, model: model() }))
+  const change = async (changes: BotChanges) => {
+    setShown({
+      model: "model" in changes ? (changes.model ?? "") : model(),
+      effort: "effort" in changes ? (changes.effort ?? "") : effort(),
+    })
+    setChipProblem(undefined)
+    const problem = await props.onSettings(changes)
+    if (problem) {
+      setShown(undefined)
+      setChipProblem(problem)
+    }
+  }
+  const chooseModel = (value: string) => {
+    if (value === model()) return
+    const variants = runner().id === "nikcli" && value ? variantsOf(props.models, parseModelRef(value)) : undefined
+    void change(modelChange(value, effort(), variants))
+  }
+  const chooseEffort = (value: string) => {
+    if (value === (efforts().stale ? "" : effort())) return
+    void change(effortChange(value))
+  }
 
   return (
     <div data-slot="bots-thread">
@@ -1272,6 +1324,8 @@ function Thread(props: {
         </div>
       </Show>
 
+      <Show when={chipProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+
       <form
         data-slot="bots-composer"
         onSubmit={(event) => {
@@ -1298,30 +1352,70 @@ function Thread(props: {
             }
           }}
         />
-        <span data-slot="bots-composer-cap">
-          <Show when={props.talk.lastTurn}>
-            {(turn) => (
-              <>
-                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
-                {" · "}
-                <LastFigures
-                  {...(turn().mode ? { mode: turn().mode } : {})}
-                  runner={props.bot.runner}
-                  model={turn().model}
-                  tokens={turn().tokens}
-                  costUsd={turn().costUsd}
-                />
-                {" · "}
-              </>
-            )}
+        {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
+        <div data-slot="bots-composer-row">
+          <Show
+            when={runner().id === "nikcli"}
+            fallback={
+              <ChipMenu
+                kind="model"
+                label={t("bots.engine.model")}
+                text={model() || t("bots.engine.modelDefaultOf", runner().label)}
+                value={model()}
+                items={runnerModelItems(runner().models, model(), t("bots.engine.modelDefaultOf", runner().label))}
+                onChoose={chooseModel}
+              />
+            }
+          >
+            <ModelPicker
+              label={t("bots.engine.model")}
+              value={model()}
+              gone={gone()}
+              models={props.models}
+              {...(props.catalog ? { state: props.catalog.state() } : {})}
+              recent={props.catalog?.recent() ?? []}
+              defaultLabel={t("bots.engine.nikcliDefault")}
+              {...(props.bot.model ? { kept: props.bot.model } : {})}
+              fallback={(value) => botModelLabel(value)}
+              onOpen={() => props.catalog?.open()}
+              onRetry={() => props.catalog?.retry()}
+              onChoose={chooseModel}
+            />
           </Show>
-          <Show when={hasThreadTotals(props.talk)}>
-            {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+          <Show when={!efforts().none}>
+            <EffortPicker
+              label={t("bots.engine.effort")}
+              value={efforts().stale ? "" : effort()}
+              levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
+              onChoose={chooseEffort}
+            />
           </Show>
-        </span>
-        <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
-          {t("bots.send")}
-        </button>
+          <span data-slot="bots-composer-gap" />
+          <span data-slot="bots-composer-cap">
+            <Show when={props.talk.lastTurn}>
+              {(turn) => (
+                <>
+                  {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                  {" · "}
+                  <LastFigures
+                    {...(turn().mode ? { mode: turn().mode } : {})}
+                    runner={props.bot.runner}
+                    model={turn().model}
+                    tokens={turn().tokens}
+                    costUsd={turn().costUsd}
+                  />
+                  {" · "}
+                </>
+              )}
+            </Show>
+            <Show when={hasThreadTotals(props.talk)}>
+              {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            </Show>
+          </span>
+          <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
+            {t("bots.send")}
+          </button>
+        </div>
       </form>
     </div>
   )
@@ -1482,6 +1576,7 @@ function BotCard(props: {
   onOpenKeys?: () => void
 }) {
   const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
+  const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
   const [editing, setEditing] = createSignal(false)
   const [confirming, setConfirming] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
@@ -1511,9 +1606,13 @@ function BotCard(props: {
         <h2 data-slot="bots-card-name">{props.bot.identifier}</h2>
         <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
         <span data-slot="bots-card-meta">
-          {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
-          {" · "}
-          {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
+          {runnerById(props.bot.runner).label} ·{" "}
+          {/* A model the catalog no longer has: its name in words and why, the id in the tooltip (bot-riquadro, a). */}
+          <Show when={modelIsGone()} fallback={<>{props.bot.model ?? t("bots.defaultModel")} · {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}</>}>
+            <span data-slot="bots-card-gone" title={t("picker.goneTitle", props.bot.model ?? "")}>
+              {t("picker.gone", readableModelName(props.bot.model ?? ""))}
+            </span>
+          </Show>
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
           {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
@@ -1883,6 +1982,52 @@ function BotForm(props: {
  * before a list here learns them, and refuse a wrong one in their own words.
  */
 
+/**
+ * The efforts a bot's model offers, for the form and the composer's chip
+ * alike. A nikcli model's are its variants: the catalog's, or its provider's
+ * for a model the catalog lacks.
+ */
+function createEfforts(input: () => {
+  readonly runner: string | undefined
+  readonly model: string
+  readonly effort: string
+  readonly models: readonly ChatModelChoice[]
+}) {
+  const runner = createMemo<Runner>(() => runnerById(input().runner))
+  const model = () => input().model
+  const listed = createMemo(() =>
+    runner().id === "nikcli" && model() ? variantsOf(input().models, parseModelRef(model())) : undefined,
+  )
+  const [variants] = createResource(
+    () => (runner().id === "nikcli" && model() && listed() === undefined ? model() : null),
+    (name) => nikcliModelVariants(name, loadCatalog),
+  )
+  return createMemo(() =>
+    effortChoices({
+      nikcli: runner().id === "nikcli",
+      fixed: runner().efforts,
+      // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
+      variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
+      saved: input().effort,
+    }),
+  )
+}
+
+/**
+ * Whether a nikcli bot's model has left its provider's catalog, as the card,
+ * the composer's chip and the form say it (review of bot-riquadro, a). Read
+ * with the provider's catalog the efforts already read; false while it is
+ * read, and for the other runners.
+ */
+function createGone(input: () => { readonly runner: string | undefined; readonly model: string }) {
+  const [gone] = createResource(
+    () => (runnerById(input().runner).id === "nikcli" && input().model ? input().model : null),
+    (model) => modelGone(model, loadCatalog),
+  )
+  // A resource keeps the last model's answer: only this model's, read.
+  return () => runnerById(input().runner).id === "nikcli" && Boolean(input().model) && !gone.loading && gone() === true
+}
+
 function EngineFields(props: {
   listId: string
   runner: string
@@ -1904,23 +2049,8 @@ function EngineFields(props: {
   onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
-  // A nikcli model's efforts are its variants: the catalog's, or its provider's for a model the catalog lacks.
-  const listed = createMemo(() =>
-    runner().id === "nikcli" && props.model ? variantsOf(props.nikcliModels, parseModelRef(props.model)) : undefined,
-  )
-  const [variants] = createResource(
-    () => (runner().id === "nikcli" && props.model && listed() === undefined ? props.model : null),
-    (model) => nikcliModelVariants(model, loadCatalog),
-  )
-  const efforts = createMemo(() =>
-    effortChoices({
-      nikcli: runner().id === "nikcli",
-      fixed: runner().efforts,
-      // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
-      variants: runner().id === "nikcli" && props.model ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
-      saved: props.effort,
-    }),
-  )
+  const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))
+  const gone = createGone(() => ({ runner: props.runner, model: props.model }))
   createEffect(() => props.onStale?.(efforts().stale))
   const [pickingKey, setPickingKey] = createSignal(false)
   const [assigned] = createResource(
@@ -2051,6 +2181,7 @@ function EngineFields(props: {
               below
               label={t("bots.engine.model")}
               value={props.model}
+              gone={gone()}
               models={props.nikcliModels}
               {...(props.catalog ? { state: props.catalog.state() } : {})}
               recent={props.catalog?.recent() ?? []}

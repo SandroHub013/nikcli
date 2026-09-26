@@ -538,8 +538,9 @@
   padding: 0 var(--ade-space-7);
   border: 1px solid transparent;
   border-radius: var(--ade-radius-lg);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
+  /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
+  background: var(--ade-text);
+  color: var(--ade-surface);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
@@ -551,8 +552,8 @@
   transform: var(--ade-press);
 }
 
-[data-slot="chat-send"]:hover:not(:disabled) {
-  background: var(--ade-accent-strong);
+[data-slot="chat-send"]:hover:not(:disabled):not([data-stop]) {
+  background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface));
 }
 
 [data-slot="chat-send"]:disabled {
@@ -574,7 +575,7 @@
 
 [data-slot="chat-send"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
 }
 
 /* ── narrow ───────────────────────────────────────────────────────────────── */

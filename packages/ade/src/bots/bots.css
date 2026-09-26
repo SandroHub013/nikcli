@@ -474,12 +474,18 @@
 
 [data-slot="bots-mention"]:hover { border-color: var(--ade-waiting); color: var(--ade-waiting); }
 
+/*
+ * One box, as the Chat's (chat-riquadro) and Claude's and Codex's apps: the
+ * text on top, and under it, inside, the model and effort chips, the last
+ * turn's figures and Invia (composer-chip, pezzo 4).
+ */
 [data-slot="bots-composer"] {
   display: flex;
-  align-items: flex-end;
-  gap: var(--ade-space-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-3);
   margin: 0 var(--ade-space-8) var(--ade-space-7);
-  padding: var(--ade-space-4) var(--ade-space-5);
+  padding: var(--ade-space-4) var(--ade-space-4) var(--ade-space-3) var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-surface);
@@ -497,14 +503,16 @@
 }
 
 /*
- * The field keeps room to write in: a long caption (a model id like
- * openrouter/nvidia/…:free, the figures, the mode) used to take the whole
- * line, nowrap and unshrinkable, and squeeze the field to one column. Now
- * the caption gives way, up to wrapping on its own lines (Verifiche).
+ * The field has a line of its own, the box's whole width: a long caption (a
+ * model id like openrouter/nvidia/…:free, the figures, the mode) beside it
+ * used to squeeze it to one column (Verifiche). The caption is in the row
+ * under it now.
  */
 [data-slot="bots-composer-field"] {
-  flex: 1 1 auto;
-  min-width: min(14rem, 55%);
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
   max-height: 8rem;
   padding: var(--ade-space-2) 0;
   border: 0;
@@ -521,6 +529,58 @@
    drew a second one inside it (bot-sforzo, A occhio). */
 [data-slot="bots-composer-field"]:focus { outline: none; box-shadow: none; }
 
+/* The chips, the figures and Invia, under the text. */
+[data-slot="bots-composer-row"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  min-width: 0;
+}
+
+[data-slot="bots-composer-gap"] { flex: 1 1 auto; }
+
+/*
+ * Invia as the Chat's (`chat-send`), not the form's primary button: neutral
+ * while there is nothing to send, the same size and shape (review of
+ * bot-riquadro, b: the bot's was a full teal where the Chat's was not).
+ * With something to send, no teal either: the strong text's colour.
+ */
+[data-slot="bots-send"] {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--ade-space-7);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-lg);
+  /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
+  background: var(--ade-text);
+  color: var(--ade-surface);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="bots-send"]:active:not(:disabled) { transform: var(--ade-press); }
+[data-slot="bots-send"]:hover:not(:disabled):not([data-stop]) { background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface)); }
+
+[data-slot="bots-send"]:disabled {
+  background: var(--ade-surface);
+  border-color: var(--ade-border);
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="bots-send"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+}
+
+/* The card's line for a model the catalog no longer has (bot-riquadro, a). */
+[data-slot="bots-card-gone"] { color: var(--ade-warning); }
+
+/* The caption gives way to the chips and Invia: it shrinks, and wraps on its own lines. */
 [data-slot="bots-composer-cap"] {
   flex: 0 1 auto;
   min-width: 0;
@@ -534,20 +594,14 @@
 }
 
 /*
- * A narrow thread: the caption takes a line of its own under the field and
- * the button, and the field the whole line above. Beside the caption, in a
- * 900 px window with the card open, the field had its 14rem — 168 px, the
- * root font being 12 px — and the caption seven lines (Verifiche, live 3).
- * The field starts from nothing and grows, so a long line typed in it does
- * not push the button down as well.
+ * A narrow thread: the caption takes a line of its own under the chips and
+ * Invia, and the chips give way first, the model's name cut. Beside the
+ * chips, in a 900 px window with the card open, the caption had seven lines
+ * (Verifiche, live 3).
  */
 @container (max-width: 640px) {
-  [data-slot="bots-composer"] {
-    flex-wrap: wrap;
-  }
-
-  [data-slot="bots-composer-field"] {
-    flex-basis: 0;
+  [data-slot="bots-composer-row"] [data-slot="chip"] {
+    max-width: 12rem;
   }
 
   [data-slot="bots-composer-cap"] {
