@@ -1190,6 +1190,7 @@ export const it = {
     `La conversazione è già aperta nel pannello «${pane}»: qui non la riapro, per non scrivere in due nella stessa`,
   "resume.alsoOpen": (pane: string) =>
     `Questa conversazione è aperta anche nel pannello «${pane}»: al riavvio la riprende uno solo dei due`,
+  "resume.gone": (agent: string) => `La conversazione di prima non c'è più in ${agent}: ne apro una nuova`,
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",

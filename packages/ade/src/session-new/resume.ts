@@ -85,6 +85,20 @@ export interface ResumeRecipe {
     readonly read: (output: string) => string | undefined
   }
   /**
+   * How to ask the CLI whether the conversation `byId` would reopen is still
+   * there, for a CLI that keeps no transcript file to look for.
+   *
+   * nikcli is the case: its conversations are rows in one database, and one
+   * deleted from nikcli made the pane's `--session <id>` fail on the next
+   * restart (Verifiche, 2026-09-27: the raw `NotFoundError`, then «Uscito con
+   * 1»). Asked first, a missing one is a new conversation instead.
+   */
+  readonly exists?: {
+    readonly args: (id: string) => string[]
+    /** `gone`, `here`, or undefined while the answer has not arrived. */
+    readonly read: (output: string, id: string) => "gone" | "here" | undefined
+  }
+  /**
    * Arguments that start a new conversation as a copy of `parent`, under
    * `child` where the CLI takes an id. The copy's prompt is the parent's, so a
    * forked subagent reads the parent's context from the cache instead of
@@ -152,6 +166,22 @@ function agyLatest(text: string, cwd: string): string | undefined {
 export function mintedNikcliId(output: string): string | undefined {
   const match = /"id"\s*:\s*"(ses_[A-Za-z0-9]{8,64})"/.exec(output)
   return match?.[1]
+}
+
+/**
+ * Whether `nikcli api session.get` found the conversation `id`.
+ *
+ * A missing one is a 404 and `{"name":"NotFoundError", … "Session not found:
+ * <id>"}`, and the command exits; a present one is the conversation's JSON,
+ * after which the command stays up (`askCli` kills it once this answers).
+ * Anything else — a warning, half a line — is no answer yet, and no answer at
+ * all leaves the pane reopening the id as before.
+ */
+export function nikcliConversationThere(output: string, id: string): "gone" | "here" | undefined {
+  const text = output.replace(/\r/g, "")
+  if (/"name"\s*:\s*"NotFoundError"/.test(text) && text.includes(`Session not found: ${id}`)) return "gone"
+  const found = /"id"\s*:\s*"(ses_[A-Za-z0-9]{8,64})"/.exec(text)
+  return found?.[1] === id ? "here" : undefined
 }
 
 /**
@@ -322,6 +352,10 @@ export const RESUME: Record<string, ResumeRecipe> = {
     mint: {
       args: (title) => ["api", "session.create", "--log-level", "warn", "-d", JSON.stringify({ title })],
       read: mintedNikcliId,
+    },
+    exists: {
+      args: (id) => ["api", "session.get", "--log-level", "warn", "--param", `sessionID=${id}`],
+      read: nikcliConversationThere,
     },
   },
   grok: {
@@ -514,7 +548,7 @@ export type ResumePlan =
    * `resumeId` is the id to start under again when the recorded one was never
    * used, so the pane keeps the id it already carries.
    */
-  | { readonly kind: "fresh"; readonly resumeId?: string }
+  | { readonly kind: "fresh"; readonly resumeId?: string; readonly gone?: true }
 
 /** What to do with one session that was live when the app went away. */
 export function planResume(request: ResumeRequest): ResumePlan {
@@ -522,7 +556,8 @@ export function planResume(request: ResumeRequest): ResumePlan {
   if (!recipe) return { kind: "fresh" }
 
   if (request.resumeId && request.missing) {
-    return recipe.start ? { kind: "fresh", resumeId: request.resumeId } : { kind: "fresh" }
+    // `gone`: the id the pane carries is not to be reopened, nor kept (`startProcess`).
+    return recipe.start ? { kind: "fresh", resumeId: request.resumeId } : { kind: "fresh", gone: true }
   }
   if (request.resumeId && recipe.byId) {
     return { kind: "resume", via: "id", args: recipe.byId(request.resumeId) }

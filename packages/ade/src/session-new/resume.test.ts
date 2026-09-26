@@ -135,8 +135,8 @@ describe("planResume", () => {
     expect(latest.read("not json", "C:\\Users\\me")).toBeUndefined()
     expect(latest.path("C:\\Users\\me")).toBe("C:\\Users\\me\\.gemini\\antigravity-cli\\cache\\last_conversations.json")
     expect(planResume({ agentId: "agy", resumeId: "x" })).toEqual({ kind: "resume", via: "id", args: ["--conversation", "x"] })
-    // No `--session-id` for agy: a vanished conversation cannot be re-pinned.
-    expect(planResume({ agentId: "agy", resumeId: "x", missing: true })).toEqual({ kind: "fresh" })
+    // No `--session-id` for agy: a vanished conversation cannot be re-pinned, and its id is dropped (`gone`), not reopened.
+    expect(planResume({ agentId: "agy", resumeId: "x", missing: true })).toEqual({ kind: "fresh", gone: true })
   })
 
   test("an agent that takes an id but was never given one asks for the last", () => {

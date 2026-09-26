@@ -1180,6 +1180,7 @@ export const en: Messages = {
     `This conversation is already open in the pane «${pane}»: it is not reopened here, so the two do not write into the same one`,
   "resume.alsoOpen": (pane) =>
     `This conversation is also open in the pane «${pane}»: on a restart only one of the two reopens it`,
+  "resume.gone": (agent: string) => `The previous conversation no longer exists in ${agent}: opening a new one`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",

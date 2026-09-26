@@ -78,6 +78,12 @@ export function waitForAnswer(options: {
 export const MINT_MS = 30_000
 export const MINT_SLOW_MS = 15_000
 export const LIST_MS = 15_000
+/**
+ * Whether a conversation is still there (`ResumeRecipe.exists`): about 2 s
+ * either way (measured, nikcli 1.400). Past this the pane reopens the id as
+ * it always did, so a slow CLI costs a restore no more than this.
+ */
+export const EXISTS_MS = 8_000
 
 /** What the slow note promises: the seconds left after it, as the constants say. */
 export const MINT_SLOW_LEFT_S = (MINT_MS - MINT_SLOW_MS) / 1000
