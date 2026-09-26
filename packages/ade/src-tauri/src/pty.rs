@@ -245,6 +245,8 @@ fn blocked_bash_denials() -> Vec<String> {
      */
     const WINDOWS_DELETE: &[&str] = &["Remove-Item", "ri", "rd", "rmdir", "del", "erase"];
     const DRIVES: &[&str] = &["?:", "?:\\", "?:/", "?:\\?", "?:/?"];
+    // The user's folder, and a drive with nothing before it (second check, MEDIO).
+    const HOMES: &[&str] = &["~", "~\\", "~/", "$HOME", "$env:USERPROFILE", "${env:USERPROFILE}", "%USERPROFILE%"];
     const WINDOWS_WORDS: &[&str] = &[
         "diskpart", "Format-Volume", "Clear-Disk", "Remove-Partition", "Initialize-Disk", "shutdown", "Stop-Computer",
         "Restart-Computer", "bcdedit", "vssadmin delete", "reg delete HKLM", "wmic shadowcopy delete",
@@ -271,6 +273,16 @@ fn blocked_bash_denials() -> Vec<String> {
                 denied.push(format!("{command} * {quote}{drive}{quote}"));
                 denied.push(format!("{command} * {quote}{drive}{quote} *"));
             }
+        }
+    }
+    for command in WINDOWS_DELETE.iter().flat_map(|word| [word.to_string(), word.to_lowercase()]) {
+        for home in HOMES {
+            denied.push(format!("{command} * {home}"));
+            denied.push(format!("{command} * {home} *"));
+        }
+        for drive in DRIVES {
+            denied.push(format!("{command} {drive}"));
+            denied.push(format!("{command} {drive} *"));
         }
     }
     for word in WINDOWS_WORDS.iter().flat_map(|word| spellings(word)) {
@@ -2320,6 +2332,11 @@ mod tests {
         ("deleteDrive", "RD /S /Q C:\\"),
         ("power", "SHUTDOWN /s /t 0"),
         ("disk", "FORMAT C:"),
+        ("deleteDrive", "Remove-Item -Recurse -Force ~"),
+        ("deleteDrive", "Remove-Item -Recurse -Force $env:USERPROFILE"),
+        ("deleteDrive", "Remove-Item C:\\"),
+        ("deleteDrive", "rd /s /q %USERPROFILE%"),
+        ("deleteDrive", "ri -r $HOME"),
     ];
 
     #[test]
@@ -2362,7 +2379,7 @@ mod tests {
         // Well under what Windows allows a variable (32767).
         for flag in super::BLOCK_LIST_FLAGS {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
-            assert!(env[0].1.len() < 20_000, "{flag}: {}", env[0].1.len());
+            assert!(env[0].1.len() < 24_000, "{flag}: {}", env[0].1.len());
         }
     }
 

@@ -281,6 +281,61 @@ describe("every danger of a command", () => {
  * (where ADE reads the menu), or one whose content cannot be read, is asked
  * about every time: «Sempre» has no key for it.
  */
+/*
+ * Second check, MEDIO: the user's folder and a drive's root as PowerShell and
+ * cmd write them, in any case. And every spelling Rust's
+ * `no_spelling_passes_a_users_allow_in_any_flag` leaves to ADE's answer
+ * (nikcli asks, it does not deny) is refused here.
+ */
+describe("Windows: the user's folder, a bare drive, any case", () => {
+  test("deleting the user's folder or a drive's root never runs", () => {
+    for (const command of [
+      "Remove-Item -Recurse -Force ~",
+      "Remove-Item -Recurse -Force ~\\",
+      "Remove-Item -Recurse -Force $HOME",
+      "Remove-Item -Recurse -Force $env:USERPROFILE",
+      "Remove-Item -Recurse -Force ${env:USERPROFILE}",
+      "Remove-Item -Recurse -Force $env:USERPROFILE\\*",
+      "rd /s /q %USERPROFILE%",
+      "rmdir /s /q \"%USERPROFILE%\\\"",
+      "Remove-Item C:\\",
+      "Remove-Item -Path C:\\ -Recurse",
+      "ri -r C:\\",
+      "RI -r C:\\",
+      "rm C:\*",
+      "del C:\\*",
+      "erase /q D:\\",
+      "Remove-Item -Recurse $env:SystemRoot",
+    ]) {
+      expect([command, kind(command)]).toEqual([command, "block:deleteDrive"])
+    }
+  })
+
+  test("a folder inside them is not the folder itself", () => {
+    for (const command of [
+      "Remove-Item -Recurse -Force ~\\progetto\\dist",
+      "Remove-Item -Recurse $env:USERPROFILE\\progetto\\build",
+      "rd /s /q %USERPROFILE%\\tmp\\x",
+      "del C:\\Users\\me\\notes.txt",
+      "Remove-Item -Recurse dist",
+      "rm ~/.cache/x",
+    ]) {
+      expect([command, kind(command).startsWith("block")]).toEqual([command, false])
+    }
+  })
+
+  test("every spelling nikcli asks about is refused by ADE", () => {
+    const rust = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
+    const start = rust.indexOf("let spellings = [", rust.indexOf("fn no_spelling_passes_a_users_allow_in_any_flag"))
+    const table = rust.slice(start, rust.indexOf("];", start))
+    const spellings = [...table.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((match) => match[1]!.replace(/\\\\/g, "\\"))
+    expect(spellings.length).toBeGreaterThan(8)
+    for (const command of spellings) {
+      expect([command, decide("bash", command, []).kind]).toEqual([command, "block"])
+    }
+  })
+})
+
 describe("dangers «Sempre» cannot keep", () => {
   test("writing to the console, or the menu's own words, is asked", () => {
     for (const command of [

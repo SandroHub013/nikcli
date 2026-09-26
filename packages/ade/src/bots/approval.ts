@@ -84,6 +84,12 @@ const WRAPPER = String.raw`\b(?:sudo|doas|exec|env|command|builtin|nohup|nice|ti
  */
 const START = String.raw`(?:^|[;&|({\x60\n]\s*|${NESTED}|${WRAPPER})["']?(?:\\|[^\s;&|'"(]*[\\/])?`
 const ROOT = String.raw`(?:\/|\/\*|~|~\/|\$HOME|\$\{HOME\}|[A-Za-z]:\\?|[A-Za-z]:\\\*|[A-Za-z]:\/)`
+/*
+ * A drive's root or the user's folder, as PowerShell and cmd write them
+ * (second check, MEDIO): `C:\`, `~`, `$HOME`, `$env:USERPROFILE`,
+ * `%USERPROFILE%`, with or without a final separator and `*`.
+ */
+const WINDOWS_ROOT = String.raw`(?:[A-Za-z]:|~|\$HOME|\$\{HOME\}|\$env:(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)|\$\{env:USERPROFILE\}|%(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)%)[\\/]?\*?`
 const END = String.raw`(?=\s|$|[;&|)"'])`
 const re = (source: string) => new RegExp(source, "i")
 
@@ -101,9 +107,16 @@ export const BLOCKED: readonly CommandRule[] = [
     id: "deleteDrive",
     reason: "bots.approval.reason.deleteRoot",
     pattern: re(
-      String.raw`${START}(?:remove-item|ri|rm|del|erase|rd|rmdir)\b[^;&|\n]*?(?:-recurse|\/s)\b[^;&|\n]*?\s["']?[A-Za-z]:\\?\*?["']?${END}|${START}(?:del|erase)\b[^;&|\n]*\s["']?[A-Za-z]:\\\*`,
+      String.raw`${START}(?:remove-item|ri|rm|del|erase|rd|rmdir)\b(?:[^;&|\n]*?\s)?["']?${WINDOWS_ROOT}["']?${END}`,
     ),
-    prefixes: ["Remove-Item -Recurse -Force C:\\", "rd /s /q C:\\", "rmdir /s /q C:\\", "del /s /q C:\\"],
+    prefixes: [
+      "Remove-Item -Recurse -Force C:\\",
+      "Remove-Item -Recurse -Force ~",
+      "Remove-Item -Recurse -Force $env:USERPROFILE",
+      "rd /s /q C:\\",
+      "rmdir /s /q C:\\",
+      "del /s /q C:\\",
+    ],
   },
   {
     id: "disk",
