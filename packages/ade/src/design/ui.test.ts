@@ -650,6 +650,9 @@ describe("a variant's preview", () => {
     )
     const image = previewPlan("shots/a.png", root, "DS1", true)
     expect(image).toMatchObject({ kind: "image", path: "C:/p/shots/a.png" })
+  })
+
+  test("lint: the image's onError names the path through loadFailure", () => {
     const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
     expect(tsx).toContain('onError={() => setFailure(loadFailure(current.path, t("design.preview.imageBroken")))}')
   })

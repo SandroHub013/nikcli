@@ -138,7 +138,9 @@ describe("B8a: the two blocks and their limits", () => {
     }
     expect(byUser("la chiave è sk-abcdefghijklmnopqrstuvwxyz123456").ok).toBe(false)
     expect(byUser("la chiave è [nascosto]").ok).toBe(false)
-    // The panel writes as the user.
+  })
+
+  test("lint: the memory panel writes every entry as the user, so the heuristic never runs on it", () => {
     const panel = readFileSync(new URL("./memory-panel.tsx", import.meta.url), "utf8")
     expect(panel).toContain("applyMemoryOp(memory(), op, { byUser: true })")
   })

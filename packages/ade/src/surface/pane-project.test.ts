@@ -113,13 +113,16 @@ describe("a session whose folder is gone (ROADMAP, BASSO)", () => {
   })
 })
 
-test("the pane of a gone folder offers to close, not to restart, and the flag is never saved", () => {
-  const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
-  expect(source).toContain('current().gone && !deps.isRunning(current().id)')
-  expect(source).toMatch(/restartable = \(\) =>\s+!current\(\)\.suspended &&\s+!current\(\)\.gone/)
+test("the pane of a gone folder says so, offers to close, and the flag is never saved", () => {
   expect(t("pane.closeGone")).toBe("Chiudi il pannello")
   expect(activityLabel("folderGone")).toBe("Cartella sparita")
   const pane = { id: "p1", title: "Claude", status: "error", agent: "claude-code", mode: "auto", lines: [], workspaceId: "app", gone: "C:/x/vecchia" } as unknown as Pane
   const state = toWorkspaceState({ panes: [pane], view: "code", sidebarWidth: 260 } as unknown as Workbench)
   expect(JSON.stringify(state)).not.toContain("C:/x/vecchia")
+})
+
+test("lint: a gone pane is offered to close, and is never restartable", () => {
+  const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
+  expect(source).toContain('current().gone && !deps.isRunning(current().id)')
+  expect(source).toMatch(/restartable = \(\) =>\s+!current\(\)\.suspended &&\s+!current\(\)\.gone/)
 })

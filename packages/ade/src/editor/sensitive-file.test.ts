@@ -208,29 +208,23 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     expect(svgBody).toContain('data-slot="file-image"')
   })
 
-  test("SvgView and ImageView reset failed state when src changes so a new src shows after an error (Punto 10 bis)", async () => {
+  /*
+   * The half of this that ran was `createRoot` over its own signal and its own
+   * `createEffect`, asserting that Solid does what Solid does. `SvgView` and
+   * `ImageView` are components and this suite does not mount components, so
+   * what is left is the wiring on the sheet, and that is all this says.
+   */
+  test("lint: the SVG and image viewers clear the failed flag when props.src changes", () => {
     const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
     const svgIndex = view.indexOf("function SvgView")
+    expect(svgIndex).toBeGreaterThan(-1)
     const svgBody = view.slice(svgIndex, view.indexOf("\n}", svgIndex))
     expect(svgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
 
     const imgIndex = view.indexOf("function ImageView")
+    expect(imgIndex).toBeGreaterThan(-1)
     const imgBody = view.slice(imgIndex, view.indexOf("\n}", imgIndex))
     expect(imgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
-
-    await createRoot(async (dispose) => {
-      const [src, setSrc] = createSignal("err.svg")
-      const [failed, setFailed] = createSignal(false)
-      createEffect(on(() => src(), () => setFailed(false)))
-
-      setFailed(true)
-      expect(failed()).toBe(true)
-
-      setSrc("new.svg")
-      await Promise.resolve()
-      expect(failed()).toBe(false)
-      dispose()
-    })
   })
 
   test("lint: the file view centres with safe center, never margin: auto on children", () => {
