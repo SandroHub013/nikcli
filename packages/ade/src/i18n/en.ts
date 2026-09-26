@@ -1070,6 +1070,10 @@ export const en: Messages = {
   "keys.saving": "Saving…",
   "keys.request": "Key requested",
   "keys.request.title": (env) => `A session is asking for the ${env} key`,
+  "keys.request.from": (pane, agent, env) => `«${pane}» (${agent}) is asking for the ${env} key`,
+  "keys.request.says": "The agent writes:",
+  "keys.request.goes": (agent) =>
+    `It stays in the system keychain and goes to ${agent}, which gets it the next time the session starts. You can also ignore the request.`,
   "keys.request.hint": "It stays in the system keychain, and the session gets it the next time it starts. You can also ignore the request.",
 
   // Video, 3D model, simulator, recording, remote, quota

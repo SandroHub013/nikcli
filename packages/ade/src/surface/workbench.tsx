@@ -24,7 +24,7 @@ import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
 import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
-import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
+import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
   checkName,
@@ -786,11 +786,16 @@ export function Workbench() {
       ok: t("panels.consent.allow"),
       cancel: t("panels.consent.deny"),
     })
-  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string }>()
+  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string; asker?: KeyAsker }>()
   panels.register("keys", {
     verbs: KEYS_VERBS,
-    run: (request) => {
-      return runKeysCommand({ list: keysService.list, ask: (env, reason) => setKeyRequest({ env, reason }) }, request).catch(
+    run: (request, from) => {
+      // Who asks, for the dialog: the pane's name and its agent.
+      const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+      const agentId = pane?.agent ?? pane?.model
+      const asker = pane && agentId ? { title: pane.title, agentId } : undefined
+      const ask = (env: string, reason: string) => setKeyRequest({ env, reason, ...(asker ? { asker } : {}) })
+      return runKeysCommand({ list: keysService.list, ask }, request).catch(
         (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
       )
     },
@@ -8017,6 +8022,7 @@ export function Workbench() {
           agents={AGENTS}
           env={keyRequest()!.env}
           reason={keyRequest()!.reason}
+          {...(keyRequest()!.asker ? { asker: keyRequest()!.asker } : {})}
           onClose={() => setKeyRequest(undefined)}
         />
       </Show>

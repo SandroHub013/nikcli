@@ -1079,6 +1079,10 @@ export const it = {
   "keys.saving": "Salvo…",
   "keys.request": "Chiave richiesta",
   "keys.request.title": (env: string) => `Una sessione chiede la chiave ${env}`,
+  "keys.request.from": (pane: string, agent: string, env: string) => `«${pane}» (${agent}) chiede la chiave ${env}`,
+  "keys.request.says": "L'agente scrive:",
+  "keys.request.goes": (agent: string) =>
+    `Resta nel portachiavi del sistema e va a ${agent}, che la riceve al prossimo avvio della sessione. Puoi anche ignorare la richiesta.`,
   "keys.request.hint": "Resta nel portachiavi del sistema; la sessione la riceve al prossimo avvio. Puoi anche ignorare la richiesta.",
 
   // Video, 3D model, simulator, recording, remote, quota
