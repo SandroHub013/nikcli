@@ -31,6 +31,8 @@ import type { AgentFile } from "../nikcli"
 import { runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
+import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
+import type { Talk } from "../talk"
 import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
@@ -80,6 +82,13 @@ export interface GatewayControllerDeps {
   readonly remote?: (bot: string) => RemoteSetting
   /** The bot's account in ADE (`account.ts`). Absent is a subscription. */
   readonly account?: (bot: string) => BotAccount
+  /**
+   * Each bot's memory (B8a review): read at the start of a chat's
+   * conversation, as in ADE, and never written from here. What the bot
+   * writes from a chat is proposed, for the user to confirm in ADE: a chat's
+   * text is someone else's. Absent, the bots have none here.
+   */
+  readonly memory?: MemoryStore
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   /** How long nikcli's output stays quiet before its menu is taken (`MENU_QUIET_MS`); for tests. */
@@ -262,10 +271,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
               ...(deps.menuQuietMs !== undefined ? { quietMs: deps.menuQuietMs } : {}),
             })
           : undefined
+      const framed = framedMessage(message.platform, message.sender.name, message.text)
+      const memory = deps.memory?.get(message.bot)
+      const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
       turn = deps.runTurn({
         runner,
         bot,
-        message: framedMessage(message.platform, message.sender.name, message.text),
+        message: sent,
         cwd: project,
         timeoutMs: BOT_TURN_TIMEOUT_MS,
         remote,
@@ -279,14 +291,16 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       clearInterval(typing)
       typing = undefined
       if (result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
+      const said = settleChatMemory(message.bot, result.talk, sent, framed)
+      const text = said.found ? takeMemoryOps(result.text).text : result.text
       if (deps.threads && result.talk) {
         const stored = gatewayThreadKey(message.bot, message.platform, message.chat)
-        deps.threads.save(stored, keptThread(deps.threads.read(stored), result.talk))
+        deps.threads.save(stored, keptThread(deps.threads.read(stored), said.talk))
       }
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
       if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))
-      await reply(message, result.text.trim() ? result.text : t("gateway.empty"))
+      await reply(message, text.trim() ? text : t("gateway.empty"))
     } catch (error) {
       await reply(message, t("gateway.failed", error instanceof Error ? error.message : String(error)))
     } finally {
@@ -296,6 +310,38 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       state.starting = false
       void next(key)
     }
+  }
+
+  /**
+   * A chat's turn and its memory (B8a review): the tags leave the bot's words
+   * and become proposals, and the thread kept in ADE shows the chat's message
+   * without the snapshot put before it.
+   */
+  const settleChatMemory = (bot: string, talk: Talk, sent: string, framed: string): { talk: Talk; found: boolean } => {
+    const store = deps.memory
+    if (!store) return { talk, found: false }
+    const ops: MemoryOp[] = []
+    let found = false
+    const messages = talk.messages
+      .map((entry) => {
+        if (entry.role === "user" && entry.text === sent) return { ...entry, text: framed }
+        if (entry.role !== "bot") return entry
+        const taken = takeMemoryOps(entry.text)
+        if (taken.ops.length === 0 && taken.unreadable === 0) return entry
+        found = true
+        ops.push(...taken.ops)
+        return { ...entry, text: taken.text }
+      })
+      .filter((entry) => !(entry.role === "bot" && entry.text.length === 0))
+    if (ops.length > 0) {
+      const { memory } = settleMemoryOps(store.get(bot), ops, () => crypto.randomUUID(), {
+        propose: () => true,
+        from: "gateway",
+        at: (deps.now ?? Date.now)(),
+      })
+      store.set(bot, memory)
+    }
+    return { talk: { ...talk, messages }, found }
   }
 
   const receive = async (message: GatewayMessage) => {

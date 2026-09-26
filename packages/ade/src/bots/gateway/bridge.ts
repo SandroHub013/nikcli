@@ -17,6 +17,7 @@ import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, Pairi
 import { recheckTrust, scopeOf } from "./policy"
 import { localAccountStore } from "../account"
 import { localRemoteStore } from "./remote"
+import { appMemoryStore } from "../memory-app"
 import { localSessionStore } from "./session"
 
 interface LinkStatus {
@@ -132,5 +133,6 @@ export function startAppGatewayController(): Promise<GatewayController> {
     threads: localGatewayThreads(),
     remote: (bot) => localRemoteStore().get(bot),
     account: (bot) => localAccountStore().get(bot),
+    memory: appMemoryStore,
   })
 }

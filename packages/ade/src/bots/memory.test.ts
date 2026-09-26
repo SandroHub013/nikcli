@@ -198,6 +198,27 @@ describe("B8a: the tags in an answer", () => {
   })
 })
 
+describe("B8a review: where the memory goes", () => {
+  test("the voice has none: the voice agent is not a bot, and a snapshot would lengthen every turn", () => {
+    const { readdirSync } = require("node:fs") as typeof import("node:fs")
+    const voice = new URL("../voice/", import.meta.url)
+    for (const name of readdirSync(voice).filter((file: string) => /\.tsx?$/.test(file) && !file.includes(".test."))) {
+      const source = readFileSync(new URL(name, voice), "utf8")
+      expect([name, /bots\/memory|memoryPreface|memorySnapshot/.test(source)]).toEqual([name, false])
+    }
+  })
+
+  test("the gateway reads it and only proposes", () => {
+    const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
+    // The same store as the panel's, so the Memoria section sees a chat's proposals at once.
+    expect(bridge).toContain("memory: appMemoryStore,")
+    expect(readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")).toContain("const memories = appMemoryStore")
+    const controller = readFileSync(new URL("./gateway/controller.ts", import.meta.url), "utf8")
+    expect(controller).toContain("propose: () => true,")
+    expect(controller).not.toContain("applyMemoryOp")
+  })
+})
+
 describe("B8a review: proposals wait for the user", () => {
   test("a proposal is checked, kept, survives a reload, and is applied only on «Conferma»", () => {
     let id = 0

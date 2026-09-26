@@ -92,7 +92,7 @@ import {
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
 import { catalogFree } from "./catalog"
-import { localMemoryStore, type MemoryStore } from "./memory"
+import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
@@ -185,20 +185,9 @@ const accounts = localAccountStore()
 
 /*
  * Each bot's memory (B8a), read through a signal so the card follows the
- * writes a turn makes as well as the user's own.
+ * writes a turn makes, a chat's proposals and the user's own (`memory-app.ts`).
  */
-const memoryDisk = localMemoryStore()
-const [memoryWrites, setMemoryWrites] = createSignal(0)
-const memories: MemoryStore = {
-  get: (bot) => {
-    memoryWrites()
-    return memoryDisk.get(bot)
-  },
-  set: (bot, memory) => {
-    memoryDisk.set(bot, memory)
-    setMemoryWrites((n) => n + 1)
-  },
-}
+const memories = appMemoryStore
 
 const turns = createBotTurns({
   runTurn: (request) => runTurn(request),

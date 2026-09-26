@@ -10,6 +10,8 @@ import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
+import { volatileMemoryStore } from "../memory"
+import { appendMessage, sendMessage } from "../talk"
 
 /*
  * G4: a message from a chat becomes a turn of its bot, with a fake Rust side
@@ -103,6 +105,35 @@ async function until(what: string, check: () => boolean) {
 }
 
 const trusted = async () => ({ ok: true as const, bot: BOT })
+
+describe("a bot's memory from a chat (B8a review)", () => {
+  test("read at the start of a conversation; what the bot writes is only proposed, and leaves its reply", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const memory = volatileMemoryStore()
+    memory.set(BOT.path, { notes: ["Il progetto usa bun."], user: [] })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), memory })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    const first = turns.started[0]!.request
+    expect(first.message).toContain("Il progetto usa bun.")
+    expect(first.message.endsWith(`${chatHeader("Telegram", "Ale")}\n\nciao`)).toBe(true)
+    const answer = 'Ciao!\n<ade-memory op="add" block="notes">Scrive da Telegram.</ade-memory>'
+    const talk = appendMessage(sendMessage(emptyTalk(), first.message, 1), { role: "bot", text: answer }, 2)
+    turns.started[0]!.finish({ text: answer, sessionId: "s-1", talk })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe("Ciao!")
+    expect(memory.get(BOT.path).notes).toEqual(["Il progetto usa bun."])
+    expect(memory.get(BOT.path).proposals?.map((proposal) => [proposal.from, proposal.op])).toEqual([
+      ["gateway", { op: "add", block: "notes", text: "Scrive da Telegram." }],
+    ])
+    // The same conversation goes on without the snapshot.
+    b.emit("e poi?")
+    await until("il secondo turno", () => turns.started.length === 2)
+    expect(turns.started[1]!.request.message).toBe(`${chatHeader("Telegram", "Ale")}\n\ne poi?`)
+    turns.started[1]!.finish({ text: "ok" })
+  })
+})
 
 describe("the gateways' controller", () => {
   test("it listens before Rust is told to read, and stops listening when stopped", async () => {
