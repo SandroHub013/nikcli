@@ -1949,7 +1949,8 @@ mod tests {
         let slot = installer.slot(PIPER);
         let _one = installer.hold(&slot);
         let install = installer.begin(&slot, 1, bytes_pending(&files), far());
-        let mut closed = Closed { install: &install, closed: false };
+        // Il panico non passa da `report`: è il drop a chiudere, che è il punto.
+        let closed = Closed { install: &install, closed: false };
         // Il rumore del panico non è un fallimento: qui viene voluto.
         let quiet = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
