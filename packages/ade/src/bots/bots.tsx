@@ -19,10 +19,10 @@
  *   - on the right its card: what it is for, what it runs on, its objectives,
  *     the file, and the form to change any of it.
  *
- * The conversation is `nikcli run --agent <name> --format json` one process
- * per turn, continued by session id — see `talk.ts` for the events and
- * `session.ts` for the process. "Terminale" still opens the full TUI in a
- * pane for whoever wants it.
+ * A nikcli bot's conversation is a session on ADE's nikcli server
+ * (`serve-turn.ts`); Claude Code's and Codex's are one process per turn,
+ * continued by session id (`turn.ts`). `talk.ts` is the thread. "Terminale"
+ * still opens the full TUI in a pane for whoever wants it.
  *
  * Everything with a rule in it is in the sibling `.ts` files. A `.tsx`
  * cannot be imported under `bun test` here, so nothing that matters lives in

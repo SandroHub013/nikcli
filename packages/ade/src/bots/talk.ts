@@ -4,20 +4,13 @@
  * Talking to a bot used to mean opening its TUI in a pane. That is still
  * there — "Terminale" — but a conversation wants to be read as one: what you
  * said, what it said, what it did in between, and whether it is waiting on
- * you. nikcli has a mode that gives exactly that: `nikcli run --agent <name>
- * --format json "message"` runs one turn against the agent's file and prints
- * one JSON object per event — text, tool use, step, error — every one carrying
- * the session id, so the next turn is `--session <id>` and the model keeps its
- * context. This module is the translation between those lines and a thread.
+ * you. This module is the thread: its messages, its question, what it cost.
  *
- * One process per turn, not one long-running one. A process that exits is a
- * turn that is over: there is nothing to detect and no spinner to time out.
- * The price is a few hundred milliseconds of startup per message, which a
- * conversation does not notice.
- *
- * A bot's nikcli turn runs on ADE's nikcli server now (B8d, `serve-turn.ts`),
- * where a question is an event with an id, answered by that id: no menu is
- * read off a terminal. The thread and its question are the same.
+ * A bot's nikcli turn runs on ADE's nikcli server (B8d, `serve-turn.ts`),
+ * where a question is an event with an id, answered by that id. Claude Code
+ * and Codex print one JSON object per event, one process per turn; their
+ * lines are folded in by `applyJsonLine` with each runner's own reading
+ * (`runners.ts`).
  *
  * Pure, in a `.ts`: a JSON line misread is a message lost.
  */
@@ -113,11 +106,6 @@ export interface Talk {
    * Codex's `turn.completed`). What follows is the process tidying up.
    */
   readonly ended?: boolean
-  /**
-   * The session of the turn under way: the `sessionID` of its first event.
-   * A sub-agent's events carry their own, and do not end the turn.
-   */
-  readonly turnSession?: string
   /**
    * The answer being written, before its message is complete: Claude Code's
    * text deltas, for a turn that asked for them. Gone once the whole message
@@ -227,32 +215,6 @@ export function sealTurn(talk: Talk): Talk {
   return noteTurnUsage(talk, 0, 0, true)
 }
 
-/**
- * The arguments for one turn.
- *
- * `--format json` before the message, and the message last: yargs takes
- * `run [message..]` as a variadic, and a message beginning with `-` would be
- * read as a flag anywhere else. `--session` only when there is one; `-c`
- * (continue the last session) is not used because "last" is whichever
- * session any process on this machine touched most recently, which is not
- * necessarily this bot's.
- */
-export function runArgs(input: {
-  readonly identifier: string
-  readonly message: string
-  readonly sessionId?: string
-  readonly model?: string
-  readonly effort?: string
-}): string[] {
-  // No identifier: nikcli's own default agent, for a turn that is not a bot's.
-  const args = input.identifier ? ["run", "--agent", input.identifier, "--format", "json"] : ["run", "--format", "json"]
-  if (input.model) args.push("--model", input.model)
-  if (input.effort) args.push("--variant", input.effort)
-  if (input.sessionId) args.push("--session", input.sessionId)
-  args.push("--", input.message)
-  return args
-}
-
 let sequence = 0
 function nextId(prefix: string, at: number): string {
   return `${prefix}-${at}-${++sequence}`
@@ -272,27 +234,10 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     limited: undefined,
     turnMode: undefined,
     pendingTurn: { tokens: 0, costUsd: 0 },
-    turnSession: undefined,
   }
 }
 
 /* ── the JSON events ────────────────────────────────────────────────────── */
-
-interface RunEvent {
-  readonly type: string
-  readonly timestamp?: number
-  readonly sessionID?: string
-  readonly part?: {
-    readonly type?: string
-    readonly text?: string
-    readonly tool?: string
-    readonly state?: { readonly title?: string; readonly output?: string; readonly input?: unknown; readonly status?: string }
-    readonly tokens?: unknown
-    readonly cost?: unknown
-    readonly reason?: string
-  }
-  readonly error?: unknown
-}
 
 /** How much of a broken event is kept before giving up on it. */
 const MAX_PARTIAL = 256 * 1024
@@ -317,19 +262,6 @@ function errorText(error: unknown): string {
     if (typeof record.name === "string") return record.name
   }
   return "Errore sconosciuto."
-}
-
-/**
- * One line of the process's output, folded into the conversation.
- *
- * A JSON line is an event; any other line is ignored — nikcli's own logging,
- * a stray warning.
- */
-export function applyLine(talk: Talk, line: string, at: number): Talk {
-  return applyJsonLine(talk, line, at, (current, parsed, when) => {
-    if (typeof (parsed as unknown as RunEvent).type !== "string") return current
-    return applyEvent(current, parsed as unknown as RunEvent, when)
-  })
 }
 
 /**
@@ -465,82 +397,6 @@ export function attachOutput(talk: Talk, id: string, output: string): Talk {
 }
 
 export { sumTokens, errorText }
-
-function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
-  const when = typeof event.timestamp === "number" ? event.timestamp : at
-  const withSession = rememberModel(
-    event.sessionID && (!talk.sessionId || !talk.turnSession)
-      ? { ...talk, sessionId: talk.sessionId ?? event.sessionID, turnSession: talk.turnSession ?? event.sessionID }
-      : talk,
-    reportedModel(event as unknown as Record<string, unknown>),
-  )
-
-  switch (event.type) {
-    case "text": {
-      const text = event.part?.text ?? ""
-      if (text.trim().length === 0) return withSession
-      return {
-        ...withSession,
-        messages: [...withSession.messages, { id: nextId("b", when), role: "bot", text, at: when }],
-        updatedAt: when,
-      }
-    }
-    case "tool_use": {
-      const tool = event.part?.tool ?? "tool"
-      const state = event.part?.state
-      const title = scrubSecrets(
-        state?.title ||
-          (state?.input && typeof state.input === "object" && Object.keys(state.input as object).length > 0
-            ? JSON.stringify(state.input)
-            : tool),
-      )
-      const output = typeof state?.output === "string" && state.output.trim().length > 0 ? limitToolOutput(state.output) : undefined
-      return {
-        ...withSession,
-        messages: [
-          ...withSession.messages,
-          { id: nextId("t", when), role: "tool", tool, text: title, ...(output ? { output } : {}), at: when },
-        ],
-        updatedAt: when,
-      }
-    }
-    case "step_finish": {
-      const tokens = sumTokens(event.part?.tokens)
-      const cost = typeof event.part?.cost === "number" ? event.part.cost : 0
-      /*
-       * The answer is complete at the turn's own last step (`reason: "stop"`;
-       * `tool-calls` means another step follows). nikcli 1.389 does not exit
-       * after it inside a git repository — minutes of «sta rispondendo» and a
-       * slot held (B7, live) — so the turn ends here, and `turn.ts` kills the
-       * process after its grace. A sub-agent's step, in its own session, does
-       * not end it.
-       */
-      const ended = event.part?.reason === "stop" && !!event.sessionID && event.sessionID === withSession.turnSession
-      return noteTurnUsage(
-        {
-          ...withSession,
-          tokens: withSession.tokens + tokens,
-          costUsd: withSession.costUsd + cost,
-          ...(ended ? { ended: true } : {}),
-        },
-        tokens,
-        cost,
-        ended,
-      )
-    }
-    case "error": {
-      const text = errorText(event.error)
-      return {
-        ...withSession,
-        status: "error",
-        messages: [...withSession.messages, { id: nextId("e", when), role: "error", text, at: when }],
-        updatedAt: when,
-      }
-    }
-    default:
-      return withSession
-  }
-}
 
 export type PermissionAnswer = "once" | "always" | "reject"
 
