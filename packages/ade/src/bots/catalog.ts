@@ -9,7 +9,7 @@
  * counts there, and nikcli is not asked.
  */
 
-import { hasReliableCost, isFreeModel } from "../chat/model"
+import { formatModelLabel, hasReliableCost, isFreeModel } from "../chat/model"
 
 export interface CatalogModel {
   readonly id: string
@@ -74,4 +74,15 @@ export async function catalogFree(model: string, load: (provider: string) => Pro
   const entry = parseModelCatalog(stdout).get(name)
   if (!entry) return false
   return isFreeModel({ id: entry.id, providerID: entry.providerID ?? provider, ...(entry.cost ? { cost: entry.cost } : {}) })
+}
+
+/**
+ * A model as the bot form's list shows it: a free one marked as the Chat's
+ * selector marks it, «(gratis)», any other by its id alone. The list is
+ * nikcli's ids with no prices, so the `:free` suffix is what tells; before,
+ * the 17 free models sat among 368 paid ones looking the same (prove dal
+ * vivo 2).
+ */
+export function botModelLabel(id: string): string {
+  return isFreeModel({ id }) ? formatModelLabel(id, undefined, true) : id
 }
