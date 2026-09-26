@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import {
   applyMemoryOp,
   applyMemoryOps,
@@ -130,5 +131,14 @@ describe("B8a: the snapshot", () => {
     expect(parseMemory({ notes: ["a", 3, ""], user: "no" })).toEqual({ notes: ["a"], user: [] })
     expect(parseMemory({ notes: ["x".repeat(MEMORY_LIMITS.notes + 1)] }).notes).toEqual([])
     expect(parseMemory(null)).toEqual(EMPTY_MEMORY)
+  })
+})
+
+describe("B8a: the panel", () => {
+  test("the bots' turns get their memory, and the card shows it", () => {
+    const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
+    const turns = view.slice(view.indexOf("const turns = createBotTurns("), view.indexOf("})", view.indexOf("const turns = createBotTurns(")))
+    expect(turns).toContain("memory: memories")
+    expect(view).toContain("<MemorySection bot={props.bot.path} store={memories} />")
   })
 })

@@ -92,6 +92,8 @@ import {
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
 import { catalogFree } from "./catalog"
+import { localMemoryStore, type MemoryStore } from "./memory"
+import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
 
@@ -180,12 +182,31 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
  * runner that does not start says so in the thread. See `controller.ts`.
  */
 const accounts = localAccountStore()
+
+/*
+ * Each bot's memory (B8a), read through a signal so the card follows the
+ * writes a turn makes as well as the user's own.
+ */
+const memoryDisk = localMemoryStore()
+const [memoryWrites, setMemoryWrites] = createSignal(0)
+const memories: MemoryStore = {
+  get: (bot) => {
+    memoryWrites()
+    return memoryDisk.get(bot)
+  },
+  set: (bot, memory) => {
+    memoryDisk.set(bot, memory)
+    setMemoryWrites((n) => n + 1)
+  },
+}
+
 const turns = createBotTurns({
   runTurn: (request) => runTurn(request),
   runRoutine: (request, run) => runRoutine(request, run),
   talkOf,
   update: updateTalk,
   accountOf: (path) => accounts.get(path),
+  memory: memories,
 })
 
 /*
@@ -1300,6 +1321,7 @@ function BotCard(props: {
 
         <Show when={props.bot.mode !== "subagent"}>
           <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
+          <MemorySection bot={props.bot.path} store={memories} />
         </Show>
 
         <section data-slot="bots-card-section">
