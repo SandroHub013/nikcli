@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AGENTS } from "./agents"
+import { BOT_SESSION_MARK, botPermission } from "../bots/serve-rules"
 import {
   RESUME,
   mintedNikcliId,
@@ -369,6 +370,16 @@ describe("nikcli's latest conversation in this folder", () => {
       session("ses_dddddddddddddddddddddddddd", 5),
     )
     expect(lastNikcliHere(output, HERE, none)).toBe("ses_dddddddddddddddddddddddddd")
+  })
+
+  test("a bot's conversation is never a pane's, however recent and whatever its title", () => {
+    const output = listed(
+      session("ses_eeeeeeeeeeeeeeeeeeeeeeeeee", 50, { title: "renamed by hand", permission: [BOT_SESSION_MARK, ...botPermission("ask")] }),
+      // Made before the mark: the profile's rules at the end say it.
+      session("ses_ffffffffffffffffffffffffff", 40, { permission: [...botPermission("remote-none")] }),
+      session("ses_gggggggggggggggggggggggggg", 30, { permission: [{ permission: "edit", pattern: "*", action: "ask" }] }),
+    )
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_gggggggggggggggggggggggggg")
   })
 
   test("an empty list is a final no; a list still arriving is not an answer yet", () => {

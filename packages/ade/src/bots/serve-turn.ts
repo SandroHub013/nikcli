@@ -37,7 +37,7 @@ import { localTrustStore } from "./trust"
 import { agentDirs, type AgentFile } from "./nikcli"
 import { joinPath } from "../host/path"
 import { finalText, spendKind } from "./runners"
-import { botPermission, hasBotRules, profileFor } from "./serve-rules"
+import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
 import {
   appendMessage,
   emptyTalk,
@@ -336,7 +336,8 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       const previous = request.sessionId ? await server.session(request.sessionId) : undefined
       if (request.sessionId && hasBotRules(previous, profile)) sessionId = request.sessionId
       else {
-        sessionId = await server.create({ title: bot.identifier || "bot", permission: botPermission(profile) })
+        // The mark first: `hasBotRules` reads the tail, and «here» in a pane reads the mark.
+        sessionId = await server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] })
         /*
          * A routine's session is its own each run (B11): made read-only, it
          * cannot be the one the panel goes on with, so the thread keeps its own.

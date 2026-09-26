@@ -227,6 +227,23 @@ export function profileFor(spec: {
 const same = (a: { permission?: unknown; pattern?: unknown; action?: unknown }, b: PermissionRule) =>
   a.permission === b.permission && a.pattern === b.pattern && a.action === b.action
 
+/**
+ * At the head of every session a bot makes: a rule no tool asks for, so it
+ * changes nothing, and it says what the title cannot, since the user may
+ * rename a conversation. «here» leaves such sessions out of a pane.
+ */
+export const BOT_SESSION_MARK: PermissionRule = rule("ade.bot", "deny")
+
+/**
+ * A conversation of the bots' server: it carries the mark, or, made before
+ * the mark, it ends with one profile's rules, which no one else writes.
+ */
+export function isBotSession(session: { readonly permission?: unknown } | undefined): boolean {
+  const rules = Array.isArray(session?.permission) ? (session.permission as { permission?: unknown; pattern?: unknown; action?: unknown }[]) : []
+  if (rules.some((found) => found && same(found, BOT_SESSION_MARK))) return true
+  return (Object.keys(PROFILE_RULES) as BotProfile[]).some((profile) => hasBotRules(session, profile))
+}
+
 /** Whether a session's rules end with `profile`'s, in order: a session made for this bot's turns. */
 export function hasBotRules(session: { readonly permission?: unknown } | undefined, profile: BotProfile): boolean {
   const rules = (Array.isArray(session?.permission) ? session.permission : []) as readonly {
