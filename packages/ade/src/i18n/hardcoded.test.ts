@@ -147,8 +147,15 @@ function measure(): Record<string, number> {
 }
 
 describe("fixed text in JSX", () => {
+  /*
+   * Measured here, while the file loads, not in the test. It reads and parses
+   * some 330 sources, and had a timeout of 30 s that was still not enough
+   * right after a checkout: on Windows the first open of a file just written
+   * waits for the antivirus. Loading is not timed per test.
+   */
+  const now = measure()
+
   test("does not grow, and the baseline follows it down", () => {
-    const now = measure()
     if (process.env.ADE_I18N_BASELINE === "write") {
       writeFileSync(BASELINE, JSON.stringify(now, null, 2) + "\n")
       return
@@ -164,5 +171,5 @@ describe("fixed text in JSX", () => {
     }
     expect(grew).toEqual([])
     expect(shrank).toEqual([])
-  }, 30_000)
+  })
 })
