@@ -54,14 +54,22 @@ describe("la lingua della risposta viene dal suo testo", () => {
     expect(detectReplyLanguage("Ho aperto la sessione, ma i test non sono verdi.")).toBe("it");
   });
 
-  test("quando il testo non dice niente, decide la voce, e il sistema segue l'impostazione", () => {
-    // Ogni voce porta con sé la sua lingua, e il testo non ha detto niente.
-    expect(replyLocale("af_heart", undefined, "it-IT")).toBe("en-US");
-    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("en-GB");
-    expect(replyLocale("lessac", undefined, "it-IT")).toBe("en-US");
-    expect(replyLocale("ugo", undefined, "en-US")).toBe("it-IT");
-    // La voce di sistema non ha una lingua propria: è l'impostazione.
-    expect(replyLocale("system", undefined, "en-GB")).toBe("en-GB");
+  test("quando il testo non dice niente, decide l'interfaccia, non la voce", () => {
+    // Le risposte corte di un assistente non hanno parole da contare, e sono
+    // italiane più spesso di quanto sembri: se decidesse la voce, una voce
+    // Kokoro le leggerebbe in inglese.
+    expect(replyLocale("af_heart", undefined, "it-IT")).toBe("it-IT");
+    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT");
+    // E in una finestra inglese la stessa risposta va in inglese.
+    expect(replyLocale("af_heart", undefined, "en-US")).toBe("en-US");
+    expect(replyLocale("bf_emma", undefined, "en-GB")).toBe("en-GB");
+  });
+
+  test("la variante inglese la dà la voce, ma solo su una risposta già in inglese", () => {
+    expect(replyLocale("bf_emma", "en", "it-IT")).toBe("en-GB");
+    expect(replyLocale("af_heart", "en", "it-IT")).toBe("en-US");
+    // Sul "non so" l'interfaccia decide, anche per una voce britannica.
+    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT");
   });
 
   test("una risposta italiana resta italiana anche con la voce inglese scelta", () => {
@@ -98,6 +106,17 @@ describe("la voce che parla è quella che il testo chiede", () => {
     expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]));
   });
 
+  test("una risposta troppo corta da contare resta nella lingua dell'interfaccia", async () => {
+    // «Salvato.» non ha una parola che si possa contare, e in una finestra
+    // italiana lo dice Ugo o Paola: non è il caso in cui la voce decide.
+    for (const line of ["Salvato.", "Ok, aperto.", "Tutto a posto: 3 test verdi."]) {
+      const h = host("af_heart");
+      await createNaturalSpeaker(h.deps).speak(line);
+      expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["paola"]));
+      expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["it-IT"]));
+    }
+  });
+
   test("la lingua che arriva al bridge è quella della risposta", async () => {
     const h = host("af_heart");
     await createNaturalSpeaker(h.deps).speak(english);
@@ -107,8 +126,10 @@ describe("la voce che parla è quella che il testo chiede", () => {
   test("il prefetch porta la lingua del testo che prefetcha", async () => {
     const h = host("af_heart");
     const speaker = createNaturalSpeaker(h.deps);
-    speaker.prepare();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Una risposta in inglese tiene la voce Kokoro e la rende pronta, così il
+    // prefetch ha qualcosa su cui lavorare.
+    await speaker.speak(english);
+    h.asked.length = 0;
     speaker.prefetch?.(english);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(h.asked.length).toBeGreaterThan(1);

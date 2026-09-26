@@ -341,27 +341,36 @@ export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
 }
 
 /**
- * The locale a reply is spoken in: what the text says, and the setting when the
- * text does not.
+ * The locale a reply is spoken in: what the text says, and the interface's when
+ * the text does not.
  *
  * The order matters and is the whole point. A reply in Italian is read in
  * Italian whatever the panel says, which is what keeps a Kokoro voice from
  * reading an Italian answer with an English mouth. A reply in English keeps the
  * English locale of the voice that was chosen — the British voices have one, and
- * it is not the same — and the setting is only asked when nothing else knows.
+ * it is not the same — and the voice is only asked for its variant when the
+ * reply is already known to be English.
+ *
+ * When the text says nothing the interface decides, which is what Piper has
+ * always done and what the short answers of an assistant are: «Salvato.»,
+ * «Ok, aperto.» and «Tutto a posto: 3 test verdi» have no words to count, and a
+ * rule that gave those to the language of the *voice* read an Italian answer
+ * with an English mouth — the exact thing the rest of this file exists to
+ * prevent. A Kokoro voice is English, so a rule that let it decide would be a
+ * rule that always answered in English.
  */
 export function replyLocale(chosen: ReplyVoice, detected: ReplyLanguage | undefined, fallback: TtsLocale): TtsLocale {
   const voice = kokoroVoice(chosen);
   if (detected === "it") return "it-IT";
   if (detected === "en") {
+    // The variant is the voice's own, and only because the reply is English: the
+    // British voices are not en-US, and rounding them to it is what K1 measured
+    // as a voice with the wrong mouth.
     if (voice && voice.locale.startsWith("en")) return voice.locale;
     return fallback.startsWith("en") ? fallback : "en-US";
   }
-  // Nothing said: a voice the user chose for its language brings that language
-  // with it, and a Piper voice has one in its own name.
-  if (voice) return voice.locale;
-  if (chosen === "lessac") return "en-US";
-  if (chosen === "ugo" || chosen === "paola") return "it-IT";
+  // Nothing said: the interface's language, which is what the setting holds, and
+  // the voice is derived from it by `replyVoiceFor`.
   return fallback;
 }
 
