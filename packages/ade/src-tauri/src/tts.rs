@@ -755,9 +755,10 @@ pub struct InstallProgress {
     /// when the user opens the panel on a warm install.
     files_done: u32,
     files_total: u32,
-    /// Bytes over the bytes still to be fetched, and `None` for the total while
-    /// one of the files has no size written down. Nothing to draw is not the
-    /// same as nothing downloaded, and the two are told apart by this being
+    /// Bytes over the bytes still to be fetched, counted over every file of the
+    /// install and not over the one being written, and `None` for the total
+    /// while one of the files has no size written down. Nothing to draw is not
+    /// the same as nothing downloaded, and the two are told apart by this being
     /// `None` rather than zero.
     bytes_done: u64,
     bytes_total: Option<u64>,
@@ -896,7 +897,16 @@ impl InstallRun<'_> {
         // for, and a file that looks whole is the one case that would not be
         // caught by the digest later.
         let _ = std::fs::remove_file(part);
-        let mut report = |bytes: u64| self.publish(|progress| progress.bytes_done = bytes);
+        // Bytes arrive for the file being written, while the total the interface
+        // draws against is over every file still to fetch: so what is published
+        // is the growth of this file added to what came before, and the bar does
+        // not fall back to zero when the install moves to the next file.
+        let mut already: u64 = 0;
+        let mut report = |bytes: u64| {
+            let grown = bytes.saturating_sub(already);
+            already = bytes;
+            self.publish(|progress| progress.bytes_done += grown);
+        };
         let written = match curl.fetch(download.url, part, &mut report, &|| self.stop()) {
             Ok(written) => written,
             // A cancel and a deadline are this install's own reasons and they say
@@ -956,7 +966,6 @@ fn staging(dest: &Path) -> PathBuf {
 fn bytes_pending(jobs: &[(&Download, PathBuf)]) -> Option<u64> {
     jobs.iter().filter(|(_, path)| !path.is_file()).map(|(download, _)| download.size).sum()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1405,6 +1414,7 @@ mod tests {
         assert!(!staging(&dest).exists());
         assert_eq!(installer.progress_of(PIPER).error.as_deref(), Some(problem.as_str()));
     }
+
     #[test]
     fn a_part_left_by_an_earlier_attempt_is_never_resumed() {
         let root = test_root("ripreso");
@@ -1499,6 +1509,14 @@ mod tests {
         assert_eq!(after_one.bytes_done, 64);
         assert_eq!(after_one.bytes_total, Some(128), "solo i byte ancora da scaricare");
         assert!(after_one.error.is_none());
+
+        // The second file reports its own bytes from zero, and what the panel
+        // reads still goes up: a bar that fell back here would show an install
+        // going backwards halfway through.
+        install.bring(&jobs[1].0, &jobs[1].1, &scripted, &FingerprintInProcess).unwrap();
+        let after_two = installer.progress_of(PIPER);
+        assert_eq!(after_two.files_done, 2);
+        assert_eq!(after_two.bytes_done, 128, "i byte di tutti i file, non quelli dell'ultimo");
         install.finish(&Ok(()));
         assert!(!installer.progress_of(PIPER).running);
     }
