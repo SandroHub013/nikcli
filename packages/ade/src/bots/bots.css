@@ -776,7 +776,12 @@
 
 /* ── the Gateway section (G6) ───────────────────────────────────────────── */
 
-[data-component="bot-gateway"] [data-slot="gateway-block"] {
+/*
+ * The Memory section's blocks too: laid out inline, «0/2200 caratteri» and
+ * «Vuoto.» read as one word, «caratteriVuoto.» (Verifiche).
+ */
+[data-component="bot-gateway"] [data-slot="gateway-block"],
+[data-slot="bots-card-section"] > [data-slot="gateway-block"] {
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-2);
