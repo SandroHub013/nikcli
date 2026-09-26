@@ -63,6 +63,7 @@ import {
 import {
   emptyTalk,
   formatWhen,
+  hasThreadTotals,
   lastLine,
   mentionIn,
   applyProblem,
@@ -1225,7 +1226,9 @@ function Thread(props: {
               </>
             )}
           </Show>
-          {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+          <Show when={hasThreadTotals(props.talk)}>
+            {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+          </Show>
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
           {t("bots.send")}
@@ -1472,8 +1475,10 @@ function BotCard(props: {
           <span data-slot="bots-label">{t("bots.card.conversation")}</span>
           <span data-slot="bots-card-stat">
             {t("bots.card.messages", props.talk.messages.length)}
-            {" · "}
-            {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            <Show when={hasThreadTotals(props.talk)}>
+              {" · "}
+              {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            </Show>
           </span>
           <Show when={props.talk.lastTurn}>
             {(turn) => (
