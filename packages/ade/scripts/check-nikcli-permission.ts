@@ -40,6 +40,7 @@ const { PermissionRuleset } = (await import(rulesetPath)) as {
   PermissionRuleset: {
     fromConfig(permission: unknown): unknown[]
     evaluate(permission: string, pattern: string, ...rulesets: unknown[][]): { action: string }
+    disabled(tools: string[], ruleset: unknown[]): Set<string>
   }
 }
 const remedaPath: string = Bun.resolveSync("remeda", nikcli)
@@ -62,10 +63,18 @@ const USERS: Record<string, object> = {
   "bash: ask": { bash: "ask" },
   "bash a pattern": { bash: { "*": "allow", "git push *": "ask" } },
   "*: allow dopo bash": { bash: "ask", "*": "allow" },
+  "*: allow e basta": { "*": "allow" },
+  "tutto allow, poi *": {
+    bash: { "git *": "ask", "ls *": "allow" },
+    external_directory: "allow",
+    computer: "allow",
+    browser_control: "allow",
+    "*": "allow",
+  },
 }
 
-const action = (permission: object, command: string) =>
-  PermissionRuleset.evaluate("bash", command, PermissionRuleset.fromConfig(permission)).action
+const action = (permission: object, command: string, tool = "bash") =>
+  PermissionRuleset.evaluate(tool, command, PermissionRuleset.fromConfig(permission)).action
 
 const failures: string[] = []
 let checks = 0
@@ -83,7 +92,8 @@ for (const [flag, raw] of flags) {
     continue
   }
   const keys = Object.keys(value)
-  const blocks = keys.includes(BLOCK_KEY)
+  // The block list is an object; in a flag that denies the shell whole, the key is only its alias.
+  const blocks = typeof value[BLOCK_KEY] === "object"
   if (blocks) check(keys.at(-1) === BLOCK_KEY, `${flag}: ${BLOCK_KEY} non è l'ultima chiave (${keys.join(", ")})`)
   const { [BLOCK_KEY]: _list, ...without } = value
   for (const [user, config] of Object.entries(USERS)) {
@@ -94,10 +104,10 @@ for (const [flag, raw] of flags) {
         check(action(merged, command) === "deny", `${flag}, ${user}: «${command}» non è negato (${action(merged, command)})`)
       }
     }
-    // The list changes nothing else: an everyday command gets what it got
-    // without it, or a question where the flag asks about every command.
+    // The list changes nothing else: an everyday command gets what the
+    // flag says of the shell or, where it says nothing, what it got without it.
     for (const command of EVERYDAY) {
-      const expected = value["bash"] === "ask" ? "ask" : action(before, command)
+      const expected = typeof value["bash"] === "string" ? value["bash"] : action(before, command)
       check(
         action(merged, command) === expected,
         `${flag}, ${user}: «${command}» dà ${action(merged, command)}, doveva dare ${expected}`,
@@ -105,6 +115,19 @@ for (const [flag, raw] of flags) {
     }
     // A flag that asks about the shell keeps asking, whatever the user wrote.
     if (value["bash"] === "ask") check(action(merged, "git status") === "ask", `${flag}, ${user}: «git status» non chiede`)
+    // Every rule of the flag holds over a user's "*" written after it (second look, G5-bis).
+    for (const [tool, rule] of Object.entries(value)) {
+      if (tool.includes("?") || typeof rule !== "string") continue
+      for (const pattern of ["git status", "C:/fuori/progetto", "x"]) {
+        const got = action(merged, pattern, tool)
+        check(got === rule, `${flag}, ${user}: ${tool} «${pattern}» dà ${got}, doveva dare ${rule}`)
+      }
+    }
+    // A shell denied whole is not shown to the model (`disabled`, ruleset.ts).
+    if (value["bash"] === "deny") {
+      const hidden = PermissionRuleset.disabled(["bash"], PermissionRuleset.fromConfig(merged)).has("bash")
+      check(hidden, `${flag}, ${user}: la shell negata resta visibile al modello`)
+    }
   }
 }
 

@@ -178,7 +178,8 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// see `blocked_bash_denials`. `bot-block` is that alone, for a turn with no
 /// rule of its own on the shell (a routine). `remote-no-shell` does without:
 /// the shell is denied whole, and a rule after it would show the tool to the
-/// model again (`disabled` in nikcli's `permission/ruleset.ts`).
+/// model again (`disabled` in nikcli's `permission/ruleset.ts`). Every key of
+/// every flag is written again at the end under its `alias` (`with_aliases`).
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
     (
@@ -306,38 +307,56 @@ fn spellings(word: &str) -> Vec<String> {
     all
 }
 
-/*
- * `value` (a flag's `NIKCLI_PERMISSION`, a JSON object) with the block list
- * under `BLOCK_KEY`, written as its **last** key: nikcli keeps the keys in
- * the order written, and the last matching rule wins. Written by hand, as
- * `serde_json::Map` here sorts its keys, and `b?sh` sorts before `bash`.
- */
-///
-/// A flag that asks about every command (`"bash":"ask"`) also opens the list
-/// with `"*": "ask"`: a user's own `"*": "allow"` written after `bash` would
-/// otherwise be the last rule to match an everyday command, and nothing would
-/// be asked (found by `scripts/check-nikcli-permission.ts`). The denials come
-/// after it, so they still win.
-fn with_block_list(value: &str) -> String {
-    let denials: serde_json::Map<String, serde_json::Value> =
-        blocked_bash_denials().into_iter().map(|pattern| (pattern, serde_json::Value::from("deny"))).collect();
-    let denials = serde_json::Value::Object(denials).to_string();
-    let asks = serde_json::from_str::<serde_json::Value>(value).ok().and_then(|parsed| parsed.get("bash").cloned())
-        == Some(serde_json::Value::from("ask"));
-    let list = if asks { format!("{{\"*\":\"ask\",{}", &denials[1..]) } else { denials };
-    let body = value.trim().strip_suffix('}').unwrap_or("{");
-    let comma = if body.trim_end().ends_with('{') { "" } else { "," };
-    format!("{body}{comma}{}:{list}}}", serde_json::Value::from(BLOCK_KEY))
+/// `key` as a glob nikcli reads as `key` and the merge as a key of its own: `bash` → `b?sh`.
+fn alias(key: &str) -> String {
+    key.chars().enumerate().map(|(at, char)| if at == 1 { '?' } else { char }).collect()
 }
 
-/// Each flag's variable as it is set: the fixed value, with the block list where it goes.
+/*
+ * `value` (a flag's `NIKCLI_PERMISSION`, a JSON object) with each of its keys
+ * again, under its `alias`, at the end: nikcli keeps the keys in the order
+ * written, `mergeDeep` puts the flag's new keys after the user's, and the
+ * last matching rule wins. Without them a user's `"*": "allow"` written after
+ * `bash` would be the last rule for every permission: the shell of a chat with
+ * commands off, a step outside the project and the computer would pass, and
+ * the tool would show again (second look, G5-bis). With `block_list` the alias
+ * of `bash` carries the block list too, after the flag's own rule, so its
+ * denials win; it is the last key. Written by hand, as `serde_json::Map` here
+ * sorts its keys, and `b?sh` sorts before `bash`.
+ */
+fn with_aliases(value: &str, block_list: bool) -> String {
+    let parsed: serde_json::Map<String, serde_json::Value> = serde_json::from_str(value).unwrap_or_default();
+    let mut tail: Vec<String> = parsed
+        .iter()
+        .filter(|(key, _)| !(block_list && key.as_str() == "bash"))
+        .map(|(key, rule)| format!("{}:{rule}", serde_json::Value::from(alias(key))))
+        .collect();
+    if block_list {
+        let denials: serde_json::Map<String, serde_json::Value> =
+            blocked_bash_denials().into_iter().map(|pattern| (pattern, serde_json::Value::from("deny"))).collect();
+        let denials = serde_json::Value::Object(denials).to_string();
+        let list = match parsed.get("bash") {
+            Some(rule) => format!("{{\"*\":{rule},{}", &denials[1..]),
+            None => denials,
+        };
+        tail.push(format!("{}:{list}", serde_json::Value::from(BLOCK_KEY)));
+    }
+    if tail.is_empty() {
+        return value.to_string();
+    }
+    let body = value.trim().strip_suffix('}').unwrap_or("{");
+    let comma = if body.trim_end().ends_with('{') { "" } else { "," };
+    format!("{body}{comma}{}}}", tail.join(","))
+}
+
+/// Each flag's variable as it is set: the fixed value, with its aliases and the block list where it goes.
 fn flag_value(name: &str, value: &'static str) -> &'static str {
     static WITH_BLOCK: std::sync::OnceLock<HashMap<&'static str, String>> = std::sync::OnceLock::new();
     let table = WITH_BLOCK.get_or_init(|| {
         SPAWN_FLAGS
             .iter()
-            .filter(|(name, _, _, _)| BLOCK_LIST_FLAGS.contains(name))
-            .map(|(name, _, _, value)| (*name, with_block_list(value)))
+            .filter(|(_, _, variable, _)| *variable == "NIKCLI_PERMISSION")
+            .map(|(name, _, _, value)| (*name, with_aliases(value, BLOCK_LIST_FLAGS.contains(name))))
             .collect()
     });
     table.get(name).map(String::as_str).unwrap_or(value)
@@ -2201,10 +2220,10 @@ mod tests {
         let permission = |flag: &str| -> serde_json::Value {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
             let mut value: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
-            value.as_object_mut().unwrap().remove(super::BLOCK_KEY);
+            value.as_object_mut().unwrap().retain(|key, _| !key.contains('?'));
             value
         };
-        assert_eq!(serde_json::from_str::<serde_json::Value>(env[1].1).unwrap(), permission("remote-no-shell"));
+        assert_eq!(env[1].1, super::spawn_flag_env("nikcli", &["remote-no-shell".to_string()]).unwrap()[0].1);
         for (flag, bash) in [("remote-no-shell", "deny"), ("remote-ask-shell", "ask")] {
             // Outside the project asked about, the computer and a browser never (G5 review, M2).
             assert_eq!(
@@ -2337,11 +2356,126 @@ mod tests {
         }
         // Not in a chat's turn with the shell denied whole: the tool stays hidden from the model.
         let env = super::spawn_flag_env("nikcli", &["remote-no-shell".to_string()]).unwrap();
-        assert!(!env[0].1.contains(super::BLOCK_KEY));
+        assert!(nikcli_hides_bash(env[0].1, "{}"));
         // Well under what Windows allows a variable (32767).
         for flag in super::BLOCK_LIST_FLAGS {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
             assert!(env[0].1.len() < 20_000, "{flag}: {}", env[0].1.len());
+        }
+    }
+
+    /*
+     * nikcli's rules for `flag` (a `NIKCLI_PERMISSION` as set) merged over
+     * `user` (a configuration's `permission`), as `(permission, glob, action)`
+     * in order: `mergeDeep` keeps the user's keys where they are and appends
+     * the flag's new ones, a string takes the place of an object whole, and
+     * `fromConfig` reads a string as `"*"`. Key order comes from the text,
+     * since `serde_json` here sorts it.
+     */
+    fn nikcli_rules(flag: &str, user: &str) -> Vec<(String, String, String)> {
+        type Entries = Vec<(String, serde_json::Value)>;
+        fn ordered(raw: &str, value: &serde_json::Value, from: usize) -> Vec<(usize, String, serde_json::Value)> {
+            let mut entries: Vec<_> = value
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(key, rule)| {
+                    let quoted = format!("{}:", serde_json::Value::from(key.as_str()));
+                    (from + raw[from..].find(&quoted).unwrap(), key.clone(), rule.clone())
+                })
+                .collect();
+            entries.sort_by_key(|entry| entry.0);
+            entries
+        }
+        fn read(raw: &str) -> Entries {
+            let value: serde_json::Value = serde_json::from_str(raw).unwrap();
+            ordered(raw, &value, 0)
+                .into_iter()
+                .map(|(at, key, rule)| match rule {
+                    serde_json::Value::Object(_) => {
+                        let inner = ordered(raw, &rule, at).into_iter().map(|(_, glob, action)| (glob, action));
+                        (key, serde_json::Value::Array(inner.map(|(glob, action)| serde_json::json!([glob, action])).collect()))
+                    }
+                    other => (key, other),
+                })
+                .collect()
+        }
+        let mut merged = read(user);
+        for (key, rule) in read(flag) {
+            match merged.iter_mut().find(|(have, _)| *have == key) {
+                Some((_, have)) => match (have.as_array_mut(), rule.as_array()) {
+                    (Some(old), Some(new)) => {
+                        for pair in new {
+                            match old.iter_mut().find(|kept| kept[0] == pair[0]) {
+                                Some(kept) => *kept = pair.clone(),
+                                None => old.push(pair.clone()),
+                            }
+                        }
+                    }
+                    _ => *have = rule,
+                },
+                None => merged.push((key, rule)),
+            }
+        }
+        let mut rules = Vec::new();
+        for (key, rule) in merged {
+            match rule {
+                serde_json::Value::Array(pairs) => {
+                    for pair in pairs {
+                        rules.push((key.clone(), pair[0].as_str().unwrap().to_string(), pair[1].as_str().unwrap().to_string()));
+                    }
+                }
+                action => rules.push((key, "*".to_string(), action.as_str().unwrap().to_string())),
+            }
+        }
+        rules
+    }
+
+    /// nikcli's `evaluate`: the last rule that matches both wins; none, `ask`.
+    fn nikcli_evaluate(flag: &str, user: &str, permission: &str, pattern: &str) -> String {
+        nikcli_rules(flag, user)
+            .into_iter()
+            .rev()
+            .find(|(key, glob, _)| nikcli_wildcard(permission, key) && nikcli_wildcard(pattern, glob))
+            .map_or("ask".to_string(), |(_, _, action)| action)
+    }
+
+    /// nikcli's `disabled`: the shell's last rule is `"*"` denied, so the model is not shown the tool.
+    fn nikcli_hides_bash(flag: &str, user: &str) -> bool {
+        nikcli_rules(flag, user)
+            .into_iter()
+            .rev()
+            .find(|(key, _, _)| nikcli_wildcard("bash", key))
+            .is_some_and(|(_, glob, action)| glob == "*" && action == "deny")
+    }
+
+    #[test]
+    fn a_users_star_written_after_the_flag_undoes_none_of_its_rules() {
+        assert_eq!(super::alias("bash"), super::BLOCK_KEY);
+        let users = [
+            "{}",
+            r#"{"*":"allow"}"#,
+            r#"{"bash":"allow","*":"allow"}"#,
+            // No nested "*": `ordered` finds a key by its first occurrence.
+            r#"{"bash":{"git *":"ask","ls *":"allow"},"external_directory":"allow","computer":"allow","*":"allow"}"#,
+        ];
+        for (name, _, variable, _) in super::SPAWN_FLAGS {
+            if *variable != "NIKCLI_PERMISSION" {
+                continue;
+            }
+            let env = super::spawn_flag_env("nikcli", &[name.to_string()]).unwrap();
+            let own: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
+            for user in users {
+                for (key, rule) in own.as_object().unwrap().iter().filter(|(key, _)| !key.contains('?')) {
+                    let expected = rule.as_str().unwrap();
+                    for pattern in ["git status", "C:/fuori/progetto", "x"] {
+                        assert_eq!(nikcli_evaluate(env[0].1, user, key, pattern), expected, "{name}, {user}: {key} {pattern}");
+                    }
+                }
+                if own["bash"] == "deny" {
+                    assert!(nikcli_hides_bash(env[0].1, user), "{name}, {user}");
+                }
+            }
         }
     }
 
