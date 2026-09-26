@@ -8,7 +8,10 @@ import { join } from "node:path"
  * keeps each moved sheet on it, named by its title, and off the hand-made
  * Overlay that trapped nothing.
  */
-const SHEETS = [["decisions/decisions-sheet.tsx", "decisions-sheet"]] as const
+const SHEETS = [
+  ["decisions/decisions-sheet.tsx", "decisions-sheet"],
+  ["design/design-sheet.tsx", "design-sheet"],
+] as const
 
 describe("lint: the sheets are Kobalte dialogs", () => {
   test("lint: each moved sheet renders a Sheet named by a SheetTitle, and no Overlay or Surface of its own", () => {
