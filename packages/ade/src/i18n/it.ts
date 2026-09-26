@@ -610,7 +610,7 @@ export const it = {
   "gateway.panel.slackManifest": "Manifest dell'app Slack",
   "gateway.panel.slackManifestMissing": "Il manifest si prepara solo nell'app di ADE.",
   "gateway.panel.slackReinstall": "Se cambi gli scope dell'app, reinstallala nel workspace: finché non lo fai Slack non manda gli eventi che mancano, e il bot tace senza nessun errore. «Prova» dice quali scope mancano.",
-  "gateway.panel.slackInvite": "Nei canali il bot riceve solo i messaggi che lo nominano, e solo dove l'hai invitato (/invite): il resto del canale non gli arriva. In un messaggio diretto non serve niente.",
+  "gateway.panel.slackInvite": "Nei canali e nei messaggi di gruppo il bot riceve solo i messaggi che lo nominano, e solo dove l'hai aggiunto (in un canale con /invite): il resto non gli arriva. In un messaggio diretto a lui solo non serve niente.",
   "gateway.panel.platform": "Piattaforma del bot",
   "gateway.panel.platformTelegram": "Telegram",
   "gateway.panel.platformDiscord": "Discord",

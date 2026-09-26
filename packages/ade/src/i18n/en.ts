@@ -601,7 +601,7 @@ export const en: Messages = {
   "gateway.panel.slackManifest": "Slack app manifest",
   "gateway.panel.slackManifestMissing": "The manifest is only prepared in the ADE app.",
   "gateway.panel.slackReinstall": "If you change the app's scopes, reinstall it in the workspace: until you do, Slack does not send the missing events, and the bot stays silent with no error at all. «Test» says which scopes are missing.",
-  "gateway.panel.slackInvite": "In channels the bot gets only the messages that name it, and only where you invited it (/invite): the rest of the channel never reaches it. A direct message needs nothing.",
+  "gateway.panel.slackInvite": "In channels and group messages the bot gets only the messages that name it, and only where you added it (in a channel, with /invite): the rest never reaches it. A direct message to it alone needs nothing.",
   "gateway.panel.platform": "The bot's platform",
   "gateway.panel.platformTelegram": "Telegram",
   "gateway.panel.platformDiscord": "Discord",
