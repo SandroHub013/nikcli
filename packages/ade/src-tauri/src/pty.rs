@@ -312,12 +312,22 @@ fn spellings(word: &str) -> Vec<String> {
  * the order written, and the last matching rule wins. Written by hand, as
  * `serde_json::Map` here sorts its keys, and `b?sh` sorts before `bash`.
  */
+///
+/// A flag that asks about every command (`"bash":"ask"`) also opens the list
+/// with `"*": "ask"`: a user's own `"*": "allow"` written after `bash` would
+/// otherwise be the last rule to match an everyday command, and nothing would
+/// be asked (found by `scripts/check-nikcli-permission.ts`). The denials come
+/// after it, so they still win.
 fn with_block_list(value: &str) -> String {
     let denials: serde_json::Map<String, serde_json::Value> =
         blocked_bash_denials().into_iter().map(|pattern| (pattern, serde_json::Value::from("deny"))).collect();
+    let denials = serde_json::Value::Object(denials).to_string();
+    let asks = serde_json::from_str::<serde_json::Value>(value).ok().and_then(|parsed| parsed.get("bash").cloned())
+        == Some(serde_json::Value::from("ask"));
+    let list = if asks { format!("{{\"*\":\"ask\",{}", &denials[1..]) } else { denials };
     let body = value.trim().strip_suffix('}').unwrap_or("{");
     let comma = if body.trim_end().ends_with('{') { "" } else { "," };
-    format!("{body}{comma}{}:{}}}", serde_json::Value::from(BLOCK_KEY), serde_json::Value::Object(denials))
+    format!("{body}{comma}{}:{list}}}", serde_json::Value::from(BLOCK_KEY))
 }
 
 /// Each flag's variable as it is set: the fixed value, with the block list where it goes.
@@ -2319,6 +2329,12 @@ mod tests {
         let env = super::spawn_flag_env("nikcli", &["bot-block".to_string()]).unwrap();
         let value: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
         assert_eq!(value.as_object().unwrap().keys().collect::<Vec<_>>(), vec![super::BLOCK_KEY]);
+        // A flag that asks opens the list with "*": "ask", ahead of the denials; bot-block does not.
+        for (flag, opens) in [("bot-ask-shell", true), ("remote-ask-shell", true), ("bot-block", false), ("bot-ask-outside", false)] {
+            let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
+            let list = &env[0].1[env[0].1.find("\"b?sh\":").unwrap()..];
+            assert_eq!(list.starts_with("\"b?sh\":{\"*\":\"ask\","), opens, "{flag}");
+        }
         // Not in a chat's turn with the shell denied whole: the tool stays hidden from the model.
         let env = super::spawn_flag_env("nikcli", &["remote-no-shell".to_string()]).unwrap();
         assert!(!env[0].1.contains(super::BLOCK_KEY));
@@ -2326,6 +2342,19 @@ mod tests {
         for flag in super::BLOCK_LIST_FLAGS {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
             assert!(env[0].1.len() < 20_000, "{flag}: {}", env[0].1.len());
+        }
+    }
+
+    /// For `scripts/check-nikcli-permission.ts`: each flag's `NIKCLI_PERMISSION`, as set, one line each.
+    #[test]
+    #[ignore]
+    fn print_nikcli_permission_flags() {
+        for (name, agent, key, _) in super::SPAWN_FLAGS {
+            if *agent != "nikcli" || *key != "NIKCLI_PERMISSION" {
+                continue;
+            }
+            let env = super::spawn_flag_env("nikcli", &[name.to_string()]).unwrap();
+            println!("NIKCLI_PERMISSION_FLAG {name} {}", env[0].1);
         }
     }
 
