@@ -336,6 +336,7 @@ export const it = {
   "boot.host": "avvio di ADE",
   "boot.restore": "ripristino le sessioni",
   "boot.project": "apro il progetto",
+  "pane.closeRunning": (agent: string) => `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
   "editor.closeDirty": (path: string) => `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
   "editor.saveUnreadable": (path: string, problem: string) => `${path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${problem}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
   "editor.saveCancelled.unreadable": (problem: string) => `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,

@@ -42,6 +42,16 @@ export const DEFAULT_BINDINGS: BindingEntry[] = [
   { chord: "mod+shift+t", commandId: "theme.toggle" },
 ]
 
+/**
+ * Commands a chord does not run while a text field has the focus.
+ *
+ * A Ctrl chord in a field is otherwise read as a command, which is right for
+ * the palette and wrong for a close: Ctrl+W typed in a composer, out of the
+ * habit of deleting a word, closed the pane and ended the agent in it (review
+ * of the frontend, ALTO 6).
+ */
+export const NOT_FROM_TEXT_FIELDS: ReadonlySet<string> = new Set(["pane.close"])
+
 /*
  * Moving focus between panes is deliberately absent from this list. The grid
  * measures its own columns and already answers Alt+Arrow with the real

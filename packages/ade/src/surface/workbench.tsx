@@ -16,7 +16,7 @@ import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
-import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
+import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
@@ -5003,6 +5003,11 @@ export function Workbench() {
 
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
+      // Nor a close, from a text field: the chord is swallowed, so it closes neither the pane nor the window.
+      if (isInput && resolution.type === "ade" && resolution.commandId && NOT_FROM_TEXT_FIELDS.has(resolution.commandId)) {
+        e.preventDefault()
+        return
+      }
 
       if (resolution.type === "ade") {
         if (resolution.commandId && isHandledCommand(resolution.commandId)) {
@@ -5337,7 +5342,8 @@ export function Workbench() {
         }
       }
     } else if (id === "pane.close") {
-      if (wb().focusedId) close(wb().focusedId!)
+      // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
+      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb(w => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -5761,6 +5767,11 @@ export function Workbench() {
     ask: (path) => askYesNo(t("editor.closeDirty", path)),
     closeNow: (id) => closeNow(id),
     exists: (id) => wb().panes.some((pane) => pane.id === id),
+    running: (id) => {
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
+    },
+    askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
   })
   const close = (id: string): boolean => closer.close(id)
 
