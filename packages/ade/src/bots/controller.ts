@@ -44,6 +44,8 @@ export const BOT_TURN_TIMEOUT_MS = 30 * 60_000
 
 export interface BotTurnsDeps {
   readonly runTurn: (request: TurnRequest) => Turn
+  /** A routine's run (B11): `runRoutine`, which asks the list again at spawn. Absent, `runTurn`. */
+  readonly runRoutine?: (request: TurnRequest) => Turn
   readonly talkOf: (path: string) => Talk
   readonly update: (path: string, change: (talk: Talk) => Talk) => void
   /** The bot's account in ADE. Absent is a subscription. */
@@ -58,6 +60,13 @@ export interface BotTurnsDeps {
 export interface BotTurns {
   /** Starts a turn of `bot` on `message`; false when one is already running. */
   send: (bot: AgentFile, message: string, cwd?: string) => boolean
+  /**
+   * A routine's run of `bot` (B11), in its thread like any other turn, but
+   * with nobody to answer: no shell, whatever the bot may do in the panel
+   * (`bot-no-shell` on nikcli, no Bash for Claude Code, Codex read-only).
+   * Undefined when the bot already has a turn.
+   */
+  routine: (bot: AgentFile, message: string, cwd?: string) => Turn | undefined
   /**
    * The user's answer to the question on screen: Consenti (`once`), Nega
    * (`reject`), or Sempre (`always`), which is ADE's for this bot and goes to
@@ -138,15 +147,16 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     )
   }
 
-  const send = (bot: AgentFile, message: string, cwd?: string): boolean => {
+  const begin = (bot: AgentFile, message: string, cwd: string | undefined, routine: boolean): Turn | undefined => {
     const path = bot.path
-    if (turns.has(path)) return false
+    if (turns.has(path)) return undefined
     const runner = runnerById(bot.runner)
     const account = deps.accountOf?.(path) ?? { mode: "plan" as const }
     deps.update(path, (talk) => {
       // An offer from the last turn is not for this one.
       const { offer: _stale, ...rest } = talk
-      return { ...sendMessage(rest, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
+      const marked = routine ? appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.routine.thread") }, Date.now()) : rest
+      return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
     const sessionId = deps.talkOf(path).sessionId
     const current = () => turns.get(path) === turn
@@ -160,7 +170,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         if (asked && asked !== before) settle(bot, turn, asked)
       },
     })
-    const turn = deps.runTurn({
+    const run = routine ? (deps.runRoutine ?? deps.runTurn) : deps.runTurn
+    const turn = run({
       runner: runner.id,
       bot,
       message,
@@ -170,8 +181,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).
       lean: true,
       // nikcli asks, `settle` answers; Claude Code is refused what the bot's «Sempre» does not cover (B8c).
-      approvals: true,
-      always: always.get(path),
+      // A routine has nobody to answer: no approvals, and no shell (`TurnSpec.unattended`).
+      ...(routine ? { unattended: true } : { approvals: true, always: always.get(path) }),
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       onLine: (line) => {
         if (current()) deps.update(path, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
@@ -193,8 +204,10 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         return applyProblem(talk, result.problem ?? `${runner.label} non ha risposto.`, at)
       })
     })
-    return true
+    return turn
   }
+
+  const send = (bot: AgentFile, message: string, cwd?: string): boolean => begin(bot, message, cwd, false) !== undefined
 
   /** Ends the turn of `path`, if any, and forgets it: what it still says goes nowhere. */
   const end = (path: string): Turn | undefined => {
@@ -208,6 +221,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
 
   return {
     send,
+    routine: (bot, message, cwd) => begin(bot, message, cwd, true),
     answer: (bot, choice) => {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(bot.path).permission

@@ -72,6 +72,8 @@ export interface TurnRequest {
   readonly approvals?: boolean
   /** The bot's «Sempre», with `approvals` (`TurnSpec.always`). */
   readonly always?: readonly string[]
+  /** Nobody watches the turn: no shell at all (B11, `TurnSpec.unattended`). */
+  readonly unattended?: boolean
 }
 
 /**
@@ -217,6 +219,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.account ? { account: request.account } : {}),
       ...(request.approvals ? { approvals: true } : {}),
       ...(request.always ? { always: request.always } : {}),
+      ...(request.unattended ? { unattended: true } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 

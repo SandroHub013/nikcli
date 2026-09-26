@@ -747,3 +747,17 @@ describe("B8c: Claude Code e le approvazioni", () => {
     expect(blocked.messages.at(-1)!.text).toContain("Format-Volume -DriveLetter D")
   })
 })
+
+describe("a turn nobody watches (B11, a routine)", () => {
+  test("no shell on any runner: nikcli without its shell, Codex read-only", () => {
+    const own = { ...bot, scope: "global" as const }
+    const nikcli = turnCommand(runnerById("nikcli"), { bot: own, message: "x", approvals: true, unattended: true })
+    expect(nikcli.flags).toEqual(["no-project-config", "bot-no-shell"])
+    const codex = turnCommand(runnerById("codex"), { bot: { ...own, runner: "codex" }, message: "x", unattended: true })
+    expect(codex.args.join(" ")).toContain('sandbox_mode="read-only"')
+    const claude = turnCommand(runnerById("claude"), { bot: { ...own, runner: "claude" }, message: "x", lean: true, unattended: true })
+    const allowed = claude.args[claude.args.indexOf("--allowedTools") + 1] ?? ""
+    expect(allowed).not.toContain("Bash")
+    expect(allowed).not.toContain("ade-msg")
+  })
+})
