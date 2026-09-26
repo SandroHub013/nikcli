@@ -19,6 +19,7 @@ export type {
   AdeView,
   PaneStatus,
   PaneSummary,
+  PermissionSpeechKind,
   VoiceHost,
   VoiceStateSnapshot,
 } from "./bridge/host"
@@ -83,6 +84,8 @@ export {
   type PartialTranscriptCallback,
   type Transcriber,
   type TranscriberErrorCallback,
+  type TranscriberErrorContext,
+  type TranscriberErrorPurpose,
   type TranscriberOptions,
   type TranscriptEvent,
 } from "./asr/transcriber"

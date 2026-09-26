@@ -149,6 +149,28 @@ test("unverified acting messages are refused before voice confirmation", () => {
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
 })
 
+test("an unverified interrupt or close is refused centrally, as a send is", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"interrupt","from":"","to":"n2-1"}',
+    '{"kind":"close","from":"","to":"n2-1"}',
+    '{"kind":"interrupt","from":"voce","token":"falso","to":"n2-1"}',
+    '{"kind":"close","from":"voce","token":"falso","to":"n2-1"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+  }
+  for (const body of [
+    '{"kind":"interrupt","from":"n1-0","token":"segreto","to":"n2-1"}',
+    '{"kind":"close","from":"n1-0","token":"segreto","to":"n2-1"}',
+    '{"kind":"interrupt","from":"voce","token":"segreto","to":"n2-1"}',
+    '{"kind":"close","from":"voce","token":"segreto","to":"n2-1"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBeUndefined()
+  }
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
+})
+
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
   const voiceSend = verifySender(parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!, tokenOf)

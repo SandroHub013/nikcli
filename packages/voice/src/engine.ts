@@ -17,7 +17,7 @@
 
 import { createSignal } from "solid-js"
 import { Effect, Exit, Scope, Stream } from "effect"
-import type { VoiceHost } from "./bridge/host"
+import type { PermissionSpeechKind, VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"
 import { createInitialDialogState, type DialogState, type DialogStatus } from "./dialog/session"
 import type { ParseContext, ParseResult } from "./intent/parse"
@@ -103,6 +103,12 @@ export interface VoiceEngineOptions {
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
+  /**
+   * Where what the planning provider said goes when its call could not be
+   * made — the notice strip, in the app. Takes the keys out of it first: the
+   * provider quotes the key it refused, and this is not a place to write one.
+   */
+  onProviderError?: (detail: string) => void
 }
 
 export interface VoiceEngine {
@@ -124,6 +130,7 @@ export interface VoiceEngine {
   readonly dialogState: () => DialogState
   readonly lastParseResult: () => ParseResult | undefined
   readonly isRunning: () => boolean
+  readonly isBusy: () => boolean
   /**
    * Whether the next sentence would be heard, not only recorded (D74).
    *
@@ -242,7 +249,7 @@ export interface VoiceEngine {
    */
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
-  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void>
   /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
   handlePermissionResolved(paneId: string): Promise<void>
   /**
@@ -252,7 +259,7 @@ export interface VoiceEngine {
    */
   /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
   requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
-  openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
+  openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void>
   cancel(): Promise<void>
   /**
    * A tap while the assistant talks or works: it stops, and the next sentence
@@ -494,6 +501,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   }
 
   let sessionGeneration = 0
+  let responseWindowToken = 0
+  const takeSessionMode = (mode: VoiceMode): void => {
+    if (mode !== activeMode()) {
+      responseWindowToken++
+      setFollowUp(undefined)
+    }
+    setSessionMode(mode)
+  }
   let lifecycleTail: Promise<void> | null = null
   let startInFlight: Promise<void> | null = null
   let restartInFlight: Promise<void> | null = null
@@ -617,6 +632,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * sentence.
    */
   let stopping: Promise<void> | null = null
+  const isBusy = (): boolean => isRunning() || startInFlight !== null || restartInFlight !== null || stopping !== null
 
   /*
    * The assistant opened by a tap of its shortcut, or by the button, closes
@@ -1083,6 +1099,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     },
     onNameGate: () => refreshHearing(),
     onPartialTranscript: (text) => setPartialTranscript(text),
+    onProviderError: options.onProviderError,
     onSpeaking: (text) => {
       if (activeMode() !== "transcription") setLastSpoken(text)
     },
@@ -1411,6 +1428,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     dialogState,
     lastParseResult,
     isRunning,
+    isBusy,
     hearing,
     settings: currentSettings,
     activeMode,
@@ -1445,6 +1463,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async toggle(mode?: VoiceMode): Promise<void> {
       if (!isRunning()) {
+        if (mode !== undefined && startInFlight !== null) {
+          dictationInterruptedListening =
+            mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
+          takeSessionMode(mode)
+        }
         await this.start(mode)
         return
       }
@@ -1489,7 +1512,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
       dictationInterruptedListening =
         mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
-      setSessionMode(mode)
+      takeSessionMode(mode)
       if (mode === "transcription") {
         cancelSpeech()
       }
@@ -1501,7 +1524,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await Effect.runPromise(handle.submitText(text))
     },
 
-    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void> {
+    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void> {
       if (programHandle) {
         await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
@@ -1519,17 +1542,29 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       return true
     },
 
-    async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void> {
+    async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void> {
+      if (isBusy()) return
       const durationMs = options?.durationMs ?? 8_000
       const rescheduleMs = options?.rescheduleMs ?? 1_000
-      await this.start("agent", { waitForName: false, automatic: true })
+      const generationBeforeStart = sessionGeneration
+      const token = responseWindowToken
+      const start = this.start("agent", { waitForName: false, automatic: true })
+      const generation = sessionGeneration
+      if (generation === generationBeforeStart) return
+      await start
+      if (generation !== sessionGeneration || token !== responseWindowToken || !isRunning()) return
       const until = now() + durationMs
       setFollowUp(until)
       if (options?.permission && programHandle) {
-        await Effect.runPromise(programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, { silent: true }))
+        await Effect.runPromise(
+          programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, {
+            silent: true,
+            kind: options.permission.kind,
+          }),
+        )
       }
       const checkAndClose = () => {
-        if (!isRunning()) return
+        if (generation !== sessionGeneration || token !== responseWindowToken || !isRunning()) return
         const status = dialogState().status
         if (status === "executing" || status === "dictating") {
           setTimeout(checkAndClose, rescheduleMs)
@@ -1572,7 +1607,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          as it does everywhere else. */
       if (latched && isRunning()) {
         if (mode !== undefined && mode !== activeMode()) {
-          setSessionMode(mode)
+          takeSessionMode(mode)
           if (mode === "transcription") cancelSpeech()
           pressEndsLatch = true
           return
@@ -1587,14 +1622,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       pressedAt = now()
       if (currentSettings().activation !== "push-to-talk" && mode === "transcription") {
         /* Taken from always-on listening, it is given back on release. */
-        if (isRunning() && activeMode() === "agent" && currentSettings().alwaysListen) {
+        if ((isRunning() || startInFlight !== null) && activeMode() === "agent" && currentSettings().alwaysListen) {
           dictationInterruptedListening = true
         }
         heldDictation = true
       }
       /* Holding the other chord hands the microphone over mid-session, the
          same way pressing the other button does. */
-      if (mode !== undefined) setSessionMode(mode)
+      if (mode !== undefined) takeSessionMode(mode)
       if (activeMode() === "transcription") {
         cancelSpeech()
       }

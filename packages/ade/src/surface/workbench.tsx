@@ -155,8 +155,14 @@ import {
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
+import {
+  clearNaturalVoiceFailure,
+  naturalVoiceFailureFor,
+  type NaturalVoiceFailure,
+} from "../agent/onboarding"
 import { Chat } from "../chat/chat"
 import { BotsMain, BotsRoster } from "../bots/bots"
+import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
@@ -423,9 +429,10 @@ import {
   GLOBAL_VOICE_EVENT,
   globalVoiceAction,
   registerVoiceShortcuts,
+  serialiseRegistrations,
   unknownChordMessage,
 } from "../voice/global-shortcut"
-import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
+import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
 import { createProactiveAlerts } from "../voice/proactive-alerts"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -4037,25 +4044,38 @@ export function Workbench() {
   }
   const [voiceInstalled, setVoiceInstalled] = createSignal(false)
   const [voiceDownloading, setVoiceDownloading] = createSignal(false)
+  const [voiceFailure, setVoiceFailure] = createSignal<NaturalVoiceFailure>()
 
   const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
+  const voiceError = createMemo(() => naturalVoiceFailureFor(voiceFailure(), activePiperVoice()))
+  const clearVoiceFailure = (voice: string) => {
+    setVoiceFailure((current) => clearNaturalVoiceFailure(current, voice))
+  }
+  const failNaturalVoice = (voice: string, problem: unknown) => {
+    const message = (problem instanceof Error ? problem.message : String(problem ?? "")).trim() || t("voice.download.failed")
+    setVoiceFailure({ voice, problem: message })
+    if (voice === activePiperVoice()) report(t("voice.download.report", message))
+  }
 
   const checkVoiceInstalled = async () => {
     const v = activePiperVoice()
     if (v === "system") {
       setVoiceInstalled(true)
+      clearVoiceFailure(v)
       return
     }
     try {
       const host = await getHost()
       if (!host?.ttsPiperStatus) {
-        setVoiceInstalled(true)
+        if (activePiperVoice() === v) setVoiceInstalled(true)
         return
       }
       const st = await host.ttsPiperStatus(v)
+      if (activePiperVoice() !== v) return
       setVoiceInstalled(Boolean(st.installed))
+      if (st.installed) clearVoiceFailure(v)
     } catch {
-      setVoiceInstalled(false)
+      if (activePiperVoice() === v) setVoiceInstalled(false)
     }
   }
 
@@ -4086,25 +4106,32 @@ export function Workbench() {
     },
     stop: async () => {
       const host = await getHost()
-      await host?.ttsPiperStop?.()
+      return (await host?.ttsPiperStop?.()) ?? { busy: false }
     },
     stopOnCreate: true,
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+        // The device the user picked is not there: the answer comes out of the
+        // default speakers, and it says so once instead of never.
+        report(t("vui.device.missing"), "warning")
+      })
     },
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
+      if (voice !== activePiperVoice()) return
       if (state === "ready") {
         setVoiceInstalled(true)
         setVoiceDownloading(false)
+        clearVoiceFailure(voice)
       } else if (state === "downloading") {
         setVoiceDownloading(true)
       } else if (state === "failed") {
+        setVoiceInstalled(false)
         setVoiceDownloading(false)
-        console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+        failNaturalVoice(voice, problem)
       }
     },
   })
@@ -4160,30 +4187,43 @@ export function Workbench() {
     speaker,
     micMeter,
     now: () => Date.now(),
+    /*
+     * What the planning provider said, beside the sentence the user heard. It
+     * is the only way to tell a "riprova fra un momento" that keeps coming back
+     * because of a rate limit from one that will because the key is wrong, and
+     * a 401 quotes the key it refused — so it is scrubbed before it is shown,
+     * and the Italian sentence is the only thing said out loud.
+     */
+    onProviderError: (detail) => report(scrubSecrets(detail)),
     getContext: () => ({
       focusedPaneId: wb().focusedId,
     }),
   })
 
   const downloadNaturalVoice = async () => {
+    if (voiceDownloading()) return
+    const v = activePiperVoice()
     setVoiceDownloading(true)
     speaker.prepare()
-    const v = activePiperVoice()
     if (v === "system") {
       setVoiceInstalled(true)
+      clearVoiceFailure(v)
       setVoiceDownloading(false)
       return
     }
     try {
       const host = await getHost()
-      if (host?.ttsPiperInstall) {
-        await host.ttsPiperInstall(v)
-        setVoiceInstalled(true)
-      }
-    } catch (e) {
-      console.warn(e)
+      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
+      await host.ttsPiperInstall(v)
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(true)
+      clearVoiceFailure(v)
+    } catch (error) {
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(false)
+      failNaturalVoice(v, error)
     } finally {
-      setVoiceDownloading(false)
+      if (activePiperVoice() === v) setVoiceDownloading(false)
     }
   }
 
@@ -4267,8 +4307,16 @@ export function Workbench() {
     // and the profile was written back on the way in, so it does not return.
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
+    const previousVoice = activePiperVoice()
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
+    const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
+    if (nextVoice !== previousVoice) {
+      setVoiceFailure(undefined)
+      setVoiceInstalled(nextVoice === "system")
+      setVoiceDownloading(false)
+      void checkVoiceInstalled()
+    }
     await voiceEngine.updateSettings(saved.settings)
     await registerGlobalShortcuts?.(saved.settings)
     const after = listensByItself(saved.settings)
@@ -4293,6 +4341,7 @@ export function Workbench() {
     now: () => Date.now(),
     isLocked: isScreenLocked,
     isEnabled: () => voiceSettings().spokenAlerts === true,
+    isBusy: () => voiceEngine.isBusy(),
     speak: async (text) => {
       await speaker.speak(text)
     },
@@ -4304,6 +4353,7 @@ export function Workbench() {
       const decs = decisionsRegister.state()?.decisions
       return Boolean(decs?.some((d) => d.k === k && d.status === "aperta"))
     },
+    report: (text) => report(text, "info"),
   })
 
   /** ADE's window is hidden in the tray (G11): set by Rust's `ade-window-hidden`/`ade-window-shown`. */
@@ -4328,14 +4378,15 @@ export function Workbench() {
         await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
-    let ticking = false
-    const timer = setInterval(() => {
-      if (ticking) return
-      ticking = true
-      void guard.tick().finally(() => (ticking = false))
-    }, LOCK_POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    /* `every` and not a bare interval, and a hidden window does not slow it: a
+       lock is what the guard is here to notice, and a minimised ADE is how
+       listening to it looks for most of the day. What to ask the guard is the
+       guard's own decision, and it asks nothing with the voice off. */
+    const stopGuard = pollListenGuard(guard)
+    onCleanup(stopGuard)
   })
+
+  const completionTurns = new Map<string, number>()
 
   // Proactive alerts: session completed work
   createEffect(
@@ -4345,8 +4396,18 @@ export function Workbench() {
         if (!previousPanes) return
         for (const pane of currentPanes) {
           const prev = previousPanes.find((p) => p.id === pane.id)
-          if (prev && prev.status === "working" && pane.status === "idle") {
-            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines)
+          if (!prev) continue
+          if (pane.status === "working" && prev.status !== "working") {
+            completionTurns.set(pane.id, (completionTurns.get(pane.id) ?? 0) + 1)
+            continue
+          }
+          if (prev.status === "working" && pane.status === "idle") {
+            proactiveAlerts.notifyCompletion(
+              pane.id,
+              pane.title,
+              pane.lines,
+              completionTurns.get(pane.id) ?? 0,
+            )
           }
         }
       },
@@ -4362,7 +4423,12 @@ export function Workbench() {
         if (!decisions) return
         for (const dec of decisions) {
           if (dec.status === "aperta") {
-            proactiveAlerts.notifyDecision(dec.k, dec.title)
+            const latest = dec.history.at(-1)
+            proactiveAlerts.notifyDecision(
+              dec.k,
+              dec.title,
+              `${dec.openedAt}:${dec.history.length}:${latest?.type ?? "aperta"}:${latest?.at ?? ""}`,
+            )
           }
         }
       },
@@ -4900,14 +4966,18 @@ export function Workbench() {
            * they change: the panel used to save a new chord that the OS kept
            * ignoring until the next launch, while the old one still opened
            * the microphone from anywhere.
+           *
+           * Through the serialiser, because a second save arriving while this
+           * one is still claiming used to unregister what it had just claimed:
+           * the chords the user kept were whichever finished last.
            */
-          const syncGlobalShortcuts = async (settings: VoiceSettings) => {
+          const syncGlobalShortcuts = serialiseRegistrations(async (settings: VoiceSettings) => {
             await registerVoiceShortcuts(settings, {
               unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
               register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
               report: (message) => report(message, "warning"),
             })
-          }
+          })
 
           await syncGlobalShortcuts(voiceSettings())
           registerGlobalShortcuts = syncGlobalShortcuts
@@ -5793,10 +5863,10 @@ export function Workbench() {
     permissions.set(paneId, request)
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
-      void voiceEngine.handlePermissionRequest(paneId, request.what)
+      void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
     } else {
       const pane = wb().panes.find((p) => p.id === paneId)
-      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what, request.kind)
     }
   }
 
@@ -7435,8 +7505,9 @@ export function Workbench() {
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
               hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
               hasAgent={hasVoiceAgent()}
-              hasVoice={voiceInstalled()}
+              hasVoice={voiceInstalled() && !voiceError()}
               isVoiceDownloading={voiceDownloading()}
+              voiceError={voiceError()}
               onDownloadVoice={() => void downloadNaturalVoice()}
               onOpenKeySettings={() => openVoiceSettings("voice-sec-backend")}
               onOpenAgentSettings={() => openVoiceSettings("set-sec-provider")}
@@ -7574,6 +7645,9 @@ export function Workbench() {
             setVoiceSettingsOpen(false)
           }}
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+          naturalVoiceError={voiceError()}
+          naturalVoiceDownloading={voiceDownloading()}
+          onDownloadNaturalVoice={() => void downloadNaturalVoice()}
           existingBindings={bindings}
           settingsNotice={voiceSettingsNotice()}
           title={t("settings.title")}
@@ -7707,6 +7781,7 @@ export function Workbench() {
       */}
       <VoiceHud
         engine={voiceEngine}
+        naturalVoiceError={voiceError()}
         target={(() => {
           const focused = wb().panes.find((pane) => pane.id === wb().focusedId)
           return focused?.title
@@ -7721,7 +7796,10 @@ export function Workbench() {
             setWb((w) => ({ ...w, focusedId: nextPane.id }))
           }
         }}
-        onOpenSettings={() => setVoiceSettingsOpen(true)}
+        onOpenSettings={() => {
+          setVoiceSettingsSection("voice-sec-mode")
+          setVoiceSettingsOpen(true)
+        }}
       />
 
       {/* S33: the agent speaks through its own sphere, over the workspace. */}

@@ -65,6 +65,23 @@ Sources:
     expect(cleanForSpeech(withLinksList)).toBe("Tutte le informazioni sono confermate.")
   })
 
+  test("«Riferimenti:» a metà frase non porta via la frase", () => {
+    // La parola apre la frase, non un elenco: la risposta si legge intera.
+    const prose = "Fatto. Riferimenti: ho aggiornato i test in tre file."
+    expect(cleanForSpeech(prose)).toBe("Fatto. Riferimenti: ho aggiornato i test in tre file.")
+
+    // Neppure a capo, con un link dentro: è un elenco travestito, e si taglia.
+    const listAfterWord = "Fatto. Riferimenti: vedi https://example.com/uno per il resto."
+    expect(cleanForSpeech(listAfterWord)).toBe("Fatto.")
+
+    // Elenco puntato di prosa: due righe, senza link, ma è un elenco.
+    const bullets = `Ho finito il lavoro.
+Riferimenti:
+- il documento di autenticazione
+- la guida di stile`
+    expect(cleanForSpeech(bullets)).toBe("Ho finito il lavoro.")
+  })
+
   test("testo con più link", () => {
     // 1. Due URL raw
     expect(

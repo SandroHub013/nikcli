@@ -29,10 +29,23 @@ import type { Speaker } from "./speaker"
 export const SYNTHESIS_LIMIT_MS = 15_000
 
 /**
+ * The first sentence after the voice starts. Piper reads stdin only once it
+ * has loaded its 63 MB model, and that first «Pronto.» took 22 s live: with
+ * the short limit the client gave up before the host had answered, and the
+ * first reply of a session came out in the old voice. The host waits 90 s for
+ * the same sentence (`FIRST_SYNTHESIS_TIMEOUT` in `tts.rs`), and the client has
+ * to be the narrower of the two, as it is for the ones after: half of 90 s,
+ * against 15 s against 30 s.
+ */
+export const FIRST_SYNTHESIS_LIMIT_MS = 45_000
+
+/**
  * How long silence lasts without sentences to speak before the resident Piper
  * process is shut down to free its ~98 MB of memory (P1-C4). 2 minutes.
  */
 export const SILENCE_STOP_LIMIT_MS = 120_000
+
+const STOP_RETRY_MS = 250
 
 function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -51,8 +64,22 @@ function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
  */
 let tokenSeq = Date.now() * 1000
 
+/**
+ * How long the sentence due now may keep the reply silent: the long one while
+ * the host's process may still be loading its model, the short one after.
+ * `synthesisLimitMs` is a test's way of saying "every sentence", so it wins.
+ */
+export function synthesisLimitMs(state: {
+  fresh: boolean
+  synthesisLimitMs?: number
+  firstSynthesisLimitMs?: number
+}): number {
+  if (state.synthesisLimitMs !== undefined) return state.synthesisLimitMs
+  if (!state.fresh) return SYNTHESIS_LIMIT_MS
+  return state.firstSynthesisLimitMs ?? FIRST_SYNTHESIS_LIMIT_MS
+}
+
 export interface NaturalSpeakerDeps {
-  /** The chosen voice id, read at every reply so a change in the settings applies at once. `system` means Web Speech. */
   voice: () => string
   /** Whether the voice can speak now, and whether it can ever on this host. */
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
@@ -73,8 +100,10 @@ export interface NaturalSpeakerDeps {
   cancel?: (tokens: number[]) => void | Promise<void>
   /** Plays WAV bytes; resolves when done, or when `signal` aborts. */
   play: (wav: ArrayBuffer, signal: AbortSignal) => Promise<void>
-  /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. */
+  /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. Set, it covers the first one too. */
   synthesisLimitMs?: number
+  /** How long the first sentence after a start may take; `FIRST_SYNTHESIS_LIMIT_MS` unless a test needs less. */
+  firstSynthesisLimitMs?: number
   /** What speaks while Piper cannot. */
   fallback: Speaker
   /** Stop a resident process left by a previous page before this one uses it. */
@@ -84,9 +113,11 @@ export interface NaturalSpeakerDeps {
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
   fallbackNotice?: () => string
   /** Shuts down the resident process on the host after silence, freeing memory (P1-C4). */
-  stop?: () => Promise<void> | void
+  stop?: () => Promise<{ busy: boolean }> | { busy: boolean }
   /** How long silence lasts before Piper is shut down (default 120_000 ms = 2 min). */
   idleLimitMs?: number
+  stopRetryMs?: number
+  stopDeadlineMs?: number
 }
 
 /**
@@ -129,6 +160,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   /** Voices known to be installed, and the downloads already started. */
   const ready = new Set<string>()
   const installing = new Map<string, Promise<void>>()
+  const failed = new Set<string>()
   let warmed: string | undefined
   let fallbackNotified = false
   /** Tokens of the requests asked of the host and not settled yet. */
@@ -136,14 +168,77 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let stopping: Promise<void> | undefined
-  if (deps.stopOnCreate === true) {
-    stopping = Promise.resolve()
-      .then(() => deps.stop?.())
-      .then(() => undefined)
-      .catch(() => {})
-  }
+  /**
+   * Whether a sentence of a reply is waiting for the voice, which is also what
+   * the stop in flight is about: a stop that is only retrying gives up, because
+   * it is freeing a process somebody is asking to speak through.
+   */
+  let askedFor = false
   let activeTasks = 0
   let residentStarted = false
+  /**
+   * True until the host has answered one sentence: its resident process may
+   * still be loading the model, and that first answer is the slow one. A
+   * refusal counts as an answer, so a voice that is broken rather than slow
+   * does not make every reply wait out the long limit.
+   */
+  let fresh = true
+
+  /** How long the sentence due now may keep the reply silent. */
+  function limitMs(): number {
+    return synthesisLimitMs({
+      fresh,
+      synthesisLimitMs: deps.synthesisLimitMs,
+      firstSynthesisLimitMs: deps.firstSynthesisLimitMs,
+    })
+  }
+
+  function confirmStop(): Promise<boolean> {
+    const stop = deps.stop
+    if (!stop) return Promise.resolve(true)
+    const startedAt = Date.now()
+    const deadlineMs = deps.stopDeadlineMs ?? SYNTHESIS_LIMIT_MS
+    const retryMs = deps.stopRetryMs ?? STOP_RETRY_MS
+    const ask = async (): Promise<boolean> => {
+      const { busy } = await stop()
+      if (!busy) {
+        residentStarted = false
+        fresh = true
+        warmed = undefined
+        return true
+      }
+      /* The voice is being asked for again, so this stop has nothing left to
+         free. It was worth one request: the process it frees is the one the
+         sentence is about to need, and a request already at the host cannot be
+         un-made — which is why the sentence still goes out behind it, a round
+         trip away. What must not happen is the retries: they used to sit
+         inside the sentence's own limit, so a stop that never confirmed could
+         spend the whole of it and the reply left in the system voice. */
+      if (askedFor) return false
+      if (Date.now() - startedAt < deadlineMs) {
+        await new Promise<void>((resolve) => setTimeout(resolve, retryMs))
+        return ask()
+      }
+      return false
+    }
+    return ask().catch(() => false)
+  }
+
+  function beginStop(): void {
+    if (stopping) return
+    const pending: Promise<void> = confirmStop().then((confirmed) => {
+      if (stopping === pending) stopping = undefined
+      // The next stop starts from nothing: a voice asked for once is not a
+      // voice that must never be freed again.
+      askedFor = false
+      if (confirmed) return
+      residentStarted = true
+      if (activeTasks === 0) scheduleIdleStop()
+    })
+    stopping = pending
+  }
+
+  if (deps.stopOnCreate === true) beginStop()
 
   function cancelIdleTimer(): void {
     if (idleTimer !== undefined) {
@@ -158,14 +253,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     const timeoutMs = deps.idleLimitMs ?? SILENCE_STOP_LIMIT_MS
     idleTimer = setTimeout(() => {
       idleTimer = undefined
-      residentStarted = false
-      warmed = undefined
-      const pending = deps.stop?.()
-      if (pending && typeof (pending as Promise<void>).then === "function") {
-        stopping = (pending as Promise<void>).finally(() => {
-          if (stopping === pending) stopping = undefined
-        })
-      }
+      beginStop()
     }, timeoutMs)
   }
 
@@ -182,11 +270,15 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   function invokeSynthesize(voice: string, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
     const token = ++tokenSeq
     inflight.add(token)
-    const pending = stopping
-      ? stopping.catch(() => {}).then(() => deps.synthesize(voice, sentence, token))
-      : deps.synthesize(voice, sentence, token)
+    const send = (): Promise<ArrayBuffer> => {
+      residentStarted = true
+      return deps.synthesize(voice, sentence, token)
+    }
+    const pending = stopping ? stopping.catch(() => {}).then(send) : send()
     const forget = () => {
       inflight.delete(token)
+      // The host has spoken, one way or the other: from here on it is warm.
+      fresh = false
     }
     void pending.then(forget, forget)
     return { token, pending }
@@ -205,6 +297,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const ahead = new Map<string, { token: number; pending: Promise<ArrayBuffer> }>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
   function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+    // The voice is needed again, so a stop in flight has nothing left to free.
+    askedFor = true
     residentStarted = true
     const key = aheadKey(voice, sentence)
     const early = ahead.get(key)
@@ -216,15 +310,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   }
 
   function ensure(voice: string): void {
-    if (ready.has(voice) || installing.has(voice)) return
+    if (ready.has(voice) || installing.has(voice) || failed.has(voice)) return
     deps.onInstall?.(voice, "downloading")
     const job = deps
       .install(voice)
       .then(() => {
         ready.add(voice)
+        failed.delete(voice)
         deps.onInstall?.(voice, "ready")
       })
       .catch((error: unknown) => {
+        failed.add(voice)
         deps.onInstall?.(voice, "failed", error instanceof Error ? error.message : String(error))
       })
       .finally(() => installing.delete(voice))
@@ -239,6 +335,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       if (!supported) return false
       if (installed) {
         ready.add(voice)
+        failed.delete(voice)
         return true
       }
       if (installIfMissing) ensure(voice)
@@ -266,6 +363,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   return {
     async speak(text: string): Promise<void> {
       cancelIdleTimer()
+      // Said before the wait below, which is the whole point: a reply that finds
+      // a stop still confirming is a voice that is needed again, and the stop
+      // must stop being asked for rather than hold the first sentence behind it.
+      askedFor = true
       activeTasks++
       try {
         await ensureNotStopping()
@@ -281,6 +382,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (!(await usable(voice))) {
           if (mine === generation) {
             await announceFallbackOnce(voice)
+            if (mine !== generation) return
             await deps.fallback.speak(clean)
           }
           return
@@ -296,11 +398,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
           let wav: ArrayBuffer
           try {
             // Timed from when this sentence is due, not when it was queued behind the others.
-            wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
+            wav = await withinLimit(audio[i]!, limitMs())
           } catch {
             // The rest of the reply goes out in the old voice rather than not at all.
             if (mine === generation) {
               await announceFallbackOnce(voice)
+              if (mine !== generation) return
               await deps.fallback.speak(sentences.slice(i).join(" "))
             }
             return
@@ -315,6 +418,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
             // Synthesised but not playable: the old voice still gets the words out.
             if (mine === generation) {
               await announceFallbackOnce(voice)
+              if (mine !== generation) return
               await deps.fallback.speak(sentences.slice(i).join(" "))
             }
             return

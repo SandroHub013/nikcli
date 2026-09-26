@@ -19,8 +19,8 @@ const grants = (effects: { type: string; answer?: string; paneId?: string }[]) =
   effects.filter((e) => e.type === "answer_permission" && e.answer === "allow").map((e) => e.paneId)
 
 function aAskedBQueued(): DialogState {
-  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "ls" }, 10_000, ctx).state
-  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf /" }, 11_000, ctx).state
+  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "ls", kind: "shell" }, 10_000, ctx).state
+  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf /", kind: "shell" }, 11_000, ctx).state
 }
 
 describe("a promoted question is heard before it is answered", () => {
@@ -31,7 +31,8 @@ describe("a promoted question is heard before it is answered", () => {
     const second = say(first.state, "va bene", 20_600)
     expect(grants(second.effects)).toEqual([])
     expect(second.state.pendingAction?.paneId).toBe("pB")
-    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("rm -rf /"))).toBe(true)
+    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("rm -rf /"))).toBe(false)
   })
 
   test("a yes after the question was read grants it", () => {

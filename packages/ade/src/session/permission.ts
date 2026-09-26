@@ -12,6 +12,7 @@
  * Everything here is pure: strings in, structured data out.
  */
 
+import { locale, translate, type Locale } from "../i18n"
 import { stripAnsi } from "./stream"
 
 export interface PermissionRequest {
@@ -23,6 +24,24 @@ export interface PermissionRequest {
   target?: string
   /** Risposte accettate, nell'ordine in cui vanno mostrate. */
   answers: PermissionAnswer[]
+}
+
+const PERMISSION_SPEECH_LABEL_KEYS = {
+  shell: "voice.permission.type.shell",
+  write: "voice.permission.type.write",
+  network: "voice.permission.type.network",
+  unknown: "voice.permission.type.unknown",
+} as const
+
+export function permissionSpeechLabel(
+  kind?: PermissionRequest["kind"],
+  currentLocale: Locale = locale(),
+): string {
+  const key =
+    kind === "shell" || kind === "write" || kind === "network" || kind === "unknown"
+      ? PERMISSION_SPEECH_LABEL_KEYS[kind]
+      : PERMISSION_SPEECH_LABEL_KEYS.unknown
+  return translate(currentLocale, key)
 }
 
 export interface PermissionAnswer {

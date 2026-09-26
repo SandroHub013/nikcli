@@ -287,6 +287,32 @@ describe("createAdeVoiceHost", () => {
     expect(answered[1].send).toBe("n")
   })
 
+  test("permission speech exposes only the safe kind while the raw request still identifies the answer", () => {
+    const raw = "curl -H 'Authorization: Bearer API_KEY_SECRET' https://example.test/export"
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({
+        p1: {
+          what: raw,
+          kind: "shell",
+          answers: [
+            { label: "Sì", send: "y", tone: "primary" },
+            { label: "No", send: "n", tone: "secondary" },
+          ],
+        },
+      }),
+      answerPermission: (_id, answer) => void answered.push(answer),
+      locale: () => "it",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    expect(host.pendingPermissionWhat?.("p1")).toBe(raw)
+    expect(host.pendingPermissionKind?.("p1")).toBe("shell")
+    expect(host.answerPermission("p1", "allow", "another raw request")).toBe(false)
+    expect(host.answerPermission("p1", "allow", raw)).toBe(true)
+    expect(answered.map((answer) => answer.send)).toEqual(["y"])
+  })
+
   /*
    * The one failure this path must not have. "Deny" used to fall back to the
    * second option, whatever it was — so on a question whose options are
@@ -711,6 +737,23 @@ describe("answerPermission answers only the request that was asked", () => {
     const host = createAdeVoiceHost(deps)
     expect(host.answerPermission("p1", "allow", "cat README")).toBe(true)
     expect(answered.map((a) => a.send)).toEqual(["y"])
+  })
+  test("a stale deny cannot answer a changed request", () => {
+    let pending = request("curl first-secret")
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: pending }),
+      answerPermission: (_id, answer) => void answered.push(answer),
+    })
+    const host = createAdeVoiceHost(deps)
+
+    pending = request("curl second-secret")
+    expect(host.answerPermission("p1", "deny", "curl first-secret")).toBe(false)
+    expect(answered).toEqual([])
+
+    pending = request("curl first-secret")
+    expect(host.answerPermission("p1", "deny", "curl first-secret")).toBe(true)
+    expect(answered.map((answer) => answer.send)).toEqual(["n"])
   })
 })
 

@@ -30,9 +30,12 @@ export function cleanForSpeech(text: string): string {
   }
 
   // 1. Strip trailing sources / references sections at the end of a response
-  // Matches when starting on a new line or preceded by sentence-ending punctuation
+  // A line of its own, or after a sentence ends — but only when what follows is
+  // really a list of sources: links, or bullet lines. "Riferimenti: ho
+  // aggiornato i test in tre file." is prose that happens to open with the
+  // word, and cutting there took the rest of the answer with it.
   result = result.replace(
-    /(?:(?:\r?\n|(?<=[.!?])\s+)\s*(?:Fonti(?:\s+utilizzate)?|Sources|Riferimenti|Note\s+e\s+fonti)\s*:[\s\S]*)$/i,
+    /(?:(?:\r?\n|(?<=[.!?])\s+)\s*(?:Fonti(?:\s+utilizzate)?|Sources|Riferimenti|Note\s+e\s+fonti)\s*:(?:[\s\S]*\b(?:https?:\/\/|www\.)|[\s\S]*\r?\n[^\S\n]*(?:[-*•]|\d+\.)[^\S\n])[\s\S]*)$/i,
     "",
   )
 

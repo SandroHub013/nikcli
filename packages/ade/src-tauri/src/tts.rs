@@ -203,6 +203,30 @@ impl Piper {
             set.clear();
         }
     }
+
+    fn lock_resident(&self) -> std::sync::MutexGuard<'_, Option<Resident>> {
+        self.resident.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn stop_resident(&self) -> PiperStop {
+        let mut guard = match self.resident.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => return PiperStop { busy: true },
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        };
+        if forget_resident(&mut guard) {
+            self.clear_abandoned_for_stop();
+        }
+        PiperStop { busy: false }
+    }
+}
+
+fn forget_resident<T>(slot: &mut Option<T>) -> bool {
+    if slot.is_none() {
+        return false;
+    }
+    *slot = None;
+    true
 }
 
 /// Clears the abandonment mark of a phrase once it has had its turn, whether
@@ -219,6 +243,11 @@ impl Drop for Release<'_> {
 pub struct PiperStatus {
     supported: bool,
     installed: bool,
+}
+
+#[derive(Serialize)]
+pub struct PiperStop {
+    busy: bool,
 }
 
 #[tauri::command]
@@ -316,7 +345,7 @@ fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str, token: u64
         return Err("testo vuoto".into());
     }
 
-    let mut guard = state.resident.lock().map_err(|_| "voce bloccata")?;
+    let mut guard = state.lock_resident();
     // The JS may have abandoned this phrase while it waited behind the others:
     // at its turn it is skipped, and the one in corso keeps going untouched.
     state.claim(token)?;
@@ -361,12 +390,8 @@ pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> R
 /// to claim them, and a mark left behind would skip, in silence, whatever
 /// phrase of a later reply draws the same token number.
 #[tauri::command]
-pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<(), String> {
-    if let Ok(mut guard) = state.resident.try_lock() {
-        *guard = None;
-    }
-    state.clear_abandoned_for_stop();
-    Ok(())
+pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<PiperStop, String> {
+    Ok(state.stop_resident())
 }
 
 /// The JS will not wait for these phrases any more (a cancelled reply): the
@@ -675,6 +700,46 @@ mod tests {
         // When it finishes the mark must not linger: nothing will claim token 9 again.
         piper.release(9);
         assert!(piper.claim(9).is_ok());
+    }
+
+    #[test]
+    fn a_stop_reports_the_voice_it_could_not_free_and_forgets_nothing_until_it_could() {
+        let piper = Piper::default();
+        assert!(!piper.stop_resident().busy);
+        piper.abandon(&[21]);
+        let in_corso = piper.resident.lock().unwrap();
+        assert!(piper.stop_resident().busy, "a stop that freed nothing must not answer as a stop");
+        assert!(piper.claim(21).is_err(), "a busy stop leaves the queue of the live process alone");
+        drop(in_corso);
+        assert!(!piper.stop_resident().busy);
+        piper.abandon(&[21]);
+        assert!(piper.claim(21).is_err(), "only a process that was there takes its marks with it");
+    }
+
+    #[test]
+    fn the_marks_go_with_the_process_that_was_there_to_end() {
+        let resident = Mutex::new(Some(7_u8));
+        {
+            let mut guard = resident.lock().unwrap();
+            assert!(forget_resident(&mut guard), "a resident was there, and it is gone");
+            assert!(guard.is_none(), "the process is dropped, which kills it");
+        }
+        let empty = Mutex::new(None::<u8>);
+        assert!(!forget_resident(&mut empty.lock().unwrap()), "there was no process to end");
+    }
+
+    #[test]
+    fn a_stop_recovers_a_resident_lock_poisoned_by_a_panicking_synthesis() {
+        let piper = std::sync::Arc::new(Piper::default());
+        let worker = std::sync::Arc::clone(&piper);
+        let _ = std::thread::spawn(move || {
+            let _guard = worker.resident.lock().unwrap();
+            panic!("la sintesi è andata storta");
+        })
+        .join();
+        assert!(piper.resident.try_lock().is_err(), "the lock is poisoned after the panic");
+        drop(piper.lock_resident());
+        assert!(!piper.stop_resident().busy, "a poisoned lock read as a sentence in corso wedges the voice");
     }
 
     #[test]

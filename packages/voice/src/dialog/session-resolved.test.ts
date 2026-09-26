@@ -17,7 +17,7 @@ const pane = (id: string, index: number, title: string): PaneSummary => ({
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta")], focusedPaneId: "pA" }
 const ask = (state: DialogState, paneId: string, what: string, now = 10_000) =>
-  transition(state, { type: "permission_requested", paneId, what }, now, ctx)
+  transition(state, { type: "permission_requested", paneId, what, kind: "shell" }, now, ctx)
 const say = (state: DialogState, text: string) => transition(state, { type: "utterance", text }, 30_000, ctx)
 
 describe("a yes is for the question that was read", () => {
@@ -41,7 +41,8 @@ describe("a yes is for the question that was read", () => {
     const second = ask(first, "pA", "rm -rf ~", 12_000)
     expect(second.state.queuedPermission).toBeUndefined()
     expect(second.state.pendingAction?.what).toBe("rm -rf ~")
-    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("rm -rf ~"))).toBe(true)
+    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+    expect(second.effects.some((e) => e.type === "speak" && e.text.includes("rm -rf ~"))).toBe(false)
   })
 
   test("a queued request closed elsewhere leaves the queue", () => {
@@ -54,6 +55,6 @@ describe("a yes is for the question that was read", () => {
 
   test("a queued request replaced by a newer one of the same pane keeps the newer", () => {
     const asked = ask(ask(ask(createInitialDialogState("idle"), "pA", "cat README").state, "pB", "ls", 11_000).state, "pB", "rm -rf /", 11_500).state
-    expect(asked.queuedPermission).toEqual({ paneId: "pB", what: "rm -rf /", silent: undefined })
+    expect(asked.queuedPermission).toEqual({ paneId: "pB", what: "rm -rf /", kind: "shell", silent: undefined })
   })
 })

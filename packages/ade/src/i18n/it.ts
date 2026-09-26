@@ -263,6 +263,7 @@ export const it = {
   "agent.onboarding.voice.desc": "Sintesi neurale locale per risposte parlate fluide e offline, evitando voci robotiche.",
   "agent.onboarding.voice.action": "Scarica voce",
   "agent.onboarding.voice.downloading": "Download in corso…",
+  "agent.onboarding.voice.retry": "Riprova",
   "agent.onboarding.voice.done": "Installata",
   "agent.empty.title": "Niente da mostrare, ancora.",
   "agent.empty.body": "Parla all'assistente o scrivigli qui sotto. Quello che gli chiedi e ogni azione che esegue per te compaiono qui.",
@@ -321,6 +322,8 @@ export const it = {
   "update.dialog.escKey": "Esc",
   "voice.noMic": "Nessun microfono disponibile in questo ambiente.",
   "voice.noHost.download": "La voce si scarica solo dall'app desktop.",
+  "voice.download.failed": "Download della voce naturale non riuscito.",
+  "voice.download.report": (problem: string) => `Download della voce naturale non riuscito: ${problem}`,
   "voice.noHost": "La voce funziona solo nell'app desktop.",
   "plugins.consent.title": "Plugin del progetto",
   "plugins.consent.run": "Esegui",
@@ -395,6 +398,10 @@ export const it = {
   "voice.shortcut.busy": (chord: string, feature: string) => `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
   "voice.shortcut.unknown": (chord: string) => `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "voice.permission.notRefusal": "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
+  "voice.permission.type.shell": "un comando",
+  "voice.permission.type.write": "una modifica ai file",
+  "voice.permission.type.network": "una richiesta di rete",
+  "voice.permission.type.unknown": "un'azione generica",
 
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",

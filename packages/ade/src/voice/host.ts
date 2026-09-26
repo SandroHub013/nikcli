@@ -386,6 +386,10 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       return deps.permissions()[paneId]?.what
     },
 
+    pendingPermissionKind(paneId: string) {
+      return deps.permissions()[paneId]?.kind
+    },
+
     answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {

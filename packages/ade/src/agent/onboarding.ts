@@ -14,6 +14,26 @@ export interface VoicePrerequisitesState {
   hasAgent: boolean
   hasVoice: boolean
   isVoiceDownloading?: boolean
+  voiceError?: string
+}
+
+export interface NaturalVoiceFailure {
+  voice: string
+  problem: string
+}
+
+export function naturalVoiceFailureFor(
+  failure: NaturalVoiceFailure | undefined,
+  currentVoice: string,
+): string | undefined {
+  return failure?.voice === currentVoice ? failure.problem : undefined
+}
+
+export function clearNaturalVoiceFailure(
+  failure: NaturalVoiceFailure | undefined,
+  readyVoice: string,
+): NaturalVoiceFailure | undefined {
+  return failure?.voice === readyVoice ? undefined : failure
 }
 
 export interface VoicePrerequisiteItem {
@@ -23,6 +43,7 @@ export interface VoicePrerequisiteItem {
   desc: string
   actionLabel: string
   actionDisabled?: boolean
+  error?: string
 }
 
 /** Returns true when all voice prerequisites are met. */
@@ -56,8 +77,11 @@ export function voicePrerequisitesList(state: VoicePrerequisitesState): VoicePre
         ? t("agent.onboarding.voice.done")
         : state.isVoiceDownloading
           ? t("agent.onboarding.voice.downloading")
-          : t("agent.onboarding.voice.action"),
+          : state.voiceError
+            ? t("agent.onboarding.voice.retry")
+            : t("agent.onboarding.voice.action"),
       actionDisabled: state.hasVoice || Boolean(state.isVoiceDownloading),
+      error: state.voiceError,
     },
   ]
 }

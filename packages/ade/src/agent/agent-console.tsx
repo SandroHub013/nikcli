@@ -40,6 +40,7 @@ export interface AgentConsoleProps {
   hasAgent?: boolean
   hasVoice?: boolean
   isVoiceDownloading?: boolean
+  voiceError?: string
   onDownloadVoice?: () => void
   onOpenKeySettings?: () => void
   onOpenAgentSettings?: () => void
@@ -148,6 +149,7 @@ export function AgentConsole(props: AgentConsoleProps) {
               hasAgent: props.hasAgent ?? true,
               hasVoice: props.hasVoice ?? true,
               isVoiceDownloading: props.isVoiceDownloading,
+              voiceError: props.voiceError,
             })}>
               {(item) => (
                 <div data-slot="agent-onboarding-row" data-done={item.done ? "true" : "false"}>
@@ -166,6 +168,11 @@ export function AgentConsole(props: AgentConsoleProps) {
                   <div data-slot="agent-onboarding-body">
                     <div data-slot="agent-onboarding-item-title">{item.title}</div>
                     <div data-slot="agent-onboarding-item-desc">{item.desc}</div>
+                    <Show when={item.error}>
+                      <div data-slot="agent-onboarding-error" role="alert">
+                        {item.error}
+                      </div>
+                    </Show>
                   </div>
                   <button
                     type="button"

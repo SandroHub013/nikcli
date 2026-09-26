@@ -17,8 +17,8 @@ const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta")
 
 /** A asked, B waiting behind it. */
 function askingAWithBQueued(): DialogState {
-  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx).state
-  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf build" }, 11_000, ctx).state
+  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README", kind: "shell" }, 10_000, ctx).state
+  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf build", kind: "shell" }, 11_000, ctx).state
 }
 const say = (state: DialogState, text: string, now = 30_000) => transition(state, { type: "utterance", text }, now, ctx)
 const answers = (effects: { type: string }[]) =>
@@ -30,7 +30,8 @@ describe("a named pane is the pane acted on", () => {
     expect(answers(effects)).toEqual([])
     expect(state.status).toBe("confirming")
     expect(state.pendingAction?.paneId).toBe("pB")
-    expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(true)
+    expect(effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+    expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(false)
     // A is not lost: it waits for its turn.
     expect(state.queuedPermission?.paneId).toBe("pA")
   })

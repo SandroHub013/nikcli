@@ -17,6 +17,8 @@
  * brakes were a five-second pause in the same bill.
  */
 
+import { every, pageHidden } from "../host/every"
+
 export const LOCK_POLL_MS = 5_000
 /** A gap between ticks this much longer than the poll means the PC was asleep. */
 export const SLEEP_GAP_MS = 30_000
@@ -46,6 +48,13 @@ export function createListenGuard(deps: ListenGuardDeps) {
       const at = deps.now()
       const slept = at - last > SLEEP_GAP_MS
       last = at
+      /* Nothing is open and nothing should be: there is no state a lock could
+         change, so the question is not asked. It is a call into the OS session,
+         and with the voice off there is nothing to win by making it twelve
+         times a minute. A microphone that is open still asks, so a lock closes
+         the dictation too, and a voice the user wants listening still asks, so
+         the unlock is not missed. */
+      if (!deps.isListening() && (!deps.shouldListen() || deps.isHalted())) return
       /* Nobody can be talking to a locked PC: whatever is open closes, the
          dictation too, whether or not it listens by itself. A check that
          cannot answer is taken as a lock — an open microphone is the costly
@@ -63,4 +72,27 @@ export function createListenGuard(deps: ListenGuardDeps) {
       if (deps.isPaused()) await deps.resume()
     },
   }
+}
+
+/**
+ * Starts the guard on a timer, and returns what stops it.
+ *
+ * Its own function because a hidden window must not stop it: `every` pauses a
+ * hidden page by default, which is right for a poll that only feeds the screen
+ * and wrong here. Listening that stays on does not stop when the window is
+ * hidden — talking to ADE while working in another window is the whole point of
+ * it — and Chromium on Windows marks the page hidden when the screen locks, so
+ * the pause could stop the guard exactly when the lock is what it must notice.
+ * A minimised ADE on a locked PC would then keep the microphone open.
+ *
+ * The pace does not change, hidden or not, because the guard is what decides
+ * whether there is anything to ask: with the voice off and nothing open it asks
+ * nothing at all, and `every` still waits for the previous tick.
+ */
+export function pollListenGuard(
+  guard: { tick: () => Promise<void> },
+  isHidden: () => boolean = pageHidden,
+  ms: number = LOCK_POLL_MS,
+): () => void {
+  return every(ms, () => guard.tick(), { whenHidden: ms, isHidden })
 }

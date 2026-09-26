@@ -80,18 +80,20 @@ function setup(answer: string | ((prompt: { signal?: AbortSignal }) => Promise<s
   const transcriber = createFakeTranscriber()
   const speaker = createFakeSpeaker()
   const prompts: { system: string; user: string }[] = []
+  const details: string[] = []
 
   const engine = createVoiceEngine({
     host,
     transcriber,
     speaker,
     now: () => 10_000,
+    onProviderError: (detail) => void details.push(detail),
     plan: async (prompt) => {
       prompts.push({ system: prompt.system, user: prompt.user })
       return typeof answer === "string" ? answer : answer(prompt)
     }, settings: { activation: "toggle" } })
 
-  return { engine, host, transcriber, speaker, prompts }
+  return { engine, host, transcriber, speaker, prompts, details }
 }
 
 /** Lets the forked planning fiber finish before the assertions run. */
@@ -312,7 +314,28 @@ describe("il pianificatore dentro il motore", () => {
     transcriber.emit("orchestrami qualcosa di elaborato", true)
     await settle()
 
-    expect(speaker.lastSpoken).toContain("429")
+    // Dice che non è riuscito, e non il codice del provider: «ha risposto 429»
+    // non dice niente a chi sta al microfono (BASSO 9).
+    expect(speaker.lastSpoken).toContain("troppe richieste")
+    expect(speaker.lastSpoken).not.toContain("429")
+
+    await engine.stop()
+  })
+
+  test("quello che il provider ha detto resta, per capire il «riprova» che si ripete", async () => {
+    const { engine, transcriber, speaker, details } = setup(async () => {
+      throw new Error("429 Too Many Requests: rate limit reached for Bearer sk-or-v1-0123456789abcdefghijklmnop")
+    })
+
+    await engine.start()
+    transcriber.emit("orchestrami qualcosa di elaborato", true)
+    await settle()
+
+    // The sentence the user hears, and the thing that explains it, both.
+    expect(speaker.lastSpoken).toContain("troppe richieste")
+    expect(details).toEqual(["429 Too Many Requests: rate limit reached for Bearer sk-or-v1-0123456789abcdefghijklmnop"])
+    // And the detail never becomes something said out loud.
+    expect(speaker.spoken.every((said) => !said.includes("sk-or-v1"))).toBe(true)
 
     await engine.stop()
   })

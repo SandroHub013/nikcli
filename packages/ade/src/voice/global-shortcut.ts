@@ -26,6 +26,56 @@ import { t } from "../i18n"
 /** The event the native side emits for every registered voice hotkey. */
 export const GLOBAL_VOICE_EVENT = "nikcli-global-voice"
 
+/**
+ * Runs the registrations one at a time, newest last.
+ *
+ * Registering is drop-everything then claim, over the system, so a save that
+ * starts while the previous one is still claiming unregisters what that one
+ * has just claimed: the chords the user is left with are whichever call
+ * happened to finish last, not the ones they saved. Each call waits for the
+ * one before it, and its own promise settles when its own registration has.
+ *
+ * A call still waiting when a newer one arrives does not run at all: with a
+ * chord changed twice in a second the middle one is not worth claiming, and
+ * reporting it as busy would name a chord the user no longer wants. Its
+ * promise settles as soon as it is known to be superseded, so a caller waiting
+ * on it is not left hanging.
+ */
+export function serialiseRegistrations<Settings>(
+  register: (settings: Settings) => Promise<unknown>,
+): (settings: Settings) => Promise<void> {
+  let running = false
+  let queued: { settings: Settings; done: () => void } | undefined
+
+  const run = async (waiter: { settings: Settings; done: () => void }): Promise<void> => {
+    try {
+      await register(waiter.settings)
+    } catch {
+      // A chord the system refuses is reported by the registration itself, and
+      // the next save must still be applied.
+    }
+    waiter.done()
+  }
+
+  const pump = async (): Promise<void> => {
+    running = true
+    while (queued) {
+      const next = queued
+      queued = undefined
+      await run(next)
+    }
+    running = false
+  }
+
+  return (settings: Settings): Promise<void> =>
+    new Promise<void>((resolve) => {
+      // Whoever is still queued is superseded by this call.
+      queued?.done()
+      queued = { settings, done: resolve }
+      if (!running) void pump()
+    })
+}
+
 export interface GlobalVoicePayload {
   /** The hotkey as `global-hotkey` prints it: `shift+control+Space`. */
   chord: string

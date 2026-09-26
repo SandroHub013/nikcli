@@ -532,3 +532,23 @@ test("permission.allow passes on what it grants", async () => {
   await dispatch(makeParseResult(spec, { paneIndex: 1, what: "cat README" }), host)
   expect(seen).toEqual([["pane-1", "allow", "cat README"]])
 })
+
+test("permission.deny cannot deny a changed pending request", async () => {
+  const host = new MockVoiceHost()
+  const seen: unknown[][] = []
+  const pendingWhat = "curl changed-secret"
+  host.answerPermission = (...args: unknown[]) => {
+    seen.push(args)
+    return args[2] === pendingWhat
+  }
+  const spec = VOCABULARY.find((v) => v.intent === "permission.deny")!
+
+  const outcome = await dispatch(
+    makeParseResult(spec, { paneIndex: 1, what: "curl original-secret" }),
+    host,
+  )
+
+  expect(outcome.success).toBe(false)
+  expect(outcome.error).toBe("no_permission")
+  expect(seen).toEqual([["pane-1", "deny", "curl original-secret"]])
+})

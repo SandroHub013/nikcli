@@ -675,6 +675,30 @@
   margin: var(--ade-space-2) 0 0;
 }
 
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-4);
+  color: var(--ade-error);
+  font-size: var(--ade-font-sm);
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] [data-slot="link-button"] {
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 [data-component="voice-settings-panel"] [data-slot="stack"] {
   display: flex;
   flex-direction: column;

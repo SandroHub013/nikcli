@@ -19,6 +19,7 @@
  */
 
 import { t, translate, locale, type Locale } from "../i18n"
+import { permissionSpeechLabel, type PermissionRequest } from "../session/permission"
 
 export const ALERT_COOLDOWN_MS = 20_000
 export const RESPONSE_WINDOW_MS = 8_000
@@ -34,6 +35,7 @@ export type AlertEvent =
       paneId: string
       paneTitle: string
       what: string
+      kind?: PermissionRequest["kind"]
     }
   | {
       type: "completion"
@@ -47,19 +49,22 @@ export type AlertEvent =
       key: string
       k: string
       title?: string
+      signature?: string
     }
 
 export interface ProactiveAlertsDeps {
   now(): number
   isLocked(): Promise<boolean>
   isEnabled(): boolean
+  isBusy?(): boolean
   speak(text: string): Promise<void>
   openResponseWindow(options: {
     durationMs: number
-    permission?: { paneId: string; what: string }
+    permission?: { paneId: string; what: string; kind?: PermissionRequest["kind"] }
   }): Promise<void>
   isPermissionPending?(paneId: string): boolean
   isDecisionOpen?(k: string): boolean
+  report?(text: string): void
 }
 
 /**
@@ -116,9 +121,17 @@ export function summarizeCompletion(lines: readonly { text: string }[], currentL
   return undefined
 }
 
+function completionTurn(lines: readonly { text: string }[], turnId?: string | number): string {
+  if (turnId !== undefined) return String(turnId)
+  const previous = lines[lines.length - 2]
+  const last = lines[lines.length - 1]
+  return `${lines.length}:${previous?.text ?? ""}:${last?.text ?? ""}`
+}
+
 export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
   const queue: AlertEvent[] = []
   const seenEvents = new Map<string, number>()
+  const seenDecisions = new Map<string, string | undefined>()
   let alertTimestamps: number[] = []
   let capAnnounced = false
   let lastAlertAt = 0
@@ -156,7 +169,14 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
     if (locked) return
     capAnnounced = true
     queue.length = 0
-    await deps.speak(t("voice.alert.capReached", MAX_ALERTS_PER_HOUR)).catch(() => {})
+    const phrase = t("voice.alert.capReached", MAX_ALERTS_PER_HOUR)
+    if (deps.isBusy?.()) {
+      try {
+        deps.report?.(phrase)
+      } catch {}
+      return
+    }
+    await deps.speak(phrase).catch(() => {})
   }
 
   async function processQueue(): Promise<void> {
@@ -203,11 +223,14 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         if (event.type === "decision" && deps.isDecisionOpen && !deps.isDecisionOpen(event.k)) {
           continue
         }
+        if (event.type === "decision" && seenDecisions.get(event.k) !== event.signature) {
+          continue
+        }
 
         // Formulate spoken text
         let phrase = ""
         if (event.type === "permission") {
-          phrase = t("voice.alert.permission", event.paneTitle, event.what)
+          phrase = t("voice.alert.permission", event.paneTitle, permissionSpeechLabel(event.kind))
         } else if (event.type === "completion") {
           phrase = event.summary
             ? t("voice.alert.completed", event.paneTitle, event.summary)
@@ -217,6 +240,13 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         }
 
         if (!phrase) continue
+
+        if (deps.isBusy?.()) {
+          try {
+            deps.report?.(phrase)
+          } catch {}
+          continue
+        }
 
         const alertTime = deps.now()
         lastAlertAt = alertTime
@@ -233,10 +263,10 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         }
 
         // 2. Open single response window
-        if (deps.isEnabled()) {
+        if (event.type !== "decision" && deps.isEnabled() && !deps.isBusy?.()) {
           const permissionParam =
             event.type === "permission"
-              ? { paneId: event.paneId, what: event.what }
+              ? { paneId: event.paneId, what: event.what, kind: event.kind }
               : undefined
           await deps.openResponseWindow({
             durationMs: RESPONSE_WINDOW_MS,
@@ -260,9 +290,18 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
       return
     }
 
-    pruneSeenEvents(nowMs)
-    if (seenEvents.has(event.key)) return
-    seenEvents.set(event.key, nowMs)
+    if (event.type === "decision") {
+      if (seenDecisions.has(event.k) && seenDecisions.get(event.k) === event.signature) return
+      seenDecisions.set(event.k, event.signature)
+      for (let index = queue.length - 1; index >= 0; index--) {
+        const queued = queue[index]
+        if (queued?.type === "decision" && queued.k === event.k) queue.splice(index, 1)
+      }
+    } else {
+      pruneSeenEvents(nowMs)
+      if (seenEvents.has(event.key)) return
+      seenEvents.set(event.key, nowMs)
+    }
 
     if (queue.length >= MAX_QUEUE_SIZE) {
       queue.shift()
@@ -272,34 +311,45 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
   }
 
   return {
-    notifyPermission(paneId: string, paneTitle: string, what: string): void {
+    notifyPermission(
+      paneId: string,
+      paneTitle: string,
+      what: string,
+      kind?: PermissionRequest["kind"],
+    ): void {
       enqueue({
         type: "permission",
         key: `perm:${paneId}:${what}`,
         paneId,
         paneTitle,
         what,
+        kind,
       })
     },
 
-    notifyCompletion(paneId: string, paneTitle: string, lines: readonly { text: string }[], turnId?: string | number): void {
+    notifyCompletion(
+      paneId: string,
+      paneTitle: string,
+      lines: readonly { text: string }[],
+      turnId?: string | number,
+    ): void {
       const summary = summarizeCompletion(lines)
-      const turnKey = turnId !== undefined ? String(turnId) : `${lines.length}`
       enqueue({
         type: "completion",
-        key: `comp:${paneId}:${turnKey}`,
+        key: `comp:${paneId}:${completionTurn(lines, turnId)}`,
         paneId,
         paneTitle,
         summary,
       })
     },
 
-    notifyDecision(k: string, title?: string): void {
+    notifyDecision(k: string, title?: string, signature?: string): void {
       enqueue({
         type: "decision",
         key: `dec:${k}`,
         k,
         title,
+        signature,
       })
     },
 
@@ -310,6 +360,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
     clear(): void {
       queue.length = 0
       seenEvents.clear()
+      seenDecisions.clear()
       alertTimestamps = []
       capAnnounced = false
     },

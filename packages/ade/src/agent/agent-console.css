@@ -290,6 +290,14 @@
   line-height: var(--ade-leading-tight);
 }
 
+[data-slot="agent-onboarding-error"] {
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-error);
+  line-height: var(--ade-leading-tight);
+  overflow-wrap: anywhere;
+}
+
 [data-slot="agent-onboarding-btn"] {
   flex: 0 0 auto;
   padding: var(--ade-space-2) var(--ade-space-4);

@@ -4,7 +4,7 @@
  */
 
 // Bridge and host contract
-export type { AdeView, PaneStatus, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
+export type { AdeView, PaneStatus, PaneSummary, PermissionSpeechKind, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
 
 // The agent console's record of the session
 export {
@@ -52,6 +52,8 @@ export {
   type PartialTranscriptCallback,
   type Transcriber,
   type TranscriberErrorCallback,
+  type TranscriberErrorContext,
+  type TranscriberErrorPurpose,
   type TranscriberOptions,
   type TranscriptEvent,
 } from "./asr/transcriber"
