@@ -18,7 +18,7 @@ function body(start: string): string {
 }
 
 describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () => {
-  test("a bot's flags are kept with the pane, where every start reads them", () => {
+  test("lint: openBotSession keeps the bot's flags in spawnArgs, not in one start's extra (ALTO 5)", () => {
     const bot = body("const openBotSession = ")
     expect(bot).toContain("spawnArgs: [...launch.args]")
     // Not handed to this start alone.
@@ -57,7 +57,7 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
     expect(toWorkspaceState(wb).panes.map((pane) => pane.id)).toEqual(["a"])
   })
 
-  test("a sign-in pane keeps its arguments, and its restart runs them again", () => {
+  test("lint: a sign-in pane keeps signIn, and reopen runs it before planning a resume (ALTO 5)", () => {
     expect(body("const openLoginSession = ")).toContain("signIn: [...runner.login]")
     const reopen = body("const reopenPane = async ")
     expect(reopen).toContain("if (given.signIn) return startProcess(given.id, agentId, \"\", undefined, [...given.signIn])")

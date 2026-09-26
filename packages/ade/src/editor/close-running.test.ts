@@ -47,7 +47,7 @@ describe("closing an agent at work (ALTO 6)", () => {
     expect(s.questions).toEqual([])
   })
 
-  test("a close is not a chord a text field gives away", () => {
+  test("lint: the keydown handler drops NOT_FROM_TEXT_FIELDS in a text field before running a command (ALTO 6)", () => {
     expect(NOT_FROM_TEXT_FIELDS.has("pane.close")).toBe(true)
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     const keys = source.slice(source.indexOf("const isInput = target.tagName"), source.indexOf("const handleKeyUp = "))
@@ -56,7 +56,7 @@ describe("closing an agent at work (ALTO 6)", () => {
     expect(keys.indexOf("NOT_FROM_TEXT_FIELDS")).toBeLessThan(keys.indexOf("void runCommand("))
   })
 
-  test("the shortcut and the palette ask before ending an agent", () => {
+  test("lint: the pane.close command closes with confirmRunning (ALTO 6)", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     const command = source.slice(source.indexOf('} else if (id === "pane.close") {'), source.indexOf('} else if (id === "pane.expand") {'))
     expect(command).toContain("{ confirmRunning: true }")

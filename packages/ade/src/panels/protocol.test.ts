@@ -191,7 +191,7 @@ describe("a request cannot become a shell command (review, ALTO 1)", () => {
     expect(acceptsRequests(undefined)).toBe(false)
   })
 
-  test("the workbench reads a line as a request only from a session that may ask", () => {
+  test("lint: the workbench hands a line to the panels only behind acceptsRequests (ALTO 1)", () => {
     const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
     const calls = source.split("\n").filter((line) => line.includes("handlePanelRequest(paneId, line)"))
     expect(calls.length).toBe(1)
