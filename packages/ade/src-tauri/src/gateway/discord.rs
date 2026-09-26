@@ -35,9 +35,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -373,7 +373,26 @@ impl Shared {
     }
 }
 
+/// The adapter as the hub holds it. The socket task holds only the `Core`, so
+/// when the hub lets go of this (the gateway switched off, a new token, ADE
+/// closing) `alive` goes with it and the task closes its socket. It used to
+/// hold the whole adapter, which kept itself alive: a gateway switched off
+/// went on reading, and reconnecting, for nobody.
 pub struct Discord {
+    core: Arc<Core>,
+    /// Dropped with the adapter; the socket task ends when it is.
+    alive: watch::Sender<()>,
+}
+
+impl std::ops::Deref for Discord {
+    type Target = Core;
+    fn deref(&self) -> &Core {
+        &self.core
+    }
+}
+
+/// Everything but the life of the socket task, which the task shares.
+pub struct Core {
     api: String,
     /// Where the socket goes, from `GET /gateway/bot`.
     socket: String,
@@ -385,8 +404,6 @@ pub struct Discord {
     sender: mpsc::Sender<Result<Inbound, AdapterError>>,
     /// The socket task, started by the first read and not before.
     started: AtomicBool,
-    /// This adapter, so the socket task can hold it too without a cycle.
-    me: Mutex<Weak<Discord>>,
     /// The first heartbeat waits this many thousandths of the interval, so a
     /// share of it: 1000 is the whole interval, 0 is none. Discord disconnects
     /// a client that heartbeats at once, and a test has to be able to predict
@@ -421,7 +438,7 @@ impl Discord {
         // half written, or a state from a future version. Either way the safe
         // reading is to open a session, not to refuse to start.
         let session = cursor.as_deref().and_then(|raw| serde_json::from_str::<Session>(raw).ok());
-        let adapter = Arc::new(Discord {
+        let core = Arc::new(Core {
             api: api.to_string(),
             socket: socket.to_string(),
             token: token.to_string(),
@@ -437,15 +454,15 @@ impl Discord {
             inbox: tokio::sync::Mutex::new(inbox),
             sender,
             started: AtomicBool::new(false),
-            me: Mutex::new(Weak::new()),
             jitter: AtomicU64::new(500),
             #[cfg(test)]
             now_ms: AtomicU64::new(0),
         });
-        *hold(&adapter.me) = Arc::downgrade(&adapter);
-        Ok(adapter)
+        Ok(Arc::new(Discord { core, alive: watch::channel(()).0 }))
     }
+}
 
+impl Core {
     fn now(&self) -> u64 {
         #[cfg(test)]
         {
@@ -554,7 +571,7 @@ impl Discord {
         let mut attempt = 0u64;
         let mut last = String::new();
         while let Some(piece) = queue.pop_front() {
-            let mut body = Discord::body(&piece);
+            let mut body = Core::body(&piece);
             // The same nonce for every try at one piece: a repeat returns the
             // message already posted instead of posting it twice.
             body["nonce"] = Value::from(nonce(seed, attempt));
@@ -604,7 +621,7 @@ enum Ending {
 
 /// One run of the socket: connect, resume or identify, read, heartbeat, until
 /// the socket closes or the user is told why it cannot go on.
-async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inbound, AdapterError>>, first: &str) -> Ending {
+async fn socket_session(adapter: &Arc<Core>, sender: &mpsc::Sender<Result<Inbound, AdapterError>>, first: &str) -> Ending {
     let mut fresh_identifies = 0usize;
     loop {
         // Read at every turn, not once at the start: a session that lives for
@@ -815,17 +832,31 @@ async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inb
 }
 
 /// The socket task's own loop: a session that drops is another one, with a wait
-/// between that grows, so a gateway that is down is not hammered.
-async fn run_socket(adapter: Arc<Discord>, sender: mpsc::Sender<Result<Inbound, AdapterError>>, first: String) {
+/// between that grows, so a gateway that is down is not hammered. It ends, and
+/// its socket with it, when the adapter is dropped.
+async fn run_socket(
+    adapter: Arc<Core>,
+    sender: mpsc::Sender<Result<Inbound, AdapterError>>,
+    first: String,
+    mut alive: watch::Receiver<()>,
+) {
     let mut backoff = Duration::from_secs(1);
     loop {
-        match socket_session(&adapter, &sender, &first).await {
+        let ending = tokio::select! {
+            // The adapter is gone, and `alive` with it.
+            _ = alive.changed() => return,
+            ending = socket_session(&adapter, &sender, &first) => ending,
+        };
+        match ending {
             Ending::Stopped(why) => {
                 let _ = sender.send(Err(AdapterError::Fatal(why))).await;
                 return;
             }
             Ending::Dropped => {
-                tokio::time::sleep(backoff).await;
+                tokio::select! {
+                    _ = alive.changed() => return,
+                    _ = tokio::time::sleep(backoff) => {}
+                }
                 backoff = (backoff * 2).min(Duration::from_secs(300));
             }
         }
@@ -913,12 +944,10 @@ impl Adapter for Discord {
         // not async: opening a connection before the hub asks for one would
         // spend an identify on a gateway that may never be switched on.
         if !self.started.swap(true, Ordering::SeqCst) {
-            let Some(me) = hold(&self.me).upgrade() else {
-                return Err(AdapterError::Fatal("il gateway Discord non può tenere la sua connessione".into()));
-            };
+            let (core, alive) = (self.core.clone(), self.alive.subscribe());
             let sender = self.sender.clone();
             let first = self.socket.clone();
-            tokio::spawn(async move { run_socket(me, sender, first).await });
+            tokio::spawn(async move { run_socket(core, sender, first, alive).await });
         }
         let mut inbox = self.inbox.lock().await;
         let mut batch = Vec::new();
@@ -965,7 +994,7 @@ impl Adapter for Discord {
         // Discord works the mentions of an edited message out of the new text with
         // its own default, so the same "nothing is a mention" goes here as on
         // every other message this adapter sends.
-        let body = Discord::body(first);
+        let body = Core::body(first);
         if let Err(failure) = self
             .call_patiently(
                 reqwest::Method::PATCH,
@@ -1135,6 +1164,8 @@ mod tests {
         seen: Arc<Mutex<Vec<Value>>>,
         queue: Arc<Mutex<VecDeque<Vec<Ws>>>>,
         acking: Arc<AtomicBool>,
+        /// A connection the client closed before the fake's own time ran out.
+        left: Arc<AtomicBool>,
     }
 
     impl FakeGateway {
@@ -1149,6 +1180,8 @@ mod tests {
             let mine = queue.clone();
             let acking = Arc::new(AtomicBool::new(false));
             let for_the_fake = acking.clone();
+            let left = Arc::new(AtomicBool::new(false));
+            let for_the_test = left.clone();
             std::thread::spawn(move || {
                 let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
                 for incoming in listener.incoming() {
@@ -1161,6 +1194,7 @@ mod tests {
                     let queue = queue.clone();
                     let seen = thread_seen.clone();
                     let acking = acking.clone();
+                    let left = left.clone();
                     // One connection at a time: the client reconnects after the
                     // one before it is gone.
                     runtime.block_on(async move {
@@ -1184,7 +1218,10 @@ mod tests {
                         loop {
                             tokio::select! {
                                 incoming = source.next() => {
-                                    let Some(Ok(frame)) = incoming else { break };
+                                    let Some(Ok(frame)) = incoming else {
+                                        left.store(true, Ordering::SeqCst);
+                                        break;
+                                    };
                                     let Ws::Text(text) = frame else { continue };
                                     let Ok(parsed) = serde_json::from_str::<Value>(text.as_ref()) else { continue };
                                     if parsed["op"].as_i64() == Some(1) && acking.load(Ordering::SeqCst) {
@@ -1203,7 +1240,7 @@ mod tests {
                     });
                 }
             });
-            FakeGateway { address, seen, queue: mine, acking: for_the_fake }
+            FakeGateway { address, seen, queue: mine, acking: for_the_fake, left: for_the_test }
         }
 
         /// Says what the next connection will be sent.
@@ -1220,6 +1257,11 @@ mod tests {
 
         fn frames(&self) -> Vec<Value> {
             hold(&self.seen).clone()
+        }
+
+        /// Whether the client closed a connection before the fake did.
+        fn client_left(&self) -> bool {
+            self.left.load(Ordering::SeqCst)
         }
 
         /// The first frame with the given opcode.
@@ -1709,6 +1751,28 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(gateway.ops(1), 0, "il primo battito aspetta: un client che batte subito viene chiuso");
         assert!(gateway.wait_for(1, 1).await, "il primo battito arriva");
+    }
+
+    #[tokio::test]
+    async fn a_gateway_let_go_of_closes_its_socket() {
+        // The hub lets go of the adapter when the gateway is switched off. The
+        // socket must go with it, or it reads and reconnects for nobody.
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        gateway.push(vec![hello(60_000), ready("S1", &gateway.address), message("m1", "d1", None, "u1", "ciao")]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        gateway.acking(true);
+        discord.receive().await.expect("un messaggio");
+        assert!(!gateway.client_left());
+        drop(discord);
+        for _ in 0..50 {
+            if gateway.client_left() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(gateway.client_left(), "il socket resta aperto con il gateway spento");
     }
 
     #[tokio::test]
