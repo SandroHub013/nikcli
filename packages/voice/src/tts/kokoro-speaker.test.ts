@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createNaturalSpeaker, type NaturalSpeakerDeps } from "./natural-speaker";
 import { createFakeSpeaker } from "./speaker";
-import { detectReplyLanguage, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
+import { detectReplyLanguage, interfaceLocale, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
 import type { ReplyVoice, TtsLocale } from "../settings/model";
 
 const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -240,7 +240,7 @@ describe("la catena è quella che si prova davvero", () => {
     expect(h.asked.map((unit) => unit.voice)).toEqual(["paola"])
   })
 
-  test("Kokoro scelto, non ancora installato: si scarica in background e la risposta è di Lessac", async () => {
+  test("Kokoro scelto, non ancora installato: la risposta è di Lessac e nessuno scarica", async () => {
     const asked: string[] = []
     const h = host("af_heart", {
       status: async (voice) => {
@@ -253,9 +253,9 @@ describe("la catena è quella che si prova davvero", () => {
     })
     const english = "I opened the session on the parser and the tests are green."
     await createNaturalSpeaker(h.deps).speak(english)
-    // La domanda è fatta, la scaricazione parte senza che nessuno la chieda, e la
-    // risposta non aspetta: è di Lessac, in inglese, offline.
-    expect(asked).toEqual(["status:af_heart", "install:af_heart", "status:lessac"])
+    // Il pannello promette che i 219 MB arrivano premendo Installa, quindi una
+    // risposta non li avvia: si chiede se Kokoro c'è, si va a Lessac, e basta.
+    expect(asked).toEqual(["status:af_heart", "status:lessac"])
     expect(h.asked.map((unit) => unit.voice)).toEqual(["lessac"])
     expect(h.played).toEqual([english])
     expect(h.fallback.spoken).toEqual([])
@@ -404,6 +404,151 @@ describe("il profilo di default non si rimappa da solo", () => {
     // Mentre per un id Kokoro la catena scende, che è il suo punto.
     expect(replyVoiceChainFrom("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"])
   })
+});
+
+describe("il ripiego viene dalla lingua dell'interfaccia, non dall'impostazione", () => {
+  /**
+   * The composition `workbench.tsx` does in `voiceFor`, spelled out: the
+   * interface's language is the fallback, the text wins over it, and the voice is
+   * derived from the locale that came out. It is the same three calls in the same
+   * order, so a test that says the wrong voice is caught here and not in the app.
+   */
+  const voiceFor = (chosen: ReplyVoice, ui: "it" | "en", ttsLocale: TtsLocale, text: string) => {
+    const spoken = replyLocale(chosen, detectReplyLanguage(text), interfaceLocale(ui, ttsLocale));
+    return { voice: speakingReplyVoice(chosen, spoken, ui), locale: spoken };
+  };
+
+  test("interfaccia inglese, voce Kokoro, «Done.»: la voce inglese", () => {
+    // ttsLocale rimasto it-IT, come sta su un profilo che non l'ha toccato: se il
+    // ripiego venisse da lì, «Done.» andrebbe a Paola.
+    expect(voiceFor("af_heart", "en", "it-IT", "Done.")).toEqual({ voice: "af_heart", locale: "en-US" });
+  });
+
+  test("interfaccia italiana, voce Kokoro, «Salvato.»: Paola", () => {
+    expect(voiceFor("af_heart", "it", "it-IT", "Salvato.")).toEqual({ voice: "paola", locale: "it-IT" });
+  });
+
+  test("la variante britannica si conserva quando l'impostazione la ha già", () => {
+    expect(voiceFor("bf_emma", "en", "en-GB", "Done.")).toEqual({ voice: "bf_emma", locale: "en-GB" });
+    // E una finestra italiana non la riporta indietro: l'inglese è una scelta.
+    expect(voiceFor("bf_emma", "it", "en-GB", "Done.")).toEqual({ voice: "paola", locale: "it-IT" });
+  });
+
+  test("un testo riconosciuto vince sull'interfaccia, in entrambe le direzioni", () => {
+    // Finestra inglese, ma la risposta è italiana: la risposta comanda.
+    expect(voiceFor("af_heart", "en", "en-US", "Ho aperto la sessione e i test sono verdi.")).toEqual({
+      voice: "paola",
+      locale: "it-IT",
+    });
+    // Finestra italiana, ma la risposta è inglese: idem, e su Ugo resta Ugo.
+    expect(voiceFor("ugo", "it", "it-IT", "I opened the session and the tests are green.")).toEqual({
+      voice: "ugo",
+      locale: "en-US",
+    });
+  });
+
+  test("l'impostazione non può più essere la risposta, quale che sia", () => {
+    // Il punto della condizione: qualunque valore abbia ttsLocale, un testo che
+    // non dice la lingua prende la lingua dell'interfaccia.
+    for (const ttsLocale of ["it-IT", "en-US", "en-GB"] as const) {
+      expect(interfaceLocale("en", ttsLocale).startsWith("en")).toBe(true);
+      expect(interfaceLocale("it", ttsLocale)).toBe("it-IT");
+    }
+  });
+});
+
+describe("una risposta non scarica mai niente", () => {
+  const english = "I opened the session and the tests are green.";
+
+  test("Kokoro scelto e non installato: nessun download, e la catena scende", async () => {
+    // Il pannello promette che i 219 MB arrivano premendo Installa. Una risposta
+    // che li avvia da sé rompe la promessa, e basta una frase inglese per
+    // metterla in moto.
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async (voice) => {
+        asked.push(`status:${voice}`)
+        return { supported: true, installed: voice === "lessac" }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(asked).toEqual(["status:af_heart", "status:lessac"])
+    expect(asked.filter((step) => step.startsWith("install"))).toEqual([])
+    // E la risposta è di Lessac, che era già lì: la catena ha usato quello che
+    // c'era senza andare a prendere niente.
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["lessac"]))
+  })
+
+  test("Kokoro scelto e non installato, e Lessac nemmeno: la voce di sistema", async () => {
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: false }),
+      install: async () => {
+        throw new Error("una risposta non scarica niente")
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(h.asked).toEqual([])
+    expect(h.fallback.spoken).toEqual([english])
+  })
+
+  test("il passo di mezzo della catena è usato solo se è già installato", async () => {
+    // La regola vale per ogni passo dopo il primo: Lessac è la voce che c'era
+    // dentro la catena, non una scelta, e non viene scaricata da una risposta.
+    const asked: string[] = []
+    const h = host("bm_george", {
+      status: async (voice) => {
+        asked.push(voice)
+        return { supported: true, installed: false }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    // Il Kokoro scelto non scarica niente, e il suo passo di mezzo è chiesto una
+    // volta e basta: nessun download.
+    expect(asked).toEqual(["bm_george", "lessac"])
+    expect(h.asked).toEqual([])
+  })
+
+  test("il warm-up non scarica niente nemmeno lui", async () => {
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: false }),
+      install: async () => {
+        throw new Error("il warm-up non scarica niente")
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(h.asked).toEqual([])
+  })
+
+  test("la voce scelta che non c'è ancora si scarica ancora, se è di Piper", async () => {
+    // La regola è sulla catena e sul backend, non sulle risposte in generale: una
+    // voce Piper scelta e non ancora presente si prende come una volta sola, e la
+    // risposta di dopo la trova già pronta.
+    const installed: string[] = []
+    let ready = false
+    const h = host("ugo", {
+      status: async () => ({ supported: true, installed: ready }),
+      install: async (voice) => {
+        installed.push(voice)
+        ready = true
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("I opened the session and the tests are green.")
+    expect(installed).toEqual(["ugo"])
+    // Il modello non c'era, quindi questa risposta la legge la voce di sotto, e la
+    // seconda la legge Ugo: è il comportamento di sempre per Piper.
+    expect(h.fallback.spoken.length).toBe(1)
+    await speaker.speak("And now the second one.")
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["ugo"]))
+  });
 });
 
 describe("la catena di ripiego è quella del dominio", () => {

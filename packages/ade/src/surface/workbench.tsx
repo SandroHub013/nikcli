@@ -396,6 +396,9 @@ import {
   createNaturalSpeaker,
   activeReplyVoice,
   speakingReplyVoice,
+  isKokoroVoice,
+  type ReplyVoice,
+  interfaceLocale,
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
@@ -4149,32 +4152,60 @@ export function Workbench() {
       const settings = voiceSettings()
       // Not called `locale`: that is the language of the window, and it is asked
       // for one line below.
-      const spoken = replyLocale(settings.replyVoice, detected, settings.ttsLocale)
+      const spoken = replyLocale(settings.replyVoice, detected, interfaceLocale(locale(), settings.ttsLocale))
       return { voice: speakingReplyVoice(settings.replyVoice, spoken, locale()), locale: spoken }
     },
     status: async (voice) => {
       const host = await getHost()
-      return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
+      // Which backend reads the voice decides which command answers: Piper's
+      // voices are files of their own, Kokoro's four are one 219 MB download, and
+      // asking the wrong backend about a voice it does not have is a question
+      // with no answer.
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        // The panel's shape: undefined means this build cannot run Kokoro at all,
+        // which is not the same as a pack that is not there yet.
+        const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
+        return { supported: pack !== undefined, installed: pack?.installed ?? false }
+      }
+      if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
+      return { supported: false, installed: false }
     },
     install: async (voice) => {
       const host = await getHost()
-      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
-      await host.ttsPiperInstall(voice)
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
+      } else if (host?.ttsPiperInstall) {
+        return host.ttsPiperInstall(voice)
+      }
+      throw new Error(t("voice.noHost.download"))
     },
     synthesize: async (voice, text, token, ttsLocale) => {
       const host = await getHost()
-      if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
       // The locale goes across as what the G2P is asked for, not as the setting:
       // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
       // outright. This is the boundary where that becomes true.
-      return host.ttsPiperSpeak(voice, text, token, g2pLocale(ttsLocale))
+      const lang = g2pLocale(ttsLocale)
+      // A Kokoro voice is read by the other backend, and it takes the voice id
+      // too: its four voices are speaker numbers inside one model, not four files.
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
+        throw new Error(t("voice.noHost"))
+      }
+      if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
+      return host.ttsPiperSpeak(voice, text, token, lang)
     },
     cancel: async (tokens) => {
       const host = await getHost()
+      // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
+      // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
+      // non e' ancora partita non parte.
       await host?.ttsPiperCancel?.(tokens)
     },
     stop: async () => {
       const host = await getHost()
+      // I due figli sono uno per backend: fermare quello che stava parlando, e la
+      // catena si rimette sola al turno dopo.
+      await host?.ttsLocalStop?.()
       return (await host?.ttsPiperStop?.()) ?? { busy: false }
     },
     stopOnCreate: true,

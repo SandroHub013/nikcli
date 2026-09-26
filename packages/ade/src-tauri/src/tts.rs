@@ -23,11 +23,186 @@
 //! Web Speech voice.
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 use tauri::Manager;
+
+mod kokoro;
+
+/// What a local voice can do on this host, for the panel and for the panel's tests.
+#[derive(serde::Serialize)]
+pub struct LocalStatus {
+    pub supported: bool,
+    pub installed: bool,
+    /// How much an install would fetch, for «Installa (… MB)». `None` when there
+    /// is nothing to fetch, so a number never sits next to a button that has
+    /// nothing to do.
+    #[serde(rename = "sizeBytes")]
+    pub size_bytes: Option<u64>,
+}
+
+/// The status of a Kokoro voice: installed when this revision is whole, and never
+/// "supported but not installed" — the pieces are one download and one folder.
+#[tauri::command]
+pub fn tts_local_status(app: tauri::AppHandle, provider: String) -> Result<LocalStatus, String> {
+    let root = kokoro_root(&app)?;
+    match provider.as_str() {
+        kokoro::KOKORO => Ok(LocalStatus {
+            supported: true,
+            installed: kokoro::ready(&root),
+            size_bytes: kokoro::download_size(&root),
+        }),
+        _ => Err(format!("{provider} non è un provider locale.")),
+    }
+}
+
+/// Takes Kokoro away again, so the 219 MB do not stay for nothing.
+///
+/// Refused while an install is running, and the resident host is stopped first if
+/// it is there: a process with the model open is a process that does not give the
+/// model back.
+///
+/// Both locks are held for the whole removal, and that is the point of the two
+/// lines below. Checking `install_running` and then removing is a check-then-act:
+/// «Installa» followed at once by «Rimuovi» would delete the folder under the
+/// installer that is writing into it. And the child lock is taken *before* the
+/// host is stopped and kept until the folder is gone, so a synthesis that arrives
+/// in between cannot start a new host with the model half deleted — which is a
+/// DLL locked on Windows and a cancellation that removes half of it.
+#[tauri::command]
+pub fn tts_local_delete(app: tauri::AppHandle, state: tauri::State<'_, KokoroState>) -> Result<u64, String> {
+    let root = kokoro_root(&app)?;
+    let installer = app.state::<Piper>();
+    let slot = installer.installer.slot(kokoro::KOKORO);
+    // Il lock dell'installer, e da subito il lock del figlio: in quest'ordine,
+    // cosi' nessuno dei due può essere messo in mezzo fra il controllo e la
+    // cancellazione.
+    let _install = installer.installer.hold(&slot);
+    if installer.installer.install_running(kokoro::KOKORO) {
+        return Err("C'è un'installazione di Kokoro in corso: fermala prima di cancellare.".into());
+    }
+    let mut child = state.0.lock();
+    if let Some(host) = child.as_mut() {
+        host.stop();
+    }
+    *child = None;
+    let freed = kokoro::delete(&root, false)?;
+    Ok(freed)
+}
+
+/// Kokoro's own folder, a sibling of Piper's: `…/tts/kokoro`.
+fn kokoro_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("tts").join("kokoro"))
+}
+
+/// One Kokoro sentence, as WAV bytes, from the resident host.
+///
+/// `tts_local_*` and not another pair of commands: Piper's are the same commands
+/// with `piper` as the provider, so a second voice is a second value and not a
+/// second API to keep in step.
+#[tauri::command]
+pub async fn tts_local_speak(
+    app: tauri::AppHandle,
+    provider: String,
+    voice_id: String,
+    text: String,
+    token: u64,
+    lang: String,
+) -> Result<tauri::ipc::Response, String> {
+    if provider != kokoro::KOKORO {
+        return Err(format!("{provider} non è un provider locale."));
+    }
+    let root = kokoro_root(&app)?;
+    let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    if text.trim().is_empty() {
+        return Err("testo vuoto".into());
+    }
+    // L'host di Kokoro non annulla: una richiesta gia' mandata finisce e il suo
+    // WAV si butta. L'unico momento in cui ADE risparmia il lavoro e' qui, prima
+    // che la riga entri nel figlio, e il segno e' lo stesso che manda K5.
+    if app.state::<Piper>().claim(token).is_err() {
+        return Err(FRASE_ANNULLATA.into());
+    }
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<KokoroState>();
+        kokoro::speak_blocking(&root, &state, &voice_id, &text, token, &lang)
+    })
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Ends the resident host, for the idle timer, a page reload and the exit of ADE.
+#[tauri::command]
+pub fn tts_local_stop(state: tauri::State<'_, KokoroState>) -> Result<(), String> {
+    kokoro::stop(&state);
+    Ok(())
+}
+
+/// The resident host, kept by Tauri so there is one of it for the whole app.
+pub struct KokoroState(pub kokoro::Kokoro);
+
+impl KokoroState {
+    /// Ends the resident host, for the exit of ADE.
+    ///
+    /// Not the EOF on stdin, which is what the host would see on its own: the
+    /// host that is still loading its model is not reading stdin, so it would keep
+    /// 219 MB resident for as long as it takes, and the process outliving the app
+    /// that started it is the thing this exists to avoid.
+    pub fn stop(&self) {
+        kokoro::stop(self);
+    }
+}
+
+impl Default for KokoroState {
+    fn default() -> Self {
+        Self(kokoro::Kokoro::default())
+    }
+}
+
+#[tauri::command]
+pub async fn tts_local_install(
+    app: tauri::AppHandle,
+    provider: String,
+) -> Result<(), String> {
+    if provider != kokoro::KOKORO {
+        return Err(format!("{provider} non è un provider locale."));
+    }
+    let state = app.state::<Piper>();
+    let root = kokoro_root(&app)?;
+    let slot = state.installer.slot(kokoro::KOKORO);
+    let _one = state.installer.hold(&slot);
+    let install = state.installer.begin(
+        &slot,
+        kokoro::STEPS,
+        None,
+        Instant::now() + state.installer.deadline(),
+    );
+    let mut closed = Closed { install: &install, closed: false };
+    let outcome = kokoro::install_locked(&install, &root, &Curl, &Certutil);
+    closed.report(&outcome);
+    outcome
+}
+
+/// The digest of some bytes, in the spelling a manifest pins.
+///
+/// The files on disk are digested by `certutil`, which is what the installer's
+/// `Fingerprint` is. This is for the bytes that are not a file yet — a model that
+/// is prepared in memory, a vocabulary compiled into the executable — where
+/// writing them out to be digested would be a step that exists only to be
+/// measured.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
 
 /// One file to fetch: where from, the digest it must have, and how many bytes
 /// it weighs when it is whole.
@@ -179,6 +354,10 @@ impl Drop for Resident {
 
 /// Names the scratch file each sentence is written to; sentences run one at a time, so it only has to differ.
 static SENTENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The sentence an abandoned phrase stops with: the host's own wording is not
+/// the user's, and this one is what K5's bridge already knows.
+const FRASE_ANNULLATA: &str = "frase annullata dal client";
 
 /// The resident process, and the lock that keeps two installs apart.
 #[derive(Default)]
@@ -542,7 +721,12 @@ fn forget_on_error<T, R, E>(slot: &mut Option<T>, result: &Result<R, E>) {
 /// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
 #[tauri::command]
 pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> Result<(), String> {
-    let source = voice(&voice_id)?.source;
+    // Le due pagine di Kokoro sono in una lista fissa, come i sorgenti delle voci
+    // Piper: l'indirizzo non viene mai dall'interfaccia.
+    let source = match kokoro::source_of(&voice_id) {
+        Some(url) => url,
+        None => voice(&voice_id)?.source,
+    };
     #[allow(deprecated)]
     tauri_plugin_shell::ShellExt::shell(&app).open(source, None).map_err(|e| e.to_string())
 }
@@ -914,6 +1098,12 @@ impl Installer {
 
     /// What is known about this provider's install. Never fails: a provider
     /// nobody has installed yet has simply not started.
+    /// Whether this provider has an install in flight, which is what makes a
+    /// delete refuse: the installer is writing into the folder being removed.
+    pub fn install_running(&self, provider: &str) -> bool {
+        self.progress_of(provider).running
+    }
+
     fn progress_of(&self, provider: &str) -> InstallProgress {
         self.slot(provider).progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }

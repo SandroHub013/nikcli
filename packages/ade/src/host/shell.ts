@@ -222,21 +222,41 @@ export interface Host {
   ttsPiperCancel?: (tokens: number[]) => Promise<void>
   /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
   ttsPiperStop?: () => Promise<{ busy: boolean }>
+  /**
+   * The same things, for the second local backend, with the provider as a
+   * parameter. They are their own names because the resident process is one per
+   * backend and stopping one is not stopping the other, and they take a provider
+   * because the shape is one — but only `kokoro` is accepted today, and Piper's
+   * own commands stay where they are. A comment that said otherwise was here.
+   *
+   * No `voiceId` on status, install and stop: Kokoro's four voices are one
+   * 219 MB download, so installing them is one operation with nothing to choose.
+   *
+   * The status and the delete keep K6's shapes — `PackStatus | undefined` and a
+   * `void` — because the panel reads them; the host answers more than that
+   * (`sizeBytes` on the status, the bytes freed on the delete) and the two
+   * implementations below fold it in.
+   */
+  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
+  ttsLocalInstall?: (provider: string) => Promise<void>
+  /** One unit as WAV bytes. `lang` is the G2P language, not a locale. */
+  ttsLocalSpeak?: (
+    provider: string,
+    voiceId: string,
+    text: string,
+    token: number,
+    lang: string,
+  ) => Promise<ArrayBuffer>
+  /** Ends the resident child of the second backend. One child, so no provider. */
+  ttsLocalStop?: () => Promise<void>
+  /** Takes the second backend away again; the host answers with the bytes freed. */
+  ttsLocalDelete?: (provider: string) => Promise<void>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
   ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
   /** K3: stops the install under way for a provider; whether there was one. */
   ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
-  /**
-   * K4b: a local provider's pack. Undefined: this build cannot run it — the
-   * command is not there yet, or the host says it is not supported.
-   */
-  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
-  /** K4b: downloads a provider's pack, checked against pinned digests. */
-  ttsLocalInstall?: (provider: string) => Promise<void>
-  /** K4b: removes a provider's pack from disk. */
-  ttsLocalDelete?: (provider: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -739,6 +759,18 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalDelete(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_local_delete", { provider })
+    },
+
+    // K4b's own two: the panel does not speak, the speaker does, and it needs the
+    // voice id because Kokoro's four voices are numbers inside one model.
+    async ttsLocalSpeak(provider, voiceId, text, token, lang) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId, text, token, lang })
+    },
+
+    async ttsLocalStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_stop")
     },
 
     async ttsPiperSpeak(voice, text, token, lang) {

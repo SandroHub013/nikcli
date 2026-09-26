@@ -350,6 +350,7 @@ export {
   backendOf,
   detectReplyLanguage,
   g2pLocale,
+  interfaceLocale,
   isKokoroVoice,
   kokoroVoice,
   replyVoiceChain,

@@ -1978,6 +1978,7 @@ pub fn run() {
         .manage(gateway::Gateway::default())
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
+        .manage(tts::KokoroState::default())
         .manage(usage::UsageCache::default())
         .manage(std::sync::Arc::new(CloseManager::default()))
         .manage(tray::Tray::default())
@@ -2059,6 +2060,11 @@ pub fn run() {
             tts::tts_piper_stop,
             tts::tts_piper_cancel,
             tts::tts_open_voice_source,
+            tts::tts_local_status,
+            tts::tts_local_install,
+            tts::tts_local_speak,
+            tts::tts_local_stop,
+            tts::tts_local_delete,
             tts::tts_install_status,
             tts::tts_install_cancel,
             mailbox::mailbox_receipt,
@@ -2147,6 +2153,10 @@ pub fn run() {
                 app.state::<serve::Server>().shutdown();
                 app.state::<frontend::DevServer>().shutdown();
                 app.state::<pty::Registry>().end_all();
+                // The resident voice hosts, killed and not left to notice the
+                // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
+                // the EOF of a stdin nobody writes to again.
+                app.state::<tts::KokoroState>().stop();
             }
         });
 }

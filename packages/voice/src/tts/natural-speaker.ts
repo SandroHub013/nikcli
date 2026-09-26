@@ -542,11 +542,27 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         failed.delete(voice)
         return true
       }
-      if (installIfMissing) ensure(voice)
+      if (installIfMissing && mayDownload(voice)) ensure(voice)
     } catch {
       // A host that cannot say is a host that cannot speak with Piper.
     }
     return false
+  }
+
+  /**
+   * Whether a reply may start fetching this voice.
+   *
+   * Not Kokoro, ever. The panel promises that the 219 MB arrive when the user
+   * presses «Installa», and a promise the speaker breaks on its own is a promise
+   * the user cannot rely on: a single English sentence — a word, three ids, a
+   * path — is enough for the detector to say English and set a download going
+   * that nobody asked for and cannot see.
+   *
+   * Piper is as it was: a voice that is not there yet is fetched, because it is
+   * 63 MB and the panel says so on the voice itself.
+   */
+  function mayDownload(voice: string): boolean {
+    return !isKokoroVoice(voice as ReplyVoice)
   }
 
   /**
@@ -569,7 +585,13 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   /** Where in the chain the reading starts: the first voice that can speak. */
   async function firstUsable(chain: string[], mine: number): Promise<number> {
     for (let step = 0; step < chain.length; step++) {
-      if (await usable(chain[step]!)) return step;
+      // Only the voice that was asked for may start a download, and only if it is
+      // a Piper voice: that one has been chosen, and the panel says its size on
+      // the voice itself. A step further down the chain is a voice that happens
+      // to be there, and not being there is not a reason to go and get it — the
+      // 219 MB of Kokoro in particular, which the panel promises arrive when the
+      // button is pressed, and one English sentence is enough to break that.
+      if (await usable(chain[step]!, step === 0)) return step;
       // An abandoned reply stops asking: the next step belongs to whoever is
       // speaking now.
       if (mine !== generation) return -1;
