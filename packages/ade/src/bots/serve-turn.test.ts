@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { CHAT_PERMISSION, type PermissionRule } from "../chat/rules"
 import type { ChatEvent } from "../chat/events"
+import type { NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { botPermission } from "./serve-rules"
-import { agentProblem, modelRef, runServeTurn, type ServeClient, type ServeConnection } from "./serve-turn"
+import { agentProblem, catalogCache, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -83,6 +84,20 @@ const BOT: AgentFile = {
   runner: "nikcli",
 }
 
+/** A catalog with these models, their providers connected. */
+function catalogOf(...models: string[]): ProviderList {
+  const all = new Map<string, Record<string, { id: string }>>()
+  for (const model of models) {
+    const ref = modelRef(model)!
+    all.set(ref.providerID, { ...all.get(ref.providerID), [ref.modelID]: { id: ref.modelID } })
+  }
+  return {
+    all: [...all].map(([id, models]) => ({ id, name: id, models })),
+    default: {},
+    connected: [...all.keys()],
+  } as unknown as ProviderList
+}
+
 interface Calls {
   connect: { directory: string; interactive: boolean }[]
   created: { title: string; permission: readonly PermissionRule[] }[]
@@ -97,7 +112,9 @@ function server(
     events?: readonly ChatEvent[]
     session?: string
     existing?: Record<string, { permission?: unknown }>
-    agents?: { name: string; prompt?: string }[]
+    agents?: { name: string; prompt?: string; model?: { providerID: string; modelID: string } }[]
+    /** The server's catalog; by default one with the bot's model on a connected OpenRouter. */
+    catalog?: Awaited<ReturnType<ServeClient["catalog"]>>
     refuse?: string
     onPrompt?: (stream: ReturnType<typeof channel>) => void
   } = {},
@@ -107,6 +124,7 @@ function server(
   const client: ServeClient = {
     agents: async () => options.agents ?? [{ name: "build", prompt: "" }, { name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" }],
     session: async (id) => options.existing?.[id],
+    catalog: async () => options.catalog ?? { providerList: catalogOf("openrouter/nvidia/nemotron-3-super-120b-a12b:free") },
     create: async (input) => {
       calls.created.push(input)
       return options.session ?? SESSION
@@ -266,6 +284,40 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(agentProblem([{ name: "build", prompt: "x" }], BOT)).toBe(t("bots.serve.noAgent", "alfa"))
     expect(agentProblem([{ name: "alfa", prompt: " Sei alfa.\r\nRispondi breve. " }], BOT)).toBeUndefined()
     expect(agentProblem([{ name: "alfa" }], BOT)).toBe(t("bots.serve.agentTaken", "alfa"))
+  })
+
+  /* A model the server does not have: nikcli 1.398 would end the turn without a word. */
+  test("a model missing from the catalog is refused before any session: the bot's, else its agent's, else the configured one", async () => {
+    const gone = server({ catalog: { providerList: catalogOf("openrouter/nvidia/nemotron-3.5-lightning:free") } })
+    const result = await runServeTurn(panel(), gone.deps).result
+    expect(result).toMatchObject({ status: "error", problem: t("bots.serve.noModel", "openrouter/nvidia/nemotron-3-super-120b-a12b:free") })
+    expect(gone.calls.created).toEqual([])
+    expect(gone.calls.prompts).toEqual([])
+
+    // A provider that is not connected has no models to run.
+    const unplugged = server({ catalog: { providerList: { ...catalogOf(BOT.model!), connected: [] } } })
+    expect((await runServeTurn(panel(), unplugged.deps).result).problem).toBe(t("bots.serve.noModel", BOT.model!))
+
+    const { model: _none, ...noModel } = BOT
+    const agent = { name: "alfa", prompt: BOT.prompt, model: { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" } }
+    const byAgent = server({ agents: [agent], catalog: { providerList: catalogOf(BOT.model!) } })
+    expect((await runServeTurn(panel({ bot: noModel }), byAgent.deps).result).problem).toBe(
+      t("bots.serve.noModel", "openrouter/nex-agi/nex-n2.5-mini:free"),
+    )
+
+    const byConfig = server({ catalog: { providerList: catalogOf(BOT.model!), configModel: "openrouter/nex-agi/nex-n2.5-mini:free" } })
+    expect((await runServeTurn(panel({ bot: noModel }), byConfig.deps).result).problem).toBe(
+      t("bots.serve.noModel", "openrouter/nex-agi/nex-n2.5-mini:free"),
+    )
+    expect(byConfig.calls.created).toEqual([])
+  })
+
+  test("a catalog that cannot be read, or a turn with no model named anywhere, goes: the server decides", async () => {
+    const unknown = server({ events: FIRST, session: FIRST_SESSION, catalog: {} })
+    expect((await runServeTurn(panel(), unknown.deps).result).status).toBe("done")
+    const { model: _none, ...noModel } = BOT
+    const nothing = server({ events: FIRST, session: FIRST_SESSION, catalog: { providerList: catalogOf("openrouter/x:free") } })
+    expect((await runServeTurn(panel({ bot: noModel }), nothing.deps).result).status).toBe("done")
   })
 
   test("a user's bot where the project has an agent file of its name, even with the same words: refused", async () => {
@@ -440,5 +492,64 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(modelRef("solo")).toBeUndefined()
     expect(modelRef("/x")).toBeUndefined()
     expect(modelRef(undefined)).toBeUndefined()
+  })
+})
+
+/* Modello assente review, M4: a bot's turn does not wait for ever on the catalog. */
+describe("the bot's catalog read has a time limit", () => {
+  test("a server that never answers gives an unknown catalog, in time", async () => {
+    const never = () => new Promise<never>(() => {})
+    const client = { provider: { list: never }, config: { get: never } } as unknown as NikcliClient
+    const started = Date.now()
+    expect(await serveClientOf(client, 20).catalog()).toEqual({})
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+})
+
+/* Modello assente review, B3: the bots' catalog is kept per folder for a while. */
+describe("the bots' catalog is kept", () => {
+  test("read once per folder while fresh; `fresh` reads again; an unread one is not kept; old ones are read again", async () => {
+    let at = 0
+    const cache = catalogCache(1_000, () => at)
+    let reads = 0
+    const good = async () => (reads++, { providerList: catalogOf("openrouter/a/b:free") })
+    await cache("C:/p", good)
+    await cache("C:/p", good)
+    expect(reads).toBe(1)
+    await cache("C:/altro", good)
+    expect(reads).toBe(2)
+    await cache("C:/p", good, true)
+    expect(reads).toBe(3)
+    at = 1_500
+    await cache("C:/p", good)
+    expect(reads).toBe(4)
+    let unread = 0
+    const none = async () => (unread++, {})
+    await cache("C:/q", none)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await cache("C:/q", none)
+    expect(unread).toBe(2)
+  })
+
+  test("a turn reads the catalog again before refusing: a model connected since the last read goes", async () => {
+    const fake = server({ events: FIRST, session: FIRST_SESSION })
+    const reads: boolean[] = []
+    const client = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
+    const deps = {
+      ...fake.deps,
+      connect: async () => ({
+        ...client,
+        client: {
+          ...client.client,
+          catalog: async (fresh?: boolean) => {
+            reads.push(fresh === true)
+            return { providerList: fresh ? catalogOf(BOT.model!) : catalogOf("openrouter/x/y:free") }
+          },
+        },
+      }),
+    }
+    const result = await runServeTurn(panel(), deps).result
+    expect(result.status).toBe("done")
+    expect(reads).toEqual([false, true])
   })
 })

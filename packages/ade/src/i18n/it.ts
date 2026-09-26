@@ -1303,6 +1303,8 @@ export const it = {
   "chat.model.free": "gratis",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
+  "chat.model.missing": (model: string) =>
+    `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.new": "Nuova conversazione",
@@ -1601,6 +1603,8 @@ export const it = {
   "bots.serve.notAdmitted": (root: string) =>
     `Il progetto ${root} non è ancora ammesso per nikcli, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
   "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
+  "bots.serve.noModel": (model: string) =>
+    `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
   "bots.serve.agentTaken": (name: string) =>
     `Il progetto ha un suo agente «${name}», diverso da questo bot: sul server risponderebbe al suo posto, quindi il turno non parte. Rinomina uno dei due.`,
   "bots.serve.newSession":

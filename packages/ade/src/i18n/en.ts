@@ -1292,6 +1292,8 @@ export const en: Messages = {
   "chat.model.free": "free",
   "chat.model.choose": "Choose a model",
   "chat.model.none": "No models available",
+  "chat.model.missing": (model) =>
+    `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. Nothing was sent: choose another one.`,
   "chat.agent.label": "Agent",
   "chat.agent.none": "No agents available",
   "chat.new": "New conversation",
@@ -1587,6 +1589,8 @@ export const en: Messages = {
   "bots.serve.notAdmitted": (root) =>
     `The project ${root} is not admitted for nikcli yet, or it changed: open the bot in the panel, answer the question and try again.`,
   "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
+  "bots.serve.noModel": (model) =>
+    `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
   "bots.serve.agentTaken": (name) =>
     `The project has its own agent «${name}», different from this bot: on the server it would answer in its place, so the turn does not start. Rename one of the two.`,
   "bots.serve.newSession":

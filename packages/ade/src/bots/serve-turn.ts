@@ -17,16 +17,19 @@
  * The project is admitted before anything is sent (`admitProject`), as for
  * the Chat: with its dialog when someone is in front of the screen, refused
  * otherwise. A project agent with the bot's name would take its place on the
- * server, with its own prompt and rules: the turn is refused instead.
+ * server, with its own prompt and rules: the turn is refused instead. So is a
+ * turn whose model the server's catalog does not have: nikcli would end it
+ * without a word (`catalogHasModel`).
  *
  * Stop, the time limit and the spend cap abort the session's turn on the
  * server; nothing of it keeps running.
  */
 
-import type { Agent, NikcliClient } from "@nikcli-ai/sdk/client"
+import type { Agent, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
-import { appChatConnectionDeps, openChat, type ChatConnectionDeps } from "../chat/connection"
+import { appChatConnectionDeps, CATALOG_TIMEOUT_MS, openChat, within, type ChatConnectionDeps } from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
+import { catalogHasModel, parseModelRef, serializeModelRef } from "../chat/model"
 import { readEvents } from "../chat/stream"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
@@ -53,7 +56,13 @@ import type { PermissionRule } from "../chat/rules"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
 export interface ServeClient {
-  readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt">[]>
+  readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt" | "model">[]>
+  /**
+   * The server's models and its configured one; `providerList` absent when
+   * it could not be read. It may be one read a little earlier; `fresh` reads
+   * it now.
+   */
+  readonly catalog: (fresh?: boolean) => Promise<ServeCatalog>
   /** The session, or undefined when the server has none by that id. */
   readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
   readonly create: (input: { readonly title: string; readonly permission: readonly PermissionRule[] }) => Promise<string>
@@ -67,6 +76,37 @@ export interface ServeClient {
   readonly abort: (sessionID: string) => Promise<void>
   readonly reply: (requestID: string, reply: "once" | "reject") => Promise<void>
   readonly rejectQuestion: (requestID: string) => Promise<void>
+}
+
+export interface ServeCatalog {
+  readonly providerList?: ProviderList
+  readonly configModel?: string
+}
+
+/** How long a bot's catalog is kept for the next turns in the same folder. */
+export const CATALOG_FRESH_MS = 60_000
+
+/**
+ * The catalog per folder, kept for `CATALOG_FRESH_MS` (modello assente
+ * review, B3): a room's round or a routine's runs do not read it again for
+ * every turn. `fresh` reads it now, as a turn does before refusing a model;
+ * one that could not be read is not kept.
+ */
+export function catalogCache(ttlMs = CATALOG_FRESH_MS, now: () => number = Date.now) {
+  const kept = new Map<string, { at: number; value: Promise<ServeCatalog> }>()
+  return (directory: string, read: () => Promise<ServeCatalog>, fresh = false): Promise<ServeCatalog> => {
+    const entry = kept.get(directory)
+    if (!fresh && entry && now() - entry.at < ttlMs) return entry.value
+    const value = read()
+    kept.set(directory, { at: now(), value })
+    void value.then(
+      (catalog) => {
+        if (!catalog.providerList && kept.get(directory)?.value === value) kept.delete(directory)
+      },
+      () => kept.delete(directory),
+    )
+    return value
+  }
 }
 
 export type ServeConnection =
@@ -212,10 +252,12 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       client = connection.client
       const server = client
 
+      let agentModel: { providerID: string; modelID: string } | undefined
       if (bot.identifier) {
         const agents = await server.agents()
         const problem = agentProblem(agents, bot)
         if (problem) return finish("error", problem)
+        agentModel = agents.find((agent) => agent.name === bot.identifier)?.model
         /*
          * A user's bot and a project's agent of its name, with the same words:
          * the server runs the project's file, whose rules and model are its
@@ -223,6 +265,21 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
          */
         if (bot.scope === "global" && (await deps.projectHasAgent?.(cwd, bot.identifier)))
           return finish("error", t("bots.serve.agentTaken", bot.identifier))
+      }
+
+      /*
+       * The model the server would use, as it picks it: the bot's, else its
+       * agent's, else the configured one. One the catalog does not have is
+       * refused here, before any session: nikcli would end the turn without
+       * a word. A catalog that cannot be read lets the server decide.
+       */
+      const model = modelRef(bot.model)
+      const catalog = await server.catalog()
+      const wanted = model ?? agentModel ?? parseModelRef(catalog.configModel)
+      // The catalog may be one read a little earlier: read now before refusing.
+      if (wanted && catalogHasModel(catalog.providerList, wanted) === false) {
+        if (catalogHasModel((await server.catalog(true)).providerList, wanted) === false)
+          return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
       }
 
       const profile = profileFor({
@@ -398,7 +455,6 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
 
       // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
       const text = !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
-      const model = modelRef(bot.model)
       if (stopped) return settled({ kind: "stopped" })
       sent = true
       await server.prompt({
@@ -466,10 +522,21 @@ export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = ap
   return runTurn(request, deps)
 }
 
-/** The calls of `ServeClient` on the SDK's client. */
-export function serveClientOf(client: NikcliClient): ServeClient {
+/** The calls of `ServeClient` on the SDK's client; the catalog within `catalogTimeoutMs`. */
+export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
   return {
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
+    catalog: async () => {
+      // Unread within the time, it is unknown and the server decides (modello assente review, M4).
+      const [providers, config] = await Promise.all([
+        within(client.provider.list(), catalogTimeoutMs),
+        within(client.config.get(), catalogTimeoutMs),
+      ])
+      return {
+        ...(providers?.data ? { providerList: providers.data } : {}),
+        ...(config?.data?.model ? { configModel: config.data.model } : {}),
+      }
+    },
     session: async (sessionID) => {
       try {
         return (await client.session.get({ sessionID })).data as { permission?: unknown } | undefined
@@ -509,6 +576,9 @@ export function serveClientOf(client: NikcliClient): ServeClient {
  * for its files as they are: asked once, and again only when they change.
  * With nobody in front of the screen, a project not admitted is refused.
  */
+/** The bots' catalogs, one per folder, for the whole window. */
+const botCatalogs = catalogCache()
+
 export function appServeTurnDeps(
   connection: () => ChatConnectionDeps = appChatConnectionDeps,
   trust: (directory: string) => Omit<AdmitProjectDeps, "confirm"> = appProjectTrust,
@@ -533,7 +603,12 @@ export function appServeTurnDeps(
       const base = connection()
       const opened = await openChat(directory, interactive ? base : { ...base, admit: unattended })
       if (!opened.ok) return opened
-      return { ok: true, client: serveClientOf(opened.client), events: (signal) => readEvents(opened.fetch, directory, signal) }
+      const client = serveClientOf(opened.client)
+      return {
+        ok: true,
+        client: { ...client, catalog: (fresh) => botCatalogs(directory, () => client.catalog(), fresh) },
+        events: (signal) => readEvents(opened.fetch, directory, signal),
+      }
     },
   }
 }
