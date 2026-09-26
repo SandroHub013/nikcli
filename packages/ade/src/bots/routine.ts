@@ -18,6 +18,7 @@
  *   it was closed is made up once at most, and the routine says so.
  */
 
+import { isAdeTestBuild } from "../chat/model"
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import {
@@ -33,27 +34,29 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 
 /** What the scheduler cleared one run for. */
 export interface RoutineRun {
-  /** Dollars the run may spend; past them it is stopped (`TurnRequest.maxCostUsd`). Absent on a plan. */
+  /** Dollars the run may spend; past them it is stopped (`TurnRequest.maxCostUsd`). Absent on a plan, 0 on a free model. */
   readonly maxCostUsd?: number
+  /** The catalog's word on the model (`catalog.ts`). */
+  readonly free?: boolean
 }
 
 /**
  * The gate one execution passes at spawn: a runner and mode off the list
  * never start, whatever the scheduler thought a moment before.
  */
-export function runRoutine(request: TurnRequest, _run: RoutineRun = {}, deps: TurnDeps = {}): Turn {
+export function runRoutine(request: TurnRequest, run: RoutineRun = {}, deps: TurnDeps = {}): Turn {
   const model = request.model ?? request.bot?.model
-  const mode = routineModeOf(request.runner, request.account?.mode, model)
-  const policy = routinePolicy(request.runner, mode, model)
-  if (!policy.allowed) {
-    const talk = applyProblem(emptyTalk(), policy.reason, Date.now())
+  const offer = routineOffer(request.runner, request.account, model, run.free !== undefined ? { free: run.free } : {})
+  if (!offer.allowed) {
+    const reason = offer.reason ?? t("bots.routine.problem.notAllowed")
+    const talk = applyProblem(emptyTalk(), reason, Date.now())
     return {
       result: Promise.resolve({
         status: "error",
         text: "",
         tokens: 0,
         costUsd: 0,
-        problem: policy.reason,
+        problem: reason,
         talk,
       }),
       stop: () => {},
@@ -273,22 +276,42 @@ export interface RoutineOffer {
   readonly checked?: string
 }
 
+/** What else decides a bot's offer. */
+export interface RoutineOfferOptions {
+  /** The catalog's word on a nikcli model (`catalog.ts`); absent, the `:free` suffix. */
+  readonly free?: boolean | undefined
+  /** ADE Test runs only what costs nothing: free models and subscriptions. Default: `isAdeTestBuild()`. */
+  readonly testBuild?: boolean
+}
+
 /**
  * Whether a bot may have routines, and under which cap. The panel shows the
  * Routine section only when `allowed`; otherwise the reason and the source,
  * with no disabled button inviting a way round.
  */
-export function routineOffer(runner: string, account: BotAccount | undefined, model: string | undefined): RoutineOffer {
-  const mode = routineModeOf(runner, account?.mode, model)
-  const policy = routinePolicy(runner, mode, model)
+export function routineOffer(
+  runner: string,
+  account: BotAccount | undefined,
+  model: string | undefined,
+  options: RoutineOfferOptions = {},
+): RoutineOffer {
+  const mode = routineModeOf(runner, account?.mode, model, options.free)
+  const policy = routinePolicy(runner, mode, model, options.free)
   const row = ROUTINE_POLICY.find((entry) => entry.runner === runner && entry.mode === mode)
   const where = {
     ...(row?.source ? { source: row.source } : {}),
     ...(row?.checked ? { checked: row.checked } : {}),
   }
   if (!policy.allowed) return { mode, allowed: false, reason: policy.reason, ...where }
+  // ADE Test never spends the user's money (review, M2): a paid model or a key is off there.
+  if ((options.testBuild ?? isAdeTestBuild()) && mode !== "free" && mode !== "plan")
+    return { mode, allowed: false, reason: t("bots.routine.testOnlyFree"), ...where }
   return { mode, allowed: true, cap: policy.cap, ...where }
 }
+
+/** The offer for a bot as it is now. */
+export const offerFor = (context: RoutineContext) =>
+  routineOffer(context.runner, context.account, context.model, { free: context.free })
 
 /** The key the runner and mode's day is counted under. */
 export const planKey = (runner: string, mode: RoutineMode) => `${runner}:${mode}`
@@ -298,6 +321,8 @@ export interface RoutineContext {
   readonly runner: string
   readonly model?: string | undefined
   readonly account?: BotAccount | undefined
+  /** The catalog's word on a nikcli model (`catalog.ts`); absent, the `:free` suffix. */
+  readonly free?: boolean | undefined
 }
 
 /** The consent's hash for `routine` under `context`: prompt, runner, mode, model, cap, schedule and the key's name. */
@@ -305,7 +330,7 @@ export async function routineConsent(
   routine: Pick<Routine, "prompt" | "every" | "spend">,
   context: RoutineContext,
 ): Promise<string> {
-  const offer = routineOffer(context.runner, context.account, context.model)
+  const offer = offerFor(context)
   return routineConsentHash({
     prompt: routine.prompt,
     runner: context.runner,
@@ -448,7 +473,7 @@ export function checkRoutine(book: RoutineBook, routine: Routine, check: Routine
   if (routine.paused || log.suspended) return { kind: "wait" }
   if (!dueAt(routine, log, now).due) return { kind: "wait" }
   if (!check.context) return { kind: "suspend", reason: t("bots.routine.suspended.noBot") }
-  const offer = routineOffer(check.context.runner, check.context.account, check.context.model)
+  const offer = offerFor(check.context)
   if (!offer.allowed || !offer.cap)
     return { kind: "suspend", reason: offer.reason ?? t("bots.routine.problem.notAllowed") }
   if (!check.consent || check.consent !== routine.consent)
@@ -473,14 +498,21 @@ export function checkRoutine(book: RoutineBook, routine: Routine, check: Routine
       return { kind: "wait", note: t("bots.routine.note.spendDay", usd(cap.perDayUsd)) }
     }
   }
-  /* Money is capped per run where it is money: a paid model, a key. A plan's figure is not a charge. */
-  const maxCostUsd = offer.mode === "paid" || offer.mode === "key" ? routine.spend?.perRunUsd : undefined
+  /*
+   * Money is capped per run where it is money: a paid model, a key. A free
+   * model may spend nothing (review, M2). A plan's figure is not a charge.
+   */
+  const maxCostUsd =
+    offer.mode === "free" ? 0 : offer.mode === "paid" || offer.mode === "key" ? routine.spend?.perRunUsd : undefined
   return {
     kind: "run",
     missed: dueAt(routine, log, now).missed,
     plan: key,
     cap,
-    run: maxCostUsd !== undefined ? { maxCostUsd } : {},
+    run: {
+      ...(maxCostUsd !== undefined ? { maxCostUsd } : {}),
+      ...(check.context.free !== undefined ? { free: check.context.free } : {}),
+    },
   }
 }
 
@@ -541,6 +573,8 @@ export function recordResult(
   const plan = planOn(book, key, now)
   const cost = finite(result.costUsd) && result.costUsd > 0 ? result.costUsd : 0
   const over = routine.spend !== undefined && cost > routine.spend.perRunUsd
+  /* A free model that cost something is not free: the routine waits for the user (review, M2). */
+  const notFree = key.endsWith(":free") && cost > 0
   const note = result.limited
     ? t("bots.routine.note.limit")
     : result.status === "done"
@@ -561,6 +595,7 @@ export function recordResult(
     ...(over && routine.spend
       ? { suspended: t("bots.routine.suspended.overRun", usd(cost), usd(routine.spend.perRunUsd)) }
       : {}),
+    ...(notFree ? { suspended: t("bots.routine.suspended.notFree", usd(cost)) } : {}),
   })
 }
 

@@ -1423,6 +1423,8 @@ export const en: Messages = {
   "bots.routine.suspended.noBot": "The bot's file is gone.",
   "bots.routine.suspended.consent":
     "The model, mode, key, prompt, schedule or cap changed: give your consent again.",
+  "bots.routine.suspended.notFree": (cost: string) => `The model is not free: the last run cost ${cost}.`,
+  "bots.routine.testOnlyFree": "ADE Test runs only free models and subscriptions",
   "bots.routine.suspended.overRun": (cost: string, max: string) =>
     `The last run cost ${cost}, over the cap of ${max} per run.`,
   "bots.routine.note.limit": "The plan reached its limit: no more routines today, they resume tomorrow.",

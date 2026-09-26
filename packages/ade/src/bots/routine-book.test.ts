@@ -86,6 +86,48 @@ describe("B11: the list decides where a routine may exist", () => {
   })
 })
 
+describe("B11 review, M2: ADE Test spends nothing", () => {
+  test("in ADE Test only free models and subscriptions have routines", () => {
+    const test = { testBuild: true }
+    expect(routineOffer("nikcli", undefined, "openrouter/mario:free", test).allowed).toBe(true)
+    expect(routineOffer("claude", { mode: "plan" }, "sonnet", test).allowed).toBe(true)
+    expect(routineOffer("codex", { mode: "plan" }, "gpt-5.5", test).allowed).toBe(true)
+    const paid = routineOffer("nikcli", undefined, "openrouter/openai/gpt-4o", test)
+    expect(paid.allowed).toBe(false)
+    expect(paid.reason).toContain("ADE Test")
+    expect(routineOffer("claude", { mode: "key", key: "lavoro" }, "sonnet", test).allowed).toBe(false)
+    // Outside ADE Test the same rows stay open.
+    expect(routineOffer("nikcli", undefined, "openrouter/openai/gpt-4o", { testBuild: false }).allowed).toBe(true)
+  })
+
+  test("free is the catalog's word, not only the suffix's", () => {
+    const test = { testBuild: true }
+    expect(routineOffer("nikcli", undefined, "opencode/mario-free", { ...test, free: true })).toMatchObject({
+      allowed: true,
+      mode: "free",
+    })
+    expect(routineOffer("nikcli", undefined, "opencode/mario-free", test).allowed).toBe(false)
+  })
+
+  test("a free run is capped at nothing, and one that cost something suspends the routine", async () => {
+    const routine = await made(nikcliFree)
+    const verdict = checkRoutine(
+      addRoutine(EMPTY_BOOK, routine),
+      routine,
+      { context: nikcliFree, consent: routine.consent, busy: false },
+      at(9),
+    )
+    expect(verdict.kind === "run" && verdict.run.maxCostUsd).toBe(0)
+    const key = planKey("nikcli", "free")
+    let book = recordStart(addRoutine(EMPTY_BOOK, routine), routine, key, 0, at(9))
+    book = recordResult(book, routine, key, { status: "done", costUsd: 0 }, at(9, 1))
+    expect(book.logs[routine.id]?.suspended).toBeUndefined()
+    book = recordResult(book, routine, key, { status: "error", costUsd: 0.02 }, at(10, 1))
+    expect(book.logs[routine.id]?.suspended).toContain("non è gratuito")
+    expect(book.logs[routine.id]?.suspended).toContain("0.02 $")
+  })
+})
+
 describe("B11: the consent", () => {
   test("changing prompt, model, mode, key, schedule or cap changes the hash", async () => {
     const routine = {

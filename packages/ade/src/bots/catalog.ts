@@ -1,0 +1,77 @@
+/**
+ * Whether a bot's nikcli model is free, from nikcli's own catalog (B11
+ * review, M2), the way the chat's selector decides it (`chat/model.ts`).
+ *
+ * The `:free` suffix is not the whole answer: a provider that prices its
+ * catalogue honestly (OpenCode Zen, a local server) prices its free models at
+ * 0 and names them after the tier, not after a tag. Everywhere else a cost of
+ * 0 means the price is missing, not that it is nothing, so only the suffix
+ * counts there, and nikcli is not asked.
+ */
+
+import { hasReliableCost, isFreeModel } from "../chat/model"
+
+export interface CatalogModel {
+  readonly id: string
+  readonly providerID?: string
+  readonly cost?: { readonly input?: number; readonly output?: number }
+}
+
+/**
+ * `nikcli models <provider> --verbose`: each model's `provider/id` on a line
+ * of its own, then its record as indented JSON closed by `}` at the start of a
+ * line. A record that does not read is skipped, never guessed.
+ */
+export function parseModelCatalog(stdout: string): ReadonlyMap<string, CatalogModel> {
+  const models = new Map<string, CatalogModel>()
+  const lines = stdout.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const name = lines[i]!.trim()
+    if (!/^[^\s/{}]+\/\S+$/.test(name) || lines[i + 1]?.trim() !== "{") continue
+    const end = lines.findIndex((line, at) => at > i && line === "}")
+    if (end < 0) break
+    try {
+      const record = JSON.parse(lines.slice(i + 1, end + 1).join("\n")) as Record<string, unknown>
+      const cost = record["cost"] as Record<string, unknown> | undefined
+      models.set(name, {
+        id: typeof record["id"] === "string" ? record["id"] : name.slice(name.indexOf("/") + 1),
+        ...(typeof record["providerID"] === "string" ? { providerID: record["providerID"] } : {}),
+        ...(cost && typeof cost === "object"
+          ? {
+              cost: {
+                ...(typeof cost["input"] === "number" ? { input: cost["input"] } : {}),
+                ...(typeof cost["output"] === "number" ? { output: cost["output"] } : {}),
+              },
+            }
+          : {}),
+      })
+    } catch {
+      // Not a record: the next name starts over.
+    }
+    i = end
+  }
+  return models
+}
+
+/**
+ * Whether `model` (`provider/id`) is free. `load` reads the provider's
+ * catalog; it is asked only where a cost of 0 can be believed. A catalog that
+ * cannot be read, or does not list the model, makes it paid.
+ */
+export async function catalogFree(model: string, load: (provider: string) => Promise<string>): Promise<boolean> {
+  const name = model.trim()
+  if (isFreeModel({ id: name })) return true
+  const slash = name.indexOf("/")
+  if (slash <= 0) return false
+  const provider = name.slice(0, slash)
+  if (!hasReliableCost(provider)) return false
+  let stdout: string
+  try {
+    stdout = await load(provider)
+  } catch {
+    return false
+  }
+  const entry = parseModelCatalog(stdout).get(name)
+  if (!entry) return false
+  return isFreeModel({ id: entry.id, providerID: entry.providerID ?? provider, ...(entry.cost ? { cost: entry.cost } : {}) })
+}

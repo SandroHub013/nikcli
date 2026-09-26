@@ -129,4 +129,17 @@ describe("una routine parte come gli altri spawn", () => {
     expect(refused.status).toBe("error")
     expect(refused.problem).toContain("non riporta un costo")
   })
+
+  test("in ADE Test a paid model does not start at spawn either (review, M2)", async () => {
+    const root = globalThis as { document?: unknown }
+    const before = root.document
+    root.document = { documentElement: { dataset: { adeBuild: "test" } } }
+    try {
+      const refused = await runRoutine({ runner: "nikcli", message: "ciao", bot: { ...bot("nikcli"), model: "openrouter/openai/gpt-4o" } }).result
+      expect(refused.status).toBe("error")
+      expect(refused.problem).toContain("ADE Test")
+    } finally {
+      root.document = before
+    }
+  })
 })

@@ -53,6 +53,7 @@ import {
   projectOfBotPath,
   listBots,
   listModels,
+  modelCatalogText,
   projectFs,
   readBotText,
   resolveRoots,
@@ -78,17 +79,19 @@ import {
   addRoutine,
   createRoutineScheduler,
   localRoutineStore,
+  offerFor,
   pauseRoutine,
   reconsent,
   removeRoutine,
   routineConsent,
-  routineOffer,
   routineProblem,
   runRoutine,
   type Routine,
   type RoutineBook,
+  type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
+import { catalogFree } from "./catalog"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
 
@@ -246,10 +249,30 @@ async function readBotFile(path: string): Promise<AgentFile | undefined> {
   }
 }
 
-const botContext = (bot: AgentFile) => ({
+/* nikcli's catalog of one provider, read again after ten minutes; one that could not be read is not kept. */
+const catalogs = new Map<string, { at: number; text: Promise<string> }>()
+const loadCatalog = (provider: string) => {
+  const kept = catalogs.get(provider)
+  if (kept && Date.now() - kept.at < 10 * 60_000) return kept.text
+  const text = modelCatalogText(provider)
+  catalogs.set(provider, { at: Date.now(), text })
+  void text.then((read) => {
+    if (!read) catalogs.delete(provider)
+  })
+  return text
+}
+
+/** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
+async function catalogFreeOf(bot: AgentFile): Promise<boolean | undefined> {
+  if (runnerById(bot.runner).id !== "nikcli" || !bot.model) return undefined
+  return catalogFree(bot.model, loadCatalog)
+}
+
+const botContext = async (bot: AgentFile): Promise<RoutineContext> => ({
   runner: runnerById(bot.runner).id,
   model: bot.model,
   account: accounts.get(bot.path),
+  free: await catalogFreeOf(bot),
 })
 
 const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
@@ -314,9 +337,8 @@ const routineDeps: RoutinePanelDeps = {
   },
   now: routineNow,
   add: async (bot, draft, cwd) => {
-    const context = botContext(bot)
-    const offer = routineOffer(context.runner, context.account, context.model)
-    const problem = routineProblem(draft, offer)
+    const context = await botContext(bot)
+    const problem = routineProblem(draft, offerFor(context))
     if (problem) return problem
     const where = projectOfBotPath(bot.path) ?? cwd
     if (context.runner === "codex" && !where) return t("bots.routine.suspended.noProject")
@@ -341,14 +363,15 @@ const routineDeps: RoutinePanelDeps = {
   reconsent: async (bot, id) => {
     const routine = routineStore.get().routines.find((entry) => entry.id === id)
     if (!routine) return undefined
-    const context = botContext(bot)
-    const problem = routineProblem(routine, routineOffer(context.runner, context.account, context.model))
+    const context = await botContext(bot)
+    const problem = routineProblem(routine, offerFor(context))
     if (problem) return problem
     const consent = await routineConsent(routine, context)
     writeRoutines((book) => reconsent(book, id, consent))
     return undefined
   },
   openSource: (url) => void openExternally(url),
+  catalogFree: catalogFreeOf,
 }
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */

@@ -1434,6 +1434,9 @@ export const it = {
   "bots.routine.suspended.noBot": "Il file del bot non c'è più.",
   "bots.routine.suspended.consent":
     "È cambiato qualcosa tra modello, modo, chiave, prompt, orario o tetto: ridai il consenso.",
+  "bots.routine.suspended.notFree": (cost: string) =>
+    `Il modello non è gratuito: l'ultima esecuzione è costata ${cost}.`,
+  "bots.routine.testOnlyFree": "in ADE Test girano solo modelli gratuiti e abbonamenti",
   "bots.routine.suspended.overRun": (cost: string, max: string) =>
     `L'ultima esecuzione è costata ${cost}, oltre il tetto di ${max} per esecuzione.`,
   "bots.routine.note.limit": "Il piano ha raggiunto il suo limite: niente altre routine oggi, si riprende domani.",
