@@ -4156,10 +4156,12 @@ export function Workbench() {
       // asking the wrong backend about a voice it does not have is a question
       // with no answer.
       if (isKokoroVoice(voice as ReplyVoice)) {
-        if (host?.ttsLocalStatus) return host.ttsLocalStatus("kokoro")
-      } else if (host?.ttsPiperStatus) {
-        return host.ttsPiperStatus(voice)
+        // The panel's shape: undefined means this build cannot run Kokoro at all,
+        // which is not the same as a pack that is not there yet.
+        const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
+        return { supported: pack !== undefined, installed: pack?.installed ?? false }
       }
+      if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
       return { supported: false, installed: false }
     },
     install: async (voice) => {

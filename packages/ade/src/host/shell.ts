@@ -218,13 +218,18 @@ export interface Host {
   /**
    * The same three things, for the second local backend, with the provider as a
    * parameter: Piper is `tts_local_*` with `piper`, and Kokoro is the same
-   * commands with `kokoro`. They exist as their own names because the resident
-   * process is one per backend and stopping one is not stopping the other.
+   * commands with `kokoro`. They are their own names because the resident process
+   * is one per backend and stopping one is not stopping the other.
    *
    * No `voiceId` on status, install and stop: Kokoro's four voices are one
    * 219 MB download, so installing them is one operation with nothing to choose.
+   *
+   * The status and the delete keep K6's shapes — `PackStatus | undefined` and a
+   * `void` — because the panel reads them; the host answers more than that
+   * (`sizeBytes` on the status, the bytes freed on the delete) and the two
+   * implementations below fold it in.
    */
-  ttsLocalStatus?: (provider: string) => Promise<{ supported: boolean; installed: boolean }>
+  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
   ttsLocalInstall?: (provider: string) => Promise<void>
   /** One unit as WAV bytes. `lang` is the G2P language, not a locale. */
   ttsLocalSpeak?: (
@@ -236,23 +241,14 @@ export interface Host {
   ) => Promise<ArrayBuffer>
   /** Ends the resident child of the second backend. One child, so no provider. */
   ttsLocalStop?: () => Promise<void>
-  /** Takes the second backend away again, and answers with the bytes it freed. */
-  ttsLocalDelete?: (provider: string) => Promise<number>
+  /** Takes the second backend away again; the host answers with the bytes freed. */
+  ttsLocalDelete?: (provider: string) => Promise<void>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
   ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
   /** K3: stops the install under way for a provider; whether there was one. */
   ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
-  /**
-   * K4b: a local provider's pack. Undefined: this build cannot run it — the
-   * command is not there yet, or the host says it is not supported.
-   */
-  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
-  /** K4b: downloads a provider's pack, checked against pinned digests. */
-  ttsLocalInstall?: (provider: string) => Promise<void>
-  /** K4b: removes a provider's pack from disk. */
-  ttsLocalDelete?: (provider: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -753,6 +749,18 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("tts_local_delete", { provider })
     },
 
+    // K4b's own two: the panel does not speak, the speaker does, and it needs the
+    // voice id because Kokoro's four voices are numbers inside one model.
+    async ttsLocalSpeak(provider, voiceId, text, token, lang) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId, text, token, lang })
+    },
+
+    async ttsLocalStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_stop")
+    },
+
     async ttsPiperSpeak(voice, text, token, lang) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text, token, lang })
@@ -766,31 +774,6 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsPiperStop() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<{ busy: boolean }>("tts_piper_stop")
-    },
-
-    async ttsLocalStatus(provider) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<{ supported: boolean; installed: boolean; sizeBytes: number | null }>("tts_local_status", { provider })
-    },
-
-    async ttsLocalInstall(provider) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("tts_local_install", { provider })
-    },
-
-    async ttsLocalSpeak(provider, voiceId, text, token, lang) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId, text, token, lang })
-    },
-
-    async ttsLocalStop() {
-      const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("tts_local_stop")
-    },
-
-    async ttsLocalDelete(provider) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<number>("tts_local_delete", { provider })
     },
 
     async mailboxTake() {

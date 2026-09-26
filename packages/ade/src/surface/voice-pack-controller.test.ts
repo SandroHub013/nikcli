@@ -149,14 +149,17 @@ describe("K3's progress and cancel have a caller", () => {
     }
   })
 
-  test("the panel's part of the bridge: status with its size, install, delete; the speaking is K4b's", () => {
+  test("the panel's part of the bridge: status with its size, install, delete; and the speaking is here now", () => {
     const shell = read("src", "host", "shell.ts")
     expect(shell).toContain('invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })')
     expect(shell).toContain('invoke("tts_local_install", { provider })')
     expect(shell).toContain('invoke("tts_local_delete", { provider })')
-    // The speaker's commands come with K4b's bridge, not a second one here.
-    expect(shell).not.toContain('"tts_local_speak"')
-    expect(shell).not.toContain('"tts_local_stop"')
+    // The speaker's two commands were expected to be elsewhere when the panel was
+    // written, on the assumption that whoever synthesises would wire them. K4b is
+    // that whoever, so they are here, and the voice id travels with them: Kokoro's
+    // four voices are speaker numbers inside one model, not four files.
+    expect(shell).toContain('"tts_local_speak", { provider, voiceId, text, token, lang }')
+    expect(shell).toContain('invoke("tts_local_stop")')
   })
 
   test("the host's size wins over the one the panel knows", async () => {
