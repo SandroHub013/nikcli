@@ -21,6 +21,7 @@
  */
 
 import { t } from "../i18n"
+import { classifyCommand } from "./approval"
 import { scrubSecrets, SECRET_MARK } from "./terms"
 
 export type MemoryBlock = "notes" | "user"
@@ -74,6 +75,46 @@ const FRAME_MARKS = [
 const FRAME_LINE = /^\s*(?:==|\[\s*(?:system|user|assistant)\b|<\/?\s*(?:system|user|assistant)\b)/im
 const ROLE_LINE = /^\s*(?:user|assistant|system|human|developer|utente|assistente|sistema)\s*:/im
 
+/*
+ * What is not a note (B8a review, M1 c). A heuristic, and said as one: it
+ * catches the common shapes of an instruction planted to outlive the
+ * conversation, not every one. A command the approval list blocks or finds
+ * dangerous (`classifyCommand`, B8c) would be read as something to run; an
+ * address, as somewhere to go; and these phrases are how an injection talks.
+ */
+const URL = /\b(?:https?|ftp|file):\/\/|\bwww\.[a-z0-9-]+\.[a-z]/i
+const INJECTION = [
+  /\bignor[ae]\b[^.\n]{0,40}\b(?:istruzion|regol|indicazion)/i,
+  /\bignore\b[^.\n]{0,40}\b(?:instruction|rule|previous|prior|above)/i,
+  /\bdisregard\b/i,
+  /\bsystem\s+prompt\b/i,
+  /\bprompt\s+di\s+sistema\b/i,
+  /\b(?:nuove|new)\s+(?:istruzioni|instructions)\b/i,
+  /\bnon\s+(?:dirlo|dire|dirglielo|mostrarlo)\b[^.\n]{0,30}\butente\b/i,
+  /\bsenza\s+(?:dirlo|avvisare)\b[^.\n]{0,30}\butente\b/i,
+  /\b(?:don'?t|do not|never)\s+(?:tell|show|inform)\b[^.\n]{0,20}\buser\b/i,
+  /\b(?:developer|god|dan)\s+mode\b/i,
+  /\bmodalit[aà]\s+sviluppatore\b/i,
+  /\bjailbreak/i,
+]
+
+/**
+ * Whether a command the approval list blocks or finds dangerous starts
+ * anywhere in `text`: the list reads a command from its start, and in a note
+ * it sits inside a sentence («poi esegui rm -rf ~»).
+ */
+function holdsCommand(text: string): boolean {
+  for (let at = 0; at < text.length; at++) {
+    if (at > 0 && !/[\s`'"(:;,]/.test(text[at - 1]!)) continue
+    const rest = text.slice(at)
+    const { blocked, dangers } = classifyCommand(rest)
+    // «su» is Italian for «on»: in a note it is a word, not Unix's `su`.
+    const real = dangers.filter((rule) => !(rule.id === "elevate" && /^su\b/i.test(rest)))
+    if (blocked || real.length > 0) return true
+  }
+  return false
+}
+
 /** Why `text` cannot be an entry; undefined when it can. */
 export function entryProblem(text: string): string | undefined {
   if (text.trim().length === 0) return t("bots.memory.error.empty")
@@ -83,6 +124,9 @@ export function entryProblem(text: string): string | undefined {
   const lower = text.toLowerCase()
   if (FRAME_MARKS.some((mark) => lower.includes(mark)) || FRAME_LINE.test(text) || ROLE_LINE.test(text))
     return t("bots.memory.error.frame")
+  if (holdsCommand(text)) return t("bots.memory.error.command")
+  if (URL.test(text)) return t("bots.memory.error.url")
+  if (INJECTION.some((phrase) => phrase.test(text))) return t("bots.memory.error.injection")
   if (text.includes(ENTRY_SEPARATOR.trim())) return t("bots.memory.error.separator")
   return undefined
 }

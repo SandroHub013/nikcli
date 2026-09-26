@@ -1454,6 +1454,9 @@ export const en: Messages = {
   "bots.memory.error.empty": "An empty entry is not saved.",
   "bots.memory.error.secret": "It looks like a key or a token: it is not saved in memory.",
   "bots.memory.error.tag": "An entry cannot hold an ade-memory tag.",
+  "bots.memory.error.command": "An entry cannot hold a dangerous or blocked command: not saved.",
+  "bots.memory.error.url": "An entry cannot hold a web address: not saved.",
+  "bots.memory.error.injection": "This reads as an instruction to the bot rather than a note: not saved.",
   "bots.memory.error.frame":
     "An entry cannot look like the memory's frame or like someone else's message (User:, System:…): not saved.",
   "bots.memory.error.separator": "An entry cannot hold the § separator.",

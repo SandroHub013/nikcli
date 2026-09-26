@@ -1467,6 +1467,9 @@ export const it = {
   "bots.memory.error.secret": "Sembra una chiave o un token: in memoria non si salva.",
   "bots.memory.error.tag": "Una voce non può contenere un tag ade-memory.",
   "bots.memory.error.separator": "Una voce non può contenere il separatore §.",
+  "bots.memory.error.command": "Una voce non può contenere un comando pericoloso o bloccato: non si salva.",
+  "bots.memory.error.url": "Una voce non può contenere un indirizzo web: non si salva.",
+  "bots.memory.error.injection": "Sembra un'istruzione per il bot più che un appunto: non si salva.",
   "bots.memory.error.frame":
     "Una voce non può somigliare alla cornice della memoria o al messaggio di un altro (User:, System:…): non si salva.",
   "bots.memory.error.full": (block: string, size: number, limit: number) =>
