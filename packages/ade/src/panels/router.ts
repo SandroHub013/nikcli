@@ -109,6 +109,129 @@ export function panelReplyHold(from: { alive: boolean; typing: boolean; question
   if (from.questionOpen) return "prompt aperto"
   return undefined
 }
+
+/** How long a panel answer may wait for its pane before it is given up on. */
+export const PANEL_REPLY_MAX_AGE_MS = 5 * 60_000
+
+/**
+ * Whether dictated words may be written into a pane's line, and why not when they
+ * may not.
+ *
+ * Dictation sends no Enter, so it confirms nothing by itself: this is not the
+ * Enter that answers a prompt. It is where the text lands. A permission menu
+ * takes what is written as an answer, and a menu of numbered options takes a
+ * digit as the choice — through its own reading of the line rather than through
+ * a pane's Enter, which is the same accident by another road. The review that
+ * found this had not watched it happen, so the argument is from the menu, not
+ * from an observation; a guard that costs a line, is silent when there is no
+ * question, and takes nothing from the user is worth more than the doubt.
+ *
+ * So the words are not written and the pane says why: the user answers with the
+ * keys or the card's buttons, and dictates again after. A line the user has
+ * begun is not a reason: dictated words have always joined it, and that is not
+ * what this is about.
+ */
+export function dictationHold(from: { alive: boolean; questionOpen: boolean }): string | undefined {
+  if (!from.alive) return "sessione chiusa"
+  if (from.questionOpen) return "prompt aperto"
+  return undefined
+}
+
+/** One answer waiting, and the moment it was made: the age is counted from there, not from the last try. */
+export interface PanelReplyWait {
+  text: string
+  at: number
+}
+
+/**
+ * The panel answers waiting for their pane.
+ *
+ * A pane is not a session: restarting or resuming it keeps the id and gives a new
+ * process, and an answer made for the old one would arrive at a session that
+ * never asked for it and start a turn there. So the session is stored with the
+ * answer, and the whole entry is dropped when the pane's session is not the one
+ * that asked — which is what "it dies with the pane" has to mean to be true.
+ *
+ * A list and not a single answer, because two `@ade` lines in a row while a
+ * prompt is open are two answers and the second does not cancel the first. They
+ * go in the order they were made, which is the order the agent asked.
+ *
+ * And an age, because a TUI does not sit blocked on its input the way a pipe
+ * does: after the permission is answered the turn carries on and ends, and the
+ * agent may be long past needing the reply. Typing it then is not a safety
+ * problem — the guard still holds — but it is a turn nobody asked for, and it
+ * costs. Five minutes is long enough for a user who stepped away from an open
+ * prompt and short enough that the answer is still about the same conversation.
+ * The answer is already in the transcript, so dropping it loses the record and
+ * not the text.
+ */
+export interface PendingPanelReplies<S> {
+  /** Waits an answer for `session`, after the ones already waiting for it. */
+  queue(paneId: string, session: S, text: string, now?: number): void
+  /** Takes one answer out, so the round sending it cannot send it twice. True when it was there. */
+  take(paneId: string, text: string): boolean
+  /** Puts an answer back after a try that did not give it, keeping the age it was made at. */
+  restore(paneId: string, session: S, text: string, at: number): void
+  /**
+   * The answers still young enough to send, and how many were too old and are now
+   * gone. Ageing happens here and not on the way in, so a pane that stays busy
+   * for an hour still gives up its answers instead of keeping them for ever.
+   */
+  claim(paneId: string, now?: number): { waits: PanelReplyWait[]; stale: number }
+  /** The session that asked for the answers waiting on `paneId`. */
+  sessionOf(paneId: string): S | undefined
+  /** The answers waiting on `paneId`, in the order they were made. */
+  waiting(paneId: string): PanelReplyWait[]
+  /** Every pane with something waiting. */
+  panes(): string[]
+  forget(paneId: string): void
+}
+
+export function createPendingPanelReplies<S>(): PendingPanelReplies<S> {
+  const entries = new Map<string, { session: S; waits: PanelReplyWait[] }>()
+  return {
+    queue(paneId, session, text, now = Date.now()) {
+      const entry = entries.get(paneId)
+      // A different session on the same pane: the old answers were for a process
+      // that is gone, and the new one has not asked for them.
+      if (!entry || entry.session !== session) entries.set(paneId, { session, waits: [{ text, at: now }] })
+      else entry.waits.push({ text, at: now })
+    },
+    take(paneId, text) {
+      const entry = entries.get(paneId)
+      if (!entry) return false
+      const before = entry.waits.length
+      entry.waits = entry.waits.filter((wait) => wait.text !== text)
+      if (entry.waits.length === 0) entries.delete(paneId)
+      return entry.waits.length < before
+    },
+    restore(paneId, session, text, at) {
+      const entry = entries.get(paneId)
+      // A pane that restarted while the try was in flight: the answer is for the
+      // process that asked, and that one is not this one.
+      if (entry && entry.session !== session) return
+      if (entry?.waits.some((wait) => wait.text === text)) return
+      // The entry may be gone: taking the last answer out empties it, and this is
+      // that answer coming back because the try did not give it.
+      if (entry) entry.waits.push({ text, at })
+      else entries.set(paneId, { session, waits: [{ text, at }] })
+    },
+    claim(paneId, now = Date.now()) {
+      const entry = entries.get(paneId)
+      if (!entry) return { waits: [], stale: 0 }
+      const waits = entry.waits.filter((wait) => now - wait.at <= PANEL_REPLY_MAX_AGE_MS)
+      const stale = entry.waits.length - waits.length
+      entry.waits = waits
+      if (waits.length === 0) entries.delete(paneId)
+      return { waits, stale }
+    },
+    sessionOf: (paneId) => entries.get(paneId)?.session,
+    waiting: (paneId) => entries.get(paneId)?.waits.map((wait) => ({ ...wait })) ?? [],
+    panes: () => [...entries.keys()],
+    forget: (paneId) => void entries.delete(paneId),
+  }
+}
+
 /**
  * How long text ADE typed into a session can come back as its echo.
  *

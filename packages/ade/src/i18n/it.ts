@@ -1182,6 +1182,8 @@ export const it = {
   "note.resent": "Invio ripetuto: il messaggio non era partito",
   "note.enterHeld": "Digitata, Invio non premuto: c'è un permesso aperto",
   "note.panelReplyHeld": (why: string) => `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
+  "note.panelReplyStale": (n: number) => `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
+  "note.dictationHeld": "Dettatura non scritta: c'è una domanda aperta, rispondi prima e poi detta",
   "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
   "note.inboxLost": (id: string) => `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,

@@ -331,7 +331,7 @@ import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
-import { createPanelRouter, panelReplyHold } from "../panels/router"
+import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
 import { panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
@@ -1588,7 +1588,8 @@ export function Workbench() {
   }
 
   /*
-   * Panel answers waiting for their pane, keyed by pane.
+   * Panel answers waiting for their pane (`createPendingPanelReplies`, which says
+   * why each of its rules is there).
    *
    * Not `heldLines`: those are mail, they are persisted so a suspended session
    * finds them on the next start, and a panel answer persisted would be typed
@@ -1597,7 +1598,7 @@ export function Workbench() {
    * pane is not free: the agent is blocked on its stdin until it goes, so the
    * retry is not politeness, it is the delivery.
    */
-  const pendingPanelReplies = new Map<string, string>()
+  const pendingPanelReplies = createPendingPanelReplies<SpawnedSession>()
 
   /**
    * Acts on one line of agent output, if it was addressed to a panel.
@@ -1631,33 +1632,47 @@ export function Workbench() {
       questionOpen: questionOpen(paneId),
     })
     if (hold) {
-      pendingPanelReplies.set(paneId, handled.reply)
+      pendingPanelReplies.queue(paneId, session, handled.reply)
       return appendLine(paneId, t("note.panelReplyHeld", hold), "note", "ade")
     }
-    // Counted as waiting before it is typed, so the round below cannot type it a
-    // second time while this one is still in the queue; given back if it was not
-    // given after all.
-    pendingPanelReplies.delete(paneId)
+    // Out of the waiting before it is typed, so the round below cannot send it a
+    // second time while this one is still in the queue.
+    pendingPanelReplies.take(paneId, handled.reply)
     void typeLine(session, handled.reply, { unlessBusy: true }).then((given) => {
-      if (given || !pendingPanelReplies.has(paneId)) return
-      pendingPanelReplies.set(paneId, handled.reply)
+      // Given, nothing to retry. Something else waiting for this pane means a
+      // newer answer arrived while this one was in the queue, and that one is
+      // first: this text is the stale half of the pair, not a lost answer.
+      if (given || pendingPanelReplies.waiting(paneId).length > 0) return
+      pendingPanelReplies.queue(paneId, session, handled.reply)
     })
   }
 
-  /** Types the panel answers whose pane has gone free, and keeps the others. */
+  /** Types the panel answers whose pane has gone free, and keeps or drops the rest. */
   const flushPanelReplies = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
-    for (const [paneId, reply] of [...pendingPanelReplies]) {
+    const now = Date.now()
+    for (const paneId of pendingPanelReplies.panes()) {
       const session = running.get(paneId)
-      if (!session) {
-        pendingPanelReplies.delete(paneId)
+      // A pane closed, or restarted or resumed: the same id, a process that never
+      // asked for these answers.
+      if (!session || session !== pendingPanelReplies.sessionOf(paneId)) {
+        pendingPanelReplies.forget(paneId)
         continue
       }
+      // Ageing first, so a pane that stays busy for an hour gives its answers up
+      // instead of keeping them until the heat death of the app.
+      const { waits, stale } = pendingPanelReplies.claim(paneId, now)
+      if (stale > 0) appendLine(paneId, t("note.panelReplyStale", stale), "note", "ade")
+      if (waits.length === 0) continue
       if (!(await freeNow(host, paneId))) continue
-      pendingPanelReplies.delete(paneId)
-      const given = await typeLineOutcome(session, reply, { unlessBusy: true })
-      // Still not given — a prompt opened again, or the user is typing: back in
-      // the waiting, and the next round asks again.
-      if (deliveryResult(given, running.get(paneId) === session) === "held") pendingPanelReplies.set(paneId, reply)
+      for (const wait of waits) {
+        pendingPanelReplies.take(paneId, wait.text)
+        const outcome = await typeLineOutcome(session, wait.text, { unlessBusy: true })
+        // Not given — a prompt opened again, or the user is typing: back in the
+        // waiting, still as old as it was, so it cannot be kept alive by trying.
+        if (deliveryResult(outcome, running.get(paneId) === session) === "held") {
+          pendingPanelReplies.restore(paneId, session, wait.text, wait.at)
+        }
+      }
     }
   }
 
@@ -2054,10 +2069,16 @@ export function Workbench() {
    * Writes into a session's input line on the user's behalf — dropped paths,
    * dictated speech — and counts it as typed, because it is: nothing is
    * submitted until the user says so, and until then the line is theirs.
+   *
+   * Not over a question, and the reason is where the text lands rather than an
+   * Enter: `dictationHold` says it at length. The words are not written and the
+   * pane says why, so the user answers with the keys or the card's buttons and
+   * dictates again afterwards.
    */
   const typeAsUser = (paneId: string, text: string) => {
     const session = running.get(paneId)
     if (!session) return
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) })) return tellPane(paneId, t("note.dictationHeld"))
     records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
     session.write(text)
   }

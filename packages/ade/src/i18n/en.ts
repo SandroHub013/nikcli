@@ -1171,6 +1171,8 @@ export const en: Messages = {
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
   "note.panelReplyHeld": (why: string) => `Panel reply waiting (${why}): I will try again when the pane is free`,
+  "note.panelReplyStale": (n: number) => `Dropped ${n === 1 ? "one panel reply" : `${n} panel replies`}: waiting too long`,
+  "note.dictationHeld": "Dictation not written: a question is open, answer it first and then dictate",
   "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
