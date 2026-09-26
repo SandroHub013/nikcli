@@ -115,6 +115,10 @@ for (const [flag, raw] of flags) {
     }
     // A flag that asks about the shell keeps asking, whatever the user wrote.
     if (value["bash"] === "ask") check(action(merged, "git status") === "ask", `${flag}, ${user}: «git status» non chiede`)
+    // Every tool that asks has the flag's own rule, never the user's (third check).
+    for (const tool of ["bash", "external_directory", "computer", "browser_control"]) {
+      check(typeof value[tool] === "string", `${flag}: ${tool} lasciato alla regola dell'utente`)
+    }
     // Every rule of the flag holds over a user's "*" written after it (second look, G5-bis).
     for (const [tool, rule] of Object.entries(value)) {
       if (tool.includes("?") || typeof rule !== "string") continue

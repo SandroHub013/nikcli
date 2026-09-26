@@ -180,7 +180,10 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// `SHUTDOWN` would pass a user's `"bash": "allow"` under any list of
 /// spellings. Where ADE answers the menu, every command is asked, and
 /// `approval.ts`, which ignores case, refuses the block list; where nobody
-/// answers (`bot-no-shell`, a routine), the shell is denied. The asking flags
+/// answers (`bot-no-shell`, a routine), the shell is denied. The same holds
+/// for the other tools nikcli asks about (third check): outside the project,
+/// the computer and a browser are asked where ADE answers, denied where it
+/// does not, and never left to the user's rule. The asking flags
 /// also carry the block list as nikcli's own denials (B8c review, M1: see
 /// `blocked_bash_denials`), so the common spellings never reach the menu.
 /// Every key of every flag is written again at the end under its `alias`
@@ -199,9 +202,24 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
         "NIKCLI_PERMISSION",
         r#"{"bash":"ask","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
     ),
-    ("bot-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask","external_directory":"ask"}"#),
-    ("bot-ask-outside", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny","external_directory":"ask"}"#),
-    ("bot-no-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny"}"#),
+    (
+        "bot-ask-shell",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"ask","external_directory":"ask","computer":"ask","browser_control":"ask"}"#,
+    ),
+    (
+        "bot-ask-outside",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"deny","external_directory":"ask","computer":"ask","browser_control":"ask"}"#,
+    ),
+    (
+        "bot-no-shell",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"deny","external_directory":"deny","computer":"deny","browser_control":"deny"}"#,
+    ),
 ];
 
 /// The flags whose `NIKCLI_PERMISSION` carries the block list.
@@ -2257,9 +2275,12 @@ mod tests {
         }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
         // A turn in ADE (B8c): every command and every step outside asked, for the page to answer.
-        assert_eq!(permission("bot-no-shell"), serde_json::json!({ "bash": "deny" }));
-        assert_eq!(permission("bot-ask-shell"), serde_json::json!({ "bash": "ask", "external_directory": "ask" }));
-        assert_eq!(permission("bot-ask-outside"), serde_json::json!({ "bash": "deny", "external_directory": "ask" }));
+        let tools = |bash: &str, rest: &str| {
+            serde_json::json!({ "bash": bash, "external_directory": rest, "computer": rest, "browser_control": rest })
+        };
+        assert_eq!(permission("bot-no-shell"), tools("deny", "deny"));
+        assert_eq!(permission("bot-ask-shell"), tools("ask", "ask"));
+        assert_eq!(permission("bot-ask-outside"), tools("deny", "ask"));
         assert!(super::spawn_flag_env("claude", &["bot-ask-shell".to_string()]).is_err());
     }
 
@@ -2531,6 +2552,25 @@ mod tests {
                 // Asked means answered: only a flag of a turn ADE answers may ask.
                 let asks = nikcli_evaluate(env[0].1, user, "bash", "git status") == "ask";
                 assert_eq!(asks, super::BLOCK_LIST_FLAGS.contains(name), "{name}, {user}");
+            }
+        }
+    }
+
+    /*
+     * Third check: every tool nikcli asks about has the flag's own rule, never
+     * the user's (`"*": "allow"` here), and a flag nobody answers asks nothing.
+     */
+    #[test]
+    fn no_flag_leaves_a_tool_that_asks_to_the_user() {
+        for (name, _, variable, _) in super::SPAWN_FLAGS {
+            if *variable != "NIKCLI_PERMISSION" {
+                continue;
+            }
+            let env = super::spawn_flag_env("nikcli", &[name.to_string()]).unwrap();
+            let answered = *name != "bot-no-shell";
+            for tool in ["bash", "external_directory", "computer", "browser_control"] {
+                let got = nikcli_evaluate(env[0].1, r#"{"*":"allow"}"#, tool, "x");
+                assert!(got == "deny" || (answered && got == "ask"), "{name}: {tool} → {got}");
             }
         }
     }
