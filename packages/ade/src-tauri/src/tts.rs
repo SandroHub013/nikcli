@@ -327,6 +327,40 @@ pub fn tts_install_cancel(app: tauri::AppHandle, provider: String) -> Result<Ins
     Ok(InstallCancel { cancelled })
 }
 
+/// Said when the install stopped without saying why.
+///
+/// A panic inside it crosses the Tauri command and leaves nobody to read the
+/// reason, so this is what the panel is told instead: that it happened, which is
+/// more than the panel used to get.
+const PANICA: &str = "L'installazione si è interrotta in modo inatteso.";
+
+/// Closes the install whatever happens to it, a panic included.
+///
+/// `running` is what the panel reads, and an install that is over must not leave
+/// it true: the cancel would answer «nothing to cancel» and the bar would go on
+/// filling for a download nobody is making. The normal path reports its own
+/// outcome; this one exists for the paths where there is no outcome to report.
+struct Closed<'a, 'b> {
+    install: &'a InstallRun<'b>,
+    closed: bool,
+}
+
+impl<'a, 'b> Closed<'a, 'b> {
+    /// Reports how it went, and takes the closing off the drop.
+    fn report(&mut self, outcome: &Result<(), String>) {
+        self.install.finish(outcome);
+        self.closed = true;
+    }
+}
+
+impl Drop for Closed<'_, '_> {
+    fn drop(&mut self) {
+        if !self.closed {
+            self.install.finish(&Err(PANICA.into()));
+        }
+    }
+}
+
 fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<(), String> {
     let state = app.state::<Piper>();
     let root = root(app)?;
@@ -352,15 +386,18 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
     let slot = state.installer.slot(PIPER);
     // The lock, and only then the state: see `hold`. And the budget starts here,
     // because an install that waited its turn has not spent any of its time.
-    let _one = state.installer.hold(&slot)?;
+    let _one = state.installer.hold(&slot);
     let install = state.installer.begin(
         &slot,
         files_total,
         bytes_pending(&voice_files),
         Instant::now() + state.installer.deadline(),
     );
+    // Closed however this ends: `running` is read by the panel, and an install
+    // that is over must not leave it true.
+    let mut closed = Closed { install: &install, closed: false };
     let outcome = install_locked(&install, &root, &voice_files, &Curl, &Certutil);
-    install.finish(&outcome);
+    closed.report(&outcome);
     outcome
 }
 
@@ -847,8 +884,13 @@ impl Installer {
     /// `running` fall to false over a download that was running, and summed two
     /// transfers into one counter. Queued behind the lock, an install has not
     /// begun: the state belongs to the one that is going.
-    fn hold<'a>(&'a self, slot: &'a Arc<ProviderSlot>) -> Result<MutexGuard<'a, ()>, String> {
-        slot.lock.lock().map_err(|_| "installazione bloccata".into())
+    ///
+    /// A lock poisoned by a panic is taken anyway, like every other mutex in this
+    /// file. Refusing it left the provider saying "installazione bloccata" for
+    /// the rest of the session, and there is nothing in this install that a
+    /// panic leaves half written: the staging file is never its destination.
+    fn hold<'a>(&'a self, slot: &'a Arc<ProviderSlot>) -> MutexGuard<'a, ()> {
+        slot.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// How long an install has, counted from the moment it holds the lock. An
@@ -1394,7 +1436,7 @@ mod tests {
         scripted: &Scripted,
     ) -> Result<(), String> {
         let slot = installer.slot(provider);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(jobs), far());
         let mut outcome = Ok(());
         for (download, path) in jobs {
@@ -1465,7 +1507,7 @@ mod tests {
         let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
 
         let slot = installer.slot(PIPER);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, 1, bytes_pending(&jobs), far());
         // Il file è giusto, e il controllo non è potuto arrivare: quello che si
         // dice è il motivo, non che il download sia sbagliato.
@@ -1559,7 +1601,7 @@ mod tests {
         let past = Instant::now() - std::time::Duration::from_secs(1);
 
         let slot = installer.slot(PIPER);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, 1, bytes_pending(&[(&wanted, dest.clone())]), past);
         let problem = install
             .bring(&wanted, &dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess)
@@ -1584,7 +1626,7 @@ mod tests {
         let scripted = Scripted::new(b"{}".to_vec(), Ending::Whole);
 
         let slot = installer.slot(PIPER);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(&jobs), far());
         // The one already there is not fetched again: a voice the user already
         // installed must not be downloaded because they opened the panel.
@@ -1611,7 +1653,7 @@ mod tests {
         ];
 
         let slot = installer.slot(PIPER);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, 3, bytes_pending(&jobs), far());
         let started = installer.progress_of(PIPER);
         assert!(started.running);
@@ -1670,7 +1712,7 @@ mod tests {
         );
 
         let slot = installer.slot(PIPER);
-        let _one = installer.hold(&slot).unwrap();
+        let _one = installer.hold(&slot);
         let install = installer.begin(&slot, 3, bytes_pending(&voice_files), far());
         assert!(
             installer.progress_of(PIPER).bytes_total.is_some(),
@@ -1687,6 +1729,66 @@ mod tests {
         assert!(!done.running);
         // Il runtime non è stato riscaricato: era già installato.
         assert_eq!(scripted.asked.lock().unwrap().len(), 2, "solo i due file della voce");
+    }
+
+    /// A `Fingerprint` that panics, which is the one way an install can stop
+    /// without an outcome: nothing in `install_locked` is expected to.
+    struct FingerprintPanicking;
+
+    impl Fingerprint for FingerprintPanicking {
+        fn sha256(&self, _path: &Path) -> Result<String, String> {
+            panic!("un panico vero, dentro il controllo");
+        }
+    }
+
+    #[test]
+    fn a_panic_inside_an_install_leaves_it_closed() {
+        let root = test_root("panico");
+        let installer = Installer::default();
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
+        let files = [(&wanted, dest.clone())];
+
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        let install = installer.begin(&slot, 1, bytes_pending(&files), far());
+        let mut closed = Closed { install: &install, closed: false };
+        // Il rumore del panico non è un fallimento: qui viene voluto.
+        let quiet = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            install_locked(&install, &root, &files, &Scripted::new(body, Ending::Whole), &FingerprintPanicking)
+        }));
+        std::panic::set_hook(quiet);
+        assert!(outcome.is_err(), "il controllo è andato in panico");
+        drop(closed);
+
+        let progress = installer.progress_of(PIPER);
+        assert!(!progress.running, "un install finito non resta in corso per sempre");
+        assert_eq!(progress.error.as_deref(), Some(PANICA));
+    }
+
+    #[test]
+    fn a_lock_poisoned_by_a_panic_is_still_taken() {
+        let installer = std::sync::Arc::new(Installer::default());
+        let quiet = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        // Un thread che tiene il lock e va in panico: il mutex resta avvelenato.
+        let poisoned = {
+            let installer = installer.clone();
+            std::thread::spawn(move || {
+                let slot = installer.slot(PIPER);
+                let _held = installer.hold(&slot);
+                panic!("un panico vero, col lock in mano");
+            })
+        };
+        assert!(poisoned.join().is_err());
+        std::panic::set_hook(quiet);
+        // Rifiutarlo lasciava il provider con «installazione bloccata» per
+        // tutta la sessione, e non è niente qui che resti scritto a metà.
+        let slot = installer.slot(PIPER);
+        let _taken = installer.hold(&slot);
     }
 
     #[test]
@@ -1729,7 +1831,7 @@ mod tests {
             let body = body.clone();
             std::thread::spawn(move || {
                 let slot = installer.slot(PIPER);
-                let _one = installer.hold(&slot).unwrap();
+                let _one = installer.hold(&slot);
                 let install = installer.begin(&slot, 1, None, far());
                 let scripted = Scripted::new(body, Ending::Whole).signalling(started_tx).gated(release_rx);
                 let outcome = install.bring(&first_wanted, &first_dest, &scripted, &FingerprintInProcess);
@@ -1752,7 +1854,7 @@ mod tests {
             std::thread::spawn(move || {
                 queued_tx.send(()).unwrap();
                 let slot = installer.slot(PIPER);
-                let _one = installer.hold(&slot).unwrap();
+                let _one = installer.hold(&slot);
                 let install = installer.begin(&slot, 1, None, far());
                 let outcome = install.bring(&second_wanted, &second_dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess);
                 install.finish(&outcome);
@@ -1804,7 +1906,7 @@ mod tests {
 
         // Il lock è tenuto da un altro, più a lungo del budget.
         let held = installer.slot(PIPER);
-        let guard = installer.hold(&held).unwrap();
+        let guard = installer.hold(&held);
         let waiter = {
             let installer = installer.clone();
             let body = body.clone();
@@ -1813,7 +1915,7 @@ mod tests {
                 // La forma di `install_blocking`: il lock, e solo dopo il
                 // budget. Un install in coda non ha ancora speso niente.
                 let slot = installer.slot(PIPER);
-                let _one = installer.hold(&slot).unwrap();
+                let _one = installer.hold(&slot);
                 let install = installer.begin(&slot, 1, None, Instant::now() + installer.deadline());
                 let outcome = install.bring(&wanted, &dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess);
                 install.finish(&outcome);
