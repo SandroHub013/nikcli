@@ -105,9 +105,25 @@ export function isBinaryPath(path: string): boolean {
   return extension !== undefined && BINARY.has(extension)
 }
 
-/** What `@` offers of the server's matches: not a `.env`, not a binary. */
-export function mentionCandidates(paths: readonly string[]): string[] {
-  return paths.filter((path) => !isEnvFile(path) && !isBinaryPath(path))
+/**
+ * Whether `path` has the letters of `query` in order, case aside: what a
+ * fuzzy match promises. nikcli's finder forgives typos and ranks by use, so
+ * `@som` came back with `README.md`, which has no `s` (chat-bot-facili, prove).
+ */
+export function mentionMatches(path: string, query: string): boolean {
+  const target = path.replace(/\\/g, "/").toLowerCase()
+  let at = 0
+  for (const char of query.replace(/\\/g, "/").toLowerCase()) {
+    at = target.indexOf(char, at)
+    if (at < 0) return false
+    at++
+  }
+  return true
+}
+
+/** What `@query` offers of the server's matches: ones that match, not a `.env`, not a binary. */
+export function mentionCandidates(paths: readonly string[], query = ""): string[] {
+  return paths.filter((path) => mentionMatches(path, query) && !isEnvFile(path) && !isBinaryPath(path))
 }
 
 /** An attachment for `path` in `root`, or undefined when the path is outside it. */

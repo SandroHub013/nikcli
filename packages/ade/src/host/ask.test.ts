@@ -23,6 +23,7 @@ function deps(over: Partial<AskDeps> = {}): AskDeps & { asked: [string, AskOptio
     browserConfirm: () => {
       throw new Error("non nel browser")
     },
+    attention: async () => {},
     ...over,
   }
 }
@@ -70,6 +71,42 @@ describe("una domanda sì/no in ADE", () => {
     const bots = readFileSync(join(import.meta.dir, "../bots/bots.tsx"), "utf8")
     expect(bots).not.toMatch(/(?<![\w$])(?:window\.)?confirm\s*\(/)
     expect(bots).toContain('askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") })')
+  })
+
+  /* chat-bot-facili, prove: the trust dialog opened over ADE, behind the app in front, unseen. */
+  test("prima di chiedere la finestra chiama l'attenzione, e smette alla risposta", async () => {
+    const steps: string[] = []
+    const d = deps({
+      attention: async (on) => void steps.push(on ? "attenzione" : "basta"),
+      load: async () => ({ ask: async () => (steps.push("domanda"), true) }),
+    })
+    expect(await askDialog("Lo usi?", {}, d)).toBe(true)
+    expect(steps).toEqual(["attenzione", "domanda", "basta"])
+  })
+
+  test("un'attenzione rifiutata non ferma la domanda, e un rifiuto della domanda la spegne lo stesso", async () => {
+    const steps: string[] = []
+    const refusedEye = deps({
+      attention: async (on) => {
+        steps.push(on ? "attenzione" : "basta")
+        throw new Error("not allowed")
+      },
+    })
+    expect(await askDialog("Lo usi?", {}, refusedEye)).toBe(true)
+    const refusedAsk = deps({
+      attention: async (on) => void steps.push(on ? "attenzione" : "basta"),
+      load: async () => ({ ask: () => Promise.reject("dialog.ask not allowed") }),
+    })
+    await expect(askDialog("Lo usi?", {}, refusedAsk)).rejects.toBe("dialog.ask not allowed")
+    expect(steps).toEqual(["attenzione", "basta", "attenzione", "basta"])
+  })
+
+  test("la finestra può chiedere attenzione, non prendersi il fuoco", () => {
+    const capabilities = JSON.parse(readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8"))
+    expect(capabilities.permissions).toContain("core:window:allow-request-user-attention")
+    const source = readFileSync(join(import.meta.dir, "ask.ts"), "utf8")
+    expect(source).toContain("if (!(await win.isFocused())) await win.requestUserAttention(UserAttentionType.Critical)")
+    expect(source).not.toContain("setFocus")
   })
 
   test("il workbench non chiama più confirm()", () => {

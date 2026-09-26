@@ -24,12 +24,23 @@ export interface AskDeps {
   readonly load: () => Promise<{ ask: AskDialog }>
   /** The browser's own question, outside ADE (the page served by vite alone). */
   readonly browserConfirm: (message: string) => boolean
+  /**
+   * `true` before the question: the window asks for the user's eye when it is
+   * not the one in front. `false` once answered, to stop asking.
+   */
+  readonly attention: (on: boolean) => Promise<void>
 }
 
 const defaultDeps: AskDeps = {
   inTauri: () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window),
   load: () => import("@tauri-apps/plugin-dialog"),
   browserConfirm: (message) => window.confirm(message),
+  attention: async (on) => {
+    const { getCurrentWindow, UserAttentionType } = await import("@tauri-apps/api/window")
+    const win = getCurrentWindow()
+    if (!on) return win.requestUserAttention(null)
+    if (!(await win.isFocused())) await win.requestUserAttention(UserAttentionType.Critical)
+  },
 }
 
 /**
@@ -43,14 +54,23 @@ export async function askDialog(
 ): Promise<boolean> {
   if (!deps.inTauri()) return deps.browserConfirm(question) === true
   const { ask } = await deps.load()
-  return (
-    (await ask(question, {
-      title: "ADE",
-      kind: "warning",
-      ...(labels.ok ? { okLabel: labels.ok } : {}),
-      ...(labels.cancel ? { cancelLabel: labels.cancel } : {}),
-    })) === true
-  )
+  // The dialog opens over ADE's window, and with it behind whatever the user
+  // is in: a bot's trust asked from a Telegram message went unseen
+  // (chat-bot-facili, prove). The window flashes in the taskbar; it does not
+  // take the focus, which would hand a keystroke meant elsewhere to the question.
+  await deps.attention(true).catch(() => undefined)
+  try {
+    return (
+      (await ask(question, {
+        title: "ADE",
+        kind: "warning",
+        ...(labels.ok ? { okLabel: labels.ok } : {}),
+        ...(labels.cancel ? { cancelLabel: labels.cancel } : {}),
+      })) === true
+    )
+  } finally {
+    await deps.attention(false).catch(() => undefined)
+  }
 }
 
 /** True only on the user's yes. A question that cannot be put is a no. */
