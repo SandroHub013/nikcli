@@ -222,10 +222,11 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     }
   }
 
-  async function catalog(): Promise<ChatCatalog> {
+  /** The catalog of this opening, loaded once; `fresh` loads it again. */
+  async function catalog(fresh = false): Promise<ChatCatalog> {
     const connection = opened()
     const mine = generation
-    if (catalogLoad?.mine !== mine) {
+    if (fresh || catalogLoad?.mine !== mine) {
       const promise = loadChatCatalog(connection.client).then((catalog) => {
         if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
         return catalog
@@ -374,9 +375,17 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const connection = opened()
       const mine = generation
       const folder = state.directory ?? ""
-      // A model the server does not have would end the turn without a word: said here instead.
-      const known = catalogHasModel((await catalog()).providerList, model)
-      if (known === false) throw new Error(t("chat.model.missing", serializeModelRef(model)))
+      /*
+       * A model the server does not have would end the turn without a word:
+       * said here instead. The catalog is kept for the opening, so before a
+       * refusal it is read again: a provider connected since then counts
+       * (modello assente review, M2).
+       */
+      if (catalogHasModel((await catalog()).providerList, model) === false) {
+        if (catalogHasModel((await catalog(true)).providerList, model) === false) {
+          throw new Error(t("chat.model.missing", serializeModelRef(model)))
+        }
+      }
       for (const file of files) {
         const path = pathOfFileUrl(file.url)
         if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
@@ -434,7 +443,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const found = await opened().client.find.files({ query, type: "file", limit: 20 })
       return Array.isArray(found.data) ? found.data.filter((path): path is string => typeof path === "string") : []
     },
-    catalog,
+    catalog: () => catalog(),
   }
 }
 

@@ -442,6 +442,30 @@ describe("the chat's store", () => {
     expect(await store.send(undefined, "Ciao", FREE)).toBe("ses_nuova")
   })
 
+  /* Modello assente review, M2: a provider connected while the Chat is open is not refused. */
+  test("before refusing, the catalog is read again: a provider connected meanwhile counts", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.catalog()
+    const later = { providerID: "anthropic", modelID: "claude-x" }
+    // Connected after the catalog was read.
+    server.routes.providers = {
+      all: [
+        { id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } },
+        { id: "anthropic", name: "Anthropic", models: { "claude-x": { id: "claude-x", providerID: "anthropic" } } },
+      ],
+      default: {},
+      connected: ["openrouter", "anthropic"],
+    }
+    expect(await store.send(undefined, "Ciao", later)).toBe("ses_nuova")
+    // One read at the opening and one before the refusal that did not happen; the model it had goes with no new read.
+    expect(server.calls("GET", /^\/provider$/)).toHaveLength(2)
+    await store.send(undefined, "Ancora", FREE)
+    expect(server.calls("GET", /^\/provider$/)).toHaveLength(2)
+  })
+
   test("a catalog that cannot be read does not stop the message: the server decides", async () => {
     const server = fakeServer()
     server.routes.providers = undefined
