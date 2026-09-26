@@ -21,7 +21,14 @@
 /* 44px: room for a 26px field with 9px of air, which is what stops the bar from
    reading as a toolbar crammed against the content. */
 [data-slot="ade-bar"] {
-  display: flex;
+  /*
+   * Three groups in a grid (DS-polish, closure 1): the left one shrinks first
+   * and to nothing, the middle one takes what is left and never less than its
+   * content, the right one is its content. The middle is in the flow, not laid
+   * over the sides: nothing can cover anything at any width.
+   */
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(max-content, 1fr) max-content;
   align-items: center;
   gap: var(--ade-space-5);
   padding: 0 var(--ade-space-6);
@@ -34,13 +41,6 @@
   box-sizing: border-box;
 }
 
-/*
- * Three groups, and the middle one centred on the sessions area.
- *
- * Absolute rather than a flex third, because the section you are in must not
- * move when a project name gets longer or a session count goes from 9 to 10.
- * The sides stay in the flow and are allowed to shrink; the centre never is.
- */
 [data-slot="ade-bar"] {
   position: relative;
 }
@@ -59,7 +59,6 @@
   align-items: center;
   gap: var(--ade-space-4);
   min-width: 0;
-  flex: 1 1 0;
 }
 
 [data-slot="ade-bar-side"][data-side="end"] {
@@ -119,21 +118,22 @@
   opacity: 0.8;
 }
 
-/* Centred on the sessions area: `--ade-bar-offset` is the sidebar's width,
-   set by the workbench, and the bar spans the whole window above both. */
+/* Centred in what the sides leave: the right side keeps its width in every
+   view (see `ade-menu-anchor`), so the navigation does not move between them. */
 [data-slot="ade-bar-center"] {
-  position: absolute;
-  left: calc(var(--ade-bar-offset, 0px) + (100% - var(--ade-bar-offset, 0px)) / 2);
-  transform: translateX(-50%);
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--ade-space-2);
-  /* Above the sides, which may otherwise overlap it at narrow widths. */
-  z-index: 1;
-  max-width: calc(100% - var(--ade-space-6) * 2);
+  justify-content: center;
+  gap: var(--ade-space-3);
+  min-width: max-content;
 }
 
 /* ── menus hung off an icon ───────────────────────────────────────────────── */
+
+/* Where the view has no panes to add, the button keeps its place, unseen. */
+[data-slot="ade-menu-anchor"][data-idle] {
+  visibility: hidden;
+}
 
 [data-slot="ade-menu-anchor"] {
   position: relative;
@@ -571,19 +571,6 @@
   flex: 0 0 auto;
 }
 
-/*
- * Session count: informational meta, not an action. Small caps + weak colour
- * keep it out of the visual hierarchy of controls.
- */
-[data-slot="ade-count"] {
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-xs);
-  font-weight: var(--ade-weight-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ade-text-weak);
-}
-
 [data-slot="ade-selected-file"] {
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
@@ -691,7 +678,8 @@
   border: 1px solid transparent;
   border-radius: var(--ade-radius-sm);
   background: transparent;
-  color: var(--ade-text-weak);
+  /* `soft` on the sunken track: 5.5:1 in light, where `weak` was 4.2 (closure 3). */
+  color: var(--ade-text-soft);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   letter-spacing: 0.01em;
@@ -702,7 +690,7 @@
     box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="ade-view-tab"]:hover { color: var(--ade-text-soft); }
+[data-slot="ade-view-tab"]:hover { color: var(--ade-text); }
 
 /* Raised, not tinted: the selected cell should look like it sits above the
    track. An accent fill here would shout over the primary action in the bar. */
@@ -729,7 +717,6 @@
   }
   [data-slot="ade-bar-center"] {
     gap: 2px;
-    max-width: calc(100% - 16px);
   }
   [data-slot="ade-view-tab"] {
     padding: 0 var(--ade-space-3);
@@ -790,71 +777,256 @@
 
 [data-slot="ade-project"] {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--ade-space-4);
   min-width: 0;
 }
 
+/* The first weight: the name, never squeezed to nothing (closure 2). */
 [data-slot="ade-project-name"] {
+  flex: 0 1 auto;
+  min-width: 48px;
   color: var(--ade-text);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
-  font-weight: var(--ade-weight-medium);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /*
- * Which nikcli is installed, where the branch used to be.
- *
- * Same typeface and the same 22ch ceiling as the branch it replaces — a
- * version never reaches it, a future build with a hash appended might — but a
- * step stronger in ink. The branch wore `--ade-text-weak`, and in the glass
- * theme with the veil at its most transparent that is very nearly the
- * backdrop: the digits were there and could not be read. `soft` raises the
- * contrast rather than lowering it, so the ceiling the bar has on the white
- * lift is untouched.
+ * The second weight: one line of facts, small and soft (closure 8) —
+ * «nikcli 1.398.0 · ● senza isolamento · 0 sessioni». No capitals spaced
+ * out, no chip: the red of the isolation is a dot.
  */
-[data-slot="ade-nikcli-version"] {
+[data-slot="ade-project-meta"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  white-space: nowrap;
+}
+
+[data-slot="ade-meta-item"] {
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-2);
-  min-width: 0;
+}
+
+[data-slot="ade-meta-item"] + [data-slot="ade-meta-item"]::before {
+  content: "·";
+  margin-right: var(--ade-space-1);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="ade-meta-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-error);
+}
+
+/* The «i» that holds the facts when the line does not fit (under 1100 px). */
+[data-slot="ade-project-info"] {
+  display: none;
+  flex: none;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: transparent;
   color: var(--ade-text-soft);
-  font-family: var(--ade-mono);
+  font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
-  max-width: 22ch;
+  font-weight: var(--ade-weight-semibold);
+  line-height: 20px;
+  cursor: pointer;
+}
+
+[data-slot="ade-project-info"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="ade-project-info"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The browser's popover, placed under the bar's left side. */
+[data-slot="ade-project-facts"] {
+  position: fixed;
+  inset: 48px auto auto var(--ade-space-6);
+  margin: 0;
+  padding: var(--ade-space-4) var(--ade-space-5);
+  max-width: 320px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-overlay);
+  box-shadow: var(--ade-shadow-md);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-normal);
+  line-height: 1.5;
+}
+
+[data-slot="ade-project-facts"] p {
+  margin: 0;
+}
+
+[data-slot="ade-project-facts-note"] {
+  margin-top: var(--ade-space-2) !important;
+  color: var(--ade-text-soft);
+}
+
+/* ── the queue buttons: Decisioni and Design ─────────────────────────────── */
+/*
+ * One grammar for both (closures 3 to 6): the vial, the name in the bar's ink,
+ * the count in a pill of the family's colour, and what is queued or discarded
+ * in small soft text with a dot. The family's colour is in the pill and in the
+ * focus ring only; the text is never coloured, which is what kept «3 Design»
+ * at 3:1 on its tinted ground.
+ */
+[data-slot="bar-queue"] {
+  --queue-tone: var(--ade-working);
+  --queue-glow: var(--ade-working-bg);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 var(--ade-space-4) 0 var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="bar-queue"][data-family="design"] {
+  --queue-tone: var(--ade-accent-strong);
+  --queue-glow: var(--ade-accent-glow);
+}
+
+[data-slot="bar-queue"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="bar-queue"]:active {
+  background: var(--ade-active);
+  transform: var(--ade-press);
+}
+
+/* Its panel is open (`aria-expanded`): pressed in, not tinted. */
+[data-slot="bar-queue"][data-open] {
+  background: var(--ade-active);
+  border-color: var(--ade-border-strong);
+}
+
+/* The family's ring (closure 6): the global teal is 2.99:1 in light, under 3:1. */
+[data-slot="bar-queue"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--queue-tone), 0 0 0 4px var(--queue-glow);
+}
+
+[data-slot="bar-queue-vial"] {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+/* The count: the ground's ink on the family's colour, 4.57:1 and up (closure 3). */
+[data-slot="bar-queue-pill"] {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  box-sizing: border-box;
+  background: var(--queue-tone);
+  color: var(--ade-accent-fg);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: center;
+}
+
+[data-slot="bar-queue-aside"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-normal);
+}
+
+[data-slot="bar-queue-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-error);
+}
+
+[data-slot="bar-queue-aside"][data-tone="warn"] [data-slot="bar-queue-dot"] {
+  background: var(--ade-warning);
 }
 
 /*
- * Clipped from the left, not from the right.
- *
- * The end of a version is the part that identifies it, so the ellipsis has to
- * eat the `v` and leave the `0`. `direction: rtl` puts the ellipsis at the
- * start; the element is a `<bdi>`, so the digits and dots inside are still
- * laid out in the order they were written instead of being reordered by the
- * bidirectional algorithm.
+ * Under 1100 px (closures 1 and 2): the facts of the project go into the «i»,
+ * the queue buttons keep the vial and the pill, and a dot on the button says
+ * there is something queued or discarded. The TEST badge drops the folder.
  */
-[data-slot="ade-nikcli-number"] {
-  direction: rtl;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The one warning the bar can carry, so it is allowed to look like one. */
-[data-slot="ade-project-warning"] {
-  padding: 1px var(--ade-space-3);
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-error-bg);
-  color: var(--ade-error);
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-xs);
-  font-weight: var(--ade-weight-medium);
-  white-space: nowrap;
+@media (max-width: 1099.98px) {
+  [data-slot="ade-project-meta"] {
+    display: none;
+  }
+  [data-slot="ade-project-info"] {
+    display: inline-block;
+  }
+  [data-slot="bar-queue"] {
+    gap: 5px;
+    padding: 0 var(--ade-space-3) 0 var(--ade-space-2);
+  }
+  [data-slot="bar-queue-name"],
+  [data-slot="bar-queue-aside"] {
+    display: none;
+  }
+  /* Only what is queued keeps a mark: the discarded are history, and a red
+     dot on the corner of the pill reads as something to do. */
+  [data-slot="bar-queue"][data-queued]::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: var(--ade-radius-full);
+    box-shadow: 0 0 0 1.5px var(--ade-raised);
+  }
+  [data-slot="bar-queue"][data-queued]::before {
+    left: -3px;
+    background: var(--ade-warning);
+  }
+  :root[data-ade-build="test"] [data-slot="ade-brand"]::after {
+    content: "TEST";
+  }
 }
 
 /* ── no project ───────────────────────────────────────────────────────────── */

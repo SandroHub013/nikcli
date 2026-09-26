@@ -6,108 +6,6 @@
  * Kept to 24px in the top bar so the bar height never grows.
  */
 
-/* The badge: hidden at zero, so at rest the bar is as it was. */
-[data-slot="design-badge"] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  /* `md`, like every other button of its weight. */
-  height: 26px;
-  margin-left: var(--ade-space-2);
-  padding: 0 var(--ade-space-5);
-  border: 1px solid var(--ade-accent);
-  border-radius: var(--ade-radius-full);
-  background: var(--ade-accent-soft);
-  color: var(--ade-accent);
-  font: inherit;
-  font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-  line-height: 1;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-/* Holds the vial (S62): its size is the vial's, see `surface/vial/vial.css`. */
-[data-slot="design-badge-icon"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-[data-slot="design-badge-count"] {
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-[data-slot="design-badge-label"] {
-  line-height: 1;
-}
-
-/* The ground, not a `filter`: see the note on the decisions badge. */
-[data-slot="design-badge"]:hover {
-  background: color-mix(in srgb, var(--ade-accent) 22%, transparent);
-}
-
-[data-slot="design-badge"]:active {
-  background: color-mix(in srgb, var(--ade-accent) 22%, transparent);
-  transform: var(--ade-press);
-}
-
-[data-slot="design-badge"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
-/* Glass theme adjustments */
-:root[data-theme="glass"] [data-slot="design-badge"] {
-  backdrop-filter: blur(8px);
-}
-
-/*
- * Narrow window (e.g. 420px):
- * The top bar must never overflow horizontally. Under 640px we drop the text
- * label and place the count directly on the icon as a compact badge.
- * Total width is 22px (height 22px), saving 12px over the 34px pill,
- * guaranteeing zero horizontal scrollWidth blowout at 420px.
- */
-@media (max-width: 640px) {
-  [data-slot="design-badge"] {
-    position: relative;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    margin: 0;
-    gap: 0;
-    justify-content: center;
-    border-radius: var(--ade-radius-sm);
-  }
-  [data-slot="design-badge-count"] {
-    position: absolute;
-    top: -3px;
-    right: -4px;
-    min-width: 13px;
-    height: 13px;
-    padding: 0 2px;
-    border-radius: var(--ade-radius-full);
-    background: var(--ade-accent);
-    color: var(--ade-accent-fg, #0a1613);
-    font-size: 8.5px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    box-shadow: 0 0 0 1.5px var(--ade-raised);
-  }
-  [data-slot="design-badge-label"] {
-    display: none;
-  }
-}
-
 /* Preview file source indicator */
 [data-slot="variant-preview-source"] {
   display: flex;
@@ -685,10 +583,6 @@
   font-size: 11px;
 }
 
-[data-slot="badge-queued"][data-tone="warn"] {
-  color: var(--ade-warning, #b7791f);
-}
-
 /* The select above its sentence, as S75 asks; in the DOM the sentence comes first, as its label. */
 [data-slot="recipient-inline-wrap"] {
   display: flex;
@@ -714,23 +608,6 @@
   padding: 2px 6px;
 }
 
-/* Narrow bar: no room for the words, a warning dot on the button says it. */
-@media (max-width: 640px) {
-  [data-slot="design-badge"] [data-slot="badge-queued"] {
-    display: none;
-  }
-  [data-slot="design-badge"][data-queued]::after {
-    content: "";
-    position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 7px;
-    height: 7px;
-    border-radius: var(--ade-radius-full);
-    background: var(--ade-warning, #b7791f);
-  }
-}
-
 /* «giro N» next to the key, from the second round on. */
 [data-slot="design-round"] {
   flex: 0 0 auto;
@@ -740,28 +617,6 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-accent-soft);
   color: var(--ade-accent);
-}
-
-/* «· N scartate»: lines of the register nobody will see otherwise. */
-[data-slot="badge-discarded"][data-tone="error"] {
-  color: var(--ade-error);
-  font-weight: var(--ade-weight-semibold);
-}
-
-@media (max-width: 640px) {
-  [data-slot="design-badge"] [data-slot="badge-discarded"] {
-    display: none;
-  }
-  [data-slot="design-badge"][data-discarded]::before {
-    content: "";
-    position: absolute;
-    bottom: -2px;
-    left: -2px;
-    width: 7px;
-    height: 7px;
-    border-radius: var(--ade-radius-full);
-    background: var(--ade-error);
-  }
 }
 
 /* «puoi sceglierne più d'una», under the title of a multiple question. */

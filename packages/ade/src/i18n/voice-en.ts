@@ -23,6 +23,7 @@ export const voiceEn: VoiceMessages = {
   "vui.orb.confirming": "The assistant is waiting for confirmation (press to close)",
   "vui.orb.executing": "The assistant is running a command",
   "vui.orb.listening": "The assistant is listening (press to close)",
+  "vui.orb.title": (chord) => `Microphone · ${chord}`,
   "vui.agentOrb.speaking": "The assistant is speaking: press to interrupt",
   "vui.agentOrb.working": "The assistant is working: press to cancel",
   "vui.listening.text": (wakeWord) => `Listening · “${wakeWord}”`,

@@ -13,6 +13,8 @@ import type { VoiceEngine } from "../engine"
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
 import { OrbMark } from "./orb-mark"
+import { orbTitle } from "./orb-title"
+import { getPlatform } from "./shortcut-capture"
 import "./voice-orb.css"
 import { t } from "@nikcli-ai/ade/i18n"
 
@@ -76,7 +78,7 @@ export function VoiceOrb(props: VoiceOrbProps) {
       class={props.class}
       aria-label={label()}
       aria-pressed={isRunning()}
-      title={label()}
+      title={orbTitle(props.engine.settings(), getPlatform())}
       onClick={() => void props.engine.toggle()}
     >
       <OrbMark

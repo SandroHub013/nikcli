@@ -24,6 +24,7 @@ export const voiceIt = {
   "vui.orb.confirming": "L'assistente attende una conferma (premi per chiudere)",
   "vui.orb.executing": "L'assistente sta eseguendo un comando",
   "vui.orb.listening": "Assistente in ascolto (premi per chiudere)",
+  "vui.orb.title": (chord: string) => `Microfono · ${chord}`,
   "vui.agentOrb.speaking": "L'assistente sta parlando: premi per interrompere",
   "vui.agentOrb.working": "L'assistente sta lavorando: premi per annullare",
   "vui.listening.text": (wakeWord: string) => `In ascolto · «${wakeWord}»`,

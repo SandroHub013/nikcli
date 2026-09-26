@@ -9,11 +9,3 @@
   width: 12px;
   height: 21px;
 }
-
-/* The compact Design button under 640px: the prototype's tube at 20 px. */
-@media (max-width: 640px) {
-  [data-slot="design-badge"] [data-slot="vial"] {
-    width: 10px;
-    height: 16px;
-  }
-}

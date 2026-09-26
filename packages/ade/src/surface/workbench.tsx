@@ -1,5 +1,4 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
-import { VialMark } from "./vial/vial-mark"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every, pageHidden, watchDue } from "../host/every"
@@ -74,6 +73,8 @@ import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
+import { BarQueueButton } from "./bar-queue-button"
+import { queueShown } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
 const isTauriDesktop = () =>
   typeof window !== "undefined" &&
@@ -332,8 +333,6 @@ import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
 import { createOutsideConfirmationTracker, markdownLinkRefusal, openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
-import { countLabel } from "../decisions/answer"
-import { discardedBadge, queuedBadge } from "../decisions/card"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
 import {
   deliveryLine,
@@ -356,8 +355,7 @@ import {
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
 import { decisionsPath } from "../decisions/store"
-import { countLabel as designCountLabel, formatMoment as formatDesignMoment } from "../design/answer"
-import { discardedBadge as designDiscardedBadge, queuedBadge as designQueuedBadge } from "../design/card"
+import { formatMoment as formatDesignMoment } from "../design/answer"
 import { DesignSheet } from "../design/design-sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -7100,20 +7098,6 @@ export function Workbench() {
     return entry ? formatChord(parseChord(entry.chord, platform), platform) : ""
   })
 
-  /*
-   * How much of the window the sidebar takes, so the bar's middle group can
-   * centre on the sessions rather than on the whole window. Measured, not read
-   * from state: the sidebar owns its width while it is being dragged.
-   */
-  const [sidebarPx, setSidebarPx] = createSignal(0)
-  onMount(() => {
-    const sidebar = document.querySelector<HTMLElement>('[data-component="ade-sidebar"]')
-    if (!sidebar || typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(() => setSidebarPx(sidebar.getBoundingClientRect().width))
-    observer.observe(sidebar)
-    onCleanup(() => observer.disconnect())
-  })
-
   return (
     <div data-component="ade-shell" data-theme={theme()}>
       {/* First, so it is over the workbench while the workbench is still
@@ -7124,16 +7108,13 @@ export function Workbench() {
         data-slot="ade-bar"
         data-platform={isTauriDesktop() && isMacOS() ? "macos" : undefined}
         data-tauri-drag-region
-        style={{ "--ade-bar-offset": `${sidebarPx()}px` }}
         onDblClick={(e) => {
           if (e.target === e.currentTarget) void adeWindowToggleMaximize()
         }}
       >
-        {/* Three groups: who and where on the left, the navigation in the
-            middle, the controls on the right. The middle one is centred on
-            the sessions area — the window minus the sidebar — rather than on
-            what is left over, so the section you are in does not move when a
-            project name gets longer. */}
+        {/* Three groups in a grid: who and where on the left, the navigation
+            in the middle, the controls on the right. The left one gives way
+            first, so nothing is ever laid over anything (DS-polish). */}
         <div data-slot="ade-bar-side" data-side="start">
           {/*
             The mark, not the word.
@@ -7152,8 +7133,7 @@ export function Workbench() {
               <NikChromeLogo size={30} />
             </span>
           </Show>
-          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} />
-          <span data-slot="ade-count">{t("bar.sessions", wb().panes.filter(p => !isPanelPane(p)).length)}</span>
+          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} sessions={wb().panes.filter((p) => !isPanelPane(p)).length} />
         </div>
 
         <div data-slot="ade-bar-center">
@@ -7194,49 +7174,26 @@ export function Workbench() {
             <path d="M10.2 10.2L14 14" stroke-linecap="round" />
           </svg>
         </button>
-        {/* Decisions waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={decisionsWaiting() > 0 || decisionsQueued() > 0 || decisionsDiscarded() > 0}>
-          <button
-            type="button"
-            data-slot="decisions-badge"
-            data-queued={decisionsQueued() > 0 ? String(decisionsQueued()) : undefined}
-            data-discarded={decisionsDiscarded() > 0 ? String(decisionsDiscarded()) : undefined}
-            onClick={() => setDecisionsOpen(true)}
-            title={t("decisions.waiting")}
-          >
-            <VialMark fam="dec" count={decisionsWaiting()} theme={theme()} />
-            {countLabel(decisionsWaiting())}
-            <Show when={queuedBadge(decisionsQueued())}>
-              {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
-            </Show>
-            <Show when={discardedBadge(decisionsDiscarded())}>
-              {(text) => <span data-slot="badge-discarded" data-tone="error">{` ${text()}`}</span>}
-            </Show>
-          </button>
+        {/* Decisions and design proposals waiting for the user: one button
+            each, the same component (DS-polish). Hidden at zero; each opens
+            its panel only when pressed, and says whether it is open. */}
+        <Show when={queueShown({ waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() })}>
+          <BarQueueButton
+            family="decisions"
+            counts={{ waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() }}
+            open={decisionsOpen()}
+            theme={theme()}
+            onOpen={() => setDecisionsOpen(true)}
+          />
         </Show>
-        {/* Design proposals waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={designWaiting() > 0 || designQueued() > 0 || designDiscarded() > 0}>
-          <button
-            type="button"
-            data-slot="design-badge"
-            data-queued={designQueued() > 0 ? String(designQueued()) : undefined}
-            data-discarded={designDiscarded() > 0 ? String(designDiscarded()) : undefined}
-            onClick={() => setDesignOpen(true)}
-            title={t("design.waiting")}
-            aria-label={designCountLabel(designWaiting())}
-          >
-            <span data-slot="design-badge-icon" aria-hidden="true">
-              <VialMark fam="design" count={designWaiting()} theme={theme()} />
-            </span>
-            <span data-slot="design-badge-count">{designWaiting()}</span>
-            <span data-slot="design-badge-label">{t("design.title")}</span>
-            <Show when={designQueuedBadge(designQueued())}>
-              {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
-            </Show>
-            <Show when={designDiscardedBadge(designDiscarded())}>
-              {(text) => <span data-slot="badge-discarded" data-tone="error">{` ${text()}`}</span>}
-            </Show>
-          </button>
+        <Show when={queueShown({ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() })}>
+          <BarQueueButton
+            family="design"
+            counts={{ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() }}
+            open={designOpen()}
+            theme={theme()}
+            onOpen={() => setDesignOpen(true)}
+          />
         </Show>
         </div>
 
@@ -7281,8 +7238,10 @@ export function Workbench() {
             One button per kind worked while there were two; with a video
             player, and an emulator and a 3D viewer behind it, the bar would
             become a row of verbs competing with the navigation beside it. */}
-        <Show when={showsNewPane(wb().view)}>
-          <div data-slot="ade-menu-anchor">
+        {/* Always in the layout, hidden where it does nothing (DS-polish,
+            closure 9): the right group keeps its width, and the navigation
+            in the middle does not move from one view to the next. */}
+        <div data-slot="ade-menu-anchor" data-idle={showsNewPane(wb().view) ? undefined : "true"} inert={!showsNewPane(wb().view)}>
             <button
               type="button"
               data-slot="ade-icon"
@@ -7303,7 +7262,7 @@ export function Workbench() {
               </svg>
             </button>
 
-            <Show when={newPaneOpen()}>
+            <Show when={newPaneOpen() && showsNewPane(wb().view)}>
               <div data-slot="ade-menu" role="menu" aria-label={t("bar.newPane")}>
                 <For each={NEW_PANE_ITEMS}>
                   {(item) => (
@@ -7329,7 +7288,6 @@ export function Workbench() {
               </div>
             </Show>
           </div>
-        </Show>
 
         {/* The user must never be unsure whether ADE is filming: the badge
             stays above everything, says where the file is going, and stops

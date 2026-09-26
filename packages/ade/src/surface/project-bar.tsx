@@ -6,58 +6,74 @@ export interface ProjectBarProps {
   project?: Project
   /** The nikcli the user is running, or undefined when there is none to name. */
   nikcliVersion?: string
+  /** The sessions open in this project. */
+  sessions: number
 }
 
 /**
  * Which project ADE is pointed at, in the top bar.
  *
- * The "senza isolamento" mark is the point of this component: outside a git
- * repository there are no worktrees to hand out, so every agent edits the
- * user's own files. That is a fact about their work, not a technical footnote,
- * and it belongs where they can see it without asking.
+ * Two weights (DS-polish, closure 8): the name, and one line of facts under
+ * the bar's voice — which nikcli, whether agents are isolated, how many
+ * sessions. The "senza isolamento" mark is the one that matters: outside a
+ * git repository there are no worktrees to hand out, so every agent edits the
+ * user's own files. It keeps its red, as a dot, not as a pink chip.
  *
- * The branch used to sit here too and has moved to the sidebar, where it
- * already was beside the project: in a bar that is the same at every moment,
- * a name like `ade/feat-ade-integra` truncated at its end read as a path, and
- * it said nothing the column below did not say better. What takes its place is
- * the one thing the bar could not tell you at all — which nikcli every session
- * started from here is going to be.
+ * Under 1100 px the line gives way to an «i» that holds the same three facts
+ * (closure 2): the stylesheet chooses, the popover is the browser's own.
  */
 export function ProjectBar(props: ProjectBarProps) {
+  // «nikcli 1.399.0»: the program's name already says what the number is, the «v» is noise.
+  const version = () => props.nikcliVersion?.replace(/^v(?=\d)/, "")
+  const facts = (project: Project) =>
+    [
+      version() ? t("bar.meta.nikcli", version()!) : undefined,
+      project.git ? undefined : t("projectBar.noGit.short"),
+      t("bar.sessions", props.sessions),
+    ].filter((fact): fact is string => Boolean(fact))
   return (
     <Show when={props.project}>
       {(project) => (
         <div data-slot="ade-project">
           <Show when={project().name && project().name.toLowerCase() !== "nikcli"}>
-            <span data-slot="ade-project-name">{project().name}</span>
-          </Show>
-          {/* Nothing at all when nikcli is absent or would not say: an empty
-              space is the correct report, and a message here would be
-              permanent furniture for a fact about the machine. */}
-          <Show when={props.nikcliVersion}>
-            {(version) => (
-              <span data-slot="ade-nikcli-version" title={t("bar.nikcliVersion", version())}>
-                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 4L2.5 8 6 12" />
-                  <path d="M10 4l3.5 4-3.5 4" />
-                </svg>
-                {/*
-                 * Isolated, and clipped from the left by the stylesheet: what
-                 * matters in a version is its end, so a bar with no room for
-                 * "v1.384.0" must lose the v and not the 0.
-                 */}
-                <bdi data-slot="ade-nikcli-number">{version()}</bdi>
-              </span>
-            )}
-          </Show>
-          <Show when={!project().git}>
-            <span
-              data-slot="ade-project-warning"
-              title={t("projectBar.noGit")}
-            >
-              {t("projectBar.noGit.short")}
+            <span data-slot="ade-project-name" title={project().name}>
+              {project().name}
             </span>
           </Show>
+          <span data-slot="ade-project-meta">
+            {/* Nothing at all when nikcli is absent or would not say: an empty
+                space is the correct report. */}
+            <Show when={version()}>
+              {(shown) => (
+                <span data-slot="ade-meta-item" title={t("bar.nikcliVersion", props.nikcliVersion ?? shown())}>
+                  {t("bar.meta.nikcli", shown())}
+                </span>
+              )}
+            </Show>
+            <Show when={!project().git}>
+              <span data-slot="ade-meta-item" data-tone="error" title={t("projectBar.noGit")}>
+                <span data-slot="ade-meta-dot" aria-hidden="true" />
+                {t("projectBar.noGit.short")}
+              </span>
+            </Show>
+            <span data-slot="ade-meta-item">{t("bar.sessions", props.sessions)}</span>
+          </span>
+          <button
+            type="button"
+            data-slot="ade-project-info"
+            popovertarget="ade-project-facts"
+            aria-label={t("bar.info", facts(project()).join(", "))}
+          >
+            i
+          </button>
+          <div id="ade-project-facts" data-slot="ade-project-facts" popover="auto">
+            {facts(project()).map((fact) => (
+              <p>{fact}</p>
+            ))}
+            <Show when={!project().git}>
+              <p data-slot="ade-project-facts-note">{t("projectBar.noGit")}</p>
+            </Show>
+          </div>
         </div>
       )}
     </Show>
