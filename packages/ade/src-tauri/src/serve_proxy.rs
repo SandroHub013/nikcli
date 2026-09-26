@@ -155,6 +155,14 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
 /// answers to permissions and questions, and reading files for `@file`. Each
 /// with its methods: `GET` also allows `HEAD`.
 ///
+/// Reading the configuration again (`POST /config/reload`): a bot made while
+/// the server runs is an agent file it has not read, and the bot's turn is
+/// refused as unknown until it does (Verifiche). The reload only rereads what
+/// is on disk, and nikcli leaves the live sessions as they are; changing the
+/// configuration (`PATCH /config`) stays closed. The inline configuration ADE
+/// passes in `NIKCLI_CONFIG_CONTENT` (a free model, in ADE Test) is read once
+/// at the server's start and merged again by every reload, so it stays.
+///
 /// Not forking (C6): nikcli's fork makes the new session without the
 /// permission rules the chat gives its own (`POST /session/:id/fork` takes a
 /// message id only, and `PATCH` cannot add rules), so a fork would run with
@@ -167,6 +175,7 @@ const ALLOWED: &[(&str, &str)] = &[
     ("GET", "/event"),
     ("GET", "/path"),
     ("GET", "/config"),
+    ("POST", "/config/reload"),
     ("GET", "/config/providers"),
     ("GET", "/provider"),
     ("GET", "/agent"),
@@ -470,6 +479,19 @@ mod tests {
     }
 
     #[test]
+    fn a_bot_turn_may_ask_the_server_to_read_its_bots_again() {
+        let base = "http://127.0.0.1:4096";
+        let refused = |method: Method, path: &str| fenced(&method, &target(base, path).unwrap()).is_some();
+        // A bot made while the server runs is refused as unknown until it is read.
+        assert!(!refused(Method::POST, "/config/reload"));
+        assert!(!refused(Method::POST, "/Config/Reload"));
+        // Only that: the configuration is not written, and nothing under it opens.
+        assert!(refused(Method::GET, "/config/reload"));
+        assert!(refused(Method::PATCH, "/config"));
+        assert!(refused(Method::POST, "/config/reload/x"));
+    }
+
+    #[test]
     fn the_chat_cannot_reach_the_servers_bots_disposal_config_or_shells() {
         let base = "http://127.0.0.1:4096";
         let refused = |method: Method, path: &str| fenced(&method, &target(base, path).unwrap()).is_some();
@@ -481,7 +503,7 @@ mod tests {
             (Method::POST, "/mobile/pty"),
             (Method::POST, "/global/dispose"),
             (Method::POST, "/instance/dispose"),
-            (Method::POST, "/config/reload"),
+            (Method::GET, "/config/reload"),
             (Method::PATCH, "/config"),
             (Method::POST, "/config/mcp"),
             (Method::PUT, "/auth/openrouter"),
