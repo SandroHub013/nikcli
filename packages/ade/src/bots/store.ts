@@ -398,8 +398,8 @@ export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
  * has a provider configured for. Offering the wrong list would offer choices
  * that fail at launch with a message from another program.
  */
-export async function listModels(cwd?: string): Promise<string[]> {
-  const host = await getHost()
+export async function listModels(cwd?: string, hostOf: () => Promise<Host | undefined> = getHost): Promise<string[]> {
+  const host = await hostOf()
   if (!host) return []
   try {
     if (!host.nikcliBot) return []
