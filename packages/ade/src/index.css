@@ -688,9 +688,12 @@ body,
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  border: 2px dashed var(--ade-accent);
+  /* A drop target says so with a dashed edge and a wash of the neutral; accent
+     here would be the one green the user asked to be rid of, and it is a border
+     drawn over a pane, not a fill. */
+  border: 2px dashed var(--ade-text-weak);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--ade-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--ade-text-weak) 18%, transparent);
 }
 
 /*
