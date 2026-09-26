@@ -341,14 +341,12 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
     ];
 
     let slot = state.installer.slot(PIPER);
-    let install = state.installer.begin(
-        &slot,
-        jobs.len() as u32,
-        bytes_pending(&jobs),
-        Instant::now() + INSTALL_DEADLINE,
-    );
-    // Two first sentences must not download the same files into each other.
-    let _one = install.lock().map_err(|_| "installazione bloccata".to_string())?;
+    // The lock, and only then the state: see `hold`. And the budget starts here,
+    // because an install that waited its turn has not spent any of its time.
+    let _one = state.installer.hold(&slot)?;
+    let install = state
+        .installer
+        .begin(&slot, jobs.len() as u32, bytes_pending(&jobs), Instant::now() + state.installer.deadline());
     let outcome = install_locked(&install, &root, &jobs);
     install.finish(&outcome);
     outcome
@@ -783,6 +781,10 @@ struct ProviderSlot {
 #[derive(Default)]
 struct Installer {
     providers: Mutex<HashMap<String, Arc<ProviderSlot>>>,
+    /// How long one install has. A field and not only the constant, so that the
+    /// moment the budget starts counting is the moment the lock was taken
+    /// rather than the moment the install was queued; `None` is the constant.
+    deadline: Option<std::time::Duration>,
 }
 
 impl Installer {
@@ -816,6 +818,25 @@ impl Installer {
         true
     }
 
+    /// Takes the provider's lock, so that two installs of it do not write the
+    /// same files. Providers do not wait for each other.
+    ///
+    /// Before `begin` and never after it: `begin` writes everything the panel
+    /// reads for this provider, and a second install writing that state while
+    /// the first is still downloading is what made a cancel disappear, made
+    /// `running` fall to false over a download that was running, and summed two
+    /// transfers into one counter. Queued behind the lock, an install has not
+    /// begun: the state belongs to the one that is going.
+    fn hold<'a>(&'a self, slot: &'a Arc<ProviderSlot>) -> Result<MutexGuard<'a, ()>, String> {
+        slot.lock.lock().map_err(|_| "installazione bloccata".into())
+    }
+
+    /// How long an install has, counted from the moment it holds the lock. An
+    /// install that waited its turn has not spent any of its time yet.
+    fn deadline(&self) -> std::time::Duration {
+        self.deadline.unwrap_or(INSTALL_DEADLINE)
+    }
+
     fn begin<'a>(&self, slot: &'a Arc<ProviderSlot>, files_total: u32, bytes_total: Option<u64>, deadline: Instant) -> InstallRun<'a> {
         let mut progress = slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         *progress = InstallProgress {
@@ -839,12 +860,6 @@ struct InstallRun<'a> {
 }
 
 impl InstallRun<'_> {
-    /// Held for the whole install: two of them for one provider must not write
-    /// the same files. Providers do not wait for each other.
-    fn lock(&self) -> Result<MutexGuard<'_, ()>, String> {
-        self.slot.lock.lock().map_err(|_| "installazione bloccata".into())
-    }
-
     /// The reason to stop, or `None`. Asked by the fetcher between its waits, so
     /// a cancel is at most one tick away and a deadline is exact.
     fn stop(&self) -> Option<String> {
@@ -1245,6 +1260,7 @@ mod tests {
         chunk: usize,
         ending: Ending,
         started: Option<std::sync::mpsc::Sender<()>>,
+        release: Option<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
         /// The urls it was asked for, and what the staging file weighed when
         /// each transfer walked in: a resume arrives at a file that is not empty,
         /// and a transfer that starts from zero arrives at nothing.
@@ -1259,6 +1275,7 @@ mod tests {
                 chunk: 8,
                 ending,
                 started: None,
+                release: None,
                 asked: Mutex::new(Vec::new()),
                 part_len_at_entry: Mutex::new(Vec::new()),
             }
@@ -1266,6 +1283,16 @@ mod tests {
 
         fn signalling(mut self, started: std::sync::mpsc::Sender<()>) -> Self {
             self.started = Some(started);
+            self
+        }
+
+        /// Holds the transfer still after its first piece, so another install can
+        /// queue up behind it and the state have something da dire. Once, on
+        /// purpose: after the permission the transfer goes on, and it is the
+        /// next `stop()` that decides — which is the whole point of asking
+        /// before every piece.
+        fn gated(mut self, release: std::sync::mpsc::Receiver<()>) -> Self {
+            self.release = Some(Mutex::new(Some(release)));
             self
         }
     }
@@ -1281,11 +1308,22 @@ mod tests {
             self.asked.lock().unwrap().push(url.to_string());
             self.part_len_at_entry.lock().unwrap().push(bytes_so_far(part));
             let mut written: Vec<u8> = Vec::new();
+            let mut pieces = 0;
             for piece in self.body.chunks(self.chunk.max(1)) {
                 // Asked before every piece, the way the real fetcher asks before
                 // every wait: a cancel is one tick away, never one file away.
                 if let Some(reason) = stop() {
                     return Err(reason);
+                }
+                // The gate is after the first piece, so that the transfer has
+                // already reported something before it is held still.
+                if pieces > 0 {
+                    if let Some(release) = &self.release {
+                        let taken = release.lock().unwrap().take();
+                        if let Some(gate) = taken {
+                            let _ = gate.recv();
+                        }
+                    }
                 }
                 written.extend_from_slice(piece);
                 std::fs::write(part, &written).map_err(|e| e.to_string())?;
@@ -1293,6 +1331,7 @@ mod tests {
                 if let Some(started) = &self.started {
                     let _ = started.send(());
                 }
+                pieces += 1;
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
             if let Some(reason) = stop() {
@@ -1326,18 +1365,17 @@ mod tests {
         }
     }
 
-    /// Runs an install of `jobs` the way `install_blocking` does: begin, lock,
-    /// bring each file, finish.
+    /// Runs an install of `jobs` the way `install_blocking` does: the lock, then
+    /// `begin`, then each file, then `finish`.
     fn run_install(
         installer: &Installer,
         provider: &str,
         jobs: &[(&Download, PathBuf)],
         scripted: &Scripted,
-        deadline: Instant,
     ) -> Result<(), String> {
         let slot = installer.slot(provider);
-        let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(jobs), deadline);
-        let _one = install.lock().unwrap();
+        let _one = installer.hold(&slot).unwrap();
+        let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(jobs), far());
         let mut outcome = Ok(());
         for (download, path) in jobs {
             if let Err(problem) = install.bring(download, path, scripted, &FingerprintInProcess) {
@@ -1362,7 +1400,7 @@ mod tests {
         std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
         let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
 
-        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Short), far()).unwrap_err();
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Short)).unwrap_err();
         assert_eq!(problem, INTERROTTA);
         assert!(!dest.is_file(), "un file scaricato a metà non può restare al suo posto");
         assert!(!staging(&dest).exists(), "il .part di un tentativo interrotto non resta");
@@ -1382,7 +1420,7 @@ mod tests {
         // Whole, and not the file: the size cannot catch this one, only the digest.
         let jobs = [(&download_of("ugo.onnx", &wanted, Some(served.len() as u64)), dest.clone())];
 
-        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(served, Ending::Whole), far()).unwrap_err();
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(served, Ending::Whole)).unwrap_err();
         assert_eq!(problem, DIGEST);
         assert!(!dest.is_file());
         assert!(!staging(&dest).exists());
@@ -1407,8 +1445,8 @@ mod tests {
         let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
 
         let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot).unwrap();
         let install = installer.begin(&slot, 1, bytes_pending(&jobs), far());
-        let _one = install.lock().unwrap();
         // Il file è giusto, e il controllo non è potuto arrivare: quello che si
         // dice è il motivo, non che il download sia sbagliato.
         let problem = install
@@ -1442,7 +1480,7 @@ mod tests {
                 installer.cancel_of(PIPER)
             })
         };
-        let problem = run_install(&installer, PIPER, &jobs, &scripted, far()).unwrap_err();
+        let problem = run_install(&installer, PIPER, &jobs, &scripted).unwrap_err();
         assert_eq!(problem, ANNULLATA);
         assert!(cancelling.join().unwrap(), "un annullamento senza installazione in corso non annulla niente");
         assert!(!dest.is_file());
@@ -1459,7 +1497,7 @@ mod tests {
 
         // The one message this change must not touch: before it, every failure of
         // the download was named like this, and Piper's install said it too.
-        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Refused), far()).unwrap_err();
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Refused)).unwrap_err();
         assert_eq!(problem, "Download della voce non riuscito: curl: (28) Operation timed out");
         assert!(!dest.is_file());
         assert!(!staging(&dest).exists());
@@ -1479,7 +1517,7 @@ mod tests {
         let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
         let scripted = Scripted::new(body.clone(), Ending::Whole);
 
-        run_install(&installer, PIPER, &jobs, &scripted, far()).expect("l'installazione deve riuscire");
+        run_install(&installer, PIPER, &jobs, &scripted).expect("l'installazione deve riuscire");
         assert_eq!(std::fs::read(&dest).unwrap(), body, "il file finale è quello scaricato adesso");
         assert_eq!(scripted.asked.lock().unwrap().len(), 1, "il download riparte da capo, non riprende");
         assert_eq!(
@@ -1496,11 +1534,17 @@ mod tests {
         let installer = Installer::default();
         let body = b"un modello".to_vec();
         let dest = root.join("ugo.onnx");
-        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+        let wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
         // Already past: the deadline is absolute, not a count of retries.
         let past = Instant::now() - std::time::Duration::from_secs(1);
 
-        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Whole), past).unwrap_err();
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot).unwrap();
+        let install = installer.begin(&slot, 1, bytes_pending(&[(&wanted, dest.clone())]), past);
+        let problem = install
+            .bring(&wanted, &dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess)
+            .unwrap_err();
+        install.finish(&Err(problem.clone()));
         assert_eq!(problem, SCADUTA);
         assert!(!dest.is_file());
     }
@@ -1520,8 +1564,8 @@ mod tests {
         let scripted = Scripted::new(b"{}".to_vec(), Ending::Whole);
 
         let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot).unwrap();
         let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(&jobs), far());
-        let _one = install.lock().unwrap();
         // The one already there is not fetched again: a voice the user already
         // installed must not be downloaded because they opened the panel.
         assert_eq!(install.bring(&jobs[0].0, &dest, &scripted, &FingerprintInProcess), Ok(()));
@@ -1547,8 +1591,8 @@ mod tests {
         ];
 
         let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot).unwrap();
         let install = installer.begin(&slot, 3, bytes_pending(&jobs), far());
-        let _one = install.lock().unwrap();
         let started = installer.progress_of(PIPER);
         assert!(started.running);
         assert_eq!(started.files_total, 3, "i tre file dell'installazione, anche quello che c'è già");
@@ -1577,7 +1621,9 @@ mod tests {
         let installer = Installer::default();
         let piper = installer.slot(PIPER);
         let kokoro = installer.slot("kokoro");
-        let _held = piper.lock.lock().unwrap();
+        // `hold` aspetta, e qui si vuole sapere subito: `try_lock` è la
+        // domanda «lo si può prendere adesso?».
+        let _held = piper.lock.try_lock().unwrap();
         // Kokoro's files are not Piper's files: asking for one while the other
         // downloads must not wait, or a 63 MB voice holds up the next one.
         assert!(kokoro.lock.try_lock().is_ok());
@@ -1590,5 +1636,122 @@ mod tests {
         assert!(!installer.cancel_of("kokoro"), "non c'è installazione in corso da fermare");
         // And it does not leave a cancelled mark on the next one.
         assert!(!installer.progress_of("kokoro").cancelled);
+    }
+
+    #[test]
+    fn a_second_install_of_one_provider_waits_its_turn_and_leaves_the_state_alone() {
+        let root = test_root("due-install");
+        let installer = std::sync::Arc::new(Installer::default());
+        let body = b"un modello da sessanta megabyte".to_vec();
+        let first_dest = root.join("ugo.onnx");
+        let second_dest = root.join("paola.onnx");
+        let first_wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
+        let second_wanted = download_of("paola.onnx", &body, Some(body.len() as u64));
+
+        // Il primo install tiene il lock e aspetta il permesso di scaricare.
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let first = {
+            let installer = installer.clone();
+            let body = body.clone();
+            std::thread::spawn(move || {
+                let slot = installer.slot(PIPER);
+                let _one = installer.hold(&slot).unwrap();
+                let install = installer.begin(&slot, 1, None, far());
+                let scripted = Scripted::new(body, Ending::Whole).signalling(started_tx).gated(release_rx);
+                let outcome = install.bring(&first_wanted, &first_dest, &scripted, &FingerprintInProcess);
+                install.finish(&outcome);
+                outcome
+            })
+        };
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("il primo download parte");
+        // Qualcosa è già scaricato: è lo stato che il secondo non deve toccare.
+        assert!(installer.progress_of(PIPER).bytes_done > 0);
+
+        // Il secondo chiede un'altra voce mentre il primo scarica.
+        let (queued_tx, queued_rx) = std::sync::mpsc::channel();
+        let second = {
+            let installer = installer.clone();
+            let body = body.clone();
+            let second_dest = second_dest.clone();
+            std::thread::spawn(move || {
+                queued_tx.send(()).unwrap();
+                let slot = installer.slot(PIPER);
+                let _one = installer.hold(&slot).unwrap();
+                let install = installer.begin(&slot, 1, None, far());
+                let outcome = install.bring(&second_wanted, &second_dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess);
+                install.finish(&outcome);
+                outcome
+            })
+        };
+        queued_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("il secondo install chiede il lock");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // In coda non ha ancora cominciato: lo stato è ancora quello del primo e
+        // non è stato azzerato da un `begin` che non è ancora cominciato.
+        let while_queued = installer.progress_of(PIPER);
+        assert!(while_queued.running, "il primo sta scaricando: lo stato lo dice");
+        assert!(
+            while_queued.bytes_done > 0,
+            "i byte del primo non sono spariti per un install in coda"
+        );
+
+        // L'annulla raggiunge quello che gira.
+        assert!(installer.cancel_of(PIPER), "c'era un install in corso da fermare");
+        // Il permesso di scaricare, che era tenuto fermo il primo pezzo: adesso
+        // va avanti e al pezzo dopo è `stop()` a leggerlo.
+        release_tx.send(()).unwrap();
+        let stopped = first.join().unwrap().unwrap_err();
+        assert_eq!(stopped, ANNULLATA, "l'annulla ha fermato il download che stava andando");
+
+        // E il secondo parte dopo, con lo stato pulito.
+        assert!(second.join().unwrap().is_ok(), "chi aspetta parte dopo e riesce");
+        let after = installer.progress_of(PIPER);
+        assert!(!after.running);
+        assert!(!after.cancelled, "l'annullamento non resta sul successivo");
+        assert!(second_dest.is_file());
+    }
+
+    #[test]
+    fn an_install_that_waited_its_turn_has_not_spent_its_budget() {
+        let root = test_root("scadenza-dopo");
+        // Centoventi millisecondi di budget: un install che aspetta il lock più a
+        // lungo di quanto dura, e uno che comincia appena lo prende.
+        let installer = std::sync::Arc::new(Installer {
+            providers: Mutex::new(HashMap::new()),
+            deadline: Some(std::time::Duration::from_millis(120)),
+        });
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
+
+        // Il lock è tenuto da un altro, più a lungo del budget.
+        let held = installer.slot(PIPER);
+        let guard = installer.hold(&held).unwrap();
+        let waiter = {
+            let installer = installer.clone();
+            let body = body.clone();
+            let dest = dest.clone();
+            std::thread::spawn(move || {
+                // La forma di `install_blocking`: il lock, e solo dopo il
+                // budget. Un install in coda non ha ancora speso niente.
+                let slot = installer.slot(PIPER);
+                let _one = installer.hold(&slot).unwrap();
+                let install = installer.begin(&slot, 1, None, Instant::now() + installer.deadline());
+                let outcome = install.bring(&wanted, &dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess);
+                install.finish(&outcome);
+                outcome
+            })
+        };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        drop(guard);
+
+        let outcome = waiter.join().unwrap();
+        assert!(outcome.is_ok(), "il budget parte dal lock, non dalla richiesta: {outcome:?}");
+        assert!(dest.is_file());
     }
 }
