@@ -594,7 +594,9 @@ export const it = {
   "gateway.panel.tokenPlaceholderDiscord": "TOKEN-DEL-BOT…",
   "gateway.panel.portal": "Nel portale sviluppatori",
   "gateway.panel.portalWhere":
-    "Nella tua applicazione su discord.com/developers/applications, apri il tuo bot. Serve un'applicazione nuova solo se non ne hai ancora una per il bot.",
+    "Crea il bot su discord.com/developers/applications: pulsante «New Application», poi «Add Bot». Il bot nasce dentro l'applicazione e subito sotto il suo nome trovi il token: è quello che va nel campo qui sopra, e non ne esiste un secondo.",
+  "gateway.panel.intentsOff":
+    "Gli intent da lasciare spenti sono tre, e sono chiusi di proposito: «Message Content», «Server Members Intent» e «Presence Intent». Non serve nessuno dei tre. «Message Content» resta chiuso: una chat privata e una menzione dentro il tuo messaggio arrivano con il testo anche senza, mentre con l'intent chiuso il bot non si collega affatto e te lo dice.",
   "gateway.panel.intents":
     "Gli intent del bot devono essere quelli di base, senza «Message Content»: una chat privata e una menzione nel tuo messaggio arrivano con il testo anche senza. Con «Message Content» chiuso il bot non si collega e te lo dice.",
   "gateway.panel.invite":
