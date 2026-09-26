@@ -50,8 +50,10 @@ import {
   createTalkArchive,
   migrateTalkKeys,
   deleteBot,
+  projectOfBotPath,
   listBots,
   listModels,
+  modelCatalogText,
   projectFs,
   readBotText,
   resolveRoots,
@@ -72,6 +74,24 @@ import {
 import { gatewayVisible } from "../surface/state"
 import { appGatewayPanelDeps } from "./gateway/bridge"
 import { GatewaySection } from "./gateway/panel"
+import { openExternally } from "../browser/host-bridge"
+import {
+  addRoutine,
+  createRoutineScheduler,
+  localRoutineStore,
+  offerFor,
+  pauseRoutine,
+  reconsent,
+  removeRoutine,
+  routineConsent,
+  routineProblem,
+  runRoutine,
+  type Routine,
+  type RoutineBook,
+  type RoutineContext,
+} from "./routine"
+import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
+import { catalogFree } from "./catalog"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
 
@@ -162,10 +182,197 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
 const accounts = localAccountStore()
 const turns = createBotTurns({
   runTurn: (request) => runTurn(request),
+  runRoutine: (request, run) => runRoutine(request, run),
   talkOf,
   update: updateTalk,
   accountOf: (path) => accounts.get(path),
 })
+
+/*
+ * The checks every turn of a bot passes before it starts: a project's bot
+ * is asked about first (B3, `trust.ts`), and what runs is the file as it was
+ * read and trusted just now, not the copy the roster loaded earlier; a nikcli
+ * bot that grants itself the shell does not start (B8c); a project's nikcli
+ * bot loads the project's own configuration, so the project is asked about
+ * (B3b). `confirm` is the dialog; a routine passes one that always says no.
+ */
+async function admitTurn(
+  bot: AgentFile,
+  root: string | undefined,
+  confirm: (question: string) => boolean | Promise<boolean>,
+): Promise<{ ok: true; bot: AgentFile } | { ok: false; problem?: string }> {
+  let read: string | undefined
+  const verdict = await admit(bot, {
+    store: localTrustStore(),
+    read: async (path) => (read = await readBotText(path)),
+    confirm,
+  })
+  if (!verdict.ok) return verdict
+  const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+  const nikcli = runnerById(trusted.runner).id === "nikcli"
+  if (nikcli) {
+    const granted = await grantProblem(trusted, root, { read: readBotText, fs: projectFs, text: read })
+    if (granted) return { ok: false, problem: granted }
+  }
+  if (root && trusted.scope === "project" && nikcli) {
+    const project = await admitProject(root, {
+      store: localTrustStore(PROJECT_TRUST_KEY),
+      surface: () => projectSurface(root, projectFs),
+      confirm,
+    })
+    if (!project.ok) return project
+  }
+  return { ok: true, bot: trusted }
+}
+
+/* ── routines (B11) ─────────────────────────────────────────────────────── */
+
+/*
+ * Kept in the WebView's storage and looked at once a minute by a timer that
+ * lives and dies with the page: nothing runs while ADE is closed, and no
+ * process is left behind. A routine's run is the bot's own turn
+ * (`turns.routine`), after the checks above with no dialog: a routine never
+ * asks, it is suspended and says why.
+ */
+const routineStore = localRoutineStore()
+const [routineBook, setRoutineBook] = createSignal<RoutineBook>(routineStore.get())
+const [routineNow, setRoutineNow] = createSignal(Date.now())
+/** The file each routine was cleared to run, between `prepare` and `start`. */
+const clearedBots = new Map<string, AgentFile>()
+
+async function readBotFile(path: string): Promise<AgentFile | undefined> {
+  try {
+    const text = await readBotText(path)
+    return readAgentFile({ path, scope: projectOfBotPath(path) ? "project" : "global", text })
+  } catch {
+    return undefined
+  }
+}
+
+/* nikcli's catalog of one provider, read again after ten minutes; one that could not be read is not kept. */
+const catalogs = new Map<string, { at: number; text: Promise<string> }>()
+const loadCatalog = (provider: string) => {
+  const kept = catalogs.get(provider)
+  if (kept && Date.now() - kept.at < 10 * 60_000) return kept.text
+  const text = modelCatalogText(provider)
+  catalogs.set(provider, { at: Date.now(), text })
+  void text.then((read) => {
+    if (!read) catalogs.delete(provider)
+  })
+  return text
+}
+
+/** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
+async function catalogFreeOf(bot: AgentFile): Promise<boolean | undefined> {
+  if (runnerById(bot.runner).id !== "nikcli" || !bot.model) return undefined
+  return catalogFree(bot.model, loadCatalog)
+}
+
+const botContext = async (bot: AgentFile): Promise<RoutineContext> => ({
+  runner: runnerById(bot.runner).id,
+  model: bot.model,
+  account: accounts.get(bot.path),
+  free: await catalogFreeOf(bot),
+})
+
+const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
+  const next = change(routineStore.get())
+  routineStore.set(next)
+  setRoutineBook(next)
+}
+
+const routineScheduler = createRoutineScheduler({
+  store: routineStore,
+  botOf: async (path) => {
+    const bot = await readBotFile(path)
+    return bot ? botContext(bot) : undefined
+  },
+  prepare: async (routine) => {
+    const bot = await readBotFile(routine.bot)
+    if (!bot) return { ok: false, problem: t("bots.routine.suspended.noBot") }
+    // Codex on a subscription only in a project the user trusts (B11, «B11 in dettaglio»).
+    if (runnerById(bot.runner).id === "codex") {
+      const root = routine.cwd
+      if (!root) return { ok: false, problem: t("bots.routine.suspended.noProject") }
+      const project = await admitProject(root, {
+        store: localTrustStore(PROJECT_TRUST_KEY),
+        surface: () => projectSurface(root, projectFs),
+        confirm: () => false,
+      })
+      if (!project.ok) return { ok: false, problem: project.problem ?? t("bots.routine.suspended.trust") }
+    }
+    const verdict = await admitTurn(bot, routine.cwd, () => false)
+    if (!verdict.ok) return { ok: false, problem: verdict.problem ?? t("bots.routine.suspended.trust") }
+    clearedBots.set(routine.id, verdict.bot)
+    return { ok: true, context: await botContext(verdict.bot) }
+  },
+  start: (routine, run) => {
+    const bot = clearedBots.get(routine.id)
+    clearedBots.delete(routine.id)
+    if (!bot) return undefined
+    ensureLoaded([bot.path])
+    return turns.routine(bot, routine.prompt, routine.cwd, run)
+  },
+  running: (path) => turns.running(path),
+  changed: setRoutineBook,
+})
+
+if (typeof window !== "undefined") {
+  // One timer per page, also when this module is loaded again in development.
+  const holder = window as { __adeRoutineTimer?: ReturnType<typeof setInterval> }
+  if (holder.__adeRoutineTimer !== undefined) clearInterval(holder.__adeRoutineTimer)
+  holder.__adeRoutineTimer = setInterval(() => {
+    setRoutineNow(Date.now())
+    void routineScheduler.tick()
+  }, 60_000)
+  // The first look once ADE has settled: a run missed while it was closed goes then, once.
+  setTimeout(() => void routineScheduler.tick(), 20_000)
+}
+
+const routineDeps: RoutinePanelDeps = {
+  book: routineBook,
+  runningId: () => {
+    routineBook()
+    return routineScheduler.runningId()
+  },
+  now: routineNow,
+  add: async (bot, draft, cwd) => {
+    const context = await botContext(bot)
+    const problem = routineProblem(draft, offerFor(context))
+    if (problem) return problem
+    const where = projectOfBotPath(bot.path) ?? cwd
+    if (context.runner === "codex" && !where) return t("bots.routine.suspended.noProject")
+    const fields = {
+      prompt: draft.prompt.trim(),
+      every: draft.every,
+      ...(draft.spend ? { spend: draft.spend } : {}),
+    }
+    const routine: Routine = {
+      id: crypto.randomUUID(),
+      bot: bot.path,
+      ...fields,
+      ...(where ? { cwd: where } : {}),
+      consent: await routineConsent(fields, context),
+      createdAt: Date.now(),
+    }
+    writeRoutines((book) => addRoutine(book, routine))
+    return undefined
+  },
+  remove: (id) => writeRoutines((book) => removeRoutine(book, id)),
+  pause: (id, paused) => writeRoutines((book) => pauseRoutine(book, id, paused)),
+  reconsent: async (bot, id) => {
+    const routine = routineStore.get().routines.find((entry) => entry.id === id)
+    if (!routine) return undefined
+    const context = await botContext(bot)
+    const problem = routineProblem(routine, offerFor(context))
+    if (problem) return problem
+    const consent = await routineConsent(routine, context)
+    writeRoutines((book) => reconsent(book, id, consent))
+    return undefined
+  },
+  openSource: (url) => void openExternally(url),
+  catalogFree: catalogFreeOf,
+}
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
 function ensureLoaded(paths: readonly string[]) {
@@ -441,51 +648,14 @@ export function BotsMain(props: BotsMainProps) {
     return start(bot, message)
   }
 
-  /*
-   * A project's bot is asked about first (B3, `trust.ts`). What runs is the
-   * file as it was read and trusted just now, not the copy the roster loaded
-   * earlier: a file changed in between would otherwise run unseen.
-   */
+  /* The checks of `admitTurn`, with the user's dialog. */
   const start = async (bot: AgentFile, message: string): Promise<boolean> => {
-    let read: string | undefined
-    const verdict = await admit(bot, {
-      store: localTrustStore(),
-      read: async (path) => (read = await readBotText(path)),
-      confirm: askTrust,
-    })
+    const verdict = await admitTurn(bot, props.projectRoot, askTrust)
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
       return false
     }
-    const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
-
-    // A nikcli bot that grants itself the shell would skip every question and the block list (B8c).
-    if (runnerById(trusted.runner).id === "nikcli") {
-      const granted = await grantProblem(trusted, props.projectRoot, { read: readBotText, fs: projectFs, text: read })
-      if (granted) {
-        updateTalk(bot.path, (talk) => applyProblem(talk, granted, Date.now()))
-        return false
-      }
-    }
-
-    /*
-     * nikcli also loads the project's own configuration, plugins included
-     * (B3b). A bot of the user's runs without it (`no-project-config` in
-     * `runners.ts`); a project's bot needs it, so the project is asked about.
-     */
-    const root = props.projectRoot
-    if (root && trusted.scope === "project" && runnerById(trusted.runner).id === "nikcli") {
-      const project = await admitProject(root, {
-        store: localTrustStore(PROJECT_TRUST_KEY),
-        surface: () => projectSurface(root, projectFs),
-        confirm: askTrust,
-      })
-      if (!project.ok) {
-        if (project.problem) updateTalk(bot.path, (talk) => applyProblem(talk, project.problem!, Date.now()))
-        return false
-      }
-    }
-    return turns.send(trusted, message, props.projectRoot)
+    return turns.send(verdict.bot, message, props.projectRoot)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
@@ -553,6 +723,7 @@ export function BotsMain(props: BotsMainProps) {
               models={models() ?? []}
               expression={expression(bot())}
               {...(gateway ? { gateway } : {})}
+              {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
               {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
               {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
@@ -994,6 +1165,8 @@ function BotCard(props: {
   expression: Expression
   /** The Gateway section's dependencies; absent, no section. */
   gateway?: Omit<GatewayPanelDeps, "bot">
+  /** The open project: where a routine made now runs (B11). */
+  projectRoot?: string
   onLaunch?: (bot: AgentFile) => void
   onOpenFile?: (path: string) => void
   onForget: () => void
@@ -1123,6 +1296,10 @@ function BotCard(props: {
               <GatewaySection bot={props.bot} deps={deps()} />
             </Show>
           )}
+        </Show>
+
+        <Show when={props.bot.mode !== "subagent"}>
+          <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
         </Show>
 
         <section data-slot="bots-card-section">

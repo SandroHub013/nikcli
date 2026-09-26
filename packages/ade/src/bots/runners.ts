@@ -243,6 +243,15 @@ export interface TurnSpec {
   readonly approvals?: boolean
   /** The bot's «Sempre» (`approval.ts`), with `approvals`: what Claude Code is not refused. */
   readonly always?: readonly string[]
+  /**
+   * A turn nobody watches (B11, a routine): no shell at all, not even
+   * `ade-msg`, which can open a session with a shell of its own. nikcli gets
+   * `bot-read-only`, Claude Code and Codex run read-only too (B11 review:
+   * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
+   */
+  readonly unattended?: boolean
+  /** Claude Code only: the dollars the turn may spend (`--max-budget-usd`, B11). */
+  readonly maxBudgetUsd?: number
 }
 
 /**
@@ -286,6 +295,9 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   task: ["Task"],
   todowrite: ["TodoWrite"],
 }
+
+/** What a routine's Claude Code turn is refused besides the shell: it reads, it does not write. */
+const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
 
 /*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
@@ -403,9 +415,11 @@ export function turnCommand(
             ...(fromRepository(bot) ? [] : ["no-project-config"]),
             ...(spec.remote
               ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
-              : spec.approvals
-                ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
-                : ["bot-no-shell"]),
+              : spec.unattended
+                ? ["bot-read-only"]
+                : spec.approvals
+                  ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
+                  : ["bot-no-shell"]),
           ]
           return flags.length > 0 ? { flags } : {}
         })(),
@@ -435,7 +449,8 @@ export function turnCommand(
       const remote = spec.remote
       // From a chat: lean always, no `ade-msg`, and never a shell, remote commands or not.
       const lean = spec.lean === true || remote !== undefined
-      const adeMsgOnly = lean && bot.disabledTools.includes("bash") && !repository && !remote
+      const unattended = spec.unattended === true
+      const adeMsgOnly = lean && bot.disabledTools.includes("bash") && !repository && !remote && !unattended
       if (lean) {
         /*
          * No settings file at all, the project's `.claude/settings.local.json`
@@ -445,15 +460,20 @@ export function turnCommand(
         args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
-      args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
+      args.push("--permission-mode", canWrite(bot) && !unattended ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
-        .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote) && tool === "bash"))
+        .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote || unattended) && tool === "bash"))
+        .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
         .flatMap(([, names]) => names)
-      if (lean && !repository && !remote) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
+      if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
-      if (remote && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
+      if ((remote || unattended) && !disallowed.includes("Bash")) disallowed.push("Bash", "PowerShell")
+      // A routine is read-only, like Codex's (B11 review, the Master's decision).
+      if (unattended)
+        for (const name of READ_ONLY_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
+          if (!disallowed.includes(name)) disallowed.push(name)
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       /*
@@ -464,6 +484,8 @@ export function turnCommand(
       if (allowed.includes("Bash")) disallowed.push(...claudeRefusals(spec.approvals ? (spec.always ?? []) : undefined))
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
+      const budget = spec.maxBudgetUsd
+      if (budget !== undefined && Number.isFinite(budget) && budget > 0) args.push("--max-budget-usd", String(budget))
       if (!spec.stdin) args.push("--", message)
       return { command: runner.command, args, ...accountLaunch(spec.account) }
     }
@@ -472,7 +494,8 @@ export function turnCommand(
       const repository = fromRepository(bot)
       const inOutbox = !repository && !canWrite(bot) && spec.outbox !== undefined
       // From a chat, read-only whatever the bot may do in ADE: `workspace-write` runs any command.
-      const sandbox = !repository && !spec.remote && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
+      const sandbox =
+        !repository && !spec.remote && !spec.unattended && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
       // A project's bot says no approval policy: `codex exec` runs as `never`
       // whatever it is told (see `fromRepository`), and codex-cli 0.154 exits 1
       // on `untrusted` ("no longer supported; remove this setting", B7 live).

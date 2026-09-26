@@ -26,8 +26,10 @@ function machine(options: { refuse?: string } = {}) {
   const writes: string[] = []
   const flags: (readonly string[] | undefined)[] = []
   const secrets: (readonly string[] | undefined)[] = []
+  const argv: (readonly string[])[] = []
   const host = {
     spawn: async (spawn: {
+      args?: readonly string[]
       flags?: readonly string[]
       secrets?: readonly string[]
       onExit: (code: number | null) => void
@@ -39,6 +41,7 @@ function machine(options: { refuse?: string } = {}) {
       if (spawn.onData) data.push(spawn.onData)
       flags.push(spawn.flags)
       secrets.push(spawn.secrets)
+      argv.push(spawn.args ?? [])
       if (options.refuse) {
         spawn.onLine(options.refuse, "err")
         spawn.onExit(null)
@@ -58,6 +61,7 @@ function machine(options: { refuse?: string } = {}) {
     spawned: () => exits.length,
     flags,
     secrets,
+    argv,
     exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
     say: (line: string, at = lines.length - 1) => lines[at]?.(line, "out"),
     /** Raw output, as a pty gives it: where nikcli draws its permission menu. */
@@ -422,6 +426,79 @@ describe("the Bots panel's turns", () => {
     await tick()
     expect(m.flags[0]).toEqual(["account-key"])
     expect(m.secrets[0]).toEqual(["lavoro"])
+    p.turns.stop(claude)
+    await tick()
+  })
+})
+
+/*
+ * B11: a routine's run is the bot's own turn, in its thread, but nobody is
+ * there to answer: no approvals and no shell, whatever the panel allows.
+ */
+describe("a routine's run", () => {
+  test("goes in the thread, marked, with the shell denied, and waits for the bot's own turn", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    const turn = p.turns.routine(nikcli, "fai il punto")
+    expect(turn).toBeDefined()
+    await tick()
+    expect(m.flags[0]).toEqual(["bot-read-only"])
+    const messages = p.talk(nikcli.path).messages
+    expect(messages.map((message) => message.role)).toEqual(["tool", "user"])
+    expect(p.turns.routine(nikcli, "ancora")).toBeUndefined()
+    expect(p.turns.send(nikcli, "ancora")).toBe(false)
+    m.exit(0)
+    await turn!.result
+    // The panel's own turn still asks about every command.
+    expect(p.turns.send(nikcli, "a mano")).toBe(true)
+    await tick()
+    expect(m.flags[1]).toEqual(["bot-ask-shell"])
+  })
+
+  test("whatever nikcli asks during a routine is refused at once (review, BASSO 1)", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    const turn = p.turns.routine(nikcli, "fai il punto")
+    await tick()
+    m.print(menu("edit", "src/index.ts"))
+    p.quiet()
+    expect(m.writes).toEqual([REJECT])
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    expect(p.talk(nikcli.path).messages.at(-1)?.text).toContain("nessuno può rispondere")
+    // Nothing waits on the question: no expiry left behind.
+    expect(p.timers.filter((timer) => !timer.cancelled && timer.ms !== MENU_QUIET_MS)).toEqual([])
+    m.exit(0)
+    await turn!.result
+  })
+
+  test("Claude Code is refused the shell for a routine, not in the panel", async () => {
+    const m = machine()
+    const p = panel(m)
+    // The user's own bot: a project's never has the shell, routine or not.
+    const claude: AgentFile = { ...bot("claude"), scope: "global" }
+    const disallowed = (at: number) => {
+      const args = m.argv[at] ?? []
+      return args[args.indexOf("--disallowedTools") + 1] ?? ""
+    }
+    const allowed = (at: number) => {
+      const args = m.argv[at] ?? []
+      return args[args.indexOf("--allowedTools") + 1] ?? ""
+    }
+    const turn = p.turns.routine(claude, "fai il punto", undefined, { maxCostUsd: 0.05 })
+    await tick()
+    expect(disallowed(0).split(",")).toContain("Bash")
+    // The run's cap reaches Claude Code (review, M1); the panel's own turn has none.
+    expect(m.argv[0]).toContain("--max-budget-usd")
+    expect(allowed(0).split(",")).not.toContain("Bash")
+    m.exit(0)
+    await turn!.result
+    p.turns.send(claude, "a mano")
+    await tick()
+    expect(allowed(1).split(",")).toContain("Bash")
+    expect(m.argv[1]).not.toContain("--max-budget-usd")
+    // Its place on the plan back, for the tests after this one.
     p.turns.stop(claude)
     await tick()
   })

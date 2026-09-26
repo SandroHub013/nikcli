@@ -250,7 +250,12 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
 
   test("il pannello chiede grantProblem per ogni bot su nikcli prima di mandare il turno", () => {
     const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-    const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(trusted"))
-    expect(start).toMatch(/runnerById\(trusted\.runner\)\.id === "nikcli"\) \{\s*const granted = await grantProblem\(/)
+    const checks = view.slice(view.indexOf("async function admitTurn"), view.indexOf("return { ok: true, bot: trusted }"))
+    expect(checks).toMatch(/const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"\s*if \(nikcli\) \{\s*const granted = await grantProblem\(/)
+    // The panel's turn and a routine's run (B11) both pass there before they start.
+    const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(verdict.bot"))
+    expect(start).toContain("await admitTurn(bot, props.projectRoot, askTrust)")
+    const prepare = view.slice(view.indexOf("prepare: async (routine)"), view.indexOf("clearedBots.set(routine.id"))
+    expect(prepare).toContain("await admitTurn(bot, routine.cwd, () => false)")
   })
 })

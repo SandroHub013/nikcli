@@ -532,10 +532,20 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
 /// program with fixed arguments, it writes nothing and reads nothing but
 /// itself, and the top bar asks it a few times a day. A second command would
 /// have been a second thing to keep in step with this list for no gain.
+/// The providers whose catalog ADE reads, from `chat/model.ts`.
+const CATALOG_PROVIDERS: &[&str] = &["opencode", "ollama", "lmstudio"];
+
 fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
     match args {
         [only] if only == "--version" => Ok(()),
         [only] if only == "models" => Ok(()),
+        // One provider's catalog with its prices, for whether a routine's model is free (B11, `bots/catalog.ts`):
+        // only the providers whose price of 0 means free (`RELIABLE_COST_PROVIDERS`, `LOCAL_PROVIDERS`).
+        [models, provider, verbose]
+            if models == "models" && verbose == "--verbose" && CATALOG_PROVIDERS.contains(&provider.as_str()) =>
+        {
+            Ok(())
+        }
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
                 return Err("argomenti di nikcli agent create incompleti".to_string());
@@ -569,6 +579,7 @@ fn nikcli_timeout(args: &[String]) -> Duration {
     match args {
         [only] if only == "--version" => Duration::from_secs(15),
         [only] if only == "models" => Duration::from_secs(30),
+        [models, ..] if models == "models" => Duration::from_secs(30),
         [agent, create, ..] if agent == "agent" && create == "create" => Duration::from_secs(120),
         _ => Duration::from_secs(120),
     }
@@ -2448,6 +2459,7 @@ mod tests {
 
         assert!(check_nikcli_args(&roots, &args(&["--version"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
+        assert!(check_nikcli_args(&roots, &args(&["models", "opencode", "--verbose"])).is_ok());
         assert!(check_nikcli_args(
             &roots,
             &args(&["agent", "create", "--path", &home, "--description", "a", "--mode", "primary", "--tools", ""])
@@ -2456,6 +2468,10 @@ mod tests {
         for bad in [
             &["run", "rm -rf"][..],
             &["models", "--x"],
+            &["models", "openrouter", "--verbose"],
+            &["models", "opencode", "--refresh"],
+            &["models", "opencode"],
+            &["models", "opencode", "--verbose", "--x"],
             &["--version", "--x"],
             &["--help"],
             &["agent", "create", "--description", "a"],

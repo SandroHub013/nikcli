@@ -66,6 +66,7 @@ const USERS: Record<string, object> = {
   "bash a pattern": { bash: { "*": "allow", "git push *": "ask" } },
   "*: allow dopo bash": { bash: "ask", "*": "allow" },
   "*: allow e basta": { "*": "allow" },
+  "scrittura allow": { edit: "allow", write: "allow", repo_clone: "allow", "*": "allow" },
   "tutto allow, poi *": {
     bash: { "git *": "ask", "ls *": "allow" },
     external_directory: "allow",
@@ -131,6 +132,13 @@ for (const [flag, raw] of flags) {
     if (value["bash"] === "deny") {
       const hidden = PermissionRuleset.disabled(["bash"], PermissionRuleset.fromConfig(merged)).has("bash")
       check(hidden, `${flag}, ${user}: la shell negata resta visibile al modello`)
+    }
+    // A routine only reads (B11 review): every tool that writes is hidden, by nikcli's own tool names.
+    if (value["edit"] === "deny") {
+      const writers = ["edit", "write", "multiedit", "apply_patch", "patch", "repo_clone", "generate_image", "artifact"]
+      const hidden = PermissionRuleset.disabled(writers, PermissionRuleset.fromConfig(merged))
+      for (const tool of writers) check(hidden.has(tool), `${flag}, ${user}: ${tool} resta visibile al modello`)
+      check(action(merged, "src/index.ts", "read") !== "deny", `${flag}, ${user}: anche la lettura è negata`)
     }
   }
 }

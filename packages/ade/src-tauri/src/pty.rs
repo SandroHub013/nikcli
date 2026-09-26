@@ -180,7 +180,9 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// `SHUTDOWN` would pass a user's `"bash": "allow"` under any list of
 /// spellings. Where ADE answers the menu, every command is asked, and
 /// `approval.ts`, which ignores case, refuses the block list; where nobody
-/// answers (`bot-no-shell`, a routine), the shell is denied. The same holds
+/// answers (`bot-no-shell`, a routine), the shell is denied. A routine also
+/// only reads (`bot-read-only`, B11 review): every tool that writes a file,
+/// clones a repository, makes an image or publishes one is denied as well. The same holds
 /// for the other tools nikcli asks about (third check): outside the project,
 /// the computer and a browser are asked where ADE answers, denied where it
 /// does not, and never left to the user's rule. The asking flags
@@ -220,7 +222,19 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
         "NIKCLI_PERMISSION",
         r#"{"bash":"deny","external_directory":"deny","computer":"deny","browser_control":"deny"}"#,
     ),
+    (
+        "bot-read-only",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"deny","external_directory":"deny","computer":"deny","browser_control":"deny","edit":"deny","write":"deny","patch":"deny","repo_clone":"deny","generate_image":"deny","artifact":"deny"}"#,
+    ),
 ];
+
+/// What `bot-read-only` denies besides `bot-no-shell`: `edit` is what nikcli's
+/// edit, write, multiedit and apply_patch ask (`TOOL_PERMISSION`, ruleset.ts);
+/// `write` and `patch` are there for any tool that asks under its own name.
+#[cfg(test)]
+const READ_ONLY_TOOLS: &[&str] = &["edit", "write", "patch", "repo_clone", "generate_image", "artifact"];
 
 /// The flags whose `NIKCLI_PERMISSION` carries the block list.
 const BLOCK_LIST_FLAGS: &[&str] = &["remote-ask-shell", "bot-ask-shell"];
@@ -2279,6 +2293,11 @@ mod tests {
             serde_json::json!({ "bash": bash, "external_directory": rest, "computer": rest, "browser_control": rest })
         };
         assert_eq!(permission("bot-no-shell"), tools("deny", "deny"));
+        let mut read_only = tools("deny", "deny");
+        for tool in super::READ_ONLY_TOOLS {
+            read_only[*tool] = serde_json::Value::from("deny");
+        }
+        assert_eq!(permission("bot-read-only"), read_only);
         assert_eq!(permission("bot-ask-shell"), tools("ask", "ask"));
         assert_eq!(permission("bot-ask-outside"), tools("deny", "ask"));
         assert!(super::spawn_flag_env("claude", &["bot-ask-shell".to_string()]).is_err());
@@ -2496,6 +2515,7 @@ mod tests {
             "{}",
             r#"{"*":"allow"}"#,
             r#"{"bash":"allow","*":"allow"}"#,
+            r#"{"edit":"allow","repo_clone":"allow","artifact":"allow","*":"allow"}"#,
             // No nested "*": `ordered` finds a key by its first occurrence.
             r#"{"bash":{"git *":"ask","ls *":"allow"},"external_directory":"allow","computer":"allow","*":"allow"}"#,
         ];
@@ -2567,12 +2587,40 @@ mod tests {
                 continue;
             }
             let env = super::spawn_flag_env("nikcli", &[name.to_string()]).unwrap();
-            let answered = *name != "bot-no-shell";
+            let answered = !["bot-no-shell", "bot-read-only"].contains(name);
             for tool in ["bash", "external_directory", "computer", "browser_control"] {
                 let got = nikcli_evaluate(env[0].1, r#"{"*":"allow"}"#, tool, "x");
                 assert!(got == "deny" || (answered && got == "ask"), "{name}: {tool} → {got}");
             }
         }
+    }
+
+    /*
+     * B11 review: a routine only reads. Under any user rule, every tool that
+     * writes is denied, and hidden from the model as nikcli's `disabled`
+     * hides a tool whose last rule is `"*"` denied; reading stays the user's.
+     */
+    #[test]
+    fn a_routine_writes_nothing_whatever_the_user_allows() {
+        let env = super::spawn_flag_env("nikcli", &["bot-read-only".to_string()]).unwrap();
+        let hidden = |user: &str, permission: &str| {
+            nikcli_rules(env[0].1, user)
+                .into_iter()
+                .rev()
+                .find(|(key, _, _)| nikcli_wildcard(permission, key))
+                .is_some_and(|(_, glob, action)| glob == "*" && action == "deny")
+        };
+        for user in ["{}", r#"{"*":"allow"}"#, r#"{"edit":"allow","write":"allow","*":"allow"}"#] {
+            for tool in super::READ_ONLY_TOOLS {
+                assert_eq!(nikcli_evaluate(env[0].1, user, tool, "src/index.ts"), "deny", "{user}: {tool}");
+                assert!(hidden(user, tool), "{user}: {tool}");
+            }
+            for tool in ["bash", "external_directory", "computer", "browser_control"] {
+                assert_eq!(nikcli_evaluate(env[0].1, user, tool, "x"), "deny", "{user}: {tool}");
+            }
+        }
+        assert_eq!(nikcli_evaluate(env[0].1, r#"{"*":"allow"}"#, "read", "src/index.ts"), "allow");
+        assert!(env[0].1.len() < 24_000);
     }
 
     /// For `scripts/check-nikcli-permission.ts`: each flag's `NIKCLI_PERMISSION`, as set, one line each.

@@ -72,6 +72,15 @@ export interface TurnRequest {
   readonly approvals?: boolean
   /** The bot's «Sempre», with `approvals` (`TurnSpec.always`). */
   readonly always?: readonly string[]
+  /** Nobody watches the turn: no shell at all (B11, `TurnSpec.unattended`). */
+  readonly unattended?: boolean
+  /**
+   * Dollars the turn may spend (B11, a routine's cap per run): past them it
+   * is stopped at once, with its child processes, and says so. Claude Code
+   * reports its cost only at the end, so it is told as well
+   * (`TurnSpec.maxBudgetUsd`).
+   */
+  readonly maxCostUsd?: number
 }
 
 /**
@@ -217,6 +226,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.account ? { account: request.account } : {}),
       ...(request.approvals ? { approvals: true } : {}),
       ...(request.always ? { always: request.always } : {}),
+      ...(request.unattended ? { unattended: true } : {}),
+      ...(request.maxCostUsd !== undefined ? { maxBudgetUsd: request.maxCostUsd } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 
@@ -230,6 +241,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     if (request.mailbox && token) registerSender(request.mailbox.id, token)
     const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
     let timedOut = false
+    /* The turn spent more than `maxCostUsd`. */
+    let overBudget = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let exited = false
     let lingering: ReturnType<typeof setTimeout> | undefined
@@ -266,6 +279,12 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
               request.onLine?.(line)
               const before = talk
               update(applyRunnerLine(runner, talk, line, Date.now()))
+              if (request.maxCostUsd !== undefined && !overBudget && talk.costUsd > request.maxCostUsd) {
+                overBudget = true
+                kill?.()
+                resolve(null)
+                return
+              }
               // stderr shares the stream: an error the CLI printed is the last plain line (review B7, BASSO 3).
               const plain = stripAnsi(line).trim()
               // Scrub before the cut, so a key that runs past the 300th character is not sliced in half and kept.
@@ -297,7 +316,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             markTurn("cli-spawned")
             kill = () => session.kill({ tree: true })
             write = (keys) => session.write(keys)
-            if (stopped || timedOut) {
+            if (stopped || timedOut || overBudget) {
               kill()
               resolve(null)
             }
@@ -306,6 +325,12 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       })
       if (timedOut) {
         const problem = timeoutProblem(runner.label, timeoutMs)
+        update(applyProblem(talk, problem, Date.now()))
+        return finish("error", problem)
+      }
+      if (overBudget) {
+        const usd = (value: number) => `${value.toFixed(2)} $`
+        const problem = t("bots.turn.overBudget", runner.label, usd(talk.costUsd), usd(request.maxCostUsd ?? 0))
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }

@@ -410,6 +410,21 @@ export async function listModels(cwd?: string): Promise<string[]> {
   }
 }
 
+/**
+ * One provider's catalog, with its prices (`nikcli models <provider>
+ * --verbose`), for `catalog.ts`. Empty when it cannot be read.
+ */
+export async function modelCatalogText(provider: string, cwd?: string): Promise<string> {
+  const host = await getHost()
+  if (!host?.nikcliBot) return ""
+  try {
+    const result = await host.nikcliBot(["models", provider, "--verbose"], cwd)
+    return result.code === 0 ? result.stdout : ""
+  } catch {
+    return ""
+  }
+}
+
 /** What to run to open a session as this bot. */
 export function botLaunch(bot: AgentFile): { agentId: string; command: string; args: string[] } | undefined {
   /*

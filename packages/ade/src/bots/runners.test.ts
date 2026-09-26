@@ -553,13 +553,14 @@ describe("un turno da chat non ha la shell", () => {
   })
 
   test("M1: ogni turno su nikcli ha un solo flag sui permessi, che nega la shell o la chiede", () => {
-    const withBlock = ["bot-no-shell", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell", "remote-no-shell"]
+    const withBlock = ["bot-no-shell", "bot-read-only", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell", "remote-no-shell"]
     const cases = [
       { bot: mine, message: "x" },
       { bot: { ...bot, scope: "project" as const }, message: "x" },
       { bot: mine, message: "x", approvals: true },
       { bot: { ...mine, disabledTools: ["bash"] }, message: "x", approvals: true },
       { bot: mine, message: "x", remote: on },
+      { bot: mine, message: "x", approvals: true, unattended: true },
     ]
     for (const spec of cases) {
       const flags = turnCommand(runnerById("nikcli"), spec).flags ?? []
@@ -745,5 +746,44 @@ describe("B8c: Claude Code e le approvazioni", () => {
     ])
     expect(blocked.offer).toBeUndefined()
     expect(blocked.messages.at(-1)!.text).toContain("Format-Volume -DriveLetter D")
+  })
+})
+
+describe("a turn nobody watches (B11, a routine)", () => {
+  test("no shell on any runner: nikcli without its shell, Codex read-only", () => {
+    const own = { ...bot, scope: "global" as const }
+    const nikcli = turnCommand(runnerById("nikcli"), { bot: own, message: "x", approvals: true, unattended: true })
+    // Read-only as well (B11 review): nothing that writes, whatever the user's rules.
+    expect(nikcli.flags).toEqual(["no-project-config", "bot-read-only"])
+    const codex = turnCommand(runnerById("codex"), { bot: { ...own, runner: "codex" }, message: "x", unattended: true })
+    expect(codex.args.join(" ")).toContain('sandbox_mode="read-only"')
+    const claude = turnCommand(runnerById("claude"), { bot: { ...own, runner: "claude" }, message: "x", lean: true, unattended: true })
+    const allowed = claude.args[claude.args.indexOf("--allowedTools") + 1] ?? ""
+    expect(allowed).not.toContain("Bash")
+    expect(allowed).not.toContain("ade-msg")
+  })
+
+  test("a routine on Claude Code is read-only, like Codex's (B11 review)", () => {
+    const own = { ...bot, scope: "global" as const, runner: "claude" }
+    const routine = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true, unattended: true })
+    const option = (name: string) => (routine.args[routine.args.indexOf(name) + 1] ?? "").split(",")
+    expect(option("--permission-mode")).toEqual(["default"])
+    for (const name of ["Edit", "NotebookEdit", "Write"]) {
+      expect(option("--allowedTools")).not.toContain(name)
+      expect(option("--disallowedTools")).toContain(name)
+    }
+    expect(option("--allowedTools")).toContain("Read")
+    // The panel's own turn still writes.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true })
+    expect(panel.args[panel.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+  })
+
+  test("Claude Code is told the run's cap, before the message (B11 review, M1)", () => {
+    const own = { ...bot, scope: "global" as const, runner: "claude" }
+    const capped = turnCommand(runnerById("claude"), { bot: own, message: "x", unattended: true, maxBudgetUsd: 0.05 })
+    const at = capped.args.indexOf("--max-budget-usd")
+    expect(capped.args[at + 1]).toBe("0.05")
+    expect(at).toBeLessThan(capped.args.indexOf("--"))
+    expect(turnCommand(runnerById("claude"), { bot: own, message: "x" }).args).not.toContain("--max-budget-usd")
   })
 })

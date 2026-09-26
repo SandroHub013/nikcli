@@ -113,7 +113,7 @@ describe("una routine parte come gli altri spawn", () => {
           },
         }) as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
     }
-    const turn = runRoutine({ runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } }, deps)
+    const turn = runRoutine({ runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } }, {}, deps)
     while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     exit(0)
     await turn.result
@@ -122,10 +122,24 @@ describe("una routine parte come gli altri spawn", () => {
 
     const refused = await runRoutine(
       { runner: "codex", message: "ciao", bot: bot("codex"), account: { mode: "key", key: "lavoro" } },
+      {},
       deps,
     ).result
     expect(seen).toHaveLength(1)
     expect(refused.status).toBe("error")
     expect(refused.problem).toContain("non riporta un costo")
+  })
+
+  test("in ADE Test a paid model does not start at spawn either (review, M2)", async () => {
+    const root = globalThis as { document?: unknown }
+    const before = root.document
+    root.document = { documentElement: { dataset: { adeBuild: "test" } } }
+    try {
+      const refused = await runRoutine({ runner: "nikcli", message: "ciao", bot: { ...bot("nikcli"), model: "openrouter/openai/gpt-4o" } }).result
+      expect(refused.status).toBe("error")
+      expect(refused.problem).toContain("ADE Test")
+    } finally {
+      root.document = before
+    }
   })
 })

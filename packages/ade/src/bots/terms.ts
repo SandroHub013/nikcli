@@ -176,8 +176,10 @@ export function routineModeOf(
   runner: string | undefined,
   accountMode: "plan" | "key" | undefined,
   model: string | undefined,
+  /** The catalog's word (`catalog.ts`); absent, the `:free` suffix. */
+  free?: boolean,
 ): RoutineMode {
-  if (!runner || runner === "nikcli") return typeof model === "string" && /:free$/i.test(model.trim()) ? "free" : "paid"
+  if (!runner || runner === "nikcli") return (free ?? (typeof model === "string" && /:free$/i.test(model.trim()))) ? "free" : "paid"
   return accountMode === "key" ? "key" : "plan"
 }
 
@@ -185,9 +187,10 @@ export function routinePolicy(
   runner: string,
   mode: RoutineMode,
   model?: string | undefined,
+  free?: boolean,
 ): { readonly allowed: true; readonly cap: RoutineCap } | { readonly allowed: false; readonly reason: string } {
   if (runner === "grok") return { allowed: false, reason: "i termini xAI non sono stati letti" }
-  const effective: RoutineMode = runner === "nikcli" ? (typeof model === "string" && /:free$/i.test(model.trim()) ? "free" : "paid") : mode
+  const effective: RoutineMode = runner === "nikcli" ? routineModeOf(runner, undefined, model, free) : mode
   const row = ROUTINE_POLICY.find((entry) => entry.runner === runner && entry.mode === effective)
   if (!row || !row.allowed || !row.cap) {
     return { allowed: false, reason: row?.reason ?? "questo runner non può eseguire routine" }

@@ -84,12 +84,13 @@ const LOCAL_PROVIDERS: ReadonlySet<string> = new Set(["ollama", "lmstudio"])
  * costs nothing, is free, and does not end in a colon.
  */
 const RELIABLE_COST_PROVIDERS: ReadonlySet<string> = new Set(["opencode"])
+/* ADE reads these providers' catalogs from nikcli: keep `CATALOG_PROVIDERS` in `lib.rs` the same. */
 
 /**
  * Whether a cost of 0 from this provider can be believed, and therefore whether
  * a model that costs nothing to run is free.
  */
-function hasReliableCost(providerID: string | undefined): boolean {
+export function hasReliableCost(providerID: string | undefined): boolean {
   return (
     providerID !== undefined &&
     (LOCAL_PROVIDERS.has(providerID) || RELIABLE_COST_PROVIDERS.has(providerID))
