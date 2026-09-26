@@ -86,9 +86,13 @@ const ESPEAK_DATA: Download = Download {
  */
 const HOST_EXE: Option<Download> = None;
 
-/// What the installed revision looks like on disk, relative to the root.
+/// What the installed revision looks like on disk.
+///
+/// `root` is `…/tts/kokoro`, a sibling of Piper's folder and not inside it: the
+/// two backends have their own runtime, their own files and their own installer
+/// slot, and a backend's folder inside another's is how a cleanup takes both.
 fn home(root: &Path) -> PathBuf {
-    root.join("tts").join("kokoro").join(REV)
+    root.join(REV)
 }
 
 fn host_exe(root: &Path) -> PathBuf {
@@ -377,10 +381,29 @@ fn push_varint(out: &mut Vec<u8>, mut value: u64) {
 /* ----------------------------------------------------------------- the child */
 
 /// The first line the host writes, and the only one read before a request.
+///
+/// K4a measured its shape: `{"v":1,"ready":true,"loadMs":…}` when the model is
+/// loaded, and the same line with `ready:false` and an `error` when it is not —
+/// `missing:model` or `missing:dll`, with exit code 2. The error is the host's own
+/// words about what it could not find, and ADE shows it rather than guessing.
 #[derive(Debug, Deserialize)]
 struct Hello {
     v: u32,
     ready: bool,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default, rename = "loadMs")]
+    load_ms: Option<u64>,
+}
+
+/// What ADE says when the host could not start, in the user's words.
+fn why_not_ready(hello: &Hello) -> String {
+    match hello.error.as_deref() {
+        Some("missing:model") => "Il modello di Kokoro non è dove l'host lo cerca.".into(),
+        Some("missing:dll") => "La libreria di Kokoro non è dove l'host la cerca.".into(),
+        Some(other) => format!("L'host di Kokoro: {other}"),
+        None => "L'host di Kokoro non ha caricato il modello.".into(),
+    }
 }
 
 /// One answer from the host, on one line.
@@ -594,7 +617,15 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
     };
     let hello: Hello = serde_json::from_str(&first).map_err(|_| "L'host di Kokoro non parla il protocollo.".to_string())?;
     if !hello.ready {
-        return Err("L'host di Kokoro non ha caricato il modello.".into());
+        // Il suo errore è più utile di un errore generico: sa lui quale dei due
+        // file non ha trovato, e ADE non deve indovinare.
+        return Err(why_not_ready(&hello));
+    }
+    if let Some(load_ms) = hello.load_ms {
+        // Il primo caricamento è lento, ed è il numero che dice quanto. Sta in un
+        // log e non in un messaggio: l'utente non aspetta un modello, aspetta una
+        // voce.
+        eprintln!("Kokoro: modello caricato in {load_ms} ms");
     }
     if hello.v != PROTOCOL {
         return Err(format!(
@@ -603,6 +634,27 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
         ));
     }
     Ok(Box::new(Local { child, stdin, rx, fresh: true }))
+}
+
+/// How long a sentence may be before ADE refuses to send it.
+///
+/// The host has no limit of its own and K5 cuts the units, so this is a backstop
+/// for a caller that does not: a synthesis of minutes holds the one-at-a-time
+/// queue for minutes, and every reply behind it waits. Measured in characters
+/// because that is what the text is, and a reply of this size is already a page.
+pub const TEXT_LIMIT: usize = 4_000;
+
+/// A name for the WAV of one request, unique and never from the page.
+///
+/// The host writes where ADE says, and ADE says here: a folder it owns, a name
+/// with the token and a counter in it, and the file is deleted as soon as it has
+/// been read. A path that came from the interface would be a path to write to.
+fn out_for(root: &Path, token: u64) -> Result<PathBuf, String> {
+    let scratch = root.join("scratch");
+    std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(scratch.join(format!("kokoro-{token}-{n}.wav")))
 }
 
 /// One sentence through whichever child is running, starting one if needed.
@@ -619,6 +671,13 @@ pub fn speak_blocking(
     locale: &str,
 ) -> Result<Vec<u8>, String> {
     let (sid, lang) = speaker_of(voice).ok_or("Questa voce non è una voce Kokoro.")?;
+    if text.chars().count() > TEXT_LIMIT {
+        return Err(format!(
+            "La frase da {} caratteri è troppo lunga per una voce ({TEXT_LIMIT} il massimo).",
+            text.chars().count()
+        ));
+    }
+    let out = out_for(root, token)?;
     let mut guard = state.0.lock();
     if guard.as_mut().is_some_and(|child| !child.alive()) {
         // A process that died keeps its slot until something replaces it, and
@@ -635,9 +694,9 @@ pub fn speak_blocking(
         *guard = None;
         return Err(format!("L'host di Kokoro parla una versione diversa da {PROTOCOL}."));
     }
-    let scratch = root.join("scratch");
-    std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
-    let out = scratch.join(format!("kokoro-{}.wav", std::process::id()));
+    // L'host non annulla: quello che è già stato mandato finisce, e il suo WAV si
+    // butta. Il segno dell'abbandono è già stato consumato dal comando, che è
+    // l'unico posto dove può farlo: qui la richiesta parte.
     let attempt = child.say(token, text, sid, &format!("{}-{}", lang, phonemizer_lang(locale)), &out);
     if attempt.is_err() {
         // A child that failed is not asked again: a half-written WAV and a
@@ -745,6 +804,51 @@ mod tests {
         assert!(!answer_is_ours("sherpa: bla", 7));
         assert_eq!(error_in(r#"{"id":7,"error":"voce sconosciuta"}"#), Some("voce sconosciuta".into()));
         assert_eq!(error_in(r#"{"id":7,"synthMs":1}"#), None);
+    }
+
+    #[test]
+    fn la_prima_riga_si_legge_come_l_host_la_scrive() {
+        // Le due righe che K4a ha misurato: il caricamento e il rifiuto, che
+        // esce con 2 e dice quale dei due file non ha trovato.
+        let ok: Hello = serde_json::from_str(r#"{"v":1,"ready":true,"loadMs":8123}"#).unwrap();
+        assert!(ok.ready);
+        assert_eq!(ok.v, PROTOCOL);
+        assert_eq!(ok.load_ms, Some(8_123));
+        assert_eq!(why_not_ready(&ok), "L'host di Kokoro non ha caricato il modello.");
+
+        let no_model: Hello = serde_json::from_str(r#"{"error":"missing:model","loadMs":0,"ready":false,"v":1}"#).unwrap();
+        assert!(!no_model.ready);
+        assert_eq!(why_not_ready(&no_model), "Il modello di Kokoro non è dove l'host lo cerca.");
+
+        let no_dll: Hello = serde_json::from_str(r#"{"error":"missing:dll","loadMs":0,"ready":false,"v":1}"#).unwrap();
+        assert_eq!(why_not_ready(&no_dll), "La libreria di Kokoro non è dove l'host la cerca.");
+
+        // Un errore che ADE non conosce passa come viene: l'host sa più di noi.
+        let other: Hello = serde_json::from_str(r#"{"error":"bad-args:unknown","ready":false,"v":1}"#).unwrap();
+        assert_eq!(why_not_ready(&other), "L'host di Kokoro: bad-args:unknown");
+    }
+
+    #[test]
+    fn il_wav_si_genera_qui_e_ha_un_nome_per_ogni_richiesta() {
+        let root = Path::new("tts").join("prova-out");
+        let first = out_for(&root, 7).unwrap();
+        let second = out_for(&root, 7).unwrap();
+        // Due richieste con lo stesso token non possono scrivere sullo stesso
+        // file: il nome porta anche un contatore.
+        assert_ne!(first, second);
+        assert!(first.starts_with(&root));
+        assert!(first.extension().is_some_and(|ext| ext == "wav"));
+        // E il percorso è dentro la cartella di ADE, mai uno che viene dalla pagina.
+        assert!(first.parent().is_some_and(|parent| parent.ends_with("scratch")));
+    }
+
+    #[test]
+    fn il_testo_ha_un_tetto() {
+        assert_eq!(TEXT_LIMIT, 4_000);
+        // Il tetto è in caratteri, non in byte: una risposta con accenti non
+        // viene rifiutata perché pesa di più.
+        let lunga = "a".repeat(TEXT_LIMIT + 1);
+        assert!(lunga.chars().count() > TEXT_LIMIT);
     }
 
     #[test]

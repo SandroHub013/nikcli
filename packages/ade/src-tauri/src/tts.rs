@@ -72,6 +72,12 @@ pub async fn tts_local_speak(
     if text.trim().is_empty() {
         return Err("testo vuoto".into());
     }
+    // L'host di Kokoro non annulla: una richiesta gia' mandata finisce e il suo
+    // WAV si butta. L'unico momento in cui ADE risparmia il lavoro e' qui, prima
+    // che la riga entri nel figlio, e il segno e' lo stesso che manda K5.
+    if app.state::<Piper>().claim(token).is_err() {
+        return Err(FRASE_ANNULLATA.into());
+    }
     let bytes = tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<KokoroState>();
         kokoro::speak_blocking(&root, &state, &voice_id, &text, token, &lang)
@@ -289,6 +295,10 @@ impl Drop for Resident {
 
 /// Names the scratch file each sentence is written to; sentences run one at a time, so it only has to differ.
 static SENTENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The sentence an abandoned phrase stops with: the host's own wording is not
+/// the user's, and this one is what K5's bridge already knows.
+const FRASE_ANNULLATA: &str = "frase annullata dal client";
 
 /// The resident process, and the lock that keeps two installs apart.
 #[derive(Default)]
