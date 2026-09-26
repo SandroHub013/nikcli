@@ -417,11 +417,14 @@ body[data-theme="glass"] #root,
     transform var(--ade-dur-fast) var(--ade-ease);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
-  /* One ring, applied everywhere through :focus-visible. The second, softer
-     ring is what keeps it visible on top of an accent-filled button. */
+  /* One ring, applied everywhere through :focus-visible, and neutral in every
+     theme (composer-nero, contorni A). It is the token ~20 sheets reach for, so
+     this is where the green stops. The colour is `--ade-border-strong`, which
+     is defined per theme, and the softer second layer is the same grey mixed
+     with nothing — the geometry is unchanged, only the hue. */
   --ade-focus-ring:
-    0 0 0 2px var(--ade-accent),
-    0 0 0 4px var(--ade-accent-glow);
+    0 0 0 2px var(--ade-border-strong),
+    0 0 0 4px color-mix(in srgb, var(--ade-border-strong) 45%, transparent);
 
   --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
 
@@ -621,8 +624,11 @@ body,
   box-shadow: var(--ade-pane-shadow, 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45)));
 }
 
+/* The focused pane is told apart by a neutral grey a shade above the resting
+   border, in every theme: the accent ring round the active pane is what the
+   user asked to be rid of (contorni A). */
 [data-slot="grid-cell"] > [data-component][data-focused] {
-  outline: var(--ade-pane-focus, 1px solid var(--ade-accent));
+  outline: var(--ade-pane-focus, 1px solid var(--ade-border-strong));
   outline-offset: -1px;
 }
 
