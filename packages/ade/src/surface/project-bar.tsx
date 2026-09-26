@@ -4,7 +4,9 @@ import { t } from "../i18n"
 
 export interface ProjectBarProps {
   project?: Project
-  /** The nikcli the user is running, or undefined when there is none to name. */
+  /** ADE's own version, the one the bar names: the user is looking at ADE. */
+  adeVersion?: string
+  /** The nikcli new sessions start with. Not in the text: it is in the tooltip, where it is asked for. */
   nikcliVersion?: string
   /** The sessions open in this project. */
   sessions: number
@@ -23,11 +25,12 @@ export interface ProjectBarProps {
  * (closure 2): the stylesheet chooses, the popover is the browser's own.
  */
 export function ProjectBar(props: ProjectBarProps) {
-  // «nikcli 1.399.0»: the program's name already says what the number is, the «v» is noise.
-  const version = () => props.nikcliVersion?.replace(/^v(?=\d)/, "")
+  // «ADE 1.2.3»: the name already says what the number is, the «v» is noise. This is ADE's
+  // version because the bar is ADE's; the nikcli one is in the tooltip below.
+  const version = () => props.adeVersion?.replace(/^v(?=\d)/, "")
   const facts = (project: Project) =>
     [
-      version() ? t("bar.meta.nikcli", version()!) : undefined,
+      version() ? t("bar.meta.ade", version()!) : undefined,
       project.git ? undefined : t("projectBar.noGit.short"),
       t("bar.sessions", props.sessions),
     ].filter((fact): fact is string => Boolean(fact))
@@ -45,8 +48,11 @@ export function ProjectBar(props: ProjectBarProps) {
                 space is the correct report. */}
             <Show when={version()}>
               {(shown) => (
-                <span data-slot="ade-meta-item" title={t("bar.nikcliVersion", props.nikcliVersion ?? shown())}>
-                  {t("bar.meta.nikcli", shown())}
+                <span
+                  data-slot="ade-meta-item"
+                  title={props.nikcliVersion ? t("bar.nikcliVersion", props.nikcliVersion) : undefined}
+                >
+                  {t("bar.meta.ade", shown())}
                 </span>
               )}
             </Show>

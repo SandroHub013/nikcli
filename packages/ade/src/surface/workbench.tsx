@@ -7376,7 +7376,12 @@ export function Workbench() {
               <NikChromeLogo size={30} />
             </span>
           </Show>
-          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} sessions={barSessionCount(wb().panes, project(), chatStore)} />
+          <ProjectBar
+            project={project()}
+            adeVersion={installedVersion()}
+            nikcliVersion={nikcliVersion()}
+            sessions={barSessionCount(wb().panes, project(), chatStore)}
+          />
         </div>
 
         <div data-slot="ade-bar-center">
