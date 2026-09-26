@@ -6,6 +6,7 @@ import {
   followReports,
   lastReportedId,
   newNonce,
+  otherFolder,
   parseReport,
   reportFile,
   watchForReport,
@@ -328,5 +329,20 @@ describe("lastReportedId", () => {
     expect(lastReportedId(left("ses_tab", "switch", "ffffff"), expected, "ses_saved")).toBeUndefined()
     expect(lastReportedId(left("ses_saved", "switch"), expected, "ses_saved")).toBeUndefined()
     expect(lastReportedId(left("ses_child", "startup"), expected, "ses_saved")).toBeUndefined()
+  })
+})
+
+/* nikcli's tabs are shared by every project: a pane can be moved to another folder's conversation. */
+describe("otherFolder", () => {
+  const report = (sessionDir?: string) =>
+    parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "nikcli", sessionId: "ses_x", source: "switch", ...(sessionDir ? { sessionDir } : {}) }))!
+
+  test("another folder is named", () => {
+    expect(otherFolder(report("C:\\Users\\me\\altro"), "C:\\Users\\me\\progetto")).toBe("C:\\Users\\me\\altro")
+  })
+
+  test("the pane's own folder, however it is spelled, or no folder said: nothing", () => {
+    expect(otherFolder(report("C:\\Users\\me\\progetto"), "c:/users/me/progetto/")).toBeUndefined()
+    expect(otherFolder(report(), "C:\\Users\\me\\progetto")).toBeUndefined()
   })
 })

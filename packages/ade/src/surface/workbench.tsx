@@ -55,7 +55,7 @@ import {
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { countingLines, followReports, lastReportedId, newNonce } from "../session-new/agent-link"
+import { countingLines, followReports, lastReportedId, newNonce, otherFolder } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -6520,6 +6520,8 @@ export function Workbench() {
           onReport: (report) => {
             if (running.get(paneId) !== session) return
             setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+            const elsewhere = otherFolder(report, workDir)
+            if (elsewhere) appendLine(paneId, t("resume.otherFolder", elsewhere), "note")
           },
         })
       }

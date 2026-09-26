@@ -1127,6 +1127,8 @@ export const en: Messages = {
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
   "resume.lookingHere": (agent) => `Looking for ${agent}'s latest conversation in this folder…`,
   "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
+  "resume.otherFolder": (dir) =>
+    `This conversation belongs to another folder (${dir}): nikcli's tabs are shared by every project. The pane follows it now, on a restart too`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",

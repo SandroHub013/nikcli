@@ -337,6 +337,20 @@ export async function followReports(follow: LinkFollow): Promise<void> {
 }
 
 /**
+ * The folder of the reported conversation, when it is not the pane's.
+ *
+ * nikcli's session tabs are one list for every TUI of every project, so a
+ * tab clicked in a pane can open another folder's conversation, and the pane
+ * follows it. That cannot be stopped from here; it can be said. Windows hands
+ * the same folder back with either slash and any case.
+ */
+export function otherFolder(report: LinkReport, cwd: string): string | undefined {
+  if (!report.sessionDir || !cwd) return undefined
+  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(report.sessionDir) === norm(cwd) ? undefined : report.sessionDir
+}
+
+/**
  * The conversation the previous spawn of a pane last reported, when that
  * report was never taken.
  *
