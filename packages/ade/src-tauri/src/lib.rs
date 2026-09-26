@@ -909,22 +909,92 @@ async fn claude_version() -> Option<String> {
     .flatten()
 }
 
+/// Reads `reader` on a thread of its own, sending what it has as it goes.
+///
+/// The reader is never joined. A thread that is blocked in `read` on a pipe
+/// somebody else holds does not come back, and there is no timeout on a join, so
+/// joining is how a bounded wait became an unbounded one. What the caller waits
+/// for instead is a channel, and this is what puts bytes on it.
+fn read_on_a_thread(mut reader: Box<dyn std::io::Read + Send>) -> std::sync::mpsc::Receiver<Vec<u8>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut chunk = vec![0_u8; 1024];
+        loop {
+            match reader.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    // Nobody waiting any more is a normal end, not an error: the
+                    // caller gave up and this thread can stop reading.
+                    if tx.send(chunk[..read].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+        // Dropping the sender is how the reader says it is finished.
+    });
+    rx
+}
+
+/// Collects what a reader sent, until it finishes or `limit` runs out.
+///
+/// Every chunk, not the first one: a line that arrives in two reads is one line,
+/// and a `PATH` longer than the buffer is still a `PATH` with its marker at the
+/// end. The first chunk alone is what a `recv_timeout` returns, and a caller that
+/// takes it has half a line whenever the pipe split one.
+fn collect_until(rx: std::sync::mpsc::Receiver<Vec<u8>>, limit: std::time::Duration) -> Option<Vec<u8>> {
+    let deadline = std::time::Instant::now() + limit;
+    let mut out: Vec<u8> = Vec::new();
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            break;
+        }
+        match rx.recv_timeout(left) {
+            Ok(chunk) => out.extend_from_slice(&chunk),
+            // Finished, or out of time. Both end the wait; what arrived so far is
+            // what there is, and the caller decides whether that is a line.
+            Err(_) => break,
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The first line of some output, at most 200 characters, trimmed.
+fn first_line_of(out: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(out);
+    let line = text.lines().next()?.trim();
+    (!line.is_empty()).then(|| line.chars().take(200).collect())
+}
+
+/// The first line out of `reader`, within `limit`, with nothing joined.
+///
+/// This is the part both callers share, and it is a function of its own so a test
+/// can hand it a reader that misbehaves on purpose — one that sends a line in
+/// pieces, one that never finishes — instead of a process to arrange.
+fn first_line_from(reader: Box<dyn std::io::Read + Send>, limit: std::time::Duration) -> Option<String> {
+    let rx = read_on_a_thread(reader);
+    let out = collect_until(rx, limit)?;
+    first_line_of(&out)
+}
+
 /// Waits up to `timeout` for `child` to exit and returns the first line of its
 /// stdout, at most 200 characters. A child that fails, or is still running at
 /// the deadline, gives None; the late one is killed and reaped first.
+///
+/// The deadline is the deadline: it bounds the wait for the output as well as the
+/// wait for the process, and nothing on the way out is joined. See
+/// `read_on_a_thread` for what that costs when it is not done, and
+/// `collect_until` for why the first chunk is not the answer.
 fn first_line_within(child: &mut std::process::Child, timeout: std::time::Duration) -> Option<String> {
-    use std::io::Read;
     use std::time::Instant;
 
-    let mut stdout = child.stdout.take()?;
+    let stdout = child.stdout.take()?;
     // Read on a thread so the pipe cannot fill and stall the child while the
     // loop below waits on it.
-    let reader = std::thread::spawn(move || {
-        let mut out = Vec::new();
-        let _ = stdout.read_to_end(&mut out);
-        out
-    });
-    let deadline = Instant::now() + timeout;
+    let rx = read_on_a_thread(Box::new(stdout));
+    let started = Instant::now();
+    let deadline = started + timeout;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -939,10 +1009,11 @@ fn first_line_within(child: &mut std::process::Child, timeout: std::time::Durati
     if !status.success() {
         return None;
     }
-    let out = reader.join().ok()?;
-    let text = String::from_utf8_lossy(&out);
-    let line = text.lines().next()?.trim();
-    (!line.is_empty()).then(|| line.chars().take(200).collect())
+    // The child is gone, so what the reader sends is all there will be. What is
+    // left of the deadline is what there is time for.
+    let left = deadline.saturating_duration_since(Instant::now());
+    let out = collect_until(rx, left)?;
+    first_line_of(&out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1136,14 +1207,12 @@ fn login_shell_path() -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let mut stdout = child.stdout.take()?;
+    let stdout = child.stdout.take()?;
     // Read on a thread so a chatty profile cannot fill the pipe and stall the
-    // shell, and so the wait below can give up on one that never exits.
-    let reader = std::thread::spawn(move || {
-        let mut out = String::new();
-        let _ = stdout.read_to_string(&mut out);
-        out
-    });
+    // shell, and so the wait below can give up on one that never exits. Same
+    // three pieces as the Windows side and for the same reasons: a channel, no
+    // join, and every chunk rather than the first.
+    let rx = read_on_a_thread(Box::new(stdout));
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         match child.try_wait() {
@@ -1156,11 +1225,36 @@ fn login_shell_path() -> Option<String> {
             }
         }
     }
-    let out = reader.join().ok()?;
-    let start = out.rfind("__ADE_PATH__")? + "__ADE_PATH__".len();
-    let end = out[start..].find("__ADE_END__")? + start;
-    let path = out[start..end].trim();
-    (!path.is_empty()).then(|| path.to_string())
+    // The shell is gone, so what the reader sends is all there will be.
+    let left = deadline.saturating_duration_since(Instant::now());
+    let out = collect_until(rx, left)?;
+    path_between_markers(&out)
+}
+
+/// The `PATH` between the two markers, from whatever the shell printed.
+///
+/// A function of its own, and not `cfg(unix)`, so a test can run it here: the two
+/// callers of this logic are the shell on unix and the marker in a test, and the
+/// part that goes wrong is arithmetic on an offset, which a Windows build cannot
+/// see and neither can a test that never runs.
+///
+/// The start marker is looked for from the end and the end marker from the
+/// beginning of what follows it, because a login profile prints things and one of
+/// them may contain a marker: the last `__ADE_PATH__` is ours and the first
+/// `__ADE_END__` after it is the end of ours. Bytes, not a String, because the
+/// reader gives bytes and `rfind` on a `Vec<u8>` does not exist — which is how a
+/// line that could not compile got committed once.
+fn path_between_markers(out: &[u8]) -> Option<String> {
+    const START: &[u8] = b"__ADE_PATH__";
+    const END: &[u8] = b"__ADE_END__";
+    let start = out.windows(START.len()).rposition(|window| window == START)? + START.len();
+    // `position` counts from where the slice starts, so this is the one addition
+    // and there is no other. The first version added `start` twice and made
+    // `out[start..end]` a slice out of range on the most ordinary output there is,
+    // which on macOS is the first line of `run()`.
+    let end = start + out[start..].windows(END.len()).position(|window| window == END)?;
+    let path = String::from_utf8_lossy(&out[start..end]).trim().to_string();
+    (!path.is_empty()).then_some(path)
 }
 
 /// Where Homebrew, bun, npm, pnpm, cargo, volta, pipx and nvm put binaries.
@@ -2281,6 +2375,142 @@ mod tests {
         assert_eq!(first_line_within(&mut child, Duration::from_secs(5)), None);
         assert!(started.elapsed() < Duration::from_secs(6), "took {:?}", started.elapsed());
         assert!(child.try_wait().expect("handle still valid").is_some(), "child still running");
+    }
+
+    /**
+     * The markers, on the bytes, with nothing Unix about them.
+     *
+     * `login_shell_path` is `cfg(unix)` and this is not, so what is tested here
+     * runs on this machine: the arithmetic on the offsets is what goes wrong, and
+     * the first version of it added `start` twice, which put `out[start..end]` out
+     * of range on the most ordinary output a login shell produces. On macOS that
+     * is the first line of `run()`.
+     */
+    #[test]
+    fn l_uscita_piu_semplice_da_il_path() {
+        let out = b"__ADE_PATH__/usr/local/bin:/usr/bin__ADE_END__";
+        assert_eq!(path_between_markers(out).as_deref(), Some("/usr/local/bin:/usr/bin"));
+    }
+
+    #[test]
+    fn il_rumore_del_profilo_prima_dei_marcatori_non_conta() {
+        // Un profilo di login stampa, e quello che stampa puo' contenere un
+        // marcatore: l'ultimo __ADE_PATH__ e' il nostro, e il primo __ADE_END__
+        // dopo di quello chiude il nostro e non quello del rumore.
+        let out = b"Last login: Tue\n__ADE_PATH__/rumore__ADE_END__\n__ADE_PATH__/opt/bin__ADE_END__\n";
+        assert_eq!(path_between_markers(out).as_deref(), Some("/opt/bin"));
+    }
+
+    #[test]
+    fn due_marcatori_e_niente_fine_non_da_un_path() {
+        // Il caso in cui la shell e' stata uccisa prima di arrivare in fondo: la
+        // parte che c'e' non e' un PATH, quindi nessun PATH.
+        let out = b"__ADE_PATH__/usr/local/bin";
+        assert_eq!(path_between_markers(out), None);
+        // E senza il marcatore di inizio non c'e' niente da cercare.
+        assert_eq!(path_between_markers(b"__ADE_END__/usr/bin"), None);
+        // E un PATH vuotofra i due marcatori non e' un PATH.
+        assert_eq!(path_between_markers(b"__ADE_PATH____ADE_END__"), None);
+    }
+
+    /**
+     * The reader that misbehaves, and the function that has to survive it.
+     *
+     * These call the function callers use, with the reader as a parameter: a line
+     * handed over in pieces, and one that never finishes. The first is a
+     * `recv_timeout` that returns only the first chunk — a line the pipe split
+     * came back half a line. The second is a reader still blocked when the child
+     * is gone, which a join waits for for ever.
+     */
+    #[test]
+    fn una_riga_spezzata_in_piu_read_e_una_riga() {
+        use std::io::Read;
+        use std::time::Duration;
+
+        /// Says one thing at a time, however much the caller asked for, and then
+        /// the end of the stream: a reader that hands out a fixed sequence and
+        /// finishes, which is what a pipe that split one line looks like.
+        struct Trickle {
+            pieces: Vec<&'static [u8]>,
+            at: usize,
+        }
+        impl Read for Trickle {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let Some(piece) = self.pieces.get(self.at) else {
+                    return Ok(0);
+                };
+                self.at += 1;
+                let take = piece.len().min(buffer.len());
+                buffer[..take].copy_from_slice(&piece[..take]);
+                Ok(take)
+            }
+        }
+
+        let line = first_line_from(
+            Box::new(Trickle {
+                pieces: vec![b"__ADE_PATH__/usr/lo", b"cal/bin:/opt/hom", b"ebrew/bin__ADE_END__"],
+                at: 0,
+            }),
+            Duration::from_secs(2),
+        );
+        // Non la prima meta' e non i primi 1024 byte: la riga intera, che e'
+        // quello che il marcatore promette.
+        assert_eq!(line.as_deref(), Some("__ADE_PATH__/usr/local/bin:/opt/homebrew/bin__ADE_END__"));
+    }
+
+    #[test]
+    fn un_lettore_che_non_finisce_mai_non_allunga_la_scadenza() {
+        use std::io::Read;
+        use std::time::{Duration, Instant};
+
+        /// A `Read` that never returns, which is what a pipe held open by something
+        /// that is not this process looks like from here.
+        struct Never;
+        impl Read for Never {
+            fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(Duration::from_secs(60));
+                Ok(0)
+            }
+        }
+
+        let started = Instant::now();
+        // One second allowed, half a second tolerated: with no join, the function
+        // returns when the time is up and not when the reader is ready. On the
+        // old code it did not return at all.
+        let answer = first_line_from(Box::new(Never), Duration::from_secs(1));
+        let took = started.elapsed();
+        assert!(answer.is_none(), "un lettore bloccato non è una risposta");
+        assert!(took < Duration::from_secs(2), "la scadenza non vale: {took:?}");
+    }
+
+    #[test]
+    fn un_lettore_che_tace_dopo_una_riga_non_fa_aspettare() {
+        use std::io::Read;
+        use std::time::Duration;
+
+        /// Says a beginning and then stops without ending: the reader that goes
+        /// quiet while the pipe is still open.
+        struct ThenSilence {
+            said: bool,
+        }
+        impl Read for ThenSilence {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if self.said {
+                    return Ok(0);
+                }
+                self.said = true;
+                let line = b"/usr/local/bin\n";
+                buffer[..line.len()].copy_from_slice(line);
+                Ok(line.len())
+            }
+        }
+
+        // What arrived is a line, and the silence after it must not cost the whole
+        // allowance.
+        assert_eq!(
+            first_line_from(Box::new(ThenSilence { said: false }), Duration::from_secs(2)).as_deref(),
+            Some("/usr/local/bin")
+        );
     }
 
     #[test]
