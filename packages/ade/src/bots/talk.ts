@@ -168,7 +168,31 @@ function rememberModel(talk: Talk, model: string | undefined): Talk {
   const named = model?.trim()
   if (!named) return talk
   const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
-  return { ...talk, pendingTurn: { ...pending, model: named } }
+  const remembered = { ...talk, pendingTurn: { ...pending, model: named } }
+  /*
+   * A bot on nikcli's default model starts its turn `metered`: the default
+   * can be paid. Once the turn names a free model, it was free, and what it
+   * already counted goes with it (Verifiche, live 3: «Predefinito» turns on
+   * a :free model summed as «a consumo»). The test is `isFreeModel`'s, in
+   * runners.ts, which imports this file.
+   */
+  if (talk.turnMode === "metered" && /:free$/i.test(named)) return spentAs(remembered, "free")
+  return remembered
+}
+
+/** The turn under way paid for as `mode`, with what it already counted moved over. */
+function spentAs(talk: Talk, mode: TalkSpend): Talk {
+  const from = talk.turnMode
+  const pending = talk.pendingTurn
+  let byMode = talk.byMode
+  const counted = from && pending && byMode?.[from] && (pending.tokens !== 0 || pending.costUsd !== 0)
+  if (from && pending && counted) {
+    const left = { tokens: byMode![from]!.tokens - pending.tokens, costUsd: byMode![from]!.costUsd - pending.costUsd }
+    const rest = { ...byMode }
+    delete rest[from]
+    byMode = addMode(left.tokens > 0 || left.costUsd > 0 ? { ...rest, [from]: left } : rest, mode, pending.tokens, pending.costUsd)
+  }
+  return { ...talk, turnMode: mode, ...(byMode ? { byMode } : {}) }
 }
 
 /** Keeps the model an event named, for the turn under way. */

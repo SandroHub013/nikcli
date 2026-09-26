@@ -142,6 +142,8 @@ pub trait Env: Send + Sync {
     /// nikcli's provider keys, the keys in ADE's environment.
     fn secrets(&self) -> Vec<String>;
     fn now_ms(&self) -> u64;
+    /// Whether the bot's file is still there: a bot is its file.
+    fn bot_exists(&self, bot: &str) -> bool;
 }
 
 #[derive(Clone, Default)]
@@ -337,12 +339,35 @@ impl Hub {
         if platform.needs_app_token() {
             self.vault.delete(&self.service, &secret_name(bot, platform, TokenKind::App))?;
         }
+        // A platform the bot never had: nothing to write down. A deleted bot's
+        // tokens are cleared on every platform, and each would leave a link.
+        if self.store.link(bot, platform).is_none() {
+            return Ok(());
+        }
         self.store.update(bot, platform, |link, _| {
             link.token_hash = None;
             link.app_token_hash = None;
             link.enabled = false;
             Ok(())
         })
+    }
+
+    /// A bot deleted: every gateway of it stops, its tokens leave the keychain,
+    /// and its links go, with who was authorized and the chats it knew. A new
+    /// bot made later at the same path starts from nothing: it does not
+    /// inherit the senders someone let write to the old one.
+    pub fn forget_bot(&self, bot: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        let mut platforms = vec![Platform::Telegram, Platform::Discord, Platform::Slack];
+        for link in self.store.read().links.into_iter().filter(|link| link.bot == bot) {
+            if !platforms.contains(&link.platform) {
+                platforms.push(link.platform);
+            }
+        }
+        for platform in platforms {
+            self.clear_token(bot, platform)?;
+        }
+        self.store.forget(bot)
     }
 
     /// The token, for building the platform's adapter. Rust only: never sent to the page.
@@ -417,9 +442,17 @@ impl Hub {
     }
 
     /// Starts every gateway the user left switched on: ADE opened. Each waits
-    /// for the page to listen before it reads.
+    /// for the page to listen before it reads. Not one whose bot is gone,
+    /// deleted outside ADE or by a deletion that could not clear its token:
+    /// its token would answer chats for a bot nobody sees in the roster.
     pub fn resume(&self) {
         for link in self.store.read().links.into_iter().filter(|link| link.enabled) {
+            if !self.env.bot_exists(&link.bot) {
+                let error = "il file del bot non c'è più".to_string();
+                self.env.log(&format!("gateway {} {}: non riparte: {error}", link.platform.id(), &bot_key(&link.bot)[..8]));
+                self.failed().insert((link.bot.clone(), link.platform), error);
+                continue;
+            }
             self.relaunch(&link.bot, link.platform);
         }
     }
@@ -952,6 +985,8 @@ mod tests {
         log: Mutex<Vec<String>>,
         /// Added to the clock, to move time on.
         later: std::sync::atomic::AtomicU64,
+        /// Bots whose file is gone.
+        gone: Mutex<Vec<String>>,
     }
     impl Env for Recorder {
         fn message(&self, message: &GatewayMessage) {
@@ -971,6 +1006,9 @@ mod tests {
         }
         fn now_ms(&self) -> u64 {
             1_000 + self.later.load(std::sync::atomic::Ordering::SeqCst)
+        }
+        fn bot_exists(&self, bot: &str) -> bool {
+            !self.gone.lock().unwrap().iter().any(|gone| gone == bot)
         }
     }
 
@@ -1444,6 +1482,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_bot_made_where_a_deleted_one_was_inherits_nobody() {
+        let s = setup("forget");
+        authorize(&s, "42");
+        let (adapter, _feed) = start(&s);
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(s.hub.status().iter().all(|link| link.bot != BOT), "il collegamento del bot cancellato resta");
+        assert!(s.hub.token(BOT, Platform::Fake).unwrap().is_none());
+        assert!(s.hub.links().is_empty(), "il gateway del bot cancellato gira ancora");
+        drop(adapter);
+        // A new bot, same path: nobody authorized, no token, off.
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        let fresh = s.hub.status().into_iter().find(|link| link.bot == BOT).expect("il bot nuovo");
+        assert!(fresh.authorized.is_empty(), "ha ereditato gli autorizzati: {:?}", fresh.authorized);
+        assert!(!fresh.enabled);
+        // Another bot is left as it was.
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        s.hub.set_token(other, Platform::Fake, "987654321:ALTRO-token-di-prova_AbCdEfGhIj").unwrap();
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(s.hub.status().iter().any(|link| link.bot == other && link.has_token));
+    }
+
+    #[tokio::test]
+    async fn clearing_a_platform_the_bot_never_had_leaves_nothing_behind() {
+        let s = setup("clear-nothing");
+        start(&s);
+        // A deleted bot's tokens are cleared on every platform, not only its own.
+        s.hub.clear_token(BOT, Platform::Telegram).unwrap();
+        s.hub.clear_token(BOT, Platform::Discord).unwrap();
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+        let links = s.hub.status();
+        assert_eq!(links.len(), 1, "un collegamento per ogni piattaforma svuotata");
+        assert!(!links[0].enabled && !links[0].has_token && !links[0].running);
+    }
+
+    #[tokio::test]
     async fn when_ade_opens_the_gateways_left_on_start_again_once_the_page_listens() {
         let dir = std::env::temp_dir().join(format!("ade-gateway-hub-resume-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1500,6 +1573,28 @@ mod tests {
         assert!(missing.enabled && !missing.running);
         assert!(missing.last_error.as_deref().is_some_and(|error| error.contains("manca il token")), "{missing:?}");
         assert!(s.env.statuses.lock().unwrap().iter().any(|status| status.bot == other && status.last_error.is_some()));
+    }
+
+    #[tokio::test]
+    async fn when_ade_opens_a_gateway_whose_bot_is_gone_stays_off() {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-gone-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state.json");
+        let vault = Arc::new(MapVault::default());
+        let before = setup_with(path.clone(), vault.clone());
+        start(&before);
+        before.hub.shutdown();
+
+        // The bot's file was deleted while ADE was closed; its token is still there.
+        let after = setup_with(path, vault);
+        after.env.gone.lock().unwrap().push(BOT.into());
+        after.hub.resume();
+        assert!(after.made.lock().unwrap().is_empty(), "il gateway di un bot cancellato è ripartito");
+        let status = after.hub.status();
+        assert!(!status[0].running);
+        assert!(status[0].last_error.as_deref().is_some_and(|error| error.contains("non c'è più")), "{:?}", status[0].last_error);
+        let log = after.env.log.lock().unwrap();
+        assert!(log.iter().any(|line| line.contains("non c'è più") && !line.contains(BOT)), "{log:?}");
     }
 
     #[tokio::test]

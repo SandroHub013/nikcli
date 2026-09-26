@@ -55,6 +55,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const API: &str = "https://slack.com/api";
@@ -65,12 +67,19 @@ const MAX_PIECES: usize = 8;
 /// What a section block holds: a question with buttons longer than this goes
 /// as text, and the buttons in a message of their own under it.
 const SECTION_MAX: usize = 3_000;
-/// Events and envelopes remembered to recognise one Slack sends again.
-const SEEN_EVENTS: usize = 256;
+/// Events and envelopes remembered to recognise one Slack sends again. Both
+/// go in the one list, an event twice (its envelope and its own id), so a
+/// busy minute of a few hundred must not push out what Slack may still send
+/// again (G10 delta, BASSO).
+const SEEN_EVENTS: usize = 512;
 /// How long a sender's name is waited for. It is asked inside the socket's
 /// reading loop, where every moment spent holds the acks of the envelopes
 /// behind it, and Slack's limit for those is three seconds.
 const NAME_WAIT: Duration = Duration::from_secs(1);
+/// How long an id whose name did not come stands for it before Slack is asked
+/// again. Without it every message from that sender waited `NAME_WAIT` anew,
+/// holding the acks behind it each time (G10 delta, BASSO).
+const NAME_RETRY: Duration = Duration::from_secs(5 * 60);
 const MAX_WAIT: Duration = Duration::from_secs(60);
 const RETRIES: usize = 3;
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -406,6 +415,8 @@ struct Inner {
     bot_user: Mutex<Option<String>>,
     /// Senders' names by id, from `users.info`.
     names: Mutex<HashMap<String, String>>,
+    /// Senders whose name did not come, and when: not asked again for `NAME_RETRY`.
+    unnamed: Mutex<HashMap<String, std::time::Instant>>,
     /// What a message last showed, per `chat/ts`: an edit that changes nothing is not sent.
     preview: Mutex<HashMap<String, String>>,
     /// The last events handed on, to drop one Slack sends again.
@@ -541,10 +552,17 @@ impl Inner {
         if user.is_empty() || !user.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
             return user.to_string();
         }
+        if hold(&self.unnamed).get(user).is_some_and(|since| since.elapsed() < NAME_RETRY) {
+            return user.to_string();
+        }
         let path = format!("/users.info?user={user}");
         let Ok(Ok(answer)) = tokio::time::timeout(NAME_WAIT, self.call(reqwest::Method::GET, &path, Token::Bot, None)).await else {
+            let mut unnamed = hold(&self.unnamed);
+            unnamed.retain(|_, since| since.elapsed() < NAME_RETRY);
+            unnamed.insert(user.to_string(), std::time::Instant::now());
             return user.to_string();
         };
+        hold(&self.unnamed).remove(user);
         let person = &answer.body["user"];
         let name = [&person["profile"]["display_name"], &person["real_name"], &person["name"]]
             .iter()
@@ -635,6 +653,16 @@ enum Ending {
     Dropped { greeted: bool },
     /// Slack asked for a new socket: at once, without the wait.
     Refresh,
+    /// The adapter is gone, the gateway switched off: the socket said goodbye.
+    LetGo,
+}
+
+/// Closes the socket as a client that is leaving, with a 1000: Slack sees it
+/// go rather than a connection that vanishes. At most a second, so a peer
+/// that does not read cannot hold the task.
+async fn say_goodbye<S: SinkExt<Message> + Unpin>(sink: &mut S) {
+    let close = Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() }));
+    let _ = tokio::time::timeout(Duration::from_secs(1), sink.send(close)).await;
 }
 
 fn ack(envelope: &str) -> String {
@@ -643,9 +671,19 @@ fn ack(envelope: &str) -> String {
 
 /// One socket: `auth.test` the first time, `apps.connections.open`, then read
 /// and acknowledge until it closes.
-async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, AdapterError>>) -> Ending {
+async fn socket_session(
+    inner: &Inner,
+    sender: &mpsc::Sender<Result<Inbound, AdapterError>>,
+    alive: &mut watch::Receiver<()>,
+) -> Ending {
+    // The adapter can go at any wait below: `alive` is watched at each, and
+    // once the socket is open it closes with a goodbye.
     if inner.bot_user().is_none() {
-        match inner.auth_test().await {
+        let me = tokio::select! {
+            _ = alive.changed() => return Ending::LetGo,
+            me = inner.auth_test() => me,
+        };
+        match me {
             Ok(me) => {
                 *hold(&inner.bot_user) = Some(me.user_id);
                 if !me.missing.is_empty() {
@@ -662,7 +700,11 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
             }
         }
     }
-    let address = match inner.open_socket().await {
+    let opened = tokio::select! {
+        _ = alive.changed() => return Ending::LetGo,
+        opened = inner.open_socket() => opened,
+    };
+    let address = match opened {
         Ok(address) => address,
         Err(failure) if failure.refuses_token() => {
             return Ending::Stopped(format!(
@@ -675,7 +717,11 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
             return Ending::Dropped { greeted: false };
         }
     };
-    let (mut sink, mut source) = match tokio_tungstenite::connect_async(&address).await {
+    let connected = tokio::select! {
+        _ = alive.changed() => return Ending::LetGo,
+        connected = tokio_tungstenite::connect_async(&address) => connected,
+    };
+    let (mut sink, mut source) = match connected {
         Ok((socket, _handshake)) => socket.split(),
         // The address carries a ticket: the error is said without it.
         Err(_) => {
@@ -685,7 +731,15 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
     };
     let mut greeted = false;
     let mut warned = false;
-    while let Some(incoming) = source.next().await {
+    loop {
+        let incoming = tokio::select! {
+            _ = alive.changed() => {
+                say_goodbye(&mut sink).await;
+                return Ending::LetGo;
+            }
+            incoming = source.next() => incoming,
+        };
+        let Some(incoming) = incoming else { break };
         let Ok(frame) = incoming else { break };
         match frame {
             Message::Ping(payload) => {
@@ -753,12 +807,9 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
 async fn run_socket(inner: Arc<Inner>, sender: mpsc::Sender<Result<Inbound, AdapterError>>, mut alive: watch::Receiver<()>, first_wait: Duration) {
     let mut backoff = first_wait;
     loop {
-        let ending = tokio::select! {
-            // The adapter is gone: its sender with it.
-            _ = alive.changed() => return,
-            ending = socket_session(&inner, &sender) => ending,
-        };
-        match ending {
+        // The session watches `alive` itself, to close its socket with a goodbye.
+        match socket_session(&inner, &sender, &mut alive).await {
+            Ending::LetGo => return,
             Ending::Stopped(why) => {
                 if !why.is_empty() {
                     let _ = sender.send(Err(AdapterError::Fatal(why))).await;
@@ -822,6 +873,7 @@ impl Slack {
                 calls,
                 bot_user: Mutex::new(None),
                 names: Mutex::new(HashMap::new()),
+                unnamed: Mutex::new(HashMap::new()),
                 preview: Mutex::new(HashMap::new()),
                 seen: Mutex::new(VecDeque::new()),
             }),
@@ -1038,6 +1090,8 @@ mod tests {
         received: Vec<(Instant, Value)>,
         /// The client closed it, rather than the fake's time running out.
         closed_by_client: bool,
+        /// The code of the close frame the client sent, if it sent one.
+        goodbye: Option<u16>,
     }
 
     /// Slack's socket on localhost: one script of frames per connection, then
@@ -1089,6 +1143,9 @@ mod tests {
                                         Some(Ok(Ws::Text(text))) => {
                                             let parsed = serde_json::from_str::<Value>(text.as_ref()).unwrap_or(Value::Null);
                                             hold(&log)[index].received.push((Instant::now(), parsed));
+                                        }
+                                        Some(Ok(Ws::Close(Some(close)))) => {
+                                            hold(&log)[index].goodbye = Some(u16::from(close.code));
                                         }
                                         Some(Ok(_)) => {}
                                         _ => {
@@ -1232,6 +1289,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_name_that_did_not_come_in_time_is_not_waited_for_again() {
+        let socket = FakeSocket::start(vec![], 100);
+        let mut queues = HashMap::new();
+        queues.insert("/users.info", vec![with_header(ok(json!({ "ok": true, "user": { "name": "lento" } })), LATE, "3000")]);
+        let api = FakeApi::start(&socket.address, queues);
+        let slack = adapter(&api);
+        assert_eq!(slack.inner.name_of("U9").await, "U9");
+        // The next message from the same sender: its id at once, not another second.
+        let again = Instant::now();
+        assert_eq!(slack.inner.name_of("U9").await, "U9");
+        assert!(again.elapsed() < Duration::from_millis(300), "aspettato di nuovo: {:?}", again.elapsed());
+    }
+
+    #[tokio::test]
+    async fn a_repeat_is_still_known_after_two_hundred_events_between() {
+        let socket = FakeSocket::start(vec![], 100);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        // Two hundred messages, each an envelope and an event: four hundred names.
+        assert!(slack.inner.first_time("envelope:primo"));
+        assert!(slack.inner.first_time("Ev-primo"));
+        for n in 0..199 {
+            assert!(slack.inner.first_time(&format!("envelope:e{n}")));
+            assert!(slack.inner.first_time(&format!("Ev{n}")));
+        }
+        assert!(!slack.inner.first_time("envelope:primo"), "il primo è già dimenticato");
+    }
+
+    #[tokio::test]
     async fn a_user_id_that_is_not_one_never_reaches_a_url() {
         let socket = FakeSocket::start(vec![], 100);
         let api = FakeApi::start(&socket.address, HashMap::new());
@@ -1364,6 +1450,8 @@ mod tests {
         slack.receive().await.expect("letto");
         drop(slack);
         eventually("il socket si chiude", || socket.connections().first().is_some_and(|c| c.closed_by_client)).await;
+        // With a goodbye, the code of a client that leaves.
+        assert_eq!(socket.connections()[0].goodbye, Some(1000));
     }
 
     #[test]

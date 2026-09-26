@@ -283,6 +283,8 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  /* The composer lays out by the thread's width, not the window's (below). */
+  container-type: inline-size;
 }
 
 /* The Chat's `chat-rules-note`: what a bot's rules on ADE's server do not cover (B8d). */
@@ -521,6 +523,31 @@
   color: var(--ade-text-weak);
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+/*
+ * A narrow thread: the caption takes a line of its own under the field and
+ * the button, and the field the whole line above. Beside the caption, in a
+ * 900 px window with the card open, the field had its 14rem — 168 px, the
+ * root font being 12 px — and the caption seven lines (Verifiche, live 3).
+ * The field starts from nothing and grows, so a long line typed in it does
+ * not push the button down as well.
+ */
+@container (max-width: 640px) {
+  [data-slot="bots-composer"] {
+    flex-wrap: wrap;
+  }
+
+  [data-slot="bots-composer-field"] {
+    flex-basis: 0;
+  }
+
+  [data-slot="bots-composer-cap"] {
+    order: 1;
+    flex-basis: 100%;
+    max-width: none;
+    text-align: left;
+  }
 }
 
 /* ── the card ────────────────────────────────────────────────────────────── */

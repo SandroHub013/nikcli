@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { readReportLine } from "../session/report"
 import { join } from "node:path"
 import { translate } from "../i18n"
 import { MAX_NOTICES, addPane, createWorkbench, toWorkspaceState, withPaneNotice, type Pane } from "./state"
@@ -51,5 +52,29 @@ describe("the notes over a terminal", () => {
     expect(translate("it", "resume.shared", "Sessione 1")).not.toContain("ne parte un'altra")
     expect(translate("it", "resume.shared", "Sessione 1")).toContain("qui non la riapro")
     expect(translate("en", "resume.shared", "Sessione 1")).not.toContain("another one starts")
+  })
+})
+
+/*
+ * Verifiche, live 4: after a restore «here» the pane's header stayed on «Cerco
+ * l'ultima conversazione di nikcli» with the conversation found and open. The
+ * header shows the agent's reported activity, and ADE's own note read as one.
+ */
+describe("ADE's own notes are not the agent's report", () => {
+  test("the note reads as an activity, which is why it must not be read", () => {
+    const note = "Cerco l'ultima conversazione di nikcli in questa cartella…"
+    expect(readReportLine({}, note).activity).toBeDefined()
+  })
+
+  test("the restore's notes and the pane notices are written as ADE's", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).toContain('if (from === "ade") return')
+    expect(workbench).toContain('appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note", "ade")')
+    expect(workbench).toContain('appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")')
+    expect(workbench).toContain('appendLine(id, text, "note", "ade")')
+    // The report and the permission watch come after the line is kept, and only for the agent's.
+    const body = workbench.slice(workbench.indexOf("const appendLine = "), workbench.indexOf("const watchForPermission = "))
+    expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("watchForPermission(id, text)"))
+    expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("readReportLine"))
   })
 })

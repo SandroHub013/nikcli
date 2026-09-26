@@ -378,10 +378,38 @@ export const projectFs: ProjectFs = {
   },
 }
 
-/** Removes a bot's file. The roster is the directory, so this is the deletion. */
-export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
-  const host = await getHost()
+/**
+ * Stops every gateway of a bot, takes its tokens out of the keychain and its
+ * links out of the gateway's state, with who was authorized (`forget_bot`).
+ */
+export type ForgetGateways = (bot: string) => Promise<void>
+
+const forgetGateways: ForgetGateways = async (bot) => {
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("gateway_forget_bot", { bot })
+}
+
+/**
+ * Removes a bot's file. The roster is the directory, so this is the deletion.
+ *
+ * Its gateways go first: they stop, the tokens leave the keychain, and the
+ * links go with who was authorized. Before, a bot deleted here went on
+ * answering its chats until ADE closed, its tokens stayed in the keychain,
+ * and a new bot at the same path inherited the senders. When they cannot be
+ * cleared the file stays, and the card says why.
+ */
+export async function deleteBot(
+  bot: AgentFile,
+  forget: ForgetGateways = forgetGateways,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<string | undefined> {
+  const host = await hostOf()
   if (!host?.deleteBotFile) return t("bots.store.hostMissing")
+  try {
+    await forget(bot.path)
+  } catch (error) {
+    return t("bots.store.gatewayKept", error instanceof Error ? error.message : String(error))
+  }
   /*
    * A command of its own, which deletes only a bot's file. This used to go
    * through `host.run("cmd", ["/c", "del", …])`, which `run` refuses — it runs

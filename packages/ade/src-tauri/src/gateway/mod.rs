@@ -82,6 +82,10 @@ impl Env for AppEnv {
             .map(|elapsed| elapsed.as_millis() as u64)
             .unwrap_or(0)
     }
+    /// The bot is the path of its file (`bot` in every gateway command).
+    fn bot_exists(&self, bot: &str) -> bool {
+        std::path::Path::new(bot).is_file()
+    }
 }
 
 /// ADE opened: the hub is made now, and the gateways the user left on start
@@ -169,6 +173,12 @@ pub async fn gateway_probe(app: AppHandle, bot: String, platform: Platform) -> R
 #[tauri::command]
 pub async fn gateway_clear_token(app: AppHandle, bot: String, platform: Platform) -> Result<(), String> {
     hub(&app)?.clear_token(&bot, platform)
+}
+
+/// A bot deleted: its gateways, tokens and links go, who was authorized with them.
+#[tauri::command]
+pub async fn gateway_forget_bot(app: AppHandle, bot: String) -> Result<(), String> {
+    hub(&app)?.forget_bot(&bot)
 }
 
 /// Switches a bot's gateway on (its turns fixed to `project`) or off.

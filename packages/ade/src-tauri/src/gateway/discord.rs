@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -617,11 +618,28 @@ enum Ending {
     Stopped(String),
     /// The socket dropped: go round again.
     Dropped,
+    /// The adapter is gone, the gateway switched off: the socket said goodbye.
+    LetGo,
+}
+
+/// Closes the socket as a client that is leaving, with a 1000: Discord ends
+/// the session and the bot shows offline at once. Only when the gateway is
+/// switched off: a 1000 also makes the session one that cannot be resumed,
+/// so a socket that drops to come back just goes, without it. At most a
+/// second, so a peer that does not read cannot hold the task.
+async fn say_goodbye<S: SinkExt<Message> + Unpin>(sink: &mut S) {
+    let close = Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() }));
+    let _ = tokio::time::timeout(Duration::from_secs(1), sink.send(close)).await;
 }
 
 /// One run of the socket: connect, resume or identify, read, heartbeat, until
 /// the socket closes or the user is told why it cannot go on.
-async fn socket_session(adapter: &Arc<Core>, sender: &mpsc::Sender<Result<Inbound, AdapterError>>, first: &str) -> Ending {
+async fn socket_session(
+    adapter: &Arc<Core>,
+    sender: &mpsc::Sender<Result<Inbound, AdapterError>>,
+    first: &str,
+    alive: &mut watch::Receiver<()>,
+) -> Ending {
     let mut fresh_identifies = 0usize;
     loop {
         // Read at every turn, not once at the start: a session that lives for
@@ -645,7 +663,12 @@ async fn socket_session(adapter: &Arc<Core>, sender: &mpsc::Sender<Result<Inboun
                 (first.to_string(), None)
             }
         };
-        let (mut sink, mut source) = match tokio_tungstenite::connect_async(&address).await {
+        let connected = tokio::select! {
+            // The adapter is gone, and `alive` with it: nothing is open yet.
+            _ = alive.changed() => return Ending::LetGo,
+            connected = tokio_tungstenite::connect_async(&address) => connected,
+        };
+        let (mut sink, mut source) = match connected {
             Ok((socket, _handshake)) => socket.split(),
             Err(error) => {
                 let _ = sender.send(Err(AdapterError::Transient(format!("Discord non raggiungibile: {error}")))).await;
@@ -657,7 +680,14 @@ async fn socket_session(adapter: &Arc<Core>, sender: &mpsc::Sender<Result<Inboun
         // A socket that goes before the Hello leaves `hello` unset, and the
         // connection is one to go round on rather than to give up on.
         let hello: Option<Frame> = loop {
-            let Some(incoming) = source.next().await else { break None };
+            let incoming = tokio::select! {
+                _ = alive.changed() => {
+                    say_goodbye(&mut sink).await;
+                    return Ending::LetGo;
+                }
+                incoming = source.next() => incoming,
+            };
+            let Some(incoming) = incoming else { break None };
             let Ok(frame) = incoming else { break None };
             let Message::Text(text) = frame else { continue };
             match serde_json::from_str::<Frame>(text.as_ref()) {
@@ -699,6 +729,10 @@ async fn socket_session(adapter: &Arc<Core>, sender: &mpsc::Sender<Result<Inboun
 
         loop {
             tokio::select! {
+                _ = alive.changed() => {
+                    say_goodbye(&mut sink).await;
+                    return Ending::LetGo;
+                }
                 incoming = source.next() => {
                     let Some(incoming) = incoming else { break };
                     let frame = match incoming {
@@ -842,12 +876,9 @@ async fn run_socket(
 ) {
     let mut backoff = Duration::from_secs(1);
     loop {
-        let ending = tokio::select! {
-            // The adapter is gone, and `alive` with it.
-            _ = alive.changed() => return,
-            ending = socket_session(&adapter, &sender, &first) => ending,
-        };
-        match ending {
+        // The session watches `alive` itself, to close its socket with a goodbye.
+        match socket_session(&adapter, &sender, &first, &mut alive).await {
+            Ending::LetGo => return,
             Ending::Stopped(why) => {
                 let _ = sender.send(Err(AdapterError::Fatal(why))).await;
                 return;
@@ -1166,6 +1197,8 @@ mod tests {
         acking: Arc<AtomicBool>,
         /// A connection the client closed before the fake's own time ran out.
         left: Arc<AtomicBool>,
+        /// The code of the close frame the client sent, if it sent one.
+        goodbye: Arc<Mutex<Option<u16>>>,
     }
 
     impl FakeGateway {
@@ -1182,6 +1215,8 @@ mod tests {
             let for_the_fake = acking.clone();
             let left = Arc::new(AtomicBool::new(false));
             let for_the_test = left.clone();
+            let goodbye = Arc::new(Mutex::new(None));
+            let goodbye_seen = goodbye.clone();
             std::thread::spawn(move || {
                 let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
                 for incoming in listener.incoming() {
@@ -1195,6 +1230,7 @@ mod tests {
                     let seen = thread_seen.clone();
                     let acking = acking.clone();
                     let left = left.clone();
+                    let goodbye = goodbye.clone();
                     // One connection at a time: the client reconnects after the
                     // one before it is gone.
                     runtime.block_on(async move {
@@ -1222,6 +1258,9 @@ mod tests {
                                         left.store(true, Ordering::SeqCst);
                                         break;
                                     };
+                                    if let Ws::Close(Some(close)) = &frame {
+                                        *goodbye.lock().unwrap() = Some(u16::from(close.code));
+                                    }
                                     let Ws::Text(text) = frame else { continue };
                                     let Ok(parsed) = serde_json::from_str::<Value>(text.as_ref()) else { continue };
                                     if parsed["op"].as_i64() == Some(1) && acking.load(Ordering::SeqCst) {
@@ -1240,7 +1279,7 @@ mod tests {
                     });
                 }
             });
-            FakeGateway { address, seen, queue: mine, acking: for_the_fake, left: for_the_test }
+            FakeGateway { address, seen, queue: mine, acking: for_the_fake, left: for_the_test, goodbye: goodbye_seen }
         }
 
         /// Says what the next connection will be sent.
@@ -1262,6 +1301,11 @@ mod tests {
         /// Whether the client closed a connection before the fake did.
         fn client_left(&self) -> bool {
             self.left.load(Ordering::SeqCst)
+        }
+
+        /// The code the client closed a connection with, if it said one.
+        fn goodbye(&self) -> Option<u16> {
+            *self.goodbye.lock().unwrap()
         }
 
         /// The first frame with the given opcode.
@@ -1773,6 +1817,30 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(gateway.client_left(), "il socket resta aperto con il gateway spento");
+    }
+
+    #[tokio::test]
+    async fn a_gateway_switched_off_says_goodbye_with_1000_and_one_that_drops_does_not() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        // A socket whose beat is never answered drops, to come back and resume.
+        gateway.push(vec![hello(60), ready("S1", &gateway.address), message("m1", "d1", None, "u1", "ciao")]);
+        gateway.push(vec![hello(60_000), message("m2", "d1", None, "u1", "ancora")]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        discord.receive().await.expect("il primo");
+        discord.receive().await.expect("il secondo, dopo la ripresa");
+        assert_eq!(gateway.op(6).map(|resume| resume["d"]["session_id"].clone()), Some(json!("S1")));
+        assert_eq!(gateway.goodbye(), None, "chiuso con un codice che non si riprende");
+        // Switched off: a goodbye, with the code of a client that leaves.
+        drop(discord);
+        for _ in 0..100 {
+            if gateway.goodbye().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(gateway.goodbye(), Some(1000));
     }
 
     #[tokio::test]
