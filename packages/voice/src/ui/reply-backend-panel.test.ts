@@ -35,6 +35,8 @@ describe("the reply voice in the panel", () => {
     expect(box).toContain('t("vui.pack.kokoro.host")');
     expect(box).toContain('t("vui.pack.installSize", view().size ?? "")');
     expect(box).toContain('role="progressbar"');
+    expect(box).toContain('t("vui.pack.filesOf"');
+    expect(box).toContain('view().phase === "installed" && view().removable && props.onDelete');
   });
 
   test("Kokoro's source is the pack's note, not the Piper voice-page button", () => {

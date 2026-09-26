@@ -175,6 +175,7 @@ export const voiceEn: VoiceMessages = {
   "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
   "vui.pack.installing": "Installing",
   "vui.pack.bytesOf": (done, total, percent) => `${done} of ${total} (${percent}%)`,
+  "vui.pack.filesOf": (done, file, files) => `${done}, file ${file} of ${files}`,
   "vui.pack.cancel": "Cancel",
   "vui.pack.cancelling": "Cancelling…",
   "vui.pack.install": "Install",

@@ -413,6 +413,7 @@ import {
   type InstallProgress,
   type PackState,
   kokoroVoice,
+  KOKORO_DOWNLOAD_BYTES,
 } from "@nikcli-ai/voice"
 import { createPackController, followInstall } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
@@ -4065,6 +4066,7 @@ export function Workbench() {
     get: kokoroPack,
     set: setKokoroPack,
     fallback: t("voice.download.failed"),
+    sizeBytes: KOKORO_DOWNLOAD_BYTES,
   })
   /*
    * «Prova»: a sentence in the language of the voice, so the reply-language

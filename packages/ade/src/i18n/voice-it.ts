@@ -176,6 +176,7 @@ export const voiceIt = {
   "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
   "vui.pack.installing": "Installazione in corso",
   "vui.pack.bytesOf": (done: string, total: string, percent: string) => `${done} di ${total} (${percent}%)`,
+  "vui.pack.filesOf": (done: string, file: string, files: string) => `${done}, file ${file} di ${files}`,
   "vui.pack.cancel": "Annulla",
   "vui.pack.cancelling": "Annullo…",
   "vui.pack.install": "Installa",

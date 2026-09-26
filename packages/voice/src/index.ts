@@ -367,6 +367,7 @@ export {
 
 export {
   formatBytes,
+  KOKORO_DOWNLOAD_BYTES,
   packView,
   watchInstall,
   type InstallProgress,

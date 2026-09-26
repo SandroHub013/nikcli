@@ -19,7 +19,7 @@ function onceWatch(log: string[]) {
   }
 }
 
-function controller(host: VoicePackHost | undefined, log: string[] = []) {
+function controller(host: VoicePackHost | undefined, log: string[] = [], sizeBytes?: number) {
   let state: PackState = {}
   const seen: PackState[] = []
   const pack = createPackController({
@@ -32,6 +32,7 @@ function controller(host: VoicePackHost | undefined, log: string[] = []) {
     },
     fallback: "non riuscito",
     watch: onceWatch(log),
+    ...(sizeBytes === undefined ? {} : { sizeBytes }),
   })
   return { pack, state: () => state, seen }
 }
@@ -44,6 +45,16 @@ describe("the Kokoro pack, driven from the panel", () => {
     const failing = controller({ ttsLocalStatus: async () => Promise.reject(new Error("command tts_local_status not found")) })
     await failing.pack.refresh()
     expect(failing.state().status).toBeUndefined()
+  })
+
+  test("K4b's status says only whether it is there: the size is the known one, and no delete", async () => {
+    const { pack, state } = controller({ ttsLocalStatus: async () => ({ installed: false }) }, [], 209 * MB)
+    await pack.refresh()
+    expect(state().status).toEqual({ installed: false, sizeBytes: 209 * MB })
+    expect(state().removable).toBe(false)
+    const deleting = controller({ ttsLocalStatus: async () => ({ installed: true }), ttsLocalDelete: async () => {} })
+    await deleting.pack.refresh()
+    expect(deleting.state().removable).toBe(true)
   })
 
   test("install: watched while it runs, then asked again what is there", async () => {
@@ -131,11 +142,21 @@ describe("K3's progress and cancel have a caller", () => {
     }
   })
 
+  test("the bridge uses K4b's names, and no delete that Rust does not have", () => {
+    const shell = read("src", "host", "shell.ts")
+    expect(shell).toContain('invoke<{ supported: boolean; installed: boolean }>("tts_local_status", { provider })')
+    expect(shell).toContain('invoke("tts_local_install", { provider })')
+    expect(shell).toContain('invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId: voice, text, token, lang })')
+    expect(shell).toContain('invoke("tts_local_stop")')
+    expect(shell).not.toContain('"tts_local_delete"')
+  })
+
   test("the panel is given the progress, the cancel and the Kokoro pack", () => {
     const workbench = read("src", "surface", "workbench.tsx")
     expect(workbench).toContain('stopFollowing = followInstall(host, "piper", setPiperProgress)')
     expect(workbench).toContain("onCancelInstall={(provider) =>")
     expect(workbench).toContain("kokoroPack={kokoroPack()}")
+    expect(workbench).toContain("sizeBytes: KOKORO_DOWNLOAD_BYTES,")
     expect(workbench).toContain("onTestVoice={testReplyVoice}")
   })
 })

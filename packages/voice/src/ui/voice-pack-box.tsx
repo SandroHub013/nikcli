@@ -14,7 +14,9 @@ export function InstallBar(props: { view: PackView; onCancel?: () => void }) {
         <span>
           {props.view.bytesTotal
             ? t("vui.pack.bytesOf", props.view.bytesDone ?? "0 MB", props.view.bytesTotal, String(props.view.percent ?? 0))
-            : (props.view.bytesDone ?? "")}
+            : props.view.filesTotal
+              ? t("vui.pack.filesOf", props.view.bytesDone ?? "0 MB", String(props.view.filesDone ?? 0), String(props.view.filesTotal))
+              : (props.view.bytesDone ?? "")}
         </span>
       </div>
       <div
@@ -71,7 +73,7 @@ export function VoicePackBox(props: {
           {view().size ? t("vui.pack.installSize", view().size ?? "") : t("vui.pack.install")}
         </button>
       </Show>
-      <Show when={view().phase === "installed" && props.onDelete}>
+      <Show when={view().phase === "installed" && view().removable && props.onDelete}>
         <button type="button" data-slot="ghost-btn" disabled={!view().canDelete} onClick={() => props.onDelete?.()}>
           {view().canDelete ? t("vui.pack.delete") : t("vui.pack.deleting")}
         </button>

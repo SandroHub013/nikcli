@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatBytes, packView, watchInstall, type InstallProgress } from "./voice-pack";
+import { formatBytes, KOKORO_DOWNLOAD_BYTES, packView, watchInstall, type InstallProgress } from "./voice-pack";
 
 const MB = 1024 * 1024;
 
@@ -18,6 +18,23 @@ function progress(overrides: Partial<InstallProgress> = {}): InstallProgress {
 }
 
 describe("a voice pack as the panel shows it", () => {
+  test("a total not known is drawn by files, as K4b sends it for Kokoro", () => {
+    const view = packView({ status: { installed: false }, progress: progress({ bytes_total: null, bytes_done: 21 * MB, files_done: 2, files_total: 5 }) });
+    expect(view).toMatchObject({ phase: "installing", percent: 40, filesDone: 2, filesTotal: 5, bytesDone: "21 MB" });
+    expect(view.bytesTotal).toBeUndefined();
+  });
+
+  test("no «Elimina» unless the host can delete", () => {
+    const installed = { status: { installed: true } };
+    expect(packView(installed)).toMatchObject({ phase: "installed", removable: false, canDelete: false, canTest: true });
+    expect(packView({ ...installed, removable: true })).toMatchObject({ removable: true, canDelete: true });
+  });
+
+  test("Kokoro's download is K4b's four files", () => {
+    expect(KOKORO_DOWNLOAD_BYTES).toBe(219_489_095);
+    expect(formatBytes(KOKORO_DOWNLOAD_BYTES)).toBe("209 MB");
+  });
+
   test("a host without the backend offers nothing to press", () => {
     const view = packView({});
     expect(view.phase).toBe("unavailable");
@@ -35,8 +52,8 @@ describe("a voice pack as the panel shows it", () => {
     const view = packView({ status: { installed: false, sizeBytes: 192 * MB }, progress: progress({ bytes_done: 50 * MB }) });
     expect(view).toMatchObject({ phase: "installing", percent: 25, bytesDone: "50 MB", bytesTotal: "200 MB", canCancel: true, canInstall: false });
     expect(packView({ status: { installed: false }, progress: progress({ cancelled: true }) }).canCancel).toBe(false);
-    // A total not known yet: the bytes, no percentage.
-    const unknown = packView({ status: { installed: false }, progress: progress({ bytes_total: null, bytes_done: 3 * MB }) });
+    // Neither bytes nor files known yet: the bytes, no percentage.
+    const unknown = packView({ status: { installed: false }, progress: progress({ bytes_total: null, bytes_done: 3 * MB, files_total: 0 }) });
     expect(unknown.percent).toBeUndefined();
     expect(unknown.bytesDone).toBe("3 MB");
     // The panel's own install counts before the first progress arrives.
@@ -52,8 +69,8 @@ describe("a voice pack as the panel shows it", () => {
   });
 
   test("installed: test and delete, not while deleting", () => {
-    expect(packView({ status: { installed: true } })).toMatchObject({ phase: "installed", canTest: true, canDelete: true, canInstall: false });
-    expect(packView({ status: { installed: true }, busy: "delete" })).toMatchObject({ canTest: false, canDelete: false });
+    expect(packView({ status: { installed: true }, removable: true })).toMatchObject({ phase: "installed", canTest: true, canDelete: true, canInstall: false });
+    expect(packView({ status: { installed: true }, removable: true, busy: "delete" })).toMatchObject({ canTest: false, canDelete: false });
   });
 
   test("sizes in whole megabytes, kilobytes under one", () => {

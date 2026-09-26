@@ -30,9 +30,17 @@ export interface InstallProgress {
 /** What the host says about a pack. */
 export interface PackStatus {
   readonly installed: boolean;
-  /** Bytes the install downloads, from the host's manifest; absent when it does not say. */
+  /** Bytes the install downloads; absent when nobody says. */
   readonly sizeBytes?: number;
 }
+
+/**
+ * What installing Kokoro downloads, from K4b's manifest (`tts/kokoro.rs`): the
+ * sherpa-onnx runtime 20 494 724, the fp16 model 163 527 961, `voices-v1.0.bin`
+ * 28 214 398 and `espeak-ng-data` 7 252 012 bytes. `tts_local_status` says only
+ * whether it is there, so the size on «Installa» is this one.
+ */
+export const KOKORO_DOWNLOAD_BYTES = 20_494_724 + 163_527_961 + 28_214_398 + 7_252_012;
 
 export interface PackState {
   /** Undefined: this host has no backend for the pack, or it did not answer. */
@@ -42,6 +50,8 @@ export interface PackState {
   readonly busy?: "install" | "delete";
   /** A failure the panel was told, besides the install's own. */
   readonly error?: string;
+  /** The host can delete the pack: without its command there is no «Elimina». */
+  readonly removable?: boolean;
 }
 
 export type PackPhase = "unavailable" | "absent" | "installing" | "installed";
@@ -54,6 +64,11 @@ export interface PackView {
   readonly percent?: number;
   readonly bytesDone?: string;
   readonly bytesTotal?: string;
+  /** Files in place and in all, for the bar when the bytes' total is not known. */
+  readonly filesDone?: number;
+  readonly filesTotal?: number;
+  /** «Elimina» is shown: the host has a delete. */
+  readonly removable: boolean;
   readonly error?: string;
   readonly canInstall: boolean;
   readonly canCancel: boolean;
@@ -72,7 +87,7 @@ export function formatBytes(bytes: number): string {
 
 /** What the panel draws for `state`, and which of its buttons do something. */
 export function packView(state: PackState): PackView {
-  const none = { canInstall: false, canCancel: false, canTest: false, canDelete: false };
+  const none = { canInstall: false, canCancel: false, canTest: false, canDelete: false, removable: state.removable === true };
   const status = state.status;
   if (!status) return { phase: "unavailable", ...none };
   const size = status.sizeBytes !== undefined && status.sizeBytes > 0 ? formatBytes(status.sizeBytes) : undefined;
@@ -81,10 +96,19 @@ export function packView(state: PackState): PackView {
   if (state.busy === "install" || running) {
     const total = progress?.bytes_total ?? undefined;
     const done = progress?.bytes_done ?? 0;
+    // `bytes_total: null` is a total not known (the runtime is downloaded too): then the bar counts files.
+    const files = progress && !(total && total > 0) && progress.files_total > 0 ? progress : undefined;
     return {
       phase: "installing",
       ...(size ? { size } : {}),
       ...(total && total > 0 ? { percent: Math.min(100, Math.floor((done / total) * 100)), bytesTotal: formatBytes(total) } : {}),
+      ...(files
+        ? {
+            percent: Math.min(100, Math.floor((files.files_done / files.files_total) * 100)),
+            filesDone: files.files_done,
+            filesTotal: files.files_total,
+          }
+        : {}),
       bytesDone: formatBytes(done),
       ...none,
       // A cancel already asked for is not asked twice.
@@ -100,7 +124,7 @@ export function packView(state: PackState): PackView {
       ...(state.error ? { error: state.error } : {}),
       ...none,
       canTest: state.busy !== "delete",
-      canDelete: state.busy !== "delete",
+      canDelete: state.removable === true && state.busy !== "delete",
     };
   }
   return {

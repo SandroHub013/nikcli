@@ -48,6 +48,8 @@ export function createPackController(deps: {
   readonly set: (next: PackState) => void
   /** Said when a failure has no words of its own. */
   readonly fallback: string
+  /** What the install downloads, when the host's status does not say it. */
+  readonly sizeBytes?: number
   readonly watch?: Watch
 }): PackController {
   const { provider } = deps
@@ -59,7 +61,9 @@ export function createPackController(deps: {
   const status = async (host: VoicePackHost | undefined): Promise<PackStatus | undefined> => {
     if (!host?.ttsLocalStatus) return undefined
     try {
-      return await host.ttsLocalStatus(provider)
+      const found = await host.ttsLocalStatus(provider)
+      if (!found || found.sizeBytes !== undefined || deps.sizeBytes === undefined) return found
+      return { ...found, sizeBytes: deps.sizeBytes }
     } catch {
       // The command is not there (K4b not in this build) or did not answer: not available.
       return undefined
@@ -68,7 +72,7 @@ export function createPackController(deps: {
   return {
     async refresh() {
       const host = await deps.host()
-      patch({ status: await status(host) })
+      patch({ status: await status(host), removable: Boolean(host?.ttsLocalDelete) })
     },
     async install() {
       if (deps.get().busy) return
