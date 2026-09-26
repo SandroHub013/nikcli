@@ -1370,6 +1370,30 @@ export const en: Messages = {
     `Claude Code did not run «${command}»: it ${reason}. It can from the next turn if you choose «Always for this bot».`,
   "bots.approval.offer": (command: string) => `Allow this bot commands like «${command}», from the next turn?`,
   "bots.approval.expired": (command: string) => `No answer: «${command}» was denied.`,
+  "bots.routine.problem.notAllowed": "this runner cannot run routines",
+  "bots.routine.problem.prompt": "Write what the routine should do.",
+  "bots.routine.problem.every": "Choose every how many hours (1 to 168) or a time.",
+  "bots.routine.problem.gap": (minutes: number) => `Two runs need at least ${minutes} minutes between them.`,
+  "bots.routine.problem.spendRequired": "This mode needs a spending cap, per run and per day.",
+  "bots.routine.problem.perRun": (max: number) => `The cap per run goes up to ${max} $.`,
+  "bots.routine.problem.perDay": (max: number) => `The cap per day goes up to ${max} $.`,
+  "bots.routine.problem.runOverDay": "The cap per run cannot exceed the one per day.",
+  "bots.routine.suspended.noBot": "The bot's file is gone.",
+  "bots.routine.suspended.consent":
+    "The model, mode, key, prompt, schedule or cap changed: give your consent again.",
+  "bots.routine.suspended.overRun": (cost: string, max: string) =>
+    `The last run cost ${cost}, over the cap of ${max} per run.`,
+  "bots.routine.note.limit": "The plan reached its limit: no more routines today, they resume tomorrow.",
+  "bots.routine.note.perDay": (runs: number) => `Today's ${runs} runs are done: they resume tomorrow.`,
+  "bots.routine.note.spendDay": (max: string) => `Today's spending cap (${max}) does not cover another run: it resumes tomorrow.`,
+  "bots.routine.note.missed": (missed: number) =>
+    missed === 1
+      ? "ADE was closed: a missed run is not made up; running one now."
+      : `ADE was closed: ${missed} missed runs are not made up; running one now.`,
+  "bots.routine.note.running": "Running.",
+  "bots.routine.note.done": (cost: string) => (cost ? `Done, ${cost}.` : "Done."),
+  "bots.routine.note.stopped": "Stopped.",
+  "bots.routine.note.failed": (why: string) => (why ? `Failed: ${why}` : "Failed."),
   "bots.approval.alwaysSet": (reason: string) => `From now on this bot no longer asks when it ${reason}.`,
   "bots.status.replying": "replying…",
   "bots.stop": "Stop",

@@ -1381,6 +1381,30 @@ export const it = {
     `Claude Code non ha eseguito «${command}»: ${reason}. Può farlo dal prossimo turno se scegli «Sempre per questo bot».`,
   "bots.approval.offer": (command: string) => `Consentire a questo bot comandi come «${command}», dal prossimo turno?`,
   "bots.approval.expired": (command: string) => `Nessuna risposta: «${command}» è stato negato.`,
+  "bots.routine.problem.notAllowed": "questo runner non può eseguire routine",
+  "bots.routine.problem.prompt": "Scrivi che cosa deve fare la routine.",
+  "bots.routine.problem.every": "Scegli ogni quante ore (da 1 a 168) o un orario.",
+  "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} minuti.`,
+  "bots.routine.problem.spendRequired": "Con questo modo serve un tetto di spesa, per esecuzione e al giorno.",
+  "bots.routine.problem.perRun": (max: number) => `Il tetto per esecuzione arriva al massimo a ${max} $.`,
+  "bots.routine.problem.perDay": (max: number) => `Il tetto al giorno arriva al massimo a ${max} $.`,
+  "bots.routine.problem.runOverDay": "Il tetto per esecuzione non può superare quello al giorno.",
+  "bots.routine.suspended.noBot": "Il file del bot non c'è più.",
+  "bots.routine.suspended.consent":
+    "È cambiato qualcosa tra modello, modo, chiave, prompt, orario o tetto: ridai il consenso.",
+  "bots.routine.suspended.overRun": (cost: string, max: string) =>
+    `L'ultima esecuzione è costata ${cost}, oltre il tetto di ${max} per esecuzione.`,
+  "bots.routine.note.limit": "Il piano ha raggiunto il suo limite: niente altre routine oggi, si riprende domani.",
+  "bots.routine.note.perDay": (runs: number) => `Fatte le ${runs} esecuzioni consentite oggi: si riprende domani.`,
+  "bots.routine.note.spendDay": (max: string) => `Il tetto di spesa di oggi (${max}) non basta per un'altra esecuzione: si riprende domani.`,
+  "bots.routine.note.missed": (missed: number) =>
+    missed === 1
+      ? "ADE era chiusa: un'esecuzione saltata non si recupera; ne faccio una adesso."
+      : `ADE era chiusa: ${missed} esecuzioni saltate non si recuperano; ne faccio una adesso.`,
+  "bots.routine.note.running": "In corso.",
+  "bots.routine.note.done": (cost: string) => (cost ? `Fatta, ${cost}.` : "Fatta."),
+  "bots.routine.note.stopped": "Fermata.",
+  "bots.routine.note.failed": (why: string) => (why ? `Non riuscita: ${why}` : "Non riuscita."),
   "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",
   "bots.stop": "Ferma",
