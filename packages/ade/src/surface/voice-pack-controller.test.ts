@@ -142,13 +142,19 @@ describe("K3's progress and cancel have a caller", () => {
     }
   })
 
-  test("the bridge uses K4b's names, and no delete that Rust does not have", () => {
+  test("the bridge uses the names agreed with K4b: status with its size, install, delete, speak, stop", () => {
     const shell = read("src", "host", "shell.ts")
-    expect(shell).toContain('invoke<{ supported: boolean; installed: boolean }>("tts_local_status", { provider })')
+    expect(shell).toContain('invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })')
     expect(shell).toContain('invoke("tts_local_install", { provider })')
+    expect(shell).toContain('invoke("tts_local_delete", { provider })')
     expect(shell).toContain('invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId: voice, text, token, lang })')
     expect(shell).toContain('invoke("tts_local_stop")')
-    expect(shell).not.toContain('"tts_local_delete"')
+  })
+
+  test("the host's size wins over the one the panel knows", async () => {
+    const { pack, state } = controller({ ttsLocalStatus: async () => ({ installed: false, sizeBytes: 230 * MB }) }, [], 209 * MB)
+    await pack.refresh()
+    expect(state().status?.sizeBytes).toBe(230 * MB)
   })
 
   test("the panel is given the progress, the cancel and the Kokoro pack", () => {

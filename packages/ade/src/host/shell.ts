@@ -228,6 +228,8 @@ export interface Host {
   ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
   /** K4b: downloads a provider's pack, checked against pinned digests. */
   ttsLocalInstall?: (provider: string) => Promise<void>
+  /** K4b: removes a provider's pack from disk. */
+  ttsLocalDelete?: (provider: string) => Promise<void>
   /** K4b: a WAV of `text` in a local provider's voice; `lang` is the G2P language (it | en-us | en). */
   ttsLocalSpeak?: (provider: string, voice: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
   /** K4b: stops the resident local host; there is one, whatever the provider. */
@@ -716,9 +718,10 @@ export async function getHost(): Promise<Host | undefined> {
      */
     async ttsLocalStatus(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
-      const status = await invoke<{ supported: boolean; installed: boolean }>("tts_local_status", { provider })
+      // `sizeBytes` comes with K4b's LocalStatus; until it does, the panel uses the size it knows.
+      const status = await invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })
       if (!status.supported) return undefined
-      return { installed: Boolean(status.installed) }
+      return { installed: Boolean(status.installed), ...(typeof status.sizeBytes === "number" ? { sizeBytes: status.sizeBytes } : {}) }
     },
 
     async ttsLocalInstall(provider) {
@@ -726,7 +729,11 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("tts_local_install", { provider })
     },
 
-    // No `tts_local_delete`: K4b has none, and the panel offers no «Elimina» without it.
+    async ttsLocalDelete(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_delete", { provider })
+    },
+
     async ttsLocalSpeak(provider, voice, text, token, lang) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId: voice, text, token, lang })
