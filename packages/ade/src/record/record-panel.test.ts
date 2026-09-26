@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseRequest } from "../panels/protocol"
+import { parseRequest, type PanelOutcome } from "../panels/protocol"
 import { RECORD_VERBS, runRecordRequest, type RecordPanelDeps } from "./record-panel"
 import type { RecordTarget } from "./recording"
 
@@ -129,13 +129,31 @@ describe("record/record-panel", () => {
     expect(await runRecordRequest(ask("@ade record state"), idle)).toEqual({ ok: true, detail: "nessuna registrazione" })
   })
 
-  test("an unknown verb is refused, and every verb offered has an answer", async () => {
-    const { deps: d } = deps()
-    const outcome = await runRecordRequest(ask("@ade record zoom"), d)
-    expect(outcome.ok).toBe(false)
-    for (const verb of RECORD_VERBS) {
-      const answered = await runRecordRequest(ask(`@ade record ${verb.name}`), deps({ state: () => ({ recording: true }) }).deps)
-      expect(answered).toBeDefined()
+  test("an unknown verb is refused, and every verb offered answers for itself", async () => {
+    const refused = await runRecordRequest(ask("@ade record zoom"), deps().deps)
+    expect(refused).toEqual({ ok: false, reason: "comando sconosciuto: zoom" })
+
+    /*
+     * What each offered verb answers while a take is already running, with no
+     * path on the state. Every verb gets its own exact answer. The
+     * `toBeDefined` that stood here proved nothing: `PanelOutcome` is a union of
+     * two non-nullable objects, so the assertion held for any behaviour at all,
+     * including one that refused every verb as unknown and left nothing able to
+     * record.
+     */
+    const WHILE_RUNNING: Record<string, PanelOutcome> = {
+      start: { ok: false, reason: "una registrazione è già in corso" },
+      stop: { ok: true, detail: "registrazione chiusa" },
+      state: { ok: true, detail: "registro in corso" },
     }
+    // A verb added to RECORD_VERBS has to bring its own expected answer with it,
+    // or this test quietly stops covering the list it walks.
+    expect(Object.keys(WHILE_RUNNING).sort()).toEqual(RECORD_VERBS.map((verb) => verb.name).sort())
+
+    const answers: Record<string, PanelOutcome> = {}
+    for (const verb of RECORD_VERBS) {
+      answers[verb.name] = await runRecordRequest(ask(`@ade record ${verb.name}`), deps({ state: () => ({ recording: true }) }).deps)
+    }
+    expect(answers).toEqual(WHILE_RUNNING)
   })
 })
