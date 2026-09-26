@@ -1480,6 +1480,7 @@ export const en: Messages = {
   "bots.memory.from.panel": "from the conversation",
   "bots.memory.from.routine": "from a routine",
   "bots.memory.from.gateway": "from a chat",
+  "bots.memory.from.room": "from a room",
   "bots.memory.confirm": "Confirm",
   "bots.memory.discard": "Discard",
   "bots.memory.undo": "Undo",

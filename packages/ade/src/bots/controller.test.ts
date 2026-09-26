@@ -457,6 +457,40 @@ describe("a routine's run", () => {
     expect(m.flags[1]).toEqual(["bot-ask-shell"])
   })
 
+  test("a room's turn has its own thread and session, and nikcli's questions are answered as in the panel (B8b)", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    const thread = `room:r1:${nikcli.path}`
+    const turn = p.turns.room(nikcli, "tocca a te", thread)
+    expect(turn).toBeDefined()
+    await tick()
+    // The user watches the room: nikcli asks, and ADE answers (B8c).
+    expect(m.flags[0]).toEqual(["bot-ask-shell"])
+    expect(p.turns.threadOf(nikcli.path)).toBe(thread)
+    expect(p.talk(thread).messages.map((message) => message.role)).toEqual(["user"])
+    expect(p.talk(nikcli.path).messages).toEqual([])
+    // One turn at a time per bot, in a room or not.
+    expect(p.turns.send(nikcli, "a mano")).toBe(false)
+    // The block list refuses at once; a dangerous command waits in the room's thread.
+    m.print(menu("bash", "rm -rf ~"))
+    p.quiet()
+    expect(m.writes).toEqual([REJECT])
+    m.print(menu("bash", "git push --force"))
+    p.quiet()
+    expect(p.talk(thread).permission?.patterns).toBe("git push --force")
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    p.turns.answer(nikcli, "once")
+    expect(m.writes).toEqual([REJECT, ONCE])
+    m.exit(0)
+    await turn!.result
+    expect(p.turns.threadOf(nikcli.path)).toBe(nikcli.path)
+    expect(p.turns.send(nikcli, "a mano")).toBe(true)
+    await tick()
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
   test("whatever nikcli asks during a routine is refused at once (review, BASSO 1)", async () => {
     const m = machine()
     const p = panel(m)
@@ -623,6 +657,22 @@ describe("a bot's memory in its turns", () => {
       ["routine", "notes"],
     ])
     expect(p.talks[nikcli.path]!.messages.some((message) => message.memoryUndo)).toBe(false)
+  })
+
+  test("a room's writes all wait for the user too (B8b)", async () => {
+    const p = memoryPanel()
+    const nikcli = bot("nikcli")
+    const thread = `room:r1:${nikcli.path}`
+    p.turns.room(nikcli, "tocca a te", thread)
+    p.talks[thread] = {
+      ...appendMessage(p.talks[thread]!, { role: "bot", text: 'Ecco.\n<ade-memory op="add" block="notes">Usa bun.</ade-memory>' }, 1),
+      sessionId: "s1",
+    }
+    await p.done()
+    expect(p.memory.get(nikcli.path).notes).toEqual([])
+    expect(p.memory.get(nikcli.path).proposals?.map((proposal) => proposal.from)).toEqual(["room"])
+    expect(p.talks[thread]!.messages.find((message) => message.role === "bot")?.text).toBe("Ecco.")
+    expect(p.talks[nikcli.path]).toBeUndefined()
   })
 
   test("a refused write is said in the thread, and to the bot on its next turn", async () => {

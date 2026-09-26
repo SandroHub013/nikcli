@@ -1493,6 +1493,7 @@ export const it = {
   "bots.memory.from.panel": "dalla conversazione",
   "bots.memory.from.routine": "da una routine",
   "bots.memory.from.gateway": "da una chat",
+  "bots.memory.from.room": "da una stanza",
   "bots.memory.confirm": "Conferma",
   "bots.memory.discard": "Scarta",
   "bots.memory.undo": "Annulla",
