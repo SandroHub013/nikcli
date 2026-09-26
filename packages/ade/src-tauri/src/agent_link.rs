@@ -446,6 +446,12 @@ fn write_hook_files(
 /// [`HOOK_TARGETS`], and one that names anything else is refused before any
 /// write. A text that is not already the one on disk is shown to the user
 /// first, as the hook scripts are: it is a program another CLI will load.
+///
+/// Removing takes the two folders the install may have made (`plugin\tui`,
+/// then `plugin`) when they are left empty, and only then: an empty folder
+/// holds nothing anyone reads, nikcli scans an absent one the same way, and a
+/// folder with anything else in it is the user's. «Rimuovi» used to leave an
+/// empty `plugin\tui` behind (prove dal vivo 2).
 fn write_plugin_file(path: &Path, script: Option<&str>, confirm: impl FnOnce(&Path) -> bool) -> Result<(), String> {
     if path.file_name().and_then(|name| name.to_str()) != Some(PLUGIN_NAME) {
         return Err(format!("{} non è il plugin di {}", path.display(), crate::brand::name()));
@@ -460,11 +466,23 @@ fn write_plugin_file(path: &Path, script: Option<&str>, confirm: impl FnOnce(&Pa
             }
             write_atomic(path, text.as_bytes())
         }
-        None => match fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(format!("plugin non rimosso: {error}")),
-        },
+        None => {
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(format!("plugin non rimosso: {error}")),
+            }
+            // `remove_dir` refuses a folder that is not empty, which is the check.
+            let mut folder = path.parent();
+            for _ in 0..2 {
+                let Some(dir) = folder else { break };
+                if fs::remove_dir(dir).is_err() {
+                    break;
+                }
+                folder = dir.parent();
+            }
+            Ok(())
+        }
     }
 }
 
@@ -863,6 +881,33 @@ mod tests {
         write_plugin_file(&path, None, |_| true).expect("removed");
         assert!(!path.exists());
         write_plugin_file(&path, None, |_| true).expect("already gone");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn removing_the_plugin_takes_the_folders_it_left_empty_and_no_others() {
+        // Prove dal vivo 2: «Rimuovi» left an empty plugin\tui behind.
+        let (_, _, dir) = hook_scratch("plugin-folders");
+        let plugin = dir.join("plugin");
+        let path = plugin.join("tui").join(PLUGIN_NAME);
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!plugin.join("tui").exists(), "plugin\\tui vuota resta");
+        assert!(!plugin.exists(), "plugin vuota resta");
+        assert!(dir.exists(), "oltre le due cartelle del plugin non si risale");
+
+        // The user's own plugin beside it: the folder is theirs, and it stays.
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        fs::write(plugin.join("suo.js"), "// dell'utente").unwrap();
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!plugin.join("tui").exists());
+        assert_eq!(fs::read_to_string(plugin.join("suo.js")).unwrap(), "// dell'utente");
+
+        // And a file of theirs in tui keeps tui.
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        fs::write(plugin.join("tui").join("altro.js"), "// dell'utente").unwrap();
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(plugin.join("tui").join("altro.js").exists());
         let _ = fs::remove_dir_all(dir);
     }
 
