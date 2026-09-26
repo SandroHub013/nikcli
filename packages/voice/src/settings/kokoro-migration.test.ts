@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CURRENT_SETTINGS_VERSION, DEFAULT_VOICE_SETTINGS, normalizeSettings, type VoiceSettings } from "./model";
-import { isKokoroVoice, KOKORO_VOICES } from "./reply-voices";
+import { isKokoroVoice, KOKORO_VOICES, speakingReplyVoice } from "./reply-voices";
 
 /**
  * A version 7 profile: what every profile on disk looks like before Kokoro —
@@ -106,27 +106,37 @@ describe("la coppia voce e backend", () => {
 });
 
 describe("Kokoro con una lingua che non può parlare", () => {
-  test("una risposta italiana su una voce Kokoro viene messa su Piper, e si può rimettere", () => {
+  test("la scelta dell'utente resta sul disco, e la correzione sparisce con lei", () => {
     const res = normalizeSettings(v8({ replyVoice: "af_heart", replyBackend: "kokoro", ttsLocale: "it-IT" }));
-    expect(res.replyVoice).toBe("paola");
-    expect(res.replyBackend).toBe("piper");
-    expect(isKokoroVoice(res.replyVoice)).toBe(false);
-    // La correzione è reversibile: l'interfaccia la cerca per nome.
-    expect(res.migrations).toContain("kokoro-remapped");
-    expect(res.corrections.length).toBeGreaterThan(0);
+    // Niente viene riscritto: la voce che parla è decisa per ogni risposta, e
+    // un profilo che ha scelto Kokoro resta su Kokoro anche se la finestra è
+    // italiana. Il giorno in cui una risposta è in inglese, parla da sola.
+    expect(res.replyVoice).toBe("af_heart");
+    expect(res.replyBackend).toBe("kokoro");
+    expect(isKokoroVoice(res.replyVoice)).toBe(true);
+    // E non c'è una correzione da mostrare: non è successo niente al profilo.
+    expect(res.corrections).toEqual([]);
+    expect(res.migrations).toEqual([]);
   });
 
-  test("sul genere giusto, voce per voce", () => {
-    expect(normalizeSettings(v8({ replyVoice: "am_fenrir", replyBackend: "kokoro", ttsLocale: "it-IT" })).replyVoice).toBe("ugo");
-    expect(normalizeSettings(v8({ replyVoice: "bf_emma", replyBackend: "kokoro", ttsLocale: "it-IT" })).replyVoice).toBe("paola");
+  test("non ripete: due caricamenti dello stesso profilo dicono la stessa cosa", () => {
+    // Il banner che si ripeteva a ogni avvio veniva da qui: la riscrittura non
+    // cambiava la versione, e il risparmio del profilo è legato alla versione.
+    const stored = v8({ replyVoice: "am_fenrir", replyBackend: "kokoro", ttsLocale: "it-IT" });
+    const first = normalizeSettings(stored);
+    const second = normalizeSettings({ ...first.settings });
+    expect(second.corrections).toEqual(first.corrections);
+    expect(second.settings.replyVoice).toBe("am_fenrir");
   });
 
-  test("in inglese la voce Kokoro resta, e non viene rimossa due volte", () => {
-    for (const voice of KOKORO_VOICES) {
-      const res = normalizeSettings(v8({ replyVoice: voice.id, replyBackend: "kokoro", ttsLocale: voice.locale }));
-      expect(res.replyVoice).toBe(voice.id);
-      expect(res.migrations).not.toContain("kokoro-remapped");
-    }
+  test("e la lingua in cui legge è comunque quella della risposta", () => {
+    // Il rimedio non sparisce con la migrazione: è nella voce che parla, che è
+    // `speakingReplyVoice` e non il profilo. Il secondo argomento è la lingua
+    // che il testo della risposta dice, quindi lo stesso profilo legge in Ugo su
+    // una risposta italiana e in Kokoro su una inglese.
+    const res = normalizeSettings(v8({ replyVoice: "am_fenrir", replyBackend: "kokoro", ttsLocale: "it-IT" }));
+    expect(speakingReplyVoice(res.replyVoice, "it-IT", "it")).toBe("ugo");
+    expect(speakingReplyVoice(res.replyVoice, "en-US", "it")).toBe("am_fenrir");
   });
 
   test("una lingua che non è nell'elenco non viene passata al runtime", () => {

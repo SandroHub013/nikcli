@@ -6,7 +6,6 @@
  */
 
 import { describeChordRisk } from "./shortcuts"
-import { replyVoiceFor } from "./reply-voices"
 import type { TranscriberBackend } from "../asr/select"
 import { t } from "@nikcli-ai/ade/i18n"
 
@@ -368,8 +367,10 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * `shortcut-only`: a profile on the wake word is back on the shortcut.
  * `name-only`: a profile on the shortcut or toggle now listens for the name.
  * `listening-off`: a profile that listened on its own no longer does.
- * `kokoro-remapped`: a Kokoro voice that cannot speak the reply's language has
- * been put on the voice of that language, and can be put back where it was.
+ *
+ * There is deliberately no migration for a Kokoro voice in the wrong language:
+ * the voice that reads such a reply is decided per reply, so there is nothing on
+ * disk to move and nothing to put back.
  */
 export type VoiceMigration =
   | "wake-word"
@@ -377,7 +378,6 @@ export type VoiceMigration =
   | "shortcut-only"
   | "name-only"
   | "listening-off"
-  | "kokoro-remapped"
 
 /**
  * The locale a profile written before version 8 was really speaking in.
@@ -751,22 +751,22 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   }
 
   /*
-   * Kokoro is English only (D95), so an Italian reply on a Kokoro voice has no
-   * voice to read it. It is put on the Piper voice of that language here, once,
-   * with a migration that names it — so the user is told and can put the choice
-   * back — rather than at every reply, where it would be invisible. The
-   * alternative, sending an English Kokoro id to Piper, is a voice that does
-   * not exist.
+   * A Kokoro voice in the wrong language is left exactly where the profile put
+   * it, and this is where a reviewer will look for the code that moves it.
+   *
+   * There was one, and it was wrong twice. It overwrote the id the user had
+   * chosen, so the migration that claimed it could be put back had nothing to
+   * put it back to, and `loadVoiceSettings` writes a migrated profile straight
+   * back, which made the loss permanent. And the write-back only runs when the
+   * version changed while a remap is not a version, so the sentence was produced
+   * again at every start: the banner repeated for as long as the app was opened.
+   *
+   * It is not needed. The voice that reads a reply is decided from the text of
+   * that reply, per reply, by `speakingReplyVoice`: an Italian answer on an
+   * English Kokoro voice goes to Ugo or Paola with nothing written anywhere, and
+   * the choice comes back by itself the first time an answer is in English. A
+   * migration that moves nothing cannot be irreversible, and cannot repeat.
    */
-  if (replyBackend === "kokoro") {
-    const speaking = replyVoiceFor(replyVoice, ttsLocale)
-    if (speaking !== replyVoice) {
-      corrections.push(t("vui.fix.kokoroLanguage", String(speaking)))
-      replyVoice = speaking
-      replyBackend = REPLY_BACKEND_BY_VOICE[speaking]
-      migrations.push("kokoro-remapped")
-    }
-  }
 
   /*
    * 16. The chosen audio devices, if any were chosen.
