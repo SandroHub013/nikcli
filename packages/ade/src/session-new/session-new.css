@@ -354,7 +354,7 @@
 }
 
 [data-slot="new-agent"][data-active] {
-  border-color: var(--cli-color, var(--ade-accent));
+  border-color: var(--cli-border, var(--cli-color, var(--ade-border-strong)));
   background:
     radial-gradient(130% 130% at 0% 50%, var(--cli-tint, var(--ade-accent-soft)) 0%, transparent 80%),
     var(--ade-raised);
@@ -394,9 +394,9 @@
 }
 
 [data-slot="new-agent"][data-active] [data-slot="new-agent-glyph"] {
-  border-color: var(--cli-border, var(--cli-color, var(--ade-accent)));
+  border-color: var(--cli-border, var(--cli-color, var(--ade-border-strong)));
   background: var(--cli-tint, var(--ade-active));
-  box-shadow: 0 0 8px -2px var(--cli-glow, var(--ade-accent));
+  box-shadow: 0 0 8px -2px var(--cli-glow, transparent);
 }
 
 [data-slot="new-agent-badge-slot"] {
@@ -507,7 +507,8 @@
 [data-slot="new-count"][data-active] {
   position: relative;
   z-index: 1;
-  border-color: var(--ade-accent);
+  /* The badge is accent because it is a filled chip, not an outline. */
+  border-color: var(--ade-accent-soft);
   background: var(--ade-accent);
   color: var(--ade-accent-fg);
   font-weight: var(--ade-weight-semibold);
