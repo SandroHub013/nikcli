@@ -909,43 +909,90 @@ async fn claude_version() -> Option<String> {
     .flatten()
 }
 
-/// Waits up to `timeout` for `child` to exit and returns the first line of its
-/// stdout, at most 200 characters. A child that fails, or is still running at
-/// the deadline, gives None; the late one is killed and reaped first.
+/// Reads `reader` on a thread of its own, sending what it has as it goes.
 ///
-/// The deadline is the deadline. It used to bind only the polling loop: on the
-/// way out the function joined the reader, and a join has no timeout, so a
-/// grandchild still holding the pipe open — `cmd /c start /b`, a shell that
-/// leaves a sleeper behind, a launcher that returns before its child — kept that
-/// join alive for as long as the grandchild lived, and a function documented as
-/// bounded ran for thirty seconds. The reader now hands what it has over a
-/// channel and the wait for it has the time that is left, so the bound holds on
-/// every path.
-fn first_line_within(child: &mut std::process::Child, timeout: std::time::Duration) -> Option<String> {
-    use std::io::Read;
-    use std::time::Instant;
-
-    let mut stdout = child.stdout.take()?;
-    // Read on a thread so the pipe cannot fill and stall the child while the
-    // loop below waits on it. What it sends is what it has read so far, not the
-    // end of the pipe: the point is to be able to stop waiting for it.
+/// The reader is never joined. A thread that is blocked in `read` on a pipe
+/// somebody else holds does not come back, and there is no timeout on a join, so
+/// joining is how a bounded wait became an unbounded one. What the caller waits
+/// for instead is a channel, and this is what puts bytes on it.
+fn read_on_a_thread(mut reader: Box<dyn std::io::Read + Send>) -> std::sync::mpsc::Receiver<Vec<u8>> {
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
-    let reader = std::thread::spawn(move || {
-        let mut out = Vec::new();
-        let mut buffer = [0_u8; 1024];
+    std::thread::spawn(move || {
+        let mut chunk = vec![0_u8; 1024];
         loop {
-            match stdout.read(&mut buffer) {
+            match reader.read(&mut chunk) {
                 Ok(0) | Err(_) => break,
                 Ok(read) => {
-                    out.extend_from_slice(&buffer[..read]);
-                    if tx.send(out.clone()).is_err() {
-                        // Nobody is waiting any more: the deadline went by.
+                    // Nobody waiting any more is a normal end, not an error: the
+                    // caller gave up and this thread can stop reading.
+                    if tx.send(chunk[..read].to_vec()).is_err() {
                         break;
                     }
                 }
             }
         }
+        // Dropping the sender is how the reader says it is finished.
     });
+    rx
+}
+
+/// Collects what a reader sent, until it finishes or `limit` runs out.
+///
+/// Every chunk, not the first one: a line that arrives in two reads is one line,
+/// and a `PATH` longer than the buffer is still a `PATH` with its marker at the
+/// end. The first chunk alone is what a `recv_timeout` returns, and a caller that
+/// takes it has half a line whenever the pipe split one.
+fn collect_until(rx: std::sync::mpsc::Receiver<Vec<u8>>, limit: std::time::Duration) -> Option<Vec<u8>> {
+    let deadline = std::time::Instant::now() + limit;
+    let mut out: Vec<u8> = Vec::new();
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            break;
+        }
+        match rx.recv_timeout(left) {
+            Ok(chunk) => out.extend_from_slice(&chunk),
+            // Finished, or out of time. Both end the wait; what arrived so far is
+            // what there is, and the caller decides whether that is a line.
+            Err(_) => break,
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The first line of some output, at most 200 characters, trimmed.
+fn first_line_of(out: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(out);
+    let line = text.lines().next()?.trim();
+    (!line.is_empty()).then(|| line.chars().take(200).collect())
+}
+
+/// The first line out of `reader`, within `limit`, with nothing joined.
+///
+/// This is the part both callers share, and it is a function of its own so a test
+/// can hand it a reader that misbehaves on purpose — one that sends a line in
+/// pieces, one that never finishes — instead of a process to arrange.
+fn first_line_from(reader: Box<dyn std::io::Read + Send>, limit: std::time::Duration) -> Option<String> {
+    let rx = read_on_a_thread(reader);
+    let out = collect_until(rx, limit)?;
+    first_line_of(&out)
+}
+
+/// Waits up to `timeout` for `child` to exit and returns the first line of its
+/// stdout, at most 200 characters. A child that fails, or is still running at
+/// the deadline, gives None; the late one is killed and reaped first.
+///
+/// The deadline is the deadline: it bounds the wait for the output as well as the
+/// wait for the process, and nothing on the way out is joined. See
+/// `read_on_a_thread` for what that costs when it is not done, and
+/// `collect_until` for why the first chunk is not the answer.
+fn first_line_within(child: &mut std::process::Child, timeout: std::time::Duration) -> Option<String> {
+    use std::time::Instant;
+
+    let stdout = child.stdout.take()?;
+    // Read on a thread so the pipe cannot fill and stall the child while the
+    // loop below waits on it.
+    let rx = read_on_a_thread(Box::new(stdout));
     let started = Instant::now();
     let deadline = started + timeout;
     let status = loop {
@@ -962,28 +1009,11 @@ fn first_line_within(child: &mut std::process::Child, timeout: std::time::Durati
     if !status.success() {
         return None;
     }
-    // The child is gone, so whatever the reader has sent is all there will ever
-    // be; what is left is the time the deadline still allows. Zero means the
-    // polling loop used it all, and a line that arrives after the deadline is
-    // not one this caller is waiting for.
+    // The child is gone, so what the reader sends is all there will be. What is
+    // left of the deadline is what there is time for.
     let left = deadline.saturating_duration_since(Instant::now());
-    let out = match rx.recv_timeout(left) {
-        Ok(out) => out,
-        Err(_) => {
-            // The reader is still blocked on a pipe somebody else holds. The child
-            // is already reaped, so there is nothing to kill, and the thread ends
-            // when the pipe does; it is not joined and it is not waited for.
-            std::thread::spawn(move || {
-                drop(rx);
-            });
-            return None;
-        }
-    };
-    drop(rx);
-    let _ = reader.join();
-    let text = String::from_utf8_lossy(&out);
-    let line = text.lines().next()?.trim();
-    (!line.is_empty()).then(|| line.chars().take(200).collect())
+    let out = collect_until(rx, left)?;
+    first_line_of(&out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,14 +1207,12 @@ fn login_shell_path() -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let mut stdout = child.stdout.take()?;
+    let stdout = child.stdout.take()?;
     // Read on a thread so a chatty profile cannot fill the pipe and stall the
-    // shell, and so the wait below can give up on one that never exits.
-    let reader = std::thread::spawn(move || {
-        let mut out = String::new();
-        let _ = stdout.read_to_string(&mut out);
-        out
-    });
+    // shell, and so the wait below can give up on one that never exits. Same
+    // three pieces as the Windows side and for the same reasons: a channel, no
+    // join, and every chunk rather than the first.
+    let rx = read_on_a_thread(Box::new(stdout));
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         match child.try_wait() {
@@ -1197,29 +1225,26 @@ fn login_shell_path() -> Option<String> {
             }
         }
     }
-    // The child is gone, so whatever the reader has sent is all there will ever
-    // be; what is left is the time the deadline still allows. Zero means the
-    // polling loop used it all, and a line that arrives after the deadline is
-    // not one this caller is waiting for.
+    // The shell is gone, so what the reader sends is all there will be.
     let left = deadline.saturating_duration_since(Instant::now());
-    let out = match rx.recv_timeout(left) {
-        Ok(out) => out,
-        Err(_) => {
-            // The reader is still blocked on a pipe somebody else holds. The child
-            // is already reaped, so there is nothing to kill, and the thread ends
-            // when the pipe does; it is not joined and it is not waited for.
-            std::thread::spawn(move || {
-                drop(rx);
-            });
-            return None;
-        }
-    };
-    drop(rx);
-    let _ = reader.join();
-    let start = out.rfind("__ADE_PATH__")? + "__ADE_PATH__".len();
-    let end = out[start..].find("__ADE_END__")? + start;
-    let path = out[start..end].trim();
-    (!path.is_empty()).then(|| path.to_string())
+    let out = collect_until(rx, left)?;
+    // The markers are looked for in the bytes, not in a String: the reader gives
+    // bytes now, and a PATH that comes back in pieces is found in all of them
+    // rather than in the first chunk. `rfind` on a `Vec<u8>` does not exist, and
+    // this is `cfg(unix)`, so a Windows build says nothing about it — which is how
+    // a wrong line survived a whole commit.
+    let start_marker = b"__ADE_PATH__";
+    let end_marker = b"__ADE_END__";
+    let start = out
+        .windows(start_marker.len())
+        .rposition(|window| window == start_marker)
+        .map(|at| at + start_marker.len())?;
+    let end = out[start..]
+        .windows(end_marker.len())
+        .position(|window| window == end_marker)
+        .map(|at| at + start)? + start;
+    let path = String::from_utf8_lossy(&out[start..end]).trim().to_string();
+    (!path.is_empty()).then_some(path)
 }
 
 /// Where Homebrew, bun, npm, pnpm, cargo, volta, pipx and nvm put binaries.
@@ -2340,56 +2365,6 @@ mod tests {
         assert_eq!(first_line_within(&mut child, Duration::from_secs(5)), None);
         assert!(started.elapsed() < Duration::from_secs(6), "took {:?}", started.elapsed());
         assert!(child.try_wait().expect("handle still valid").is_some(), "child still running");
-    }
-
-    /**
-     * The bound, on the side of it that was missing.
-     *
-     * `first_line_within` is called for a process it started itself, so its own
-     * stdout is the only pipe involved and a grandchild is not a case it must
-     * survive. What it must survive is a reader that is still blocked when the
-     * child is gone: the pipe can outlive the process, and the old code joined
-     * that reader, and a join has no deadline. So the test is the reader that
-     * never sends, and the assertion is that waiting for it costs the time the
-     * caller allowed and not one moment more.
-     */
-    fn un_lettore_bloccato_non_e_un_testo_appeso() {
-        use std::io::Read;
-        use std::time::{Duration, Instant};
-
-        // Il lettore che non finisce, costruito a mano: un Read che non ritorna
-        // mai. Serve a provare che il canale e' quello che attende, e non il
-        // thread.
-        struct Never;
-        impl Read for Never {
-            fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
-                std::thread::sleep(Duration::from_secs(30));
-                Ok(0)
-            }
-        }
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
-        let started = Instant::now();
-        let mut reader = std::thread::spawn(move || {
-            let mut out = Vec::new();
-            let mut buffer = [0_u8; 8];
-            let mut never = Never;
-            while let Ok(read) = never.read(&mut buffer) {
-                if read == 0 {
-                    break;
-                }
-                out.extend_from_slice(&buffer[..read]);
-                if tx.send(out.clone()).is_err() {
-                    break;
-                }
-            }
-        });
-        // Il canale scade, il thread no: e' quello che il fix rende vero.
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
-        assert!(started.elapsed() < Duration::from_secs(1));
-        drop(rx);
-        // Il lettore viene lasciato andare: non lo si aspetta, e il test non
-        // dipende da quanto tempo ci mette.
-        reader.detach_ok();
     }
 
     trait DetachOk {
