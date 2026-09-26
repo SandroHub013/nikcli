@@ -49,6 +49,8 @@ import {
   planFork,
   planLastHere,
   planMint,
+  MintLedger,
+  lastHereBesideMints,
   planRestore,
   restoreClaims,
   claimedByRestore,
@@ -6113,21 +6115,27 @@ export function Workbench() {
    * CLI's background service open — so this reads until the id appears and
    * kills it, rather than waiting for an exit that is not coming.
    */
+  const mints = new MintLedger()
   const mintConversation = async (agentId: string, command: string, cwd: string, title: string) => {
     const plan = planMint(agentId, title)
     if (!plan) return undefined
-    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+    return await mints.track(askCli(command, plan.args, cwd, plan.read).then((id) => id ?? undefined))
   }
 
   /**
-   * The most recent conversation of `cwd` that no other pane holds, asked of
-   * the CLI (`ResumeRecipe.lastHere`). Undefined when there is none or the
-   * command did not answer in time.
+   * The most recent conversation of `cwd` that no other pane holds and no
+   * pane minted, asked of the CLI (`ResumeRecipe.lastHere`). Undefined when
+   * there is none or the command did not answer in time.
    */
   const lastConversationHere = async (agentId: string, command: string, cwd: string, taken: ReadonlySet<string>) => {
     const plan = planLastHere(agentId, cwd, taken)
     if (!plan) return undefined
-    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+    return await lastHereBesideMints(
+      (read) => askCli(command, plan.args, cwd, read),
+      (output, excluded) => planLastHere(agentId, cwd, excluded)!.read(output),
+      taken,
+      mints,
+    )
   }
 
   /**

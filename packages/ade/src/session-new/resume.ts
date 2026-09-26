@@ -546,6 +546,71 @@ function claimKey(agentId: string, cwd: string | undefined): string {
 }
 
 /**
+ * The conversations ADE asked a CLI to open in this run (`mint`), finished
+ * and under way.
+ *
+ * A pane that mints is not holding the id yet while the CLI answers, and a
+ * pane looking for "the most recent conversation here" in the same folder
+ * got it from `session.list` as the newest: two panes on one conversation
+ * (prova dal vivo 7, 1b). A minted conversation is its pane's, never
+ * another's "here".
+ */
+export class MintLedger {
+  readonly minted = new Set<string>()
+  private readonly pending = new Set<Promise<void>>()
+
+  /** Follows one mint: its id joins `minted` before the mint counts as settled. */
+  track<T extends string | undefined>(mint: Promise<T>): Promise<T> {
+    const recorded: Promise<void> = mint.then(
+      (id) => {
+        if (id) this.minted.add(id)
+      },
+      () => undefined,
+    )
+    this.pending.add(recorded)
+    void recorded.then(() => this.pending.delete(recorded))
+    return mint
+  }
+
+  /** The mints under way now, to be waited for. */
+  underWay(): readonly Promise<void>[] {
+    return [...this.pending]
+  }
+}
+
+/**
+ * "The most recent conversation here", leaving out the ones other panes hold
+ * (`taken`) and the ones ADE minted.
+ *
+ * A mint under way when the list answers can be in the list, the newest,
+ * before its id reaches ADE: those are waited for, and the same list is read
+ * again without them. One that starts after the list answered cannot be in
+ * it, and is not waited for.
+ */
+export async function lastHereBesideMints(
+  ask: (read: (output: string) => string | null | undefined) => Promise<string | null | undefined>,
+  read: (output: string, taken: ReadonlySet<string>) => string | null | undefined,
+  taken: ReadonlySet<string>,
+  mints: MintLedger,
+): Promise<string | undefined> {
+  const excluded = () => new Set([...taken, ...mints.minted])
+  let answered = ""
+  let underWay: readonly Promise<void>[] = []
+  const found = await ask((output) => {
+    const id = read(output, excluded())
+    if (id !== undefined) {
+      answered = output
+      underWay = mints.underWay()
+    }
+    return id
+  })
+  if (!found) return undefined
+  await Promise.all(underWay)
+  if (!mints.minted.has(found)) return found
+  return read(answered, excluded()) ?? undefined
+}
+
+/**
  * The folders whose "most recent conversation" a restore has handed out, per
  * agent: the claims `planRestore` made.
  *
