@@ -163,10 +163,16 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
   }
 
   /**
-   * `focus` is read by the program as many times as it likes: the test changes
-   * it while the sentence is being spoken, which is the whole point.
+   * `focus` is read by the program as many times as it likes: the test moves
+   * it while the sentence is being spoken, which is the whole point. A step is
+   * something the recogniser says — the last one of a sentence is its final —
+   * or `"elsewhere"`, which puts the eyes on the other pane.
    */
-  async function speakWhileTheFocusMoves(transcriber: FakeTranscriber, focus: { paneId: string }) {
+  async function speakWhileTheFocusMoves(
+    transcriber: FakeTranscriber,
+    focus: { paneId: string },
+    steps: (string | "elsewhere")[],
+  ) {
     const host = new TwoPaneHost()
     const layer = Layer.mergeAll(
       TranscriberFake(transcriber),
@@ -182,13 +188,18 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
             getContext: () => ({ focusedPaneId: focus.paneId }),
             onError: () => {},
           })
-          // The user starts talking with the first pane in front of them.
-          transcriber.emit("aggiungi un", false)
-          yield* Effect.sleep(Duration.millis(10))
-          // And reaches for the mouse before finishing the sentence.
-          focus.paneId = "pane-2"
-          transcriber.emit("aggiungi un test", true)
-          yield* Effect.sleep(Duration.millis(30))
+          // The last thing said is the one that ends the sentence.
+          const last = steps.reduce((spoken, step, at) => (step === "elsewhere" ? spoken : at), -1)
+          for (const [at, step] of steps.entries()) {
+            if (step === "elsewhere") {
+              focus.paneId = "pane-2"
+              yield* Effect.sleep(Duration.millis(10))
+              continue
+            }
+            // The user starts talking with the first pane in front of them.
+            transcriber.emit(step, at === last)
+            yield* Effect.sleep(Duration.millis(at === last ? 30 : 10))
+          }
         }),
       ).pipe(Effect.provide(layer)),
     )
@@ -198,10 +209,26 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
 
   test("la frase va al pannello che era a fuoco quando è iniziata, non a quello di dopo", async () => {
     const transcriber = createFakeTranscriber()
-    const host = await speakWhileTheFocusMoves(transcriber, { paneId: "pane-1" })
+    // And the mouse is reached for before the sentence is finished.
+    const host = await speakWhileTheFocusMoves(transcriber, { paneId: "pane-1" }, ["aggiungi un", "elsewhere", "aggiungi un test"])
 
     expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "aggiungi un test"] })
     expect(host.calls).not.toContainEqual({ method: "insertText", args: ["pane-2", "aggiungi un test"] })
+  })
+
+  test("con due partial la frase va al pannello del primo, non a quello in cui è finita", async () => {
+    const transcriber = createFakeTranscriber()
+    // The eyes move in the middle of the sentence, and stay there: the partial
+    // that follows is the same sentence still being spoken, not a new one.
+    const host = await speakWhileTheFocusMoves(transcriber, { paneId: "pane-1" }, [
+      "aggiungi un",
+      "elsewhere",
+      "aggiungi un test",
+      "aggiungi un test del tutto",
+    ])
+
+    expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "aggiungi un test del tutto"] })
+    expect(host.calls).not.toContainEqual({ method: "insertText", args: ["pane-2", "aggiungi un test del tutto"] })
   })
 
   test("una frase senza inizio riconosciuto va al pannello a fuoco in quel momento", async () => {

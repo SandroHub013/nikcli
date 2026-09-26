@@ -1378,6 +1378,11 @@ export function makeVoiceProgram(
      * deliberate act: it needs no held key and no wake word, and asking for
      * either would drop every sentence typed with push-to-talk or wake-word
      * activation, since nothing is held and nobody said the word.
+     *
+     * `dictated` is the pane the sentence belonged to when it began, passed
+     * in by whoever heard it — see `dictatedPaneId` — because reading it here
+     * would read it after the fork, and the sentence after this one would have
+     * had its say by then.
      */
     function processUtterance(
       rawText: string,
@@ -1385,6 +1390,7 @@ export function makeVoiceProgram(
       typed = false,
       confidence?: number,
       spokenAt?: number,
+      dictated?: string,
     ): Effect.Effect<void> {
       return Effect.gen(function* () {
         const heard = { typed, confidence }
@@ -1430,8 +1436,6 @@ export function makeVoiceProgram(
         // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
         if (currentSettings.mode === "transcription") {
           // The pane is spent with the sentence it was aimed at.
-          const dictated = fromAsr ? dictatedPaneId : undefined
-          dictatedPaneId = undefined
           yield* handleTranscriptionUtterance(trimmed, dictated)
           return
         }
@@ -1559,7 +1563,15 @@ export function makeVoiceProgram(
      * who said "detta al pannello due" and reached for the mouse while talking
      * had the text land in the pane they had just clicked, and never in the
      * one they named. The first partial is the moment a sentence belongs to a
-     * pane; after that the sentence is spoken, not re-aimed.
+     * pane; after that the sentence is spoken, not re-aimed — so it is kept
+     * with `??=`, because a second partial was a second reading of the same
+     * sentence and did the same damage the late reading used to.
+     *
+     * And it is forgotten at every final, whichever way the sentence goes, in
+     * the branch that handles the sentence and not later in the one that needs
+     * it: a pane carried over from an earlier phrase is a pane this one never
+     * chose, and a push-to-talk final with no partial would go to the pane of
+     * whatever was said before the mode changed.
      *
      * Typed text has no beginning, so it is not remembered: the pane under
      * the eyes when the words were typed is the one they meant.
@@ -1581,14 +1593,23 @@ export function makeVoiceProgram(
             // Barge-in: user started speaking, cancel any active or queued speech synthesis immediately
             if (ev.text.trim().length > 0) {
               yield* speaker.cancel
-              // And the sentence now belongs to the pane under the eyes.
-              dictatedPaneId = options.getContext?.().focusedPaneId
+              // And the sentence now belongs to the pane under the eyes — the
+              // first partial says which one, and the rest of the sentence
+              // does not get a say.
+              dictatedPaneId ??= options.getContext?.().focusedPaneId
             }
             options.onPartialTranscript?.(ev.text)
             break
           }
           case "final": {
             options.onPartialTranscript?.("")
+            /* The sentence is over, and the next one starts over: the pane it
+               was aimed at is read here and forgotten here, before anything can
+               discard it. An empty final, a push-to-talk one thrown away, an
+               agent turn: all of them end the sentence, and a pane left over
+               from the last one is a pane this one never chose. */
+            const dictated = dictatedPaneId
+            dictatedPaneId = undefined
             const text = (ev.event?.text || "").trim()
             if (!text) {
               if (currentSettings.activation === "push-to-talk" && !isPtt) {
@@ -1625,7 +1646,7 @@ export function makeVoiceProgram(
             if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
             handling++
             utteranceFiber = yield* Effect.forkIn(
-              processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt).pipe(
+              processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt, dictated).pipe(
                 Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
                 Effect.ensuring(
                   Effect.gen(function* () {
