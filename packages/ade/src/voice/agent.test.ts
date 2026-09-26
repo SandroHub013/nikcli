@@ -408,6 +408,7 @@ describe("voice/agent", () => {
       getRunningSession: () => undefined,
       openFile: async () => {},
       appendLine: () => {},
+      tellPane: () => {},
       permissions: () => ({}),
       answerPermission: () => {},
     })

@@ -34,6 +34,8 @@ export interface AdeVoiceHostDeps {
   getRunningSession: (paneId: string) => SpawnedSession | { write: (text: string) => void; kill?: () => void } | undefined
   openFile: (path: string) => Promise<void>
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
+  /** A note the user has to read, over the terminal as well as in the transcript. */
+  tellPane: (paneId: string, text: string) => void
   permissions: () => Record<string, PermissionRequest>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
@@ -437,13 +439,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         return true
       }
 
-      if (answer === "deny") {
-        deps.appendLine(
-          paneId,
-          t("voice.permission.notRefusal"),
-          "note",
-        )
-      }
+      /*
+       * Over the terminal: the spoken «nega» command says so aloud, but a
+       * «no» to the question ADE read out (`effect/program.ts`) says nothing.
+       */
+      if (answer === "deny") deps.tellPane(paneId, t("voice.permission.notRefusal"))
       return false
     },
 

@@ -10,6 +10,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
   deps: AdeVoiceHostDeps
   written: Record<string, string[]>
   appendedLines: { paneId: string; text: string; kind?: string }[]
+  told: { paneId: string; text: string }[]
   commandsRun: string[]
   permissionsAnswered: { paneId: string; answer: PermissionAnswer }[]
   currentWb: () => Workbench
@@ -20,6 +21,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
   const runningSessions = new Map<string, { write: (line: string) => void; kill?: () => void }>()
   const written: Record<string, string[]> = {}
   const appendedLines: { paneId: string; text: string; kind?: string }[] = []
+  const told: { paneId: string; text: string }[] = []
   const commandsRun: string[] = []
   const permissionsAnswered: { paneId: string; answer: PermissionAnswer }[] = []
 
@@ -38,6 +40,9 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
     appendLine: (paneId, text, kind) => {
       appendedLines.push({ paneId, text, kind })
     },
+    tellPane: (paneId, text) => {
+      told.push({ paneId, text })
+    },
     permissions: () => permissionsState,
     answerPermission: (paneId, answer) => {
       permissionsAnswered.push({ paneId, answer })
@@ -50,6 +55,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
     deps,
     written,
     appendedLines,
+    told,
     commandsRun,
     permissionsAnswered,
     currentWb: () => wbState,
@@ -331,7 +337,7 @@ describe("createAdeVoiceHost", () => {
 
     test("nothing is sent when no answer is a refusal", () => {
       const answered: PermissionAnswer[] = []
-      const { deps, appendedLines } = createMockDeps({
+      const { deps, told } = createMockDeps({
         permissions: () => ({ p1: permissive }),
         answerPermission: (_id, ans) => {
           answered.push(ans)
@@ -341,8 +347,8 @@ describe("createAdeVoiceHost", () => {
       createAdeVoiceHost(deps).answerPermission("p1", "deny")
 
       expect(answered).toHaveLength(0)
-      // And the user is told, so the request does not simply appear ignored.
-      expect(appendedLines.some((line) => line.text.includes("rifiuto"))).toBe(true)
+      // And the user is told, over the terminal too, so the request does not simply appear ignored.
+      expect(told.some((line) => line.text.includes("rifiuto"))).toBe(true)
     })
 
     test("a refusal is still found when one is offered third", () => {
