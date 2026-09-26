@@ -12,10 +12,28 @@
  * The command shown is as nikcli drew it in the terminal, so it can be cut:
  * the question says so, and a command surely cut is marked (`shownCommand`).
  * Rust takes known secrets out of everything sent to a chat.
+ *
+ * B8c: the block list comes first, here too. A blocked command is refused
+ * before any question, and the chat is told why; nothing pressed on the
+ * phone can let it through. A dangerous one is asked with its reason. The
+ * consent for a chat's turn is given on the phone, not in ADE: whoever wrote
+ * from the chat is there to answer, while ADE may have nobody in front of it
+ * — a question waiting on the computer would only run out its five minutes.
+ * And the bot's «Sempre», given in ADE, does not reach a chat's turn: from
+ * the phone every command is asked, as D93 wants.
  */
 
 import { t } from "../../i18n"
-import { answerKeys, emptyTalk, noticePermission, permissionAnswered, type PendingPermission, type PermissionAnswer } from "../talk"
+import { decide } from "../approval"
+import {
+  answerKeys,
+  emptyTalk,
+  noticePermission,
+  permissionAnswered,
+  permissionMenuReader,
+  type PendingPermission,
+  type PermissionAnswer,
+} from "../talk"
 import type { Choice } from "./controller"
 
 /** Puts a question with buttons in the chat; `undefined` when nothing valid was pressed in time. */
@@ -39,9 +57,11 @@ export async function approveOnPhone(
   permission: PendingPermission,
   ask: Ask,
   signal: AbortSignal,
+  danger?: string,
 ): Promise<{ answer: PermissionAnswer; expired: boolean }> {
+  const question = t("gateway.approve.question", permission.permission, shownCommand(permission.patterns))
   const value = await ask(
-    t("gateway.approve.question", permission.permission, shownCommand(permission.patterns)),
+    danger ? `${question}\n${t("gateway.approve.danger", danger)}` : question,
     [
       { label: t("gateway.approve.once"), value: "once" },
       { label: t("gateway.approve.no"), value: "reject" },
@@ -69,31 +89,54 @@ export function permissionWatcher(deps: {
   readonly say: (text: string) => void
   /** Aborted when the turn ends: a question still waiting gets no answer. */
   readonly signal: AbortSignal
+  /** How long the output stays quiet before a menu is taken (`MENU_QUIET_MS`); for tests. */
+  readonly quietMs?: number
 }): (chunk: string) => void {
   let talk = emptyTalk()
   let asking = false
   const refused = new Set<string>()
-  return (chunk) => {
-    if (asking || deps.signal.aborted) return
-    talk = noticePermission(talk, chunk, Date.now())
-    const pending = talk.permission
-    if (!pending) return
-    if (deps.refuse) {
-      deps.write(answerKeys("reject"))
-      // Said once per permission: a bot that keeps trying does not flood the chat.
-      if (!refused.has(pending.permission)) {
-        refused.add(pending.permission)
-        deps.say(t("gateway.approve.refused", pending.permission, shownCommand(pending.patterns)))
+  // The menu read whole, never from a line the model wrote (B8c review, M1).
+  return permissionMenuReader({
+    ...(deps.quietMs !== undefined ? { quietMs: deps.quietMs } : {}),
+    onMenu: (seen) => {
+      if (asking || deps.signal.aborted) return
+      talk = noticePermission(talk, seen, Date.now())
+      const pending = talk.permission
+      if (!pending) return
+      // No «Sempre» from a chat: every command is asked, the block list refused.
+      const verdict = decide(pending.permission, pending.patterns, [], pending.cut === true)
+      if (verdict.kind === "block") {
+        deps.write(answerKeys("reject"))
+        deps.say(t("gateway.approve.blocked", shownCommand(pending.patterns), t(verdict.rule.reason)))
+        talk = permissionAnswered(talk, Date.now())
+        return
       }
-      talk = permissionAnswered(talk, Date.now())
-      return
-    }
-    asking = true
-    void approveOnPhone(pending, deps.ask, deps.signal).then(({ answer, expired }) => {
-      if (!deps.signal.aborted) deps.write(answerKeys(answer))
-      if (expired) deps.say(t("gateway.approve.expired"))
-      talk = permissionAnswered(talk, Date.now())
-      asking = false
-    })
-  }
+      // Only Nega: said in the chat, never put to the phone (BASSO 3).
+      if (verdict.kind === "ask" && verdict.denyOnly) {
+        deps.write(answerKeys("reject"))
+        deps.say(t("gateway.approve.blocked", shownCommand(pending.patterns), verdict.reason))
+        talk = permissionAnswered(talk, Date.now())
+        return
+      }
+      if (deps.refuse) {
+        deps.write(answerKeys("reject"))
+        // Said once per permission: a bot that keeps trying does not flood the chat.
+        if (!refused.has(pending.permission)) {
+          refused.add(pending.permission)
+          deps.say(t("gateway.approve.refused", pending.permission, shownCommand(pending.patterns)))
+        }
+        talk = permissionAnswered(talk, Date.now())
+        return
+      }
+      asking = true
+      const danger =
+        verdict.kind === "ask" && (verdict.keys ?? []).every((key) => !key.startsWith("tool:")) ? verdict.reason : undefined
+      void approveOnPhone(pending, deps.ask, deps.signal, danger).then(({ answer, expired }) => {
+        if (!deps.signal.aborted) deps.write(answerKeys(answer))
+        if (expired) deps.say(t("gateway.approve.expired"))
+        talk = permissionAnswered(talk, Date.now())
+        asking = false
+      })
+    },
+  })
 }

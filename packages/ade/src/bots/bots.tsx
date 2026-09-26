@@ -31,6 +31,7 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
+import { APPROVAL_TIMEOUT_MS } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
@@ -42,7 +43,7 @@ import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
-import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runTurn } from "./turn"
 import {
   createBot,
@@ -458,6 +459,15 @@ export function BotsMain(props: BotsMainProps) {
     }
     const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
 
+    // A nikcli bot that grants itself the shell would skip every question and the block list (B8c).
+    if (runnerById(trusted.runner).id === "nikcli") {
+      const granted = await grantProblem(trusted, props.projectRoot, { read: readBotText, fs: projectFs, text: read })
+      if (granted) {
+        updateTalk(bot.path, (talk) => applyProblem(talk, granted, Date.now()))
+        return false
+      }
+    }
+
     /*
      * nikcli also loads the project's own configuration, plugins included
      * (B3b). A bot of the user's runs without it (`no-project-config` in
@@ -519,6 +529,7 @@ export function BotsMain(props: BotsMainProps) {
               expression={expression(bot())}
               onSend={(text) => send(bot(), text)}
               onAnswer={(choice) => answer(bot(), choice)}
+              onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
             />
           )}
@@ -654,6 +665,8 @@ function Thread(props: {
   /** Whether the message went: one that did not comes back into the composer. */
   onSend: (text: string) => boolean | Promise<boolean>
   onAnswer: (choice: PermissionAnswer) => void
+  /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
+  onGrant: () => void
   onStop: () => void
 }) {
   const [draft, setDraft] = createSignal("")
@@ -715,16 +728,42 @@ function Thread(props: {
                   {" "}
                   {t("bots.permission.on")} <code>{asked().patterns}</code>
                 </Show>
+                {/* B8c: why ADE stops it, and that silence is a no. */}
+                <Show when={asked().reason}>
+                  {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
+                </Show>
+                <Show when={asked().expiresAt}>
+                  <span data-slot="bots-permission-why">{t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}</span>
+                </Show>
               </span>
               <span data-slot="bots-permission-actions">
                 <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
-                  {t("bots.permission.reject")}
+                  {t("bots.permission.deny")}
                 </button>
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
-                  {t("bots.permission.always")}
-                </button>
-                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
-                  {t("bots.permission.allow")}
+                {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
+                <Show when={!asked().denyOnly && (asked().always?.length ?? 0) > 0}>
+                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
+                    {t("bots.approval.always")}
+                  </button>
+                </Show>
+                <Show when={!asked().denyOnly}>
+                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
+                    {t("bots.permission.allow")}
+                  </button>
+                </Show>
+              </span>
+            </div>
+          )}
+        </Show>
+
+        {/* B8c: Claude Code cannot ask mid-turn; a refused danger is offered for the next turn. */}
+        <Show when={!props.talk.permission && props.talk.offer}>
+          {(offer) => (
+            <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
+              <span data-slot="bots-permission-text">{t("bots.approval.offer", offer().command)}</span>
+              <span data-slot="bots-permission-actions">
+                <button type="button" data-slot="bots-btn" onClick={() => props.onGrant()}>
+                  {t("bots.approval.always")}
                 </button>
               </span>
             </div>

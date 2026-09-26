@@ -451,11 +451,30 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
  * it, and `project-trust.ts` asks about it.
  */
 describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
+  test("B8c: nikcli chiede di ogni comando solo a chi risponde (il pannello), mai alla voce", () => {
+    const global = { ...bot, scope: "global" as const }
+    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true }).flags).toEqual([
+      "no-project-config",
+      "bot-ask-shell",
+    ])
+    const noShell = { ...global, disabledTools: ["bash"] }
+    expect(turnCommand(runnerById("nikcli"), { bot: noShell, message: "x", approvals: true }).flags).toEqual([
+      "no-project-config",
+      "bot-ask-outside",
+    ])
+    // Without someone to answer, nothing is asked: the shell is denied (second check, ALTO).
+    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
+    // A chat's turn keeps its own rules.
+    expect(
+      turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true, remote: { commands: false } }).flags,
+    ).toEqual(["no-project-config", "remote-no-shell"])
+  })
+
   test("il bot globale gira con no-project-config, quello di progetto no", () => {
     const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
-    expect(mine.flags).toEqual(["no-project-config"])
+    expect(mine.flags).toEqual(["no-project-config", "bot-no-shell"])
     const fromRepo = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x" })
-    expect(fromRepo.flags).toBeUndefined()
+    expect(fromRepo.flags).toEqual(["bot-no-shell"])
   })
 
   test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
@@ -530,7 +549,24 @@ describe("un turno da chat non ha la shell", () => {
 
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config"])
+    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
+  })
+
+  test("M1: ogni turno su nikcli ha un solo flag sui permessi, che nega la shell o la chiede", () => {
+    const withBlock = ["bot-no-shell", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell", "remote-no-shell"]
+    const cases = [
+      { bot: mine, message: "x" },
+      { bot: { ...bot, scope: "project" as const }, message: "x" },
+      { bot: mine, message: "x", approvals: true },
+      { bot: { ...mine, disabledTools: ["bash"] }, message: "x", approvals: true },
+      { bot: mine, message: "x", remote: on },
+    ]
+    for (const spec of cases) {
+      const flags = turnCommand(runnerById("nikcli"), spec).flags ?? []
+      // Exactly one: two flags on NIKCLI_PERMISSION are refused by Rust.
+      expect(flags.filter((flag) => withBlock.includes(flag))).toHaveLength(1)
+    }
+    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).not.toContain("bot-no-shell")
   })
 })
 
@@ -660,5 +696,54 @@ describe("il costo di un turno", () => {
     expect(generationSpend("  ")).toEqual({ model: "", paid: true })
     expect(generationSpend("openai/gpt-4o")).toEqual({ model: "openai/gpt-4o", paid: true })
     expect(generationSpend("google/gemini-2.0-flash:free")).toEqual({ model: "google/gemini-2.0-flash:free", paid: false })
+  })
+})
+
+
+/* B8c: Claude Code cannot ask mid-turn, so what would be a question is a refusal. */
+describe("B8c: Claude Code e le approvazioni", () => {
+  const mine: AgentFile = { ...bot, scope: "global" }
+  const refusedOf = (args: readonly string[]) => {
+    const at = args.indexOf("--disallowedTools")
+    return at < 0 ? [] : (args[at + 1] ?? "").split(",")
+  }
+
+  test("un bot del pannello: la lista di blocco sempre, i pericoli tranne quelli su «Sempre»", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true, approvals: true, always: ["gitRewrite"] })
+    const refused = refusedOf(args)
+    expect(refused).toContain("Bash(rm -rf /:*)")
+    expect(refused).toContain("PowerShell(Format-Volume:*)")
+    expect(refused).toContain("Bash(rm -rf:*)")
+    expect(refused).not.toContain("Bash(git push --force:*)")
+    // Still one argument, well inside a command line.
+    expect(args.join(" ").length).toBeLessThan(7000)
+  })
+
+  test("la voce (nessuna approvazione): solo la lista di blocco", () => {
+    const refused = refusedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)
+    expect(refused).toContain("Bash(shutdown:*)")
+    expect(refused).not.toContain("Bash(rm -rf:*)")
+  })
+
+  test("un bot senza shell non ne ha bisogno: la shell è già rifiutata tutta", () => {
+    const noShell = { ...mine, disabledTools: ["bash"] }
+    const refused = refusedOf(turnCommand(runnerById("claude"), { bot: noShell, message: "x", approvals: true }).args)
+    expect(refused).toContain("Bash")
+    expect(refused).not.toContain("Bash(shutdown:*)")
+  })
+
+  test("il rifiuto torna nel thread col suo motivo; un pericolo offre «Sempre», un blocco no", () => {
+    const denied = fold("claude", [
+      '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Bash","tool_use_id":"toolu_1","tool_input":{"command":"git push --force origin main"}}]}',
+    ])
+    expect(denied.offer).toMatchObject({ always: ["gitRewrite"], command: "git push --force origin main" })
+    expect(denied.messages.at(-1)!.text).toContain("git push --force origin main")
+    // Not mistaken for a protected folder, nor for a tool to turn on.
+    expect(denied.messages.some((m) => m.text.includes(".git,"))).toBe(false)
+    const blocked = fold("claude", [
+      '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"PowerShell","tool_input":{"command":"Format-Volume -DriveLetter D"}}]}',
+    ])
+    expect(blocked.offer).toBeUndefined()
+    expect(blocked.messages.at(-1)!.text).toContain("Format-Volume -DriveLetter D")
   })
 })

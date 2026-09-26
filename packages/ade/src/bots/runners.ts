@@ -24,6 +24,7 @@ import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
 import { PLAN_RUNNERS } from "./terms"
+import { claudeRefusals, classifyCommand } from "./approval"
 import {
   appendMessage,
   applyJsonLine,
@@ -232,6 +233,16 @@ export interface TurnSpec {
    * inherited API keys. A key is the name in ADE's index, never the value.
    */
   readonly account?: BotAccount
+  /**
+   * nikcli only: the caller answers every question nikcli asks, by
+   * `approval.ts` (B8c, the Bots panel's `controller.ts`). nikcli is then told
+   * to ask about every command and every step outside the project. Off for a
+   * caller that answers nothing — the voice, a routine —, whose turn would
+   * otherwise stop on a menu nobody sees.
+   */
+  readonly approvals?: boolean
+  /** The bot's «Sempre» (`approval.ts`), with `approvals`: what Claude Code is not refused. */
+  readonly always?: readonly string[]
 }
 
 /**
@@ -378,11 +389,23 @@ export function turnCommand(
          * From a chat, the shell goes through `NIKCLI_PERMISSION` (G5): denied,
          * or asked about every command. The bot's own file can still grant
          * it, so such a file is refused for a chat (`gateway/policy.ts`).
+         * In ADE (B8c), nikcli asks about every command and every step
+         * outside the project, and `controller.ts` answers by `approval.ts`.
+         * A turn nobody answers (a routine) gets `bot-no-shell`: no flag
+         * leaves the shell to the user's own rule, since nikcli's globs count
+         * case and Windows does not (second check, ALTO; `SPAWN_FLAGS` in
+         * `pty.rs`). The asking flags carry the block list as nikcli's own
+         * denials too (B8c review, M1: `blocked_bash_denials`).
          */
         ...(() => {
+          const shell = !bot.disabledTools.includes("bash")
           const flags = [
             ...(fromRepository(bot) ? [] : ["no-project-config"]),
-            ...(spec.remote ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"] : []),
+            ...(spec.remote
+              ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
+              : spec.approvals
+                ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
+                : ["bot-no-shell"]),
           ]
           return flags.length > 0 ? { flags } : {}
         })(),
@@ -433,6 +456,12 @@ export function turnCommand(
       if (remote && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
+      /*
+       * B8c: with a shell, the block list is refused on every turn and, for a
+       * bot's turn in the panel, every danger its «Sempre» does not cover.
+       * The thread reports the refusal (`permission_denials`).
+       */
+      if (allowed.includes("Bash")) disallowed.push(...claudeRefusals(spec.approvals ? (spec.always ?? []) : undefined))
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
@@ -586,7 +615,32 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
        * not a tool to enable in the card: it is refused on purpose (review
        * B7, BASSO 2). Told apart by what Claude Code answered the call.
        */
-      const denials = list(event["permission_denials"]).map(rec)
+      /*
+       * B8c: a command refused by the block list or as a danger
+       * (`claudeRefusals`) says why; a danger offers «Sempre» for the next turn.
+       */
+      const approvalOf = (denial: Record<string, unknown> | undefined) => {
+        const tool = str(denial?.["tool_name"])
+        const command = str(rec(denial?.["tool_input"])?.["command"])
+        if ((tool !== "Bash" && tool !== "PowerShell") || !command) return undefined
+        const verdict = classifyCommand(command)
+        return verdict.blocked || verdict.dangers.length > 0 ? { command, ...verdict } : undefined
+      }
+      const allDenials = list(event["permission_denials"]).map(rec)
+      for (const denial of allDenials) {
+        const found = approvalOf(denial)
+        if (!found) continue
+        if (found.blocked) {
+          next = appendMessage(next, { role: "error", text: t("bots.approval.blocked", found.command, t(found.blocked.reason)) }, at)
+        } else {
+          const reason = found.dangers.map((rule) => t(rule.reason)).join("; ")
+          next = appendMessage(next, { role: "error", text: t("bots.approval.refused", found.command, reason) }, at)
+          // «Sempre» only when every danger may be kept (second review, BASSO 2).
+          if (found.dangers.every((rule) => rule.always !== false))
+            next = { ...next, offer: { always: found.dangers.map((rule) => rule.id), reason, command: found.command } }
+        }
+      }
+      const denials = allDenials.filter((denial) => !approvalOf(denial))
       const onProtectedPath = (denial: Record<string, unknown> | undefined) => {
         const id = str(denial?.["tool_use_id"])
         const output = id ? next.messages.find((message) => message.id === `t-${id}`)?.output : undefined

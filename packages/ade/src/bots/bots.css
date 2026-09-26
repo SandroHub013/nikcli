@@ -420,6 +420,12 @@
 
 [data-slot="bots-permission-text"] { flex: 1 1 auto; min-width: 0; }
 [data-slot="bots-permission-text"] code { font-family: var(--ade-mono); font-size: var(--ade-font-sm); }
+[data-slot="bots-permission-why"] {
+  display: block;
+  margin-top: var(--ade-space-1);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
 
 [data-slot="bots-permission-actions"] {
   display: inline-flex;

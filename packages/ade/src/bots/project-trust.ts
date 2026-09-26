@@ -17,7 +17,8 @@
 
 import { joinPath } from "../host/path"
 import { t } from "../i18n"
-import { fileFingerprint, selfApproval, type TrustStore } from "./trust"
+import type { AgentFile } from "./nikcli"
+import { fileFingerprint, reachesShell, selfApproval, shellGrant, type TrustStore } from "./trust"
 
 /** The two calls this needs from the host, as `host/shell.ts` has them. */
 export interface ProjectFs {
@@ -205,4 +206,137 @@ async function checkProject(root: string, deps: AdmitProjectDeps): Promise<{ ok:
   }
   deps.store.set(root, fingerprint)
   return { ok: true }
+}
+
+/*
+ * The configuration nikcli reads in the project whatever the bot: the root
+ * `nikcli.json` (dropped for the user's own bots by `no-project-config`, read
+ * anyway: stricter) and `.nikcli/nikcli.json`, which that flag does not drop.
+ */
+const CONFIG_FILES = ["nikcli.json", "nikcli.jsonc", ".nikcli/nikcli.json", ".nikcli/nikcli.jsonc"]
+
+/** Whether `path`, relative to the project as `projectSurface` names it, is one of nikcli's configuration files. */
+export function isConfigFile(path: string): boolean {
+  return CONFIG_FILES.includes(path)
+}
+
+/** JSON with comments and trailing commas, as nikcli reads its configuration; `undefined` when it is not. */
+export function parseJsonc(text: string): unknown {
+  let plain = ""
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]
+    if (char === '"') {
+      const end = /"(?:[^"\\\n]|\\.)*"/y
+      end.lastIndex = index
+      const string = end.exec(text)
+      if (!string) return undefined
+      plain += string[0]
+      index = end.lastIndex - 1
+    } else if (char === "/" && text[index + 1] === "/") {
+      const newline = text.indexOf("\n", index)
+      index = newline === -1 ? text.length : newline - 1
+    } else if (char === "/" && text[index + 1] === "*") {
+      const close = text.indexOf("*/", index + 2)
+      if (close === -1) return undefined
+      index = close + 1
+    } else plain += char
+  }
+  try {
+    return JSON.parse(plain.replace(/,(\s*[}\]])/g, "$1"))
+  } catch {
+    return undefined
+  }
+}
+
+const isMap = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+/*
+ * The first grant of the shell or of a folder outside in a `permission` or
+ * `tools` value, as a path to take out (`agent.revisore.permission.bash`).
+ * What is neither a string nor a map counts as a grant: nikcli is the one
+ * that decides what it means.
+ */
+function grantIn(kind: "permission" | "tools", value: unknown, at: string): string | undefined {
+  if (value === undefined) return undefined
+  if (kind === "permission" && typeof value === "string") return value === "allow" ? at : undefined
+  if (!isMap(value)) return at
+  for (const [name, rule] of Object.entries(value)) {
+    if (!reachesShell(name)) continue
+    const path = `${at}.${JSON.stringify(name)}`
+    if (kind === "tools") {
+      if (rule === true) return path
+      continue
+    }
+    if (rule === "allow") return path
+    if (typeof rule === "string") continue
+    if (!isMap(rule)) return path
+    for (const [pattern, action] of Object.entries(rule)) {
+      if (action === "allow" || typeof action !== "string") return `${path}.${JSON.stringify(pattern)}`
+    }
+  }
+  return undefined
+}
+
+/**
+ * What a project's nikcli configuration grants the bot `identifier` that
+ * reaches the shell or a folder outside (B8c): its own `permission` and
+ * `tools`, and those of `agent.<identifier>` (and the older `mode`), which
+ * nikcli merges with the bot's file, after `NIKCLI_PERMISSION`. A path to
+ * take out, `null` when the file cannot be read (a refusal too), or
+ * `undefined`.
+ */
+export function configGrant(text: string, identifier: string): string | null | undefined {
+  const config = parseJsonc(text)
+  if (!isMap(config)) return null
+  const found = grantIn("permission", config["permission"], "permission") ?? grantIn("tools", config["tools"], "tools")
+  if (found) return found
+  for (const section of ["agent", "mode"]) {
+    const agents = config[section]
+    if (agents === undefined) continue
+    if (!isMap(agents)) return section
+    const agent = agents[identifier]
+    if (agent === undefined) continue
+    if (!isMap(agent)) return `${section}.${identifier}`
+    const at = `${section}.${JSON.stringify(identifier)}`
+    const own = grantIn("permission", agent["permission"], `${at}.permission`) ?? grantIn("tools", agent["tools"], `${at}.tools`)
+    if (own) return own
+  }
+  return undefined
+}
+
+/**
+ * Why the nikcli bot `bot` does not start from the panel, or `undefined`
+ * (B8c): its file, or the project's configuration, grants the shell or a
+ * folder outside. The panel's `bot-ask-shell` sends every command through
+ * ADE's questions and block list; nikcli merges those grants after it and
+ * keeps the last rule that matches, so a bot with one would run commands no
+ * one is asked about. The user's own bots too: the message names the line to
+ * take out. `text` is the file as just read, when it was.
+ */
+export async function grantProblem(
+  bot: AgentFile,
+  root: string | undefined,
+  deps: { readonly read: (path: string) => Promise<string>; readonly fs: ProjectFs; readonly text?: string },
+): Promise<string | undefined> {
+  let text = deps.text
+  if (text === undefined) {
+    try {
+      text = await deps.read(bot.path)
+    } catch {
+      return t("bots.trust.unreadable", bot.identifier)
+    }
+  }
+  const own = shellGrant(text)
+  if (own) return t("bots.trust.grantsShell", bot.identifier, own.line, bot.path)
+  if (!root) return undefined
+  for (const name of CONFIG_FILES) {
+    const path = joinPath(root, name)
+    const config = await readOrMark(deps.fs, path)
+    if (config === undefined) continue
+    const granted = configGrant(config, bot.identifier)
+    if (granted === null) return t("bots.trust.configUnreadable", bot.identifier, path)
+    if (granted !== undefined) return t("bots.trust.configGrants", bot.identifier, granted, path)
+  }
+  return undefined
 }

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { admitProject, projectSurface, type ProjectFs } from "./project-trust"
+import { readFileSync } from "node:fs"
+import type { AgentFile } from "./nikcli"
+import { admitProject, configGrant, grantProblem, projectSurface, type ProjectFs } from "./project-trust"
+import { t } from "../i18n"
 import { memoryTrustStore } from "./trust"
 
 /*
@@ -166,5 +169,88 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
     expect(await first).toEqual({ ok: true })
     expect(await second).toEqual({ ok: true })
     expect(s.asked).toHaveLength(1)
+  })
+})
+
+/*
+ * B8c: a project's `nikcli.json` can grant a bot what its file does not:
+ * `agent.<name>` is merged with the bot's file, after `NIKCLI_PERMISSION`.
+ * The panel does not start a nikcli bot with such a grant, the user's own
+ * included, and names what to take out.
+ */
+describe("i permessi concessi dal nikcli.json del progetto", () => {
+  const own: AgentFile = {
+    identifier: "mio",
+    path: "C:/Users/x/.config/nikcli/agent/mio.md",
+    scope: "global",
+    description: "",
+    mode: "primary",
+    prompt: "Sei mio.",
+    disabledTools: [],
+  }
+  const plain = "---\ndescription: Mio\n---\nSei mio."
+
+  const granting: [string, string][] = [
+    ['{"agent":{"mio":{"permission":{"bash":"allow"}}}}', 'agent."mio".permission."bash"'],
+    ['{"agent":{"mio":{"permission":{"bash":{"*":"ask","git push *":"allow"}}}}}', 'agent."mio".permission."bash"."git push *"'],
+    ['{"agent":{"mio":{"permission":{"*":"allow"}}}}', 'agent."mio".permission."*"'],
+    ['{"agent":{"mio":{"permission":"allow"}}}', 'agent."mio".permission'],
+    ['{"agent":{"mio":{"tools":{"bash":true}}}}', 'agent."mio".tools."bash"'],
+    ['{"mode":{"mio":{"permission":{"external_directory":"allow"}}}}', 'mode."mio".permission."external_directory"'],
+    ['{"permission":{"bash":"ask","*":"allow"}}', 'permission."*"'],
+    ['{"permission":{"bash":{"rm *":"allow"}}}', 'permission."bash"."rm *"'],
+    ['{\n  // commento\n  "agent": { "mio": { "permission": { "bash": "allow", }, }, },\n}', 'agent."mio".permission."bash"'],
+  ]
+  for (const [config, key] of granting) {
+    test(`configGrant: ${config.replace(/\s+/g, " ")}`, () => {
+      expect(configGrant(config, "mio")).toBe(key)
+    })
+  }
+
+  test("configGrant: ask, deny, altri strumenti e altri bot non contano", () => {
+    for (const config of [
+      '{"agent":{"mio":{"permission":{"bash":"ask","edit":"allow"}}}}',
+      '{"agent":{"altro":{"permission":{"bash":"allow"}}}}',
+      '{"permission":{"bash":{"*":"ask","git status":"deny"},"read":{"*":"allow"}}}',
+      '{"model":"openrouter/x:free","url":"http://a/*/b"}',
+    ]) {
+      expect([config, configGrant(config, "mio")]).toEqual([config, undefined])
+    }
+  })
+
+  test("configGrant: un file che non si legge è un rifiuto (null)", () => {
+    expect(configGrant('{"agent": {"mio": ', "mio")).toBeNull()
+    expect(configGrant("[1, 2]", "mio")).toBeNull()
+  })
+
+  test("il bot dell'utente non parte e il messaggio dice cosa togliere", async () => {
+    const fs = fakeFs({ [`${ROOT}/.nikcli/nikcli.json`]: '{"agent":{"mio":{"permission":{"bash":"allow"}}}}' })
+    const read = async () => plain
+    expect(await grantProblem(own, ROOT, { read, fs })).toBe(
+      t("bots.trust.configGrants", "mio", 'agent."mio".permission."bash"', `${ROOT}/.nikcli/nikcli.json`),
+    )
+  })
+
+  test("la riga del suo file viene prima, anche per un bot dell'utente", async () => {
+    const fs = fakeFs({})
+    const read = async () => "---\ndescription: Mio\npermission:\n  bash: allow\n---\nSei mio."
+    expect(await grantProblem(own, ROOT, { read, fs })).toBe(t("bots.trust.grantsShell", "mio", "bash: allow", own.path))
+  })
+
+  test("un nikcli.json rotto ferma il bot, uno pulito no", async () => {
+    const read = async () => plain
+    const broken = fakeFs({ [`${ROOT}/nikcli.json`]: '{"agent": ' })
+    expect(await grantProblem(own, ROOT, { read, fs: broken })).toBe(
+      t("bots.trust.configUnreadable", "mio", `${ROOT}/nikcli.json`),
+    )
+    const clean = fakeFs({ [`${ROOT}/nikcli.json`]: '{"model":"openrouter/x:free"}' })
+    expect(await grantProblem(own, ROOT, { read, fs: clean })).toBeUndefined()
+    expect(await grantProblem(own, undefined, { read, fs: clean })).toBeUndefined()
+  })
+
+  test("il pannello chiede grantProblem per ogni bot su nikcli prima di mandare il turno", () => {
+    const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
+    const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(trusted"))
+    expect(start).toMatch(/runnerById\(trusted\.runner\)\.id === "nikcli"\) \{\s*const granted = await grantProblem\(/)
   })
 })

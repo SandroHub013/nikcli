@@ -14,7 +14,7 @@
 
 import { t } from "../../i18n"
 import { agentDirs, readAgentFile, type AgentFile } from "../nikcli"
-import { admitProject, type AdmitProjectDeps } from "../project-trust"
+import { admitProject, configGrant, isConfigFile, type AdmitProjectDeps } from "../project-trust"
 import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
@@ -136,6 +136,15 @@ export async function recheckTrust(
    */
   const granted = runnerById(bot.runner).id === "nikcli" ? selfApproval(text) : undefined
   if (granted !== undefined) return { ok: false, problem: t("gateway.selfGrant", bot.identifier, granted) }
+  // The project's configuration can grant it too, as `agent.<name>`, merged the same way (B8c).
+  if (runnerById(bot.runner).id === "nikcli") {
+    for (const config of await deps.surface()) {
+      if (!isConfigFile(config.path)) continue
+      const key = configGrant(config.text, bot.identifier)
+      if (key === null) return { ok: false, problem: t("gateway.configUnreadable", bot.identifier, config.path) }
+      if (key !== undefined) return { ok: false, problem: t("gateway.configGrant", bot.identifier, key, config.path) }
+    }
+  }
   const retrust = t("gateway.retrust", bot.identifier)
   const never = () => false
   const verdict = await admit(bot, { store: deps.bots, read: async () => text, confirm: never })

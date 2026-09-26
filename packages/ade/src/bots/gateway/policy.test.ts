@@ -115,13 +115,31 @@ describe("the trust checked again on every turn, with no dialog", () => {
   /*
    * G5: from a chat nikcli's shell is denied through NIKCLI_PERMISSION, and an
    * agent file's own permission overrides it. The user's own bot that grants
-   * itself a tool runs in the panel, not from a chat.
+   * itself a tool does not run from a chat; in the panel, only a grant of the
+   * shell stops it (B8c, `project-trust.ts` `grantProblem`).
    */
   test("the user's own nikcli bot that grants itself a tool does not run from a chat", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     const text = file("nikcli", "permission:\n  bash: allow\n")
     expect(await recheckTrust(own, PROJECT, await deps(text))).toEqual({ ok: false, problem: t("gateway.selfGrant", "mio", "bash") })
     expect((await recheckTrust(own, PROJECT, await deps(file("nikcli")))).ok).toBe(true)
+  })
+
+  test("the project's nikcli.json that grants the bot the shell as agent.<name> stops it too (B8c)", async () => {
+    const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
+    const text = file("nikcli")
+    const granting = { path: ".nikcli/nikcli.json", text: '{"agent":{"mio":{"permission":{"bash":{"git *":"allow"}}}}}' }
+    const withConfig = async (config: { path: string; text: string }) => ({ ...(await deps(text)), surface: async () => [config] })
+    expect(await recheckTrust(own, PROJECT, await withConfig(granting))).toEqual({
+      ok: false,
+      problem: t("gateway.configGrant", "mio", 'agent."mio".permission."bash"."git *"', ".nikcli/nikcli.json"),
+    })
+    expect(await recheckTrust(own, PROJECT, await withConfig({ path: "nikcli.json", text: "{ rotto" }))).toEqual({
+      ok: false,
+      problem: t("gateway.configUnreadable", "mio", "nikcli.json"),
+    })
+    // Another file of .nikcli is not configuration: not read as such.
+    expect((await recheckTrust(own, PROJECT, await withConfig({ path: ".nikcli/tool/x.json", text: "{ rotto" }))).ok).toBe(true)
   })
 
   test("a bot of another repository than the gateway's project needs the user's yes like any repository's", async () => {

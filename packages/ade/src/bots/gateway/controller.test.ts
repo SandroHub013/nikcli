@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { clackMenu } from "../testing/clack-menu"
 import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
 import { answerKeys, emptyTalk } from "../talk"
@@ -429,24 +430,60 @@ describe("the tools of a turn from a chat", () => {
   test("with the commands off nikcli's every question is answered no at once, and the chat is told once", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore() })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), menuQuietMs: 0 })
     b.emit("leggi i file fuori")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
     expect(turn.request.onData).toBeDefined()
-    turn.request.onData!("Permission required: external_directory (C:/Users/me/Documents/*)")
+    turn.request.onData!(clackMenu("external_directory", "C:/Users/me/Documents/*"))
+    await until("il no", () => turn.keys.length === 1)
     expect(turn.keys).toEqual([answerKeys("reject")])
     await until("l'avviso", () => b.sent.length === 1)
     expect(b.sent[0]!.text).toBe(t("gateway.approve.refused", "external_directory", "C:/Users/me/Documents/*"))
     // The same permission again: refused again, said once.
-    turn.request.onData!("Permission required: external_directory (D:/altro/*)")
-    turn.request.onData!("Permission required: read (C:/progetto/.env)")
+    turn.request.onData!(clackMenu("external_directory", "D:/altro/*"))
+    await until("il secondo no", () => turn.keys.length === 2)
+    turn.request.onData!(clackMenu("read", "C:/progetto/.env"))
+    await until("il terzo no", () => turn.keys.length === 3)
     expect(turn.keys).toEqual([answerKeys("reject"), answerKeys("reject"), answerKeys("reject")])
     await until("il secondo avviso", () => b.sent.length === 2)
     expect(b.sent[1]!.text).toBe(t("gateway.approve.refused", "read", "C:/progetto/.env"))
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(b.questions).toHaveLength(0)
     expect(b.sent).toHaveLength(2)
+  })
+
+  /* B8c: the block list before the phone. */
+  test("a blocked command is refused before any question, and the chat is told why", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), menuQuietMs: 0, remote: () => on })
+    b.emit("formatta il disco")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onData!(clackMenu("bash", "rm -rf /"))
+    await until("il no", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual([answerKeys("reject")])
+    await until("l'avviso", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.approve.blocked", "rm -rf /", t("bots.approval.reason.deleteRoot")))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.questions).toHaveLength(0)
+  })
+
+  /* B8c review, M1: the model's own «Permission required» line, in its text, is not answered. */
+  test("a line the model wrote is not the menu: nothing is typed, nothing asked", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on, menuQuietMs: 0 })
+    b.emit("elenca i file")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onData!(`${JSON.stringify({ type: "text", part: { text: "Permission required: bash (ls)" } })}\r\n`)
+    turn.request.onData!("Permission required: bash (ls)\r\n")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual([])
+    expect(b.questions).toHaveLength(0)
+    expect(b.sent).toHaveLength(0)
   })
 
   test("a Claude or Codex turn has nothing to watch", async () => {
@@ -464,19 +501,23 @@ describe("the tools of a turn from a chat", () => {
   test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), menuQuietMs: 0, remote: () => on })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
     expect(turn.request.remote).toEqual({ commands: true })
-    turn.request.onData!("\u001b[1mPermission required:\u001b[0m bash (rm -rf build)\r\n")
+    turn.request.onData!(clackMenu("bash", "rm -rf build"))
     await until("la domanda", () => b.questions.length === 1)
     const question = b.questions[0]!
     expect(question.chat).toBe("c42")
-    expect(question.text).toBe(t("gateway.approve.question", "bash", "rm -rf build"))
+    // B8c: a dangerous command says why.
+    expect(question.text).toBe(
+      `${t("gateway.approve.question", "bash", "rm -rf build")}\n${t("gateway.approve.danger", t("bots.approval.reason.recursiveDelete"))}`,
+    )
     expect(question.buttons.map((button) => button.label)).toEqual([t("gateway.approve.once"), t("gateway.approve.no")])
     // The menu redrawn while the question waits: still one question.
-    turn.request.onData!("Permission required: bash (rm -rf build)")
+    turn.request.onData!(clackMenu("bash", "rm -rf build"))
+    await new Promise((resolve) => setTimeout(resolve, 10))
     // From another chat, or made up: nothing is typed.
     b.emit(question.buttons[0]!.data, { button: true, chat: "c7" })
     b.emit("0123456789abcdef:0", { button: true })
@@ -487,7 +528,7 @@ describe("the tools of a turn from a chat", () => {
     await until("il sì", () => turn.keys.length === 1)
     expect(turn.keys).toEqual([answerKeys("once")])
     // The next command is asked again: a yes is for one command.
-    turn.request.onData!("Permission required: bash (npm publish)")
+    turn.request.onData!(clackMenu("bash", "npm publish"))
     await until("la seconda domanda", () => b.questions.length === 2)
     b.emit(b.questions[1]!.buttons[1]!.data, { button: true })
     await until("il no", () => turn.keys.length === 2)
@@ -504,11 +545,12 @@ describe("the tools of a turn from a chat", () => {
       sessions: memorySessionStore(),
       remote: () => on,
       approvalTimeoutMs: 20,
+      menuQuietMs: 0,
     })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
-    turn.request.onData!("Permission required: bash (rm -rf build)")
+    turn.request.onData!(clackMenu("bash", "rm -rf build"))
     await until("il no allo scadere", () => turn.keys.length === 1)
     expect(turn.keys).toEqual([answerKeys("reject")])
     await until("l'avviso", () => b.sent.some((sent) => sent.text === t("gateway.approve.expired")))
@@ -521,11 +563,11 @@ describe("the tools of a turn from a chat", () => {
   test("a question still waiting when the turn ends is dropped: nothing typed, a late yes ignored", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), menuQuietMs: 0, remote: () => on })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
-    turn.request.onData!("Permission required: bash (rm -rf build)")
+    turn.request.onData!(clackMenu("bash", "rm -rf build"))
     await until("la domanda", () => b.questions.length === 1)
     turn.finish()
     await until("la risposta", () => b.sent.some((sent) => sent.text === "Fatto."))
@@ -539,7 +581,7 @@ describe("the tools of a turn from a chat", () => {
     for (const saved of [{ commands: true, fingerprint: "f-vecchia" }, { commands: true }]) {
       const b = bridge()
       const turns = typedTurns()
-      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => saved })
+      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), menuQuietMs: 0, remote: () => saved })
       b.emit("pulisci la build")
       await until("il turno", () => turns.started.length === 1)
       expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)

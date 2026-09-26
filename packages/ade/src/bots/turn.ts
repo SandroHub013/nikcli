@@ -68,6 +68,10 @@ export interface TurnRequest {
   readonly remote?: RemoteTools
   /** Claude Code and Codex: subscription or one key name. Absent is a subscription. */
   readonly account?: BotAccount
+  /** The caller answers every question nikcli asks (B8c, `TurnSpec.approvals`). */
+  readonly approvals?: boolean
+  /** The bot's «Sempre», with `approvals` (`TurnSpec.always`). */
+  readonly always?: readonly string[]
 }
 
 /**
@@ -211,6 +215,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(outbox ? { outbox } : {}),
       ...(request.remote ? { remote: request.remote } : {}),
       ...(request.account ? { account: request.account } : {}),
+      ...(request.approvals ? { approvals: true } : {}),
+      ...(request.always ? { always: request.always } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 

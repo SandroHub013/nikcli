@@ -522,8 +522,14 @@ export const it = {
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.nikcli":
     "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
-  "bots.trust.selfApproves": (name: string, what: string) =>
-    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file (permission o tools), e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+  "bots.trust.selfApproves": (name: string, what: string, line: string) =>
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+  "bots.trust.grantsShell": (name: string, line: string, file: string) =>
+    `Il bot «${name}» si concede da solo i comandi o le cartelle fuori dal progetto: nel suo file c'è la riga «${line}». nikcli la applica dopo le regole di ADE, quindi quei comandi partirebbero senza domanda, anche quelli della lista di blocco. Dal pannello non parte: togli quella riga da ${file}.`,
+  "bots.trust.configGrants": (name: string, key: string, file: string) =>
+    `${file} concede i comandi o le cartelle fuori dal progetto con «${key}», e nikcli lo applica al bot «${name}» dopo le regole di ADE: quei comandi partirebbero senza domanda, anche quelli della lista di blocco. Dal pannello il bot non parte: togli «${key}» da ${file}.`,
+  "bots.trust.configUnreadable": (name: string, file: string) =>
+    `Non riesco a leggere ${file}, che potrebbe concedere i comandi al bot «${name}» senza domanda: dal pannello non parte. Controlla che sia un JSON valido.`,
   "bots.projectTrust.new": (root: string, files: string) =>
     `La cartella ${root} ha una configurazione di nikcli sua (${files}): plugin, strumenti e impostazioni che nikcli carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su nikcli non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>
@@ -559,9 +565,16 @@ export const it = {
   "gateway.failed": (problem: string) => `Il turno non è riuscito: ${problem}`,
   "gateway.selfGrant": (name: string, what: string) =>
     `Il bot «${name}» si concede «${what}» nel suo file, e da remoto quel permesso non si può togliere: da qui non lo avvio. Toglilo dal file per usarlo dal telefono.`,
+  "gateway.configGrant": (name: string, key: string, file: string) =>
+    `${file} di questo progetto concede al bot «${name}» «${key}», che da remoto scavalcherebbe il divieto della shell: da qui non lo avvio. Toglilo da ${file} per usarlo dal telefono.`,
+  "gateway.configUnreadable": (name: string, file: string) =>
+    `Non riesco a leggere ${file} di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio.`,
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nIl comando è letto dal terminale e può essere incompleto: se non lo riconosci per intero, rispondi No.\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
+  "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
+  "gateway.approve.blocked": (what: string, reason: string) =>
+    `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>
@@ -1334,6 +1347,41 @@ export const it = {
   "bots.permission.reject": "Rifiuta",
   "bots.permission.always": "Sempre",
   "bots.permission.allow": "Consenti",
+  "bots.permission.deny": "Nega",
+  "bots.approval.reason.deleteRoot": "cancella dalla radice del disco o dalla cartella utente",
+  "bots.approval.reason.disk": "scrive o formatta un disco",
+  "bots.approval.reason.forkBomb": "si moltiplica fino a bloccare il computer",
+  "bots.approval.reason.power": "spegne o riavvia il computer",
+  "bots.approval.reason.system": "tocca l'avvio o i punti di ripristino di Windows",
+  "bots.approval.reason.recursiveDelete": "cancella una cartella con tutto il contenuto",
+  "bots.approval.reason.gitRewrite": "riscrive la storia di git o butta via lavoro non salvato",
+  "bots.approval.reason.pipeToShell": "esegue uno script scaricato dalla rete",
+  "bots.approval.reason.elevate": "chiede i permessi di amministratore",
+  "bots.approval.reason.killProcess": "chiude di forza altri programmi",
+  "bots.approval.reason.permissions": "cambia i permessi dei file",
+  "bots.approval.reason.systemConfig": "cambia la configurazione del sistema, o quella di git per tutto il computer",
+  "bots.approval.reason.shellStartup": "scrive nei file che la shell esegue all'avvio",
+  "bots.approval.reason.database": "cancella tabelle di un database",
+  "bots.approval.reason.publish": "pubblica un pacchetto o una release",
+  "bots.approval.reason.containers": "cancella container o volumi di Docker",
+  "bots.approval.reason.opaqueShell": "fa girare comandi che nessuna lista può leggere: codificati, presi da una variabile o decodificati",
+  "bots.approval.reason.consoleWrite": "scrive direttamente sulla console, dove ADE legge il menu dei permessi",
+  "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
+  "bots.approval.reason.cut": "il comando potrebbe continuare oltre quello che sembra: contiene righe che imitano questo menu",
+  "bots.approval.reason.cutBlocked":
+    "il comando potrebbe continuare oltre quello che sembra, e contiene un comando della lista di blocco: si può solo negare",
+  "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
+  "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
+  "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
+  "bots.approval.always": "Sempre per questo bot",
+  "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
+  "bots.approval.blocked": (command: string, reason: string) =>
+    `Bloccato: «${command}» ${reason}. Questo comando non parte mai, qualunque cosa si scelga.`,
+  "bots.approval.refused": (command: string, reason: string) =>
+    `Claude Code non ha eseguito «${command}»: ${reason}. Può farlo dal prossimo turno se scegli «Sempre per questo bot».`,
+  "bots.approval.offer": (command: string) => `Consentire a questo bot comandi come «${command}», dal prossimo turno?`,
+  "bots.approval.expired": (command: string) => `Nessuna risposta: «${command}» è stato negato.`,
+  "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",
   "bots.stop": "Ferma",
   "bots.mention.switch": (name: string) => `Passa il messaggio a ${name}`,
