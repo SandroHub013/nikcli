@@ -236,7 +236,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     turns.set(path, turn)
     void turn.result.then((result) => {
       if (!current()) return
-      settleMemory(path, from)
+      settleMemory(path, from, routine ? "routine" : "panel")
       turns.delete(path)
       cancelExpiry(path)
       const at = Date.now()
@@ -256,7 +256,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
    * applied in order, and each outcome a line in the thread. What failed
    * reaches the bot at the start of its next turn (`memoryPreface`).
    */
-  const settleMemory = (path: string, from: number) => {
+  const settleMemory = (path: string, from: number, source: "panel" | "routine") => {
     const store = deps.memory
     if (!store) return
     const said = deps
@@ -276,11 +276,12 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     if (texts.size === 0) return
     /*
      * The user's profile is the block the model believes most: a write to it
-     * waits for the user's click in the Memoria section (B8a review).
+     * waits for the user's click in the Memoria section (B8a review). So does
+     * every write of a routine: nobody was there to see it.
      */
     const { memory, lines } = settleMemoryOps(store.get(path), ops, () => crypto.randomUUID(), {
-      propose: (op) => op.block === "user",
-      from: "panel",
+      propose: (op) => source === "routine" || op.block === "user",
+      from: source,
       at: now(),
     })
     // The bot hears of what failed, and of what waits for the user.

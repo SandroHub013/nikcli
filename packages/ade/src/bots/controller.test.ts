@@ -609,6 +609,22 @@ describe("a bot's memory in its turns", () => {
     expect(p.memory.get(nikcli.path).undo).toEqual([kept])
   })
 
+  test("a routine's writes all wait for the user: nobody was there to see them (review)", async () => {
+    const p = memoryPanel()
+    const nikcli = bot("nikcli")
+    p.turns.routine(nikcli, "fai il punto")
+    p.talks[nikcli.path] = {
+      ...appendMessage(p.talks[nikcli.path]!, { role: "bot", text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>' }, 1),
+      sessionId: "s1",
+    }
+    await p.done()
+    expect(p.memory.get(nikcli.path).notes).toEqual([])
+    expect(p.memory.get(nikcli.path).proposals?.map((proposal) => [proposal.from, proposal.op.block])).toEqual([
+      ["routine", "notes"],
+    ])
+    expect(p.talks[nikcli.path]!.messages.some((message) => message.memoryUndo)).toBe(false)
+  })
+
   test("a refused write is said in the thread, and to the bot on its next turn", async () => {
     const p = memoryPanel()
     const nikcli = bot("nikcli")
