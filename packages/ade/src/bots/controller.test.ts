@@ -443,7 +443,7 @@ describe("a routine's run", () => {
     const turn = p.turns.routine(nikcli, "fai il punto")
     expect(turn).toBeDefined()
     await tick()
-    expect(m.flags[0]).toEqual(["bot-no-shell"])
+    expect(m.flags[0]).toEqual(["bot-read-only"])
     const messages = p.talk(nikcli.path).messages
     expect(messages.map((message) => message.role)).toEqual(["tool", "user"])
     expect(p.turns.routine(nikcli, "ancora")).toBeUndefined()

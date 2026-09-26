@@ -64,7 +64,8 @@ export interface BotTurns {
   /**
    * A routine's run of `bot` (B11), in its thread like any other turn, but
    * with nobody to answer: no shell, whatever the bot may do in the panel
-   * (`bot-no-shell` on nikcli, no Bash for Claude Code, Codex read-only).
+   * and read-only (`bot-read-only` on nikcli, no Bash, Edit or Write for
+   * Claude Code, Codex read-only).
    * Undefined when the bot already has a turn.
    */
   routine: (bot: AgentFile, message: string, cwd?: string, run?: RoutineRun) => Turn | undefined

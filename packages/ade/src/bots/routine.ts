@@ -756,9 +756,9 @@ export function describeCap(cap: RoutineCap): string {
   return parts.join("; ")
 }
 
-/** Whether the runner's routines only read (`TurnSpec.unattended`): Claude Code and Codex. nikcli has no shell but may edit. */
+/** Whether the runner's routines only read (`TurnSpec.unattended`): all three, nikcli by `bot-read-only`. */
 export function routineReadOnly(runner: string): boolean {
-  return runner === "claude" || runner === "codex"
+  return runner === "claude" || runner === "codex" || runner === "nikcli"
 }
 
 export function modeLabel(mode: RoutineMode): string {

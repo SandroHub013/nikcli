@@ -130,11 +130,11 @@ describe("B11 review, M2: ADE Test spends nothing", () => {
   })
 })
 
-describe("B11 review: routines on Claude Code and Codex only read", () => {
-  test("the consent says so where it holds, and not for nikcli", () => {
+describe("B11 review: routines only read", () => {
+  test("the consent says so on every runner, nikcli included", () => {
     expect(routineReadOnly("claude")).toBe(true)
     expect(routineReadOnly("codex")).toBe(true)
-    expect(routineReadOnly("nikcli")).toBe(false)
+    expect(routineReadOnly("nikcli")).toBe(true)
     expect(t("bots.routine.consentReadOnly", "Claude Code", "abbonamento", "sonnet")).toContain("sola lettura")
     expect(t("bots.routine.consent", "nikcli", "modello gratuito", "x:free")).not.toContain("sola lettura")
   })

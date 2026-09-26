@@ -246,7 +246,7 @@ export interface TurnSpec {
   /**
    * A turn nobody watches (B11, a routine): no shell at all, not even
    * `ade-msg`, which can open a session with a shell of its own. nikcli gets
-   * `bot-no-shell`, Claude Code and Codex run read-only (B11 review:
+   * `bot-read-only`, Claude Code and Codex run read-only too (B11 review:
    * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
    */
   readonly unattended?: boolean
@@ -415,9 +415,11 @@ export function turnCommand(
             ...(fromRepository(bot) ? [] : ["no-project-config"]),
             ...(spec.remote
               ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
-              : spec.approvals && !spec.unattended
-                ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
-                : ["bot-no-shell"]),
+              : spec.unattended
+                ? ["bot-read-only"]
+                : spec.approvals
+                  ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
+                  : ["bot-no-shell"]),
           ]
           return flags.length > 0 ? { flags } : {}
         })(),
