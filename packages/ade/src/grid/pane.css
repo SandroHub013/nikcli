@@ -1028,8 +1028,8 @@
   border: 0;
   border-radius: var(--ade-radius-sm);
   outline: none;
-  background: color-mix(in srgb, var(--ade-accent) 10%, transparent);
-  box-shadow: inset 0 -1.5px 0 var(--ade-accent);
+  background: var(--ade-raised);
+  box-shadow: inset 0 -1.5px 0 var(--ade-text-weak);
   font: inherit;
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
