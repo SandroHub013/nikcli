@@ -57,15 +57,26 @@ test("a plan limit is recognised in what the CLIs say", () => {
   expect(limitReached("File not found: limits.ts")).toBe(false)
 })
 
+/*
+ * The sources are read here, while the file loads, and once each. Read in
+ * the test, one read per forbidden string, it took a timeout of 20 s, and
+ * that was still not enough right after a checkout: on Windows the first open
+ * of a file just written waits for the antivirus, and this is some 360 of
+ * them. Loading is not timed per test; the scan is a few milliseconds.
+ */
+const walk = (dir: string): string[] =>
+  readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name)
+    return statSync(path).isDirectory() ? walk(path) : /\.(ts|tsx|rs)$/.test(name) && !/\.test\.ts$/.test(name) ? [path] : []
+  })
+const root = join(import.meta.dir, "..", "..")
+const sources = [...walk(join(root, "src")), ...walk(join(root, "src-tauri", "src"))].map(
+  (file) => [file, readFileSync(file, "utf8")] as const,
+)
+
 test("ADE's source never touches the CLIs' credentials", () => {
   const forbidden = [".credentials.json", ".codex/auth.json", ".codex\\auth.json", "CLAUDE_CODE_OAUTH_TOKEN"]
-  const walk = (dir: string): string[] =>
-    readdirSync(dir).flatMap((name) => {
-      const path = join(dir, name)
-      return statSync(path).isDirectory() ? walk(path) : /\.(ts|tsx|rs)$/.test(name) && !/\.test\.ts$/.test(name) ? [path] : []
-    })
-  const root = join(import.meta.dir, "..", "..")
-  const files = [...walk(join(root, "src")), ...walk(join(root, "src-tauri", "src"))]
-  const hits = files.filter((file) => forbidden.some((needle) => readFileSync(file, "utf8").includes(needle)))
+  expect(sources.length).toBeGreaterThan(100)
+  const hits = sources.filter(([, text]) => forbidden.some((needle) => text.includes(needle))).map(([file]) => file)
   expect(hits).toEqual([])
-}, 20_000)
+})
