@@ -241,6 +241,8 @@ export const en: Messages = {
   "hooks.plugin": "A plugin of nikcli's TUI, not a configuration entry: it tells ADE which conversation the pane shows, also after /new, /sessions or a change of tab. It does nothing in a nikcli ADE did not start.",
   "hooks.install": "Install",
   "hooks.reinstall": "Reinstall",
+  "hooks.update": "Update",
+  "hooks.outdated": "The installed plugin is from an earlier ADE: press Update to put in the new one.",
   "hooks.remove": "Remove",
   "hooks.outside": "The script does nothing outside ADE: it exits at the first environment variable it can't find, so the same CLI started from any other terminal behaves exactly as before.",
   "agent.mic.start": "Turn on microphone",

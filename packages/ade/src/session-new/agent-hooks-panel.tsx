@@ -95,6 +95,10 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   <p data-slot="hook-note">{t("hooks.plugin")}</p>
                 </Show>
 
+                <Show when={state()?.outdated}>
+                  <p data-slot="hook-note">{t("hooks.outdated")}</p>
+                </Show>
+
                 <Show when={state() && !state()?.error}>
                   <p data-slot="hook-paths">
                     <Show when={state()?.configPath}>
@@ -115,7 +119,7 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     disabled={working() || Boolean(state()?.error)}
                     onClick={() => void apply(target.id, true)}
                   >
-                    {state()?.installed ? t("hooks.reinstall") : t("hooks.install")}
+                    {state()?.outdated ? t("hooks.update") : state()?.installed ? t("hooks.reinstall") : t("hooks.install")}
                   </button>
                   <Show when={state()?.installed || state()?.broken}>
                     <button

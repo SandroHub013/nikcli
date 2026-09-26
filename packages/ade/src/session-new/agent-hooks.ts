@@ -439,6 +439,8 @@ export interface HookStatus {
   readonly scriptPath: string
   /** Set when the state could not be read at all. */
   readonly error?: string
+  /** Installed by an earlier ADE, whose plugin is not this one's: the panel offers the update. */
+  readonly outdated?: boolean
 }
 
 /** What ADE has installed for this CLI right now. */
@@ -458,7 +460,14 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
     const files = await read(target.id)
     // A plugin has no entry to point at it: the file being there is the whole install.
     if (target.kind === "tui-plugin") {
-      return { target, installed: files.scriptPresent, broken: false, configPath: "", scriptPath: files.scriptPath }
+      return {
+        target,
+        installed: files.scriptPresent,
+        broken: false,
+        configPath: "",
+        scriptPath: files.scriptPath,
+        ...(files.scriptPresent && files.scriptCurrent === false ? { outdated: true } : {}),
+      }
     }
     const command = installedCommand(files.configText ?? undefined)
     const wanted = hookCommand(files.scriptPath)
@@ -535,9 +544,13 @@ export async function refreshHookScript(
   if (!host.readAgentHook || !host.writeAgentHook) return undefined
   const files = await host.readAgentHook(target.id)
   if (target.kind === "tui-plugin") {
-    // Only an installed plugin is rewritten, and only when it is not this version's: Rust compares, and writes its own.
-    if (!files.scriptPresent || files.scriptCurrent !== false) return undefined
-    await host.writeAgentHook(target.id, "", "")
+    /*
+     * Not rewritten here. Writing it opens Rust's confirmation, and this runs
+     * when ADE starts: after an update that changed the plugin, a native
+     * dialog came up that nobody had asked for (lettura di Mimo, F9). The
+     * status says it is outdated, and the settings panel updates it when the
+     * user presses the button.
+     */
     return undefined
   }
   const script = hookScript(target.agent)
