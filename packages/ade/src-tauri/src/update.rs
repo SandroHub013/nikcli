@@ -138,11 +138,28 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
             });
         }
     }
+    /*
+     * The one-ADE lock (`tray::single_instance`) goes before the new process
+     * starts, wherever this is called from: `restart` on the main thread skips
+     * `RunEvent::Exit`, where the plugin would let it go, and the updated ADE
+     * would find it taken and end. A no-op when the plugin is not on.
+     */
+    tauri_plugin_single_instance::destroy(&app);
     app.restart()
 }
 
 #[cfg(test)]
 mod tests {
+
+    /* G11 review, BASSO 1. */
+    #[test]
+    fn the_one_ade_lock_is_released_before_the_restart() {
+        let source = include_str!("update.rs");
+        // Split, so this test's own text is not what is found.
+        let destroy = source.find(&["tauri_plugin_single_instance::", "destroy(&app);"].concat()).expect("il lock non viene rilasciato");
+        let restart = source.find(&["app.", "restart()"].concat()).expect("nessun riavvio");
+        assert!(destroy < restart, "il lock va rilasciato prima del riavvio");
+    }
     #[test]
     fn a_check_that_never_answers_ends_in_an_error() {
         let limit = std::time::Duration::from_millis(50);

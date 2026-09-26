@@ -29,6 +29,7 @@ mod serve_proxy;
 mod shots;
 mod mailbox;
 mod stats;
+mod tray;
 mod tts;
 mod usage;
 mod vision;
@@ -1446,6 +1447,14 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
     let target = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            use tauri::Manager;
+            // A bot's gateway is on: the window goes, ADE stays in the tray (G11), once the page is asked.
+            let app = target.app_handle();
+            if tray::hides_on_close(app.state::<gateway::Gateway>().any_on(), app.state::<tray::Tray>().quitting()) {
+                api.prevent_close();
+                tray::request_hide(app);
+                return;
+            }
             match manager.on_close_requested() {
                 CloseAction::AllowClose => {}
                 CloseAction::PreventAndAsk(request_id) => {
@@ -1490,9 +1499,12 @@ fn ade_confirm_close(
 #[tauri::command]
 fn ade_cancel_close(
     manager: tauri::State<'_, std::sync::Arc<CloseManager>>,
+    tray: tauri::State<'_, tray::Tray>,
     request_id: Option<u64>,
 ) -> Result<(), String> {
     manager.cancel(request_id);
+    // The user said no to closing: Esci from the tray is off again.
+    tray.set_quitting(false);
     Ok(())
 }
 
@@ -1611,6 +1623,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let dev_url = app.config().build.dev_url.clone();
     #[cfg(all(windows, not(debug_assertions)))]
     let dev_url: Option<tauri::Url> = None;
+    let tray_title = title.clone();
     let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title(title)
         // A new document in the window is a new page: the old one's ptys have
@@ -1691,6 +1704,11 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         use tauri::Manager;
         let close_manager = app.state::<std::sync::Arc<CloseManager>>().inner().clone();
         attach_close_handler(&window, close_manager);
+    }
+
+    // With the window's name, «ADE Test · <worktree>» in a test build (G11).
+    if let Err(error) = tray::install(app, &tray_title) {
+        eprintln!("ADE: icona nella tray non creata: {error}");
     }
 
     #[cfg(windows)]
@@ -1913,7 +1931,15 @@ pub fn run() {
     #[cfg(unix)]
     import_login_path();
 
-    tauri::Builder::default()
+    let context = tauri::generate_context!();
+    let builder = tauri::Builder::default();
+    // The first plugin: a second ADE of this identity ends before anything of its own starts.
+    let builder = if tray::single_instance(&context.config().identifier, std::env::var("ADE_SINGLE_INSTANCE").ok().as_deref()) {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+    } else {
+        builder
+    };
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -1954,6 +1980,7 @@ pub fn run() {
         .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
         .manage(std::sync::Arc::new(CloseManager::default()))
+        .manage(tray::Tray::default())
         /*
          * The video panel's files.
          *
@@ -2084,6 +2111,8 @@ pub fn run() {
             ade_confirm_close,
             ade_cancel_close,
             ade_close_ack,
+            tray::ade_tray_take,
+            tray::ade_hide_to_tray,
             write_clipboard,
             secrets::secret_list,
             secrets::secret_save,
@@ -2096,7 +2125,7 @@ pub fn run() {
             glass::ade_glass_status,
             glass::ade_window_set_glass,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running ADE")
         /*
          * Every process this window started is a child of it, so they die

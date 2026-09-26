@@ -46,11 +46,15 @@ test-exe = []
 # without it the release build failed with E0599 and 0.7.3 never shipped. It
 # is also what `window-vibrancy` asks for, together with `macOSPrivateApi` in
 # `tauri.conf.json`; Tauri refuses to build if only one of the two is set.
-tauri = { version = "2.9.5", features = ["macos-private-api"] }
+# `tray-icon`: ADE in the tray while a bot's gateway is on (G11, `src/tray.rs`).
+tauri = { version = "2.9.5", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# One ADE per identity: a second start brings the first one's window forward,
+# out of the tray too, instead of a second gateway on the same bots (G11).
+tauri-plugin-single-instance = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }

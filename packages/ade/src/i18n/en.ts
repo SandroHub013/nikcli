@@ -425,6 +425,13 @@ export const en: Messages = {
     `${count} ${count === 1 ? "session is working" : "sessions are working"}. Close anyway?`,
   "window.closeConfirm.ok": "Close",
   "window.closeConfirm.cancel": "Cancel",
+  "tray.hide.working": (count) =>
+    `A gateway is on: ADE goes to the tray and stays open. ${count} ${count === 1 ? "session is working and will go on" : "sessions are working and will go on"} with the window hidden. To close ADE altogether: Exit, in its icon's menu.`,
+  "tray.hide.keepSessions": "Hide, sessions go on",
+  "tray.hide.closeSessions": "Close the sessions and hide",
+  "tray.hide.cancel": "Cancel",
+  "tray.hide.notice":
+    "ADE stays in the tray while a gateway is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
   "bell.title": "Notifications",
   "bell.dismiss": "Dismiss",
 

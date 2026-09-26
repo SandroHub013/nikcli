@@ -44,6 +44,18 @@
         "uninstallerHeaderImage": "icons/nsis/header.bmp",
         "sidebarImage": "icons/nsis/sidebar.bmp"
       }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "libayatana-appindicator-gtk3"
+        ]
+      }
     }
   },
   "plugins": {

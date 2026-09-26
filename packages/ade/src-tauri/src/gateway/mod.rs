@@ -39,6 +39,12 @@ impl Gateway {
         }
     }
 
+    /// Whether any bot's gateway is switched on: closing the window then
+    /// leaves ADE in the tray (G11).
+    pub fn any_on(&self) -> bool {
+        self.0.get().is_some_and(|hub| hub.any_on())
+    }
+
     /// ADE is closing: every gateway's task ends.
     pub fn shutdown(&self) {
         if let Some(hub) = self.0.get() {

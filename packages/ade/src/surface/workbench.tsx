@@ -3,7 +3,8 @@ import { VialMark } from "./vial/vial-mark"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every, pageHidden, watchDue } from "../host/every"
-import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions } from "./before-unload"
+import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions, isWorkingAgentPane } from "./before-unload"
+import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
@@ -4305,6 +4306,9 @@ export function Workbench() {
     },
   })
 
+  /** ADE's window is hidden in the tray (G11): set by Rust's `ade-window-hidden`/`ade-window-shown`. */
+  let hiddenInTray = false
+
   onMount(() => {
     preloadNaturalVoice()
     if (listensByItself(voiceSettings())) listenForName()
@@ -4312,6 +4316,7 @@ export function Workbench() {
     const guard = createListenGuard({
       now: () => Date.now(),
       isLocked: isScreenLocked,
+      isHidden: () => hiddenInTray,
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
@@ -4732,6 +4737,9 @@ export function Workbench() {
     }
 
     let unlistenClose: (() => void) | undefined
+    let unlistenHide: (() => void) | undefined
+    let unlistenHidden: (() => void) | undefined
+    let unlistenShown: (() => void) | undefined
     if (isTauriDesktop()) {
       void import("@tauri-apps/api/event").then(({ listen }) => {
         listen<{ requestId?: number }>("ade-window-close-requested", async (event) => {
@@ -4781,6 +4789,54 @@ export function Workbench() {
           }
         }).then((unlisten) => {
           unlistenClose = unlisten
+        })
+
+        /*
+         * The X with a bot's gateway on hides ADE to the tray (G11): said
+         * first, and with sessions at work asked (`surface/tray-hide.ts`).
+         * Rust waits a few seconds for `ade_tray_take`, then hides anyway.
+         */
+        listen<{ requestId?: number }>("ade-window-hide-requested", async (event) => {
+          const requestId = event.payload?.requestId
+          const { invoke } = await import("@tauri-apps/api/core")
+          if (requestId === undefined || !(await invoke<boolean>("ade_tray_take", { requestId }).catch(() => false))) return
+          const working = wb().panes.filter((pane) => isWorkingAgentPane(pane, running))
+          const storage = (() => {
+            try {
+              return window.localStorage
+            } catch {
+              return undefined
+            }
+          })()
+          const plan = planHide({ working: working.length, noticed: trayNoticed(storage) })
+          const dialog = await import("@tauri-apps/plugin-dialog")
+          if (plan.kind === "ask") {
+            const buttons = hideButtons()
+            const answer = await dialog
+              .message(t("tray.hide.working", plan.working), { title: "ADE", kind: "warning", buttons })
+              .catch(() => undefined)
+            const choice = hideChoice(answer, buttons)
+            if (choice === "keep") return
+            if (choice === "close-sessions") await closer.closeAll(working.map((pane) => pane.id))
+          } else if (plan.kind === "notice") {
+            await dialog.message(t("tray.hide.notice"), { title: "ADE", kind: "info" }).catch(() => undefined)
+            markTrayNoticed(storage)
+          }
+          await invoke("ade_hide_to_tray").catch(() => {})
+        }).then((unlisten) => {
+          unlistenHide = unlisten
+        })
+        // Hidden: no microphone open in a window nobody sees; the guard brings listening back with the window.
+        listen("ade-window-hidden", () => {
+          hiddenInTray = true
+          if (voiceEngine.isRunning()) void voiceEngine.pauseListening()
+        }).then((unlisten) => {
+          unlistenHidden = unlisten
+        })
+        listen("ade-window-shown", () => {
+          hiddenInTray = false
+        }).then((unlisten) => {
+          unlistenShown = unlisten
         })
       })
     }
@@ -4902,6 +4958,9 @@ export function Workbench() {
 
     onCleanup(() => {
       unlistenClose?.()
+      unlistenHide?.()
+      unlistenHidden?.()
+      unlistenShown?.()
       window.removeEventListener("keydown", handleKeyDown, true)
       window.removeEventListener("keyup", handleKeyUp, true)
       window.removeEventListener("blur", handleBlur)

@@ -413,6 +413,12 @@ impl Hub {
         }
     }
 
+    /// Whether any gateway is switched on, running or waiting to retry: the
+    /// user wants the chats to reach their bots (G11, the tray).
+    pub fn any_on(&self) -> bool {
+        self.store.read().links.iter().any(|link| link.enabled)
+    }
+
     /// ADE is closing: every task ends, and each gateway stays as the user left it.
     pub fn shutdown(&self) {
         for (_, running) in self.links().drain() {
@@ -981,6 +987,20 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         panic!("non è successo: {what}");
+    }
+
+    /* G11: the window hides to the tray while a gateway is on. */
+    #[tokio::test]
+    async fn a_gateway_is_on_from_start_to_stop_even_when_its_task_is_not_running() {
+        let s = setup("any-on");
+        assert!(!s.hub.any_on(), "nessun gateway acceso");
+        let _ = start(&s);
+        assert!(s.hub.any_on());
+        // ADE closing ends the tasks, and the gateway stays on for the next start.
+        s.hub.shutdown();
+        assert!(s.hub.any_on());
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        assert!(!s.hub.any_on());
     }
 
     #[tokio::test]
