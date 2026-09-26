@@ -215,6 +215,27 @@ export interface Host {
   ttsPiperCancel?: (tokens: number[]) => Promise<void>
   /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
   ttsPiperStop?: () => Promise<{ busy: boolean }>
+  /**
+   * The same three things, for the second local backend, with the provider as a
+   * parameter: Piper is `tts_local_*` with `piper`, and Kokoro is the same
+   * commands with `kokoro`. They exist as their own names because the resident
+   * process is one per backend and stopping one is not stopping the other.
+   *
+   * No `voiceId` on status, install and stop: Kokoro's four voices are one
+   * 219 MB download, so installing them is one operation with nothing to choose.
+   */
+  ttsLocalStatus?: (provider: string) => Promise<{ supported: boolean; installed: boolean }>
+  ttsLocalInstall?: (provider: string) => Promise<void>
+  /** One unit as WAV bytes. `lang` is the G2P language, not a locale. */
+  ttsLocalSpeak?: (
+    provider: string,
+    voiceId: string,
+    text: string,
+    token: number,
+    lang: string,
+  ) => Promise<ArrayBuffer>
+  /** Ends the resident child of the second backend. One child, so no provider. */
+  ttsLocalStop?: () => Promise<void>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */

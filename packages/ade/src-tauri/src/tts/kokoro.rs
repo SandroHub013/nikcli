@@ -380,6 +380,71 @@ fn push_varint(out: &mut Vec<u8>, mut value: u64) {
 
 /* ----------------------------------------------------------------- the child */
 
+/// The bytes an install of this revision fetches, when there is something to fetch.
+///
+/// For the panel's «Installa (192 MB)»: the sum of the four downloads, which is
+/// the 219 489 095 bytes K1 counted. `None` when the revision is already whole,
+/// because a number next to «Installa» on something installed is a number
+/// nobody asked for.
+pub fn download_size(root: &Path) -> Option<u64> {
+    if ready(root) {
+        return None;
+    }
+    Some(DOWNLOAD_BYTES)
+}
+
+/// The sum of the four downloads, from the manifest rather than written out
+/// again: a total that is typed twice is a total that can disagree with itself.
+const DOWNLOAD_BYTES: u64 = 20_494_724 + 163_527_961 + 28_214_398 + 7_252_012;
+
+/**
+ * Removes the revision, so the 219 MB go away.
+ *
+ * Refused while an install of this provider is running: the installer is writing
+ * into that folder, and a folder that disappears under it is an install that ends
+ * in a way nobody asked for. Refused while the host is speaking, unless it is
+ * stopped first — which is what the caller does, and is the only way out: a
+ * process with a model open in it does not give the model back.
+ */
+pub fn delete(root: &Path, installing: bool) -> Result<u64, String> {
+    if installing {
+        return Err("C'è un'installazione in corso: fermala prima di cancellare.".into());
+    }
+    if !home(root).is_dir() {
+        return Ok(0);
+    }
+    let freed = folder_bytes(&home(root));
+    std::fs::remove_dir_all(home(root)).map_err(|e| e.to_string())?;
+    Ok(freed)
+}
+
+/// What a folder weighs, for the answer to «how much did this free».
+fn folder_bytes(folder: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(folder) else { return 0 };
+    entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| match entry.metadata() {
+            Ok(data) if data.is_dir() => folder_bytes(&entry.path()),
+            Ok(data) => data.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// The two pages a Kokoro user can be sent to, from a fixed list.
+///
+/// The model is the upstream release that publishes it, and the host is the source
+/// of the executable, because it is GPL and the person who downloads it has to be
+/// able to find the code that made it. A URL that came from the interface is a URL
+/// ADE would open on request, and this opens pages.
+pub fn source_of(id: &str) -> Option<&'static str> {
+    match id {
+        "kokoro" => Some("https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1"),
+        "kokoro-host" => Some("https://github.com/SandroHub013/nikcli/tree/main/packages/kokoro-host"),
+        _ => None,
+    }
+}
+
 /// The first line the host writes, and the only one read before a request.
 ///
 /// K4a measured its shape: `{"v":1,"ready":true,"loadMs":…}` when the model is
@@ -804,6 +869,47 @@ mod tests {
         assert!(!answer_is_ours("sherpa: bla", 7));
         assert_eq!(error_in(r#"{"id":7,"error":"voce sconosciuta"}"#), Some("voce sconosciuta".into()));
         assert_eq!(error_in(r#"{"id":7,"synthMs":1}"#), None);
+    }
+
+    #[test]
+    fn la_dimensione_del_download_e_quel_la_di_k1() {
+        assert_eq!(DOWNLOAD_BYTES, 219_489_095, "i 219 MB di K1, dalla tabella e non scritti due volte");
+        let root = Path::new("tts").join("vuoto-per-il-download");
+        assert_eq!(download_size(&root), Some(219_489_095));
+    }
+
+    #[test]
+    fn cancellare_toglie_la_cartella_e_rifiuta_durante_un_install() {
+        let root = Path::new("tts").join("da-cancellare");
+        let _ = std::fs::remove_dir_all(&root);
+        let rev = home(&root);
+        std::fs::create_dir_all(&rev).unwrap();
+        std::fs::write(rev.join("kokoro-v1.0.fp16.onnx"), vec![7_u8; 2_475]).unwrap();
+        assert!(rev.is_dir());
+        // Durante un install non si cancella: l'installer sta scrivendo lì.
+        let refused = delete(&root, true);
+        assert!(refused.is_err());
+        assert!(rev.is_dir(), "la cartella e' ancora dove era");
+        // Fuori da un install, la cartella va e con lei i byte che occupava.
+        assert_eq!(delete(&root, false), Ok(2_475));
+        assert!(!rev.exists());
+        // E su una cartella che non c'e' non si risponde con un errore: non c'e'
+        // niente da togliere, che e' quello che il pannello voleva dire.
+        assert_eq!(delete(&root, false), Ok(0));
+    }
+
+    #[test]
+    fn le_pagine_di_kokoro_stanno_in_una_lista_fissa() {
+        assert_eq!(
+            source_of("kokoro"),
+            Some("https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1")
+        );
+        // Il sorgente dell'host: e' GPL e chi lo scarica deve poter trovare il
+        // codice che lo ha fatto.
+        assert!(source_of("kokoro-host").is_some_and(|url| url.contains("kokoro-host")));
+        // E un id che non e' fra questi non e' una pagina da aprire.
+        assert_eq!(source_of("https://example.invalid"), None);
+        assert_eq!(source_of("ugo"), None);
     }
 
     #[test]

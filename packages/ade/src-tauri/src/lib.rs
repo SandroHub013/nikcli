@@ -2064,6 +2064,7 @@ pub fn run() {
             tts::tts_local_install,
             tts::tts_local_speak,
             tts::tts_local_stop,
+            tts::tts_local_delete,
             tts::tts_install_status,
             tts::tts_install_cancel,
             mailbox::mailbox_receipt,

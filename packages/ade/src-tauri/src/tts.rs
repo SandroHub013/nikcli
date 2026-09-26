@@ -37,17 +37,46 @@ mod kokoro;
 pub struct LocalStatus {
     pub supported: bool,
     pub installed: bool,
+    /// How much an install would fetch, for «Installa (… MB)». `None` when there
+    /// is nothing to fetch, so a number never sits next to a button that has
+    /// nothing to do.
+    #[serde(rename = "sizeBytes")]
+    pub size_bytes: Option<u64>,
 }
 
 /// The status of a Kokoro voice: installed when this revision is whole, and never
 /// "supported but not installed" — the pieces are one download and one folder.
 #[tauri::command]
 pub fn tts_local_status(app: tauri::AppHandle, provider: String) -> Result<LocalStatus, String> {
-    let root = root(&app)?;
+    let root = kokoro_root(&app)?;
     match provider.as_str() {
-        kokoro::KOKORO => Ok(LocalStatus { supported: true, installed: kokoro::ready(&root) }),
+        kokoro::KOKORO => Ok(LocalStatus {
+            supported: true,
+            installed: kokoro::ready(&root),
+            size_bytes: kokoro::download_size(&root),
+        }),
         _ => Err(format!("{provider} non è un provider locale.")),
     }
+}
+
+/// Takes Kokoro away again, so the 219 MB do not stay for nothing.
+///
+/// Refused while an install is running, and the resident host is stopped first if
+/// it is there: a process with the model open is a process that does not give the
+/// model back.
+#[tauri::command]
+pub fn tts_local_delete(app: tauri::AppHandle, state: tauri::State<'_, KokoroState>) -> Result<u64, String> {
+    let root = kokoro_root(&app)?;
+    if app.state::<Piper>().installer.install_running(kokoro::KOKORO) {
+        return Err("C'è un'installazione di Kokoro in corso: fermala prima di cancellare.".into());
+    }
+    kokoro::stop(&state);
+    kokoro::delete(&root, false)
+}
+
+/// Kokoro's own folder, a sibling of Piper's: `…/tts/kokoro`.
+fn kokoro_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("tts").join("kokoro"))
 }
 
 /// One Kokoro sentence, as WAV bytes, from the resident host.
@@ -662,7 +691,12 @@ fn forget_on_error<T, R, E>(slot: &mut Option<T>, result: &Result<R, E>) {
 /// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
 #[tauri::command]
 pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> Result<(), String> {
-    let source = voice(&voice_id)?.source;
+    // Le due pagine di Kokoro sono in una lista fissa, come i sorgenti delle voci
+    // Piper: l'indirizzo non viene mai dall'interfaccia.
+    let source = match kokoro::source_of(&voice_id) {
+        Some(url) => url,
+        None => voice(&voice_id)?.source,
+    };
     #[allow(deprecated)]
     tauri_plugin_shell::ShellExt::shell(&app).open(source, None).map_err(|e| e.to_string())
 }
@@ -1034,6 +1068,12 @@ impl Installer {
 
     /// What is known about this provider's install. Never fails: a provider
     /// nobody has installed yet has simply not started.
+    /// Whether this provider has an install in flight, which is what makes a
+    /// delete refuse: the installer is writing into the folder being removed.
+    pub fn install_running(&self, provider: &str) -> bool {
+        self.progress_of(provider).running
+    }
+
     fn progress_of(&self, provider: &str) -> InstallProgress {
         self.slot(provider).progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
