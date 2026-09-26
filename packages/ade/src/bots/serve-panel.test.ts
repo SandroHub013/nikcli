@@ -77,9 +77,9 @@ function server() {
 }
 
 const status = (type: string): ChatEvent => ({ type: "session.status", properties: { sessionID: SESSION, status: { type } } })
-const asked = (id: string, command: string): ChatEvent => ({
+const asked = (id: string, command: string, permission = "bash"): ChatEvent => ({
   type: "permission.asked",
-  properties: { id, sessionID: SESSION, permission: "bash", patterns: [command], metadata: {}, always: [] },
+  properties: { id, sessionID: SESSION, permission, patterns: [command], metadata: {}, always: [] },
 })
 
 /** Lets the turn's promises and the stream run until `done` holds. */
@@ -88,12 +88,13 @@ async function until(done: () => boolean) {
   expect(done()).toBe(true)
 }
 
-function panel(fake: ReturnType<typeof server>) {
+/** The panel, each bot's turns on its own server (`serverOf`), or all on `fake`. */
+function panel(fake: ReturnType<typeof server>, serverOf: (path: string) => ReturnType<typeof server> = () => fake) {
   const talks: Record<string, Talk> = {}
   const kept: Record<string, string[]> = {}
   const timers: { run: () => void; ms: number; cancelled: boolean }[] = []
   const turns = createBotTurns({
-    runTurn: (request) => runServeTurn(request, fake.deps),
+    runTurn: (request) => runServeTurn(request, serverOf(request.bot?.path ?? "").deps),
     talkOf: (path) => talks[path] ?? emptyTalk(),
     update: (path, change) => {
       talks[path] = change(talks[path] ?? emptyTalk())
@@ -194,6 +195,148 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
   })
 })
 
+/*
+ * B8c's approvals in the panel, as they were with the menu (`controller.ts`),
+ * now answered by id: what each answer sends, what «Sempre» keeps, and when
+ * a question becomes a Nega.
+ */
+describe("B8d: the panel's approvals, as B8c gave them", () => {
+  async function started(fake: ReturnType<typeof server>, view: ReturnType<typeof panel>, bot: AgentFile = BOT) {
+    view.turns.send(bot, "ciao", "C:/progetto")
+    await until(() => fake.prompts.length === 1)
+    fake.push(status("busy"))
+  }
+
+  test("with no question on screen an answer goes nowhere", async () => {
+    const fake = server()
+    const view = panel(fake)
+    await started(fake, view)
+    fake.push(asked("per_1", "git push --force"))
+    await until(() => view.talk().permission?.requestID === "per_1")
+    view.turns.answer(BOT, "once")
+    view.turns.answer(BOT, "once")
+    await until(() => fake.replies.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(fake.replies).toEqual([["per_1", "once"]])
+    view.turns.stop(BOT)
+  })
+
+  /* B8c review, M3: every danger of the command, not the first. */
+  test("«Sempre» on the deletion does not let a forced push through with it; «Sempre» then keeps both", async () => {
+    const fake = server()
+    const view = panel(fake)
+    view.kept[BOT.path] = ["recursiveDelete"]
+    await started(fake, view)
+    fake.push(asked("per_1", "rm -rf build && git push --force"))
+    await until(() => view.talk().permission?.requestID === "per_1")
+    expect(view.talk().permission).toMatchObject({ always: ["recursiveDelete", "gitRewrite"] })
+    expect(fake.replies).toEqual([])
+    view.turns.answer(BOT, "always")
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_1", "once"])
+    expect(view.kept[BOT.path]).toEqual(["recursiveDelete", "gitRewrite"])
+    fake.push(asked("per_2", "rm -rf dist && git push -f"))
+    await until(() => fake.replies.length === 2)
+    expect(fake.replies[1]).toEqual(["per_2", "once"])
+    view.turns.stop(BOT)
+  })
+
+  test("a blocked command never runs, whatever the bot's «Sempre» holds", async () => {
+    const fake = server()
+    const view = panel(fake)
+    view.kept[BOT.path] = ["recursiveDelete", "deleteRoot", "disk", "power"]
+    await started(fake, view)
+    fake.push(asked("per_1", "rm -rf /"))
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_1", "reject"])
+    expect(view.talk().permission).toBeUndefined()
+    expect(view.talk().messages.at(-1)).toMatchObject({ role: "error" })
+    expect(view.talk().messages.at(-1)!.text).toContain("rm -rf /")
+    view.turns.stop(BOT)
+  })
+
+  test("a dangerous command waits with its reason; «Sempre» holds for this bot and not for another", async () => {
+    const first = server()
+    const second = server()
+    const other: AgentFile = { ...BOT, path: "C:/finto/.config/nikcli/agent/altro/alfa.md" }
+    const view = panel(first, (path) => (path === other.path ? second : first))
+    await started(first, view)
+    first.push(asked("per_1", "git push --force origin main"))
+    await until(() => view.talk().permission?.requestID === "per_1")
+    const waiting = view.talk().permission!
+    expect(waiting).toMatchObject({ always: ["gitRewrite"] })
+    expect(waiting.reason).toBeTruthy()
+    expect(waiting.expiresAt! - waiting.askedAt).toBe(APPROVAL_TIMEOUT_MS)
+    view.turns.answer(BOT, "always")
+    await until(() => first.replies.length === 1)
+    // ADE's «Sempre», sent to nikcli as a once: never nikcli's own «always».
+    expect(first.replies[0]).toEqual(["per_1", "once"])
+    expect(view.kept[BOT.path]).toEqual(["gitRewrite"])
+    first.push(asked("per_2", "git push -f"))
+    await until(() => first.replies.length === 2)
+    expect(first.replies[1]).toEqual(["per_2", "once"])
+
+    await started(second, view, other)
+    second.push(asked("per_3", "git push -f"))
+    await until(() => view.talk(other.path).permission?.requestID === "per_3")
+    expect(view.talk(other.path).permission).toMatchObject({ always: ["gitRewrite"] })
+    view.turns.answer(other, "reject")
+    await until(() => second.replies.length === 1)
+    expect(second.replies[0]).toEqual(["per_3", "reject"])
+    expect(view.kept[other.path]).toBeUndefined()
+    view.turns.stop(BOT)
+    view.turns.stop(other)
+  })
+
+  test("a folder outside the project: kept by «Sempre» as that folder; no answer in time is a Nega", async () => {
+    const fake = server()
+    const view = panel(fake)
+    await started(fake, view)
+    fake.push(asked("per_1", "C:/Users/me/*", "external_directory"))
+    await until(() => view.talk().permission?.requestID === "per_1")
+    expect(view.talk().permission).toMatchObject({ always: ["outside:C:/Users/me/*"] })
+    const timer = view.timers.at(-1)!
+    expect(timer.ms).toBe(APPROVAL_TIMEOUT_MS)
+    timer.run()
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_1", "reject"])
+    expect(view.talk().permission).toBeUndefined()
+    expect(view.talk().messages.at(-1)!.text).toContain("C:/Users/me/*")
+    view.turns.stop(BOT)
+  })
+
+  test("an answer in time cancels the Nega", async () => {
+    const fake = server()
+    const view = panel(fake)
+    await started(fake, view)
+    fake.push(asked("per_1", "rm -rf build"))
+    await until(() => view.talk().permission?.requestID === "per_1")
+    view.turns.answer(BOT, "once")
+    expect(view.timers.at(-1)!.cancelled).toBe(true)
+    view.turns.stop(BOT)
+  })
+
+  test("a room's turn: its own thread, one turn at a time per bot, and the bot's thread back after it", async () => {
+    const fake = server()
+    const view = panel(fake)
+    const thread = `room:r1:${BOT.path}`
+    const turn = view.turns.room(BOT, "tocca a te", thread, "C:/progetto")
+    expect(turn).toBeDefined()
+    await until(() => fake.prompts.length === 1)
+    expect(view.turns.threadOf(BOT.path)).toBe(thread)
+    expect(view.talk(thread).messages.map((message) => message.role)).toEqual(["user"])
+    expect(view.talk().messages).toEqual([])
+    expect(view.turns.send(BOT, "a mano", "C:/progetto")).toBe(false)
+    fake.push(status("busy"), asked("per_1", "rm -rf ~"))
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_1", "reject"])
+    fake.push(status("idle"))
+    await turn!.result
+    await until(() => !view.turns.running(BOT.path))
+    expect(view.turns.threadOf(BOT.path)).toBe(BOT.path)
+  })
+})
+
 describe("B8d: a routine's run and a chat's turn on the server", () => {
   test("a routine: read-only rules, no dialog, a question refused at once, the panel's session left as it was", async () => {
     const fake = server()
@@ -221,6 +364,9 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     fake.push(status("idle"))
     await until(() => !turns.running(BOT.path))
     expect(talks[BOT.path]!.sessionId).toBe("ses_panel")
+    // Marked in the thread as a routine's, and nothing waits on its question.
+    expect(talks[BOT.path]!.messages.some((message) => message.text === t("bots.routine.thread"))).toBe(true)
+    expect(talks[BOT.path]!.permission).toBeUndefined()
   })
 
   test("a chat's turns and a routine's go through `runBotTurn`, so nikcli's run on the server", () => {

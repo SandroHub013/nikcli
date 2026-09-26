@@ -29,12 +29,9 @@ import type { AgentFile } from "./nikcli"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import {
-  answerKeys,
   appendMessage,
   applyExit,
   applyProblem,
-  noticePermission,
-  permissionMenuReader,
   permissionAnswered,
   sendMessage,
   emptyTalk,
@@ -74,8 +71,8 @@ export interface BotTurns {
   /**
    * A routine's run of `bot` (B11), in its thread like any other turn, but
    * with nobody to answer: no shell, whatever the bot may do in the panel
-   * and read-only (`bot-read-only` on nikcli, no Bash, Edit or Write for
-   * Claude Code, Codex read-only).
+   * and read-only (the `read-only` rules on ADE's server for nikcli, B8d; no
+   * Bash, Edit or Write for Claude Code; Codex read-only).
    * Undefined when the bot already has a turn.
    */
   routine: (bot: AgentFile, message: string, cwd?: string, run?: RoutineRun) => Turn | undefined
@@ -132,9 +129,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   /** Answers nikcli's question and closes it; a line in the thread when there is something to say. */
   const reply = (path: string, turn: Turn, answer: "once" | "reject", line?: string) => {
     cancelExpiry(path)
-    // On ADE's server the question has an id (B8d); in a terminal, the menu takes keys.
-    if (turn.answer) turn.answer(answer)
-    else turn.write?.(answerKeys(answer))
+    // On ADE's server the question has an id (B8d): the answer goes to it.
+    turn.answer?.(answer)
     const at = now()
     deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
@@ -149,7 +145,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
    */
   const settle = (bot: AgentFile, turn: Turn, asked: PendingPermission) => {
     const path = bot.path
-    const verdict = decide(asked.permission, asked.patterns, always.get(path), asked.cut === true)
+    const verdict = decide(asked.permission, asked.patterns, always.get(path))
     if (verdict.kind === "block")
       return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
     if (verdict.kind === "allow") return reply(path, turn, "once")
@@ -162,7 +158,6 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
               ...asked,
               reason: verdict.reason,
               ...(verdict.keys ? { always: verdict.keys } : {}),
-              ...(verdict.denyOnly ? { denyOnly: true } : {}),
               expiresAt,
             },
           }
@@ -224,17 +219,6 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       if (routine) return reply(path, turn, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
       settle(bot, turn, asked)
     }
-    const readMenu = permissionMenuReader({
-      schedule,
-      onMenu: (seen) => {
-        if (!current()) return
-        const before = deps.talkOf(thread).permission
-        deps.update(thread, (talk) => noticePermission(talk, seen, now()))
-        const asked = deps.talkOf(thread).permission
-        if (!asked || asked === before) return
-        ask(asked)
-      },
-    })
     const request: TurnRequest = {
       runner: runner.id,
       bot,
@@ -264,10 +248,6 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       },
       onLine: (line) => {
         if (current()) deps.update(thread, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
-      },
-      /* Only nikcli draws a permission menu, read whole (M1); the others decide up front. */
-      onData: (chunk) => {
-        if (current() && runner.id === "nikcli") readMenu(chunk)
       },
     }
     const turn = routine && deps.runRoutine ? deps.runRoutine(request, routine) : deps.runTurn(request)
@@ -391,8 +371,6 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(threadOf(bot.path)).permission
       if (!turn || !asked) return
-      // Only Nega was offered: nothing else is sent, whatever reaches here.
-      if (asked.denyOnly && choice !== "reject") return
       // Every danger of the command: «Sempre» on one must not let the others through (M3).
       if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
       reply(bot.path, turn, choice === "reject" ? "reject" : "once")

@@ -43,7 +43,6 @@ type ReasonKey =
   | "bots.approval.reason.containers"
   | "bots.approval.reason.nestedShell"
   | "bots.approval.reason.opaqueShell"
-  | "bots.approval.reason.consoleWrite"
 
 /** Five minutes, as the phone's question (`gateway/approval.ts`): then Nega. */
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000
@@ -308,38 +307,13 @@ export const DANGEROUS: readonly CommandRule[] = [
     prefixes: ["powershell -EncodedCommand", "powershell -e", "pwsh -EncodedCommand", "pwsh -e", "eval"],
     always: false,
   },
-  {
-    /*
-     * Straight to the console, past nikcli's JSON: where ADE reads the
-     * permission menu, so a command could draw a false one (second review,
-     * BASSO 1). B8d, on `nikcli serve`, closes it for good.
-     */
-    id: "consoleWrite",
-    reason: "bots.approval.reason.consoleWrite",
-    pattern: re(
-      String.raw`>\s*["']?(?:\/dev\/tty|CON|CONOUT\$)["']?(?![\w$.])|\[(?:System\.)?Console\]::|\$host\.UI\b|Permission required|Allow once`,
-    ),
-    prefixes: [],
-    always: false,
-  },
 ]
 
 export type Verdict =
   | { readonly kind: "allow"; readonly keys?: readonly string[] }
   | { readonly kind: "block"; readonly rule: CommandRule }
-  /**
-   * `keys` is what «Sempre» would keep, every one; none when it cannot be
-   * kept (a command not read whole). `denyOnly`: the only answer is Nega.
-   */
-  | { readonly kind: "ask"; readonly keys?: readonly string[]; readonly reason: string; readonly denyOnly?: true }
-
-/*
- * The words of the block list's commands. In a command that may go on past
- * what shows (`cut`), one of them leaves only Nega (B8c review, BASSO 3):
- * what follows could be the rest of a command the list refuses.
- */
-const BLOCK_WORDS =
-  /(?:^|[^\w-])(?:rm|rmdir|rd|del|erase|ri|remove-item|format|format-volume|mkfs(?:\.\w+)?|dd|diskpart|fdisk|wipefs|parted|clear-disk|remove-partition|initialize-disk|shutdown|reboot|poweroff|halt|stop-computer|restart-computer|init|bcdedit|vssadmin|reg|wmic|cipher)(?![\w-])/i
+  /** `keys` is what «Sempre» would keep, every one; none when it cannot be kept. */
+  | { readonly kind: "ask"; readonly keys?: readonly string[]; readonly reason: string }
 
 /**
  * What `command` is: blocked, or every kind of danger in it (B8c review,
@@ -359,21 +333,18 @@ const outsideKey = (patterns: string) => `outside:${patterns.trim()}`
 
 /**
  * The decision for one question nikcli asks (`permission` and its patterns,
- * as its menu draws them), for a bot with `always`.
+ * whole, as its event carries them: B8d), for a bot with `always`.
  *
  * - `bash`: the block list refuses, `always` never reaches it; a command
- *   maybe cut (`cut`) is asked, always; a command with dangers is asked
- *   unless `always` has every one of them (M3); anything else goes.
+ *   with dangers is asked unless `always` has every one of them (M3);
+ *   anything else goes.
  * - `external_directory`: asked unless `always` has that folder.
  * - anything else nikcli asks about (the user's own «ask» rules): asked.
  */
-export function decide(permission: string, patterns: string, always: Always, cut = false): Verdict {
+export function decide(permission: string, patterns: string, always: Always): Verdict {
   if (permission === "bash") {
     const { blocked, dangers } = classifyCommand(patterns)
     if (blocked) return { kind: "block", rule: blocked }
-    // What follows the cut is unknown: never let through unseen, nor on «Sempre».
-    if (cut && BLOCK_WORDS.test(patterns)) return { kind: "ask", reason: t("bots.approval.reason.cutBlocked"), denyOnly: true }
-    if (cut) return { kind: "ask", reason: t("bots.approval.reason.cut") }
     if (dangers.length === 0) return { kind: "allow" }
     const keys = dangers.map((rule) => rule.id)
     const reason = dangers.map((rule) => t(rule.reason)).join("; ")

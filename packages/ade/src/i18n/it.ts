@@ -1387,11 +1387,7 @@ export const it = {
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
   "bots.approval.reason.opaqueShell": "fa girare comandi che nessuna lista può leggere: codificati, presi da una variabile o decodificati",
-  "bots.approval.reason.consoleWrite": "scrive direttamente sulla console, dove ADE legge il menu dei permessi",
   "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
-  "bots.approval.reason.cut": "il comando potrebbe continuare oltre quello che sembra: contiene righe che imitano questo menu",
-  "bots.approval.reason.cutBlocked":
-    "il comando potrebbe continuare oltre quello che sembra, e contiene un comando della lista di blocco: si può solo negare",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
@@ -1592,6 +1588,7 @@ export const it = {
   "bots.turn.noHost": "Nessun host: un turno si esegue solo nell'app desktop.",
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
+  "bots.turn.nikcliOnServer": "Un turno di nikcli gira sul server di nikcli di ADE, con le regole della sua sessione: qui non parte.",
   "bots.serve.noFolder": "Un bot nikcli risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
     `Il progetto ${root} non è ancora ammesso per nikcli, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,

@@ -80,16 +80,10 @@ export function permissionAnswerer(deps: {
     if (deps.signal.aborted) return
     const command = shown(pending.patterns)
     // No «Sempre» from a chat: every command is asked, the block list refused.
-    const verdict = decide(pending.permission, pending.patterns, [], false)
+    const verdict = decide(pending.permission, pending.patterns, [])
     if (verdict.kind === "block") {
       deps.answer("reject")
       deps.say(t("gateway.approve.blocked", command, t(verdict.rule.reason)))
-      return
-    }
-    // Only Nega: said in the chat, never put to the phone (BASSO 3).
-    if (verdict.kind === "ask" && verdict.denyOnly) {
-      deps.answer("reject")
-      deps.say(t("gateway.approve.blocked", command, verdict.reason))
       return
     }
     if (deps.refuse) {

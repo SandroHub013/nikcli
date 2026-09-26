@@ -761,7 +761,7 @@ export function describeCap(cap: RoutineCap): string {
   return parts.join("; ")
 }
 
-/** Whether the runner's routines only read (`TurnSpec.unattended`): all three, nikcli by `bot-read-only`. */
+/** Whether the runner's routines only read (`TurnSpec.unattended`): all three, nikcli by the `read-only` rules on ADE's server (B8d). */
 export function routineReadOnly(runner: string): boolean {
   return runner === "claude" || runner === "codex" || runner === "nikcli"
 }

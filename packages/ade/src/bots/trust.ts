@@ -206,10 +206,11 @@ function wildcard(pattern: string): RegExp {
 
 /**
  * Whether a grant under `permission` reaches what ADE asks about for a bot in
- * the panel (`bot-ask-shell` in `runners.ts`): the shell, or a folder outside
- * the project. nikcli merges the bot's own rules after `NIKCLI_PERMISSION`,
- * and the last matching rule wins, so such a grant is a command no one is
- * asked about, the block list included.
+ * the panel (the `ask` rules of `serve-rules.ts`): the shell, or a folder
+ * outside the project. Before B8d nikcli merged the bot's own rules after
+ * ADE's, and such a grant was a command no one was asked about; on ADE's
+ * server the session's rules come last, and the refusal stays as a second
+ * guard.
  */
 export function reachesShell(permission: string): boolean {
   const name = wildcard(permission)

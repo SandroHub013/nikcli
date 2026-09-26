@@ -234,11 +234,10 @@ export interface TurnSpec {
    */
   readonly account?: BotAccount
   /**
-   * nikcli only: the caller answers every question nikcli asks, by
-   * `approval.ts` (B8c, the Bots panel's `controller.ts`). nikcli is then told
-   * to ask about every command and every step outside the project. Off for a
-   * caller that answers nothing — the voice, a routine —, whose turn would
-   * otherwise stop on a menu nobody sees.
+   * The caller answers questions (B8c, the Bots panel's `controller.ts`).
+   * Claude Code, which cannot ask mid-turn, is then refused only what the
+   * bot's «Sempre» does not cover. nikcli's turns run on ADE's server (B8d),
+   * with the rules of `serve-rules.ts`.
    */
   readonly approvals?: boolean
   /** The bot's «Sempre» (`approval.ts`), with `approvals`: what Claude Code is not refused. */
@@ -246,7 +245,8 @@ export interface TurnSpec {
   /**
    * A turn nobody watches (B11, a routine): no shell at all, not even
    * `ade-msg`, which can open a session with a shell of its own. nikcli gets
-   * `bot-read-only`, Claude Code and Codex run read-only too (B11 review:
+   * the `read-only` rules on ADE's server (B8d), Claude Code and Codex run
+   * read-only too (B11 review:
    * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
    */
   readonly unattended?: boolean
@@ -392,37 +392,10 @@ export function turnCommand(
           ...(bot.effort ? { effort: bot.effort } : {}),
         }),
         /*
-         * A bot of the user's runs without the project's `.nikcli/` (B3b,
-         * review M1): no plugins from the repository, and no project agent of
-         * the same name taking its place. A project's bot needs that folder
-         * to exist, so it keeps it, behind `project-trust.ts`.
+         * No spawn flag: a bot's nikcli turn runs on ADE's server with its
+         * session's rules (B8d, `serve-turn.ts`), and `runTurn` refuses to
+         * start one here. What `nikcli run` would be, for the record.
          */
-        /*
-         * From a chat, the shell goes through `NIKCLI_PERMISSION` (G5): denied,
-         * or asked about every command. The bot's own file can still grant
-         * it, so such a file is refused for a chat (`gateway/policy.ts`).
-         * In ADE (B8c), nikcli asks about every command and every step
-         * outside the project, and `controller.ts` answers by `approval.ts`.
-         * A turn nobody answers (a routine) gets `bot-no-shell`: no flag
-         * leaves the shell to the user's own rule, since nikcli's globs count
-         * case and Windows does not (second check, ALTO; `SPAWN_FLAGS` in
-         * `pty.rs`). The asking flags carry the block list as nikcli's own
-         * denials too (B8c review, M1: `blocked_bash_denials`).
-         */
-        ...(() => {
-          const shell = !bot.disabledTools.includes("bash")
-          const flags = [
-            ...(fromRepository(bot) ? [] : ["no-project-config"]),
-            ...(spec.remote
-              ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
-              : spec.unattended
-                ? ["bot-read-only"]
-                : spec.approvals
-                  ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
-                  : ["bot-no-shell"]),
-          ]
-          return flags.length > 0 ? { flags } : {}
-        })(),
       }
     case "claude": {
       /*

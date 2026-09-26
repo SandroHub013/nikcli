@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { t } from "../i18n"
 import { MAX_PARALLEL_TURNS, turnsRunning } from "./terms"
 import { runTurn, timeoutProblem, TURN_EXIT_GRACE_MS, TURN_TIMEOUT_MS, type Turn, type TurnDeps } from "./turn"
 
@@ -29,6 +30,7 @@ function machine() {
     kills,
     exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
     say: (line: string, at = lines.length - 1) => lines[at]?.(line),
+    spawned: () => exits.length,
   }
 }
 
@@ -136,37 +138,13 @@ describe("runTurn", () => {
     )
   })
 
-  test("a nikcli turn is over at its own last step, and gives its slot back (B7)", async () => {
+  /* B8d: a bot's nikcli turn runs on ADE's server, with its session's rules; nothing here would carry them. */
+  test("a nikcli turn is not started here", async () => {
     const m = machine()
-    const turn = runTurn({ runner: "nikcli", message: "ciao" }, m.deps)
-    open.push(turn)
-    await tick()
-    m.say('{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}')
-    m.say('{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"GLOBALE"}}')
-    m.say('{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","tokens":{"input":10,"output":1},"cost":0}}')
-    const result = await turn.result
-    expect(result.status).toBe("done")
-    expect(result.text).toContain("GLOBALE")
-    expect(result.sessionId).toBe("ses_1")
-    expect(turnsRunning("nikcli")).toBe(0)
-  })
-
-  test("a turn with a spending cap is stopped as soon as it passes it, not after (B11 review, M1)", async () => {
-    const m = machine()
-    const turn = runTurn({ runner: "nikcli", message: "ciao", maxCostUsd: 0.1 }, m.deps)
-    open.push(turn)
-    await tick()
-    const step =
-      '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","tokens":{"input":10,"output":1},"cost":0.04}}'
-    m.say(step)
-    m.say(step)
-    expect(m.kills).toEqual([])
-    m.say(step)
-    const result = await turn.result
-    expect(m.kills).toEqual([{ tree: true }])
+    const result = await runTurn({ runner: "nikcli", message: "ciao" }, m.deps).result
     expect(result.status).toBe("error")
-    expect(result.costUsd).toBeCloseTo(0.12)
-    expect(result.problem).toContain("0.10 $")
+    expect(result.problem).toBe(t("bots.turn.nikcliOnServer"))
+    expect(m.spawned()).toBe(0)
     expect(turnsRunning("nikcli")).toBe(0)
   })
 
@@ -241,24 +219,6 @@ describe("a CLI that does not start", () => {
 })
 
 describe("le opzioni di avvio arrivano all'host", () => {
-  test("un bot dell'utente su nikcli parte con no-project-config", async () => {
-    const seen: { flags?: readonly string[] }[] = []
-    let exit: (code: number | null) => void = () => {}
-    const host = {
-      spawn: async (options: { flags?: readonly string[]; onExit: (code: number | null) => void }) => {
-        seen.push({ ...(options.flags ? { flags: options.flags } : {}) })
-        exit = options.onExit
-        return { kill: () => {}, write: () => {}, resize: () => {} }
-      },
-    }
-    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
-    const turn = runTurn({ runner: "nikcli", message: "ciao", exitGraceMs: 30 }, deps)
-    while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
-    exit(0)
-    await turn.result
-    expect(seen[0]!.flags).toEqual(["no-project-config", "bot-no-shell"])
-  })
-
   test("Claude in abbonamento toglie le chiavi ereditate e non ne passa", async () => {
     const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
     let exit: (code: number | null) => void = () => {}

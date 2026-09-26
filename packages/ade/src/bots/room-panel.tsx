@@ -187,16 +187,14 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                     <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "reject")}>
                       {t("bots.permission.deny")}
                     </button>
-                    <Show when={!pending().denyOnly && (pending().always?.length ?? 0) > 0}>
+                    <Show when={(pending().always?.length ?? 0) > 0}>
                       <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "always")}>
                         {t("bots.approval.always")}
                       </button>
                     </Show>
-                    <Show when={!pending().denyOnly}>
-                      <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.deps.answer(speaking()!, "once")}>
-                        {t("bots.permission.allow")}
-                      </button>
-                    </Show>
+                    <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.deps.answer(speaking()!, "once")}>
+                      {t("bots.permission.allow")}
+                    </button>
                   </span>
                 </div>
               )}

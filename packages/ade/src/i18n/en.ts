@@ -1376,11 +1376,7 @@ export const en: Messages = {
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
   "bots.approval.reason.opaqueShell": "runs commands no list can read: encoded, taken from a variable or decoded",
-  "bots.approval.reason.consoleWrite": "writes straight to the console, where ADE reads the permission menu",
   "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
-  "bots.approval.reason.cut": "the command may go on past what it seems: it holds rows that mimic this menu",
-  "bots.approval.reason.cutBlocked":
-    "the command may go on past what it seems, and it holds a command of the block list: it can only be denied",
   "bots.approval.reason.outside": "works outside the project folder",
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your nikcli configuration asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,
@@ -1578,6 +1574,7 @@ export const en: Messages = {
   "bots.turn.noHost": "No host: a turn only runs in the desktop app.",
   "bots.turn.cannotRefuse": (label) => `${label} cannot refuse the tools this turn leaves out.`,
   "bots.turn.didNotStart": (label, why) => `${label} did not start: ${why}`,
+  "bots.turn.nikcliOnServer": "A nikcli turn runs on ADE's nikcli server, with its session's rules: it does not start here.",
   "bots.serve.noFolder": "A nikcli bot answers from a project: open a folder to talk to it.",
   "bots.serve.notAdmitted": (root) =>
     `The project ${root} is not admitted for nikcli yet, or it changed: open the bot in the panel, answer the question and try again.`,

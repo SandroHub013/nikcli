@@ -504,14 +504,13 @@ describe("the tools of a turn from a chat", () => {
   })
 
   /* B8d: a question is nikcli's event with its id; no output is read, so nothing the model writes can be one. */
-  test("a nikcli turn from a chat takes its questions as events, and reads no output for them", async () => {
+  test("a nikcli turn from a chat takes its questions as events", async () => {
     const b = bridge()
     const turns = typedTurns()
     await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
     b.emit("elenca i file")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
-    expect(turn.request.onData).toBeUndefined()
     expect(turn.request.onPermission).toBeDefined()
   })
 

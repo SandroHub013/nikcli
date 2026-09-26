@@ -20,7 +20,8 @@
  *   likes. Anything else pressed is ignored.
  * - the turn gets the tools of a turn from a chat (G5, `RemoteTools`): no
  *   shell unless the owner turned on the bot's remote commands, and then
- *   nikcli's permission menu becomes a question on the phone (`approval.ts`).
+ *   nikcli's question, an event with its id on ADE's server (B8d), goes to
+ *   the phone (`approval.ts`).
  *
  * Nothing is read from a chat before this listens: `gateway_ready` is called
  * once the listener is in place, and Rust holds every gateway until then.

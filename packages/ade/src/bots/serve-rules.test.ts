@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRule } from "../chat/rules"
+import { BLOCKED as BLOCK_RULES, classifyCommand } from "./approval"
 import { blockedBashDenials, botPermission, hasBotRules, profileFor, type BotProfile } from "./serve-rules"
 
 /*
@@ -89,7 +90,7 @@ describe("B8d: the rules of a bot's session", () => {
     }
   })
 
-  test("the list is the one pty.rs used: every form, deduplicated", () => {
+  test("the list: every form, deduplicated", () => {
     const list = blockedBashDenials()
     expect(new Set(list).size).toBe(list.length)
     for (const pattern of ["rm * ~", "sudo rm * / *", "rm -rf", "Remove-Item * ?:\\", "remove-item * ~", "FORMAT ?:*", "dd *of=/dev/*", "Remove-item * ?:\\"])
@@ -115,5 +116,68 @@ describe("B8d: the rules of a bot's session", () => {
     expect(profileFor({ approvals: true, shell: true })).toBe("ask")
     expect(profileFor({ approvals: true, shell: false })).toBe("ask-outside")
     expect(profileFor({ shell: true })).toBe("no-shell")
+  })
+})
+
+/*
+ * The block list is written twice: ADE's (`approval.ts`, which ignores case)
+ * and nikcli's own denials here. This keeps them together, as `pty.rs` did
+ * while the list was its own: every rule has a command nikcli denies, and
+ * every such command is blocked by ADE for the same rule.
+ */
+describe("the block list is the same in nikcli", () => {
+  const SAMPLES: readonly (readonly [string, string])[] = [
+    ["deleteRoot", "rm -rf /"],
+    ["deleteRoot", "rm -rf /*"],
+    ["deleteRoot", "rm -fr ~"],
+    ["deleteRoot", "rm -rf ~/"],
+    ["deleteRoot", "rm -r -f $HOME"],
+    ["deleteRoot", "sudo rm -rf /"],
+    ["deleteRoot", "/bin/rm -rf /"],
+    ["deleteRoot", "\\rm -rf ~"],
+    ["deleteRoot", 'rm -rf "/"'],
+    ["deleteRoot", "rm -rf --no-preserve-root /"],
+    ["deleteRoot", "rm -rf C:/"],
+    ["deleteDrive", "Remove-Item -Recurse -Force C:\\"],
+    ["deleteDrive", "rd /s /q C:\\"],
+    ["deleteDrive", "del /s /q D:\\*"],
+    ["disk", "mkfs.ext4 /dev/sda1"],
+    ["disk", "diskpart"],
+    ["disk", "format C:"],
+    ["disk", "dd if=/dev/zero of=/dev/sda"],
+    ["disk", "Clear-Disk -Number 0"],
+    ["power", "shutdown /s /t 0"],
+    ["power", "sudo reboot"],
+    ["power", "Stop-Computer"],
+    ["system", "bcdedit /deletevalue"],
+    ["system", "vssadmin delete shadows /all"],
+    ["system", "reg delete HKLM\\Software\\X"],
+    ["deleteDrive", "Remove-item -Recurse -Force C:\\"],
+    ["deleteDrive", "RD /S /Q C:\\"],
+    ["power", "SHUTDOWN /s /t 0"],
+    ["disk", "FORMAT C:"],
+    ["deleteDrive", "Remove-Item -Recurse -Force ~"],
+    ["deleteDrive", "Remove-Item -Recurse -Force $env:USERPROFILE"],
+    ["deleteDrive", "Remove-Item C:\\"],
+    ["deleteDrive", "rd /s /q %USERPROFILE%"],
+    ["deleteDrive", "ri -r $HOME"],
+  ]
+
+  test("every sample is denied by nikcli in the profiles that ask, whatever the bot's file grants", () => {
+    for (const profile of ["ask", "remote-ask"] as const) {
+      for (const [, command] of SAMPLES) expect([profile, command, decide("bash", command, HOSTILE, botPermission(profile))]).toEqual([profile, command, "deny"])
+    }
+  })
+
+  test("every rule of BLOCKED has a sample, but the fork bomb", () => {
+    const covered = new Set(SAMPLES.map(([rule]) => rule))
+    for (const rule of BLOCK_RULES) {
+      if (rule.id === "forkBomb") continue
+      expect([rule.id, covered.has(rule.id)]).toEqual([rule.id, true])
+    }
+  })
+
+  test("every sample is blocked by ADE too, for the same rule", () => {
+    for (const [rule, command] of SAMPLES) expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
   })
 })
