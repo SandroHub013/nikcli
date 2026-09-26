@@ -23,7 +23,7 @@ mod telegram;
 
 pub use adapter::Platform;
 use adapter::Adapter;
-use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo};
+use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo, TokenKind, Tokens};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -120,11 +120,11 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
 
 /// The adapter for `platform`, reading on from `cursor`. Slack comes in
 /// its own piece.
-fn adapter_for(platform: Platform, token: &str, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
+fn adapter_for(platform: Platform, tokens: &Tokens, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     match platform {
-        Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(token, cursor)?)),
+        Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(&tokens.bot, cursor)?)),
         // `new` already hands back a reference, as the socket task keeps one too.
-        Platform::Discord => Ok(discord::Discord::new(token, cursor)? as Arc<dyn Adapter>),
+        Platform::Discord => Ok(discord::Discord::new(&tokens.bot, cursor)? as Arc<dyn Adapter>),
         other => Err(format!("il gateway per {} non è ancora disponibile", other.id())),
     }
 }
@@ -141,10 +141,21 @@ pub async fn gateway_status(app: AppHandle) -> Result<Vec<StatusInfo>, String> {
     Ok(hub(&app)?.status())
 }
 
-/// Saves the bot's token in the keychain. It is never read back by the page.
+/// Saves the bot's token in the keychain, or with `kind: "app"` Slack's
+/// App-Level Token. Neither is ever read back by the page.
 #[tauri::command]
-pub async fn gateway_set_token(app: AppHandle, bot: String, platform: Platform, token: String) -> Result<(), String> {
-    hub(&app)?.set_token(&bot, platform, &token)
+pub async fn gateway_set_token(
+    app: AppHandle,
+    bot: String,
+    platform: Platform,
+    token: String,
+    kind: Option<TokenKind>,
+) -> Result<(), String> {
+    let hub = hub(&app)?;
+    match kind.unwrap_or(TokenKind::Bot) {
+        TokenKind::Bot => hub.set_token(&bot, platform, &token),
+        TokenKind::App => hub.set_app_token(&bot, platform, &token),
+    }
 }
 
 /// The panel's «Prova»: the bot's name on the platform, with the saved token.

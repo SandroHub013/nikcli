@@ -16,7 +16,7 @@ use super::authz::{self, Request};
 use super::redact::redact;
 use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -75,6 +75,8 @@ pub struct StatusInfo {
     pub running: bool,
     pub connected: bool,
     pub has_token: bool,
+    /// Slack's App-Level Token is saved. Always false on the other platforms.
+    pub has_app_token: bool,
     pub project: Option<String>,
     pub last_error: Option<String>,
     pub last_message_ms: Option<u64>,
@@ -157,9 +159,24 @@ struct Running {
     live: Arc<Mutex<Live>>,
 }
 
-/// Builds a platform's adapter from the bot's token and where its stream was
+/// Which of a link's secrets: the bot's token, or Slack's App-Level Token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenKind {
+    Bot,
+    App,
+}
+
+/// What an adapter is made with: the bot's token and, on Slack, the App-Level
+/// Token its socket is opened with.
+pub struct Tokens {
+    pub bot: String,
+    pub app: Option<String>,
+}
+
+/// Builds a platform's adapter from the bot's tokens and where its stream was
 /// last read up to.
-pub type Connect = Arc<dyn Fn(Platform, &str, Option<String>) -> Result<Arc<dyn Adapter>, String> + Send + Sync>;
+pub type Connect = Arc<dyn Fn(Platform, &Tokens, Option<String>) -> Result<Arc<dyn Adapter>, String> + Send + Sync>;
 
 pub struct Hub {
     env: Arc<dyn Env>,
@@ -192,6 +209,15 @@ fn hex(bytes: &[u8]) -> String {
 
 fn token_name(bot: &str, platform: Platform) -> String {
     format!("{}:{}", platform.id(), bot_key(bot))
+}
+
+/// The keychain entry of one of a link's secrets. The App-Level Token is a
+/// second entry next to the bot's: the vault needs nothing new for it.
+fn secret_name(bot: &str, platform: Platform, kind: TokenKind) -> String {
+    match kind {
+        TokenKind::Bot => token_name(bot, platform),
+        TokenKind::App => format!("{}:app", token_name(bot, platform)),
+    }
 }
 
 fn token_hash(token: &str) -> String {
@@ -249,20 +275,50 @@ impl Hub {
     /// account would each take half of its messages. A gateway switched on
     /// starts again with the new token; the old one is no longer read.
     pub fn set_token(&self, bot: &str, platform: Platform, token: &str) -> Result<(), String> {
+        self.set_secret(bot, platform, TokenKind::Bot, token)
+    }
+
+    /// Saves Slack's App-Level Token, under the same rule: a value already
+    /// saved anywhere, as either token of any link, is refused.
+    pub fn set_app_token(&self, bot: &str, platform: Platform, token: &str) -> Result<(), String> {
+        if !platform.needs_app_token() {
+            return Err(format!("{} non usa un secondo token", platform.id()));
+        }
+        self.set_secret(bot, platform, TokenKind::App, token)
+    }
+
+    fn set_secret(&self, bot: &str, platform: Platform, kind: TokenKind, token: &str) -> Result<(), String> {
         check_bot(bot)?;
         let token = token.trim();
         check_token(token)?;
         let hash = token_hash(token);
-        let taken = |others: &[LinkState]| others.iter().any(|other| other.token_hash.as_deref() == Some(hash.as_str()));
-        if taken(&self.store.read().links.into_iter().filter(|l| !(l.bot == bot && l.platform == platform)).collect::<Vec<_>>()) {
+        let held = |link: &LinkState| {
+            link.token_hash.as_deref() == Some(hash.as_str()) || link.app_token_hash.as_deref() == Some(hash.as_str())
+        };
+        // Another link's token of either kind, or the other token of this one:
+        // a bot token pasted where the App-Level Token goes is the same mistake.
+        let taken = |link: &LinkState, others: &[LinkState]| {
+            let other_slot = match kind {
+                TokenKind::Bot => &link.app_token_hash,
+                TokenKind::App => &link.token_hash,
+            };
+            others.iter().any(held) || other_slot.as_deref() == Some(hash.as_str())
+        };
+        let (this, others): (Vec<LinkState>, Vec<LinkState>) =
+            self.store.read().links.into_iter().partition(|l| l.bot == bot && l.platform == platform);
+        let this = this.into_iter().next().unwrap_or_else(|| LinkState::new(bot, platform));
+        if taken(&this, &others) {
             return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
         }
-        self.vault.set(&self.service, &token_name(bot, platform), token)?;
+        self.vault.set(&self.service, &secret_name(bot, platform, kind), token)?;
         self.store.update(bot, platform, |link, others| {
-            if taken(others) {
+            if taken(link, others) {
                 return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
             }
-            link.token_hash = Some(hash.clone());
+            match kind {
+                TokenKind::Bot => link.token_hash = Some(hash.clone()),
+                TokenKind::App => link.app_token_hash = Some(hash.clone()),
+            }
             Ok(())
         })?;
         if self.store.link(bot, platform).is_some_and(|link| link.enabled) {
@@ -271,14 +327,19 @@ impl Hub {
         Ok(())
     }
 
-    /// Forgets the token: the gateway stops and is switched off.
+    /// Forgets the token, and Slack's App-Level Token with it: the gateway
+    /// stops and is switched off.
     pub fn clear_token(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
         self.halt(bot, platform);
         self.failed().remove(&(bot.to_string(), platform));
         self.vault.delete(&self.service, &token_name(bot, platform))?;
+        if platform.needs_app_token() {
+            self.vault.delete(&self.service, &secret_name(bot, platform, TokenKind::App))?;
+        }
         self.store.update(bot, platform, |link, _| {
             link.token_hash = None;
+            link.app_token_hash = None;
             link.enabled = false;
             Ok(())
         })
@@ -289,11 +350,21 @@ impl Hub {
         self.vault.get(&self.service, &token_name(bot, platform))
     }
 
+    /// Slack's App-Level Token, for the same use and under the same rule.
+    pub fn app_token(&self, bot: &str, platform: Platform) -> Result<Option<String>, String> {
+        self.vault.get(&self.service, &secret_name(bot, platform, TokenKind::App))
+    }
+
     /// Every value that must not leave through a gateway: the tokens and the keychain's keys.
     fn secrets(&self) -> Vec<String> {
         let mut secrets = self.env.secrets();
         for link in self.store.read().links.iter().filter(|link| link.token_hash.is_some()) {
             if let Ok(Some(token)) = self.vault.get(&self.service, &token_name(&link.bot, link.platform)) {
+                secrets.push(token);
+            }
+        }
+        for link in self.store.read().links.iter().filter(|link| link.app_token_hash.is_some()) {
+            if let Ok(Some(token)) = self.app_token(&link.bot, link.platform) {
                 secrets.push(token);
             }
         }
@@ -330,11 +401,19 @@ impl Hub {
         Ok(())
     }
 
-    /// The platform's adapter, with the bot's token and the saved position.
+    /// The platform's adapter, with the bot's tokens and the saved position.
     fn connect(&self, bot: &str, platform: Platform) -> Result<Arc<dyn Adapter>, String> {
         let token = self.token(bot, platform)?.ok_or_else(|| "manca il token del bot per questa piattaforma".to_string())?;
+        let app = if platform.needs_app_token() {
+            Some(self.app_token(bot, platform)?.ok_or_else(|| {
+                "manca l'App-Level Token di Slack (xapp-…), quello con connections:write".to_string()
+            })?)
+        } else {
+            None
+        };
         let cursor = self.store.link(bot, platform).and_then(|link| link.cursor);
-        (self.connect)(platform, &token, cursor).map_err(|error| redact(&error, &[token]))
+        let secrets: Vec<String> = std::iter::once(token.clone()).chain(app.clone()).collect();
+        (self.connect)(platform, &Tokens { bot: token, app }, cursor).map_err(|error| redact(&error, &secrets))
     }
 
     /// Starts every gateway the user left switched on: ADE opened. Each waits
@@ -597,6 +676,7 @@ impl Hub {
                     last_error: live.last_error.or_else(|| failed.get(&(link.bot.clone(), link.platform)).cloned()),
                     last_message_ms: live.last_message_ms,
                     has_token: link.token_hash.is_some(),
+                    has_app_token: link.app_token_hash.is_some(),
                     enabled: link.enabled,
                     project: link.project,
                     authorized: link.authorized.into_iter().map(|a| MessageSender { id: a.id, name: a.name }).collect(),
@@ -919,9 +999,13 @@ mod tests {
         let env = Arc::new(Recorder::default());
         let made: Made = Arc::default();
         let record = made.clone();
-        let connect: Connect = Arc::new(move |_platform, token: &str, cursor: Option<String>| {
+        let connect: Connect = Arc::new(move |_platform, tokens: &Tokens, cursor: Option<String>| {
             let (adapter, feed) = FakeAdapter::new();
-            record.lock().unwrap().push((token.to_string(), cursor, adapter.clone(), feed));
+            let token = match &tokens.app {
+                Some(app) => format!("{}+{app}", tokens.bot),
+                None => tokens.bot.clone(),
+            };
+            record.lock().unwrap().push((token, cursor, adapter.clone(), feed));
             Ok(adapter as Arc<dyn Adapter>)
         });
         let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
@@ -1114,6 +1198,84 @@ mod tests {
         s.hub.set_token(other, Platform::Fake, TOKEN).unwrap();
     }
 
+    /* G10: Slack has two secrets, the bot's token and the App-Level Token. */
+
+    const SLACK_BOT: &str = "xoxb-FINTO-0000000000-token-del-bot";
+    const SLACK_APP: &str = "xapp-1-FINTO-0000000000-token-app";
+
+    #[tokio::test]
+    async fn slack_keeps_two_tokens_and_either_one_taken_is_refused() {
+        let s = setup("slack-tokens");
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        s.hub.set_token(BOT, Platform::Slack, SLACK_BOT).unwrap();
+        // The bot's token where the App-Level Token goes: the same mistake as a
+        // token of another bot.
+        assert!(s.hub.set_app_token(BOT, Platform::Slack, SLACK_BOT).unwrap_err().contains("già"));
+        s.hub.set_app_token(BOT, Platform::Slack, SLACK_APP).unwrap();
+        assert!(s.hub.set_token(BOT, Platform::Slack, SLACK_APP).unwrap_err().contains("già"));
+        // Either of them on another bot, in either slot.
+        assert!(s.hub.set_token(other, Platform::Slack, SLACK_APP).unwrap_err().contains("già"));
+        assert!(s.hub.set_app_token(other, Platform::Slack, SLACK_BOT).unwrap_err().contains("già"));
+        assert!(s.hub.set_token(other, Platform::Telegram, SLACK_APP).unwrap_err().contains("già"));
+        assert!(s.hub.app_token(other, Platform::Slack).unwrap().is_none());
+        // Only Slack has a second one.
+        assert!(s.hub.set_app_token(other, Platform::Telegram, "xapp-1-UN-ALTRO-FINTO-0000").is_err());
+
+        let status = s.hub.status();
+        let slack = status.iter().find(|link| link.bot == BOT).expect("il collegamento");
+        assert!(slack.has_token && slack.has_app_token);
+        let shown = serde_json::to_string(&status).unwrap();
+        assert!(!shown.contains(SLACK_BOT) && !shown.contains(SLACK_APP));
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        assert!(!saved.contains(SLACK_APP), "nel file solo l'hash");
+        assert!(saved.contains(&token_hash(SLACK_APP)));
+
+        // The adapter is made with both.
+        s.hub.start(BOT, Platform::Slack, "C:/progetto").unwrap();
+        assert_eq!(last_made_token(&s), format!("{SLACK_BOT}+{SLACK_APP}"));
+
+        // Forgetting the token forgets both.
+        s.hub.clear_token(BOT, Platform::Slack).unwrap();
+        assert!(s.hub.token(BOT, Platform::Slack).unwrap().is_none());
+        assert!(s.hub.app_token(BOT, Platform::Slack).unwrap().is_none());
+        assert!(!s.hub.status()[0].has_app_token);
+        s.hub.set_app_token(other, Platform::Slack, SLACK_APP).unwrap();
+    }
+
+    #[tokio::test]
+    async fn slack_without_its_app_token_does_not_start_and_says_which_one() {
+        let s = setup("slack-no-app");
+        s.hub.set_token(BOT, Platform::Slack, SLACK_BOT).unwrap();
+        let error = s.hub.start(BOT, Platform::Slack, "C:/progetto").unwrap_err();
+        assert!(error.contains("App-Level Token") && error.contains("connections:write"), "{error}");
+        assert!(s.made.lock().unwrap().is_empty());
+        assert!(!error.contains(SLACK_BOT));
+    }
+
+    #[tokio::test]
+    async fn a_reply_loses_the_app_token_too() {
+        let s = setup("slack-redact");
+        s.hub.set_token(BOT, Platform::Slack, SLACK_BOT).unwrap();
+        s.hub.set_app_token(BOT, Platform::Slack, SLACK_APP).unwrap();
+        s.hub
+            .store
+            .update(BOT, Platform::Slack, |link, _| {
+                link.authorized.push(Authorized { id: "U42".into(), name: "Io".into(), added_ms: 1 });
+                Ok(())
+            })
+            .unwrap();
+        s.hub.start(BOT, Platform::Slack, "C:/progetto").unwrap();
+        let (adapter, feed) = last_made(&s);
+        feed.send(Ok(vec![message("1", "D42", "U42", "dimmi i token")])).unwrap();
+        eventually("il messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.send(BOT, Platform::Slack, "D42", &format!("app={SLACK_APP} bot={SLACK_BOT}")).await.unwrap();
+        assert_eq!(adapter.sent.lock().unwrap()[0].1, "app=[nascosto] bot=[nascosto]");
+    }
+
+    fn last_made_token(setup: &Setup) -> String {
+        setup.made.lock().unwrap().last().expect("nessun adapter creato").0.clone()
+    }
+
     #[tokio::test]
     async fn a_failed_read_is_tried_again_and_a_fatal_one_stops_the_gateway() {
         let s = setup("errors");
@@ -1295,9 +1457,13 @@ mod tests {
         let env = Arc::new(Recorder::default());
         let made: Made = Arc::default();
         let record = made.clone();
-        let connect: Connect = Arc::new(move |_platform, token: &str, cursor: Option<String>| {
+        let connect: Connect = Arc::new(move |_platform, tokens: &Tokens, cursor: Option<String>| {
             let (adapter, feed) = FakeAdapter::new();
-            record.lock().unwrap().push((token.to_string(), cursor, adapter.clone(), feed));
+            let token = match &tokens.app {
+                Some(app) => format!("{}+{app}", tokens.bot),
+                None => tokens.bot.clone(),
+            };
+            record.lock().unwrap().push((token, cursor, adapter.clone(), feed));
             Ok(adapter as Arc<dyn Adapter>)
         });
         let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect);
