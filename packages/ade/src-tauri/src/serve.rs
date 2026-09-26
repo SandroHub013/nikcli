@@ -78,9 +78,32 @@ const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP
 /// after `nikcli.json` at the project's root, so a `small_model` there gives
 /// way to this free one; `<project>/.nikcli/nikcli.json` and
 /// `NIKCLI_CONFIG_DIR` are merged after it (`config/config.ts`, the
-/// `directories` loop) and win. Should this model go away, only those calls
-/// fail, quietly: nikcli does not fall back to a paid one.
-pub(crate) const FREE_SMALL_MODEL: &str = "openrouter/nvidia/nemotron-3-super-120b-a12b:free";
+/// `directories` loop) and win.
+///
+/// Models leave the catalog (`nex-agi/nex-n2.5-mini:free` did), and a small
+/// model that is not there makes those calls fail quietly: nikcli does not
+/// fall back to another. So the one ADE gives is chosen from the server's own
+/// catalog when it starts (`pick_small_model`), and this is only the fixed
+/// fallback, for a catalog that cannot be read.
+pub(crate) const FREE_SMALL_MODEL: &str = KNOWN_FREE_SMALL[0];
+
+/// Free models known to answer as a small model, best first: Nemotron 3.5
+/// Lightning answered in 12 s on 2026-09-26, Nemotron 3 Super titled and
+/// summarised the Chat's recorded conversation (C4).
+const KNOWN_FREE_SMALL: [&str; 2] = [
+    "openrouter/nvidia/nemotron-3.5-lightning:free",
+    "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+];
+
+/// The small model chosen from the catalog, for the next server of this run:
+/// asked for again only when it is not the one a server started with.
+static CHOSEN_SMALL_MODEL: Mutex<Option<String>> = Mutex::new(None);
+
+/// How long the catalog may take; past it the server keeps the model it has.
+const CATALOG_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// The catalog is a few hundred kilobytes; past this it is not read at all.
+const CATALOG_LIMIT: usize = 32 * 1024 * 1024;
 
 pub(crate) struct Serving {
     pub(crate) url: String,
@@ -334,11 +357,11 @@ fn user_config_file() -> Option<PathBuf> {
 ///
 /// `inherited` is the variable ADE itself was started with, `user_files` the
 /// text of the config files the user writes. A `small_model` in any of them
-/// is theirs and stays; otherwise the inherited content gets `FREE_SMALL_MODEL`
-/// added, or is made of it. A file only has to mention the key: nikcli reads
+/// is theirs and stays; otherwise the inherited content gets `model` added,
+/// or is made of it. A file only has to mention the key: nikcli reads
 /// JSONC, and a commented-out line counting as a choice errs on the user's side.
 /// Content that is not a JSON object is not touched: nikcli refuses it anyway.
-fn small_model_content(inherited: Option<&str>, user_files: &[String]) -> Option<String> {
+fn small_model_content(inherited: Option<&str>, user_files: &[String], model: &str) -> Option<String> {
     let mut content = match inherited.map(str::trim).filter(|text| !text.is_empty()) {
         Some(text) => match serde_json::from_str::<serde_json::Value>(text) {
             Ok(serde_json::Value::Object(object)) => object,
@@ -349,8 +372,80 @@ fn small_model_content(inherited: Option<&str>, user_files: &[String]) -> Option
     if content.contains_key("small_model") || user_files.iter().any(|text| text.contains("\"small_model\"")) {
         return None;
     }
-    content.insert("small_model".into(), serde_json::Value::String(FREE_SMALL_MODEL.into()));
+    content.insert("small_model".into(), serde_json::Value::String(model.into()));
     Some(serde_json::Value::Object(content).to_string())
+}
+
+/// Whether a model of the catalog can title and summarise for free: free by
+/// its id, a text model that calls tools, not on its way out.
+fn fit_small_model(id: &str, model: &serde_json::Value) -> bool {
+    let capabilities = &model["capabilities"];
+    id.ends_with(":free")
+        && model["status"].as_str() != Some("deprecated")
+        && capabilities["toolcall"].as_bool() == Some(true)
+        && capabilities["output"]["text"].as_bool() != Some(false)
+}
+
+/// The small model for ADE's server, from its catalog (`GET /provider`): the
+/// first of `KNOWN_FREE_SMALL` it has, else its first free text model with
+/// tool calls, by provider and then by id; `None` when it has none. Only a
+/// connected provider's models count: the server runs no other.
+fn pick_small_model(catalog: &serde_json::Value) -> Option<String> {
+    let connected: Vec<&str> = catalog["connected"].as_array()?.iter().filter_map(|name| name.as_str()).collect();
+    let providers: Vec<(&str, &serde_json::Map<String, serde_json::Value>)> = catalog["all"]
+        .as_array()?
+        .iter()
+        .filter_map(|provider| Some((provider["id"].as_str()?, provider["models"].as_object()?)))
+        .filter(|(name, _)| connected.contains(name))
+        .collect();
+    let known = KNOWN_FREE_SMALL.iter().find(|known| {
+        known.split_once('/').is_some_and(|(provider, id)| {
+            providers
+                .iter()
+                .any(|(name, models)| *name == provider && models.get(id).is_some_and(|model| fit_small_model(id, model)))
+        })
+    });
+    if let Some(known) = known {
+        return Some(known.to_string());
+    }
+    providers.iter().find_map(|(name, models)| {
+        let mut ids: Vec<&String> = models.iter().filter(|(id, model)| fit_small_model(id, model)).map(|(id, _)| id).collect();
+        ids.sort();
+        ids.first().map(|id| format!("{name}/{id}"))
+    })
+}
+
+/// The small model the running server's catalog offers (`pick_small_model`),
+/// or `None` when it cannot be read in time.
+fn catalog_small_model(serving: &Serving) -> Option<String> {
+    use crate::serve_proxy::{ProxyEvent, relay, target};
+    let client = crate::serve_proxy::client_with_timeout(CATALOG_TIMEOUT).ok()?;
+    let url = target(&serving.url, "/provider").ok()?;
+    let mut body = Vec::new();
+    let mut ok = false;
+    tauri::async_runtime::block_on(relay(
+        &client,
+        url,
+        reqwest::Method::GET,
+        Vec::new(),
+        None,
+        serving.auth.clone(),
+        |event| match event {
+            ProxyEvent::Head { status, .. } => {
+                ok = status == 200;
+                ok
+            }
+            ProxyEvent::Chunk { bytes } => {
+                body.extend_from_slice(&bytes);
+                body.len() <= CATALOG_LIMIT
+            }
+            _ => true,
+        },
+    ));
+    if !ok || body.len() > CATALOG_LIMIT {
+        return None;
+    }
+    pick_small_model(&serde_json::from_slice(&body).ok()?)
 }
 
 /// The user's own config files, as text: the global one and `NIKCLI_CONFIG`.
@@ -428,13 +523,41 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
 
 /// Starts ADE's own `nikcli serve`, with a password of its own, and installs
 /// it. The caller holds the `Starting` claim.
+///
+/// When the small model is ADE's to give, the server's catalog says which:
+/// the one it started with stays if the catalog would pick it; otherwise that
+/// server is ended and one with the catalog's pick takes its place, once. The
+/// pick is kept for the next start of this run, so the second server is the
+/// exception.
 fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, String> {
     let program = which_on_path("nikcli")
         .ok_or_else(|| "nikcli non è nel PATH: installalo per usare chat e assistente.".to_string())?;
-    let password = random_password()?;
     let inherited = std::env::var("NIKCLI_CONFIG_CONTENT").ok();
-    let content = small_model_content(inherited.as_deref(), &user_config_texts());
-    let mut command = serve_command(&program, directory.as_deref(), &password, content.as_deref());
+    let user_files = user_config_texts();
+    let chosen = CHOSEN_SMALL_MODEL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+        .unwrap_or_else(|| FREE_SMALL_MODEL.to_string());
+    let content = small_model_content(inherited.as_deref(), &user_files, &chosen);
+    let mut serving = launch(&program, directory.as_deref(), content.as_deref())?;
+    if content.is_some() {
+        if let Some(picked) = catalog_small_model(&serving) {
+            *CHOSEN_SMALL_MODEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(picked.clone());
+            if picked != chosen {
+                serving.end();
+                let content = small_model_content(inherited.as_deref(), &user_files, &picked);
+                serving = launch(&program, directory.as_deref(), content.as_deref())?;
+            }
+        }
+    }
+    install(server, serving)
+}
+
+/// Starts one `nikcli serve` and waits for it to say where it listens.
+fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Result<Serving, String> {
+    let password = random_password()?;
+    let mut command = serve_command(program, directory, &password, content);
 
     let mut child = command
         .spawn()
@@ -491,15 +614,12 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
     }
 
     match ready_rx.recv_timeout(READY_TIMEOUT) {
-        Ok(Ok(url)) => install(
-            server,
-            Serving {
-                url,
-                auth: Some((USERNAME.to_string(), password)),
-                version: None,
-                child,
-            },
-        ),
+        Ok(Ok(url)) => Ok(Serving {
+            url,
+            auth: Some((USERNAME.to_string(), password)),
+            version: None,
+            child,
+        }),
         Ok(Err(reason)) => {
             crate::pty::kill_tree(child.id());
             let _ = child.kill();
@@ -790,6 +910,7 @@ mod tests {
     fn a_free_small_model_only_when_the_user_chose_none() {
         use super::{FREE_SMALL_MODEL, small_model_content};
         let free = format!(r#"{{"small_model":"{FREE_SMALL_MODEL}"}}"#);
+        let small_model_content = |inherited: Option<&str>, files: &[String]| small_model_content(inherited, files, FREE_SMALL_MODEL);
         // Nothing chosen anywhere: ADE's free one.
         assert_eq!(small_model_content(None, &[]).as_deref(), Some(free.as_str()));
         assert_eq!(small_model_content(None, &[r#"{"model":"openrouter/x"}"#.into()]).as_deref(), Some(free.as_str()));
@@ -810,6 +931,77 @@ mod tests {
         assert_eq!(small_model_content(Some(r#"{"small_model":"x/y"}"#), &[]), None);
         assert_eq!(small_model_content(Some("non json"), &[]), None);
         assert!(FREE_SMALL_MODEL.ends_with(":free"));
+    }
+
+    /// A catalog as `GET /provider` gives it: these models, of these providers,
+    /// each a free text model with tool calls unless it says otherwise.
+    fn catalog(connected: &[&str], models: &[(&str, serde_json::Value)]) -> serde_json::Value {
+        let mut all: Vec<(String, serde_json::Map<String, serde_json::Value>)> = Vec::new();
+        for (model, fields) in models {
+            let (provider, id) = model.split_once('/').unwrap();
+            let mut entry = serde_json::json!({ "id": id, "status": "active", "capabilities": { "toolcall": true, "output": { "text": true } } });
+            for (key, value) in fields.as_object().unwrap() {
+                entry[key] = value.clone();
+            }
+            match all.iter_mut().find(|(name, _)| name == provider) {
+                Some((_, map)) => {
+                    map.insert(id.to_string(), entry);
+                }
+                None => all.push((provider.to_string(), serde_json::Map::from_iter([(id.to_string(), entry)]))),
+            }
+        }
+        serde_json::json!({
+            "all": all.into_iter().map(|(id, models)| serde_json::json!({ "id": id, "models": models })).collect::<Vec<_>>(),
+            "default": {},
+            "connected": connected,
+        })
+    }
+
+    #[test]
+    fn the_small_model_is_chosen_from_the_catalog_a_known_one_first() {
+        use super::{FREE_SMALL_MODEL, KNOWN_FREE_SMALL, pick_small_model};
+        let plain = serde_json::json!({});
+        // A known one, the first there, before any other free one.
+        let both = catalog(&["openrouter"], &[("openrouter/a/aaa:free", plain.clone()), (KNOWN_FREE_SMALL[1], plain.clone()), (KNOWN_FREE_SMALL[0], plain.clone())]);
+        assert_eq!(pick_small_model(&both).as_deref(), Some(KNOWN_FREE_SMALL[0]));
+        let second = catalog(&["openrouter"], &[("openrouter/a/aaa:free", plain.clone()), (KNOWN_FREE_SMALL[1], plain.clone())]);
+        assert_eq!(pick_small_model(&second).as_deref(), Some(KNOWN_FREE_SMALL[1]));
+        // No known one: the first free text model with tool calls, by id; the rest are passed over.
+        let others = catalog(
+            &["openrouter"],
+            &[
+                ("openrouter/z/zeta:free", plain.clone()),
+                ("openrouter/a/paid", plain.clone()),
+                ("openrouter/a/safety:free", serde_json::json!({ "capabilities": { "toolcall": false, "output": { "text": true } } })),
+                ("openrouter/a/image:free", serde_json::json!({ "capabilities": { "toolcall": true, "output": { "text": false } } })),
+                ("openrouter/a/old:free", serde_json::json!({ "status": "deprecated" })),
+                ("openrouter/m/mid:free", plain.clone()),
+            ],
+        );
+        assert_eq!(pick_small_model(&others).as_deref(), Some("openrouter/m/mid:free"));
+        // A known one that no longer calls tools is not taken for its name.
+        let unfit = catalog(&["openrouter"], &[(KNOWN_FREE_SMALL[0], serde_json::json!({ "capabilities": { "toolcall": false } })), ("openrouter/b/beta:free", plain.clone())]);
+        assert_eq!(pick_small_model(&unfit).as_deref(), Some("openrouter/b/beta:free"));
+        // A provider that is not connected runs nothing.
+        let unplugged = catalog(&[], &[(KNOWN_FREE_SMALL[0], plain.clone())]);
+        assert_eq!(pick_small_model(&unplugged), None);
+        // Nothing free, or no catalog: none, and the server keeps the fixed fallback.
+        assert_eq!(pick_small_model(&catalog(&["openrouter"], &[("openrouter/a/paid", plain.clone())])), None);
+        assert_eq!(pick_small_model(&serde_json::json!({ "error": "x" })), None);
+        assert_eq!(FREE_SMALL_MODEL, KNOWN_FREE_SMALL[0]);
+    }
+
+    #[test]
+    fn the_catalogs_pick_goes_to_the_server_and_a_different_one_restarts_it_once() {
+        let source = include_str!("serve.rs");
+        let start = source.find(concat!("fn spawn_", "own(")).unwrap();
+        let body = &source[start..source[start..].find(concat!("fn la", "unch(")).unwrap() + start];
+        assert!(body.contains(concat!("catalog_small_", "model(&serving)")));
+        assert!(body.contains(concat!("if picked != ", "chosen {")));
+        let end = body.find(concat!("serving.", "end();")).unwrap();
+        assert!(end < body.rfind(concat!("serving = ", "launch(")).unwrap());
+        // Only when the small model is ADE's to give: a user's own is never replaced.
+        assert!(body.find(concat!("if content.", "is_some()")).unwrap() < body.find(concat!("catalog_small_", "model(")).unwrap());
     }
 
     #[test]
@@ -949,6 +1141,15 @@ mod tests {
         assert_eq!(own.lock_info().as_ref(), Some(&started));
         assert_eq!(live_status(&own, "/global/health", false), 200);
         assert_eq!(live_status(&own, "/provider", true), 200);
+        let picked = {
+            let slot = own.lock();
+            match &*slot {
+                Slot::Running(serving) => super::catalog_small_model(serving),
+                _ => None,
+            }
+        };
+        println!("small model dal catalogo: {picked:?}");
+        assert!(picked.is_some_and(|model| model.ends_with(":free")));
         // Without the password it is refused: the random one is enforced.
         assert_eq!(live_status(&own, "/provider", false), 401);
         own.shutdown();

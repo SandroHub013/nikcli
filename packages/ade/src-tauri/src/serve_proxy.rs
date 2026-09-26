@@ -107,8 +107,8 @@ fn client() -> Result<&'static Client, String> {
         .map_err(Clone::clone)
 }
 
-/// The same, with a deadline for the whole call: for the live tests, not streams.
-#[cfg(test)]
+/// The same, with a deadline for the whole call: for single reads (the
+/// catalog at the server's start, the live tests), never for streams.
 pub(crate) fn client_with_timeout(timeout: Duration) -> Result<Client, String> {
     tls_ready();
     Client::builder()
