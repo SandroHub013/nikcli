@@ -334,29 +334,47 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
 
     let model = model_path(&root, wanted.id);
     let config = model.with_extension("onnx.json");
-    let jobs: [(&Download, PathBuf); 3] = [
-        (&RUNTIME, root.join("piper.zip")),
-        (&wanted.config, config),
-        (&wanted.model, model),
-    ];
+    /*
+     * The voice's own two files, and only them.
+     *
+     * The runtime used to be the first job, on a `piper.zip` that is never
+     * there: it is fetched as `piper.zip.part` and deleted once `tar` has it.
+     * A job list is a list of files to put in place, and that one has no
+     * destination, so it was counted as missing for ever — which put its `None`
+     * size into the total and left `bytes_total` empty on every install, warm
+     * or cold, and left the bar at two files out of three. The runtime is a
+     * step with a condition of its own instead, and `install_locked` says
+     * whether it is done.
+     */
+    let voice_files: [(&Download, PathBuf); 2] = [(&wanted.config, config), (&wanted.model, model)];
+    let files_total = 3;
 
     let slot = state.installer.slot(PIPER);
     // The lock, and only then the state: see `hold`. And the budget starts here,
     // because an install that waited its turn has not spent any of its time.
     let _one = state.installer.hold(&slot)?;
-    let install = state
-        .installer
-        .begin(&slot, jobs.len() as u32, bytes_pending(&jobs), Instant::now() + state.installer.deadline());
-    let outcome = install_locked(&install, &root, &jobs);
+    let install = state.installer.begin(
+        &slot,
+        files_total,
+        bytes_pending(&voice_files),
+        Instant::now() + state.installer.deadline(),
+    );
+    let outcome = install_locked(&install, &root, &voice_files, &Curl, &Certutil);
     install.finish(&outcome);
     outcome
 }
 
 /// The install itself, with the provider's lock already held.
+///
+/// The fetcher and the fingerprint come in as arguments, as they already do for
+/// `bring`, so that the whole sequence — runtime first, then the voice's files —
+/// can be walked in a test without a network and without `tar`.
 fn install_locked(
     install: &InstallRun<'_>,
     root: &Path,
-    jobs: &[(&Download, PathBuf)],
+    voice_files: &[(&Download, PathBuf)],
+    curl: &dyn Fetcher,
+    print: &dyn Fingerprint,
 ) -> Result<(), String> {
     if !runtime_ready(root) {
         // Whatever an interrupted attempt left is discarded, not trusted.
@@ -365,7 +383,7 @@ fn install_locked(
         // The archive is `tar`'s to unpack, so it is fetched and left in place
         // for `tar` rather than renamed: the marker is what says the runtime is
         // whole, and it is written only after the executable is there.
-        install.fetch(&RUNTIME, &zip, &Curl, &Certutil)?;
+        install.fetch(&RUNTIME, &zip, curl, print)?;
         let extracted = run(system_tool("tar.exe"), &["-xf".as_ref(), zip.as_os_str(), "-C".as_ref(), root.as_os_str()]);
         let _ = std::fs::remove_file(&zip);
         extracted?;
@@ -373,10 +391,12 @@ fn install_locked(
             return Err("L'archivio di Piper non contiene piper.exe.".into());
         }
         std::fs::write(runtime_marker(root), RUNTIME.sha256).map_err(|e| e.to_string())?;
-        install.counted();
     }
-    for (download, path) in &jobs[1..] {
-        install.bring(download, path, &Curl, &Certutil)?;
+    // Counted either way: the runtime is one of the three, and a bar that stops
+    // at two thirds with the install finished is a bar that is lying.
+    install.counted();
+    for (download, path) in voice_files {
+        install.bring(download, path, curl, print)?;
     }
     Ok(())
 }
@@ -1616,6 +1636,59 @@ mod tests {
         assert!(!installer.progress_of(PIPER).running);
     }
 
+    /// A root whose runtime is already installed: the marker and the executable,
+    /// which is the whole of `runtime_ready`.
+    fn root_with_runtime(name: &str) -> PathBuf {
+        let root = test_root(name);
+        std::fs::create_dir_all(root.join("piper")).unwrap();
+        std::fs::write(exe_path(&root), b"un eseguibile qualsiasi").unwrap();
+        std::fs::write(runtime_marker(&root), RUNTIME.sha256).unwrap();
+        root
+    }
+
+    #[test]
+    fn with_the_runtime_already_there_the_bar_reaches_the_end_and_knows_its_bytes() {
+        let root = root_with_runtime("runtime-pronto");
+        let installer = Installer::default();
+        let body = vec![7_u8; 64];
+        let model = root.join("voices").join("ugo.onnx");
+        let config = model.with_extension("onnx.json");
+        std::fs::create_dir_all(model.parent().unwrap()).unwrap();
+        let config_body = body.clone();
+        let voice_files = [
+            (&download_of("ugo.onnx", &body, Some(64)), model),
+            (&download_of("ugo.onnx.json", &config_body, Some(64)), config),
+        ];
+
+        // The runtime is not one of the files to fetch: its size is not known and
+        // its archive never sits at `piper.zip`, and with it in the list the
+        // total was empty on every install, warm or cold.
+        assert_eq!(
+            bytes_pending(&voice_files),
+            Some(128),
+            "con il runtime già installato i byte da scaricare si sanno"
+        );
+
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot).unwrap();
+        let install = installer.begin(&slot, 3, bytes_pending(&voice_files), far());
+        assert!(
+            installer.progress_of(PIPER).bytes_total.is_some(),
+            "la barra dei byte ha un totale da disegnare"
+        );
+        let scripted = Scripted::new(body, Ending::Whole);
+        let outcome = install_locked(&install, &root, &voice_files, &scripted, &FingerprintInProcess);
+        install.finish(&outcome);
+        outcome.unwrap();
+
+        let done = installer.progress_of(PIPER);
+        assert_eq!(done.files_done, 3, "tre file su tre, e l'installazione è finita");
+        assert_eq!(done.files_total, 3);
+        assert!(!done.running);
+        // Il runtime non è stato riscaricato: era già installato.
+        assert_eq!(scripted.asked.lock().unwrap().len(), 2, "solo i due file della voce");
+    }
+
     #[test]
     fn one_provider_does_not_hold_up_another() {
         let installer = Installer::default();
@@ -1719,13 +1792,13 @@ mod tests {
     #[test]
     fn an_install_that_waited_its_turn_has_not_spent_its_budget() {
         let root = test_root("scadenza-dopo");
-        // Centoventi millisecondi di budget: un install che aspetta il lock più a
-        // lungo di quanto dura, e uno che comincia appena lo prende.
+        // Trecento millisecondi di budget e un file da otto byte: dopo il lock il
+        // lavoro è di un pezzo, e regge anche con la suite che gira in parallelo.
         let installer = std::sync::Arc::new(Installer {
             providers: Mutex::new(HashMap::new()),
-            deadline: Some(std::time::Duration::from_millis(120)),
+            deadline: Some(std::time::Duration::from_millis(300)),
         });
-        let body = b"un modello".to_vec();
+        let body = b"un file".to_vec();
         let dest = root.join("ugo.onnx");
         let wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
 
@@ -1747,7 +1820,7 @@ mod tests {
                 outcome
             })
         };
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        std::thread::sleep(std::time::Duration::from_millis(400));
         drop(guard);
 
         let outcome = waiter.join().unwrap();
