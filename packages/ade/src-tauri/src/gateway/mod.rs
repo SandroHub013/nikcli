@@ -82,6 +82,10 @@ impl Env for AppEnv {
             .map(|elapsed| elapsed.as_millis() as u64)
             .unwrap_or(0)
     }
+    /// The bot is the path of its file (`bot` in every gateway command).
+    fn bot_exists(&self, bot: &str) -> bool {
+        std::path::Path::new(bot).is_file()
+    }
 }
 
 /// ADE opened: the hub is made now, and the gateways the user left on start
