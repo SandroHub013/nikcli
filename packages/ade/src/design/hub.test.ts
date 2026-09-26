@@ -324,6 +324,8 @@ describe("card stability (R0, ALTO 1)", () => {
     let register!: ReturnType<typeof createDesignRegister>
     let hub!: ReturnType<typeof createDesignHub>
 
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
     const dispose = createRoot((dispose) => {
       register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
       hub = createDesignHub({
@@ -334,7 +336,7 @@ describe("card stability (R0, ALTO 1)", () => {
         delivery: () => ({ state: "in coda" }),
         onAnswered: () => {},
       })
-      render(
+      unrender = render(
         () =>
           createComponent(DesignSheet, {
             hub,
@@ -349,8 +351,9 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.refresh()
 
     // Find the card and textarea
-    const cardBefore = host.querySelector('[data-slot="design-card"]') as HTMLElement
-    const textarea = host.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const cardBefore = document.querySelector('[data-slot="design-card"]') as HTMLElement
+    const textarea = document.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
     expect(cardBefore).not.toBeNull()
     expect(textarea).not.toBeNull()
 
@@ -363,7 +366,7 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.tick()
 
     // Card must not be unmounted and focus must stay in the note
-    const cardAfterTick = host.querySelector('[data-slot="design-card"]')
+    const cardAfterTick = document.querySelector('[data-slot="design-card"]')
     expect(cardAfterTick).toBe(cardBefore)
     expect(document.activeElement).toBe(textarea)
 
@@ -372,10 +375,11 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.refresh()
 
     // Card must still be the exact same element and focus must still be preserved
-    const cardAfterDS2 = host.querySelector('[data-slot="design-card"]')
+    const cardAfterDS2 = document.querySelector('[data-slot="design-card"]')
     expect(cardAfterDS2).toBe(cardBefore)
     expect(document.activeElement).toBe(textarea)
 
+    unrender()
     dispose()
     host.remove()
   })
@@ -463,10 +467,8 @@ describe("the sheet keeps a choice made in this window", () => {
     })
     await register.refresh()
     prepare(hub)
-    const disposeSheet = createRoot((dispose) => {
-      render(() => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }), host)
-      return dispose
-    })
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    const disposeSheet = render(() => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }), host)
     const picked = hub.draft("DS1").picked
     disposeSheet()
     disposeHub()
@@ -524,12 +526,11 @@ describe("the sheet keeps a choice made in this window", () => {
     })
     const host = document.createElement("div")
     document.body.appendChild(host)
-    const disposeSheet = createRoot((dispose) => {
-      render(() => createComponent(DesignSheet, { hub, onClose: () => { closed = true }, onOpenPanel: () => {} }), host)
-      return dispose
-    })
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    const disposeSheet = render(() => createComponent(DesignSheet, { hub, onClose: () => { closed = true }, onOpenPanel: () => {} }), host)
 
-    const openLargeBtn = host.querySelector<HTMLButtonElement>('[data-slot="variant-open-large"]')
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const openLargeBtn = document.querySelector<HTMLButtonElement>('[data-slot="variant-open-large"]')
     expect(openLargeBtn).not.toBeNull()
     openLargeBtn?.click()
     await Promise.resolve()
@@ -825,6 +826,8 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
     let register!: ReturnType<typeof createDesignRegister>
     let hub!: DesignHub
 
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
     const dispose = createRoot((dispose) => {
       register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
       hub = createDesignHub({
@@ -836,7 +839,7 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
         delivery: () => ({ state: "in coda" }),
         onAnswered: () => {},
       })
-      render(
+      unrender = render(
         () =>
           createComponent(DesignSheet, {
             hub,
@@ -855,19 +858,21 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
     hub.pick(proposal, 0)
 
     // Submit
-    const submitBtn = host.querySelector('[data-slot="design-submit"]') as HTMLButtonElement
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const submitBtn = document.querySelector('[data-slot="design-submit"]') as HTMLButtonElement
     expect(submitBtn).not.toBeNull()
     submitBtn.click()
 
     // Wait a tick for async submit and status update
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
+    const statusEl = document.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
     expect(statusEl).not.toBeNull()
     expect(statusEl?.textContent).toBe("DS1: A, a Master")
     expect(statusEl?.getAttribute("role")).toBe("status")
     expect(statusEl?.getAttribute("aria-live")).toBe("polite")
 
+    unrender()
     dispose()
     host.remove()
   })

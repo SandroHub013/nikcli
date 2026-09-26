@@ -7,6 +7,11 @@
  * meant to look the same wherever a section puts them.
  */
 
+/* The settings sheet's frame is as wide as the panel inside it (760px, voice-settings.css). */
+[data-component="voice-settings-overlay"] > [data-layout="frame"] {
+  --ade-surface-max: 760px;
+}
+
 [data-slot="settings-empty"] {
   margin: var(--ade-space-4) 0 0;
   padding: var(--ade-space-5);

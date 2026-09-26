@@ -104,6 +104,20 @@ export function keepsPaletteOpen(commandId: string): boolean {
 }
 
 /**
+ * Whether this command does nothing while a sheet is open (kobalte-overlay, M1).
+ *
+ * A sheet is modal: its focus trap takes back any focus that leaves it. A
+ * command that opens something to type into behind it — the palette, the
+ * launch screen, a pane's title — opened it in plain sight, but every key
+ * still went to the sheet: in Decisioni a digit picked an option and Enter
+ * sent the answer to the agent. While a sheet is open these wait for it to
+ * close (Esc), as everything behind a modal does.
+ */
+export function waitsForSheet(commandId: string): boolean {
+  return commandId === "palette.open" || commandId === "session.new" || commandId === "pane.rename"
+}
+
+/**
  * Every command the palette can offer, given what is true right now.
  *
  * A command that cannot run stays in the list with the reason attached. Removing

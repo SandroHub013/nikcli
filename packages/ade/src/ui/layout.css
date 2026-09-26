@@ -141,6 +141,19 @@
 :where([data-layout="surface"][data-size="lg"]) { --ade-surface-max: 640px; }
 :where([data-layout="surface"][data-size="xl"]) { --ade-surface-max: 880px; }
 
+/*
+ * A sheet around a panel that draws its own box (Sheet with surface={false}):
+ * no background, border or shadow of its own, only the width the panel may
+ * take, so a press beside the panel is still a press outside the dialog.
+ */
+:where([data-layout="frame"]) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--ade-surface-max, 560px);
+  outline: none;
+}
+
 @keyframes ade-surface-in {
   from {
     opacity: 0;

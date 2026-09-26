@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { Overlay, Surface } from "../ui/layout"
+import { Sheet, SheetTitle } from "../ui/sheet"
 import { enterReady, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
@@ -102,99 +102,89 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   }
 
   return (
-    <Overlay data-component="decisions-sheet" onClose={props.onClose}>
-      <Surface
-        ref={surface}
-        size="md"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("palette.decisions.open")}
-        tabIndex={-1}
-        onKeyDown={onKeyDown}
-      >
-        <header data-slot="sheet-head">
-          <strong>{t("palette.decisions.open")}</strong>
-          <Show when={open().length > 0}>
-            <span data-slot="sheet-count">{t("decisions.sheet.position", at() + 1, open().length)}</span>
-            <span data-slot="sheet-steps" aria-hidden="true">
-              <For each={open()}>{(_, i) => <i data-on={i() === at() ? "true" : undefined} />}</For>
-            </span>
-          </Show>
-          <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label={t("new.close")}>
-            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-        </header>
+    <Sheet component="decisions-sheet" onClose={props.onClose} size="md" ref={(element) => (surface = element)} onKeyDown={onKeyDown}>
+      <header data-slot="sheet-head">
+        <SheetTitle as="strong">{t("palette.decisions.open")}</SheetTitle>
+        <Show when={open().length > 0}>
+          <span data-slot="sheet-count">{t("decisions.sheet.position", at() + 1, open().length)}</span>
+          <span data-slot="sheet-steps" aria-hidden="true">
+            <For each={open()}>{(_, i) => <i data-on={i() === at() ? "true" : undefined} />}</For>
+          </span>
+        </Show>
+        <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label={t("new.close")}>
+          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+          </svg>
+        </button>
+      </header>
 
-        <div data-slot="sheet-body">
-          <Show when={props.hub.register.error()}>
-            <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
-          </Show>
-          <Show
-            when={current()?.k}
-            keyed
-            fallback={
-              <div data-slot="sheet-empty">
-                <b>{t("decisions.none")}</b>
-                <span>{t("decisions.sheet.empty")}</span>
-              </div>
-            }
-          >
-            {(k) => {
-              const decision = () => current()!
-              return (
-                <DecisionCard
-                  decision={decision()}
-                  picked={props.hub.draft(k).picked}
-                  note={props.hub.draft(k).note}
-                  busy={props.hub.busy(k)}
-                  problem={
-                    props.hub.problem(k) ??
-                    (needChoice() === k
-                      ? decision().options.length > 0
-                        ? t("decisions.sheet.needChoice")
-                        : t("decisions.sheet.needText")
-                      : undefined)
-                  }
-                  control={submitControl({
-                    recipient: props.hub.recipient(),
-                    sessions: props.hub.sessions(),
-                    inline: props.hub.inlineRecipient(),
-                    busy: props.hub.busy(k),
-                    label: open().length > 1 ? t("decisions.submitNext") : t("decisions.submit"),
-                  })}
-                  onInline={(id) => props.hub.setInlineRecipient(id)}
-                  onRecord={() => void submit("record")}
-                  recipientHint={recipientHint(props.hub.recipient())}
-                  now={props.hub.register.now()}
-                  onPick={(index) => pick(k, index, Boolean(decision().multi))}
-                  onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
-                  onSubmit={() => void submit()}
-                  onDefer={(until) => void props.hub.defer(decision(), until).then((done) => done && surface?.focus())}
-                  noteRef={(element) => (note = element)}
-                />
-              )
-            }}
-          </Show>
-        </div>
+      <div data-slot="sheet-body">
+        <Show when={props.hub.register.error()}>
+          <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
+        </Show>
+        <Show
+          when={current()?.k}
+          keyed
+          fallback={
+            <div data-slot="sheet-empty">
+              <b>{t("decisions.none")}</b>
+              <span>{t("decisions.sheet.empty")}</span>
+            </div>
+          }
+        >
+          {(k) => {
+            const decision = () => current()!
+            return (
+              <DecisionCard
+                decision={decision()}
+                picked={props.hub.draft(k).picked}
+                note={props.hub.draft(k).note}
+                busy={props.hub.busy(k)}
+                problem={
+                  props.hub.problem(k) ??
+                  (needChoice() === k
+                    ? decision().options.length > 0
+                      ? t("decisions.sheet.needChoice")
+                      : t("decisions.sheet.needText")
+                    : undefined)
+                }
+                control={submitControl({
+                  recipient: props.hub.recipient(),
+                  sessions: props.hub.sessions(),
+                  inline: props.hub.inlineRecipient(),
+                  busy: props.hub.busy(k),
+                  label: open().length > 1 ? t("decisions.submitNext") : t("decisions.submit"),
+                })}
+                onInline={(id) => props.hub.setInlineRecipient(id)}
+                onRecord={() => void submit("record")}
+                recipientHint={recipientHint(props.hub.recipient())}
+                now={props.hub.register.now()}
+                onPick={(index) => pick(k, index, Boolean(decision().multi))}
+                onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
+                onSubmit={() => void submit()}
+                onDefer={(until) => void props.hub.defer(decision(), until).then((done) => done && surface?.focus())}
+                noteRef={(element) => (note = element)}
+              />
+            )
+          }}
+        </Show>
+      </div>
 
-        <footer data-slot="sheet-foot">
-          <span>{t("decisions.sheet.keys")}</span>
-          <Show when={statusMessage()}>
-            <span data-slot="sheet-status" role="status" aria-live="polite">{statusMessage()}</span>
-          </Show>
-          <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
-            <span data-tone="warn">
-              {t(props.hub.recipient().state === "non scelta" ? "decisions.sheet.queued.none" : "decisions.sheet.queued.idle", queued())}
-            </span>
-          </Show>
-          <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
-            {t("decisions.sheet.full")}
-          </button>
-        </footer>
-      </Surface>
-    </Overlay>
+      <footer data-slot="sheet-foot">
+        <span>{t("decisions.sheet.keys")}</span>
+        <Show when={statusMessage()}>
+          <span data-slot="sheet-status" role="status" aria-live="polite">{statusMessage()}</span>
+        </Show>
+        <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
+          <span data-tone="warn">
+            {t(props.hub.recipient().state === "non scelta" ? "decisions.sheet.queued.none" : "decisions.sheet.queued.idle", queued())}
+          </span>
+        </Show>
+        <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
+          {t("decisions.sheet.full")}
+        </button>
+      </footer>
+    </Sheet>
   )
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
+import { buildCommands, keepsPaletteOpen, waitsForSheet, type CommandContext } from "./commands"
 import { resetLocaleForTests } from "../i18n"
 import { filterCommands } from "../command/registry"
 import { createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
@@ -346,5 +346,20 @@ describe("Sospendi la sessione (P1-C6)", () => {
     const other = buildCommands(context({ workbench: wb })).find((c) => c.id === "session.suspend")
     expect(other?.enabled).toBe(false)
     expect(other?.disabledReason).toBe("solo le sessioni Claude si sospendono")
+  })
+})
+
+describe("waitsForSheet (kobalte-overlay, M1)", () => {
+  /*
+   * With a sheet open, Ctrl+Shift+P opened the palette under the sheet's
+   * focus trap: the palette showed, and what was typed went to the sheet —
+   * in Decisioni a digit picked an option and Enter sent the answer.
+   */
+  test("the palette, the launch screen and a pane's title wait for the sheet to close", () => {
+    for (const id of ["palette.open", "session.new", "pane.rename"]) expect([id, waitsForSheet(id)]).toEqual([id, true])
+  })
+
+  test("what does not open something to type into still runs behind it", () => {
+    for (const id of ["view.toggle", "theme.toggle", "voice.toggle", "voice.settings", "pane.expand"]) expect([id, waitsForSheet(id)]).toEqual([id, false])
   })
 })

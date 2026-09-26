@@ -152,6 +152,8 @@ describe("card stability (R0, ALTO 1)", () => {
     let register!: ReturnType<typeof createDecisionsRegister>
     let hub!: ReturnType<typeof createDecisionsHub>
 
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
     const dispose = createRoot((dispose) => {
       register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
       hub = createDecisionsHub({
@@ -162,7 +164,7 @@ describe("card stability (R0, ALTO 1)", () => {
         delivery: () => ({ state: "in coda" }),
         onAnswered: () => {},
       })
-      render(
+      unrender = render(
         () =>
           createComponent(DecisionsSheet, {
             hub,
@@ -177,8 +179,9 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.refresh()
 
     // Find the card and textarea
-    const cardBefore = host.querySelector('[data-slot="decision-card"]') as HTMLElement
-    const textarea = host.querySelector('[data-slot="decision-note"]') as HTMLTextAreaElement
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const cardBefore = document.querySelector('[data-slot="decision-card"]') as HTMLElement
+    const textarea = document.querySelector('[data-slot="decision-note"]') as HTMLTextAreaElement
     expect(cardBefore).not.toBeNull()
     expect(textarea).not.toBeNull()
 
@@ -191,7 +194,7 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.tick()
 
     // Card must not be unmounted and focus must stay in the note
-    const cardAfterTick = host.querySelector('[data-slot="decision-card"]')
+    const cardAfterTick = document.querySelector('[data-slot="decision-card"]')
     expect(cardAfterTick).toBe(cardBefore)
     expect(document.activeElement).toBe(textarea)
 
@@ -200,10 +203,11 @@ describe("card stability (R0, ALTO 1)", () => {
     await register.refresh()
 
     // Card must still be the exact same element and focus must still be preserved
-    const cardAfterD2 = host.querySelector('[data-slot="decision-card"]')
+    const cardAfterD2 = document.querySelector('[data-slot="decision-card"]')
     expect(cardAfterD2).toBe(cardBefore)
     expect(document.activeElement).toBe(textarea)
 
+    unrender()
     dispose()
     host.remove()
   })
@@ -434,6 +438,8 @@ describe("sheet status line on submit (MEDIO 6)", () => {
     let register!: ReturnType<typeof createDecisionsRegister>
     let hub!: ReturnType<typeof createDecisionsHub>
 
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
     const dispose = createRoot((dispose) => {
       register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
       hub = createDecisionsHub({
@@ -444,7 +450,7 @@ describe("sheet status line on submit (MEDIO 6)", () => {
         delivery: () => ({ state: "in coda" }),
         onAnswered: () => {},
       })
-      render(
+      unrender = render(
         () =>
           createComponent(DecisionsSheet, {
             hub,
@@ -462,19 +468,20 @@ describe("sheet status line on submit (MEDIO 6)", () => {
     hub.setDraft("D1", { picked: 1, note: "" })
 
     // Submit
-    const submitBtn = host.querySelector('[data-slot="decision-submit"]') as HTMLButtonElement
+    const submitBtn = document.querySelector('[data-slot="decision-submit"]') as HTMLButtonElement
     expect(submitBtn).not.toBeNull()
     submitBtn.click()
 
     // Wait a tick for async submit and status update
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
+    const statusEl = document.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
     expect(statusEl).not.toBeNull()
     expect(statusEl?.textContent).toBe("D1: B, a Master")
     expect(statusEl?.getAttribute("role")).toBe("status")
     expect(statusEl?.getAttribute("aria-live")).toBe("polite")
 
+    unrender()
     dispose()
     host.remove()
   })
