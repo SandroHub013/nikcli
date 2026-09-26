@@ -27,8 +27,8 @@ espeak-ng and espeak-ng-data
   License: GPL-3.0-or-later
   Phonemization, statically linked inside sherpa-onnx-c-api.dll and reached
   from there. This is the reason this crate is GPL-3.0-or-later, and the
-  reason it is kept in its own directory: ADE talks to it over a pipe and
-  stays MIT.
+  reason it lives in packages/kokoro-host, outside the MIT package: ADE talks
+  to it over a pipe and stays MIT.
 
 sherpa-onnx
   License: Apache License 2.0

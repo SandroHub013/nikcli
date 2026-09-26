@@ -21,7 +21,7 @@ anywhere in the code and no build script.
 ## Build
 
 ```
-cd packages/ade/kokoro-host
+cd packages/kokoro-host
 cargo build --release
 ```
 

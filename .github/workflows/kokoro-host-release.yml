@@ -2,7 +2,7 @@
 name: kokoro-host-release
 
 # Builds the Kokoro TTS host, a GPL-3.0-or-later program of its own in
-# packages/ade/kokoro-host/, and publishes the executable with its SHA-256.
+# packages/kokoro-host/, and publishes the executable with its SHA-256.
 #
 # It is deliberately a workflow of its own. ADE's release flow is not touched
 # here: `ade-release` and `ade-auto-release` keep their `ade-v*` tags, and this
@@ -27,7 +27,7 @@ on:
       - "kokoro-host-v*.*.*"
   pull_request:
     paths:
-      - "packages/ade/kokoro-host/**"
+      - "packages/kokoro-host/**"
       - ".github/workflows/kokoro-host-release.yml"
   workflow_dispatch:
     inputs:
@@ -55,7 +55,7 @@ jobs:
     defaults:
       run:
         shell: pwsh
-        working-directory: packages/ade/kokoro-host
+        working-directory: packages/kokoro-host
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,7 +65,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/ade/kokoro-host -> target
+          workspaces: packages/kokoro-host -> target
 
       - name: Test
         run: cargo test --locked
@@ -122,7 +122,7 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release $TAG already exists; the executable will replace what is in it"
           else
-            printf 'kokoro-host %s\n\nBuild of `packages/ade/kokoro-host`, GPL-3.0-or-later.\n' "$VERSION" > notes.md
+            printf 'kokoro-host %s\n\nBuild of `packages/kokoro-host`, GPL-3.0-or-later.\n' "$VERSION" > notes.md
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "kokoro-host $VERSION" --notes-file notes.md --verify-tag
           fi
