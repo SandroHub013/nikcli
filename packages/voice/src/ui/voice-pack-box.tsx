@@ -83,8 +83,9 @@ export function VoicePackBox(props: {
         </div>
       </Show>
 
-      <p data-slot="sub-item-licence">{t("vui.pack.kokoro.model")}</p>
-      <p data-slot="sub-item-licence">{t("vui.pack.kokoro.host")}</p>
+      <p data-slot="sub-choice-note">
+        {t("vui.pack.kokoro.model")} {t("vui.pack.kokoro.host")}
+      </p>
     </div>
   )
 }

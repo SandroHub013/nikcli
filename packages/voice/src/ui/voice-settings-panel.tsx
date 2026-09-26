@@ -1346,7 +1346,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         <Show when={choice.licence}>
                           <span data-slot="sub-item-licence">
                             {choice.licence}{" "}
-                            <Show when={props.onOpenVoiceSource}>
+                            {/* The host opens the page of a Piper voice only; Kokoro's source is in its pack's note. */}
+                            <Show when={props.onOpenVoiceSource && replyBackendNow() !== "kokoro"}>
                               <button
                                 type="button"
                                 data-slot="link-button"

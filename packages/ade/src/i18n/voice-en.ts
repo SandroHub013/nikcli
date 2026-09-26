@@ -184,7 +184,7 @@ export const voiceEn: VoiceMessages = {
   "vui.pack.kokoro.unavailable": "Kokoro is not available in this version of ADE yet: until it is, Piper reads the replies.",
   "vui.pack.kokoro.absent": "The Kokoro voices are not installed: until they are, Piper reads the replies. They are downloaded only when you press Install.",
   "vui.pack.kokoro.installed": "Kokoro voices installed: they work offline.",
-  "vui.pack.kokoro.model": "Model: Kokoro-82M by hexgrad, Apache-2.0 licence.",
+  "vui.pack.kokoro.model": "Model: Kokoro-82M by hexgrad (huggingface.co/hexgrad/Kokoro-82M), Apache-2.0 licence.",
   "vui.pack.kokoro.host": "Read by kokoro-host, a program separate from ADE with espeak-ng inside, GPL-3.0-or-later licence.",
   "vui.send.title": "After dictation",
   "vui.send.manual": "Just transcribe",

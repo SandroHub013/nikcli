@@ -185,7 +185,7 @@ export const voiceIt = {
   "vui.pack.kokoro.unavailable": "Kokoro non è ancora disponibile in questa versione di ADE: finché non lo è, le risposte le legge Piper.",
   "vui.pack.kokoro.absent": "Le voci Kokoro non sono installate: finché non lo sono, le risposte le legge Piper. Si scaricano solo quando premi Installa.",
   "vui.pack.kokoro.installed": "Voci Kokoro installate: funzionano senza rete.",
-  "vui.pack.kokoro.model": "Modello: Kokoro-82M di hexgrad, licenza Apache-2.0.",
+  "vui.pack.kokoro.model": "Modello: Kokoro-82M di hexgrad (huggingface.co/hexgrad/Kokoro-82M), licenza Apache-2.0.",
   "vui.pack.kokoro.host": "Lo legge kokoro-host, un programma separato da ADE con espeak-ng dentro, licenza GPL-3.0-or-later.",
   "vui.send.title": "Comportamento invio trascrizione",
   "vui.send.manual": "Trascrivi e basta",

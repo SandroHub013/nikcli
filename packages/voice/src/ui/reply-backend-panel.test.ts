@@ -36,4 +36,20 @@ describe("the reply voice in the panel", () => {
     expect(box).toContain('t("vui.pack.installSize", view().size ?? "")');
     expect(box).toContain('role="progressbar"');
   });
+
+  test("Kokoro's source is the pack's note, not the Piper voice-page button", () => {
+    // The host opens only a Piper voice's page: under Kokoro the button would open nothing.
+    expect(panel).toContain('<Show when={props.onOpenVoiceSource && replyBackendNow() !== "kokoro"}>');
+    expect(box).toContain('{t("vui.pack.kokoro.model")} {t("vui.pack.kokoro.host")}');
+    expect(box).not.toContain('data-slot="sub-item-licence"');
+  });
+
+  test("the pack is spaced as a column, its notes without their own margins", () => {
+    const css = readFileSync(join(import.meta.dir, "voice-settings.css"), "utf8");
+    const rule = (selector: string) => css.slice(css.indexOf(selector + " {"), css.indexOf("}", css.indexOf(selector + " {")));
+    const pack = '[data-component="voice-settings-panel"] [data-slot="voice-pack"]';
+    expect(rule(pack)).toContain("flex-direction: column");
+    expect(rule(pack)).toContain("gap: var(--ade-space-4)");
+    expect(rule(pack + ' [data-slot="sub-choice-note"]')).toContain("margin: 0");
+  });
 });
