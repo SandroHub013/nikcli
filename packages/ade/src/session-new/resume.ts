@@ -1,3 +1,4 @@
+import { LIST_MS, type Timers } from "./ask-cli"
 import { folderKey, sameFolder } from "./folder"
 import { isBotSession } from "../bots/serve-rules"
 
@@ -637,6 +638,12 @@ export class MintLedger {
  * before its id reaches ADE: those are waited for, and the same list is read
  * again without them. One that starts after the list answered cannot be in
  * it, and is not waited for.
+ *
+ * For `patience` at most (the list's own time): a mint may take 30 s, and a
+ * "here" waiting on it said nothing for 45 (review of ripristino-sexies,
+ * nota 1). Past it the list is read as it is: a conversation minted for an
+ * open pane carries that pane's mark in its title (`mintMark`), which `read`
+ * already leaves out.
  */
 export async function lastHereBesideMints(
   ask: (read: (output: string) => string | null | undefined) => Promise<string | null | undefined>,
@@ -644,6 +651,7 @@ export async function lastHereBesideMints(
   taken: ReadonlySet<string>,
   mints: MintLedger,
   open: (owner: string) => boolean,
+  patience: { ms: number; timers?: Timers } = { ms: LIST_MS },
 ): Promise<string | undefined> {
   const excluded = () => {
     const out = new Set(taken)
@@ -661,7 +669,15 @@ export async function lastHereBesideMints(
     return id
   })
   if (!found) return undefined
-  await Promise.all(underWay)
+  if (underWay.length > 0) {
+    const timers = patience.timers ?? { set: (run, ms) => setTimeout(run, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) }
+    let handle: unknown
+    await Promise.race([
+      Promise.all(underWay),
+      new Promise<void>((resolve) => (handle = timers.set(resolve, patience.ms))),
+    ])
+    timers.clear(handle)
+  }
   const now = excluded()
   if (!now.has(found)) return found
   return read(answered, now) ?? undefined
