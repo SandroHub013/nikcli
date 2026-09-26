@@ -370,7 +370,7 @@
  * it was advertising is worse than no highlight at all.
  */
 [data-component="session-pane"][data-dropping] {
-  outline: 2px solid var(--ade-accent);
+  outline: 2px solid var(--ade-text-weak);
   outline-offset: -2px;
 }
 
