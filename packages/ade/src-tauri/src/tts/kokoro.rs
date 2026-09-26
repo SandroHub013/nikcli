@@ -151,12 +151,17 @@ pub fn missing(root: &Path) -> Option<&'static str> {
  * preparation writes a different file, so counting it here as a file to put in
  * place is what put a `None` size into the total and left the bar at three files
  * out of four.
+ *
+ * The names carry the version they were downloaded for. An archive whose name is
+ * the same across revisions is an archive that gets reused: a folder left by an
+ * older revision passes for a current one, and the failure shows up as a runtime
+ * that does not start rather than as a download that did not happen.
  */
 fn downloads() -> [(&'static Download, &'static str); 3] {
     [
-        (&RUNTIME_TARBALL, "sherpa-onnx.tar.bz2"),
+        (&RUNTIME_TARBALL, "sherpa-onnx-1.13.8.tar.bz2"),
         (&VOICES, "voices-v1.0.bin"),
-        (&ESPEAK_DATA, "espeak-ng-data.tar.bz2"),
+        (&ESPEAK_DATA, "espeak-ng-data-kokoro-v1.0.tar.bz2"),
     ]
 }
 
@@ -289,7 +294,7 @@ fn unpack_runtime(root: &Path) -> Result<(), String> {
     if sherpa_dll_in(&lib).is_file() {
         return Ok(());
     }
-    let archive = home(root).join("sherpa-onnx.tar.bz2");
+    let archive = home(root).join("sherpa-onnx-1.13.8.tar.bz2");
     if !archive.is_file() {
         return Ok(());
     }
@@ -347,7 +352,7 @@ fn unpack_espeak(root: &Path) -> Result<(), String> {
     if folder.is_dir() {
         return Ok(());
     }
-    let archive = home(root).join("espeak-ng-data.tar.bz2");
+    let archive = home(root).join("espeak-ng-data-kokoro-v1.0.tar.bz2");
     if !archive.is_file() {
         return Ok(());
     }
@@ -600,14 +605,14 @@ pub fn speaker_of(voice: &str) -> Option<(u32, &'static str)> {
 
 /// The G2P locale of a speech locale, as the host is asked for it.
 ///
-/// The same three as `g2pLocale` on the client, and for the same reason: K1
-/// measured that espeak refuses `en-gb`.
-pub fn phonemizer_lang(locale: &str) -> &'static str {
-    match locale {
-        "en-US" | "en-GB" => "en-us",
-        _ => "it",
-    }
-}
+/// The languages K4a's host accepts in a request.
+///
+/// Four, and it says `bad-lang` for anything else. So the language ADE sends is
+/// the one that belongs to the voice and nothing else: it used to be the voice's
+/// joined with the G2P locale of the reply, which came out as `en-us-en-us` and
+/// would have made every sentence an error — Kokoro would never have spoken a
+/// word, and the chain would have fallen to Piper without saying why.
+pub const HOST_LANGS: &[&str] = &["en-us", "en", "en-gb", "en-uk"];
 
 /// Whether ADE can write a line to the child and read one back, right now.
 pub fn answer_is_ours(line: &str, id: u64) -> bool {
@@ -852,6 +857,16 @@ pub fn speak_blocking(
     locale: &str,
 ) -> Result<Vec<u8>, String> {
     let (sid, lang) = speaker_of(voice).ok_or("Questa voce non è una voce Kokoro.")?;
+    // La lingua è quella della voce e non quella del locale: le voci britanniche
+    // vogliono `en` e K1 lo ha misurato, e `en-gb` non esiste fra le voci espeak
+    // del runtime. Un locale che non è inglese non è un'altra lingua da mandare,
+    // è una voce che non può dire quella risposta, e lo si dice qui invece di
+    // far mandare all'host una lingua che rifiuterebbe.
+    if !locale.starts_with("en") {
+        return Err(format!(
+            "Una voce Kokoro non può dire una risposta in {locale}: le voci Kokoro sono inglesi."
+        ));
+    }
     if text.chars().count() > TEXT_LIMIT {
         return Err(format!(
             "La frase da {} caratteri è troppo lunga per una voce ({TEXT_LIMIT} il massimo).",
@@ -881,7 +896,7 @@ pub fn speak_blocking(
     // L'host non annulla: quello che è già stato mandato finisce, e il suo WAV si
     // butta. Il segno dell'abbandono è già stato consumato dal comando, che è
     // l'unico posto dove può farlo: qui la richiesta parte.
-    let attempt = child.say(token, text, sid, &format!("{}-{}", lang, phonemizer_lang(locale)), &out);
+    let attempt = child.say(token, text, sid, lang, &out);
     if attempt.is_err() {
         // A child that failed is not asked again: a half-written WAV and a
         // process in an unknown state are worse than a fresh start.
@@ -972,11 +987,56 @@ mod tests {
     }
 
     #[test]
-    fn en_gb_non_è_una_lingua_di_espeak() {
-        // K1 lo misurò: «Failed to set eSpeak-ng voice».
-        assert_eq!(phonemizer_lang("en-GB"), "en-us");
-        assert_eq!(phonemizer_lang("en-US"), "en-us");
-        assert_eq!(phonemizer_lang("it-IT"), "it");
+    fn il_manifest_porta_la_versione_nei_nomi() {
+        // Un archivio con lo stesso nome fra due revisioni e' un archivio che
+        // viene riusato, e la cartella di una revisione vecchia passa per
+        // quella di adesso: il difetto si vede come un runtime che non parte, non
+        // come un download che non e' avvenuto.
+        for (_, name) in downloads() {
+            assert!(
+                name.contains("1.13.8") || name.contains("v1.0"),
+                "{name} non porta con se' la versione"
+            );
+        }
+        // E i due archivi hanno nomi diversi: uno scaricato al posto dell'altro
+        // non si riusa, e ognuno trova il suo.
+        let names: Vec<&str> = downloads().iter().map(|(_, name)| *name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len(), "due pezzi con lo stesso nome");
+    }
+
+    #[test]
+    fn la_lingua_mandata_e_quella_della_voce_e_il_runtime_la_accetta() {
+        // Il buco: la lingua era quella della voce unita a quella del locale, e
+        // veniva fuori `en-us-en-us`. L'host accetta quattro lingue e per tutto il
+        // resto risponde bad-lang, quindi Kokoro non avrebbe mai letto niente.
+        for (voice, (_, lang)) in [("af_heart", ()), ("am_fenrir", ()), ("bf_emma", ()), ("bm_george", ())]
+            .iter()
+            .map(|(voice, _)| (*voice, speaker_of(voice).unwrap()))
+        {
+            assert!(HOST_LANGS.contains(&lang), "{voice} parla {lang}, che il runtime non accetta");
+        }
+        // Le britanniche parlano `en` e non `en-gb`: K1 lo ha misurato, la voce
+        // espeak non esiste e la richiesta fallisce con «Failed to set eSpeak-ng
+        // voice».
+        assert_eq!(speaker_of("bf_emma").unwrap().1, "en");
+        assert_eq!(speaker_of("bm_george").unwrap().1, "en");
+        assert_eq!(speaker_of("af_heart").unwrap().1, "en-us");
+    }
+
+    #[test]
+    fn ogni_lingua_del_catogo_e_una_che_l_host_accetta() {
+        // Il patto con K4a, scritto qui: se l'host un giorno accetta un'altra
+        // lingua, questo test lo dice, e se smette di accettarne una, dice anche.
+        for voice in ["af_heart", "am_fenrir", "bf_emma", "bm_george"] {
+            let (_, lang) = speaker_of(voice).expect("una voce del catalogo");
+            assert!(HOST_LANGS.contains(&lang), "{lang} non è fra le lingue dell'host");
+        }
+        for lang in HOST_LANGS {
+            assert!(!lang.is_empty() && *lang == lang.to_lowercase(), "{lang} è una lingua, non una frase");
+        }
     }
 
     #[test]
@@ -1069,7 +1129,7 @@ mod tests {
         std::fs::create_dir_all(&rev).unwrap();
         // Il tarball c'e', la cartella no: e' esattamente lo stato in cui
         // l'installazione diceva di aver finito e non installava niente.
-        std::fs::write(rev.join("espeak-ng-data.tar.bz2"), b"non e' un archivio").unwrap();
+        std::fs::write(rev.join("espeak-ng-data-kokoro-v1.0.tar.bz2"), b"non e' un archivio").unwrap();
         assert!(espeak_data(&root).is_dir() == false);
         // Con un archivio che non si lascia aprire, l'errore lo dice e la
         // cartella non resta a meta' come se fosse installata.
@@ -1214,11 +1274,26 @@ mod tests {
     }
 
     #[test]
-    fn un_bambino_finto_riceve_voce_e_lingua_come_chiede_il_rilevatore() {
+    fn il_bambino_finto_riceve_voce_e_lingua_come_chiede_il_rilevatore() {
         let mut child = Fake::new();
         let (sid, lang) = speaker_of("bf_emma").unwrap();
         child.say(7, "I opened the session.", sid, lang, Path::new("out.wav")).unwrap();
+        // La lingua che arriva al figlio è quella della voce, per intero: è
+        // quello che il protocollo accetta.
         assert_eq!(child.asked, vec![(7, "I opened the session.".to_string(), 21, "en".to_string())]);
+    }
+
+    #[test]
+    fn una_risposta_non_inglese_non_raggiunge_l_host() {
+        // Le voci Kokoro sono inglesi: una risposta in italiano non è una lingua da
+        // mandare, è una voce che non può dirla. Errore qui, prima di scrivere al
+        // figlio, invece di un bad-lang che-arriva-dall'host-e-non-si-capisce.
+        let state = crate::tts::KokoroState::default();
+        let root = Path::new("tts").join("locale-non-inglese");
+        let problem = speak_blocking(&root, &state, "af_heart", "Ho aperto la sessione.", 1, "it-IT");
+        assert!(problem.is_err());
+        assert!(problem.unwrap_err().contains("inglesi"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
