@@ -346,15 +346,18 @@ export {
   KOKORO_VOICES,
   activeReplyVoice,
   backendOf,
+  detectReplyLanguage,
   g2pLocale,
   isKokoroVoice,
   kokoroVoice,
   replyVoiceChain,
+  replyLocale,
   replyVoiceFor,
   replyVoiceChoicesForLocale,
   speakingReplyVoice,
   type KokoroVoice,
   type KokoroVoiceId,
+  type ReplyLanguage,
 } from "./settings/reply-voices"
 
 export {

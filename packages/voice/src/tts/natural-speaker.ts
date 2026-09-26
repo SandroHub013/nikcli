@@ -18,7 +18,7 @@
 
 import { markVoice } from "../timing"
 import { cleanForSpeech } from "./clean"
-import { isKokoroVoice } from "../settings/reply-voices"
+import { detectReplyLanguage, isKokoroVoice, type ReplyLanguage } from "../settings/reply-voices"
 import type { ReplyVoice, TtsLocale } from "../settings/model"
 import type { Speaker } from "./speaker"
 
@@ -82,16 +82,19 @@ export function synthesisLimitMs(state: {
 }
 
 export interface NaturalSpeakerDeps {
-  voice: () => string
   /**
-   * The G2P locale the replies are spoken in, and the only place it comes from.
+   * The voice that speaks a reply, and the locale it is spoken in.
    *
-   * Not deduced from the voice id and not the interface's language: a voice is
-   * not a language, and a locale the synthesiser does not know fails on the
-   * sentence rather than on the setting. Required, because a default here would
-   * be a silent Italian on an English machine.
+   * One call and both together, because they cannot come apart: the voice is
+   * chosen *for* the locale, and a caller that picked the two separately could
+   * hand Piper an English Kokoro id. `detected` is what the text of the reply
+   * says about its language, and `undefined` when it says nothing — there the
+   * setting decides, which is what `ttsLocale` is for.
+   *
+   * A `prepare` or a prefetch has no reply to read: they pass `undefined` and
+   * get the voice the settings point at.
    */
-  ttsLocale: () => TtsLocale
+  voiceFor: (detected: ReplyLanguage | undefined) => { voice: string; locale: TtsLocale }
   /** Whether the voice can speak now, and whether it can ever on this host. */
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
   /** Downloads what the voice needs. Called once per voice, in the background. */
@@ -99,10 +102,8 @@ export interface NaturalSpeakerDeps {
   /**
    * One unit as WAV bytes. `token` names this request on the host, so `cancel`
    * can tell it to skip the unit if the reply is abandoned while it still waits
-   * its turn in the queue, and `locale` is the G2P locale to synthesise it in.
-   *
-   * `locale` is last because it was added last, and a Piper bridge does not
-   * read it: a Piper voice is one language, and which one is in its name.
+   * its turn in the queue, and `locale` is the G2P locale of the reply, which is
+   * the only place the synthesiser can learn it.
    */
   synthesize: (voice: string, text: string, token: number, locale: TtsLocale) => Promise<ArrayBuffer>
   /**
@@ -193,6 +194,17 @@ export const UNIT_GROWTH = 2.5
 
 /** Where a unit may be cut: a pause is worth more than a word boundary. */
 const CUT_AFTER = ",:;—–)"
+
+/**
+ * What the warm-up says, and in which language.
+ *
+ * Nothing hears it: the host loads the voice with it and throws the audio away.
+ * It is in the reply's language because a model loaded by an Italian sentence on
+ * an English voice is a model that was loaded by the wrong sentence.
+ */
+function readyLine(locale: TtsLocale): string {
+  return locale === "it-IT" ? "Pronto." : "Ready."
+}
 
 /**
  * The reply as the units the host synthesises, for a voice that is slow to
@@ -452,12 +464,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     }
   }
 
-  function invokeSynthesize(voice: string, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
+  function invokeSynthesize(voice: string, locale: TtsLocale, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
     const token = ++tokenSeq
     inflight.add(token)
     const send = (): Promise<ArrayBuffer> => {
       residentStarted = true
-      return deps.synthesize(voice, sentence, token, deps.ttsLocale())
+      return deps.synthesize(voice, sentence, token, locale)
     }
     const pending = stopping ? stopping.catch(() => {}).then(send) : send()
     const forget = () => {
@@ -481,7 +493,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   /* Sentences asked for ahead of their turn, by voice and text. */
   const ahead = new Map<string, { token: number; pending: Promise<ArrayBuffer> }>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
-  function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+  function synthesize(voice: string, locale: TtsLocale, sentence: string): Promise<ArrayBuffer> {
     // The voice is needed again, so a stop in flight has nothing left to free.
     askedFor = true
     residentStarted = true
@@ -491,7 +503,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       ahead.delete(key)
       return early.pending
     }
-    return invokeSynthesize(voice, sentence).pending
+    return invokeSynthesize(voice, locale, sentence).pending
   }
 
   function ensure(voice: string): void {
@@ -574,7 +586,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (!text || text.trim().length === 0) return
         const clean = cleanForSpeech(text)
         if (!clean || clean.trim().length === 0) return
-        const voice = deps.voice()
+        // The voice and the language of the reply, decided together and from the
+        // text it is made of: a reply in Italian on an English voice is read in
+        // Italian, which is the whole point of asking the text and not the panel.
+        const { voice, locale } = deps.voiceFor(detectReplyLanguage(text))
         if (!(await usable(voice))) {
           if (mine === generation) {
             await announceFallbackOnce(voice)
@@ -588,7 +603,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
         const sentences = unitsOf(voice, clean)
         // Requested together, played in order: the host works through them while the first plays.
-        const audio = sentences.map((sentence) => synthesize(voice, sentence))
+        const audio = sentences.map((sentence) => synthesize(voice, locale, sentence))
         audio.forEach((pending) => pending.catch(() => {}))
         for (let i = 0; i < sentences.length; i++) {
           let wav: ArrayBuffer
@@ -641,7 +656,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       if (!text || text.trim().length === 0) return
       const clean = cleanForSpeech(text)
       if (!clean || clean.trim().length === 0) return
-      const voice = deps.voice()
+      // The prefetched sentence is part of the reply, so it carries its language
+      // too: warming a voice in the language the reply is not in is warming the
+      // wrong one.
+      const { voice, locale } = deps.voiceFor(detectReplyLanguage(text))
       if (voice === "system" || !ready.has(voice)) return
       cancelIdleTimer()
       for (const sentence of unitsOf(voice, clean)) {
@@ -649,7 +667,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (ahead.has(key)) continue
         residentStarted = true
         activeTasks++
-        const { token, pending } = invokeSynthesize(voice, sentence)
+        const { token, pending } = invokeSynthesize(voice, locale, sentence)
         const tracked = pending.finally(() => {
           activeTasks--
           if (activeTasks === 0) scheduleIdleStop()
@@ -660,7 +678,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     },
 
     prepare(): void {
-      const voice = deps.voice()
+      // Nothing to read: a warm-up is for the voice the settings point at, and
+      // the setting is the fallback for a reply whose text says nothing.
+      const { voice, locale } = deps.voiceFor(undefined)
       if (voice === warmed) return
       cancelIdleTimer()
       void usable(voice, false).then((ok) => {
@@ -668,7 +688,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         warmed = voice
         residentStarted = true
         activeTasks++
-        const { pending } = invokeSynthesize(voice, "Pronto.")
+        const { pending } = invokeSynthesize(voice, locale, readyLine(locale))
         pending
           .catch(() => {
             warmed = undefined

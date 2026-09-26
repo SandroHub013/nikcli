@@ -23,8 +23,7 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
   const locales: string[] = []
   let installed = true
   const deps: NaturalSpeakerDeps = {
-    voice: () => "ugo",
-    ttsLocale: () => "it-IT",
+    voiceFor: () => ({ voice: "ugo", locale: "it-IT" }),
     status: async () => ({ supported: true, installed }),
     install: async (voice) => {
       installs.push(voice)
@@ -128,7 +127,7 @@ describe("tts/natural-speaker", () => {
   })
 
   test("the system voice, or a host without Piper, is the Web Speech voice", async () => {
-    const system = harness({ voice: () => "system" })
+    const system = harness({ voiceFor: () => ({ voice: "system", locale: "it-IT" }) })
     await createNaturalSpeaker(system.deps).speak("Ciao.")
     expect(system.fallback.spoken).toEqual(["Ciao."])
 

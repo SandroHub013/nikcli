@@ -257,6 +257,95 @@ export function replyVoiceChoicesForLocale(
 }
 
 /**
+ * What the text of a reply says about its language.
+ *
+ * `undefined` is the honest answer and the common one: a handful of words, or a
+ * line of numbers and identifiers, says nothing, and guessing there is how an
+ * English voice ends up reading an Italian sentence. So this only answers when
+ * the words are enough, and the setting is what answers the rest.
+ */
+export type ReplyLanguage = "it" | "en";
+
+/*
+ * Words that only one of the two languages uses, as whole words.
+ *
+ * The short ones both languages share are left out on purpose: `a`, `in`, `la`,
+ * `di`, `che` and `non` are not evidence of anything, and counting them would
+ * make a line of code look Italian. What is left are words that decide on their
+ * own, which is a smaller list and a much better one.
+ */
+const ITALIAN_WORDS = new Set([
+  "il", "lo", "gli", "una", "uno", "delle", "della", "dei", "degli", "nel", "nella", "nelle", "dal", "dalla",
+  "che", "chi", "non", "cosa", "come", "perché", "percio", "quindi", "già", "più", "sono", "essere", "stato",
+  "hanno", "aveva", "questo", "quella", "quelli", "quelle", "suo", "sua", "suoi", "sue", "loro", "noi", "voi",
+  "molto", "ogni", "qualche", "anche", "ancora", "quando", "dove", "senza", "sotto", "sopra", "dopo", "prima",
+  "posso", "devo", "vorrei", "fatto", "adesso", "nessuno", "niente", "sempre", "mai", "così", "sì", "tutto",
+  "apro", "aperta", "sessione", "pannello", "errore", "riprova", "funziona", "volendo",
+]);
+
+const ENGLISH_WORDS = new Set([
+  "the", "of", "for", "with", "and", "are", "was", "were", "its", "this", "that", "these", "those", "you",
+  "your", "they", "their", "have", "has", "had", "not", "but", "from", "there", "which", "who", "what", "how",
+  "would", "could", "should", "will", "been", "about", "into", "than", "then", "also", "very", "just", "more",
+  "some", "only", "other", "because", "where", "when", "does", "session", "opened", "panel", "error", "retry",
+  "works", "everything", "still", "want", "need", "let", "please", "here", "now",
+]);
+
+/** The accented letters an Italian sentence has and an English one does not. */
+const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i;
+
+/**
+ * The language a reply is written in, or `undefined` when the text does not say.
+ *
+ * Counts whole words, and counts the ones that only one language uses. Italian
+ * gets a nudge from the accented letters, which is not a proof and is enough to
+ * break a tie: `più`, `già` and `perché` are not English.
+ *
+ * What it deliberately does not do is answer for a text with no words in it, or
+ * for one where the two languages tie. `ttsLocale` is the fallback for both, and
+ * a wrong answer here is a wrong voice, not a wrong word.
+ */
+export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
+  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  if (words.length === 0) return undefined;
+  let italian = 0;
+  let english = 0;
+  for (const word of words) {
+    if (ITALIAN_WORDS.has(word)) italian += 1;
+    if (ENGLISH_WORDS.has(word)) english += 1;
+  }
+  if (ITALIAN_ONLY_LETTERS.test(text) && italian + 1 > english) italian += 1;
+  if (italian > english) return "it";
+  if (english > italian) return "en";
+  return undefined;
+}
+
+/**
+ * The locale a reply is spoken in: what the text says, and the setting when the
+ * text does not.
+ *
+ * The order matters and is the whole point. A reply in Italian is read in
+ * Italian whatever the panel says, which is what keeps a Kokoro voice from
+ * reading an Italian answer with an English mouth. A reply in English keeps the
+ * English locale of the voice that was chosen — the British voices have one, and
+ * it is not the same — and the setting is only asked when nothing else knows.
+ */
+export function replyLocale(chosen: ReplyVoice, detected: ReplyLanguage | undefined, fallback: TtsLocale): TtsLocale {
+  const voice = kokoroVoice(chosen);
+  if (detected === "it") return "it-IT";
+  if (detected === "en") {
+    if (voice && voice.locale.startsWith("en")) return voice.locale;
+    return fallback.startsWith("en") ? fallback : "en-US";
+  }
+  // Nothing said: a voice the user chose for its language brings that language
+  // with it, and a Piper voice has one in its own name.
+  if (voice) return voice.locale;
+  if (chosen === "lessac") return "en-US";
+  if (chosen === "ugo" || chosen === "paola") return "it-IT";
+  return fallback;
+}
+
+/**
  * The Piper (or system) voice that actually speaks for `chosen` in `language`.
  *
  * A stored id from the other language is remapped so speech and the panel
