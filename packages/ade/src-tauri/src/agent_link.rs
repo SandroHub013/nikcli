@@ -59,9 +59,10 @@ const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
 enum Base {
     /// The user's home directory.
     Home,
-    /// `%APPDATA%`, where nikcli keeps its configuration on Windows (its
-    /// `Global.Path.config`), or `<home>\AppData\Roaming` when it is not set.
-    RoamingAppData,
+    /// Where nikcli keeps its configuration (its `Global.Path.config`, one
+    /// level up): `%APPDATA%` on Windows, `$XDG_CONFIG_HOME` or `~/.config`
+    /// elsewhere. See `config_home`.
+    ConfigHome,
 }
 
 /// A CLI ADE knows how to install a reporting hook into.
@@ -94,7 +95,7 @@ const HOOK_TARGETS: &[HookTarget] = &[
     // A TUI plugin, not a hook: the folder nikcli's TUI scans, and one file of ADE's in it.
     HookTarget {
         id: "nikcli",
-        base: Base::RoamingAppData,
+        base: Base::ConfigHome,
         config: &[],
         script: &["nikcli", "plugin", "tui", PLUGIN_NAME],
     },
@@ -248,14 +249,32 @@ fn target(agent: &str) -> Result<&'static HookTarget, String> {
 fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
     let root = match base {
         Base::Home => dirs_home(),
-        Base::RoamingAppData => std::env::var("APPDATA")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .map(PathBuf::from)
-            .or_else(|| dirs_home().map(|home| home.join("AppData").join("Roaming"))),
+        Base::ConfigHome => config_home(
+            cfg!(windows),
+            std::env::var("APPDATA").ok(),
+            std::env::var("XDG_CONFIG_HOME").ok(),
+            dirs_home(),
+        ),
     }
     .ok_or_else(|| "cartella utente non trovata".to_string())?;
     Ok(segments.iter().fold(root, |path, segment| path.join(segment)))
+}
+
+/// The folder nikcli's configuration lives under, as `@nikcli-ai/util`'s
+/// `global.ts` works it out: `%APPDATA%` (or `<home>\AppData\Roaming`) on
+/// Windows; `$XDG_CONFIG_HOME` (or `<home>/.config`) on macOS and Linux.
+///
+/// It was `AppData/Roaming` everywhere, so on a Mac the plugin went to
+/// `~/AppData/Roaming/nikcli/plugin/tui`, a folder nikcli never scans, and the
+/// panel said it was installed (lettura di Mimo, F1). Arguments rather than
+/// the environment, so both platforms are tested on either.
+fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String>, home: Option<PathBuf>) -> Option<PathBuf> {
+    let set = |value: Option<String>| value.filter(|value| !value.trim().is_empty()).map(PathBuf::from);
+    if windows {
+        set(appdata).or_else(|| home.map(|home| home.join("AppData").join("Roaming")))
+    } else {
+        set(xdg_config).or_else(|| home.map(|home| home.join(".config")))
+    }
 }
 
 /// The user's home directory.
@@ -917,6 +936,27 @@ mod tests {
         for bad in ["", "../../../windows/win.ini", "a1b2/c3", "a1b2.json", &"f".repeat(65)] {
             assert!(nonce_file(bad).is_err(), "{bad} was accepted");
         }
+    }
+
+    #[test]
+    fn the_plugin_goes_where_nikcli_reads_its_configuration_on_every_platform() {
+        let home = Some(PathBuf::from("/home/utente"));
+        // macOS and Linux: XDG first, then ~/.config — never AppData.
+        let unix = config_home(false, None, None, home.clone()).unwrap();
+        assert_eq!(unix, PathBuf::from("/home/utente").join(".config"));
+        let xdg = config_home(false, Some("C:/finto/Roaming".into()), Some("/xdg/config".into()), home.clone()).unwrap();
+        assert_eq!(xdg, PathBuf::from("/xdg/config"), "APPDATA non conta fuori da Windows");
+        assert_eq!(config_home(false, None, Some("  ".into()), home.clone()).unwrap(), unix);
+        // Windows: APPDATA, then the home's AppData\Roaming; XDG does not count.
+        let windows = config_home(true, Some("C:/Utenti/u/AppData/Roaming".into()), Some("/xdg/config".into()), home.clone()).unwrap();
+        assert_eq!(windows, PathBuf::from("C:/Utenti/u/AppData/Roaming"));
+        let fallback = config_home(true, None, None, home.clone()).unwrap();
+        assert_eq!(fallback, PathBuf::from("/home/utente").join("AppData").join("Roaming"));
+        assert!(config_home(false, None, None, None).is_none());
+        // And the plugin's segments sit under it as nikcli scans them: `<config>/nikcli/plugin/tui`.
+        let plugin = target("nikcli").unwrap();
+        assert_eq!(plugin.base, Base::ConfigHome);
+        assert_eq!(&plugin.script[..3], &["nikcli", "plugin", "tui"]);
     }
 
     #[test]

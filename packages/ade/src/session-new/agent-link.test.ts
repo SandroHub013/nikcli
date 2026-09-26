@@ -4,6 +4,7 @@ import {
   acceptsReport,
   countingLines,
   followReports,
+  followedFolder,
   lastReportedId,
   newNonce,
   otherFolder,
@@ -344,5 +345,30 @@ describe("otherFolder", () => {
   test("the pane's own folder, however it is spelled, or no folder said: nothing", () => {
     expect(otherFolder(report("C:\\Users\\me\\progetto"), "c:/users/me/progetto/")).toBeUndefined()
     expect(otherFolder(report(), "C:\\Users\\me\\progetto")).toBeUndefined()
+  })
+})
+
+/*
+ * Lettura di Mimo, F4, scenario B: nikcli's plugin leaves the folder out of a
+ * report when its `session.get` fails, and that report used to write "the
+ * pane's own folder" over what was known.
+ */
+describe("followedFolder", () => {
+  const report = (sessionId: string, sessionDir?: string) =>
+    parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "nikcli", sessionId, source: "switch", ...(sessionDir ? { sessionDir } : {}) }))!
+  const here = "C:\\Users\\me\\progetto"
+  const known = { resumeId: "ses_uno", otherDir: "C:\\Users\\me\\altro" }
+
+  test("a report without its folder keeps what was known of the same conversation", () => {
+    expect(followedFolder(report("ses_uno"), here, known)).toBe(known.otherDir)
+  })
+
+  test("and knows nothing of another conversation", () => {
+    expect(followedFolder(report("ses_due"), here, known)).toBeUndefined()
+  })
+
+  test("a report that says its folder is believed, either way", () => {
+    expect(followedFolder(report("ses_uno", here), here, known)).toBeUndefined()
+    expect(followedFolder(report("ses_due", "D:\\terza"), here, known)).toBe("D:\\terza")
   })
 })

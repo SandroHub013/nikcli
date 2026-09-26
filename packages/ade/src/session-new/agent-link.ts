@@ -36,6 +36,8 @@
  * for one, which is the only thing the user ever notices going wrong.
  */
 
+import { sameFolder } from "./folder"
+
 /** The directory a hook drops its report into. */
 export const LINK_DIR_ENV = "ADE_SESSION_DIR"
 
@@ -346,8 +348,26 @@ export async function followReports(follow: LinkFollow): Promise<void> {
  */
 export function otherFolder(report: LinkReport, cwd: string): string | undefined {
   if (!report.sessionDir || !cwd) return undefined
-  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-  return norm(report.sessionDir) === norm(cwd) ? undefined : report.sessionDir
+  return sameFolder(report.sessionDir, cwd) ? undefined : report.sessionDir
+}
+
+/**
+ * The folder to keep with the pane after a report: where the followed
+ * conversation lives when it is not the pane's.
+ *
+ * A report that does not say its folder — nikcli's plugin leaves it out when
+ * its `session.get` fails — says nothing about it: for the conversation the
+ * pane already follows, what was known stays; for another one, nothing is
+ * known. It used to be written as "the pane's own folder", and a restart
+ * stopped saying the conversation belonged elsewhere (lettura di Mimo, F4).
+ */
+export function followedFolder(
+  report: LinkReport,
+  cwd: string,
+  previous: { readonly resumeId?: string; readonly otherDir?: string },
+): string | undefined {
+  if (report.sessionDir) return otherFolder(report, cwd)
+  return report.sessionId === previous.resumeId ? previous.otherDir : undefined
 }
 
 /**

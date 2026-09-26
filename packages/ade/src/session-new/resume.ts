@@ -1,3 +1,4 @@
+import { folderKey, sameFolder } from "./folder"
 import { isBotSession } from "../bots/serve-rules"
 
 /**
@@ -121,12 +122,6 @@ function joinHome(home: string, ...segments: string[]): string {
   return [home.replace(/[\\/]+$/, ""), ...segments].join(sep)
 }
 
-/** Windows hands the same directory back with either slash and any case. */
-function sameDir(a: string, b: string): boolean {
-  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-  return norm(a) === norm(b)
-}
-
 /**
  * agy's `cache/last_conversations.json`: `{ "<directory>": "<conversation id>" }`,
  * read off this machine. Conversations live in `conversations/<id>.db`.
@@ -140,7 +135,7 @@ function agyLatest(text: string, cwd: string): string | undefined {
   }
   if (!map || typeof map !== "object" || Array.isArray(map)) return undefined
   for (const [dir, id] of Object.entries(map)) {
-    if (typeof id === "string" && id && sameDir(dir, cwd)) return id
+    if (typeof id === "string" && id && sameFolder(dir, cwd)) return id
   }
   return undefined
 }
@@ -202,12 +197,23 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
         // A bot's conversation is the bot's, however recent: not a pane's to take.
         !isBotSession(entry) &&
         typeof entry["directory"] === "string" &&
-        sameDir(entry["directory"], cwd) &&
+        sameFolder(entry["directory"], cwd) &&
         !taken.has(entry["id"]),
     )
     .sort((a, b) => updated(b) - updated(a))
   return (mine[0]?.["id"] as string | undefined) ?? null
 }
+
+/**
+ * How many of the folder's most recent conversations `session.list` returns.
+ * Not 5: bots' conversations and the ones other panes hold are left out here,
+ * after the server has counted them, and five taken ones would hide the
+ * pane's own.
+ */
+export const LAST_HERE_LIMIT = 50
+
+/** The width of the terminal `session.list` and `session.create` print into: no line of their JSON is wrapped. */
+export const LIST_COLS = 4000
 
 /**
  * Claude Code's project folder: every character that is not a letter or digit
@@ -277,7 +283,15 @@ export const RESUME: Record<string, ResumeRecipe> = {
   nikcli: {
     byId: (id) => ["--session", id],
     lastHere: {
-      args: (cwd) => ["api", "session.list", "--log-level", "warn", "-d", JSON.stringify({ directory: cwd, roots: true, limit: 5 })],
+      /*
+       * A GET's parameters go in the query: `nikcli api` puts `-d` in the
+       * request's body and only `--param` in its URL, and `session.list`
+       * reads the query. Sent as `-d`, `roots` and `limit` never arrived and
+       * every restore read the folder's whole list (lettura di Mimo, F2;
+       * measured, 781 conversations for `limit: 1`). The folder is the
+       * process's own directory, which the command sends by itself.
+       */
+      args: () => ["api", "session.list", "--log-level", "warn", "--param", "roots=true", "--param", `limit=${LAST_HERE_LIMIT}`],
       read: lastNikcliHere,
     },
     mint: {
@@ -478,11 +492,6 @@ export function planResume(request: ResumeRequest): ResumePlan {
   return { kind: "fresh" }
 }
 
-/** A folder as a key: one spelling for the same place, on Windows too. */
-function folderKey(cwd: string | undefined): string {
-  return (cwd ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-}
-
 /**
  * Whether "the most recent conversation here" is already spoken for when
  * `pane` is reopened on its own (not in a whole restore, see `planRestore`).
@@ -517,6 +526,50 @@ export function lastTakenFor<P extends { id: string; agent?: string; model?: str
 }
 
 /**
+ * The conversation a start opens: the one it minted or found, or the one it
+ * reopens by the id the pane saved.
+ *
+ * Reopening by id carries no id of its own in the arguments (`byId` builds
+ * them), so a check on the minted id alone never matched the case it was
+ * written for: the note that the conversation belongs to another folder was
+ * never said at a restart, and the folder was forgotten at every one
+ * (lettura di Mimo, F4).
+ */
+export function openedConversation(plan: ResumePlan | undefined, minted: string | undefined, saved: string | undefined): string | undefined {
+  if (minted) return minted
+  return plan?.kind === "resume" && plan.via === "id" ? saved : undefined
+}
+
+/** The key of "the most recent conversation" of an agent in a folder. */
+function claimKey(agentId: string, cwd: string | undefined): string {
+  return `${agentId}\u0000${folderKey(cwd)}`
+}
+
+/**
+ * The folders whose "most recent conversation" a restore has handed out, per
+ * agent: the claims `planRestore` made.
+ *
+ * The panes it plans are not the only ones that start: the ones whose agent
+ * had already exited are reopened in the same breath (`exitedToReopen`), and
+ * `lastTakenFor` only sees the ids panes hold, not a claim made a moment ago
+ * whose `session.list` has not answered yet. A reopened pane placed before
+ * the planned one took `here` too, and the two could open one conversation
+ * (lettura di Mimo, F3).
+ */
+export function restoreClaims(planned: readonly { session: { agentId: string; cwd: string }; plan: ResumePlan }[]): Set<string> {
+  const claims = new Set<string>()
+  for (const { session, plan } of planned) {
+    if (plan.kind === "here" || (plan.kind === "resume" && plan.via === "last")) claims.add(claimKey(session.agentId, session.cwd))
+  }
+  return claims
+}
+
+/** Whether a restore already handed out this folder's "most recent conversation" (`restoreClaims`). */
+export function claimedByRestore(claims: ReadonlySet<string> | undefined, agentId: string, cwd: string | undefined): boolean {
+  return Boolean(claims?.has(claimKey(agentId, cwd)))
+}
+
+/**
  * Plans a whole restore, so the "most recent" claim is handed out once.
  *
  * Sessions are given in the order they were saved, and the first one in a
@@ -537,14 +590,14 @@ export function planRestore<T extends { agentId: string; cwd: string; resumeId?:
   const claimed = new Set<string>()
   const holders = new Map<string, T>()
   return sessions.map((session) => {
-    const key = `${session.agentId} ${session.cwd}`
-    const held = session.resumeId !== undefined ? holders.get(`${session.agentId} ${session.resumeId}`) : undefined
+    const key = claimKey(session.agentId, session.cwd)
+    const held = session.resumeId !== undefined ? holders.get(`${session.agentId}\u0000${session.resumeId}`) : undefined
     if (held) {
       const plan: ResumePlan = RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
       if (plan.kind === "here") claimed.add(key)
       return { session, plan, sharedWith: held }
     }
-    if (session.resumeId !== undefined) holders.set(`${session.agentId} ${session.resumeId}`, session)
+    if (session.resumeId !== undefined) holders.set(`${session.agentId}\u0000${session.resumeId}`, session)
     const plan = planResume({
       agentId: session.agentId,
       ...(session.resumeId !== undefined ? { resumeId: session.resumeId } : {}),

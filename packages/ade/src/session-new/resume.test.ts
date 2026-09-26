@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { AGENTS } from "./agents"
 import { BOT_SESSION_MARK, botPermission } from "../bots/serve-rules"
 import {
@@ -13,6 +15,11 @@ import {
   lastNikcliHere,
   lastTakenFor,
   planLastHere,
+  LAST_HERE_LIMIT,
+  restoreClaims,
+  claimedByRestore,
+  openedConversation,
+  LIST_COLS,
 } from "./resume"
 
 describe("planStart", () => {
@@ -402,8 +409,128 @@ describe("nikcli's latest conversation in this folder", () => {
 
   test("the command asks the server for this folder's root conversations", () => {
     const plan = planLastHere("nikcli", HERE, none)!
-    expect(plan.args.slice(0, 5)).toEqual(["api", "session.list", "--log-level", "warn", "-d"])
-    expect(JSON.parse(plan.args[5]!)).toEqual({ directory: HERE, roots: true, limit: 5 })
+    expect(plan.args.slice(0, 4)).toEqual(["api", "session.list", "--log-level", "warn"])
     expect(planLastHere("claude-code", HERE, none)).toBeUndefined()
+  })
+
+  /*
+   * What reaches the server, not what ADE builds (lettura di Mimo, F2): the
+   * request `nikcli api` makes from these arguments, by the two rules its
+   * handler follows — read from its source below, so a change there fails
+   * here — `--param` into the URL's query, `-d` into the body. `session.list`
+   * is a GET and reads only the query.
+   */
+  test("roots and the limit reach session.list's query, and a GET carries no body", () => {
+    const handler = readFileSync(join(import.meta.dir, "../../../nikcli/src/cli/handlers/api.ts"), "utf8")
+    expect(handler).toContain("if (!resolved.route.path.includes(`{${name}}`)) url.searchParams.set(name, value)")
+    expect(handler).toContain("new Request(url, { method: resolved.route.method, headers, body: args.data })")
+    const request = (args: readonly string[]) => {
+      const url = new URL("/session", "http://nikcli.local")
+      let body: string | undefined
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === "--param") {
+          const entry = args[++i]!
+          url.searchParams.set(entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1))
+        } else if (args[i] === "-d") body = args[++i]
+      }
+      return { query: Object.fromEntries(url.searchParams), body }
+    }
+    const sent = request(planLastHere("nikcli", HERE, none)!.args)
+    expect(sent).toEqual({ query: { roots: "true", limit: String(LAST_HERE_LIMIT) }, body: undefined })
+  })
+})
+
+/*
+ * Lettura di Mimo, F3: two nikcli panes of one folder, neither with an id.
+ * The live one is planned `here`; the exited one, earlier in the list, is
+ * reopened at the same time, and `lastTakenFor` cannot see a claim whose
+ * `session.list` has not answered: both asked for the same conversation.
+ */
+describe("a restore's claims reach the panes it reopens", () => {
+  const folder = "C:\\Progetti\\uno"
+  const exited = { id: "p1", agent: "nikcli", cwd: folder }
+  const live = { id: "p2", agent: "nikcli", cwd: folder }
+
+  test("the folder planned `here` is taken for the exited pane placed before it", () => {
+    const planned = planRestore([{ agentId: "nikcli", cwd: folder, pane: live }])
+    expect(planned[0]!.plan.kind).toBe("here")
+    // What the pane saw alone: nobody without an id before it.
+    expect(lastTakenFor(exited, [exited, live])).toBe(false)
+    const claims = restoreClaims(planned)
+    expect(claimedByRestore(claims, "nikcli", exited.cwd)).toBe(true)
+    // The same folder spelled otherwise is the same claim; another folder or agent is not.
+    expect(claimedByRestore(claims, "nikcli", "c:/progetti/uno/")).toBe(true)
+    expect(claimedByRestore(claims, "nikcli", "C:/Progetti/due")).toBe(false)
+    expect(claimedByRestore(claims, "codex", folder)).toBe(false)
+    expect(claimedByRestore(undefined, "nikcli", folder)).toBe(false)
+  })
+
+  test("a pane reopened by its own id claims nothing", () => {
+    const planned = planRestore([{ agentId: "nikcli", cwd: folder, resumeId: "ses_abcdefgh12345678", pane: live }])
+    expect(planned[0]!.plan.kind).toBe("resume")
+    expect(claimedByRestore(restoreClaims(planned), "nikcli", folder)).toBe(false)
+  })
+
+  test("the restore hands its claims to the exited panes it reopens", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const claims = restoreClaims(planned)")
+    expect(workbench).toContain("void reopen(pane, undefined, claims)")
+    expect(workbench).toContain("lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)")
+  })
+})
+
+/*
+ * Lettura di Mimo, F4, scenario A: a pane reopened by the id it saved opens
+ * that conversation, though no id comes back from the arguments. The note
+ * «conversazione di un'altra cartella» compared the minted id alone, never
+ * matched at a restart, and the folder was dropped at every one.
+ */
+describe("the conversation a start opens", () => {
+  test("reopening by the saved id opens that one", () => {
+    const plan = planResume({ agentId: "nikcli", resumeId: "ses_abcdefgh12345678" })
+    expect(plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_abcdefgh12345678"] })
+    expect(openedConversation(plan, undefined, "ses_abcdefgh12345678")).toBe("ses_abcdefgh12345678")
+  })
+
+  test("a minted or found id is the one opened; the most recent one, or a fresh start, is not known", () => {
+    expect(openedConversation({ kind: "here" }, "ses_trovata12345678", undefined)).toBe("ses_trovata12345678")
+    expect(openedConversation({ kind: "resume", via: "last", args: ["--continue"] }, undefined, "ses_salvata")).toBeUndefined()
+    expect(openedConversation({ kind: "fresh" }, undefined, "ses_salvata")).toBeUndefined()
+    expect(openedConversation(undefined, undefined, "ses_salvata")).toBeUndefined()
+  })
+
+  test("the start says the other folder again, and keeps it, for the conversation it reopens", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const openedId = openedConversation(resume, mintedId, launched?.resumeId)")
+    expect(workbench).toContain("if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {")
+    expect(workbench).toContain("...(openedId !== launched?.resumeId ? { otherDir: undefined } : {}),")
+    expect(workbench).not.toContain("mintedId === launched.resumeId")
+    expect(workbench).toContain("otherDir: followedFolder(report, workDir, followed ?? {})")
+    expect(workbench).toContain("followedFolder(report, pane.cwd, pane)")
+  })
+})
+
+/* Lettura di Mimo, BASSI F5, F6 and F8. */
+describe("one folder rule, and a source the tools can read", () => {
+  test("two panes of one folder spelled otherwise share its claim", () => {
+    const planned = planRestore([
+      { agentId: "nikcli", cwd: "C:\\Progetti\\uno" },
+      { agentId: "nikcli", cwd: "c:/progetti/uno/" },
+    ])
+    expect(planned.map((entry) => entry.plan.kind)).toEqual(["here", "fresh"])
+  })
+
+  test("resume.ts has no raw NUL byte: grep and rg read it as text", () => {
+    const bytes = readFileSync(join(import.meta.dir, "resume.ts"))
+    expect(bytes.includes(0)).toBe(false)
+  })
+
+  test("the workbench compares folders by the same rule, and prints the lists wide", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("sameFolder(pane.cwd || p.root, workDir)")
+    expect(workbench).not.toContain("(pane.cwd || p.root) === workDir")
+    expect(workbench).toContain("cols: LIST_COLS,")
+    expect(workbench).not.toContain("cols: 400,")
+    expect(LIST_COLS).toBeGreaterThanOrEqual(2000)
   })
 })

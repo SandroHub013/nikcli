@@ -126,7 +126,7 @@ describe("the targets here and the paths in Rust", () => {
   test("and nikcli's plugin under the same marker, with no configuration", () => {
     expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
     expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
-    expect(source).toMatch(/id: "nikcli",\s*base: Base::RoamingAppData,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
+    expect(source).toMatch(/id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
   })
 
   test("the environment variables the script reads are the ones Rust sets", () => {
@@ -651,15 +651,28 @@ describe("nikcli's TUI plugin as a target", () => {
     expect(writes[1]).toEqual({ configText: "", script: null })
   })
 
-  test("an installed plugin that is not this version's is rewritten; one never installed is not", async () => {
+  /*
+   * Lettura di Mimo, F9: the refresh runs when ADE starts, and rewriting the
+   * plugin opens Rust's confirmation — a native dialog nobody asked for. An
+   * older plugin is said to be outdated instead, and updated from the panel.
+   */
+  test("an installed plugin that is not this version's is not rewritten at start: it is said to be outdated", async () => {
     const off = disk(false)
     expect(await refreshHookScript(off.host, nikcli, undefined)).toBeUndefined()
     expect(off.writes).toEqual([])
     const older = disk(true, false)
-    await refreshHookScript(older.host, nikcli, undefined)
+    expect(await refreshHookScript(older.host, nikcli, undefined)).toBeUndefined()
+    expect(older.writes).toEqual([])
+    expect(await readHookStatus(older.host, nikcli)).toMatchObject({ installed: true, outdated: true })
+    expect((await readHookStatus(disk(true, true).host, nikcli)).outdated).toBeUndefined()
+    // The panel's button updates it, asking as any install does.
+    expect((await setHook(older.host, nikcli, true)).outdated).toBeUndefined()
     expect(older.writes).toEqual([{ configText: "", script: "" }])
-    // Already this version's: nothing written.
-    await refreshHookScript(older.host, nikcli, undefined)
-    expect(older.writes).toHaveLength(1)
+  })
+
+  test("the panel says the plugin is outdated and offers the update", () => {
+    const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
+    expect(panel).toContain('<Show when={state()?.outdated}>')
+    expect(panel).toContain('state()?.outdated ? t("hooks.update")')
   })
 })
