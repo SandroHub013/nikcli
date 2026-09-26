@@ -929,14 +929,52 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   }
 }
 
+/** All `isQuestionOpen` needs from a prompt found by reading the screen: that there is one. */
+type ScreenPrompt = { what: string } | undefined
+
+/**
+ * Whether a question is open in a pane: the prompt the screen found, or the one a
+ * `Notification` hook reported. Every path that holds a line, an Enter or a nudge
+ * back asks this, and not one of the two sources alone.
+ *
+ * The screen alone was a hole the size of the thing the hook was added for: the
+ * prompt the reading does not recognise — an option list, a counter, a frame that
+ * changed since the pane was sampled — is exactly the prompt a delivery then Enters
+ * over, confirming whichever choice was selected. The hook alone is not enough
+ * either, because it is a coarse "something is open" where the screen also knows
+ * what the question is and what its answers are; it is a gate, not a reader.
+ */
+export function isQuestionOpen(screen: ScreenPrompt, activity: Activity | undefined): boolean {
+  return screen !== undefined || activity?.state === "permission"
+}
+
+/**
+ * Whether an activity state means the pane is still occupied, so silence in it is
+ * not the end of anything.
+ *
+ * `permission` is in here for the same reason it is its own state: a pane sitting
+ * on a prompt is not going to print until somebody answers, so a quiet pane is a
+ * question waiting, and settling it would offer an idle pane that is in fact
+ * waiting on a key.
+ */
+export function activityOccupiesPane(state: Activity["state"] | undefined): boolean {
+  return state === "busy" || state === "permission"
+}
+
 /**
  * The activity to keep after a read: what was read, or, when nothing could be
- * read, a busy seen before. A read that fails mid-turn does not end the turn;
- * the stale-busy rule of `isFree` still frees a session whose Stop never came.
- * An old idle is dropped: it would let mail in mid-turn.
+ * read, a busy or a permission seen before.
+ *
+ * A read that fails mid-turn does not end the turn, and it does not answer a
+ * question: only a hook that writes the file can do either, and `Stop` and
+ * `UserPromptSubmit` both write it. So a prompt survives a failed read the way a
+ * busy does — and unlike a busy it survives for ever, because a busy has the
+ * stale-busy rule of `isFree` to free a session whose Stop never came, and a
+ * prompt has nothing of the sort: see the note above `STALE_BUSY_MS`. An old idle
+ * is dropped: it would let mail in mid-turn.
  */
 export function keptActivity(previous: Activity | undefined, read: Activity | undefined): Activity | undefined {
-  return read ?? (previous?.state === "busy" ? previous : undefined)
+  return read ?? (previous?.state === "busy" || previous?.state === "permission" ? previous : undefined)
 }
 
 /** How long a freshly spawned session has to come up before "not running" means closed. */

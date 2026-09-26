@@ -40,6 +40,8 @@ import {
   formatUpdate,
   parseActivity,
   keptActivity,
+  isQuestionOpen,
+  activityOccupiesPane,
   parseOpenRequests,
   shouldRering,
   requestState,
@@ -325,6 +327,37 @@ describe("the permission prompt the hook says", () => {
     // Il prompt successivo, o il Stop, risolvono: sono loro che scrivono il file.
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(true)
+  })
+
+  test("una lettura fallita non libera un prompt, e un prompt non lascia il pannello disponibile", () => {
+    const permission = { state: "permission" as const, at: now - 60_000 }
+    // Il file non si e' potuto leggere: nessun hook ha risposto, quindi nessuno ha
+    // risolto niente. Un busy si libera dopo trenta minuti, un prompt no.
+    expect(keptActivity(permission, undefined)).toEqual(permission)
+    // Un idle letto davvero e' un idle: la risposta e' arrivata.
+    expect(keptActivity(permission, { state: "idle", at: now })).toEqual({ state: "idle", at: now })
+    // E il pannello su un prompt non e' disponibile: `settleWhenQuiet` chiede
+    // questo, e un prompt occupa il pannello esattamente come un turno.
+    expect(activityOccupiesPane("permission")).toBe(true)
+    expect(activityOccupiesPane("busy")).toBe(true)
+    expect(activityOccupiesPane("idle")).toBe(false)
+    expect(activityOccupiesPane(undefined)).toBe(false)
+    // Il silenzio di un pannello fermo su una domanda e' attesa, non fine turno:
+    // con gli hook `busy` tiene il pannello working invece di assestarlo.
+    expect(quietOutcome({ hooked: true, busy: activityOccupiesPane("permission"), owesAnswer: false })).toBe("wait")
+  })
+
+  test("una domanda aperta si vede con lo schermo o con l'hook, e con l'hook da solo", () => {
+    const onScreen = { what: "Bash(rm -rf)", answers: ["Yes", "No"] }
+    const asking = { state: "permission" as const, at: now }
+    // Lo schermo da solo: la lettura, come prima dell'hook.
+    expect(isQuestionOpen(onScreen, undefined)).toBe(true)
+    expect(isQuestionOpen(onScreen, { state: "idle", at: now })).toBe(true)
+    // L'hook da solo: il caso che lo schermo non riconosce, e per cui esiste.
+    expect(isQuestionOpen(undefined, asking)).toBe(true)
+    // Nessuna delle due: il pannello e' libero, e si scrive.
+    expect(isQuestionOpen(undefined, { state: "busy", at: now })).toBe(false)
+    expect(isQuestionOpen(undefined, undefined)).toBe(false)
   })
 
   test("la coda dice perché aspetta, anche quando lo sa il hook", () => {
