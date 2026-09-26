@@ -930,13 +930,29 @@ impl InstallRun<'_> {
             let _ = std::fs::remove_file(part);
             return Err(INTERROTTA.into());
         }
-        match print.sha256(part) {
-            Ok(digest) if digest == download.sha256 => Ok(()),
-            _ => {
+        /*
+         * The two failures are different and are named differently.
+         *
+         * A tool that could not read the file is a tool that failed: certutil
+         * not starting, Defender holding the 63 MB open for a scan, a listing
+         * that did not come back. Reading that as "the file is not the one we
+         * asked for" tells the user their download was the wrong file — which
+         * is not true and which sends them looking for a problem that is not
+         * there — and throws away a transfer that was fine. Before the common
+         * installer this was a `?`, and the error said what it was.
+         */
+        let digest = match print.sha256(part) {
+            Ok(digest) => digest,
+            Err(problem) => {
                 let _ = std::fs::remove_file(part);
-                Err(DIGEST.into())
+                return Err(problem);
             }
+        };
+        if digest == download.sha256 {
+            return Ok(());
         }
+        let _ = std::fs::remove_file(part);
+        Err(DIGEST.into())
     }
 
     /// The install is over: the reason, if it failed, is what the panel shows.
@@ -1370,6 +1386,41 @@ mod tests {
         assert_eq!(problem, DIGEST);
         assert!(!dest.is_file());
         assert!(!staging(&dest).exists());
+    }
+
+    /// A `Fingerprint` that cannot read the file, the way certutil cannot when
+    /// it does not start or when something else holds the file open.
+    struct FingerprintUnavailable;
+
+    impl Fingerprint for FingerprintUnavailable {
+        fn sha256(&self, _path: &Path) -> Result<String, String> {
+            Err("certutil non ha potuto leggere il file.".into())
+        }
+    }
+
+    #[test]
+    fn a_digest_that_could_not_be_read_is_not_a_wrong_digest() {
+        let root = test_root("certutil");
+        let installer = Installer::default();
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+
+        let slot = installer.slot(PIPER);
+        let install = installer.begin(&slot, 1, bytes_pending(&jobs), far());
+        let _one = install.lock().unwrap();
+        // Il file è giusto, e il controllo non è potuto arrivare: quello che si
+        // dice è il motivo, non che il download sia sbagliato.
+        let problem = install
+            .bring(&jobs[0].0, &dest, &Scripted::new(body, Ending::Whole), &FingerprintUnavailable)
+            .unwrap_err();
+        install.finish(&Err(problem.clone()));
+        assert_eq!(problem, "certutil non ha potuto leggere il file.");
+        assert_ne!(problem, DIGEST, "un controllo non arrivato non è un file sbagliato");
+        // Il mezzo file non resta li: come in ogni altro errore.
+        assert!(!dest.is_file());
+        assert!(!staging(&dest).exists());
+        assert_eq!(installer.progress_of(PIPER).error.as_deref(), Some(problem.as_str()));
     }
 
     #[test]
