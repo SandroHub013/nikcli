@@ -298,31 +298,52 @@ impl Hub {
             link.token_hash.as_deref() == Some(hash.as_str()) || link.app_token_hash.as_deref() == Some(hash.as_str())
         };
         // Another link's token of either kind, or the other token of this one:
-        // a bot token pasted where the App-Level Token goes is the same mistake.
-        let taken = |link: &LinkState, others: &[LinkState]| {
+        // a bot token pasted where the App-Level Token goes is the same
+        // mistake, and it is said as what it is, not as another bot's.
+        let conflict = |link: &LinkState, others: &[LinkState]| -> Option<String> {
+            if others.iter().any(held) {
+                return Some("questo token è già di un altro bot o di un'altra piattaforma".into());
+            }
             let other_slot = match kind {
                 TokenKind::Bot => &link.app_token_hash,
                 TokenKind::App => &link.token_hash,
             };
-            others.iter().any(held) || other_slot.as_deref() == Some(hash.as_str())
+            (other_slot.as_deref() == Some(hash.as_str())).then(|| match kind {
+                TokenKind::Bot => "questo token è già l'App-Level Token di questo bot: qui va il token del bot".into(),
+                TokenKind::App => "questo token è già il token del bot: qui va l'App-Level Token, che comincia con xapp-".into(),
+            })
         };
         let (this, others): (Vec<LinkState>, Vec<LinkState>) =
             self.store.read().links.into_iter().partition(|l| l.bot == bot && l.platform == platform);
         let this = this.into_iter().next().unwrap_or_else(|| LinkState::new(bot, platform));
-        if taken(&this, &others) {
-            return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
+        if let Some(why) = conflict(&this, &others) {
+            return Err(why);
         }
-        self.vault.set(&self.service, &secret_name(bot, platform, kind), token)?;
-        self.store.update(bot, platform, |link, others| {
-            if taken(link, others) {
-                return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
+        let name = secret_name(bot, platform, kind);
+        let previous = self.vault.get(&self.service, &name)?;
+        self.vault.set(&self.service, &name, token)?;
+        let recorded = self.store.update(bot, platform, |link, others| {
+            if let Some(why) = conflict(link, others) {
+                return Err(why);
             }
             match kind {
                 TokenKind::Bot => link.token_hash = Some(hash.clone()),
                 TokenKind::App => link.app_token_hash = Some(hash.clone()),
             }
             Ok(())
-        })?;
+        });
+        if let Err(error) = recorded {
+            // Another command took the token between the check and the record:
+            // the keychain goes back to what the record says, no entry without its hash.
+            let restored = match previous {
+                Some(old) => self.vault.set(&self.service, &name, &old),
+                None => self.vault.delete(&self.service, &name),
+            };
+            if let Err(failed) = restored {
+                self.env.log(&format!("gateway {}: portachiavi non ripristinato: {failed}", platform.id()));
+            }
+            return Err(error);
+        }
         if self.store.link(bot, platform).is_some_and(|link| link.enabled) {
             self.relaunch(bot, platform);
         }
@@ -789,6 +810,8 @@ impl Task {
 
     async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
         let mut pause = self.backoff.0;
+        // A batch read and not handed on when the loop ended.
+        let mut left_behind = 0;
         loop {
             // Nobody listens yet (ADE opening, the page reloading): nothing is read.
             if !listening(&mut stopped, &mut ready).await {
@@ -799,8 +822,15 @@ impl Task {
                 _ = stopped.changed() => break,
                 read = self.adapter.receive() => read,
             };
-            // Stopped while the batch came in: it is the next adapter's to hand on.
+            /*
+             * Stopped while the batch came in: a platform with a cursor
+             * (Telegram) gives it again to the next adapter, from the position
+             * saved before it. One without (Slack) does not: it had its ack,
+             * and the batch is lost. Counted in the log below, not handed on to
+             * a gateway that was switched off (G10 review, 6).
+             */
             if *stopped.borrow() {
+                left_behind = read.as_ref().map(Vec::len).unwrap_or(0);
                 break;
             }
             match read {
@@ -814,6 +844,7 @@ impl Task {
                     }
                     // The page may have reloaded during a long poll: the batch waits for it.
                     if !batch.is_empty() && !listening(&mut stopped, &mut ready).await {
+                        left_behind = batch.len();
                         break;
                     }
                     for message in batch {
@@ -846,6 +877,20 @@ impl Task {
                     break;
                 }
             }
+        }
+        self.count_left_behind(left_behind);
+    }
+
+    /// How many messages the platform confirmed and this gateway did not hand
+    /// on, said in the log when it ends: a number, never their text. Nothing
+    /// for a platform with a cursor, which sends them again.
+    fn count_left_behind(&self, in_hand: usize) {
+        if self.adapter.cursor().is_some() {
+            return;
+        }
+        let left = in_hand + self.adapter.unread();
+        if left > 0 {
+            self.env.log(&format!("{}: fermato con {left} messaggi già confermati e non consegnati: la piattaforma non li rimanda", self.tag()));
         }
     }
 
@@ -1045,6 +1090,10 @@ mod tests {
     }
 
     fn setup_with(path: std::path::PathBuf, vault: Arc<MapVault>) -> Setup {
+        setup_vault(path, vault)
+    }
+
+    fn setup_vault(path: std::path::PathBuf, vault: Arc<dyn Vault>) -> Setup {
         let env = Arc::new(Recorder::default());
         let made: Made = Arc::default();
         let record = made.clone();
@@ -1270,9 +1319,11 @@ mod tests {
         let s = setup("slack-tokens");
         let other = "C:/progetto/.nikcli/agent/altro.md";
         s.hub.set_token(BOT, Platform::Slack, SLACK_BOT).unwrap();
-        // The bot's token where the App-Level Token goes: the same mistake as a
-        // token of another bot.
-        assert!(s.hub.set_app_token(BOT, Platform::Slack, SLACK_BOT).unwrap_err().contains("già"));
+        // The bot's token where the App-Level Token goes: refused, and said as
+        // this bot's other token, not another bot's.
+        let same_link = s.hub.set_app_token(BOT, Platform::Slack, SLACK_BOT).unwrap_err();
+        assert!(same_link.contains("già il token del bot"), "{same_link}");
+        assert!(!same_link.contains("altro bot"), "l'altro token dello stesso bot non è di un altro bot: {same_link}");
         s.hub.set_app_token(BOT, Platform::Slack, SLACK_APP).unwrap();
         assert!(s.hub.set_token(BOT, Platform::Slack, SLACK_APP).unwrap_err().contains("già"));
         // Either of them on another bot, in either slot.
@@ -1512,6 +1563,75 @@ mod tests {
         s.hub.set_token(other, Platform::Fake, "987654321:ALTRO-token-di-prova_AbCdEfGhIj").unwrap();
         s.hub.forget_bot(BOT).unwrap();
         assert!(s.hub.status().iter().any(|link| link.bot == other && link.has_token));
+    }
+
+    /// A keychain that, at its first write, lets another command record the
+    /// same token for another bot: the race between the check and the record.
+    struct RacingVault {
+        keys: MapVault,
+        store: Mutex<Option<(Arc<Store>, String)>>,
+    }
+    impl Vault for RacingVault {
+        fn get(&self, service: &str, name: &str) -> Result<Option<String>, String> {
+            self.keys.get(service, name)
+        }
+        fn set(&self, service: &str, name: &str, value: &str) -> Result<(), String> {
+            if let Some((store, other)) = self.store.lock().unwrap().take() {
+                store
+                    .update(&other, Platform::Fake, |link, _| {
+                        link.token_hash = Some(token_hash(value));
+                        Ok(())
+                    })
+                    .unwrap();
+            }
+            self.keys.set(service, name, value)
+        }
+        fn delete(&self, service: &str, name: &str) -> Result<(), String> {
+            self.keys.delete(service, name)
+        }
+    }
+
+    #[tokio::test]
+    async fn a_token_lost_to_another_bot_leaves_the_keychain_as_the_record_says() {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let vault = Arc::new(RacingVault { keys: MapVault::default(), store: Mutex::new(None) });
+        let s = setup_vault(dir.join("state.json"), vault.clone());
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        // The next write races: another bot records the new token first.
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        *vault.store.lock().unwrap() = Some((s.hub.store.clone(), other.to_string()));
+        let contested = "555555555:CONTESO-token-di-prova_AbCdEfGhIjKl";
+        assert!(s.hub.set_token(BOT, Platform::Fake, contested).unwrap_err().contains("altro bot"));
+        assert_eq!(s.hub.token(BOT, Platform::Fake).unwrap().as_deref(), Some(TOKEN), "il portachiavi tiene il token perdente");
+        // And a first token lost the same way leaves no entry at all.
+        let third = "C:/progetto/.nikcli/agent/terzo.md";
+        *vault.store.lock().unwrap() = Some((s.hub.store.clone(), other.to_string()));
+        let again = "666666666:ANCORA-token-di-prova_AbCdEfGhIjKl";
+        assert!(s.hub.set_token(third, Platform::Fake, again).is_err());
+        assert!(s.hub.token(third, Platform::Fake).unwrap().is_none(), "voce orfana nel portachiavi");
+    }
+
+    #[tokio::test]
+    async fn a_stop_says_how_many_confirmed_messages_it_leaves() {
+        let s = setup("left-behind");
+        let (adapter, _feed) = start(&s);
+        eventually("la prima lettura", || adapter.receives.load(std::sync::atomic::Ordering::SeqCst) > 0).await;
+        adapter.waiting.store(3, std::sync::atomic::Ordering::SeqCst);
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        let said = || s.env.log.lock().unwrap().iter().any(|line| line.contains("3 messaggi già confermati"));
+        eventually("la riga nel log", said).await;
+        // A number only: no text of any message.
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("ciao")));
+        // A platform with a cursor gives them again: nothing to say.
+        let t = setup("left-behind-cursor");
+        let (kept, _feed) = start(&t);
+        eventually("la prima lettura", || kept.receives.load(std::sync::atomic::Ordering::SeqCst) > 0).await;
+        *kept.position.lock().unwrap() = Some("42".into());
+        kept.waiting.store(3, std::sync::atomic::Ordering::SeqCst);
+        t.hub.stop(BOT, Platform::Fake).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(t.env.log.lock().unwrap().iter().all(|line| !line.contains("già confermati")));
     }
 
     #[tokio::test]
