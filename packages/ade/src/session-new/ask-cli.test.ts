@@ -152,16 +152,29 @@ describe("the mint's time", () => {
  * mint now leaves a line in the console, with what the CLI printed first.
  */
 describe("the mint's trace", () => {
-  test("how long, how it ended, and the first output without the title", () => {
-    const line = mintTrace({
-      agent: "nikcli",
-      ms: 16_234.6,
-      outcome: "id",
-      first: { ms: 15_900.2, line: '{ "title": "Sistema il login · 5998-1-1", "id": "ses_x" }' },
-      title: "Sistema il login · 5998-1-1",
-    })
-    expect(line).toBe('[ade.mint] nikcli: id in 16235 ms, first output at 15900 ms: "{ \\"title\\": \\"\u2026\\", \\"id\\": \\"ses_x\\" }"')
+  /*
+   * Review of ripristino-septies: in session.create's JSON the title is
+   * escaped, and splitting on the raw title left the user's task in the line.
+   */
+  const TITLE = 'Sistema "il" login\\admin · 5998-1-1'
+  const ESCAPED = JSON.stringify(TITLE)
+
+  test("the answer's JSON is said by its size only, the title in it or not", () => {
+    const json = `{ "title": ${ESCAPED}, "id": "ses_x" }`
+    const line = mintTrace({ agent: "nikcli", ms: 16_234.6, outcome: "id", first: { ms: 15_900.2, line: `  ${json}` }, title: TITLE })
+    expect(line).toBe(`[ade.mint] nikcli: id in 16235 ms, first output at 15900 ms: json, ${json.length} chars`)
     expect(line).not.toContain("login")
+    expect(mintTrace({ agent: "nikcli", ms: 1, outcome: "none", first: { ms: 1, line: "[]" }, title: TITLE })).toEndWith(": json, 2 chars")
+  })
+
+  test("another first line is kept, the title taken out raw and escaped", () => {
+    const raw = mintTrace({ agent: "nikcli", ms: 2_000, outcome: "id", first: { ms: 1_500, line: `creating ${TITLE} now` }, title: TITLE })
+    const escaped = mintTrace({ agent: "nikcli", ms: 2_000, outcome: "id", first: { ms: 1_500, line: `creating ${ESCAPED} now` }, title: TITLE })
+    expect(raw).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \u2026 now"')
+    expect(escaped).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \\"\u2026\\" now"')
+    expect(raw + escaped).not.toContain("login")
+    const plain = mintTrace({ agent: "nikcli", ms: 9, outcome: "timeout", first: { ms: 8, line: "Installing @nikcli-ai/plugin" }, title: TITLE })
+    expect(plain).toEndWith(': "Installing @nikcli-ai/plugin"')
   })
 
   test("a mint that printed nothing says so; a long first line is cut", () => {

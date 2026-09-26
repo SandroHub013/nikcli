@@ -97,7 +97,14 @@ export function mintTrace(mint: {
 }): string {
   const head = `[ade.mint] ${mint.agent}: ${mint.outcome} in ${Math.round(mint.ms)} ms`
   if (!mint.first) return `${head}, nothing printed`
+  const at = `${head}, first output at ${Math.round(mint.first.ms)} ms`
+  const printed = mint.first.line.trim()
+  // The answer itself: in JSON the title is escaped (quotes, backslashes,
+  // newlines) and no split finds it, so only its size is said (review of
+  // ripristino-septies).
+  if (printed.startsWith("{") || printed.startsWith("[")) return `${at}: json, ${printed.length} chars`
   const title = mint.title.trim()
-  const line = (title ? mint.first.line.split(title).join("\u2026") : mint.first.line).trim().slice(0, 200)
-  return `${head}, first output at ${Math.round(mint.first.ms)} ms: ${JSON.stringify(line)}`
+  const hidden = title ? [title, JSON.stringify(title).slice(1, -1)] : []
+  const line = hidden.reduce((text, secret) => text.split(secret).join("\u2026"), printed).slice(0, 200)
+  return `${at}: ${JSON.stringify(line)}`
 }
