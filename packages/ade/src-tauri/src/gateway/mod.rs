@@ -6,9 +6,8 @@
 //! for what a platform provides, `store.rs` for what is kept on disk and
 //! `redact.rs` for what never leaves.
 //!
-//! Telegram is the first platform (`telegram.rs`, with `chunk.rs` and
-//! `markdown_v2.rs`); Discord and Slack come in their own pieces, and until
-//! then switching a gateway on for them is refused.
+//! Telegram (`telegram.rs`, with `chunk.rs` and `markdown_v2.rs`), Discord
+//! (`discord.rs`) and Slack (`slack.rs`, which needs a second token).
 
 mod adapter;
 mod authz;
@@ -18,6 +17,7 @@ mod hub;
 mod known;
 mod markdown_v2;
 mod redact;
+mod slack;
 mod store;
 mod telegram;
 
@@ -118,13 +118,15 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     Ok(state.0.get_or_init(|| Arc::new(made)).clone())
 }
 
-/// The adapter for `platform`, reading on from `cursor`. Slack comes in
-/// its own piece.
+/// The adapter for `platform`, reading on from `cursor`.
 fn adapter_for(platform: Platform, tokens: &Tokens, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     match platform {
         Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(&tokens.bot, cursor)?)),
         // `new` already hands back a reference, as the socket task keeps one too.
         Platform::Discord => Ok(discord::Discord::new(&tokens.bot, cursor)? as Arc<dyn Adapter>),
+        // Slack keeps no position: an event not acknowledged comes again.
+        Platform::Slack => Ok(slack::Slack::new(&tokens.bot, tokens.app.as_deref())? as Arc<dyn Adapter>),
+        #[cfg(test)]
         other => Err(format!("il gateway per {} non è ancora disponibile", other.id())),
     }
 }
@@ -244,6 +246,13 @@ pub async fn gateway_pairing_revoke(app: AppHandle, bot: String, platform: Platf
 #[tauri::command]
 pub async fn gateway_pairing_open(app: AppHandle, bot: String, platform: Platform) -> Result<u64, String> {
     hub(&app)?.pairing_open(&bot, platform)
+}
+
+/// The manifest of a Slack app for the bot called `name`, to paste in Slack's
+/// «Create New App › From a manifest». Its scopes are the ones the probe checks.
+#[tauri::command]
+pub fn gateway_slack_manifest(name: String) -> String {
+    slack::manifest(&name)
 }
 
 #[tauri::command]
