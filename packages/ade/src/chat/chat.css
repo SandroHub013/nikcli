@@ -471,15 +471,26 @@
  * (composer-chip, pezzo 3). The field keeps its own box and focus
  * (composer-nero); the chips sit under it, in the same black.
  */
+/*
+ * One box, as in Claude's and Codex's apps: the text on top, the chips and
+ * Invia inside it, at the bottom («il tasto nella zona dove scrivo»; the row
+ * used to sit under the field, outside it). The box has the field's border,
+ * base and focus; the field inside draws none of its own.
+ */
 [data-slot="chat-composer"] {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--ade-space-3);
   flex: 0 0 auto;
-  width: min(720px, 100%);
-  margin: 0 auto;
-  padding: var(--ade-space-6) var(--ade-space-7) var(--ade-space-7);
+  box-sizing: border-box;
+  width: min(720px, calc(100% - 2 * var(--ade-space-7)));
+  margin: var(--ade-space-6) auto var(--ade-space-7);
+  padding: var(--ade-space-4) var(--ade-space-4) var(--ade-space-3) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-raised);
+  transition: border-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="chat-input"] {
@@ -487,16 +498,14 @@
   min-width: 0;
   min-height: 40px;
   max-height: 200px;
-  padding: var(--ade-space-5) var(--ade-space-6);
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-lg);
-  background: var(--ade-raised);
+  padding: var(--ade-space-2) 0;
+  border: none;
+  background: transparent;
   color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-lg);
   line-height: var(--ade-leading);
-  resize: vertical;
-  transition: border-color var(--ade-dur-fast) var(--ade-ease);
+  resize: none;
 }
 
 [data-slot="chat-input"]::placeholder {
@@ -504,14 +513,20 @@
 }
 
 /*
- * As the bot's composer: at the focus the border is the neutral grey
+ * As the bot's composer: at the focus the box's border is the neutral grey
  * `--ade-border-strong`, not the accent, and the halo is grey as well. In the
- * light theme the token is still a grey (composer-nero, DS-chat 1).
+ * light theme the token is still a grey (composer-nero, DS-chat 1). The box
+ * draws it, for the field and for its chips alike.
  */
-[data-slot="chat-input"]:focus-visible {
-  outline: none;
+[data-slot="chat-composer"]:focus-within {
   border-color: var(--ade-border-strong);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+}
+
+/* The field inside the box draws no ring of its own: one ring, the box's. */
+[data-slot="chat-input"]:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 [data-slot="chat-send"] {
@@ -569,7 +584,8 @@
     padding: var(--ade-space-6) var(--ade-space-5);
   }
   [data-slot="chat-composer"] {
-    padding: var(--ade-space-5);
+    width: calc(100% - 2 * var(--ade-space-5));
+    margin: var(--ade-space-5) auto;
   }
   [data-slot="chat-message"][data-role="user"] [data-slot="chat-body"] {
     max-width: 100%;

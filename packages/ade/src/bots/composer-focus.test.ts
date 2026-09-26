@@ -37,7 +37,8 @@ function rule(css: string, selector: string): string {
 }
 
 const BOT_FOCUS = '[data-slot="bots-composer"]:focus-within';
-const CHAT_FOCUS = '[data-slot="chat-input"]:focus-visible';
+/* Since chat-riquadro the Chat's field sits in one box with its chips: the box draws the focus. */
+const CHAT_FOCUS = '[data-slot="chat-composer"]:focus-within';
 
 describe("lint: neither composer takes colour at the focus", () => {
   test("lint: the bot's composer draws no accent at the focus, only a grey border", () => {
@@ -65,12 +66,19 @@ describe("lint: neither composer takes colour at the focus", () => {
     }
   });
 
+  test("lint: the Chat's field inside its box draws no ring of its own", () => {
+    const body = rule(chat, '[data-slot="chat-input"]:focus-visible');
+    expect([body, body.includes("--ade-accent")]).toEqual([body, false]);
+    expect([body, body.includes("--ade-focus-ring")]).toEqual([body, false]);
+    expect(body).toContain("box-shadow: none");
+  });
+
   test("lint: the two fields rest on the dark surface of their theme, not on a tint", () => {
     // The base of each field: unchanged by the focus, and not painted with the
     // accent either. Without this the rule above could hold on a coloured box.
     for (const [css, selector] of [
       [bots, '[data-slot="bots-composer"]'],
-      [chat, '[data-slot="chat-input"]'],
+      [chat, '[data-slot="chat-composer"]'],
     ] as const) {
       const body = rule(css, selector);
       expect([selector, body.includes("--ade-accent")]).toEqual([
