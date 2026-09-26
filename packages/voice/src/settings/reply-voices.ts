@@ -438,6 +438,27 @@ export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
 }
 
 /**
+ * The language of the interface, as a speech locale.
+ *
+ * This is the fallback for a reply whose text says nothing, and it is the
+ * interface and not `ttsLocale` on purpose. `ttsLocale` is written by the
+ * migration and by K6, and K6 writes it from the voice that was chosen: a panel
+ * that sets `en-US` when a Kokoro voice is picked would then make every short
+ * Italian answer English again, which is the hole the interface language closed.
+ * A setting that answers this question cannot also be an answer to "which voice
+ * did they pick".
+ *
+ * The English variant is the one already in the settings when it is English, so a
+ * British choice keeps `en-GB`; otherwise English is `en-US`, which is what an
+ * English window means when nothing else says. Italian is `it-IT` either way:
+ * there is one Italian voice locale and no variant to preserve.
+ */
+export function interfaceLocale(ui: Locale, ttsLocale: TtsLocale): TtsLocale {
+  if (ui !== "en") return "it-IT";
+  return ttsLocale.startsWith("en") ? ttsLocale : "en-US";
+}
+
+/**
  * The locale a reply is spoken in: what the text says, and the interface's when
  * the text does not.
  *

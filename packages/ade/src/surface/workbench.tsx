@@ -393,6 +393,7 @@ import {
   createNaturalSpeaker,
   activeReplyVoice,
   speakingReplyVoice,
+  interfaceLocale,
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
@@ -4143,7 +4144,7 @@ export function Workbench() {
       const settings = voiceSettings()
       // Not called `locale`: that is the language of the window, and it is asked
       // for one line below.
-      const spoken = replyLocale(settings.replyVoice, detected, settings.ttsLocale)
+      const spoken = replyLocale(settings.replyVoice, detected, interfaceLocale(locale(), settings.ttsLocale))
       return { voice: speakingReplyVoice(settings.replyVoice, spoken, locale()), locale: spoken }
     },
     status: async (voice) => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createNaturalSpeaker, type NaturalSpeakerDeps } from "./natural-speaker";
 import { createFakeSpeaker } from "./speaker";
-import { detectReplyLanguage, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
+import { detectReplyLanguage, interfaceLocale, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
 import type { ReplyVoice, TtsLocale } from "../settings/model";
 
 const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -404,6 +404,57 @@ describe("il profilo di default non si rimappa da solo", () => {
     // Mentre per un id Kokoro la catena scende, che è il suo punto.
     expect(replyVoiceChainFrom("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"])
   })
+});
+
+describe("il ripiego viene dalla lingua dell'interfaccia, non dall'impostazione", () => {
+  /**
+   * The composition `workbench.tsx` does in `voiceFor`, spelled out: the
+   * interface's language is the fallback, the text wins over it, and the voice is
+   * derived from the locale that came out. It is the same three calls in the same
+   * order, so a test that says the wrong voice is caught here and not in the app.
+   */
+  const voiceFor = (chosen: ReplyVoice, ui: "it" | "en", ttsLocale: TtsLocale, text: string) => {
+    const spoken = replyLocale(chosen, detectReplyLanguage(text), interfaceLocale(ui, ttsLocale));
+    return { voice: speakingReplyVoice(chosen, spoken, ui), locale: spoken };
+  };
+
+  test("interfaccia inglese, voce Kokoro, «Done.»: la voce inglese", () => {
+    // ttsLocale rimasto it-IT, come sta su un profilo che non l'ha toccato: se il
+    // ripiego venisse da lì, «Done.» andrebbe a Paola.
+    expect(voiceFor("af_heart", "en", "it-IT", "Done.")).toEqual({ voice: "af_heart", locale: "en-US" });
+  });
+
+  test("interfaccia italiana, voce Kokoro, «Salvato.»: Paola", () => {
+    expect(voiceFor("af_heart", "it", "it-IT", "Salvato.")).toEqual({ voice: "paola", locale: "it-IT" });
+  });
+
+  test("la variante britannica si conserva quando l'impostazione la ha già", () => {
+    expect(voiceFor("bf_emma", "en", "en-GB", "Done.")).toEqual({ voice: "bf_emma", locale: "en-GB" });
+    // E una finestra italiana non la riporta indietro: l'inglese è una scelta.
+    expect(voiceFor("bf_emma", "it", "en-GB", "Done.")).toEqual({ voice: "paola", locale: "it-IT" });
+  });
+
+  test("un testo riconosciuto vince sull'interfaccia, in entrambe le direzioni", () => {
+    // Finestra inglese, ma la risposta è italiana: la risposta comanda.
+    expect(voiceFor("af_heart", "en", "en-US", "Ho aperto la sessione e i test sono verdi.")).toEqual({
+      voice: "paola",
+      locale: "it-IT",
+    });
+    // Finestra italiana, ma la risposta è inglese: idem, e su Ugo resta Ugo.
+    expect(voiceFor("ugo", "it", "it-IT", "I opened the session and the tests are green.")).toEqual({
+      voice: "ugo",
+      locale: "en-US",
+    });
+  });
+
+  test("l'impostazione non può più essere la risposta, quale che sia", () => {
+    // Il punto della condizione: qualunque valore abbia ttsLocale, un testo che
+    // non dice la lingua prende la lingua dell'interfaccia.
+    for (const ttsLocale of ["it-IT", "en-US", "en-GB"] as const) {
+      expect(interfaceLocale("en", ttsLocale).startsWith("en")).toBe(true);
+      expect(interfaceLocale("it", ttsLocale)).toBe("it-IT");
+    }
+  });
 });
 
 describe("la catena di ripiego è quella del dominio", () => {
