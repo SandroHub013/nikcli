@@ -198,7 +198,16 @@ export interface Host {
   /** Downloads the Piper runtime and the voice, checked against pinned digests. */
   ttsPiperInstall?: (voice: string) => Promise<void>
   /** One sentence as WAV bytes, from the resident Piper process. `token` names the request for `ttsPiperCancel`. */
-  ttsPiperSpeak?: (voice: string, text: string, token: number) => Promise<ArrayBuffer>
+  /**
+   * One unit as WAV bytes, in the G2P locale of the reply.
+   *
+   * `lang` is what the synthesiser is asked for, and it is the fourth argument
+   * because it was the fourth thing to exist: a Piper voice is one language and
+   * has always known it, so this is for the backends that do not. K4 is the
+   * first to read it, and a host that does not know what to do with it is one
+   * that speaks one language anyway.
+   */
+  ttsPiperSpeak?: (voice: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
   /**
    * Skips the queued sentences of the abandoned tokens: each is dropped when
    * it reaches the front of the queue, and the one in corso finishes alone.
@@ -674,9 +683,9 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("tts_open_voice_source", { voiceId: voice })
     },
 
-    async ttsPiperSpeak(voice, text, token) {
+    async ttsPiperSpeak(voice, text, token, lang) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text, token })
+      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text, token, lang })
     },
 
     async ttsPiperCancel(tokens) {

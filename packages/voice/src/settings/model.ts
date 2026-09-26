@@ -29,13 +29,68 @@ export const AGENT_SPEEDS = ["fast", "cli"] as const
 export type AgentSpeed = (typeof AGENT_SPEEDS)[number]
 
 /**
- * The voice replies are read in: a Piper voice ADE downloads on first use, or
+ * The voice replies are read in: a local voice ADE downloads on first use, or
  * `system` for the Web Speech voice. The user's choice (D19): «ugo per
  * maschile, e piper per femminile, selezionabile dalle impostazioni» — Ugo,
  * the default, and Paola.
+ *
+ * The Kokoro ids are English voices (D95) and join the same union on purpose:
+ * the choice the user makes is a voice, and which backend speaks it is a fact
+ * about the voice, in `REPLY_BACKEND_BY_VOICE`. A second union would make the
+ * panel offer a Kokoro id on a Piper profile, which is a combination that
+ * cannot speak.
  */
-export const REPLY_VOICES = ["ugo", "paola", "lessac", "system"] as const
+export const REPLY_VOICES = [
+  "ugo",
+  "paola",
+  "lessac",
+  "af_heart",
+  "am_fenrir",
+  "bf_emma",
+  "bm_george",
+  "system",
+] as const
 export type ReplyVoice = (typeof REPLY_VOICES)[number]
+
+/**
+ * What reads the replies. Piper and Kokoro are local and downloaded; `system`
+ * is the Web Speech voice, always there and never better.
+ *
+ * No `gemini` here on purpose: that plan is not started, and the rule the two
+ * plans agree on is that whoever arrives second adds only its own migration
+ * step. When it does, this union and one step in `normalizeSettings` are all
+ * that changes, and the version after `CURRENT_SETTINGS_VERSION` is its own.
+ */
+export const REPLY_BACKENDS = ["piper", "kokoro", "system"] as const
+export type ReplyBackend = (typeof REPLY_BACKENDS)[number]
+
+/**
+ * The G2P locale the replies are spoken in, and the only source of it.
+ *
+ * Not the interface language, not the language the agent answers in, and not
+ * the recogniser's: this is the locale the synthesiser is asked for, and it is
+ * allowlisted because a synthesiser that does not know a locale fails on the
+ * sentence instead of on the setting. The mapping to what the G2P is handed is
+ * `g2pLocale` in `reply-voices.ts`, and it is not the identity — see there.
+ */
+export const TTS_LOCALES = ["it-IT", "en-US", "en-GB"] as const
+export type TtsLocale = (typeof TTS_LOCALES)[number]
+
+/**
+ * Which backend can speak each voice. One fact per voice, and the pair is
+ * validated together: a profile that names a voice and a backend that
+ * disagree has named a combination that cannot speak.
+ */
+export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> = {
+  ugo: "piper",
+  paola: "piper",
+  lessac: "piper",
+  af_heart: "kokoro",
+  am_fenrir: "kokoro",
+  bf_emma: "kokoro",
+  bm_george: "kokoro",
+  system: "system",
+}
 
 /**
  * 2: the assistant answers when it is called by name.
@@ -65,8 +120,15 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * asked spends money in the background: every noise the detector takes for
  * speech is a paid transcription. Listening on its own is now off unless it
  * is chosen, and a profile that had it is turned off once, and told.
+ *
+ * 8: Kokoro, as a second local backend, and the locale the replies are spoken
+ * in. Every profile until now had a Piper voice or the system one, and took
+ * its language from the voice; the locale becomes a setting of its own, and it
+ * starts from that same language. Nothing is offered and nothing is
+ * downloaded: Kokoro is opt-in, so a profile arrives on Piper as it left, and
+ * the Gemini plan, when it lands, takes the version after this one.
  */
-export const CURRENT_SETTINGS_VERSION = 7
+export const CURRENT_SETTINGS_VERSION = 8
 
 /**
  * Whether the wake word and always-on listening exist. The switch, like Chat
@@ -171,6 +233,23 @@ export interface VoiceSettings {
   /** Which voice reads them; see `REPLY_VOICES`. */
   readonly replyVoice: ReplyVoice
   /**
+   * What reads the replies: a local backend or the system voice; see
+   * `REPLY_BACKENDS`. Not a free choice — it is the backend of the voice in
+   * `REPLY_BACKEND_BY_VOICE`, and normalization puts the two back together when
+   * a profile arrives with them disagreeing.
+   */
+  readonly replyBackend: ReplyBackend
+  /**
+   * The G2P locale the replies are spoken in; see `TTS_LOCALES`.
+   *
+   * Separate from `language`, which is what the recogniser is asked for, and
+   * from the interface language: a Kokoro voice chosen for an English answer
+   * says nothing about which language the microphone listens in, and an
+   * Italian answer on a Kokoro voice falls back to Piper rather than being read
+   * with an English mouth. See `replyVoiceFor` in `reply-voices.ts`.
+   */
+  readonly ttsLocale: TtsLocale
+  /**
    * What answers a sentence the grammar does not know.
    *
    * The grammar covers what people say often, instantly and offline. The rest
@@ -255,6 +334,13 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   speakReplies: true,
   spokenAlerts: false,
   replyVoice: "ugo",
+  replyBackend: "piper",
+  /*
+   * Italian, because the default voice is Ugo and the default language of the
+   * profile is Italian: a new profile speaks what it has always spoken. A
+   * profile that had Lessac arrives on English, in `legacyReplyLocale`.
+   */
+  ttsLocale: "it-IT",
   agentEngine: "auto",
   agentSpeed: "fast",
   codexFallback: false,
@@ -281,8 +367,53 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * `shortcut-only`: a profile on the wake word is back on the shortcut.
  * `name-only`: a profile on the shortcut or toggle now listens for the name.
  * `listening-off`: a profile that listened on its own no longer does.
+ *
+ * There is deliberately no migration for a Kokoro voice in the wrong language:
+ * the voice that reads such a reply is decided per reply, so there is nothing on
+ * disk to move and nothing to put back.
  */
-export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only" | "listening-off"
+export type VoiceMigration =
+  | "wake-word"
+  | "always-listen"
+  | "shortcut-only"
+  | "name-only"
+  | "listening-off"
+
+/**
+ * The locale a profile written before version 8 was really speaking in.
+ *
+ * It had no locale of its own: the language came from the voice, and the voice
+ * still knows it. Lessac is the English one, Ugo and Paola the Italian ones,
+ * and the system voice speaks whatever the window does — there the profile's
+ * own recorded language is the only evidence there is, and "it" is what a
+ * profile with none says.
+ */
+function legacyReplyLocale(candidate: Record<string, unknown>): TtsLocale {
+  if (candidate.replyVoice === "lessac") return "en-US"
+  if (candidate.replyVoice === "system") return candidate.language === "en" ? "en-US" : "it-IT"
+  return "it-IT"
+}
+
+/**
+ * Version 8: the backend the voice belongs to, and the locale it speaks.
+ *
+ * Both come from the voice the profile already names, so a profile is left
+ * speaking what it was speaking. Kokoro is not offered here and nothing is
+ * downloaded: a profile arrives on Piper exactly as it left, which is the whole
+ * point of a backend that is opt-in.
+ *
+ * A function and not a block inside the versioned branch because a profile with
+ * no `version` at all is older than every version, and it reaches the same
+ * place by the other road: without this it would keep a Piper voice and lose the
+ * language that voice was in.
+ */
+function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...candidate,
+    replyBackend: candidate.replyVoice === "system" ? "system" : "piper",
+    ttsLocale: legacyReplyLocale(candidate),
+  }
+}
 
 /**
  * A profile on the shortcut or toggle, moved to listening for the name: the
@@ -358,6 +489,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       candidate = { ...candidate, alwaysListen: false }
       if (wakeWordEnabled()) migrations.push("listening-off")
     }
+    candidate = toKokoro(candidate)
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -399,6 +531,11 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       // Nothing to tell where listening for the name does not exist at all.
       if (wakeWordEnabled()) migrations.push("listening-off")
     }
+    /*
+     * Version 8: Kokoro arrives, and with it the locale the replies are spoken
+     * in. See `toKokoro`.
+     */
+    if (version < 8) candidate = toKokoro(candidate)
     version = CURRENT_SETTINGS_VERSION
   }
 
@@ -581,7 +718,58 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   }
 
   /*
-   * 14. The chosen audio devices, if any were chosen.
+   * 14. The locale the replies are spoken in.
+   *
+   * Allowlisted, because a synthesiser handed a locale it does not know fails
+   * on the sentence rather than on the setting, and the answer would look like
+   * a broken voice. Absent in every profile written before version 8, and that
+   * is the default, so absent says nothing.
+   */
+  let ttsLocale = DEFAULT_VOICE_SETTINGS.ttsLocale
+  if (TTS_LOCALES.includes(candidate.ttsLocale as TtsLocale)) {
+    ttsLocale = candidate.ttsLocale as TtsLocale
+  } else if (candidate.ttsLocale !== undefined) {
+    corrections.push(t("vui.fix.ttsLocale", String(candidate.ttsLocale)))
+  }
+
+  /*
+   * 15. The backend, and the pair with the voice.
+   *
+   * The voice is what the user picked and what the panel names, so it decides:
+   * a profile that says `af_heart` on `piper` gets the Kokoro backend, and one
+   * that says `ugo` on `kokoro` gets Piper. The other way round would be worse
+   * in both directions — a Kokoro id on the Piper backend is a voice that
+   * cannot speak, and a Piper id on the Kokoro backend is a voice the host
+   * does not have at all.
+   *
+   * A repair, so it is said: the pair was written together and does not come
+   * apart on its own.
+   */
+  let replyBackend = REPLY_BACKEND_BY_VOICE[replyVoice]
+  if (candidate.replyBackend !== undefined && candidate.replyBackend !== replyBackend) {
+    corrections.push(t("vui.fix.replyBackend", String(candidate.replyBackend), replyBackend))
+  }
+
+  /*
+   * A Kokoro voice in the wrong language is left exactly where the profile put
+   * it, and this is where a reviewer will look for the code that moves it.
+   *
+   * There was one, and it was wrong twice. It overwrote the id the user had
+   * chosen, so the migration that claimed it could be put back had nothing to
+   * put it back to, and `loadVoiceSettings` writes a migrated profile straight
+   * back, which made the loss permanent. And the write-back only runs when the
+   * version changed while a remap is not a version, so the sentence was produced
+   * again at every start: the banner repeated for as long as the app was opened.
+   *
+   * It is not needed. The voice that reads a reply is decided from the text of
+   * that reply, per reply, by `speakingReplyVoice`: an Italian answer on an
+   * English Kokoro voice goes to Ugo or Paola with nothing written anywhere, and
+   * the choice comes back by itself the first time an answer is in English. A
+   * migration that moves nothing cannot be irreversible, and cannot repeat.
+   */
+
+  /*
+   * 16. The chosen audio devices, if any were chosen.
    *
    * Optional strings, kept when they are not empty and dropped otherwise, with
    * no correction message either way — the same shape as the API key above and
@@ -605,7 +793,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   }
 
   /*
-   * 15. The agent engine.
+   * 17. The agent engine.
    *
    * Absent in every profile written before it existed, and that is the
    * default, so absent says nothing. Only a value that is present and not one
@@ -618,7 +806,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)))
   }
 
-  // 16. The agent's speed: absent in older profiles, which get the fast one.
+  // 18. The agent's speed: absent in older profiles, which get the fast one.
   let agentSpeed = DEFAULT_VOICE_SETTINGS.agentSpeed
   if (AGENT_SPEEDS.includes(candidate.agentSpeed as AgentSpeed)) {
     agentSpeed = candidate.agentSpeed as AgentSpeed
@@ -626,7 +814,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)))
   }
 
-  // 17. The fallback to Codex on Claude plan limit: absent in older profiles, which get the default (false).
+  // 19. The fallback to Codex on Claude plan limit: absent in older profiles, which get the default (false).
   let codexFallback = DEFAULT_VOICE_SETTINGS.codexFallback
   if (typeof candidate.codexFallback === "boolean") {
     codexFallback = candidate.codexFallback
@@ -651,6 +839,8 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     speakReplies,
     spokenAlerts,
     replyVoice,
+    replyBackend,
+    ttsLocale,
     agentEngine,
     agentSpeed,
     codexFallback,

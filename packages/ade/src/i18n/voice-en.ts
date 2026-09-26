@@ -306,6 +306,8 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.speakReplies": "Invalid reply reading setting: turned back on.",
   "vui.fix.spokenAlerts": "Invalid proactive alerts setting: turned back off.",
   "vui.fix.replyVoice": (value) => `Unknown reply voice '${value}': restored Ugo.`,
+  "vui.fix.replyBackend": (value, fallback) => `Kokoro voices read in English: replies now use the '${fallback}' backend instead of '${value}'.`,
+  "vui.fix.ttsLocale": (value) => `Unknown reply language '${value}': restored Italian.`,
   "vui.fix.agentSpeed": (value) => `Unknown agent speed '${value}': restored fast.`,
   "vui.fix.agentEngine": (value) => `Unknown agent engine '${value}': restored automatic.`,
   "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
