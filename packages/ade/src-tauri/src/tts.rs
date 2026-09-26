@@ -23,11 +23,121 @@
 //! Web Speech voice.
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 use tauri::Manager;
+
+mod kokoro;
+
+/// What a local voice can do on this host, for the panel and for the panel's tests.
+#[derive(serde::Serialize)]
+pub struct LocalStatus {
+    pub supported: bool,
+    pub installed: bool,
+}
+
+/// The status of a Kokoro voice: installed when this revision is whole, and never
+/// "supported but not installed" — the pieces are one download and one folder.
+#[tauri::command]
+pub fn tts_local_status(app: tauri::AppHandle, provider: String) -> Result<LocalStatus, String> {
+    let root = root(&app)?;
+    match provider.as_str() {
+        kokoro::KOKORO => Ok(LocalStatus { supported: true, installed: kokoro::ready(&root) }),
+        _ => Err(format!("{provider} non è un provider locale.")),
+    }
+}
+
+/// One Kokoro sentence, as WAV bytes, from the resident host.
+///
+/// `tts_local_*` and not another pair of commands: Piper's are the same commands
+/// with `piper` as the provider, so a second voice is a second value and not a
+/// second API to keep in step.
+#[tauri::command]
+pub async fn tts_local_speak(
+    app: tauri::AppHandle,
+    provider: String,
+    voice_id: String,
+    text: String,
+    token: u64,
+    lang: String,
+) -> Result<tauri::ipc::Response, String> {
+    if provider != kokoro::KOKORO {
+        return Err(format!("{provider} non è un provider locale."));
+    }
+    let root = root(&app)?;
+    let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    if text.trim().is_empty() {
+        return Err("testo vuoto".into());
+    }
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<KokoroState>();
+        kokoro::speak_blocking(&root, &state, &voice_id, &text, token, &lang)
+    })
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Ends the resident host, for the idle timer, a page reload and the exit of ADE.
+#[tauri::command]
+pub fn tts_local_stop(state: tauri::State<'_, KokoroState>) -> Result<(), String> {
+    kokoro::stop(&state);
+    Ok(())
+}
+
+/// The resident host, kept by Tauri so there is one of it for the whole app.
+pub struct KokoroState(pub kokoro::Kokoro);
+
+impl Default for KokoroState {
+    fn default() -> Self {
+        Self(kokoro::Kokoro::default())
+    }
+}
+
+#[tauri::command]
+pub async fn tts_local_install(
+    app: tauri::AppHandle,
+    provider: String,
+) -> Result<(), String> {
+    if provider != kokoro::KOKORO {
+        return Err(format!("{provider} non è un provider locale."));
+    }
+    let state = app.state::<Piper>();
+    let root = root(&app)?;
+    std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
+    let slot = state.installer.slot(kokoro::KOKORO);
+    let _one = state.installer.hold(&slot);
+    let install = state.installer.begin(
+        &slot,
+        kokoro::STEPS,
+        None,
+        Instant::now() + state.installer.deadline(),
+    );
+    let mut closed = Closed { install: &install, closed: false };
+    let outcome = kokoro::install_locked(&install, &root, &Curl, &Certutil);
+    closed.report(&outcome);
+    outcome
+}
+
+/// The digest of some bytes, in the spelling a manifest pins.
+///
+/// The files on disk are digested by `certutil`, which is what the installer's
+/// `Fingerprint` is. This is for the bytes that are not a file yet — a model that
+/// is prepared in memory, a vocabulary compiled into the executable — where
+/// writing them out to be digested would be a step that exists only to be
+/// measured.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
 
 /// One file to fetch: where from, the digest it must have, and how many bytes
 /// it weighs when it is whole.

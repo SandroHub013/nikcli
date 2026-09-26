@@ -1978,6 +1978,7 @@ pub fn run() {
         .manage(gateway::Gateway::default())
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
+        .manage(tts::KokoroState::default())
         .manage(usage::UsageCache::default())
         .manage(std::sync::Arc::new(CloseManager::default()))
         .manage(tray::Tray::default())
@@ -2059,6 +2060,10 @@ pub fn run() {
             tts::tts_piper_stop,
             tts::tts_piper_cancel,
             tts::tts_open_voice_source,
+            tts::tts_local_status,
+            tts::tts_local_install,
+            tts::tts_local_speak,
+            tts::tts_local_stop,
             tts::tts_install_status,
             tts::tts_install_cancel,
             mailbox::mailbox_receipt,
