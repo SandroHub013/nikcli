@@ -553,17 +553,20 @@ function claimKey(agentId: string, cwd: string | undefined): string {
  * pane looking for "the most recent conversation here" in the same folder
  * got it from `session.list` as the newest: two panes on one conversation
  * (prova dal vivo 7, 1b). A minted conversation is its pane's, never
- * another's "here".
+ * another's "here" while that pane is open. Closed, the conversation is free
+ * again, and a later "here" of the same run can reopen it (review of
+ * ripristino-quater, BASSO 1): each id is kept with the pane that asked.
  */
 export class MintLedger {
-  readonly minted = new Set<string>()
+  /** Each minted conversation, with the pane that asked for it. */
+  readonly minted = new Map<string, string>()
   private readonly pending = new Set<Promise<void>>()
 
   /** Follows one mint: its id joins `minted` before the mint counts as settled. */
-  track<T extends string | undefined>(mint: Promise<T>): Promise<T> {
+  track<T extends string | undefined>(mint: Promise<T>, owner: string): Promise<T> {
     const recorded: Promise<void> = mint.then(
       (id) => {
-        if (id) this.minted.add(id)
+        if (id) this.minted.set(id, owner)
       },
       () => undefined,
     )
@@ -580,7 +583,8 @@ export class MintLedger {
 
 /**
  * "The most recent conversation here", leaving out the ones other panes hold
- * (`taken`) and the ones ADE minted.
+ * (`taken`) and the ones ADE minted for a pane still open (`open`, which the
+ * pane asking answers false for itself).
  *
  * A mint under way when the list answers can be in the list, the newest,
  * before its id reaches ADE: those are waited for, and the same list is read
@@ -592,8 +596,13 @@ export async function lastHereBesideMints(
   read: (output: string, taken: ReadonlySet<string>) => string | null | undefined,
   taken: ReadonlySet<string>,
   mints: MintLedger,
+  open: (owner: string) => boolean,
 ): Promise<string | undefined> {
-  const excluded = () => new Set([...taken, ...mints.minted])
+  const excluded = () => {
+    const out = new Set(taken)
+    for (const [id, owner] of mints.minted) if (open(owner)) out.add(id)
+    return out
+  }
   let answered = ""
   let underWay: readonly Promise<void>[] = []
   const found = await ask((output) => {
@@ -606,8 +615,9 @@ export async function lastHereBesideMints(
   })
   if (!found) return undefined
   await Promise.all(underWay)
-  if (!mints.minted.has(found)) return found
-  return read(answered, excluded()) ?? undefined
+  const now = excluded()
+  if (!now.has(found)) return found
+  return read(answered, now) ?? undefined
 }
 
 /**

@@ -551,15 +551,17 @@ describe("a conversation being minted is not another pane's «here»", () => {
   /** The CLI's list, answered at once: what `askCli` hands its reader. */
   const answering = (output: string) => async (reader: (output: string) => string | null | undefined) => reader(output)
   const later = () => new Promise((resolve) => setTimeout(resolve, 5))
+  // The pane that minted, still open; the one asking is p2.
+  const open = (owner: string) => owner === "p1" || owner === "p3"
 
   test("a mint under way when the list answers is waited for, and the list read again without it", async () => {
     const mints = new MintLedger()
     let answer!: (id: string | undefined) => void
     // The exited pane: its mint is written on the server, the id not back yet.
-    const minting = mints.track(new Promise<string | undefined>((resolve) => (answer = resolve)))
+    const minting = mints.track(new Promise<string | undefined>((resolve) => (answer = resolve)), "p1")
     // The live pane: the list already has C, the newest.
     let settled = false
-    const here = lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints).then(
+    const here = lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints, open).then(
       (id) => ((settled = true), id),
     )
     await later()
@@ -571,37 +573,52 @@ describe("a conversation being minted is not another pane's «here»", () => {
 
   test("a mint that answered before the list is left out at once", async () => {
     const mints = new MintLedger()
-    await mints.track(Promise.resolve(minted))
-    expect(await lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints)).toBe(older)
+    await mints.track(Promise.resolve(minted), "p1")
+    expect(await lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints, open)).toBe(older)
   })
 
   test("the minted conversation alone in the folder: none here, and the pane mints its own", async () => {
     const mints = new MintLedger()
     let answer!: (id: string | undefined) => void
-    mints.track(new Promise<string | undefined>((resolve) => (answer = resolve)))
-    const here = lastHereBesideMints(answering(listed(session(minted, 30))), read, new Set(), mints)
+    mints.track(new Promise<string | undefined>((resolve) => (answer = resolve)), "p1")
+    const here = lastHereBesideMints(answering(listed(session(minted, 30))), read, new Set(), mints, open)
     answer(minted)
     expect(await here).toBeUndefined()
   })
 
   test("a mint started after the list answered is not waited for, and a failed one does not hold it", async () => {
     const mints = new MintLedger()
-    mints.track(Promise.reject(new Error("no answer")))
+    mints.track(Promise.reject(new Error("no answer")), "p1")
     let started = false
     const ask = async (reader: (output: string) => string | null | undefined) => {
       const id = reader(listed(session(older, 20)))
       // Another pane starts minting now: it cannot be in this list.
-      mints.track(new Promise<string | undefined>(() => (started = true)))
+      mints.track(new Promise<string | undefined>(() => (started = true)), "p3")
       return id
     }
-    expect(await lastHereBesideMints(ask, read, new Set(), mints)).toBe(older)
+    expect(await lastHereBesideMints(ask, read, new Set(), mints, open)).toBe(older)
     expect(started).toBe(true)
+  })
+
+  /*
+   * Review of ripristino-quater, BASSO 1: a minted conversation stayed left
+   * out for the whole run, though the pane that asked for it had been
+   * closed; a later "here" (an exited pane reopened) could not take it.
+   */
+  test("a conversation minted for a pane since closed is free again", async () => {
+    const mints = new MintLedger()
+    await mints.track(Promise.resolve(minted), "p1")
+    const list = answering(listed(session(minted, 30), session(older, 20)))
+    expect(await lastHereBesideMints(list, read, new Set(), mints, (owner) => owner === "p1")).toBe(older)
+    // p1 closed.
+    expect(await lastHereBesideMints(list, read, new Set(), mints, () => false)).toBe(minted)
   })
 
   test("the workbench mints through the ledger and asks «here» beside it", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const mints = new MintLedger()")
-    expect(workbench).toContain("return await mints.track(askCli(command, plan.args, cwd, plan.read)")
+    expect(workbench).toContain("askCli(command, plan.args, cwd, plan.read).then((id) => id ?? undefined),\n      paneId,")
     expect(workbench).toContain("return await lastHereBesideMints(")
+    expect(workbench).toContain("(owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),")
   })
 })
