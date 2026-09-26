@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import {
   HOOK_MARKER,
   HOOK_TARGETS,
@@ -674,5 +675,61 @@ describe("nikcli's TUI plugin as a target", () => {
     const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
     expect(panel).toContain('<Show when={state()?.outdated}>')
     expect(panel).toContain('state()?.outdated ? t("hooks.update")')
+  })
+})
+
+/*
+ * Lettura di Mimo, F9, for the hooks too (Master): an earlier ADE's script is
+ * rewritten behind the confirmation dialog, and the refresh runs at start.
+ * Rust reports the digest of the script on disk; only the page, which builds
+ * the script, can tell whether it is this version's.
+ */
+describe("an earlier ADE's hook script", () => {
+  const claude = hookTarget("claude-code")!
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex")
+  function disk(configText: string | null, digest: string | undefined) {
+    const state = { configText, scriptPresent: digest !== undefined, digest, writes: 0 }
+    const host = {
+      claudeVersion: async () => "2.1.280 (Claude Code)",
+      readAgentHook: async () => ({
+        configPath: "C:\\Users\\x\\.claude\\settings.json",
+        configText: state.configText,
+        scriptPath: CLAUDE_SCRIPT,
+        scriptPresent: state.scriptPresent,
+        ...(state.digest !== undefined ? { scriptDigest: state.digest } : {}),
+      }),
+      writeAgentHook: async (_agent: string, configText: string, script: string | null) => {
+        state.writes++
+        state.configText = configText
+        state.scriptPresent = script !== null
+        state.digest = script === null ? undefined : sha(script)
+      },
+    }
+    return { state, host }
+  }
+
+  test("is not rewritten at start: it is said to be outdated, and the panel's button updates it", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
+    // An earlier ADE's script on disk.
+    state.digest = sha("# lo script di un ADE precedente")
+    const before = state.writes
+    expect(await refreshHookScript(host, claude, undefined)).toBeUndefined()
+    expect(state.writes).toBe(before)
+    expect(await readHookStatus(host, claude)).toMatchObject({ installed: true, outdated: true })
+    // The update, asked for by the user, writes this version's.
+    await setHook(host, claude, true)
+    expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
+  })
+
+  test("this version's script with a configuration to bring up to date is still written: no dialog comes of that", async () => {
+    const oldConfig = JSON.stringify({
+      hooks: { SessionStart: [{ matcher: "startup|resume|clear", hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }] }] },
+    })
+    const script = hookScript(claude.agent)
+    const { state, host } = disk(oldConfig, sha(script))
+    expect(await refreshHookScript(host, claude, undefined)).toBe(script)
+    expect(state.writes).toBe(1)
   })
 })
