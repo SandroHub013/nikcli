@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRule } from "../chat/rules"
 import { BLOCKED as BLOCK_RULES, classifyCommand } from "./approval"
-import { blockedBashDenials, botPermission, hasBotRules, profileFor, type BotProfile } from "./serve-rules"
+import { blockedBashDenials, botPermission, configDenials, hasBotRules, profileFor, type BotProfile } from "./serve-rules"
+import { it as itDict } from "../i18n/it"
+import { en as enDict } from "../i18n/en"
 
 /*
  * B8d: a bot's session rules win over its own file, as nikcli decides them:
@@ -88,6 +90,62 @@ describe("B8d: the rules of a bot's session", () => {
     for (const profile of PROFILES) {
       for (const tool of ["task", "plan_enter", "plan_exit", "question"]) expect(decide(tool, "*", HOSTILE, botPermission(profile))).toBe("deny")
     }
+  })
+
+  test("no profile lets a bot write the server's configuration, however the path is spelled", () => {
+    // Every tool that writes asks `edit`, with the path relative to the worktree as the model typed it.
+    const CONFIG = [
+      ".nikcli/tool/x.ts",
+      ".nikcli\\tool\\x.ts",
+      ".nikcli\\tool/x.ts",
+      ".NIKCLI/tool/x.ts",
+      ".NiKcLi\\agent\\altro.md",
+      "./.nikcli/nikcli.json",
+      "C:\\progetto\\.nikcli\\tool\\x.ts",
+      "D:/altro/.nikcli/agent/bot.md",
+      "..\\..\\fuori\\.nikcli\\tool\\x.ts",
+      "nikcli.json",
+      "NIKCLI.JSON",
+      "nikcli.jsonc",
+      "pacchetto/sotto/nikcli.jsonc",
+      "pacchetto\\Nikcli.Jsonc",
+      "C:\\progetto\\nikcli.json",
+      "NIKCLI~1\\tool\\x.ts",
+      "nikcli~1/nikcli.json",
+      "NIKCLI~1.JSO",
+      // The file's main stream on NTFS: the same file, under a name no pattern of it ends.
+      "nikcli.json::$DATA",
+      "NIKCLI.JSONC::$data",
+      "C:\\progetto\\nikcli.json::$DATA",
+      "sotto\\nikcli.json::$DATA",
+    ]
+    const PROJECT = [
+      "src/index.ts",
+      "src\\bots\\nikcli.ts",
+      "src/bots/nikcli.test.ts",
+      "packages/nikcli/src/x.ts",
+      "docs/nikcli.md",
+      ".github/workflows/ci.yml",
+      ".vscode/settings.json",
+      "config.json",
+    ]
+    for (const profile of PROFILES) {
+      for (const path of CONFIG) expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, "deny"])
+      // The rest of the project is as the profile had it: open, or closed to a routine.
+      const open = profile === "read-only" ? "deny" : "allow"
+      for (const path of PROJECT) expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, open])
+    }
+    // First among the session's, which all come after the bot's file: a routine's
+    // `edit` denied whole stays the last, which is what hides the tool (`disabled`).
+    const denials = configDenials()
+    expect(botPermission("remote-none").slice(0, denials.length).map((entry) => entry.pattern)).toEqual(denials)
+    expect(botPermission("read-only").findLast((entry) => entry.permission === "edit")).toEqual({ permission: "edit", pattern: "*", action: "deny" })
+  })
+
+  test("the note on the rules says an «always» for edits opens the configuration too", () => {
+    // Given in the project, it comes after the session's rules and wins (bot-config-chiusa review).
+    expect(itDict["bots.serve.rulesNote"]).toContain("nikcli.json")
+    expect(enDict["bots.serve.rulesNote"]).toContain("nikcli.json")
   })
 
   test("the list: every form, deduplicated", () => {

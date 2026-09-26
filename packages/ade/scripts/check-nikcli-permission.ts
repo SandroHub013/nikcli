@@ -14,8 +14,8 @@
  * profile's own shell rule says (nothing is left to the user's rule: the globs
  * count case, Windows does not), when a rule of the profile does not hold over
  * the user's and the bot's, when a subagent, plan mode or a question is not
- * denied, or when a tool denied whole is shown to the model. Run it after
- * touching `serve-rules.ts`.
+ * denied, when a tool denied whole is shown to the model, or when a bot could
+ * write the server's configuration. Run it after touching `serve-rules.ts`.
  */
 
 import { join } from "node:path"
@@ -29,6 +29,7 @@ const { PermissionRuleset } = (await import(rulesetPath)) as {
     fromConfig(permission: unknown): unknown[]
     evaluate(permission: string, pattern: string, ...rulesets: unknown[][]): { action: string }
     disabled(tools: string[], ruleset: unknown[]): Set<string>
+    TOOL_PERMISSION: Record<string, string>
   }
 }
 
@@ -42,6 +43,8 @@ const BLOCKED = [
   "FORMAT C:",
 ]
 const EVERYDAY = ["git status", "ls -la", "rm -rf build", "git push --force origin x", "npm publish"]
+/** The server's configuration, as a tool that writes names it (`configDenials`). */
+const CONFIG = [".nikcli/tool/x.ts", ".NIKCLI\\tool\\x.ts", "C:\\progetto\\.nikcli\\nikcli.json", "sotto/Nikcli.Jsonc", "NIKCLI~1\\tool\\x.ts", "nikcli.json::$DATA", "C:\\progetto\\NIKCLI.JSONC::$data"]
 const USERS: Record<string, object> = {
   "nessuna regola": {},
   "bash: allow": { bash: "allow" },
@@ -111,6 +114,13 @@ for (const profile of Object.keys(SHELL) as BotProfile[]) {
         check(got === rule.action, `profilo ${profile}, ${user}: ${rule.permission} «${pattern}» dà ${got}, doveva dare ${rule.action}`)
       }
     }
+    // No profile writes the server's configuration, and the rest of the project is as the profile has it.
+    for (const path of CONFIG) {
+      const got = action(agent, session, path, "edit")
+      check(got === "deny", `profilo ${profile}, ${user}: scrivere «${path}» dà ${got}, doveva essere negato`)
+    }
+    const open = action(agent, session, "src/index.ts", "edit")
+    check(open === (profile === "read-only" ? "deny" : "allow"), `profilo ${profile}, ${user}: scrivere src/index.ts dà ${open}`)
     for (const tool of ["task", "plan_enter", "plan_exit", "question"]) {
       check(action(agent, session, "*", tool) === "deny", `profilo ${profile}, ${user}: ${tool} non è negato`)
     }
@@ -127,6 +137,12 @@ for (const profile of Object.keys(SHELL) as BotProfile[]) {
       check(action(agent, session, "src/index.ts", "read") !== "deny", `profilo ${profile}, ${user}: anche la lettura è negata`)
     }
   }
+}
+
+// The denials are on `edit` because every tool that writes asks it: if one stopped, they would not cover it.
+for (const tool of ["edit", "write", "patch", "multiedit", "apply_patch"]) {
+  const permission = PermissionRuleset.TOOL_PERMISSION[tool]
+  check(permission === "edit", `${tool} chiede ${permission}, non edit: le regole sulla configurazione non lo coprono`)
 }
 
 console.log(`${profiles} profili, ${checks} controlli su ruleset.ts di nikcli`)

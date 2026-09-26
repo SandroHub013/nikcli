@@ -22,8 +22,9 @@
  *   the bot's «Comandi da remoto» on or off.
  *
  * Every profile denies what no bot turn may do: a subagent (a `task` runs in
- * a child session these rules do not reach), plan mode, and a question to
- * the user (a bot's thread has nowhere to answer it).
+ * a child session these rules do not reach), plan mode, a question to the
+ * user (a bot's thread has nowhere to answer it), and a write to the server's
+ * own configuration (`configDenials`).
  *
  * What these rules do not cover, said where it matters (`bots.serve.rulesNote`):
  * an «always» the user gave in the project, in nikcli's TUI too, comes last
@@ -122,6 +123,54 @@ function spellings(word: string): string[] {
   return [...new Set(all)]
 }
 
+/*
+ * The server's own configuration, which no bot turn may write, in any profile
+ * (reload-proxy review, MEDIO): a `.nikcli` folder, where a file in `tool/` is
+ * imported by the server — code run outside every rule of the session, with
+ * the shell denied too — and `agent/` holds the bots; and `nikcli.json` or
+ * `nikcli.jsonc` anywhere, which open tools, MCP servers and permissions. The
+ * server reads them again by itself when they change.
+ *
+ * Every tool that writes a file asks `edit`: `write`, `patch`, `multiedit`
+ * and `apply_patch` are `edit` to nikcli (`TOOL_PERMISSION`, ruleset.ts), so
+ * a rule named after them would never match. The pattern is the path as the
+ * tool resolved it, relative to the worktree (`path.relative`): `./` gone,
+ * backslashes on Windows, absolute on another drive, `..` outside, and the
+ * case as the model typed it. The glob counts case and Windows does not, so
+ * every casing of «nikcli» is spelled out (64), with `?` for the separator
+ * and for the extension's letters, and the short 8.3 names (`NIKCLI~1`) are
+ * denied too. So is any path with `::`: on NTFS `nikcli.json::$DATA` is the
+ * file's own content, and no name pattern ends there; no real path has it
+ * (bot-config-chiusa review, MEDIO).
+ *
+ * Wider than needed, on the safe side: any `nikcli.` with four or five
+ * characters after it (`nikcli.yaml`, `docs/nikcli.html`) and any `x.nikcli…`.
+ * The path is the one written, not the one resolved: a link already in the
+ * repository that points at `.nikcli` under another name is not seen. A bot
+ * cannot make one without the shell.
+ *
+ * They open the session's rules rather than close them: any session rule
+ * comes after the bot's file and wins over it, and a routine's `edit` denied
+ * whole must stay the last `edit` rule, the one nikcli reads to hide the tool
+ * from the model (`disabled`, ruleset.ts).
+ */
+export function configDenials(): string[] {
+  const denied: string[] = ["*::*"]
+  for (const name of casings("nikcli")) {
+    denied.push(`*.${name}?*`, `*${name}.????`, `*${name}.?????`, `*${name}~*`)
+  }
+  return denied
+}
+
+/* Every way of writing `word` with capitals and small letters. */
+function casings(word: string): string[] {
+  let all = [""]
+  for (const letter of word) {
+    all = all.flatMap((start) => [...new Set([start + letter.toLowerCase(), start + letter.toUpperCase()])])
+  }
+  return all
+}
+
 /** What each profile says about the tools the spawn flags named, in their order. */
 const PROFILE_RULES: Record<BotProfile, readonly PermissionRule[]> = {
   ask: [rule("bash", "ask"), rule("external_directory", "ask"), rule("computer", "ask"), rule("browser_control", "ask")],
@@ -151,6 +200,7 @@ export function botPermission(profile: BotProfile): readonly PermissionRule[] {
   let rules = cache.get(profile)
   if (!rules) {
     rules = [
+      ...configDenials().map((pattern) => rule("edit", "deny", pattern)),
       ...PROFILE_RULES[profile],
       ...NEVER,
       ...(WITH_BLOCK_LIST.has(profile) ? blockedBashDenials().map((pattern) => rule("bash", "deny", pattern)) : []),

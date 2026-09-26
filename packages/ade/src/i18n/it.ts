@@ -1642,7 +1642,7 @@ export const it = {
   "bots.serve.refused": (permission: string, patterns: string) =>
     `Rifiutato: nikcli ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
   "bots.serve.rulesNote":
-    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche per lui, come nella Chat: quella richiesta non comparirà.",
+    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche per lui, come nella Chat: quella richiesta non comparirà. Un «sempre» dato a una modifica di file gli apre anche la configurazione di nikcli (.nikcli, nikcli.json), che altrimenti un bot non può scrivere.",
   "bots.serve.lost": "Il server di nikcli ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
