@@ -473,6 +473,17 @@ impl Inner {
     async fn auth_test(&self) -> Result<Me, Failure> {
         let answer = self.call_patiently(reqwest::Method::POST, "/auth.test", Token::Bot, None).await?;
         let user_id = answer.body["user_id"].as_str().unwrap_or_default().to_string();
+        // Without the bot's id no mention of it is ever recognised, and
+        // nothing would say so: a failure to try again, not a bot (G10
+        // review, BASSO 2).
+        if user_id.is_empty() {
+            return Err(Failure::Api {
+                status: 200,
+                error: "auth.test non ha dato l'id del bot".into(),
+                needed: None,
+                retry_after: None,
+            });
+        }
         let name = answer.body["user"].as_str().unwrap_or_default().to_string();
         // No header is no answer about scopes, not every scope missing.
         let missing = answer.scopes.as_deref().map(missing_scopes).unwrap_or_default();
@@ -1212,6 +1223,22 @@ mod tests {
         assert_eq!(slack.inner.name_of("").await, "");
         assert!(api.to("/users.info").is_empty(), "un id che non e' di Slack e' finito in un indirizzo");
         assert_eq!(slack.inner.name_of("U09AB").await, "Qualcuno");
+    }
+
+    #[tokio::test]
+    async fn a_bot_whose_id_slack_does_not_give_is_tried_again_not_taken() {
+        let socket = FakeSocket::start(vec![vec![hello(), envelope("e1", "Ev1", "D1", "im", "U9", "ciao")]], 1_500);
+        let mut queues = HashMap::new();
+        queues.insert("/auth.test", vec![with_header(ok(json!({ "ok": true, "user": "bot_di_prova" })), "x-oauth-scopes", ALL_SCOPES)]);
+        let api = FakeApi::start(&socket.address, queues);
+        let slack = adapter(&api);
+        let first = slack.receive().await.unwrap_err();
+        assert!(matches!(&first, AdapterError::Transient(why) if why.contains("id del bot")), "{first:?}");
+        assert!(slack.inner.bot_user().is_none(), "un id vuoto preso per buono");
+        // The next try gets it, and reads.
+        let message = tokio::time::timeout(Duration::from_secs(4), slack.receive()).await.expect("in tempo").expect("letto");
+        assert_eq!(message[0].text, "ciao");
+        assert_eq!(slack.inner.bot_user().as_deref(), Some(BOT));
     }
 
     #[tokio::test]
