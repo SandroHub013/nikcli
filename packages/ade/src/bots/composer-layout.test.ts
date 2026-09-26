@@ -28,6 +28,24 @@ describe("the bot's composer", () => {
     expect(field["flex"]).toBe("1 1 auto")
   })
 
+  test("in a narrow thread the caption has a line of its own, and the field the one above", () => {
+    // 14rem is 168 px here: the root font is 12 px, and beside a caption of seven lines that was the field.
+    expect(rule("bots-thread")["container-type"]).toBe("inline-size")
+    const narrow = /@container \(max-width: (\d+)px\) \{([\s\S]*?)\n\}/.exec(css)
+    expect(narrow).not.toBeNull()
+    expect(Number(narrow![1])).toBeGreaterThanOrEqual(560)
+    const inside = (slot: string) => {
+      const match = new RegExp(`\\[data-slot="${slot}"\\]\\s*\\{([^}]*)\\}`).exec(narrow![2]!)
+      return match?.[1] ?? ""
+    }
+    expect(inside("bots-composer")).toContain("flex-wrap: wrap")
+    expect(inside("bots-composer-field")).toContain("flex-basis: 0")
+    // After the button, on the whole line.
+    expect(inside("bots-composer-cap")).toContain("order: 1")
+    expect(inside("bots-composer-cap")).toContain("flex-basis: 100%")
+    expect(inside("bots-composer-cap")).toContain("max-width: none")
+  })
+
   test("the caption gives way: it shrinks, wraps and has a ceiling", () => {
     const cap = rule("bots-composer-cap")
     expect(cap["flex"]).toBe("0 1 auto")
