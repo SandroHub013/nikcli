@@ -138,6 +138,10 @@ describe("B8a: the two blocks and their limits", () => {
     expect(memory.notes).toEqual(["Il progetto usa bun 1.3.", "I test stanno in src."])
     expect(applyMemoryOp(memory, { op: "remove", block: "notes", match: "." }).ok).toBe(false)
     expect(applyMemoryOp(memory, { op: "remove", block: "notes", match: "python" }).ok).toBe(false)
+    // The bot's match said back to it is one short line (review, BASSO 2).
+    const long = applyMemoryOp(memory, { op: "remove", block: "notes", match: `${"parola ".repeat(40)}\nfine` })
+    expect(!long.ok && long.error).toContain(`${"parola ".repeat(11)}par…`)
+    expect(!long.ok && long.error).not.toContain("fine")
     const removed = applyMemoryOp(memory, { op: "remove", block: "notes", match: "test" })
     expect(removed.ok && removed.memory.notes).toEqual(["Il progetto usa bun 1.3."])
   })

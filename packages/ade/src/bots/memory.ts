@@ -144,14 +144,22 @@ function over(block: MemoryBlock, entries: readonly string[], memory: BotMemory)
   return { ok: false, memory, error: t("bots.memory.error.full", blockName(block), size, limit) }
 }
 
+/** The bot's own words said back to it, one short line (B8a review, BASSO 2). */
+const EXCERPT_CHARS = 80
+function excerpt(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim()
+  const chars = [...line]
+  return chars.length > EXCERPT_CHARS ? `${chars.slice(0, EXCERPT_CHARS).join("")}…` : line
+}
+
 /** The one entry `match` points at, or why there is none. */
 function pick(block: MemoryBlock, entries: readonly string[], match: string): number | string {
   const wanted = match.trim()
-  if (wanted.length === 0) return t("bots.memory.error.noMatch", blockName(block), match)
+  if (wanted.length === 0) return t("bots.memory.error.noMatch", blockName(block), excerpt(match))
   const found = entries.map((entry, at) => ({ entry, at })).filter(({ entry }) => entry.includes(wanted))
-  if (found.length === 0) return t("bots.memory.error.noMatch", blockName(block), wanted)
+  if (found.length === 0) return t("bots.memory.error.noMatch", blockName(block), excerpt(wanted))
   if (new Set(found.map(({ entry }) => entry)).size > 1)
-    return t("bots.memory.error.manyMatches", blockName(block), wanted)
+    return t("bots.memory.error.manyMatches", blockName(block), excerpt(wanted))
   return found[0]!.at
 }
 
