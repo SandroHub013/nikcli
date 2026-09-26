@@ -1747,6 +1747,7 @@ export const en: Messages = {
   "bots.engine.model": "Model",
   "bots.engine.modelDefaultOf": (label) => `${label} default`,
   "bots.engine.nikcliDefault": "nikcli default",
+  "bots.engine.paidModels": "Pay per use",
   "bots.engine.modelsUnavailable": "Model list unavailable: nikcli must be in your PATH. The bot will use the default model.",
   "bots.engine.effort": "Reasoning effort",
   "bots.engine.effortNotSupported": "not supported",

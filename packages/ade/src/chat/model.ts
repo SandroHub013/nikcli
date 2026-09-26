@@ -235,21 +235,26 @@ export function modelsFromProviderList(
  * and what is free; the variants come along, for the effort.
  */
 export function modelsFromConfigProviders(
-  configured?: ConfigProviders | null,
+  configured?: ConfigProviders | CatalogSource | null,
   options?: ModelListOptions,
 ): readonly ChatModelChoice[] {
   if (!configured || !Array.isArray(configured.providers)) return []
   return choicesOf(configured.providers, options, true)
 }
 
+/** A catalog shaped like `/config/providers`, from another source (`bots/catalog.ts`). */
+export interface CatalogSource {
+  readonly providers: readonly CatalogProvider[]
+}
+
 /** The shape both catalogs share: a provider and its models, keyed. */
-interface CatalogProvider {
+export interface CatalogProvider {
   readonly id: string
   readonly name?: string
   readonly models?: Readonly<Record<string, CatalogEntry | undefined>>
 }
 
-interface CatalogEntry {
+export interface CatalogEntry {
   readonly id?: string
   readonly providerID?: string
   readonly name?: string

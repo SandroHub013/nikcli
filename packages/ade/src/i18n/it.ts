@@ -1761,6 +1761,7 @@ export const it = {
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
   "bots.engine.nikcliDefault": "Predefinito di nikcli",
+  "bots.engine.paidModels": "A consumo",
   "bots.engine.modelsUnavailable": "Elenco dei modelli non disponibile: serve nikcli nel PATH. Il bot userà il modello predefinito.",
   "bots.engine.effort": "Sforzo",
   "bots.engine.effortNotSupported": "non previsto",

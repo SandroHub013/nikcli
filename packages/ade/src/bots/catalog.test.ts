@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { t } from "../i18n"
-import { botModelLabel, catalogFree, nikcliModelVariants, parseModelCatalog } from "./catalog"
+import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants, parseModelCatalog } from "./catalog"
+import { modelsFromConfigProviders } from "../chat/model"
 
 /* The shape of `nikcli models opencode --verbose`, with made-up models. */
 const record = (id: string, input: number, output: number) =>
@@ -65,8 +66,18 @@ describe("the bot form's model list", () => {
 
   test("is what the select shows, the pinned model included", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
-    expect(form).toContain("<For each={props.nikcliModels}>{(id) => <option value={id}>{botModelLabel(id)}</option>}</For>")
     expect(form).toContain('<option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>')
+  })
+
+  /* Composer-chip, pezzo 1: the Chat's catalog, names to read, free first and paid apart. */
+  test("comes from the one catalog: free first, paid in a group of their own", () => {
+    const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
+    expect(form).toContain("(cwd) => botModels(cwd || undefined),")
+    expect(form).toContain("if (configured) return modelsFromConfigProviders(configured, options)")
+    expect(form).toContain("return modelsFromConfigProviders(catalogFromText(await modelCatalogText(undefined, cwd)), options)")
+    expect(form).toContain("<For each={props.nikcliModels.filter((choice) => choice.free)}>")
+    expect(form).toContain('<optgroup label={t("bots.engine.paidModels")}>')
+    expect(form).toContain("<option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>")
   })
 })
 
@@ -103,10 +114,49 @@ describe("a nikcli model's efforts, from its catalog", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     expect(form).toContain("(model) => nikcliModelVariants(model, loadCatalog),")
     // This model's only: a resource keeps the last model's value when the model is cleared (A occhio).
-    expect(form).toContain('variants: runner().id === "nikcli" && props.model && !variants.loading ? variants() : undefined,')
+    expect(form).toContain('variants: runner().id === "nikcli" && props.model ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,')
+    // The catalog's first: the provider's CLI only for a model it does not list.
+    expect(form).toContain("variantsOf(props.nikcliModels, parseModelRef(props.model))")
     expect(form).toContain("<For each={efforts().options}>")
     expect(form).not.toContain("when={runner().efforts.length > 0}")
     // Said under the row, the whole width: the effort's column cut it to «predef» (A occhio).
     expect(form).toContain('<span data-slot="bots-hint" data-state="warn">\n          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}')
+  })
+})
+
+/* Composer-chip, pezzo 1: the CLI's whole catalog, read by the Chat's own rules. */
+describe("the whole CLI catalog as the one catalog", () => {
+  const full = (provider: string, id: string, name: string, extra: string) =>
+    [
+      `${provider}/${id}`,
+      "{",
+      `  "id": "${id}",`,
+      `  "providerID": "${provider}",`,
+      `  "name": "${name}",`,
+      `  "capabilities": { "toolcall": true, "reasoning": true, "output": { "text": true } },`,
+      extra,
+      "}",
+    ].join("\n")
+  const TEXT = [
+    full("openrouter", "qwen/qwen3-coder:free", "Qwen3 Coder (free)", '  "variants": { "low": {}, "high": {} }'),
+    full("opencode", "space-bunny-free", "Space Bunny Free", '  "cost": { "input": 0, "output": 0 }'),
+    full("opencode", "gpt-x", "GPT X", '  "cost": { "input": 2.5, "output": 15 }'),
+    "rumore",
+  ].join("\n")
+
+  test("grouped by provider, named to read, free or paid, with the variants", () => {
+    const source = catalogFromText(TEXT)
+    expect(source.providers.map((provider) => provider.id)).toEqual(["openrouter", "opencode"])
+    const models = modelsFromConfigProviders(source)
+    expect(models.map((model) => [`${model.providerID}/${model.modelID}`, model.name, model.free, model.variants])).toEqual([
+      ["openrouter/qwen/qwen3-coder:free", "Qwen3 Coder", true, ["low", "high"]],
+      ["opencode/space-bunny-free", "Space Bunny", true, []],
+      ["opencode/gpt-x", "GPT X", false, []],
+    ])
+    expect(modelsFromConfigProviders(source, { isTest: true }).map((model) => model.modelID)).toEqual(["qwen/qwen3-coder:free", "space-bunny-free"])
+  })
+
+  test("nothing read is an empty catalog", () => {
+    expect(catalogFromText("")).toEqual({ providers: [] })
   })
 })

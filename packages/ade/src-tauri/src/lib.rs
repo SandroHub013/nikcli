@@ -551,6 +551,9 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
         // its models' variants, the efforts a bot's form offers (chat-bot-facili, pezzo 0; `bots/catalog.ts`).
         // Any provider: the variants are every model's, not only those whose price of 0 means free.
         [models, provider, verbose] if models == "models" && verbose == "--verbose" && is_provider_id(provider) => Ok(()),
+        // Every provider's, read-only: the bot form's models, names and variants included, when ADE's
+        // server is not open on the bot's folder (composer-chip, pezzo 1; `bots/catalog.ts`).
+        [models, verbose] if models == "models" && verbose == "--verbose" => Ok(()),
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
                 return Err("argomenti di nikcli agent create incompleti".to_string());
@@ -2757,6 +2760,7 @@ mod tests {
         assert!(check_nikcli_args(&roots, &args(&["models", "opencode", "--verbose"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models", "openrouter", "--verbose"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models", "nikcli-inference", "--verbose"])).is_ok());
+        assert!(check_nikcli_args(&roots, &args(&["models", "--verbose"])).is_ok());
         assert!(check_nikcli_args(
             &roots,
             &args(&["agent", "create", "--path", &home, "--description", "a", "--mode", "primary", "--tools", ""])
@@ -2774,6 +2778,8 @@ mod tests {
             &["models", "opencode", "--refresh"],
             &["models", "opencode"],
             &["models", "opencode", "--verbose", "--x"],
+            &["models", "--verbose", "--x"],
+            &["models", "--refresh"],
             &["--version", "--x"],
             &["--help"],
             &["agent", "create", "--description", "a"],
