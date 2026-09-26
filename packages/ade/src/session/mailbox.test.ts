@@ -291,6 +291,47 @@ describe("when a session can be written to", () => {
   })
 })
 
+describe("the permission prompt the hook says", () => {
+  const now = 10_000_000
+
+  test("a Notification with a permission question parses as that state", () => {
+    // What the hook writes when Claude Code stops to ask: not busy, and a state of
+    // its own, because the Enter of a delivery would answer it.
+    const read = parseActivity('{"state":"permission","sessionId":"s","cwd":"","at":5}', "s")
+    expect(read).toEqual({ state: "permission", at: 5 })
+  })
+
+  test("and a delivery does not press Enter there", () => {
+    const permission = { state: "permission" as const, at: now - 5_000 }
+    // A session that is talking — the user is answering it — is the strongest
+    // case for waiting.
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 500 }, now)).toBe(false)
+    // And a silent one is not free either: silence is not an answer.
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now)).toBe(false)
+  })
+
+  test("a prompt nobody is answering stops holding the session, or it would hold it for ever", () => {
+    const forgotten = { state: "permission" as const, at: now - 3 * 60_000 }
+    // Silent since the prompt was written, and old: nobody is looking at it.
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now)).toBe(true)
+    // Old but the session is still moving: that is a live prompt.
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 1_000 }, now)).toBe(false)
+  })
+
+  test("the screen reading is still the fallback, and still holds the session", () => {
+    // A session whose hooks were never installed has no permission state at all:
+    // it is the regex, exactly as before, and it does not need this to be wrong
+    // for the installed case to be right.
+    expect(isFree({ hooked: true, permissionPending: true, activity: { state: "busy", at: now - 5 } }, now)).toBe(false)
+    expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
+  })
+
+  test("the status in the sidebar says working while a prompt stands", () => {
+    // The pane is not free, so it is not idle, whatever the previous state said.
+    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("working")
+  })
+})
+
 describe("what lands in the terminal", () => {
   test("a note arrives on one line, with the way to answer", () => {
     expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(

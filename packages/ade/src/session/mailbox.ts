@@ -788,7 +788,18 @@ export type RequestState =
 
 /** Whether an agent is in a turn, from its CLI's own hooks. Absent means unknown, never idle. */
 export interface Activity {
-  state: "busy" | "idle"
+  /**
+   * `permission` is what a `Notification` hook says, and it is a state of its own
+   * rather than a flavour of busy: it is the one state where typing is not merely
+   * unhelpful but answers something. The Enter of a delivery would confirm
+   * whichever choice the prompt has selected, so nothing is typed there.
+   *
+   * It comes from the hook and not from reading the screen. The screen is what we
+   * did before, and a CLI update can change the glyphs; the hook is the CLI
+   * telling us. The screen reading stays as the fallback for a session whose hooks
+   * were never installed.
+   */
+  state: "busy" | "idle" | "permission"
   at: number
   /**
    * Where the agent is working, from the hook's own input: a session that
@@ -820,7 +831,12 @@ export function statusFromActivity(
 ): "working" | "idle" | undefined {
   if (!activity) return undefined
   if (status !== "idle" && status !== "working") return undefined
-  if (activity.state === "busy") return status === "working" ? undefined : "working"
+  // A prompt is work: the session is stopped on a question, and a pane that says
+  // "Disponibile" while a permission question stands is a pane someone will send
+  // a message into. Same as busy, and never downgraded to idle by it.
+  if (activity.state === "busy" || activity.state === "permission") {
+    return status === "working" ? undefined : "working"
+  }
   if (status !== "working") return undefined
   return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
 }
@@ -835,6 +851,16 @@ export const QUIET_FREE_MS = 4000
 export const UNKNOWN_FREE_MS = 15_000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
 export const STALE_BUSY_MS = 30 * 60_000
+/**
+ * A "permission" older than this, from a session that has been talking since, is a
+ * prompt that was answered and no hook came to say so.
+ *
+ * A stuck "permission" would be worse than the screen reading it replaced: the delivery
+ * would wait for ever in a pane that is free. The bound is generous because a prompt
+ * somebody is thinking about is not a prompt that has gone - and the session is
+ * talking while they think, which is what the second half of the rule asks for.
+ */
+export const STALE_PERMISSION_MS = 2 * 60_000
 
 /**
  * Whether text can be typed into a session without interrupting it.
@@ -865,6 +891,13 @@ export function isFree(
     // Nothing known at all, neither a turn nor a byte of output: not a reason to type.
     if (!target.activity) return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
     if (target.activity.state === "idle") return true
+    if (target.activity.state === "permission") {
+      // A prompt the hook is still reporting, from a session that has gone quiet
+      // since it wrote it. The pane going quiet is the part that makes it a
+      // prompt nobody is looking at: a prompt being answered is answered with
+      // keys, and those are output.
+      return now - target.activity.at > STALE_PERMISSION_MS && quietFor >= UNKNOWN_FREE_MS
+    }
     return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
   }
   return quietFor >= QUIET_FREE_MS
@@ -881,9 +914,11 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   if (!text) return undefined
   try {
     const raw = JSON.parse(text.replace(/^\ufeff/, "")) as Record<string, unknown>
-    if ((raw.state !== "busy" && raw.state !== "idle") || typeof raw.at !== "number") return undefined
+    const state = raw.state
+    if (state !== "busy" && state !== "idle" && state !== "permission") return undefined
+    if (typeof raw.at !== "number") return undefined
     if (sessionId && typeof raw.sessionId === "string" && raw.sessionId !== sessionId) return undefined
-    return { state: raw.state, at: raw.at, ...(typeof raw.cwd === "string" && raw.cwd.trim() ? { cwd: raw.cwd } : {}) }
+    return { state, at: raw.at, ...(typeof raw.cwd === "string" && raw.cwd.trim() ? { cwd: raw.cwd } : {}) }
   } catch {
     return undefined
   }

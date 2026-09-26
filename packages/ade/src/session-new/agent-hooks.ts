@@ -95,7 +95,18 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     config: [".claude", "settings.json"],
     script: [".claude", "hooks", `${HOOK_MARKER}.ps1`],
     matcher: "startup|resume|clear",
-    activityEvents: ["UserPromptSubmit", "Stop"],
+    /*
+     * Notification, for the permission questions.
+     *
+     * Until now the only way ADE knew a prompt was standing was to read the
+     * glyphs on the screen, and that is the fragile half of the whole thing: a
+     * CLI update can change the words, and a delivery's Enter would answer
+     * whichever choice the prompt had selected. The hook is the CLI telling us,
+     * and it is the same hook the user already installed from the settings — no
+     * new file in their home, no new permission, and the screen reading stays as
+     * the fallback for a session whose hooks were never installed.
+     */
+    activityEvents: ["UserPromptSubmit", "Stop", "Notification"],
     execForm: true,
   },
   {
@@ -641,9 +652,14 @@ if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
 
 # A turn starting or ending: whether the agent is working, for ADE to wait on or remind.
 $event = "$($payload.hook_event_name)"
-if ($event -eq "UserPromptSubmit" -or $event -eq "Stop") {
+# A permission question is its own state and not a flavour of busy: typing there
+# would answer it. It is read from the hook because the hook is the CLI saying
+# so; the reading of the screen stays as the fallback for a session whose hooks
+# were never installed.
+$permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq "permission_prompt"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission) {
   $activity = [ordered]@{
-    state     = $(if ($event -eq "Stop") { "idle" } else { "busy" })
+    state     = $(if ($event -eq "Stop") { "idle" } elseif ($permission) { "permission" } else { "busy" })
     sessionId = "$sessionId"
     cwd       = "$($payload.cwd)"
     at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
