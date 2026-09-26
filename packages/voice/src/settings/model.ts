@@ -739,8 +739,8 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * a profile that says `af_heart` on `piper` gets the Kokoro backend, and one
    * that says `ugo` on `kokoro` gets Piper. The other way round would be worse
    * in both directions — a Kokoro id on the Piper backend is a voice that
-   * cannot speak, and letting the voice win here is what stops a Kokoro id in a
-   * profile that never chose the backend from starting a 219 MB download.
+   * cannot speak, and a Piper id on the Kokoro backend is a voice the host
+   * does not have at all.
    *
    * A repair, so it is said: the pair was written together and does not come
    * apart on its own.

@@ -73,9 +73,11 @@ describe("la migrazione a v8", () => {
 });
 
 describe("la coppia voce e backend", () => {
-  test("un id Kokoro senza il backend Kokoro non viene accettato, e non si corregge nel suo senso", () => {
-    // Se vincesse l'id, un profilo che nomina af_partirebbe un download di
-    // 219 MB che nessuno ha chiesto.
+  test("un id Kokoro sul backend Piper tiene l'id e corregge il backend", () => {
+    // Vince l'id, che è quello che l'utente ha scelto e quello che il pannello
+    // nomina: il backend è la parte repairsibile della coppia. Il testo che
+    // prima diceva il contrario diceva che l'id non viene accettato, e il test
+    // lo accettava.
     const res = normalizeSettings(v8({ replyVoice: "af_heart", replyBackend: "piper", ttsLocale: "en-US" }));
     expect(res.replyBackend).toBe("kokoro");
     expect(res.replyVoice).toBe("af_heart");
