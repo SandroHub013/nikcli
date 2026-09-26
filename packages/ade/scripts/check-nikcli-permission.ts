@@ -18,6 +18,7 @@
 
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
+import { blockedBashDenials, botPermission, type BotProfile } from "../src/bots/serve-rules"
 
 const ade = join(import.meta.dir, "..")
 const nikcli = join(ade, "..", "nikcli")
@@ -143,7 +144,64 @@ for (const [flag, raw] of flags) {
   }
 }
 
-console.log(`${flags.size} flag, ${checks} controlli su ruleset.ts di nikcli`)
+/*
+ * B8d: the rules of a bot's session on ADE's server (`serve-rules.ts`). They
+ * come after the agent's — nikcli's defaults, the user's configuration and the
+ * bot's own file — and the last rule that matches wins (`session/tools.ts`,
+ * `merge(agent.permission, session.permission)`). The bot's file here grants
+ * itself everything, after each user configuration above.
+ */
+const HOSTILE = { bash: { "*": "allow", "git *": "allow" }, external_directory: "allow", computer: "allow", task: "allow", edit: "allow", "*": "allow" }
+const SHELL: Record<BotProfile, "ask" | "deny"> = {
+  ask: "ask",
+  "ask-outside": "deny",
+  "no-shell": "deny",
+  "read-only": "deny",
+  "remote-ask": "ask",
+  "remote-none": "deny",
+}
+const profileAction = (agent: unknown[], session: readonly unknown[], command: string, tool = "bash") =>
+  PermissionRuleset.evaluate(tool, command, agent, [...session]).action
+let profiles = 0
+for (const profile of Object.keys(SHELL) as BotProfile[]) {
+  profiles++
+  const session = botPermission(profile)
+  for (const [user, config] of Object.entries(USERS)) {
+    const agent = [...PermissionRuleset.fromConfig(config), ...PermissionRuleset.fromConfig(HOSTILE)]
+    if (SHELL[profile] === "ask") {
+      for (const command of BLOCKED) {
+        const got = profileAction(agent, session, command)
+        check(got === "deny", `profilo ${profile}, ${user}: «${command}» dà ${got}, doveva essere negato`)
+      }
+    }
+    for (const command of EVERYDAY) {
+      const got = profileAction(agent, session, command)
+      check(got === SHELL[profile], `profilo ${profile}, ${user}: «${command}» dà ${got}, doveva dare ${SHELL[profile]}`)
+    }
+    for (const tool of ["task", "plan_enter", "plan_exit", "question"]) {
+      check(profileAction(agent, session, "*", tool) === "deny", `profilo ${profile}, ${user}: ${tool} non è negato`)
+    }
+    const merged = [...agent, ...session]
+    if (SHELL[profile] === "deny") {
+      check(PermissionRuleset.disabled(["bash"], merged).has("bash"), `profilo ${profile}, ${user}: la shell negata resta visibile al modello`)
+    }
+    if (profile === "read-only") {
+      const writers = ["edit", "write", "multiedit", "apply_patch", "patch", "repo_clone", "generate_image", "artifact"]
+      const hidden = PermissionRuleset.disabled(writers, merged)
+      for (const tool of writers) check(hidden.has(tool), `profilo ${profile}, ${user}: ${tool} resta visibile al modello`)
+      check(profileAction(agent, session, "src/index.ts", "read") !== "deny", `profilo ${profile}, ${user}: anche la lettura è negata`)
+    }
+  }
+}
+// The same list the spawn flags carried, while they are there.
+const asked = flags.get("bot-ask-shell")
+if (asked) {
+  const rust = new Set(Object.keys((JSON.parse(asked) as Record<string, Record<string, string>>)[BLOCK_KEY] ?? {}).filter((key) => key !== "*"))
+  const ts = new Set(blockedBashDenials())
+  check(rust.size === ts.size && [...ts].every((pattern) => rust.has(pattern)), `la lista di blocco di serve-rules.ts non è quella di pty.rs (${ts.size} contro ${rust.size})`)
+}
+
+console.log(`${flags.size} flag e ${profiles} profili, ${checks} controlli su ruleset.ts di nikcli`)
 if (failures.length > 0) {
   for (const failure of failures) console.error(`  ✗ ${failure}`)
   process.exit(1)
