@@ -346,6 +346,23 @@ struct Spawned {
     errors: Option<Box<dyn Read + Send>>,
 }
 
+/// A start the system refused, as the pane says it. portable-pty writes its
+/// failure with Rust's debug form — «CreateProcessW `"ohmypi\0"` in cwd
+/// `Some("…\0")` failed: … (os error 2)» — and that text reached the strip
+/// over the terminal as it was. A program that is not there (errors 2 and 3)
+/// is named as such; anything else keeps only the system's own reason.
+fn spawn_failure(command: &str, error: &str) -> String {
+    let code = error
+        .rsplit_once("(os error ")
+        .and_then(|(_, rest)| rest.split(')').next())
+        .and_then(|code| code.trim().parse::<i32>().ok());
+    if matches!(code, Some(2) | Some(3)) {
+        return format!("programma non trovato: {command}");
+    }
+    let reason = error.rsplit_once(" failed: ").map_or(error, |(_, reason)| reason);
+    format!("{command} non parte: {}", reason.replace('\0', "").trim())
+}
+
 fn spawn_in_pty(builder: CommandBuilder, rows: u16, cols: u16) -> Result<Spawned, String> {
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -904,9 +921,9 @@ pub async fn pty_spawn(
     }
 
     let spawned = if pipe {
-        spawn_piped(&program, &builder).map_err(|e| format!("{command} non parte: {e}"))?
+        spawn_piped(&program, &builder).map_err(|e| spawn_failure(&command, &e))?
     } else {
-        spawn_in_pty(builder, rows, cols).map_err(|e| format!("{command} non parte: {e}"))?
+        spawn_in_pty(builder, rows, cols).map_err(|e| spawn_failure(&command, &e))?
     };
     let Spawned { mut child, master, reader, writer, errors } = spawned;
 
@@ -1547,8 +1564,24 @@ pub(crate) fn launch_plan(resolved: &str, args: &[String]) -> Result<(String, Ve
 mod cmd_script_tests {
     //! B1: what reaches a `.cmd` agent is what was sent, and nothing runs.
     //! Only a harmless `probe.cmd`/`probe.js` in a fresh folder; no agent is started.
-    use super::launch_plan;
+    use super::{launch_plan, spawn_failure};
     use std::path::PathBuf;
+
+    #[test]
+    fn a_refused_start_is_said_without_the_debug_form() {
+        let missing = "CreateProcessW `\"ohmypi\\0\"` in cwd `Some(\"C:/progetto\\0\")` failed: Impossibile trovare il file specificato. (os error 2)";
+        assert_eq!(spawn_failure("ohmypi", missing), "programma non trovato: ohmypi");
+        let no_path = "CreateProcessW `\"x\\0\"` in cwd `None` failed: Impossibile trovare il percorso specificato. (os error 3)";
+        assert_eq!(spawn_failure("x", no_path), "programma non trovato: x");
+        // std's own error, from the piped start: the same code, the same sentence.
+        let piped = std::io::Error::from_raw_os_error(2).to_string();
+        assert_eq!(spawn_failure("claude", &piped), "programma non trovato: claude");
+        let denied = "CreateProcessW `\"x\\0\"` in cwd `Some(\"C:/p\\0\")` failed: Accesso negato. (os error 5)";
+        let said = spawn_failure("x", denied);
+        assert_eq!(said, "x non parte: Accesso negato. (os error 5)");
+        assert!(!said.contains("Some(") && !said.contains('\0') && !said.contains("CreateProcessW"));
+        assert_eq!(spawn_failure("x", "pty non creata: nessuna console"), "x non parte: pty non creata: nessuna console");
+    }
 
     fn fresh_dir(tag: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();

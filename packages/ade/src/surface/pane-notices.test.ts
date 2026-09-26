@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { readReportLine } from "../session/report"
 import { join } from "node:path"
 import { translate } from "../i18n"
-import { MAX_NOTICES, addPane, createWorkbench, toWorkspaceState, withPaneNotice, type Pane } from "./state"
+import { MAX_NOTICES, NOTICE_MAX_CHARS, addPane, createWorkbench, toWorkspaceState, withPaneNotice, type Pane } from "./state"
 
 /*
  * Prove dal vivo 2, difetto A: the restore's notes («già aperta», «aperta
@@ -130,8 +130,8 @@ describe("the notes that go over the terminal", () => {
     expect(workbench).toContain('tellPane(paneId, t("pane.startFailed", String(e)))')
     expect(workbench).toContain('tellPane(paneId, t("pane.connectFailed", String(e)))')
     // A start the host refused (a program not found) comes back as a reason, not as the agent's stderr.
-    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),')
-    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),')
+    expect(workbench).toMatch(/onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.startFailed", reason\)\)/)
+    expect(workbench).toMatch(/onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.connectFailed", reason\)\)/)
     const shell = read("host", "shell.ts")
     expect(shell).toContain("if (onRefused) onRefused(reason)")
     expect(workbench).not.toMatch(/appendLine\(paneId, String\(e\)\)/)
@@ -178,5 +178,50 @@ describe("the notes that go over the terminal", () => {
       "note.suspended",
     ]
     for (const key of traffic) expect([key, told(key)]).toEqual([key, []])
+  })
+})
+
+/*
+ * Review of note-pannelli, BASSI 1 and 2: what a field can put in the strip,
+ * and what the header says of a process that never started.
+ */
+describe("the strip's length and a start that never happened", () => {
+  test("a long note is cut in the strip, with an ellipsis; the transcript gets it whole", () => {
+    const long = `La sessione non è partita: ${"x".repeat(600)}`
+    const [shown] = withPaneNotice(undefined, long)
+    expect(shown!.length).toBe(NOTICE_MAX_CHARS)
+    expect(shown!.endsWith("…")).toBe(true)
+    expect(withPaneNotice(undefined, "breve")).toEqual(["breve"])
+    // The same long note twice is still one.
+    expect(withPaneNotice(withPaneNotice(undefined, long), long)).toHaveLength(1)
+    const workbench = read("surface", "workbench.tsx")
+    const tell = workbench.slice(workbench.indexOf("const tellPane = "), workbench.indexOf("const dismissNotices = "))
+    expect(tell).toContain('appendLine(id, text, "note", "ade")')
+  })
+
+  test("ADE's own sentences leave every field at least 120 characters", () => {
+    const sources = [read("surface", "workbench.tsx"), read("surface", "pane-renderer.tsx"), read("voice", "host.ts")]
+    const keys = new Set<string>()
+    for (const source of sources) {
+      for (const line of source.split("\n")) {
+        if (!/tellPane\(|\bsay\(|onRefused/.test(line)) continue
+        for (const match of line.matchAll(/t\("([\w.]+)"/g)) keys.add(match[1]!)
+      }
+    }
+    expect(keys.size).toBeGreaterThan(15)
+    for (const key of keys) {
+      for (const lang of ["it", "en"] as const) {
+        const fixed = (translate as (lang: string, key: string, ...args: string[]) => string)(lang, key, "", "", "")
+        expect([key, lang, fixed.length <= NOTICE_MAX_CHARS - 120]).toEqual([key, lang, true])
+      }
+    }
+  })
+
+  test("a start the host refused shows as failed, not as «Uscito con ?»", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).toContain('activity: failed ?? (code === 0 ? "done" : exitedActivity(code))')
+    expect(workbench).toContain('finish(paneId, code, refused ? "startFailed" : undefined)')
+    expect(workbench).toContain('finish(paneId, code, refused ? "connectFailed" : undefined)')
+    expect(workbench.match(/refused = true\n/g)).toHaveLength(2)
   })
 })

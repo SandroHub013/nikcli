@@ -320,8 +320,17 @@ export const MAX_NOTICES = 3
  * belonged to another folder, or could not be found (prove dal vivo 2,
  * difetto A). The same note twice is one; the oldest go first.
  */
+/**
+ * How long a note over the terminal may be. ADE's own sentences are short
+ * (none is over 160 characters, a test holds it); what fills the rest is a
+ * field — a web page's title, an error of the host — and a long one would
+ * cover the terminal. The strip shows it cut; the transcript keeps it whole.
+ */
+export const NOTICE_MAX_CHARS = 280
+
 export function withPaneNotice(notices: readonly string[] | undefined, text: string): string[] {
-  return [...(notices ?? []).filter((notice) => notice !== text), text].slice(-MAX_NOTICES)
+  const shown = text.length > NOTICE_MAX_CHARS ? `${text.slice(0, NOTICE_MAX_CHARS - 1).trimEnd()}…` : text
+  return [...(notices ?? []).filter((notice) => notice !== shown), shown].slice(-MAX_NOTICES)
 }
 
 export function updatePane(workbench: Workbench, paneId: string, updates: Partial<Pane>): Workbench {
