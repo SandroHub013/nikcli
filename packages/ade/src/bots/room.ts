@@ -22,6 +22,8 @@
  * stop talking.
  */
 
+import { t } from "../i18n"
+
 /**
  * The two things a room needs to know about a member.
  *
@@ -304,6 +306,53 @@ export function roomPrompt(input: {
   ].join("\n")
 }
 
+/* ── what a room may spend ───────────────────────────────────────────── */
+
+/**
+ * How a member is paid for: a free model, a subscription, or money (a paid
+ * model or a key). Only money has a cap per round; a free model may spend
+ * nothing, and one that does is stopped at its first cost.
+ */
+export type RoomPay = "free" | "plan" | "paid"
+
+/** The most a room's round may be allowed to spend, in dollars. */
+export const ROOM_ROUND_MAX_USD = 0.5
+
+export interface RoomSpend {
+  readonly perRoundUsd: number
+}
+
+/** Why these members cannot make a room as it is set; undefined when they can. */
+export function roomSpendProblem(
+  members: readonly { readonly name: string; readonly pay: RoomPay }[],
+  spend: RoomSpend | undefined,
+  testBuild: boolean,
+): string | undefined {
+  // ADE Test spends nothing: only free models (B8b brief).
+  const notFree = members.find((member) => member.pay !== "free")
+  if (testBuild && notFree) return t("bots.room.testOnlyFree", notFree.name)
+  if (spend && !(Number.isFinite(spend.perRoundUsd) && spend.perRoundUsd > 0 && spend.perRoundUsd <= ROOM_ROUND_MAX_USD))
+    return t("bots.room.spendRange", ROOM_ROUND_MAX_USD)
+  if (members.some((member) => member.pay === "paid") && !spend) return t("bots.room.spendRequired")
+  return undefined
+}
+
+/**
+ * The dollars one member's turn may spend (`TurnRequest.maxCostUsd`): what
+ * is left of the round's cap for money, nothing for a free model, and no cap
+ * for a subscription, whose figure is not a charge.
+ */
+/** A member's `RoomPay` from how its turns are paid (`routineModeOf`): a key is money too. */
+export function roomPay(mode: "plan" | "key" | "free" | "paid"): RoomPay {
+  return mode === "key" ? "paid" : mode
+}
+
+export function memberBudget(pay: RoomPay, leftUsd: number | undefined): number | undefined {
+  if (pay === "free") return 0
+  if (pay === "plan") return undefined
+  return leftUsd === undefined ? undefined : Math.max(0, leftUsd)
+}
+
 /** What a member's turn came to: its words, or null when it failed or could not start (a silence). */
 export interface RoomSpeech {
   readonly text: string | null
@@ -313,8 +362,10 @@ export interface RoomSpeech {
 export interface RoomRunDeps {
   readonly log: () => RoomLog
   readonly setLog: (log: RoomLog) => void
-  /** One member's turn on `prompt`. */
-  readonly speak: (member: RoomMember, prompt: string) => Promise<RoomSpeech>
+  /** One member's turn on `prompt`, within `leftUsd` of the round's cap when there is one. */
+  readonly speak: (member: RoomMember, prompt: string, leftUsd: number | undefined) => Promise<RoomSpeech>
+  /** The room's cap per round, in dollars; absent, no member is paid for with money. */
+  readonly perRoundUsd?: number
   /** A newer message from the user, or «Ferma»: the run ends at the next member. */
   readonly cancelled: () => boolean
   /** Who is on turn now; undefined when nobody is. For the room's view. */
@@ -324,7 +375,7 @@ export interface RoomRunDeps {
 }
 
 /** Why a run ended. */
-export type RoomEnd = "settled" | "rounds" | "messages" | "cancelled"
+export type RoomEnd = "settled" | "rounds" | "messages" | "cancelled" | "budget"
 
 /**
  * The rounds one user message sets off, already in the log: every bound of
@@ -344,6 +395,7 @@ export async function runRoom(
   try {
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       let spoke = 0
+      let spentUsd = 0
       for (const member of roomResponders(deps.log().entries, members, round)) {
         if (deps.cancelled()) return { end: "cancelled", posted, turns }
         if (posted >= MAX_MESSAGES) return { end: "messages", posted, turns }
@@ -353,7 +405,8 @@ export async function runRoom(
         turns++
         let speech: RoomSpeech
         try {
-          speech = await deps.speak(member, roomPrompt({ room, members, viewer: member, delta }))
+          const leftUsd = deps.perRoundUsd === undefined ? undefined : deps.perRoundUsd - spentUsd
+          speech = await deps.speak(member, roomPrompt({ room, members, viewer: member, delta }), leftUsd)
         } catch {
           speech = { text: null, costUsd: 0 }
         }
@@ -366,6 +419,9 @@ export async function runRoom(
           spoke++
         }
         deps.setLog(log)
+        spentUsd += Number.isFinite(speech.costUsd) && speech.costUsd > 0 ? speech.costUsd : 0
+        // The round's cap is spent: no more turns, this round or after.
+        if (deps.perRoundUsd !== undefined && spentUsd >= deps.perRoundUsd) return { end: "budget", posted, turns }
       }
       if (deps.cancelled()) return { end: "cancelled", posted, turns }
       if (!continuesAfter({ round, anyoneSpoke: spoke > 0 })) return { end: spoke > 0 ? "rounds" : "settled", posted, turns }

@@ -5,11 +5,15 @@ import {
   EMPTY_LOG,
   isPass,
   LOG_KEPT,
+  memberBudget,
   MAX_MESSAGES,
   MAX_ROUNDS,
   needsYou,
   roomPrompt,
+  roomPay,
   roomResponders,
+  roomSpendProblem,
+  ROOM_ROUND_MAX_USD,
   runRoom,
   type RoomEntry,
   type RoomLog,
@@ -41,11 +45,15 @@ function room(scripts: Record<string, readonly (string | null)[]>, user = "che n
     prompts,
     log: () => log,
     cancel: () => void (cancel = true),
-    run: (members: readonly RoomMember[] = three, extra: { speak?: typeof speak } = {}) =>
+    run: (
+      members: readonly RoomMember[] = three,
+      extra: { speak?: (member: RoomMember, prompt: string, leftUsd: number | undefined) => Promise<RoomSpeech>; perRoundUsd?: number } = {},
+    ) =>
       runRoom("prova", members, {
         log: () => log,
         setLog: (next) => void (log = next),
         speak: extra.speak ?? speak,
+        ...(extra.perRoundUsd !== undefined ? { perRoundUsd: extra.perRoundUsd } : {}),
         cancelled: () => cancel,
         now: () => 1,
         newId: () => `e${++id}`,
@@ -137,6 +145,76 @@ describe("B8b: a room's bounds, with fake bots", () => {
     expect(result.end).toBe("cancelled")
     // What came back after the cancel is not posted.
     expect(said(r.log())).toEqual([])
+  })
+})
+
+describe("B8b: what a room may spend, with fake bots", () => {
+  test("each turn gets what is left of the round's cap, and a spent cap stops the room", async () => {
+    const r = room({})
+    const left: (number | undefined)[] = []
+    const result = await r.run(three, {
+      perRoundUsd: 0.1,
+      speak: async (member, _prompt, leftUsd) => {
+        left.push(leftUsd)
+        return { text: `parla ${member.name}`, costUsd: 0.04 }
+      },
+    })
+    expect(left.map((usd) => Number(usd!.toFixed(2)))).toEqual([0.1, 0.06, 0.02])
+    // 0.12 spent against 0.10: no more turns, not even a second round.
+    expect(result).toEqual({ end: "budget", posted: 3, turns: 3 })
+    expect(said(r.log())).toEqual(["parla Alfa", "parla Beta", "parla Gamma"])
+  })
+
+  test("the cap is per round: a round under it leaves the next one its whole cap", async () => {
+    const r = room({})
+    const left: (number | undefined)[] = []
+    let turn = 0
+    await r.run(three, {
+      perRoundUsd: 0.1,
+      speak: async (_member, _prompt, leftUsd) => {
+        left.push(leftUsd)
+        turn++
+        return { text: turn <= 3 ? `giro uno ${turn}` : "(pass)", costUsd: 0.01 }
+      },
+    })
+    expect(left.slice(0, 3).map((usd) => Number(usd!.toFixed(2)))).toEqual([0.1, 0.09, 0.08])
+    expect(Number(left[3]!.toFixed(2))).toBe(0.1)
+  })
+
+  test("with no money in the room, nothing is capped and no cost stops it", async () => {
+    const r = room({})
+    const left: (number | undefined)[] = []
+    const result = await r.run(three, {
+      speak: async (_member, _prompt, leftUsd) => {
+        left.push(leftUsd)
+        return { text: "(pass)", costUsd: 5 }
+      },
+    })
+    expect(left).toEqual([undefined, undefined, undefined])
+    expect(result.end).toBe("settled")
+  })
+
+  test("in ADE Test only free models; money needs a cap per round, within the most allowed", () => {
+    const free = { name: "Alfa", pay: roomPay("free") }
+    const plan = { name: "Beta", pay: roomPay("plan") }
+    const key = { name: "Gamma", pay: roomPay("key") }
+    expect(key.pay).toBe("paid")
+    expect(roomSpendProblem([free, { ...free, name: "Beta" }], undefined, true)).toBeUndefined()
+    expect(roomSpendProblem([free, plan], undefined, true)).toContain("Beta")
+    expect(roomSpendProblem([free, key], { perRoundUsd: 0.1 }, true)).toContain("Gamma")
+    expect(roomSpendProblem([free, plan], undefined, false)).toBeUndefined()
+    expect(roomSpendProblem([free, key], undefined, false)).toBeDefined()
+    expect(roomSpendProblem([free, key], { perRoundUsd: 0.1 }, false)).toBeUndefined()
+    for (const perRoundUsd of [0, -1, Number.NaN, ROOM_ROUND_MAX_USD + 0.01])
+      expect(roomSpendProblem([free, key], { perRoundUsd }, false)).toBeDefined()
+  })
+
+  test("a free model may spend nothing, a plan has no cap, money what is left", () => {
+    expect(memberBudget("free", 0.3)).toBe(0)
+    expect(memberBudget("free", undefined)).toBe(0)
+    expect(memberBudget("plan", 0.3)).toBeUndefined()
+    expect(memberBudget("paid", 0.3)).toBe(0.3)
+    expect(memberBudget("paid", -0.1)).toBe(0)
   })
 })
 
