@@ -378,38 +378,37 @@ export const projectFs: ProjectFs = {
   },
 }
 
-/** The platforms a bot's gateway can be on, as the Rust side names them (`Platform`, adapter.rs). */
-export const GATEWAY_PLATFORMS = ["telegram", "discord", "slack"] as const
+/**
+ * Stops every gateway of a bot, takes its tokens out of the keychain and its
+ * links out of the gateway's state, with who was authorized (`forget_bot`).
+ */
+export type ForgetGateways = (bot: string) => Promise<void>
 
-/** Takes a bot's token for `platform` out of the keychain, and switches that gateway off. */
-export type ClearGatewayToken = (bot: string, platform: string) => Promise<void>
-
-const clearGatewayToken: ClearGatewayToken = async (bot, platform) => {
+const forgetGateways: ForgetGateways = async (bot) => {
   const { invoke } = await import("@tauri-apps/api/core")
-  await invoke("gateway_clear_token", { bot, platform })
+  await invoke("gateway_forget_bot", { bot })
 }
 
 /**
  * Removes a bot's file. The roster is the directory, so this is the deletion.
  *
- * Its gateways go first: each platform's token leaves the keychain and the
- * gateway stops. Before, a bot deleted here went on answering its chats until
- * ADE closed, and its token stayed in the keychain for good. When one cannot
- * be cleared the file stays, and the card says why.
+ * Its gateways go first: they stop, the tokens leave the keychain, and the
+ * links go with who was authorized. Before, a bot deleted here went on
+ * answering its chats until ADE closed, its tokens stayed in the keychain,
+ * and a new bot at the same path inherited the senders. When they cannot be
+ * cleared the file stays, and the card says why.
  */
 export async function deleteBot(
   bot: AgentFile,
-  clearToken: ClearGatewayToken = clearGatewayToken,
+  forget: ForgetGateways = forgetGateways,
   hostOf: () => Promise<Host | undefined> = getHost,
 ): Promise<string | undefined> {
   const host = await hostOf()
   if (!host?.deleteBotFile) return t("bots.store.hostMissing")
-  for (const platform of GATEWAY_PLATFORMS) {
-    try {
-      await clearToken(bot.path, platform)
-    } catch (error) {
-      return t("bots.store.gatewayKept", platform, error instanceof Error ? error.message : String(error))
-    }
+  try {
+    await forget(bot.path)
+  } catch (error) {
+    return t("bots.store.gatewayKept", error instanceof Error ? error.message : String(error))
   }
   /*
    * A command of its own, which deletes only a bot's file. This used to go

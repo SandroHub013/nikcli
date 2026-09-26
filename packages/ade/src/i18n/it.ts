@@ -1668,8 +1668,8 @@ export const it = {
   "bots.store.noRead": "Questo host non può leggere file.",
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
-  "bots.store.gatewayKept": (platform: string, error: string) =>
-    `Non ho tolto il token ${platform} di questo bot (${error}): il bot non è cancellato.`,
+  "bots.store.gatewayKept": (error: string) =>
+    `Non ho tolto i token e i gateway di questo bot (${error}): il bot non è cancellato.`,
   "bots.store.nikcliExited": (code: string) => `nikcli è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",

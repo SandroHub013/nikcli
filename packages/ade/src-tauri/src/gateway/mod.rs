@@ -175,6 +175,12 @@ pub async fn gateway_clear_token(app: AppHandle, bot: String, platform: Platform
     hub(&app)?.clear_token(&bot, platform)
 }
 
+/// A bot deleted: its gateways, tokens and links go, who was authorized with them.
+#[tauri::command]
+pub async fn gateway_forget_bot(app: AppHandle, bot: String) -> Result<(), String> {
+    hub(&app)?.forget_bot(&bot)
+}
+
 /// Switches a bot's gateway on (its turns fixed to `project`) or off.
 #[tauri::command]
 pub async fn gateway_set_enabled(

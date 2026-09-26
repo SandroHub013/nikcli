@@ -159,6 +159,25 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Takes away every link of `bot`, with who was authorized and the chats
+    /// it knew. Refused, like `update`, when the file cannot be read.
+    pub fn forget(&self, bot: &str) -> Result<(), String> {
+        let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = match read_file(&self.path) {
+            Some(state) => state,
+            None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
+            None => return Ok(()),
+        };
+        let before = state.links.len();
+        state.links.retain(|link| link.bot != bot);
+        if state.links.len() == before {
+            return Ok(());
+        }
+        write_file(&self.path, &state)
+    }
+}
+
 fn read_file(path: &Path) -> Option<State> {
     let text = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()

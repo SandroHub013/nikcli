@@ -352,6 +352,24 @@ impl Hub {
         })
     }
 
+    /// A bot deleted: every gateway of it stops, its tokens leave the keychain,
+    /// and its links go, with who was authorized and the chats it knew. A new
+    /// bot made later at the same path starts from nothing: it does not
+    /// inherit the senders someone let write to the old one.
+    pub fn forget_bot(&self, bot: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        let mut platforms = vec![Platform::Telegram, Platform::Discord, Platform::Slack];
+        for link in self.store.read().links.into_iter().filter(|link| link.bot == bot) {
+            if !platforms.contains(&link.platform) {
+                platforms.push(link.platform);
+            }
+        }
+        for platform in platforms {
+            self.clear_token(bot, platform)?;
+        }
+        self.store.forget(bot)
+    }
+
     /// The token, for building the platform's adapter. Rust only: never sent to the page.
     pub fn token(&self, bot: &str, platform: Platform) -> Result<Option<String>, String> {
         self.vault.get(&self.service, &token_name(bot, platform))
@@ -1461,6 +1479,28 @@ mod tests {
         s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
         assert_eq!(s.made.lock().unwrap().len(), 2);
         assert!(!s.hub.status()[0].running);
+    }
+
+    #[tokio::test]
+    async fn a_bot_made_where_a_deleted_one_was_inherits_nobody() {
+        let s = setup("forget");
+        authorize(&s, "42");
+        let (adapter, _feed) = start(&s);
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(s.hub.status().iter().all(|link| link.bot != BOT), "il collegamento del bot cancellato resta");
+        assert!(s.hub.token(BOT, Platform::Fake).unwrap().is_none());
+        assert!(s.hub.links().is_empty(), "il gateway del bot cancellato gira ancora");
+        drop(adapter);
+        // A new bot, same path: nobody authorized, no token, off.
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        let fresh = s.hub.status().into_iter().find(|link| link.bot == BOT).expect("il bot nuovo");
+        assert!(fresh.authorized.is_empty(), "ha ereditato gli autorizzati: {:?}", fresh.authorized);
+        assert!(!fresh.enabled);
+        // Another bot is left as it was.
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        s.hub.set_token(other, Platform::Fake, "987654321:ALTRO-token-di-prova_AbCdEfGhIj").unwrap();
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(s.hub.status().iter().any(|link| link.bot == other && link.has_token));
     }
 
     #[tokio::test]
