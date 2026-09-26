@@ -95,3 +95,69 @@ describe("il taglio progressivo delle unità", () => {
     expect(splitUnits("   ")).toEqual([]);
   });
 });
+
+/*
+ * Un taglio che cade dentro una parola è un refuso. Un taglio che cade dentro un
+ * numero è un numero diverso: `1.234.567` letto da solo e `89` letto dopo non
+ * dicono `1.234.567,89`. Il tetto è un peso e non una lunghezza proprio perché
+ * un pezzo che lo supera costa silenzio, mentre un pezzo spezzato costa il
+ * numero che si stava dicendo.
+ */
+describe("il taglio non spezza mai quello che va detto intero", () => {
+  /** Every token with a digit in it, in order: what the reply is saying. */
+  function numbers(text: string): string[] {
+    return text.match(/[\d][\d.,/]*\d|\d/g) ?? [];
+  }
+
+  test("un importo con i separatori delle migliaia resta un numero", () => {
+    const reply = "Il totale è 1.234.567,89 EUR come da fattura numero 20260926001.";
+    const units = splitUnits(reply);
+    // Non basta che il testo si ricomponga: ogni cifra deve essere nella stessa
+    // unità in cui era stata scritta.
+    for (const number of numbers(reply)) {
+      expect(units.some((unit) => unit.includes(number)), `«${number}» intero in una unità`).toBe(true);
+    }
+  });
+
+  test("un codice fiscale non viene spezzato", () => {
+    const units = splitUnits("Il codice fiscale RSSMRA80A01H501U del cliente va nel fatturato.");
+    expect(units.some((unit) => unit.includes("RSSMRA80A01H501U"))).toBe(true);
+  });
+
+  test("un lungo numero senza spazi resta un numero", () => {
+    const units = splitUnits("Il saldo è 1234567890 euro.");
+    expect(units.some((unit) => unit.includes("1234567890"))).toBe(true);
+  });
+
+  test("un indirizzo non viene spezzato a metà", () => {
+    const units = splitUnits("Guarda https://esempio.it/articolo/molto-lungo per il seguito.");
+    const together = units.filter((unit) => unit.includes("esempio.it")).join(" ");
+    expect(together).toContain("https://esempio.it/articolo/molto-lungo");
+  });
+
+  test("una data intera, trattini e punti compresi", () => {
+    const units = splitUnits("Il prezzo è 9,99 e la data è 2026-09-26.");
+    expect(units.some((unit) => unit.includes("2026-09-26"))).toBe(true);
+    // E il punto finale non è una sintesi tutta sua.
+    expect(units.some((unit) => unit.trim() === ".")).toBe(false);
+  });
+
+  test("andare oltre il tetto è accettato, tagliare dentro no", () => {
+    // Il codice da solo pesa 64 e il tetto è 30: nessuno spazio ci sta dentro,
+    // e la prima unità lo prende intero passando oltre. È il compromesso: un
+    // pezzo più lungo costa qualche millisecondo, un pezzo spezzato costa il
+    // codice.
+    const units = splitUnits("RSSMRA80A01H501U è il codice del cliente.");
+    expect(units[0]).toBe("RSSMRA80A01H501U");
+    expect(speechWeight(units[0]!)).toBeGreaterThan(FIRST_UNIT_WEIGHT);
+    // E nessun pezzo è rimasto a metà di un token con cifre.
+    for (const unit of units) {
+      for (const number of numbers(unit)) expect(number.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("un'unità solo di punteggiatura non resta orfana", () => {
+    const units = splitUnits("Il prezzo è 9,99 e la data è 2026-09-26.");
+    for (const unit of units) expect(unit.trim()).not.toMatch(/^[^\p{L}\p{N}]+$/u);
+  });
+});

@@ -231,10 +231,37 @@ export function splitUnits(text: string): string[] {
       queued += speechWeight(piece)
     }
   }
-  return units.filter((unit) => unit.length > 0)
+  return withoutOrphanPunctuation(units)
 }
 
-/** `sentence` in pieces of at most `cap` weight each, never ending mid-word. */
+/**
+ * A piece of nothing but punctuation goes back onto the one before it.
+ *
+ * A full stop on its own is a whole synthesis — the fixed cost plus the audio of
+ * two milliseconds — for a sound nobody hears as a unit. And it is what a cut
+ * leaves behind when the sentence ends on a number: the number stays whole and
+ * the point that closed it is left over.
+ */
+function withoutOrphanPunctuation(units: string[]): string[] {
+  const kept: string[] = []
+  for (const unit of units) {
+    if (unit.length === 0) continue
+    const last = kept.length - 1
+    if (last >= 0 && !/[\p{L}\p{N}]/u.test(unit)) {
+      kept[last] = `${kept[last]} ${unit}`
+      continue
+    }
+    kept.push(unit)
+  }
+  return kept
+}
+
+/**
+ * `sentence` in pieces, cut only where a cut is safe.
+ *
+ * The cap is a target and not a promise: a piece may go over it to reach the end
+ * of a word, because a piece that ends inside a number says the wrong number.
+ */
 function cutTo(sentence: string, cap: number): string[] {
   const pieces: string[] = []
   let rest = sentence.trim()
@@ -248,33 +275,56 @@ function cutTo(sentence: string, cap: number): string[] {
   return pieces
 }
 
-/** How much of `rest` the first piece takes, in characters. */
+/**
+ * How much of `rest` the first piece takes, in characters.
+ *
+ * A piece ends where a word ends, or where a speaker would have breathed, and
+ * nowhere else. A cut inside a word is a typo; a cut inside a number is a
+ * *different number*: `1.234.567` read on its own and `89` read after it are
+ * not what `1.234.567,89` says, and a fiscal code cut in half is a code that
+ * does not exist. So when no space fits under the cap, the piece goes past the
+ * cap to the next one. A unit a little too long costs a little more silence in
+ * front of the first sound; a unit that is wrong costs the number.
+ *
+ * Which is what the cap being a weight rather than a length is for, and what the
+ * four a digit costs is for: both keep the piece small, and neither is worth a
+ * broken token.
+ */
 function headLength(rest: string, cap: number): number {
   const half = cap / 2
   let weight = 0
   /** A pause at or before half the cap: better than a space, used second. */
   let pause = 0
-  /** The last space whose piece still fits in the cap, in weight and not in
-   * characters — a date is three times the words it is written with. */
+  /** The last space whose piece still fits the cap, in weight and not in
+   * characters: a date is three times the words it is written with. */
   let space = 0
-  /** The first place the cap is passed, for a word too long to fit at all. */
-  let overCap = 0
-  for (let at = 0; at < rest.length; at++) {
-    const character = rest[at]!
-    if (overCap === 0 && weight > cap) overCap = at
-    if (character === " " && weight <= cap) space = at
-    if (CUT_AFTER.includes(character) && rest[at + 1] === " ") {
+  /** The first boundary past the cap, pause or space. A unit over the cap beats
+   * a unit cut in half, and a pause beats a space for being over. */
+  let over = 0
+  let at = 0
+  for (const character of rest) {
+    const cut = at + character.length
+    const isPause = CUT_AFTER.includes(character) && rest[cut] === " "
+    const isSpace = character === " "
+    if (isPause) {
       // Past half the cap and at a pause: where a speaker would have breathed.
-      if (weight > half) return at + 1
-      pause = at + 1
+      // Worth returning for wherever it falls.
+      if (weight > half) return cut
+      if (weight <= cap) pause = cut
+      else if (over === 0) over = cut
+    } else if (isSpace) {
+      if (weight <= cap) space = at
+      else if (over === 0) over = at
     }
     weight += charWeight(character)
+    at = cut
   }
   if (pause > 0) return pause
   if (space > 0) return space
-  // A single word longer than the cap: cut where the cap is passed, so the
-  // piece still ends somewhere and the next one starts on a character.
-  return overCap > 0 ? overCap : rest.length
+  if (over > 0) return over
+  // Nothing to cut at: one word, or a code with no spaces in it. It stays whole,
+  // however long, because there is no place inside it that is not wrong.
+  return rest.length
 }
 
 export interface NaturalSpeaker extends Speaker {
