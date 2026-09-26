@@ -175,7 +175,7 @@ describe("copying during a take (D68)", () => {
 })
 
 describe("the CSS (D68)", () => {
-  test("blurs every terminal row not judged clean, and the IME's composition, under the recording attribute", () => {
+  test("lint: under the recording attribute every unclean xterm row and the IME composition is blurred", () => {
     const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
     const rule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] .xterm .xterm-rows`))
     const header = rule.slice(0, rule.indexOf("{"))
@@ -186,7 +186,7 @@ describe("the CSS (D68)", () => {
 })
 
 describe("where no reader reaches, during a take (D68, Architect)", () => {
-  test("the transcript and the screenshots in the tray are blurred whole", () => {
+  test("lint: under the recording attribute the transcript and the tray's screenshots are blurred whole", () => {
     const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
     const rule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="pane-transcript"]`))
     const header = rule.slice(0, rule.indexOf("{"))
@@ -196,7 +196,7 @@ describe("where no reader reaches, during a take (D68, Architect)", () => {
     expect(rule.slice(rule.indexOf("{"), rule.indexOf("}"))).toMatch(/filter:\s*blur\(0\.8em\)/)
   })
 
-  test("the names the rule uses are the ones the components draw", () => {
+  test("lint: the recording selectors name the data-slots the components actually draw", () => {
     const pane = readFileSync(join(import.meta.dir, "..", "grid", "pane.tsx"), "utf8")
     const tray = readFileSync(join(import.meta.dir, "..", "shots", "tray.tsx"), "utf8")
     expect(pane).toContain('data-slot="pane-transcript"')
@@ -204,7 +204,7 @@ describe("where no reader reaches, during a take (D68, Architect)", () => {
     expect(tray).toContain('data-slot="shot-image"')
   })
 
-  test("the full-size viewer draws its screenshot with the same shot-image, so the rule reaches it", () => {
+  test("lint: the full-size viewer draws its image through the same shot-image, so the blur rule reaches it", () => {
     const tray = readFileSync(join(import.meta.dir, "..", "shots", "tray.tsx"), "utf8")
     const viewer = tray.slice(tray.indexOf('data-component="shot-viewer"'))
     expect(tray).toContain('data-component="shot-viewer"')

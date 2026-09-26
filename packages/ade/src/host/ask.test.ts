@@ -138,7 +138,7 @@ describe("una domanda sì/no in ADE", () => {
     expect(steps).toEqual(["attenzione", "basta", "attenzione", "basta"])
   })
 
-  test("la finestra può chiedere attenzione, non prendersi il fuoco", () => {
+  test("lint: the window asks for attention only when it is not focused, and never takes the focus back", () => {
     const capabilities = JSON.parse(readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8"))
     expect(capabilities.permissions).toContain("core:window:allow-request-user-attention")
     const source = readFileSync(join(import.meta.dir, "ask.ts"), "utf8")
@@ -146,7 +146,7 @@ describe("una domanda sì/no in ADE", () => {
     expect(source).not.toContain("setFocus")
   })
 
-  test("il workbench non chiama più confirm()", () => {
+  test("lint: no confirm() left in the workbench: every question goes through askYesNo", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     const calls = source.split("\n").filter((line) => /(?<![\w$])(?:window\.)?confirm\s*\(/.test(line) && !/^\s*(?:\/\/|\*)/.test(line))
     expect(calls).toEqual([])

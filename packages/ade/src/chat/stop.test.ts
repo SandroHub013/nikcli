@@ -43,7 +43,7 @@ describe("the chat's Stop", () => {
     expect(asked).toEqual([])
   })
 
-  test("the view stops through stopAnswer and swallows no failure", () => {
+  test("lint: the view stops through stopAnswer and swallows no failure", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
     expect(view).toMatch(/stopAnswer\(/)
     expect(view).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/)

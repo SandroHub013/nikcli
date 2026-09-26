@@ -16,7 +16,7 @@ describe("the bot's settings form", () => {
     expect(rule?.[1]).toContain("grid-template-columns: minmax(0, 1fr)")
   })
 
-  test("is the compact form, and the row holds the model and the effort", () => {
+  test("lint: the settings form is the compact one, and its fields row holds the model before the effort", () => {
     expect(form).toContain('<form data-slot="bots-form" data-compact="true"')
     const row = form.slice(form.indexOf('<div data-slot="bots-row-fields">'))
     expect(row.indexOf('t("bots.engine.model")')).toBeGreaterThan(-1)

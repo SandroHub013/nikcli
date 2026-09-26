@@ -13,7 +13,7 @@ const panel = readFileSync(join(import.meta.dir, "panel.tsx"), "utf8")
 const KEYS = ["gateway.panel.nobody", "gateway.panel.remoteOn", "gateway.panel.remoteWhat"] as const
 
 describe("the gateway panel speaks of the platform it shows", () => {
-  test("each text is chosen by platform", () => {
+  test("lint: every gateway panel text is picked by the platform shown, with that platform's own wording", () => {
     for (const key of KEYS) expect(panel).toContain(`said(t("${key}"), t("${key}Discord"), t("${key}Slack"))`)
   })
 

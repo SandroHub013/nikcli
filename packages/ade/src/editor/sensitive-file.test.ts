@@ -186,7 +186,7 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     document.body.innerHTML = ""
   })
 
-  test("the names the rule uses are the ones the viewers draw", () => {
+  test("lint: the blur rule names the slots the viewers draw: file-view with data-kind image or svg, and video-element", () => {
     const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
     const video = readFileSync(join(import.meta.dir, "..", "video", "video-pane.tsx"), "utf8")
     expect(view).toContain('data-slot="file-view" data-kind="image"')
@@ -194,7 +194,7 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     expect(video).toContain('data-slot="video-element"')
   })
 
-  test("SVG viewer handles load errors with the same message as images (Punto 10)", () => {
+  test("lint: the SVG viewer handles load errors with the same message as images", () => {
     const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
     // SVG viewer must have onError handler and render file.imageFailed fallback on error
     const svgViewIndex = view.indexOf("function SvgView")
@@ -233,7 +233,7 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     })
   })
 
-  test("file-view uses safe center alignment instead of margin auto on children (Punto 11 bis)", () => {
+  test("lint: the file view centres with safe center, never margin: auto on children", () => {
     const css = readFileSync(join(import.meta.dir, "file-pane.css"), "utf8")
     const fileViewBlock = css.slice(css.indexOf('[data-slot="file-view"]'))
     const fileViewRule = fileViewBlock.slice(0, fileViewBlock.indexOf("}"))

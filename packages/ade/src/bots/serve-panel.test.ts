@@ -454,7 +454,7 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     expect(talks[BOT.path]!.permission).toBeUndefined()
   })
 
-  test("a chat's turns and a routine's go through `runBotTurn`, so nikcli's run on the server", () => {
+  test("lint: every entry point that runs a bot's turn goes through runBotTurn, so nikcli runs on ADE's server", () => {
     const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
     expect(bridge).toContain("runTurn: (request) => runBotTurn(request)")
     const routine = readFileSync(new URL("./routine.ts", import.meta.url), "utf8")
@@ -507,7 +507,7 @@ describe("B8d: the project admitted on every turn, asked about once", () => {
 
 describe("B8d: the panel says what the rules do not cover", () => {
   const bots = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-  test("the Bot section's turns go through `runBotTurn`, and a nikcli bot's thread has the Chat's line on «always»", () => {
+  test("lint: the Bot section's turns go through runBotTurn, and a nikcli bot's thread carries the Chat's line on «always»", () => {
     expect(bots).toContain("runTurn: (request) => runBotTurn(request)")
     const thread = bots.slice(bots.indexOf('<div data-slot="bots-thread">'), bots.indexOf('<div data-slot="bots-messages"'))
     expect(thread).toContain('runnerById(props.bot.runner).id === "nikcli"')

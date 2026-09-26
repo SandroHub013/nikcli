@@ -36,7 +36,7 @@ describe("deleting a bot", () => {
     expect(calls).toEqual([])
   })
 
-  test("the command is one the app registers", async () => {
+  test("lint: the app's Rust surface registers the gateway_forget_bot command", async () => {
     const { readFileSync } = await import("node:fs")
     const { join } = await import("node:path")
     const lib = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "src", "lib.rs"), "utf8")

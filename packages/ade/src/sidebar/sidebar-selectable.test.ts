@@ -57,7 +57,7 @@ describe("sidebar hover and selection follow the form, not the slot name", () =>
    * high in the cascade. The bar is now deleted rather than suppressed, so
    * nothing needs to win by force any more.
    */
-  test("sidebar.css has no !important left to win the cascade by force", () => {
+  test("lint: sidebar.css has no !important left to win the cascade by force", () => {
     expect(sidebarCss).not.toContain("!important")
   })
 

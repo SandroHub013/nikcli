@@ -44,7 +44,7 @@ describe("the X with a gateway on", () => {
     expect(trayNoticed(undefined)).toBe(true)
   })
 
-  test("the page takes the hide up, asks, closes the sessions on that answer, then hides; hidden, listening pauses", () => {
+  test("lint: the hide handler asks, closes the sessions on that answer, and only then hides", () => {
     const view = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
     const start = view.indexOf('listen<{ requestId?: number }>("ade-window-hide-requested"')
     expect(start).toBeGreaterThan(0)
@@ -58,7 +58,7 @@ describe("the X with a gateway on", () => {
     expect(view).toContain("isHidden: () => hiddenInTray,")
   })
 
-  test("the question may use three buttons: the window is granted the dialog's message", () => {
+  test("lint: the main window capability grants dialog:allow-message", () => {
     const capabilities = JSON.parse(readFileSync(new URL("../../src-tauri/capabilities/default.json", import.meta.url), "utf8"))
     expect(capabilities.permissions).toContain("dialog:allow-message")
   })

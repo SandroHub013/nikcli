@@ -674,7 +674,7 @@ describe("nikcli's TUI plugin as a target", () => {
     expect(older.writes).toEqual([{ configText: "", script: "" }])
   })
 
-  test("the panel says the plugin is outdated and offers the update", () => {
+  test("lint: the panel shows the outdated notice and the update button from the outdated flag", () => {
     const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
     expect(panel).toContain('<Show when={state()?.outdated}>')
     expect(panel).toContain('state()?.outdated ? t("hooks.update")')

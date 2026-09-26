@@ -43,7 +43,7 @@ describe("the sidebar footer, when the column is narrow", () => {
     expect(narrow).toMatch(/\[data-slot="sidebar-stats"\] \{[^}]*flex: 1 0 100%/)
   })
 
-  test("no reading is ever hidden to make the row fit", () => {
+  test("lint: no reading is ever hidden to make the row fit", () => {
     for (const kind of ["cpu", "ram", "mem"]) {
       expect(sidebar).not.toMatch(new RegExp(`\[data-kind="${kind}"\] \{\s*display: none`))
     }
@@ -73,12 +73,12 @@ describe("the screenshot tray", () => {
    * when no ancestor can take it, and the sidebar can: measured in ADE Test,
    * three notches left scrollLeft at 0. Both halves of that are kept here.
    */
-  test("it says it continues, on the edge that has more", () => {
+  test("lint: the tray has a more indicator on the row that scrolls, so it can say it continues", () => {
     expect(tray).toContain('[data-slot="shot-tray-more"]')
     expect(ruleBody(tray, '[data-slot="shot-tray-row"]')).toContain("position: relative")
   })
 
-  test("a vertical wheel is turned sideways by hand", () => {
+  test("lint: the tray turns a vertical wheel into sideways scroll by hand", () => {
     const tsx = readFileSync(new URL("../shots/tray.tsx", import.meta.url), "utf8")
     expect(tsx).toMatch(/onWheel/)
     expect(tsx).toMatch(/scrollLeft = before \+ event\.deltaY/)
@@ -115,7 +115,7 @@ describe("the sidebar's names, when the column is narrow", () => {
     expect(body).not.toContain("margin-right: auto")
   })
 
-  test("on a narrow column the room kept right of a project's count shrinks to that button", () => {
+  test("lint: under 279px a project's count gives its right margin to the open-project button", () => {
     const narrow = sidebar.slice(sidebar.indexOf("@container ade-sidebar (max-width: 279px)"))
     expect(narrow).not.toBe(sidebar)
     expect(narrow).toMatch(/\[data-slot="workspace-count"\] \{[^}]*margin-right: calc\(18px/)
