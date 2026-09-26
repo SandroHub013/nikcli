@@ -77,4 +77,16 @@ describe("ADE's own notes are not the agent's report", () => {
     expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("watchForPermission(id, text)"))
     expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("readReportLine"))
   })
+
+  test("a note that carries another session's words is still ADE's", () => {
+    const workbench = read("surface", "workbench.tsx")
+    // A message, a reply, an update, a memory line: another session's text, in a note ADE writes.
+    for (const key of ["note.messageFrom", "note.replyFrom", "note.updateFrom", "note.memory"]) {
+      const calls = workbench.split("\n").filter((line) => line.includes("appendLine(") && line.includes(`"${key}"`))
+      expect([key, calls.length > 0, calls.every((line) => line.trimEnd().endsWith('"note", "ade")'))]).toEqual([key, true, true])
+    }
+    // And no note of ADE's is left to be read as the agent's report.
+    const agentNotes = workbench.split("\n").filter((line) => /appendLine\(.*"note"\)+$/.test(line.trimEnd()))
+    expect(agentNotes).toEqual([])
+  })
 })
