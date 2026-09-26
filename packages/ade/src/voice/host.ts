@@ -21,6 +21,7 @@ import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
 import { locale, t } from "../i18n"
+import { dictatedFile, isRecentRoot } from "./paths"
 
 /**
  * External dependencies provided by Workbench to avoid direct global state coupling.
@@ -58,6 +59,12 @@ export interface AdeVoiceHostDeps {
   codexFallback?: () => boolean
   /** Opens a project already on disk, keeping the panes of the one being left. */
   switchProject?: (root: string) => Promise<void>
+  /**
+   * A yes or no from the user, for a dictated path outside what voice opens on
+   * its own: a file outside the project, a folder that is not a recent project
+   * (M11). Absent, the answer is no.
+   */
+  confirm?: (question: string) => Promise<boolean>
   /**
    * Creates one pane and starts one agent in it, returning the pane it made.
    *
@@ -203,6 +210,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * «apri il browser» answered «aperto» and the user saw nothing change.
        */
       if (OPENS_IN_GRID.has(id) && deps.wb().view !== "code") deps.setWb((w) => ({ ...w, view: "code" }))
+      // M11: a dictated folder opens as a project only among the recent ones; any other is asked.
+      if (id.startsWith("project.recent.")) {
+        const root = id.slice("project.recent.".length)
+        if (!isRecentRoot(root, deps.recents?.() ?? []) && !(await deps.confirm?.(t("voice.path.askProject", root)))) {
+          throw new Error(t("voice.path.refused"))
+        }
+      }
       await deps.runCommand(id)
     },
 
@@ -347,7 +361,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     async openFile(path: string): Promise<void> {
-      await deps.openFile(path)
+      // M11: a dictated file opens on its own only inside the project; any other is asked.
+      const file = dictatedFile(path, deps.project()?.root)
+      if (!file.inside && !(await deps.confirm?.(t("voice.path.askFile", file.path)))) {
+        throw new Error(t("voice.path.refused"))
+      }
+      await deps.openFile(file.path)
     },
 
     async searchProject(query: string): Promise<{ path: string; line?: number }[]> {

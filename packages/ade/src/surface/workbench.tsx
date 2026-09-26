@@ -4171,6 +4171,8 @@ export function Workbench() {
     agentAvailability: () => agentStatuses(),
     codexFallback: () => voiceSettings().codexFallback === true,
     switchProject: (root) => switchProjectTo(root),
+    // M11: a dictated path outside the project or the recent ones is asked, not opened.
+    confirm: (question) => askYesNo(question, { ok: t("voice.path.open"), cancel: t("voice.path.cancel") }),
     openAgentSession: (input) => openVoiceSession(input),
   })
 

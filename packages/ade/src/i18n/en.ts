@@ -1349,6 +1349,11 @@ export const en: Messages = {
   // Chat
   "chat.model.label": "Model",
   "chat.model.free": "free",
+  "voice.path.askFile": (path: string) => `Voice asks to open a file outside the project:\n\n${path}\n\nOpen it?`,
+  "voice.path.askProject": (root: string) => `Voice asks to open a folder that is not a recent project:\n\n${root}\n\nOpen it?`,
+  "voice.path.refused": "Not opened: denied by the user.",
+  "voice.path.open": "Open",
+  "voice.path.cancel": "Do not open",
   "picker.search": "Search models",
   "picker.recent": "Recent",
   "picker.free": "Free",

@@ -1360,6 +1360,11 @@ export const it = {
   // Chat
   "chat.model.label": "Modello",
   "chat.model.free": "gratis",
+  "voice.path.askFile": (path: string) => `La voce chiede di aprire un file fuori dal progetto:\n\n${path}\n\nLo apro?`,
+  "voice.path.askProject": (root: string) => `La voce chiede di aprire come progetto una cartella che non è tra i recenti:\n\n${root}\n\nLa apro?`,
+  "voice.path.refused": "Non l'ho aperto: negato dall'utente.",
+  "voice.path.open": "Apri",
+  "voice.path.cancel": "Non aprire",
   "picker.search": "Cerca un modello",
   "picker.recent": "Recenti",
   "picker.free": "Gratuiti",
