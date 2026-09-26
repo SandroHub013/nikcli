@@ -16,11 +16,12 @@ import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
-import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
+import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
+import { oneAtATime } from "./one-at-a-time"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
 import {
@@ -334,7 +335,7 @@ import { createAutosave } from "./autosave"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
-import { panelsHelp } from "../panels/protocol"
+import { acceptsRequests, panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
 import { devServerUrl, offerKey, shouldOffer, type DevServerOffer } from "../browser/dev-server"
@@ -1733,6 +1734,8 @@ export function Workbench() {
   }
 
   const running = new Map<string, SpawnedSession>()
+  // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
+  const reopening = oneAtATime()
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick(n => n + 1)
   const isRunning = (id: string) => { runningTick(); return running.has(id) }
@@ -4903,7 +4906,7 @@ export function Workbench() {
             setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
             tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
           }
-          void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
+          void reopening.run(session.pane.id, () => startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan))
         }
 
         /*
@@ -5003,6 +5006,11 @@ export function Workbench() {
 
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
+      // Nor a close, from a text field: the chord is swallowed, so it closes neither the pane nor the window.
+      if (isInput && resolution.type === "ade" && resolution.commandId && NOT_FROM_TEXT_FIELDS.has(resolution.commandId)) {
+        e.preventDefault()
+        return
+      }
 
       if (resolution.type === "ade") {
         if (resolution.commandId && isHandledCommand(resolution.commandId)) {
@@ -5337,7 +5345,8 @@ export function Workbench() {
         }
       }
     } else if (id === "pane.close") {
-      if (wb().focusedId) close(wb().focusedId!)
+      // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
+      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb(w => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -5761,6 +5770,11 @@ export function Workbench() {
     ask: (path) => askYesNo(t("editor.closeDirty", path)),
     closeNow: (id) => closeNow(id),
     exists: (id) => wb().panes.some((pane) => pane.id === id),
+    running: (id) => {
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
+    },
+    askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
   })
   const close = (id: string): boolean => closer.close(id)
 
@@ -6344,8 +6358,15 @@ export function Workbench() {
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
   const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
-    const agentId = given.agent ?? given.model
     if (running.has(given.id)) return
+    // One at a time: its awaits left room for a second one to start the same pane twice (ALTO 3).
+    await reopening.run(given.id, () => reopenPane(given, line, claims))
+  }
+
+  const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+    const agentId = given.agent ?? given.model
+    // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
+    if (given.signIn) return startProcess(given.id, agentId, "", undefined, [...given.signIn])
     const reported = await adoptLastReport(given)
     let pane = reported ? { ...given, resumeId: reported } : given
     // Another open pane holds this conversation (ripristino review, point 1): it stays there.
@@ -6733,7 +6754,8 @@ export function Workbench() {
            * works with every CLI ADE runs: they read keystrokes and write
            * text, and this is text.
            */
-          void handlePanelRequest(paneId, line)
+          // Only from an agent: a terminal's output is the user's own, and may be anything (`acceptsRequests`).
+          if (acceptsRequests(agentId)) void handlePanelRequest(paneId, line)
           noticeDevServer(paneId, line)
         },
         /*
@@ -7174,12 +7196,18 @@ export function Workbench() {
       task: "",
       lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
       ...here(),
+      /*
+       * The bot's own flags, kept with the pane (review, ALTO 5): handed only
+       * to this start, a restart ran the bare agent, without `--agent` and on
+       * the default model, which can be a paid one.
+       */
+      ...(launch.args.length ? { spawnArgs: [...launch.args] } : {}),
     }))
     /* Narrowed to nothing, or the grid keeps showing whichever session was
        expanded and the one just started is off screen. */
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
-    void startProcess(id, launch.agentId, "", undefined, launch.args)
+    void startProcess(id, launch.agentId, "")
     return { id, index: mine.length + 1 }
   }
 
@@ -7202,6 +7230,7 @@ export function Workbench() {
       task: "",
       lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
       ...here(),
+      signIn: [...runner.login],
     }))
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)

@@ -331,6 +331,7 @@ export const en: Messages = {
   "boot.host": "connecting to ADE",
   "boot.restore": "restoring sessions",
   "boot.project": "opening the project",
+  "pane.closeRunning": (agent) => `${agent}\n\nThe agent is still running. Closing the pane stops it.\n\nClose anyway?`,
   "editor.closeDirty": (path) => `${path}\n\nYou have unsaved changes. Closing will discard them.\n\nClose anyway?`,
   "editor.saveUnreadable": (path, problem) => `${path}\n\nCouldn't re-read the file to check whether it changed (${problem}).\n\nSave anyway and replace what's on disk?`,
   "editor.saveCancelled.unreadable": (problem) => `Save cancelled: couldn't re-read the file (${problem}).`,

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { describeCapabilities, formatReply, panelsHelp, parseRequest, REPLY_PREFIX, REQUEST_PREFIX } from "./protocol"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { acceptsRequests, describeCapabilities, formatReply, inert, panelsHelp, parseRequest, REPLY_PREFIX, REQUEST_PREFIX } from "./protocol"
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
@@ -165,5 +167,34 @@ describe("panelsHelp", () => {
       }
       expect(parseRequest(line)).toBeUndefined()
     }
+  })
+})
+
+describe("a request cannot become a shell command (review, ALTO 1)", () => {
+  test("the reply carries no character a shell runs, whatever the request held", () => {
+    const request = parseRequest("@ade browser open 3000/x;calc;#")!
+    const reply = formatReply(request, { ok: true, detail: `aperto http://localhost:${request.args[0]}` })
+    expect(reply).not.toMatch(/[;&|`$<>]/)
+    expect(reply).toContain("3000/x%3Bcalc%3B#")
+    const failed = formatReply(request, { ok: false, reason: "no $(calc) `calc` a|b a&b <x> \n\r\u0007" })
+    expect(failed).not.toMatch(/[;&|`$<>\u0000-\u001f]/)
+  })
+
+  test("inert leaves a plain reply alone", () => {
+    expect(inert("@ade: video seek ok — a 12,0 s")).toBe("@ade: video seek ok — a 12,0 s")
+  })
+
+  test("only an agent CLI's session may ask; a terminal and an unknown command may not", () => {
+    for (const agent of ["claude-code", "codex", "opencode", "nikcli"]) expect(acceptsRequests(agent)).toBe(true)
+    expect(acceptsRequests("terminal")).toBe(false)
+    expect(acceptsRequests("my-script")).toBe(false)
+    expect(acceptsRequests(undefined)).toBe(false)
+  })
+
+  test("lint: the workbench hands a line to the panels only behind acceptsRequests (ALTO 1)", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const calls = source.split("\n").filter((line) => line.includes("handlePanelRequest(paneId, line)"))
+    expect(calls.length).toBe(1)
+    expect(calls[0]).toContain("if (acceptsRequests(agentId))")
   })
 })
