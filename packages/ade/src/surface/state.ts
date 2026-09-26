@@ -227,6 +227,8 @@ export interface Pane {
    * starts again wearing the old name. See `session-new/resume.ts`.
    */
   resumeId?: string
+  /** The nonce of the running spawn when its CLI reports back; see `PaneState.linkNonce`. */
+  linkNonce?: string
   /** The git worktree this session works in, when `spawn --worktree` gave it one; its cwd on every start. */
   worktree?: string
   /** The folder this session should start in and that is gone: it is not started, and offers to close. Not saved. */
@@ -477,6 +479,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.task ? { task: p.task } : {}),
       ...(p.model ? { model: p.model } : {}),
       ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+      ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
       // The project each pane belongs to: the workbench holds every project's sessions, not only the open one's.
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
@@ -632,6 +635,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
          * had none. That is the second half of the bug the user reported.
          */
         ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+        ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
         /* A suspended session's transcript already ends with the note that says so: nothing is restarted to report. */
         lines: p.suspended ? history : [
           ...history,

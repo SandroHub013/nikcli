@@ -336,6 +336,27 @@ export async function followReports(follow: LinkFollow): Promise<void> {
   }
 }
 
+/**
+ * The conversation the previous spawn of a pane last reported, when that
+ * report was never taken.
+ *
+ * After its first report a pane is checked every 2 to 15 s
+ * ({@link FOLLOW_GAPS_MS}); a switch of tab made with the mouse just before
+ * ADE closed is still in the drop file at the next start. Read once, before
+ * the saved id is used: the same rules as while the pane ran, so only this
+ * pane's spawn is believed, and after a saved id only a later reason moves it.
+ */
+export function lastReportedId(
+  text: string | null | undefined,
+  expected: { pane: string; nonce: string },
+  current: string | undefined,
+): string | undefined {
+  const report = text ? parseReport(text) : undefined
+  if (!report || !acceptsReport(report, expected)) return undefined
+  if (current !== undefined && !acceptsLaterReport(report, current)) return undefined
+  return report.sessionId
+}
+
 export function newNonce(): string {
   const bytes = new Uint8Array(12)
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {

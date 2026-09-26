@@ -55,7 +55,7 @@ import {
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { countingLines, followReports, newNonce } from "../session-new/agent-link"
+import { countingLines, followReports, lastReportedId, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -4652,13 +4652,18 @@ export function Workbench() {
          * `p.root` (see `startProcess`), so that is where its transcript is.
          */
         const sessions = await Promise.all(
-          sessionsToResume(restored).map(async (pane) => ({
-            agentId: pane.agent,
-            cwd: pane.cwd || p.root,
-            ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-            missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
-            pane,
-          })),
+          sessionsToResume(restored).map(async (saved) => {
+            // The conversation the pane last switched to, when ADE closed before reading it.
+            const reported = await adoptLastReport(saved)
+            const pane = reported ? { ...saved, resumeId: reported } : saved
+            return {
+              agentId: pane.agent,
+              cwd: pane.cwd || p.root,
+              ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
+              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              pane,
+            }
+          }),
         )
         for (const { session, plan } of planRestore(sessions)) {
           void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
@@ -6034,6 +6039,22 @@ export function Workbench() {
   }
 
   /**
+   * The id in the report the pane's previous spawn left and nobody took
+   * (`lastReportedId`), written onto the pane; the file is cleared once read.
+   */
+  const adoptLastReport = async (pane: { id: string; resumeId?: string; linkNonce?: string }) => {
+    const nonce = pane.linkNonce
+    if (!nonce) return undefined
+    const host = await getHost()
+    const text = (await host?.readAgentLink?.(nonce).catch(() => null)) ?? null
+    if (text === null) return undefined
+    await host?.clearAgentLink?.(nonce).catch(() => {})
+    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
+    if (id) setWb((w) => updatePane(w, pane.id, { resumeId: id }))
+    return id
+  }
+
+  /**
    * Brings a session with no process back from its own pane.
    *
    * A restored session whose agent had already exited — or one that exited
@@ -6042,9 +6063,11 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (pane: Pane, line?: string) => {
-    const agentId = pane.agent ?? pane.model
-    if (running.has(pane.id)) return
+  const reopen = async (given: Pane, line?: string) => {
+    const agentId = given.agent ?? given.model
+    if (running.has(given.id)) return
+    const reported = await adoptLastReport(given)
+    const pane = reported ? { ...given, resumeId: reported } : given
     const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
@@ -6336,6 +6359,8 @@ export function Workbench() {
           : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
         status: hasTask ? "working" : "idle",
         activity: resumed ? "resumed" : (hasTask ? "running" : "ready"),
+        // Saved, so the next start can read what this spawn reported last.
+        linkNonce: nonce,
         // A fresh start drops an id whose conversation is gone, so the pane
         // stops promising to reopen it.
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),

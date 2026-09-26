@@ -4,6 +4,7 @@ import {
   acceptsReport,
   countingLines,
   followReports,
+  lastReportedId,
   newNonce,
   parseReport,
   reportFile,
@@ -306,5 +307,26 @@ describe("followReports slows down when nothing comes (P1-C2b)", () => {
     counted.write("ume\r")
     expect(lines).toBe(1)
     expect(written).toEqual(["/res", "ume\r"])
+  })
+})
+
+/* At a restore: the report the previous spawn left wins over the saved id. */
+describe("lastReportedId", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const left = (sessionId: string, source: string, nonce = "a1b2c3") =>
+    JSON.stringify({ pane: "pane-7", nonce, agent: "nikcli", sessionId, source })
+
+  test("a switch the pane never read beats the id saved with it", () => {
+    expect(lastReportedId(left("ses_tab", "switch"), expected, "ses_saved")).toBe("ses_tab")
+    // No saved id: the report is the id.
+    expect(lastReportedId(left("ses_tab", "switch"), expected, undefined)).toBe("ses_tab")
+  })
+
+  test("nothing left, another spawn's, the same id, or a nested startup: the saved id stays", () => {
+    expect(lastReportedId(null, expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId("", expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_tab", "switch", "ffffff"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_saved", "switch"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_child", "startup"), expected, "ses_saved")).toBeUndefined()
   })
 })

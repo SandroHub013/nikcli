@@ -64,6 +64,11 @@ export interface PaneState {
    * id — see `session-new/resume.ts`, which is where the difference lives.
    */
   resumeId?: string
+  /**
+   * The nonce of the spawn that was running, so the restore can read the
+   * report it left (`agent-link.ts`, `lastReportedId`). Hex.
+   */
+  linkNonce?: string
   /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */
   project?: string
   /** That project's folder: two projects can share a name. Absent in states saved before it was kept. */
@@ -208,6 +213,8 @@ function sanitisePane(raw: unknown): PaneState {
   const task = asOptionalString(raw.task)
   const model = asOptionalString(raw.model)
   const resumeId = asOptionalString(raw.resumeId)
+  // A nonce names a file: anything but hex is dropped.
+  const linkNonce = typeof raw.linkNonce === "string" && /^[0-9a-f]{1,64}$/i.test(raw.linkNonce) ? raw.linkNonce : undefined
   const lines = sanitiseLines(raw.lines)
   const span = sanitiseSpan(raw.span)
   return {
@@ -220,6 +227,7 @@ function sanitisePane(raw: unknown): PaneState {
     ...(task !== undefined ? { task } : {}),
     ...(model !== undefined ? { model } : {}),
     ...(resumeId !== undefined ? { resumeId } : {}),
+    ...(linkNonce !== undefined ? { linkNonce } : {}),
     ...(lines !== undefined ? { lines } : {}),
     ...(typeof raw.wasRunning === "boolean" ? { wasRunning: raw.wasRunning } : {}),
     ...(asOptionalString(raw.project) ? { project: raw.project as string } : {}),
