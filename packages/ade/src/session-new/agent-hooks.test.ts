@@ -126,7 +126,7 @@ describe("the targets here and the paths in Rust", () => {
   test("and nikcli's plugin under the same marker, with no configuration", () => {
     expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
     expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
-    expect(source).toMatch(/id: "nikcli",\s*base: Base::RoamingAppData,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
+    expect(source).toMatch(/id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
   })
 
   test("the environment variables the script reads are the ones Rust sets", () => {

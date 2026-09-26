@@ -116,6 +116,7 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     label: "nikcli",
     agent: "nikcli",
     config: [],
+    // As it lands on Windows. Rust puts it under nikcli's configuration folder on every platform (`config_home`).
     script: ["AppData", "Roaming", "nikcli", "plugin", "tui", NIKCLI_PLUGIN_NAME],
     kind: "tui-plugin",
   },
