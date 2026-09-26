@@ -67,3 +67,15 @@ describe("the Memory section's blocks", () => {
     expect(block![2]).toContain("flex-direction: column")
   })
 })
+
+/* bot-sforzo, A occhio: two focus rings, the composer's and the global one on the field. */
+describe("the composer's focus", () => {
+  test("one ring, the composer's: the field draws none of its own", () => {
+    expect(rule("bots-composer")).toBeDefined()
+    const focused = /\[data-slot="bots-composer"\]:focus-within\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
+    expect(focused).toContain("box-shadow: var(--ade-focus-ring)")
+    const field = /\[data-slot="bots-composer-field"\]:focus\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
+    expect(field).toContain("box-shadow: none")
+    expect(field).toContain("outline: none")
+  })
+})
