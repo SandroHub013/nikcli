@@ -410,7 +410,12 @@ import {
   holdsToTalk,
   type VoiceEngine,
   type VoiceSettings,
+  type InstallProgress,
+  type PackState,
+  kokoroVoice,
+  KOKORO_DOWNLOAD_BYTES,
 } from "@nikcli-ai/voice"
+import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import { disposeTerminal, hasTerminal, noteInTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
@@ -4052,6 +4057,29 @@ export function Workbench() {
   const [voiceInstalled, setVoiceInstalled] = createSignal(false)
   const [voiceDownloading, setVoiceDownloading] = createSignal(false)
   const [voiceFailure, setVoiceFailure] = createSignal<NaturalVoiceFailure>()
+  /** How the Piper download started from the panel is going (K3), while it goes. */
+  const [piperProgress, setPiperProgress] = createSignal<InstallProgress>()
+  /** The Kokoro pack as the host reports it, and what the panel started on it (K6). */
+  const [kokoroPack, setKokoroPack] = createSignal<PackState>({})
+  const kokoro = createPackController({
+    provider: "kokoro",
+    host: getHost,
+    get: kokoroPack,
+    set: setKokoroPack,
+    fallback: t("voice.download.failed"),
+    sizeBytes: KOKORO_DOWNLOAD_BYTES,
+  })
+  /*
+   * «Prova»: a sentence in the language of the voice, so the reply-language
+   * rule does not hand an English voice's sample to Ugo. Kokoro's and Lessac's
+   * are English; the rest follow the interface.
+   */
+  const testReplyVoice = () => {
+    const settings = voiceSettings()
+    const voice = activeReplyVoice(settings.replyVoice, locale())
+    const english = Boolean(kokoroVoice(settings.replyVoice)) || voice === "lessac" || (voice === "system" && locale() === "en")
+    void speaker.speak(english ? t("vui.replies.sample.en") : t("vui.replies.sample.it"))
+  }
 
   const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
   /*
@@ -4166,7 +4194,10 @@ export function Workbench() {
       } else if (state === "failed") {
         setVoiceInstalled(false)
         setVoiceDownloading(false)
-        failNaturalVoice(voice, problem)
+        // A download the user cancelled from the panel is not a failure (K6 review).
+        void getHost().then(async (host) => {
+          if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
+        })
       }
     },
   })
@@ -4246,9 +4277,12 @@ export function Workbench() {
       setVoiceDownloading(false)
       return
     }
+    let stopFollowing = () => {}
+    const host = await getHost()
     try {
-      const host = await getHost()
       if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
+      // K3's progress, read while the install runs: the command answers only at the end.
+      stopFollowing = followInstall(host, "piper", setPiperProgress)
       await host.ttsPiperInstall(v)
       if (activePiperVoice() !== v) return
       setVoiceInstalled(true)
@@ -4256,8 +4290,11 @@ export function Workbench() {
     } catch (error) {
       if (activePiperVoice() !== v) return
       setVoiceInstalled(false)
-      failNaturalVoice(v, error)
+      // Annulla in the panel ends the download with an error: it was asked for, it is not one.
+      if (!(await installCancelled(host, "piper"))) failNaturalVoice(v, error)
     } finally {
+      stopFollowing()
+      setPiperProgress(undefined)
       if (activePiperVoice() === v) setVoiceDownloading(false)
     }
   }
@@ -4312,6 +4349,8 @@ export function Workbench() {
       () => voiceSettingsOpen(),
       (open) => {
         if (open) preloadNaturalVoice()
+        // What the host has of Kokoro, asked when the panel opens: it can change under ADE.
+        if (open) void kokoro.refresh()
       },
       { defer: true },
     ),
@@ -7811,6 +7850,14 @@ export function Workbench() {
           naturalVoiceError={voiceError()}
           naturalVoiceDownloading={voiceDownloading()}
           onDownloadNaturalVoice={() => void downloadNaturalVoice()}
+          {...(piperProgress() ? { naturalVoiceProgress: piperProgress() } : {})}
+          onCancelInstall={(provider) =>
+            void (provider === "kokoro" ? kokoro.cancel() : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
+          }
+          kokoroPack={kokoroPack()}
+          onInstallKokoro={() => void kokoro.install()}
+          onDeleteKokoro={() => void kokoro.remove()}
+          onTestVoice={testReplyVoice}
           existingBindings={bindings}
           settingsNotice={voiceSettingsNotice()}
           title={t("settings.title")}

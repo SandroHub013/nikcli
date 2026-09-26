@@ -675,6 +675,18 @@
   margin: var(--ade-space-2) 0 0;
 }
 
+/* The Kokoro pack (K6): its note, bar, buttons and licences spaced like the box around it. */
+[data-component="voice-settings-panel"] [data-slot="voice-pack"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-4);
+}
+
+[data-component="voice-settings-panel"] [data-slot="voice-pack"] [data-slot="sub-choice-note"] {
+  margin: 0;
+}
+
 [data-component="voice-settings-panel"] [data-slot="reply-voice-error"] {
   display: flex;
   align-items: flex-start;

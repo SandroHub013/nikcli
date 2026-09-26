@@ -1,5 +1,5 @@
-import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type TtsLocale } from "./model";
-import { t, type Locale } from "@nikcli-ai/ade/i18n";
+import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model";
+import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
 
 /*
  * Nothing in this file may import a *value* from `model.ts`. `model.ts` needs
@@ -212,10 +212,8 @@ export function speakingReplyVoice(chosen: ReplyVoice, ttsLocale: TtsLocale, ui:
  * it is chosen: both derive from the English lessac voice, whose dataset is
  * licensed for research only.
  *
- * The Kokoro voices are not in this list yet: they are in `KOKORO_VOICES`, as
- * facts, and the panel that offers them is K6 with their labels. Adding them
- * here without those labels would put four rows in the voice picker with an id
- * where a name should be.
+ * The Kokoro voices are not in this list: they are in `KOKORO_VOICES`, as
+ * facts, and `KOKORO_VOICE_CHOICES` below gives them their names (K6).
  */
 export const REPLY_VOICE_CHOICES: readonly {
   value: ReplyVoice;
@@ -270,6 +268,65 @@ export const REPLY_VOICE_CHOICES: readonly {
   },
 ];
 
+type ReplyVoiceChoice = (typeof REPLY_VOICE_CHOICES)[number];
+
+/** The names the panel gives the Kokoro voices, and who speaks in each. */
+const KOKORO_LABELS: Record<KokoroVoiceId, { readonly title: MessageKey; readonly desc: MessageKey }> = {
+  af_heart: { title: "vui.reply.kokoro.af_heart", desc: "vui.reply.kokoro.af_heart.desc" },
+  am_fenrir: { title: "vui.reply.kokoro.am_fenrir", desc: "vui.reply.kokoro.am_fenrir.desc" },
+  bf_emma: { title: "vui.reply.kokoro.bf_emma", desc: "vui.reply.kokoro.bf_emma.desc" },
+  bm_george: { title: "vui.reply.kokoro.bm_george", desc: "vui.reply.kokoro.bm_george.desc" },
+};
+
+/** The four Kokoro voices as the panel offers them, in the catalog's order (K6). */
+export const KOKORO_VOICE_CHOICES: readonly ReplyVoiceChoice[] = KOKORO_VOICES.map((voice) => ({
+  value: voice.id,
+  get title() {
+    return t(KOKORO_LABELS[voice.id].title);
+  },
+  get desc() {
+    return t(KOKORO_LABELS[voice.id].desc);
+  },
+  get licence() {
+    return t("vui.reply.kokoro.licence");
+  },
+}));
+
+/**
+ * What reads the replies, chosen before the voice (K6): the voices a backend
+ * has are the only ones listed under it, so a Kokoro voice is never offered
+ * as if it were a Piper one, and the install it needs is said where it is.
+ */
+export const REPLY_BACKEND_CHOICES: readonly { value: ReplyBackend; title: string; desc: string }[] = [
+  {
+    value: "piper",
+    get title() {
+      return t("vui.backend.piper");
+    },
+    get desc() {
+      return t("vui.backend.piper.desc");
+    },
+  },
+  {
+    value: "kokoro",
+    get title() {
+      return t("vui.backend.kokoro");
+    },
+    get desc() {
+      return t("vui.backend.kokoro.desc");
+    },
+  },
+  {
+    value: "system",
+    get title() {
+      return t("vui.backend.system");
+    },
+    get desc() {
+      return t("vui.backend.system.desc");
+    },
+  },
+];
+
 const PIPER_BY_LOCALE: Record<Locale, ReadonlySet<ReplyVoice>> = {
   it: new Set<ReplyVoice>(["ugo", "paola"]),
   en: new Set<ReplyVoice>(["lessac"]),
@@ -283,6 +340,37 @@ export function replyVoiceChoicesForLocale(
   return REPLY_VOICE_CHOICES.filter(
     (choice) => choice.value === "system" || piper.has(choice.value),
   );
+}
+
+/**
+ * The voices listed under `backend`. Piper's follow the interface language, as
+ * they always have; Kokoro's are its four English ones whatever the interface,
+ * since an Italian reply on one of them is read by Ugo or Paola anyway.
+ */
+export function replyVoiceChoicesFor(backend: ReplyBackend, language: Locale): ReplyVoiceChoice[] {
+  if (backend === "kokoro") return [...KOKORO_VOICE_CHOICES];
+  if (backend === "system") return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system");
+  const piper = PIPER_BY_LOCALE[language];
+  return REPLY_VOICE_CHOICES.filter((choice) => piper.has(choice.value));
+}
+
+/**
+ * The voice a backend is on once it is picked: the chosen one when it is
+ * already that backend's, then the one last picked there, otherwise the
+ * backend's first for the language.
+ */
+export function voiceOnBackend(backend: ReplyBackend, chosen: ReplyVoice, language: Locale, memory?: ReplyVoiceMemory): ReplyVoice {
+  if (backendOf(chosen) === backend) return chosen;
+  const remembered = backend === "system" ? undefined : memory?.[backend];
+  if (remembered && backendOf(remembered) === backend) return remembered;
+  return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system";
+}
+
+/** `memory` with `voice` as the last one picked on its backend; the system voice has nothing to remember. */
+export function rememberReplyVoice(memory: ReplyVoiceMemory | undefined, voice: ReplyVoice): ReplyVoiceMemory | undefined {
+  const backend = backendOf(voice);
+  if (backend === "system") return memory;
+  return { ...memory, [backend]: voice };
 }
 
 /**

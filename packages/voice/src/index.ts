@@ -343,7 +343,9 @@ export {
 
 export {
   REPLY_VOICE_CHOICES,
+  REPLY_BACKEND_CHOICES,
   KOKORO_VOICES,
+  KOKORO_VOICE_CHOICES,
   activeReplyVoice,
   backendOf,
   detectReplyLanguage,
@@ -354,12 +356,28 @@ export {
   replyVoiceChainFrom,
   replyLocale,
   replyVoiceFor,
+  replyVoiceChoicesFor,
   replyVoiceChoicesForLocale,
   speakingReplyVoice,
+  voiceOnBackend,
+  rememberReplyVoice,
   type KokoroVoice,
   type KokoroVoiceId,
   type ReplyLanguage,
 } from "./settings/reply-voices"
+
+export {
+  formatBytes,
+  KOKORO_DOWNLOAD_BYTES,
+  packView,
+  watchInstall,
+  type InstallProgress,
+  type LocalProvider,
+  type PackPhase,
+  type PackState,
+  type PackStatus,
+  type PackView,
+} from "./settings/voice-pack"
 
 export {
   VOICE_API_KEY_STORAGE_KEY,

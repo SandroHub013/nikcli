@@ -64,6 +64,9 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
 export const REPLY_BACKENDS = ["piper", "kokoro", "system"] as const
 export type ReplyBackend = (typeof REPLY_BACKENDS)[number]
 
+/** The last voice picked on each local backend; the system voice has only one. */
+export type ReplyVoiceMemory = Readonly<Partial<Record<Exclude<ReplyBackend, "system">, ReplyVoice>>>
+
 /**
  * The G2P locale the replies are spoken in, and the only source of it.
  *
@@ -239,6 +242,12 @@ export interface VoiceSettings {
    * a profile arrives with them disagreeing.
    */
   readonly replyBackend: ReplyBackend
+  /**
+   * The voice last picked on each local backend, so that going to another one
+   * and back finds it again: Paola, then Kokoro, then Piper is Paola, not the
+   * first Piper voice. Absent: nothing remembered, the backend's first voice.
+   */
+  readonly replyVoiceByBackend?: ReplyVoiceMemory
   /**
    * The G2P locale the replies are spoken in; see `TTS_LOCALES`.
    *
@@ -750,6 +759,18 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.replyBackend", String(candidate.replyBackend), replyBackend))
   }
 
+  // Only a voice of that backend is remembered under it: anything else is forgotten, never moved.
+  const replyVoiceByBackend: Partial<Record<Exclude<ReplyBackend, "system">, ReplyVoice>> = {}
+  const remembered = candidate.replyVoiceByBackend
+  if (remembered && typeof remembered === "object") {
+    for (const local of ["piper", "kokoro"] as const) {
+      const voice = (remembered as Record<string, unknown>)[local]
+      if (REPLY_VOICES.includes(voice as ReplyVoice) && REPLY_BACKEND_BY_VOICE[voice as ReplyVoice] === local) {
+        replyVoiceByBackend[local] = voice as ReplyVoice
+      }
+    }
+  }
+
   /*
    * A Kokoro voice in the wrong language is left exactly where the profile put
    * it, and this is where a reviewer will look for the code that moves it.
@@ -840,6 +861,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     spokenAlerts,
     replyVoice,
     replyBackend,
+    ...(Object.keys(replyVoiceByBackend).length > 0 ? { replyVoiceByBackend } : {}),
     ttsLocale,
     agentEngine,
     agentSpeed,
