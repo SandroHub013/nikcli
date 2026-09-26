@@ -412,4 +412,63 @@ describe("the Gateway section of a bot's card", () => {
     })
   })
 
+  /*
+   * Who may write is the same on both platforms, and each platform keeps its
+   * own list: the Rust side keys a link by bot *and* platform, so Telegram's
+   * authorisations must not show up on Discord and the other way round. What
+   * this shows is that the panel asks for the list of the platform it is
+   * showing, and shows that one.
+   */
+  test("the authorised list is the one of the platform on show", async () => {
+    await createRoot(async () => {
+      const asked: string[] = []
+      const api: GatewayPanelApi = {
+        status: async () => [
+          { bot: BOT.path, platform: "telegram", enabled: true, running: true, connected: true, hasToken: true, authorized: [] },
+        ],
+        setToken: async () => {},
+        clearToken: async () => {},
+        probe: async () => "@bot_di_prova",
+        setEnabled: async () => {},
+        pairingList: async (bot, platform) => {
+          asked.push(platform)
+          return platform === "telegram"
+            ? { open: true, pending: [], authorized: [{ id: "tg1", name: "Sandro su Telegram", addedMs: 0 }], attemptsLeft: 0 }
+            : { open: false, pending: [], authorized: [{ id: "dc1", name: "Sandro su Discord", addedMs: 0 }], attemptsLeft: 0 }
+        },
+        pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
+        pairingReject: async () => {},
+        pairingRevoke: async () => {},
+        pairingOpen: async () => 0,
+        listen: async () => () => {},
+      }
+      const panel = createGatewayPanel({
+        bot: () => BOT,
+        api,
+        project: () => PROJECT,
+        remote: memoryRemoteStore(),
+        approve: async () => ({ ok: true, fingerprint: "f" }),
+        confirm: async () => true,
+      })
+      try {
+        await panel.refresh()
+        expect(asked).toEqual(["telegram"])
+        expect(panel.pairing().authorized.map((who) => who.id)).toEqual(["tg1"])
+        expect(panel.pairing().open).toBe(true)
+
+        // Discord has its own list, and the panel asks for that one and shows it.
+        panel.choose("discord")
+        await panel.refresh()
+        expect(asked).toContain("discord")
+        expect(panel.pairing().authorized.map((who) => who.id)).toEqual(["dc1"])
+        expect(panel.pairing().open).toBe(false)
+
+        // A revoking act goes to the platform it is looking at.
+        await panel.revoke("dc1")
+        expect(asked[asked.length - 1]).toBe("discord")
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
 })
