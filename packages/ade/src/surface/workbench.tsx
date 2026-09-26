@@ -175,6 +175,8 @@ import {
   type NaturalVoiceFailure,
 } from "../agent/onboarding"
 import { Chat } from "../chat/chat"
+import { appChatStore } from "../chat/store"
+import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster } from "../bots/bots"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/nikcli"
@@ -567,6 +569,8 @@ export function Workbench() {
       "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>),
   )
   const [project, setProject] = createSignal<Project>()
+  // The Chat's conversations are sessions of the project too (bar-sessions.ts).
+  const chatStore = appChatStore()
   /** Who a new pane belongs to: the open project, by name and by folder (see `pane-project.ts`). */
   const here = () => {
     const open = project()
@@ -7216,7 +7220,7 @@ export function Workbench() {
               <NikChromeLogo size={30} />
             </span>
           </Show>
-          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} sessions={wb().panes.filter((p) => !isPanelPane(p)).length} />
+          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} sessions={barSessionCount(wb().panes, project(), chatStore)} />
         </div>
 
         <div data-slot="ade-bar-center">
