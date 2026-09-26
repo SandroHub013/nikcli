@@ -1578,6 +1578,17 @@ export const en: Messages = {
   "bots.turn.noHost": "No host: a turn only runs in the desktop app.",
   "bots.turn.cannotRefuse": (label) => `${label} cannot refuse the tools this turn leaves out.`,
   "bots.turn.didNotStart": (label, why) => `${label} did not start: ${why}`,
+  "bots.serve.noFolder": "A nikcli bot answers from a project: open a folder to talk to it.",
+  "bots.serve.notAdmitted": (root) =>
+    `The project ${root} is not admitted for nikcli yet, or it changed: open the bot in the panel, answer the question and try again.`,
+  "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
+  "bots.serve.agentTaken": (name) =>
+    `The project has its own agent «${name}», different from this bot: on the server it would answer in its place, so the turn does not start. Rename one of the two.`,
+  "bots.serve.newSession":
+    "New conversation: the previous one was «nikcli run»'s, or had other rules, and on ADE's server every bot conversation starts with its own. The bot does not remember what came before.",
+  "bots.serve.refused": (permission, patterns) =>
+    `Refused: nikcli asked for «${permission}» (${patterns}) and nobody here can answer.`,
+  "bots.serve.lost": "The nikcli server closed the event stream before the turn ended.",
   "bots.runner.protectedPath": (paths) =>
     `Claude Code could not write on a path protected for project bots (${paths}): a write there becomes code that runs later, so it is refused on purpose.`,
   "bots.runner.permissionDenied": (names) =>

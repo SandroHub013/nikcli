@@ -49,6 +49,8 @@ export interface TalkMessage {
 }
 
 export interface PendingPermission {
+  /** nikcli's id for the question, on ADE's server (B8d): the answer goes to it, not to a menu. */
+  readonly requestID?: string
   readonly permission: string
   readonly patterns: string
   readonly askedAt: number
@@ -577,6 +579,24 @@ export function appendMessage(
     messages: [...talk.messages, { ...rest, id: id ?? nextId(prefix, at), at }],
     updatedAt: at,
   }
+}
+
+/**
+ * A message put on the thread, or put in place of the one with its id: nikcli's
+ * server sends a part whole each time it changes (B8d), a text as it grows and
+ * a tool from running to done. Stored as `appendMessage` stores it; the first
+ * time it came stays its time.
+ */
+export function upsertMessage(
+  talk: Talk,
+  message: { readonly id: string; readonly role: TalkRole; readonly text: string; readonly tool?: string; readonly output?: string },
+  at: number,
+): Talk {
+  const index = talk.messages.findIndex((existing) => existing.id === message.id)
+  if (index < 0) return appendMessage(talk, message, at)
+  const messages = talk.messages.slice()
+  messages[index] = { ...forStorage(message), at: messages[index]!.at }
+  return { ...talk, messages, updatedAt: at }
 }
 
 /** Adds what a tool printed to the tool message with that id, when it is on the thread. */

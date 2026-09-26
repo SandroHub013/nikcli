@@ -26,7 +26,7 @@ import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, spendKind, turnCommand, type RemoteTools, type RunnerId } from "./runners"
-import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
+import { applyExit, applyProblem, emptyTalk, sendMessage, type PendingPermission, type Talk } from "./talk"
 
 export interface TurnRequest {
   readonly runner: RunnerId
@@ -81,6 +81,19 @@ export interface TurnRequest {
    * (`TurnSpec.maxBudgetUsd`).
    */
   readonly maxCostUsd?: number
+  /**
+   * nikcli on ADE's server (B8d): each change the turn makes to a thread, as
+   * it happens, for the caller to make to its own. Not the user's message,
+   * which the caller put there already.
+   */
+  readonly onChange?: (change: (talk: Talk) => Talk) => void
+  /**
+   * nikcli on ADE's server (B8d): a question to answer with `Turn.answer`,
+   * one at a time. Absent, every question is refused as it comes.
+   */
+  readonly onPermission?: (asked: PendingPermission) => void
+  /** Someone is in front of the screen: a project not admitted yet is asked about, not refused (B8d). */
+  readonly interactive?: boolean
 }
 
 /**
@@ -149,6 +162,8 @@ export interface Turn {
   readonly stop: () => void
   /** Keystrokes to the CLI, exactly as given: the answer to nikcli's permission menu. Absent where nothing can be typed. */
   readonly write?: (keys: string) => void
+  /** The answer to the question `onPermission` gave: nikcli on ADE's server (B8d). */
+  readonly answer?: (reply: "once" | "reject") => void
 }
 
 /* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */

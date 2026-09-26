@@ -1592,6 +1592,17 @@ export const it = {
   "bots.turn.noHost": "Nessun host: un turno si esegue solo nell'app desktop.",
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
+  "bots.serve.noFolder": "Un bot nikcli risponde da un progetto: apri una cartella per parlargli.",
+  "bots.serve.notAdmitted": (root: string) =>
+    `Il progetto ${root} non è ancora ammesso per nikcli, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
+  "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
+  "bots.serve.agentTaken": (name: string) =>
+    `Il progetto ha un suo agente «${name}», diverso da questo bot: sul server risponderebbe al suo posto, quindi il turno non parte. Rinomina uno dei due.`,
+  "bots.serve.newSession":
+    "Conversazione nuova: la precedente era di «nikcli run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
+  "bots.serve.refused": (permission: string, patterns: string) =>
+    `Rifiutato: nikcli ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
+  "bots.serve.lost": "Il server di nikcli ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
