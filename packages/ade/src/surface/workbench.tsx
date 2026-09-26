@@ -4665,7 +4665,12 @@ export function Workbench() {
             }
           }),
         )
-        for (const { session, plan } of planRestore(sessions)) {
+        for (const { session, plan, sharedWith } of planRestore(sessions)) {
+          if (sharedWith) {
+            // The conversation stays with the other pane: this one must not reopen it by its saved id.
+            setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
+            appendLine(session.pane.id, t("resume.shared", sharedWith.pane.title), "note")
+          }
           void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
         }
 
@@ -6067,7 +6072,16 @@ export function Workbench() {
     const agentId = given.agent ?? given.model
     if (running.has(given.id)) return
     const reported = await adoptLastReport(given)
-    const pane = reported ? { ...given, resumeId: reported } : given
+    let pane = reported ? { ...given, resumeId: reported } : given
+    // Another open pane holds this conversation (ripristino review, point 1): it stays there.
+    const holder = pane.resumeId
+      ? wb().panes.find((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId && other.resumeId === pane.resumeId)
+      : undefined
+    if (holder) {
+      pane = { ...pane, resumeId: undefined }
+      setWb((w) => updatePane(w, pane.id, { resumeId: undefined }))
+      appendLine(pane.id, t("resume.shared", holder.title), "note")
+    }
     const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
@@ -6520,6 +6534,11 @@ export function Workbench() {
           onReport: (report) => {
             if (running.get(paneId) !== session) return
             setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+            // Followed all the same, since the TUI does show it; but only one of the two can reopen it.
+            const holder = wb().panes.find(
+              (other) => other.id !== paneId && (other.agent ?? other.model) === agentId && other.resumeId === report.sessionId,
+            )
+            if (holder) appendLine(paneId, t("resume.alsoOpen", holder.title), "note")
             const elsewhere = otherFolder(report, workDir)
             if (elsewhere) appendLine(paneId, t("resume.otherFolder", elsewhere), "note")
           },

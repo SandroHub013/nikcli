@@ -1129,6 +1129,10 @@ export const en: Messages = {
   "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
   "resume.otherFolder": (dir) =>
     `This conversation belongs to another folder (${dir}): nikcli's tabs are shared by every project. The pane follows it now, on a restart too`,
+  "resume.shared": (pane) =>
+    `This conversation is already open in the pane «${pane}»: another one starts here, so the two do not write into the same one`,
+  "resume.alsoOpen": (pane) =>
+    `This conversation is also open in the pane «${pane}»: on a restart only one of the two reopens it`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",

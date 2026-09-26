@@ -249,6 +249,31 @@ describe("asking nikcli for a conversation", () => {
     expect(plans[1]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_two"] })
   })
 
+  test("two panes saved on one conversation: only the first reopens it (review, point 1)", () => {
+    const plans = planRestore([
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+    ])
+    expect(plans.filter((entry) => entry.plan.kind === "resume")).toHaveLength(1)
+    expect(plans[0]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_one"] })
+    expect(plans[0]!.sharedWith).toBeUndefined()
+    // The second looks for its folder's latest (the held id is left out there); the third gets a new one.
+    expect(plans[1]!.plan).toEqual({ kind: "here" })
+    expect(plans[2]!.plan).toEqual({ kind: "fresh" })
+    expect(plans[1]!.sharedWith).toBe(plans[0]!.session)
+    expect(plans[2]!.sharedWith).toBe(plans[0]!.session)
+  })
+
+  test("the same id for another agent is another conversation", () => {
+    const plans = planRestore([
+      { agentId: "claude-code", cwd: "/p", resumeId: "abc" },
+      { agentId: "claude-code", cwd: "/p", resumeId: "abc" },
+      { agentId: "codex", cwd: "/p", resumeId: "abc" },
+    ])
+    expect(plans.map((entry) => entry.plan.kind)).toEqual(["resume", "fresh", "resume"])
+  })
+
   test("without ids, the folder's latest goes to one pane only", () => {
     const plans = planRestore([
       { agentId: "nikcli", cwd: "/p" },

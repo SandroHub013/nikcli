@@ -473,13 +473,29 @@ export function planResume(request: ResumeRequest): ResumePlan {
  * Sessions are given in the order they were saved, and the first one in a
  * directory that needs "the most recent conversation" gets it. The rest of
  * that directory start fresh rather than all reopening the same one.
+ *
+ * The same goes for an exact id (ripristino review, point 1): nikcli's tabs
+ * are one list for every TUI, so a pane that followed a tab can hold the
+ * conversation another pane holds, and two `--session <id>` would write into
+ * one conversation. The first pane keeps it; a later one gets `here` when
+ * its directory's claim is still free (which leaves out the ids the other
+ * panes hold), a new conversation otherwise, and `sharedWith` names the pane
+ * that kept it, for the caller to say so.
  */
 export function planRestore<T extends { agentId: string; cwd: string; resumeId?: string; missing?: boolean }>(
   sessions: readonly T[],
-): { session: T; plan: ResumePlan }[] {
+): { session: T; plan: ResumePlan; sharedWith?: T }[] {
   const claimed = new Set<string>()
+  const holders = new Map<string, T>()
   return sessions.map((session) => {
     const key = `${session.agentId} ${session.cwd}`
+    const held = session.resumeId !== undefined ? holders.get(`${session.agentId} ${session.resumeId}`) : undefined
+    if (held) {
+      const plan: ResumePlan = RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
+      if (plan.kind === "here") claimed.add(key)
+      return { session, plan, sharedWith: held }
+    }
+    if (session.resumeId !== undefined) holders.set(`${session.agentId} ${session.resumeId}`, session)
     const plan = planResume({
       agentId: session.agentId,
       ...(session.resumeId !== undefined ? { resumeId: session.resumeId } : {}),

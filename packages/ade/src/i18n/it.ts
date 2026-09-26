@@ -1139,6 +1139,10 @@ export const it = {
   "resume.noneHere": (agent: string) => `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>
     `Questa conversazione è di un'altra cartella (${dir}): le schede di nikcli sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
+  "resume.shared": (pane: string) =>
+    `La conversazione è già aperta nel pannello «${pane}»: qui ne parte un'altra, per non scrivere in due nella stessa`,
+  "resume.alsoOpen": (pane: string) =>
+    `Questa conversazione è aperta anche nel pannello «${pane}»: al riavvio la riprende uno solo dei due`,
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
