@@ -6565,6 +6565,8 @@ export function Workbench() {
         onExit: (code) => {
           if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
         },
+        // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
+        onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
@@ -6784,6 +6786,7 @@ export function Workbench() {
         onExit: (code) => {
           if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
         },
+        onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })

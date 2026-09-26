@@ -129,6 +129,11 @@ describe("the notes that go over the terminal", () => {
   test("a start that failed says why, and no bare error goes to the transcript alone", () => {
     expect(workbench).toContain('tellPane(paneId, t("pane.startFailed", String(e)))')
     expect(workbench).toContain('tellPane(paneId, t("pane.connectFailed", String(e)))')
+    // A start the host refused (a program not found) comes back as a reason, not as the agent's stderr.
+    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),')
+    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),')
+    const shell = read("host", "shell.ts")
+    expect(shell).toContain("if (onRefused) onRefused(reason)")
     expect(workbench).not.toMatch(/appendLine\(paneId, String\(e\)\)/)
   })
 

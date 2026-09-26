@@ -91,6 +91,13 @@ export interface Host {
     onLine: (line: string, stream: "out" | "err") => void
     onExit: (code: number | null) => void
     /**
+     * The host refused to start the process: a program not found, an
+     * argument cmd.exe would read again. Given, it hears the reason instead of
+     * `onLine` — a line on the agent's stderr is hidden by a terminal that is
+     * still live from the pane's last process. `onExit(null)` follows either way.
+     */
+    onRefused?: (reason: string) => void
+    /**
      * Lets the CLI report which conversation it opened.
      *
      * Passed only for an agent whose reporting hook is installed. The host
@@ -473,7 +480,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe, flags }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, onRefused, link, pane, paneToken, secrets, pipe, flags }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -543,7 +550,9 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         dead = true
         stop()
-        onLine(error instanceof Error ? error.message : String(error), "err")
+        const reason = error instanceof Error ? error.message : String(error)
+        if (onRefused) onRefused(reason)
+        else onLine(reason, "err")
         onExit(null)
       }
 
