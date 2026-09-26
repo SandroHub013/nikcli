@@ -236,6 +236,8 @@ export interface Host {
   ) => Promise<ArrayBuffer>
   /** Ends the resident child of the second backend. One child, so no provider. */
   ttsLocalStop?: () => Promise<void>
+  /** Takes the second backend away again, and answers with the bytes it freed. */
+  ttsLocalDelete?: (provider: string) => Promise<number>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
@@ -764,6 +766,31 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsPiperStop() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<{ busy: boolean }>("tts_piper_stop")
+    },
+
+    async ttsLocalStatus(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ supported: boolean; installed: boolean; sizeBytes: number | null }>("tts_local_status", { provider })
+    },
+
+    async ttsLocalInstall(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_install", { provider })
+    },
+
+    async ttsLocalSpeak(provider, voiceId, text, token, lang) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId, text, token, lang })
+    },
+
+    async ttsLocalStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_stop")
+    },
+
+    async ttsLocalDelete(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<number>("tts_local_delete", { provider })
     },
 
     async mailboxTake() {
