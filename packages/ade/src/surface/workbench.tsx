@@ -46,6 +46,7 @@ import {
 import { detectAgents } from "../session-new/availability"
 import {
   RESUME,
+  lastTakenFor,
   planFork,
   planLastHere,
   planMint,
@@ -6090,9 +6091,9 @@ export function Workbench() {
     const plan = planResume({
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
-      // "The most recent one here" only when this is the one pane of that
-      // agent: with two, the latest thread is as likely the other's.
-      lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
+      // "The most recent one here" unless another pane of this folder may be
+      // in it: per folder, and for nikcli only a pane without an id of its own.
+      lastTaken: lastTakenFor(pane, wb().panes),
       missing,
     })
     // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.

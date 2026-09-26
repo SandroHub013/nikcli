@@ -10,6 +10,7 @@ import {
   planStart,
   resumePromise,
   lastNikcliHere,
+  lastTakenFor,
   planLastHere,
 } from "./resume"
 
@@ -178,6 +179,30 @@ describe("planRestore", () => {
       { agentId: "codex", cwd: "/p" },
     ])
     expect(plans.map((entry) => entry.session.agentId)).toEqual(["claude-code", "codex"])
+  })
+})
+
+describe("the most recent conversation, when one pane is reopened", () => {
+  const pane = (id: string, agent: string, cwd: string, resumeId?: string) => ({ id, agent, cwd, ...(resumeId ? { resumeId } : {}) })
+
+  test("nikcli: a pane in another folder, or one holding its own id, does not take it (prove dal vivo 2, B)", () => {
+    const mine = pane("b", "nikcli", "C:/proj")
+    const elsewhere = [pane("a", "nikcli", "C:/altro"), mine]
+    expect(lastTakenFor(mine, elsewhere)).toBe(false)
+    expect(planResume({ agentId: "nikcli", lastTaken: lastTakenFor(mine, elsewhere) })).toEqual({ kind: "here" })
+    // A pane with its id is left out of nikcli's answer already.
+    expect(lastTakenFor(mine, [pane("a", "nikcli", "C:/proj", "ses_1"), mine])).toBe(false)
+    // Two without an id in one folder, spelled two ways: the earlier one has it.
+    const both = [pane("a", "nikcli", "C:\\Proj\\"), mine]
+    expect(lastTakenFor(mine, both)).toBe(true)
+    expect(lastTakenFor(both[0]!, both)).toBe(false)
+  })
+
+  test("an agent that can only say «the most recent one»: any pane of the folder takes it, another folder does not", () => {
+    const mine = pane("b", "claude-code", "C:/proj")
+    expect(lastTakenFor(mine, [pane("a", "claude-code", "C:/proj", "id-1"), mine])).toBe(true)
+    expect(lastTakenFor(mine, [pane("a", "claude-code", "C:/altro"), mine])).toBe(false)
+    expect(lastTakenFor(mine, [pane("a", "nikcli", "C:/proj"), mine])).toBe(false)
   })
 })
 

@@ -474,6 +474,44 @@ export function planResume(request: ResumeRequest): ResumePlan {
   return { kind: "fresh" }
 }
 
+/** A folder as a key: one spelling for the same place, on Windows too. */
+function folderKey(cwd: string | undefined): string {
+  return (cwd ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+}
+
+/**
+ * Whether "the most recent conversation here" is already spoken for when
+ * `pane` is reopened on its own (not in a whole restore, see `planRestore`).
+ *
+ * Per folder, as in `planRestore`: a pane of the same agent in another folder
+ * has a different "most recent", and counting it made every pane without an
+ * id start a new conversation as soon as any other pane of that agent was open
+ * (prove dal vivo 2, difetto B).
+ *
+ * For an agent that asks for the most recent conversation here and then
+ * reopens it by id (`lastHere`), the panes holding an id are left out of the
+ * answer already, so only another pane without one can take the same
+ * conversation, and of two such panes the earlier one has it. For an agent
+ * that can only say "the most recent one" (`last`), any other pane of the
+ * folder may be in it.
+ */
+export function lastTakenFor<P extends { id: string; agent?: string; model?: string; cwd?: string; resumeId?: string }>(
+  pane: P,
+  panes: readonly P[],
+): boolean {
+  const agentId = pane.agent ?? pane.model ?? ""
+  const folder = folderKey(pane.cwd)
+  const excludesHeld = Boolean(RESUME[agentId]?.lastHere)
+  const at = panes.findIndex((other) => other.id === pane.id)
+  return panes.some(
+    (other, index) =>
+      other.id !== pane.id &&
+      (other.agent ?? other.model) === agentId &&
+      folderKey(other.cwd) === folder &&
+      (!excludesHeld || (!other.resumeId && at >= 0 && index < at)),
+  )
+}
+
 /**
  * Plans a whole restore, so the "most recent" claim is handed out once.
  *
