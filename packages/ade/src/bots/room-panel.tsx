@@ -211,7 +211,9 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
               )}
             </Show>
 
-            <Show when={current().note}>{(note) => <p data-slot="bots-problem">{note()}</p>}</Show>
+            <Show when={current().note}>
+              {(note) => <p data-slot={current().noteKind === "end" ? "room-note" : "bots-problem"}>{note()}</p>}
+            </Show>
           </div>
 
           <div data-slot="bots-mentions">

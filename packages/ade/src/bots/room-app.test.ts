@@ -128,6 +128,7 @@ describe("B8b: a room's run, through each bot's own turn", () => {
     expect(problem).toContain("gamma")
     expect(r.calls).toHaveLength(0)
     expect(r.current().note).toBe(problem)
+    expect(r.current().noteKind).toBe("problem")
     // The message is kept: the user sees what was not answered.
     expect(r.said()).toEqual(["utente: via"])
   })
@@ -181,6 +182,8 @@ describe("B8b: a room's run, through each bot's own turn", () => {
     await r.runner.send("r1", "parlate")
     expect(r.said()).not.toContain("alfa: mezza risposta")
     expect(r.current().note).toBe(endNote("rounds"))
+    // An end is news, not a problem (B8b review): it is drawn plain.
+    expect(r.current().noteKind).toBe("end")
     expect(endNote("settled")).toBeUndefined()
     expect(endNote("budget", 0.1)).toContain("0.10 $")
   })
@@ -201,6 +204,7 @@ describe("B8b: the rooms as saved", () => {
       log: { entries: [{ id: "e1", from: { kind: "bot", id: alfa.path, name: "alfa" }, text: "ciao", at: 3 }], seen: { [alfa.path]: 1 } },
       needsYou: true,
       note: "ferma",
+      noteKind: "end",
       createdAt: 7,
     }
     const saved = JSON.stringify({ rooms: [good, { id: "r2" }, { ...good, id: "r3", members: [] }] })

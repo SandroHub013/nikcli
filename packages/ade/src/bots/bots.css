@@ -1003,6 +1003,13 @@
   white-space: nowrap;
 }
 
+/* How the last run ended: news, not an error. */
+[data-slot="room-note"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
 [data-slot="room-needs-you-line"] {
   margin: 0;
   color: var(--ade-text-soft);

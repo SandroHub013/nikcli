@@ -39,6 +39,10 @@ describe("B8b: the room in the Bot section", () => {
     expect(bots).toContain("stop: (roomId) => void roomRunner.stop(roomId)")
   })
 
+  test("how a run ended is drawn plain; only a problem is drawn as one (B8b review)", () => {
+    expect(panel).toContain('data-slot={current().noteKind === "end" ? "room-note" : "bots-problem"}')
+  })
+
   test("a room goes only on the user's yes, with its members' sessions", () => {
     const remove = bots.slice(bots.indexOf("  remove: async (roomId)"))
     expect(remove).toContain('askYesNo(t("bots.room.deleteAsk"')

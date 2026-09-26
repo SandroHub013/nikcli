@@ -46,6 +46,8 @@ export interface RoomRecord {
   readonly needsYou: boolean
   /** How the last run ended, or why it could not start. */
   readonly note?: string
+  /** An end is news, drawn plain; a problem stopped the room, drawn as one (B8b review). */
+  readonly noteKind?: "end" | "problem"
   readonly createdAt: number
 }
 
@@ -110,7 +112,7 @@ function parseRoom(value: unknown): RoomRecord | undefined {
     ...(capped ? { spend: { perRoundUsd: spend } } : {}),
     log: parseLog(value["log"]),
     needsYou: value["needsYou"] === true,
-    ...(text(value["note"]) ? { note: value["note"] } : {}),
+    ...(text(value["note"]) ? { note: value["note"], noteKind: value["noteKind"] === "end" ? "end" : "problem" } : {}),
     createdAt: typeof value["createdAt"] === "number" ? value["createdAt"] : 0,
   }
 }
@@ -232,7 +234,7 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
     // A newer message ends the run under way: the room answers this one.
     await stop(roomId)
     write(roomId, (room) => {
-      const { note: _old, ...rest } = room
+      const { note: _old, noteKind: _kind, ...rest } = room
       return {
         ...rest,
         log: appendEntry(room.log, { id: newId(), from: { kind: "user" }, text: said, at: now() }),
@@ -249,7 +251,7 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
     if (typeof verdict === "string" || run.cancelled) {
       if (runs.get(roomId) === run) runs.delete(roomId)
       if (typeof verdict !== "string") return undefined
-      write(roomId, (current) => ({ ...current, note: verdict }))
+      write(roomId, (current) => ({ ...current, note: verdict, noteKind: "problem" }))
       return verdict
     }
     const seats = verdict.seats
@@ -291,7 +293,7 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
     try {
       const { end } = await going
       const note = endNote(end, perRoundUsd)
-      if (note) write(roomId, (current) => ({ ...current, note }))
+      if (note) write(roomId, (current) => ({ ...current, note, noteKind: "end" }))
     } finally {
       if (runs.get(roomId) === run) runs.delete(roomId)
     }
