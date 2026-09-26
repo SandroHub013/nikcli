@@ -15,6 +15,16 @@ export const DENIED = "negato dall'utente"
 
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
 
+/*
+ * A local page that answers with a redirect to the outside — a dev server with
+ * `/redirect?to=…` — takes the panel out without a question, because the
+ * question is asked on the requested URL and never again on where it lands.
+ * That is accepted: the web panel cannot reach ADE's commands, and the local
+ * site is the user's own. It is written here so that nobody takes this for
+ * covered: a page that redirects is a way out of the question, and nothing in
+ * this file stops it (review-alti-seguito, BASSO 2).
+ */
+
 /**
  * Whether `url` is the machine's own: `localhost`, `127.0.0.1`, `::1`, which
  * a bare port becomes. A dev server is opened without asking; anything else
