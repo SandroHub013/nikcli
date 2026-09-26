@@ -973,3 +973,75 @@
 
 /* Inside the card the picker is narrow: the face above the rows, not beside them. */
 [data-slot="bots-form"][data-compact="true"] [data-slot="bots-picker"] { flex-direction: column; gap: var(--ade-space-4); }
+
+/* ── rooms (B8b) ─────────────────────────────────────────────────────────── */
+
+/* Under the bots in the sidebar: a room is a row like a bot, with # for a face. */
+[data-slot="rooms-roster"] {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--ade-border);
+}
+
+[data-slot="room-glyph"] {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+}
+
+/* «ti serve»: a bot wrote @utente. */
+[data-slot="room-needs-you"] {
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-accent);
+  color: var(--ade-surface);
+  font-size: var(--ade-font-xs);
+  white-space: nowrap;
+}
+
+[data-slot="room-needs-you-line"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="room-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+[data-slot="room-name"] { font-weight: var(--ade-weight-semibold); }
+[data-slot="room-members"],
+[data-slot="room-cap"] { color: var(--ade-text-weak); font-size: var(--ade-font-sm); }
+[data-slot="room-head"] [data-slot="bots-link"] { margin-left: auto; }
+
+/* No faces in a room: the speaker's name over what it said. */
+[data-room="true"] [data-slot="bots-msg"] { grid-template-columns: minmax(0, 1fr); }
+
+[data-slot="room-speaker"] {
+  display: block;
+  margin-bottom: var(--ade-space-1);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="room-pick"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="room-pick-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+}
