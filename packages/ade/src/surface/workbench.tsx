@@ -49,6 +49,7 @@ import {
   planFork,
   planLastHere,
   planMint,
+  mintMark,
   MintLedger,
   lastHereBesideMints,
   planRestore,
@@ -6137,11 +6138,15 @@ export function Workbench() {
     taken: ReadonlySet<string>,
     paneId: string,
   ) => {
-    const plan = planLastHere(agentId, cwd, taken)
+    // The other open panes' conversations by title, a mint whose id ADE never read among them.
+    const marks = wb()
+      .panes.filter((pane) => pane.id !== paneId)
+      .map((pane) => mintMark(pane.id))
+    const plan = planLastHere(agentId, cwd, taken, marks)
     if (!plan) return undefined
     return await lastHereBesideMints(
       (read) => askCli(command, plan.args, cwd, read),
-      (output, excluded) => planLastHere(agentId, cwd, excluded)!.read(output),
+      (output, excluded) => planLastHere(agentId, cwd, excluded, marks)!.read(output),
       taken,
       mints,
       (owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),
@@ -6458,7 +6463,7 @@ export function Workbench() {
        * A title that tells the conversations apart inside the CLI, where they
        * are listed together: panes are often all called "Sessione 1 — nikcli".
        */
-      const title = `${launched?.title || agent.label || agentId} · ${paneId.slice(-8)}`
+      const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`
       appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")
       const minted = await mintConversation(agentId, agent.command, workDir, title, paneId)
       if (minted && recipe.byId) opening = { args: recipe.byId(minted), resumeId: minted }

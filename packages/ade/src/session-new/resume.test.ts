@@ -22,6 +22,7 @@ import {
   LIST_COLS,
   MintLedger,
   lastHereBesideMints,
+  mintMark,
 } from "./resume"
 
 describe("planStart", () => {
@@ -620,5 +621,37 @@ describe("a conversation being minted is not another pane's «here»", () => {
     expect(workbench).toContain("askCli(command, plan.args, cwd, plan.read).then((id) => id ?? undefined),\n      paneId,")
     expect(workbench).toContain("return await lastHereBesideMints(")
     expect(workbench).toContain("(owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),")
+  })
+})
+
+/*
+ * Review of ripristino-quater, BASSO 2: a mint past MINT_MS is killed, but
+ * nikcli may have written the conversation, and ADE never read its id. Empty
+ * and the newest of the folder, it was another pane's "here".
+ */
+describe("a conversation minted for another open pane is not «here»", () => {
+  const real = "ses_f22f7ce38ffetKaHXDQ4xUS0u0"
+  const orphan = "ses_f2187fa39ffea42ThcJIS6p5l5"
+  const output = listed(
+    session(orphan, 30, { title: `Sessione 1 — nikcli${mintMark("n1789476735968-5998-1-1")}` }),
+    session(real, 20),
+  )
+
+  test("its title says the pane, and the pane is open: left out", () => {
+    expect(mintMark("n1789476735968-5998-1-1")).toBe(" · 5998-1-1")
+    expect(lastNikcliHere(output, HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])).toBe(real)
+    expect(planLastHere("nikcli", HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])!.read(output)).toBe(real)
+  })
+
+  test("a pane no longer open, or no mark, leaves it to be taken", () => {
+    expect(lastNikcliHere(output, HERE, new Set(), [mintMark("n1789476735968-7777-2-2")])).toBe(orphan)
+    expect(lastNikcliHere(output, HERE, new Set())).toBe(orphan)
+  })
+
+  test("the workbench titles a mint and reads the list by the same mark", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`")
+    expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .map((pane) => mintMark(pane.id))")
+    expect(workbench).toContain("planLastHere(agentId, cwd, excluded, marks)")
   })
 })
