@@ -86,6 +86,13 @@ const ESPEAK_DATA: Download = Download {
  */
 const HOST_EXE: Option<Download> = None;
 
+/// Whether this build knows where to fetch the host from. Without it an install
+/// fetches 219 MB and still cannot speak, so the panel offers none (verdict of
+/// area 3, A3: the stopgap until the host's release exists).
+pub fn host_published() -> bool {
+    HOST_EXE.is_some()
+}
+
 /// What the installed revision looks like on disk.
 ///
 /// `root` is `…/tts/kokoro`, a sibling of Piper's folder and not inside it: the
