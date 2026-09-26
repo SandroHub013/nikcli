@@ -1417,6 +1417,7 @@ export const it = {
   "bots.approval.refused": (command: string, reason: string) =>
     `Claude Code non ha eseguito «${command}»: ${reason}. Può farlo dal prossimo turno se scegli «Sempre per questo bot».`,
   "bots.approval.offer": (command: string) => `Consentire a questo bot comandi come «${command}», dal prossimo turno?`,
+  "bots.approval.denied": (command: string) => `Negato: «${command}» non è stato eseguito.`,
   "bots.approval.expired": (command: string) => `Nessuna risposta: «${command}» è stato negato.`,
   "bots.routine.label": "Routine",
   "bots.routine.off": (reason: string) => `Questo bot non può avere routine: ${reason}.`,

@@ -1406,6 +1406,7 @@ export const en: Messages = {
   "bots.approval.refused": (command: string, reason: string) =>
     `Claude Code did not run «${command}»: it ${reason}. It can from the next turn if you choose «Always for this bot».`,
   "bots.approval.offer": (command: string) => `Allow this bot commands like «${command}», from the next turn?`,
+  "bots.approval.denied": (command: string) => `Denied: «${command}» was not run.`,
   "bots.approval.expired": (command: string) => `No answer: «${command}» was denied.`,
   "bots.routine.label": "Routines",
   "bots.routine.off": (reason: string) => `This bot cannot have routines: ${reason}.`,

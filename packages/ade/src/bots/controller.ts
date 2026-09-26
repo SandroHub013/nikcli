@@ -376,7 +376,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       if (asked.requestID !== requestID) return
       // Every danger of the command: «Sempre» on one must not let the others through (M3).
       if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
-      reply(bot.path, turn, asked, choice === "reject" ? "reject" : "once")
+      // A Nega is said in the thread, as a block or an expiry is: the bot's next words come after a refusal.
+      if (choice === "reject") reply(bot.path, turn, asked, "reject", t("bots.approval.denied", asked.patterns))
+      else reply(bot.path, turn, asked, "once")
     },
     grant: (bot) => {
       const offer = deps.talkOf(bot.path).offer
