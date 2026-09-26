@@ -84,10 +84,12 @@ const WRAPPER = String.raw`\b(?:sudo|doas|exec|env|command|builtin|nohup|nice|ti
  */
 const START = String.raw`(?:^|[;&|({\x60\n]\s*|${NESTED}|${WRAPPER})["']?(?:\\|[^\s;&|'"(]*[\\/])?`
 /*
- * The folder of one user (`/home/mario`, `/Users/mario`, `C:\Users\mario`),
- * itself and not what is inside it: projects live there (second check, MEDIO).
+ * The folder of one user (`/home/mario`, `/Users/mario`, `C:\Users\mario`,
+ * `/c/Users/mario` in Git Bash, `/mnt/c/Users/mario` in WSL), or the folder
+ * of them all, itself and not what is inside it: projects live there (second
+ * and third check, MEDIO).
  */
-const USER_DIR = String.raw`(?:\/(?:home|Users)|[A-Za-z]:[\\/]Users)[\\/][^\\/\s;&|"'*]+[\\/]?\*?`
+const USER_DIR = String.raw`(?:\/(?:mnt\/)?[A-Za-z]\/Users|\/home|\/Users|[A-Za-z]:[\\/]Users)(?:[\\/][^\\/\s;&|"'*]+)?[\\/]?\*?`
 const ROOT = String.raw`(?:\/|\/\*|~|~\/|\$HOME|\$\{HOME\}|[A-Za-z]:\\?|[A-Za-z]:\\\*|[A-Za-z]:\/|${USER_DIR})`
 /*
  * A drive's root or the user's folder, as PowerShell and cmd write them

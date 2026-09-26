@@ -333,6 +333,12 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
       "rm -rf /home/mario",
       "rm -rf /Users/mario/",
       "sudo rm -rf /home/mario/*",
+      "rm -rf /c/Users/mario",
+      "rm -rf /mnt/c/Users/mario/",
+      "rd /s /q C:\\Users",
+      "Remove-Item -Recurse -Force C:\\Users\\",
+      "rm -rf /home",
+      "rm -rf /Users/",
     ]) {
       expect([command, kind(command).startsWith("block:delete")]).toEqual([command, true])
     }
@@ -341,6 +347,8 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
       "rd /s /q C:\\Users\\mario\\tmp",
       "rm -rf /home/mario/progetto/build",
       "rm -rf C:/Users/mario/progetto/dist",
+      "rm -rf /c/Users/mario/progetto/node_modules",
+      "rm -rf /home/mario/.cache",
     ]) {
       expect([command, kind(command).startsWith("block")]).toEqual([command, false])
     }
