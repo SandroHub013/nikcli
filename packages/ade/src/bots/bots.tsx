@@ -418,7 +418,7 @@ const roomRunner = createRoomRunner({
   store: roomStore,
   seats: async (room, asking) => {
     const seats: RoomSeat[] = []
-    // The dialog is native and may be behind the window: the room says what it waits for.
+    // The dialog is native, over ADE but behind the app in front when ADE is not: the room says what it waits for.
     const ask = async (question: string) => {
       asking(true)
       try {
