@@ -49,14 +49,32 @@ pub struct Inbound {
     /// The platform's id for the message.
     pub id: String,
     pub chat: String,
-    /// A one-to-one chat with the bot. V1 answers nothing else.
+    /// A one-to-one chat with the bot. A private chat needs no more than this
+    /// to be answered.
     pub private: bool,
+    /// The bot was named in the text of a message that is not a private chat,
+    /// so a group channel can be answered when the author says so. Decided on
+    /// the raw `<@id>` token and never on the platform's mention list, because
+    /// a reply that quotes the bot puts it in that list without the author
+    /// having written its name.
+    pub mentioned: bool,
     pub sender: Sender,
     /// The message's text; for a button, the data it carries.
     pub text: String,
     /// A button under one of the bot's messages was pressed. Whoever pressed
     /// it is checked like a sender; a stranger's press gets no pairing code.
     pub button: bool,
+}
+
+/// Whether the hub hands a message to the page.
+///
+/// A private chat is a conversation the user opened with the bot, so it is
+/// answered. A group channel is answered only when the author named the bot:
+/// without that, the bot would answer every message in a room it happens to sit
+/// in. A platform that cannot tell the two apart says so with `private`, and
+/// the same rule as Telegram applies.
+pub fn admits(inbound: &Inbound) -> bool {
+    inbound.private || inbound.mentioned
 }
 
 /// A button under a message: what it shows, and what comes back when pressed.

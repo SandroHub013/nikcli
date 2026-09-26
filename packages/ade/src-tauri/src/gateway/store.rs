@@ -40,10 +40,15 @@ pub struct LinkState {
     /// Chats an authorized sender wrote from: the only ones a reply may go to.
     #[serde(default)]
     pub chats: Vec<Chat>,
-    /// Where the platform's stream was read up to (Telegram's offset), saved
-    /// after the message was handed on.
+    /// Where the platform's stream was read up to (Telegram's offset, or a
+    /// Discord session), saved after the message was handed on.
     #[serde(default)]
     pub cursor: Option<String>,
+    /// When that cursor was written, in epoch milliseconds. A Discord session
+    /// cannot be resumed for ever, so the adapter needs to know how old the
+    /// session it is handed is and start a new one instead of resuming.
+    #[serde(default)]
+    pub cursor_saved_ms: Option<u64>,
     /// Strangers' requests waiting for the user, and the limits on them.
     #[serde(default)]
     pub pairing: Pairing,
@@ -60,6 +65,7 @@ impl LinkState {
             authorized: Vec::new(),
             chats: Vec::new(),
             cursor: None,
+            cursor_saved_ms: None,
             pairing: Pairing::default(),
         }
     }
