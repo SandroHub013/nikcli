@@ -60,6 +60,8 @@
 [data-slot="chat-head-actions"] {
   display: flex;
   gap: var(--ade-space-3);
+  /* Alone in the head since the pickers went to the composer: on the right, where it was. */
+  margin-left: auto;
 }
 
 [data-slot="chat-action"] {
@@ -464,10 +466,16 @@
 
 /* ── composer ─────────────────────────────────────────────────────────────── */
 
+/*
+ * The field, and under it the chips' row: `+`, agent, model, effort, Invia
+ * (composer-chip, pezzo 3). The field keeps its own box and focus
+ * (composer-nero); the chips sit under it, in the same black.
+ */
 [data-slot="chat-composer"] {
   display: flex;
-  align-items: flex-end;
-  gap: var(--ade-space-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-3);
   flex: 0 0 auto;
   width: min(720px, 100%);
   margin: 0 auto;
@@ -475,7 +483,7 @@
 }
 
 [data-slot="chat-input"] {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: 40px;
   max-height: 200px;
@@ -795,17 +803,34 @@
   cursor: default;
 }
 
-/* C6: the composer's files, the `@` list and what a screen reader hears. */
+[data-slot="chat-composer-row"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  min-width: 0;
+}
+
+[data-slot="chat-composer-gap"] { flex: 1 1 auto; }
+
+/* Narrow: the chips give way first, the model's name is cut, never the row. */
+@media (max-width: 900px) {
+  [data-slot="chat-composer-row"] [data-slot="chip"] { max-width: 12rem; }
+}
+
+/* C6: the composer's files, the `@` list and what a screen reader hears. `+` is a chip of its own. */
 [data-slot="chat-attach"] {
   flex: 0 0 auto;
-  height: 32px;
-  padding: 0 var(--ade-space-6);
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
   border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-lg);
+  border-radius: var(--ade-radius-full);
   background: var(--ade-surface);
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-lg);
+  line-height: 1;
   cursor: pointer;
 }
 

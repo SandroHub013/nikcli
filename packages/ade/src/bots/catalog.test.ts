@@ -59,7 +59,7 @@ describe("whether a routine's model is free, by nikcli's catalog (B11 review, M2
 describe("the bot form's model list", () => {
   test("marks a free model as the Chat does, and leaves a paid one as its id", () => {
     expect(botModelLabel("openrouter/nvidia/nemotron-3.5-lightning:free")).toBe(
-      `openrouter/nvidia/nemotron-3.5-lightning:free (${t("chat.model.free")})`,
+      `openrouter/nvidia/nemotron-3.5-lightning:free · ${t("chat.model.free")}`,
     )
     expect(botModelLabel("openrouter/anthropic/claude-sonnet-5")).toBe("openrouter/anthropic/claude-sonnet-5")
   })

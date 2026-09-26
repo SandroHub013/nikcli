@@ -188,14 +188,18 @@ export function formatModelPrice(
   return `$${cost.input}/$${cost.output} /M`
 }
 
-/** Formatted model label for the dropdown selector. */
+/**
+ * A model as the chip and its menu say it: «Qwen3 Coder · gratis». One
+ * form for both; the menu said «(gratis)» and the chip «· gratis»
+ * (model-picker review, BASSO b).
+ */
 export function formatModelLabel(
   name: string,
   cost?: { readonly input: number; readonly output: number },
   free?: boolean,
 ): string {
   const price = formatModelPrice(cost, free)
-  return `${name} (${price})`
+  return `${name} · ${price}`
 }
 
 export interface ModelListOptions {
@@ -314,22 +318,13 @@ function choicesOf(
     }
   }
 
-  return namedApart(result)
-}
-
-/**
- * Two providers serving one model under one name, told apart by the provider:
- * OpenCode Zen and OpenRouter both list «Nemotron 3 Ultra», and the list said
- * it twice alike (composer-chip, A occhio).
- */
-function namedApart(models: readonly ChatModelChoice[]): readonly ChatModelChoice[] {
-  const count = new Map<string, number>()
-  for (const model of models) count.set(model.name, (count.get(model.name) ?? 0) + 1)
-  return models.map((model) => {
-    if ((count.get(model.name) ?? 0) < 2) return model
-    const name = `${model.name} · ${model.providerName}`
-    return { ...model, name, label: formatModelLabel(name, model.cost, model.free) }
-  })
+  /*
+   * The provider is not glued to the names that happen to repeat: the menu
+   * says it on every row, apart (`modelMenuItems`), so two «Nemotron 3
+   * Ultra» are told apart and the others read the same way (model-picker
+   * review, BASSO c).
+   */
+  return result
 }
 
 /** A variant the configuration turned off is not one (`disabled: true`). */

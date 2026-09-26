@@ -74,6 +74,24 @@ function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
  * after the configuration's overrides included; the provider's name is not
  * in them, so it is its id.
  */
+/*
+ * The providers nikcli's records name by id only, as `/config/providers`
+ * names them: the menu shows the provider on every row, and «opencode» next
+ * to «OpenRouter» read as two kinds of thing (model-picker review, BASSO c).
+ */
+const PROVIDER_NAMES: Readonly<Record<string, string>> = {
+  opencode: "OpenCode Zen",
+  openrouter: "OpenRouter",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+  groq: "Groq",
+  deepseek: "DeepSeek",
+  xai: "xAI",
+  mistral: "Mistral",
+  "github-copilot": "GitHub Copilot",
+}
+
 export function catalogFromText(stdout: string): CatalogSource {
   const byProvider = new Map<string, Record<string, CatalogEntry>>()
   for (const [name, record] of catalogRecords(stdout)) {
@@ -83,7 +101,7 @@ export function catalogFromText(stdout: string): CatalogSource {
     models[id] = record as CatalogEntry
     byProvider.set(provider, models)
   }
-  return { providers: [...byProvider].map(([id, models]): CatalogProvider => ({ id, name: id, models })) }
+  return { providers: [...byProvider].map(([id, models]): CatalogProvider => ({ id, name: PROVIDER_NAMES[id] ?? id, models })) }
 }
 
 /**
