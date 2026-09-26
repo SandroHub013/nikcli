@@ -170,7 +170,7 @@
 }
 
 [data-slot="decision-option"][data-on] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   background: var(--ade-accent-soft);
 }
 
@@ -187,7 +187,7 @@
 }
 
 [data-slot="decision-option"][data-on] [data-slot="decision-option-key"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   background: var(--ade-accent);
   color: var(--ade-accent-fg);
 }
@@ -220,7 +220,7 @@
 
 [data-slot="decision-note"]:focus {
   outline: none;
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
 }
 
 [data-slot="decision-actions"],
@@ -237,7 +237,7 @@
 [data-slot="decision-chip"] {
   height: 26px;
   padding: 0 12px;
-  border: 1px solid var(--ade-accent);
+  border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-accent);
   color: var(--ade-accent-fg);
