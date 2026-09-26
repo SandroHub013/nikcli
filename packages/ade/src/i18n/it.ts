@@ -432,6 +432,8 @@ export const it = {
   "pane.mouseHint": "Alt+clic al programma",
   "pane.mouseHint.tip": "Il clic sinistro seleziona e copia. Per mandare un clic al programma, tieni Alt.",
   "pane.close": "Chiudi",
+  "hooks.foreign":
+    "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
   "bar.nikcliVersion": (v: string) => `nikcli ${v}: è il programma con cui partono le sessioni, non ADE`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,

@@ -427,6 +427,8 @@ export const en: Messages = {
   "pane.mouseHint": "Alt+click to the program",
   "pane.mouseHint.tip": "The left click selects and copies. To send a click to the program, hold Alt.",
   "pane.close": "Close",
+  "hooks.foreign":
+    "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
   "bar.nikcliVersion": (v) => `nikcli ${v}: the program new sessions start, not ADE`,
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,
   "bar.meta.ade": (version) => `ADE ${version}`,

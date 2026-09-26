@@ -454,6 +454,26 @@ export interface HookStatus {
   readonly error?: string
   /** Installed by an earlier ADE, whose plugin is not this one's: the panel offers the update. */
   readonly outdated?: boolean
+  /**
+   * The script on disk is not this build's, and this is a test build.
+   *
+   * `outdated` and this are the same digest test, and on a release build
+   * `outdated` is the right reading: the user upgraded ADE and the hook is an
+   * older one's. On a test build it is not — the hook belongs to the **official**
+   * ADE, and it is what carries the user's Claude and Codex sessions. This build
+   * cannot tell whether that ADE is older or newer, and rewriting its script
+   * with this one's would be a test build changing the official ADE's plumbing.
+   * So the panel says whose it is and offers neither the update nor the removal.
+   */
+  readonly foreign?: boolean
+}
+
+/**
+ * Whether this is a test build, which is the one `dev.tsx` marks. Read here the
+ * same way `chat/model.ts` reads it, rather than a second way of asking.
+ */
+function isTestBuild(): boolean {
+  return typeof document !== "undefined" && document.documentElement?.dataset?.adeBuild === "test"
 }
 
 /** SHA-256, lowercase hex, as Rust reports the script on disk (`scriptDigest`). */
@@ -468,6 +488,16 @@ async function sha256(text: string): Promise<string> {
  */
 async function scriptOutdated(target: HookTarget, digest: string | undefined): Promise<boolean> {
   return digest !== undefined && digest !== (await sha256(hookScript(target.agent)))
+}
+
+/** How old a script that is installed but not this build's is. See `foreign`. */
+async function describeScriptAge(
+  target: HookTarget,
+  digest: string | undefined,
+  installed: boolean,
+): Promise<{ outdated?: true; foreign?: true }> {
+  if (!installed || !(await scriptOutdated(target, digest))) return {}
+  return isTestBuild() ? { foreign: true } : { outdated: true }
 }
 
 /** What ADE has installed for this CLI right now. */
@@ -493,7 +523,11 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
         broken: false,
         configPath: "",
         scriptPath: files.scriptPath,
-        ...(files.scriptPresent && files.scriptCurrent === false ? { outdated: true } : {}),
+        ...(files.scriptPresent && files.scriptCurrent === false
+          ? isTestBuild()
+            ? { foreign: true }
+            : { outdated: true }
+          : {}),
       }
     }
     const command = installedCommand(files.configText ?? undefined)
@@ -505,7 +539,7 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
       broken: command !== undefined && (command !== wanted || !files.scriptPresent),
       configPath: files.configPath,
       scriptPath: files.scriptPath,
-      ...(installed && (await scriptOutdated(target, files.scriptDigest)) ? { outdated: true } : {}),
+      ...(await describeScriptAge(target, files.scriptDigest, installed)),
     }
   } catch (error) {
     return {
