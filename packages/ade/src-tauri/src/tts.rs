@@ -433,6 +433,13 @@ fn install_locked(
     // at two thirds with the install finished is a bar that is lying.
     install.counted();
     for (download, path) in voice_files {
+        // A cancel asked between one file and the next is still a cancel, and
+        // the next download does not start. The fetcher asks again between its
+        // own waits; this is about the gaps it never sees — a digest, a rename,
+        // a file that was already in place.
+        if let Some(reason) = install.stop() {
+            return Err(reason);
+        }
         install.bring(download, path, curl, print)?;
     }
     Ok(())
@@ -1049,6 +1056,13 @@ impl InstallRun<'_> {
         self.publish(|progress| {
             progress.running = false;
             progress.error = outcome.as_ref().err().cloned();
+            // A cancel that arrived too late is not an outcome. The install
+            // finished, and an install that finished is not cancelled: left
+            // standing, the next one for this provider would be cancelled before
+            // its first tick, with nothing to show for it.
+            if outcome.is_ok() {
+                progress.cancelled = false;
+            }
         });
     }
 
@@ -1782,6 +1796,71 @@ mod tests {
         assert!(!done.running);
         // Il runtime non è stato riscaricato: era già installato.
         assert_eq!(scripted.asked.lock().unwrap().len(), 2, "solo i due file della voce");
+    }
+
+    #[test]
+    fn a_cancel_between_two_files_stops_before_the_next_download() {
+        let root = root_with_runtime("annullato-fra-file");
+        let installer = Installer::default();
+        let body = vec![7_u8; 64];
+        let model = root.join("voices").join("ugo.onnx");
+        let config = model.with_extension("onnx.json");
+        std::fs::create_dir_all(model.parent().unwrap()).unwrap();
+        let config_body = body.clone();
+        // Il primo file è già al suo posto: l'annullamento cade nel buco fra
+        // l'uno e l'altro, dove il fetcher non chiede.
+        std::fs::write(&config, &config_body).unwrap();
+        let voice_files = [
+            (&download_of("ugo.onnx.json", &config_body, Some(64)), config),
+            (&download_of("ugo.onnx", &body, Some(64)), model),
+        ];
+
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        let install = installer.begin(&slot, 3, bytes_pending(&voice_files), far());
+        // Il primo file passa senza rete, e l'annullamento arriva lì in mezzo.
+        install
+            .bring(&voice_files[0].0, &voice_files[0].1, &Scripted::new(body.clone(), Ending::Whole), &FingerprintInProcess)
+            .unwrap();
+        assert!(installer.cancel_of(PIPER));
+
+        let scripted = Scripted::new(body, Ending::Whole);
+        let outcome = install_locked(&install, &root, &voice_files, &scripted, &FingerprintInProcess);
+        install.finish(&outcome);
+        assert_eq!(outcome.unwrap_err(), ANNULLATA);
+        assert!(scripted.asked.lock().unwrap().is_empty(), "il secondo file non parte");
+    }
+
+    #[test]
+    fn a_cancel_that_arrived_too_late_does_not_cancel_the_next_install() {
+        let root = root_with_runtime("annullato-tardi");
+        let installer = Installer::default();
+        let body = vec![7_u8; 64];
+        let model = root.join("voices").join("ugo.onnx");
+        let config = model.with_extension("onnx.json");
+        std::fs::create_dir_all(model.parent().unwrap()).unwrap();
+        let config_body = body.clone();
+        // Tutti i file già al loro posto: l'installazione non scarica niente.
+        std::fs::write(&model, &body).unwrap();
+        std::fs::write(&config, &config_body).unwrap();
+        let voice_files = [
+            (&download_of("ugo.onnx.json", &config_body, Some(64)), config),
+            (&download_of("ugo.onnx", &body, Some(64)), model),
+        ];
+
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        let install = installer.begin(&slot, 3, bytes_pending(&voice_files), far());
+        let scripted = Scripted::new(body, Ending::Whole);
+        let outcome = install_locked(&install, &root, &voice_files, &scripted, &FingerprintInProcess);
+        assert!(outcome.is_ok(), "{outcome:?}");
+        // L'annullamento arriva dopo l'ultimo controllo ma prima della chiusura:
+        // la finestra esiste, ed è qui che l'annullamento si fermava addosso.
+        assert!(installer.cancel_of(PIPER), "l'annullamento è arrivato a un install in corso");
+        install.finish(&outcome);
+        // L'installazione è riuscita, e un install riuscito non è annullato: se
+        // no, il prossimo per questo provider parte già annullato.
+        assert!(!installer.progress_of(PIPER).cancelled);
     }
 
     /// A transfer that gets halfway, is cut, and starts again from zero: what
