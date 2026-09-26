@@ -525,10 +525,10 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
 /// it. The caller holds the `Starting` claim.
 ///
 /// When the small model is ADE's to give, the server's catalog says which:
-/// the one it started with stays if the catalog would pick it; otherwise that
-/// server is ended and one with the catalog's pick takes its place, once. The
-/// pick is kept for the next start of this run, so the second server is the
-/// exception.
+/// the one it started with stays if the catalog would pick it; otherwise one
+/// with the catalog's pick is started, once, and takes the first one's place
+/// when it is up (`replace_when_ready`). The pick is kept for the next start
+/// of this run, so the second server is the exception.
 fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, String> {
     let program = which_on_path("nikcli")
         .ok_or_else(|| "nikcli non è nel PATH: installalo per usare chat e assistente.".to_string())?;
@@ -545,13 +545,29 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
         if let Some(picked) = catalog_small_model(&serving) {
             *CHOSEN_SMALL_MODEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(picked.clone());
             if picked != chosen {
-                serving.end();
                 let content = small_model_content(inherited.as_deref(), &user_files, &picked);
-                serving = launch(&program, directory.as_deref(), content.as_deref())?;
+                serving = replace_when_ready(serving, || launch(&program, directory.as_deref(), content.as_deref()));
             }
         }
     }
     install(server, serving)
+}
+
+/// `serving`, or the server `relaunch` starts in its place once it is up.
+///
+/// The first one is ended only then: a replacement that does not start keeps
+/// the server that works, with its small model, rather than leaving none
+/// (modello assente review, M3). Neither is installed yet, so no client knows
+/// either address and nothing of theirs is lost.
+fn replace_when_ready(serving: Serving, relaunch: impl FnOnce() -> Result<Serving, String>) -> Serving {
+    match relaunch() {
+        Ok(replacement) => {
+            let mut first = serving;
+            first.end();
+            replacement
+        }
+        Err(_) => serving,
+    }
 }
 
 /// Starts one `nikcli serve` and waits for it to say where it listens.
@@ -995,13 +1011,34 @@ mod tests {
     fn the_catalogs_pick_goes_to_the_server_and_a_different_one_restarts_it_once() {
         let source = include_str!("serve.rs");
         let start = source.find(concat!("fn spawn_", "own(")).unwrap();
-        let body = &source[start..source[start..].find(concat!("fn la", "unch(")).unwrap() + start];
+        let body = &source[start..source[start..].find(concat!("fn replace_", "when_ready(")).unwrap() + start];
         assert!(body.contains(concat!("catalog_small_", "model(&serving)")));
         assert!(body.contains(concat!("if picked != ", "chosen {")));
-        let end = body.find(concat!("serving.", "end();")).unwrap();
-        assert!(end < body.rfind(concat!("serving = ", "launch(")).unwrap());
+        assert!(body.contains(concat!("serving = replace_", "when_ready(serving,")));
+        assert!(!body.contains(concat!("serving.", "end();")));
         // Only when the small model is ADE's to give: a user's own is never replaced.
         assert!(body.find(concat!("if content.", "is_some()")).unwrap() < body.find(concat!("catalog_small_", "model(")).unwrap());
+    }
+
+    /// Modello assente review, M3: a replacement that does not start keeps the server that works.
+    #[test]
+    fn the_first_server_is_ended_only_once_its_replacement_is_up() {
+        use super::replace_when_ready;
+        let kept = replace_when_ready(own("http://127.0.0.1:1", sleeper()), || Err("non parte".into()));
+        let mut kept = kept;
+        assert_eq!(kept.url, "http://127.0.0.1:1");
+        assert!(kept.child.try_wait().unwrap().is_none(), "il server che funziona è stato chiuso");
+        kept.end();
+
+        let first = own("http://127.0.0.1:1", sleeper());
+        let first_id = first.child.id();
+        let mut replaced = replace_when_ready(first, || Ok(own("http://127.0.0.1:2", sleeper())));
+        assert_eq!(replaced.url, "http://127.0.0.1:2");
+        assert!(replaced.child.try_wait().unwrap().is_none());
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing());
+        assert!(sys.process(sysinfo::Pid::from_u32(first_id)).is_none(), "il primo server è rimasto in vita");
+        replaced.end();
     }
 
     #[test]
