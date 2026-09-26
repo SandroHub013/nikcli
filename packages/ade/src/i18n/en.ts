@@ -402,6 +402,7 @@ export const en: Messages = {
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
   "pane.copied": "Copied",
+  "pane.noticeDismiss": "Dismiss the note",
   "pane.copyBlocked": "Not copied: during the recording the selection reaches a covered line",
   "file.preview": "Preview",
   "file.text": "Text",
@@ -1130,7 +1131,7 @@ export const en: Messages = {
   "resume.otherFolder": (dir) =>
     `This conversation belongs to another folder (${dir}): nikcli's tabs are shared by every project. The pane follows it now, on a restart too`,
   "resume.shared": (pane) =>
-    `This conversation is already open in the pane «${pane}»: another one starts here, so the two do not write into the same one`,
+    `This conversation is already open in the pane «${pane}»: it is not reopened here, so the two do not write into the same one`,
   "resume.alsoOpen": (pane) =>
     `This conversation is also open in the pane «${pane}»: on a restart only one of the two reopens it`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",

@@ -238,6 +238,43 @@
   pointer-events: none;
 }
 
+/* ADE's notes over a live terminal: a strip that pushes it down, not a layer over its text. */
+[data-slot="pane-notice"] {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ade-border-subtle);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="pane-notice-lines"] {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="pane-notice-lines"] > p {
+  margin: 0;
+}
+
+[data-slot="pane-notice-lines"] > p + p {
+  margin-top: 4px;
+}
+
+[data-slot="pane-notice-close"] {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
 [data-slot="pane-mouse-hint"] {
   flex: 0 0 auto;
   white-space: nowrap;

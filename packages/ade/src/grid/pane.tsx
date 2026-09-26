@@ -216,6 +216,12 @@ export interface SessionPaneProps {
   /** Shows what is waiting, in the transcript. Looking is not reading. */
   onMail?: () => void
   /**
+   * ADE's notes to read over a live terminal, whose transcript is hidden: a
+   * conversation that stayed with another pane, one of another folder.
+   */
+  notices?: readonly string[]
+  onDismissNotices?: () => void
+  /**
    * Files were dropped on this session: from the project tree, from the
    * screenshot tray, or from the system's own file manager.
    *
@@ -847,6 +853,29 @@ export function SessionPane(props: SessionPaneProps) {
         instead of the program. The emulator lives in the registry, not here, so
         scrollback survives collapsing, expanding and re-tiling the pane.
       */}
+      {/* Over the terminal, because the transcript the notes are written to is hidden while it is there. */}
+      <Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>
+        {(notices) => (
+          <div data-slot="pane-notice" role="status">
+            <div data-slot="pane-notice-lines">
+              <For each={notices()}>{(text) => <p>{text}</p>}</For>
+            </div>
+            <button
+              type="button"
+              data-slot="pane-notice-close"
+              aria-label={t("pane.noticeDismiss")}
+              title={t("pane.noticeDismiss")}
+              onClick={(event) => {
+                event.stopPropagation()
+                props.onDismissNotices?.()
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </Show>
+
       <Show when={props.terminalId}>
         <div
           data-slot="pane-terminal"

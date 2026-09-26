@@ -407,6 +407,7 @@ export const it = {
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",
   "pane.copied": "Copiato",
+  "pane.noticeDismiss": "Chiudi la nota",
   "pane.copyBlocked": "Non copiato: durante la ripresa la selezione tocca una riga coperta",
   "file.preview": "Anteprima",
   "file.text": "Testo",
@@ -1140,7 +1141,7 @@ export const it = {
   "resume.otherFolder": (dir: string) =>
     `Questa conversazione è di un'altra cartella (${dir}): le schede di nikcli sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
   "resume.shared": (pane: string) =>
-    `La conversazione è già aperta nel pannello «${pane}»: qui ne parte un'altra, per non scrivere in due nella stessa`,
+    `La conversazione è già aperta nel pannello «${pane}»: qui non la riapro, per non scrivere in due nella stessa`,
   "resume.alsoOpen": (pane: string) =>
     `Questa conversazione è aperta anche nel pannello «${pane}»: al riavvio la riprende uno solo dei due`,
   "resume.none":
