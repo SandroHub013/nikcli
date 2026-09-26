@@ -24,7 +24,8 @@
  * pane is the parent's.
  */
 
-import { HOOK_MARKER } from "./agent-hooks"
+/** `HOOK_MARKER` of `agent-hooks.ts`, which imports this module: the tests check they agree. */
+const HOOK_MARKER = "ade-agent-session"
 
 /** The plugin's file name: the marker, so ADE finds its own file again. */
 export const NIKCLI_PLUGIN_NAME = `${HOOK_MARKER}.js`

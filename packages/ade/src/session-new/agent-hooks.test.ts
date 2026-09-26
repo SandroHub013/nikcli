@@ -21,6 +21,7 @@ import {
   setHook,
   usesExecForm,
 } from "./agent-hooks"
+import { NIKCLI_PLUGIN_NAME, nikcliPluginScript } from "./nikcli-plugin"
 
 /**
  * The real shape of `~/.claude/settings.json` on a machine that already has
@@ -69,8 +70,8 @@ const CODEX = JSON.stringify(
 const CLAUDE_SCRIPT = "C:\\Users\\x\\.claude\\hooks\\ade-agent-session.ps1"
 
 describe("targets", () => {
-  test("only the two CLIs whose format has been read off disk", () => {
-    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex"])
+  test("only the CLIs whose format has been read off disk or off their loader", () => {
+    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex", "nikcli"])
   })
 
   test("every target is an agent ADE can also resume", async () => {
@@ -115,6 +116,12 @@ describe("the targets here and the paths in Rust", () => {
 
   test("Rust puts the script where this module says the marker is", () => {
     expect(source).toContain(`const SCRIPT_NAME: &str = "${HOOK_MARKER}.ps1";`)
+  })
+
+  test("and nikcli's plugin under the same marker, with no configuration", () => {
+    expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
+    expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
+    expect(source).toMatch(/id: "nikcli",\s*base: Base::RoamingAppData,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
   })
 
   test("the environment variables the script reads are the ones Rust sets", () => {
@@ -592,5 +599,55 @@ describe("activity events", () => {
   test("an install from before them is found missing", () => {
     const old = installHook(CLAUDE, command, "startup|resume|clear")
     expect(missingActivityEvents(old, events)).toEqual(events)
+  })
+})
+
+/* nikcli: a plugin file and no configuration, off until the user switches it on. */
+describe("nikcli's TUI plugin as a target", () => {
+  const nikcli = hookTarget("nikcli")!
+  const PLUGIN = "C:\\Users\\x\\AppData\\Roaming\\nikcli\\plugin\\tui\\ade-agent-session.js"
+
+  function disk(scriptPresent = false, scriptText?: string) {
+    const writes: { configText: string; script: string | null }[] = []
+    const state = { scriptPresent, scriptText }
+    const host = {
+      readAgentHook: async () => ({ configPath: "", configText: null, scriptPath: PLUGIN, scriptPresent: state.scriptPresent }),
+      writeAgentHook: async (_agent: string, configText: string, script: string | null) => {
+        writes.push({ configText, script })
+        state.scriptPresent = script !== null
+        state.scriptText = script ?? undefined
+      },
+    }
+    return { writes, state, host }
+  }
+
+  test("is a plugin with nothing to edit", () => {
+    expect(nikcli).toMatchObject({ kind: "tui-plugin", config: [], agent: "nikcli" })
+    expect(nikcli.script.at(-1)).toBe(NIKCLI_PLUGIN_NAME)
+  })
+
+  test("off until installed: the file being there is the whole install", async () => {
+    const { host } = disk()
+    expect(await readHookStatus(host, nikcli)).toMatchObject({ installed: false, broken: false, configPath: "", scriptPath: PLUGIN })
+  })
+
+  test("installing writes only the plugin, removing takes only the plugin away", async () => {
+    const { writes, host } = disk()
+    expect((await setHook(host, nikcli, true)).installed).toBe(true)
+    expect(writes).toEqual([{ configText: "", script: nikcliPluginScript() }])
+    expect((await setHook(host, nikcli, false)).installed).toBe(false)
+    expect(writes[1]).toEqual({ configText: "", script: null })
+  })
+
+  test("an installed plugin is rewritten with this version's; one never installed is not", async () => {
+    const off = disk(false)
+    expect(await refreshHookScript(off.host, nikcli, undefined)).toBeUndefined()
+    expect(off.writes).toEqual([])
+    const on = disk(true, "// older")
+    expect(await refreshHookScript(on.host, nikcli, "// older")).toBe(nikcliPluginScript())
+    expect(on.writes).toEqual([{ configText: "", script: nikcliPluginScript() }])
+    // Already this version's: nothing written.
+    expect(await refreshHookScript(on.host, nikcli, nikcliPluginScript())).toBeUndefined()
+    expect(on.writes).toHaveLength(1)
   })
 })

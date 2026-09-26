@@ -241,6 +241,7 @@ export const it = {
   "hooks.state.broken": "da reinstallare",
   "hooks.state.off": "non attivo",
   "hooks.broken": "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
+  "hooks.plugin": "Un plugin del TUI di nikcli, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un nikcli che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.remove": "Rimuovi",

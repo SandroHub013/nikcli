@@ -12,7 +12,7 @@
 //! - the drop file is addressed by its nonce, and a nonce is hex, so nothing
 //!   the frontend sends can escape the directory;
 //! - the hook configuration is addressed by an agent id that must appear in
-//!   [`HOOK_TARGETS`], so the only files reachable are the two listed there.
+//!   [`HOOK_TARGETS`], so the only files reachable are the ones listed there.
 //!
 //! Neither install nor removal happens on its own. Both are commands, invoked
 //! from the settings panel, because they edit files ADE does not own.
@@ -45,6 +45,19 @@ const LINK_TTL: Duration = Duration::from_secs(60 * 60 * 24);
 /// Filename of the script ADE installs. Mirrors `HOOK_MARKER` in `agent-hooks.ts`.
 const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 
+/// Filename of nikcli's TUI plugin. Mirrors `NIKCLI_PLUGIN_NAME` in `nikcli-plugin.ts`.
+const PLUGIN_NAME: &str = "ade-agent-session.js";
+
+/// Where a target's paths start.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Base {
+    /// The user's home directory.
+    Home,
+    /// `%APPDATA%`, where nikcli keeps its configuration on Windows (its
+    /// `Global.Path.config`), or `<home>\AppData\Roaming` when it is not set.
+    RoamingAppData,
+}
+
 /// A CLI ADE knows how to install a reporting hook into.
 ///
 /// Mirrors `HOOK_TARGETS` in `src/session-new/agent-hooks.ts`, which decides
@@ -53,6 +66,8 @@ const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 /// fails until it is added there too.
 struct HookTarget {
     id: &'static str,
+    base: Base,
+    /// Empty for a plugin: there is no configuration to edit, only its file.
     config: &'static [&'static str],
     script: &'static [&'static str],
 }
@@ -60,13 +75,22 @@ struct HookTarget {
 const HOOK_TARGETS: &[HookTarget] = &[
     HookTarget {
         id: "claude-code",
+        base: Base::Home,
         config: &[".claude", "settings.json"],
         script: &[".claude", "hooks", SCRIPT_NAME],
     },
     HookTarget {
         id: "codex",
+        base: Base::Home,
         config: &[".codex", "hooks.json"],
         script: &[".codex", SCRIPT_NAME],
+    },
+    // A TUI plugin, not a hook: the folder nikcli's TUI scans, and one file of ADE's in it.
+    HookTarget {
+        id: "nikcli",
+        base: Base::RoamingAppData,
+        config: &[],
+        script: &["nikcli", "plugin", "tui", PLUGIN_NAME],
     },
 ];
 
@@ -211,9 +235,18 @@ fn target(agent: &str) -> Result<&'static HookTarget, String> {
         .ok_or_else(|| format!("nessun hook noto per {agent}"))
 }
 
-fn under_home(segments: &[&str]) -> Result<PathBuf, String> {
-    let home = dirs_home().ok_or_else(|| "cartella utente non trovata".to_string())?;
-    Ok(segments.iter().fold(home, |path, segment| path.join(segment)))
+/// A target's path, from where its `base` says.
+fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
+    let root = match base {
+        Base::Home => dirs_home(),
+        Base::RoamingAppData => std::env::var("APPDATA")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .or_else(|| dirs_home().map(|home| home.join("AppData").join("Roaming"))),
+    }
+    .ok_or_else(|| "cartella utente non trovata".to_string())?;
+    Ok(segments.iter().fold(root, |path, segment| path.join(segment)))
 }
 
 /// The user's home directory.
@@ -241,8 +274,16 @@ fn dirs_home() -> Option<PathBuf> {
 #[tauri::command]
 pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
     let target = target(&agent)?;
-    let config = under_home(target.config)?;
-    let script = under_home(target.script)?;
+    let script = under_base(target.base, target.script)?;
+    if target.config.is_empty() {
+        return Ok(HookFiles {
+            config_path: String::new(),
+            config_text: None,
+            script_present: script.is_file(),
+            script_path: script.to_string_lossy().to_string(),
+        });
+    }
+    let config = under_base(target.base, target.config)?;
     Ok(HookFiles {
         config_text: fs::read_to_string(&config).ok(),
         config_path: config.to_string_lossy().to_string(),
@@ -269,8 +310,32 @@ pub async fn agent_hook_write(
     script: Option<String>,
 ) -> Result<(), String> {
     let target = target(&agent)?;
-    let config = under_home(target.config)?;
-    let script_path = under_home(target.script)?;
+    let script_path = under_base(target.base, target.script)?;
+    if target.config.is_empty() {
+        // A plugin: its file and nothing else, and no configuration may come with it.
+        if !config_text.is_empty() {
+            return Err(format!("{agent} non ha una configurazione da scrivere"));
+        }
+        return tauri::async_runtime::spawn_blocking(move || {
+            write_plugin_file(&script_path, script.as_deref(), |path| {
+                let brand = crate::brand::name();
+                let question = format!(
+                    "{brand} vuole installare o aggiornare il suo plugin per il TUI di {agent}:\n\n{}\n\nIl plugin viene caricato da ogni TUI di {agent} e scrive qualcosa solo in quelli avviati da {brand}, per dirgli quale conversazione mostrano. Consentire?",
+                    path.display()
+                );
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                app.dialog()
+                    .message(question)
+                    .title(format!("Plugin di {}", crate::brand::name()))
+                    .kind(MessageDialogKind::Warning)
+                    .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                    .blocking_show()
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    let config = under_base(target.base, target.config)?;
 
     tauri::async_runtime::spawn_blocking(move || {
         write_hook_files(&config, &script_path, &config_text, script.as_deref(), |script_path| {
@@ -360,6 +425,34 @@ fn write_hook_files(
         fs::create_dir_all(parent).map_err(|e| format!("cartella configurazione non creata: {e}"))?;
     }
     write_atomic(config, config_text.as_bytes())
+}
+
+/// Installs or removes a plugin target's one file.
+///
+/// Only ever the file named by [`PLUGIN_NAME`]: the path comes from
+/// [`HOOK_TARGETS`], and one that names anything else is refused before any
+/// write. A text that is not already the one on disk is shown to the user
+/// first, as the hook scripts are: it is a program another CLI will load.
+fn write_plugin_file(path: &Path, script: Option<&str>, confirm: impl FnOnce(&Path) -> bool) -> Result<(), String> {
+    if path.file_name().and_then(|name| name.to_str()) != Some(PLUGIN_NAME) {
+        return Err(format!("{} non è il plugin di {}", path.display(), crate::brand::name()));
+    }
+    match script {
+        Some(text) => {
+            if fs::read_to_string(path).ok().as_deref() != Some(text) && !confirm(path) {
+                return Err("installazione del plugin annullata".to_string());
+            }
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("cartella plugin non creata: {e}"))?;
+            }
+            write_atomic(path, text.as_bytes())
+        }
+        None => match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("plugin non rimosso: {error}")),
+        },
+    }
 }
 
 /// How a CLI's configuration invokes ADE's script. Mirrors `hookCommand` in `agent-hooks.ts`.
@@ -701,9 +794,55 @@ mod tests {
     #[test]
     fn every_target_has_a_script_this_module_recognises() {
         for target in HOOK_TARGETS {
-            assert_eq!(target.script.last(), Some(&SCRIPT_NAME));
-            assert!(!target.config.is_empty());
+            // A hook: a configuration and ADE's script; a plugin: ADE's plugin file alone.
+            if target.config.is_empty() {
+                assert_eq!(target.script.last(), Some(&PLUGIN_NAME));
+            } else {
+                assert_eq!(target.script.last(), Some(&SCRIPT_NAME));
+            }
         }
+    }
+
+    #[test]
+    fn nikclis_plugin_goes_in_the_folder_its_tui_scans_and_nowhere_else() {
+        let nikcli = target("nikcli").expect("nikcli is a target");
+        assert!(nikcli.config.is_empty());
+        let path = under_base(nikcli.base, nikcli.script).expect("a path");
+        assert!(path.ends_with(Path::new("nikcli").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
+        let roaming = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| dirs_home().unwrap().join("AppData").join("Roaming"));
+        assert!(path.starts_with(&roaming), "{} is not under {}", path.display(), roaming.display());
+    }
+
+    #[test]
+    fn a_plugin_write_touches_its_own_file_only() {
+        let (_, _, dir) = hook_scratch("plugin");
+        let path = dir.join("plugin").join("tui").join(PLUGIN_NAME);
+        let mut asked = 0;
+        write_plugin_file(&path, Some("export default {}"), |_| {
+            asked += 1;
+            true
+        })
+        .expect("installed");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "export default {}");
+        // The same text again: nothing to ask.
+        write_plugin_file(&path, Some("export default {}"), |_| {
+            asked += 1;
+            true
+        })
+        .expect("rewritten");
+        assert_eq!(asked, 1);
+        // A new text the user refuses: the old one stays.
+        assert!(write_plugin_file(&path, Some("altro"), |_| false).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "export default {}");
+        // Any other file name is refused before anything is asked or written.
+        let other = dir.join("plugin").join("tui").join("evil.js");
+        assert!(write_plugin_file(&other, Some("x"), |_| panic!("asked for a foreign file")).is_err());
+        assert!(!other.exists());
+        // Removed, and removing again is not an error.
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!path.exists());
+        write_plugin_file(&path, None, |_| true).expect("already gone");
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -723,9 +862,9 @@ mod tests {
     #[test]
     fn a_config_path_stays_under_the_home_directory() {
         let home = dirs_home().expect("a home directory");
-        for entry in HOOK_TARGETS {
-            let config = under_home(entry.config).expect("a path");
-            let script = under_home(entry.script).expect("a path");
+        for entry in HOOK_TARGETS.iter().filter(|entry| entry.base == Base::Home) {
+            let config = under_base(entry.base, entry.config).expect("a path");
+            let script = under_base(entry.base, entry.script).expect("a path");
             assert!(config.starts_with(&home), "{} escaped", config.display());
             assert!(script.starts_with(&home), "{} escaped", script.display());
         }

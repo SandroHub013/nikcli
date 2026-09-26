@@ -236,6 +236,7 @@ export const en: Messages = {
   "hooks.state.broken": "needs reinstalling",
   "hooks.state.off": "off",
   "hooks.broken": "The configuration has an ADE entry that doesn't match the script on disk, so the CLI is running a hook that does nothing. Reinstall to fix it.",
+  "hooks.plugin": "A plugin of nikcli's TUI, not a configuration entry: it tells ADE which conversation the pane shows, also after /new, /sessions or a change of tab. It does nothing in a nikcli ADE did not start.",
   "hooks.install": "Install",
   "hooks.reinstall": "Reinstall",
   "hooks.remove": "Remove",
