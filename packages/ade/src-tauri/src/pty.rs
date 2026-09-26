@@ -251,13 +251,59 @@ fn apply_pane_env(builder: &mut CommandBuilder) {
 
 /// Environment an agent must not inherit from whatever launched ADE.
 ///
-/// Prefixes, matched from the start of the name: a session marker set by one
-/// agent CLI is not something the next one should read, and the messaging
-/// socket and token under `CLAUDE_CODE_` are credentials scoped to a session
-/// that is not this one. `ADE_MAILBOX_ROOT` is `test:app`'s choice for one
-/// ADE Test: a `native:dev` started from a session inside it would otherwise
-/// share that mailbox.
-const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID", "ADE_MAILBOX_ROOT"];
+/// Whole names, any case: a session marker set by one agent CLI is not
+/// something the next one should read, and the messaging socket and token are
+/// credentials scoped to a session that is not this one. `ADE_MAILBOX_ROOT` is
+/// `test:app`'s choice for one ADE Test: a `native:dev` started from a session
+/// inside it would otherwise share that mailbox.
+///
+/// Not the whole `CLAUDE_CODE_` prefix any more (review, MEDIO 7): under it are
+/// the user's own settings too — `CLAUDE_CODE_USE_BEDROCK`, `_USE_VERTEX`,
+/// the OAuth token's variable, `CLAUDE_CODE_GIT_BASH_PATH` — and Claude Code in
+/// a pane lost them: another provider, another login, no Git Bash. (The token's
+/// name is spelt in pieces in the test: ADE's source never names a CLI's
+/// credential, `bots/terms.test.ts`.)
+const INHERITED_SESSION_MARKERS: &[&str] = &[
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SSE_PORT",
+    "CLAUDECODE",
+    "CLAUDE_PID",
+    "ADE_MAILBOX_ROOT",
+];
+
+/// Whether `key`, inherited from whatever launched ADE, is another session's.
+fn is_session_marker(key: &str) -> bool {
+    INHERITED_SESSION_MARKERS.iter().any(|name| name.eq_ignore_ascii_case(key))
+}
+
+/// Takes out of `builder` what the child must not inherit of `inherited`: other
+/// sessions' markers, the launcher's colour switches, and the names the
+/// account in use removes.
+fn scrub_inherited(builder: &mut CommandBuilder, inherited: impl IntoIterator<Item = String>, account_remove: &[&str]) {
+    for key in inherited {
+        /*
+         * The colour switches belong in the same sweep, and were not in it.
+         *
+         * `INHERITED_COLOUR_SWITCHES` and `is_launcher_colour_switch` were
+         * written for this loop, documented the exact symptom — a session in
+         * a real 24-bit pane rendering white on black, logo included — and
+         * were then never called from anywhere. The compiler said so, twice,
+         * as a `dead_code` warning that had become part of the scenery.
+         *
+         * They matter because of how ADE is launched: from a shell whose own
+         * output goes to a pipe, or from a bench runner, both of which set
+         * `NO_COLOR`. The pane is not that pipe.
+         */
+        let dropped_for_account = account_remove.iter().any(|name| name.eq_ignore_ascii_case(&key));
+        if is_session_marker(&key) || is_launcher_colour_switch(&key) || dropped_for_account {
+            builder.env_remove(&key);
+        }
+    }
+}
 
 /// Colour switches that describe the output of whatever launched ADE, not the
 /// pty an agent is given.
@@ -840,29 +886,7 @@ pub async fn pty_spawn(
      * real terminal, exactly as the user would start it themselves". These are
      * the variables that made that untrue.
      */
-    for (key, _) in std::env::vars() {
-        let is_session_marker = INHERITED_SESSION_MARKERS
-            .iter()
-            .any(|marker| key == *marker || key.starts_with(marker));
-
-        /*
-         * The colour switches belong in the same sweep, and were not in it.
-         *
-         * `INHERITED_COLOUR_SWITCHES` and `is_launcher_colour_switch` were
-         * written for this loop, documented the exact symptom — a session in
-         * a real 24-bit pane rendering white on black, logo included — and
-         * were then never called from anywhere. The compiler said so, twice,
-         * as a `dead_code` warning that had become part of the scenery.
-         *
-         * They matter because of how ADE is launched: from a shell whose own
-         * output goes to a pipe, or from a bench runner, both of which set
-         * `NO_COLOR`. The pane is not that pipe.
-         */
-        let dropped_for_account = account_remove.iter().any(|name| name.eq_ignore_ascii_case(&key));
-        if is_session_marker || is_launcher_colour_switch(&key) || dropped_for_account {
-            builder.env_remove(&key);
-        }
-    }
+    scrub_inherited(&mut builder, std::env::vars().map(|(key, _)| key), &account_remove);
     /*
      * The chosen key, after the sweep and the account removals, so it is not
      * taken back out and no inherited key of the same name survives (B10).
@@ -1950,16 +1974,42 @@ mod tests {
             "CLAUDE_CODE_MESSAGING_SOCKET",
             "CLAUDE_CODE_MESSAGING_TOKEN",
             "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_CODE_SSE_PORT",
             "CLAUDECODE",
             "CLAUDE_PID",
             "ADE_MAILBOX_ROOT",
+            // Windows' names have no case.
+            "claude_code_session_id",
         ] {
-            assert!(
-                INHERITED_SESSION_MARKERS
-                    .iter()
-                    .any(|marker| leaked == *marker || leaked.starts_with(marker)),
-                "{leaked} should not reach a spawned agent"
-            );
+            assert!(is_session_marker(leaked), "{leaked} should not reach a spawned agent");
+        }
+    }
+
+    #[test]
+    fn a_setting_of_the_user_reaches_the_child_and_a_session_marker_does_not() {
+        // Review, MEDIO 7: the whole `CLAUDE_CODE_` prefix went, the user's own
+        // provider, login and Git Bash with it. Fake values only; the token's
+        // name in pieces, as ADE's source never spells a CLI's credential.
+        const OAUTH: &str = concat!("CLAUDE_CODE_", "OAUTH_TOKEN");
+        let inherited = [
+            ("CLAUDE_CODE_USE_BEDROCK", "1"),
+            ("CLAUDE_CODE_USE_VERTEX", "1"),
+            (OAUTH, "finto-token-di-prova"),
+            ("CLAUDE_CODE_GIT_BASH_PATH", "C:/Git/bin/bash.exe"),
+            ("CLAUDE_CODE_SESSION_ID", "sessione-di-un-altro"),
+            ("CLAUDE_CODE_MESSAGING_TOKEN", "token-di-un-altro"),
+            ("CLAUDECODE", "1"),
+        ];
+        let mut builder = CommandBuilder::new("agente");
+        for (key, value) in inherited {
+            builder.env(key, value);
+        }
+        scrub_inherited(&mut builder, inherited.iter().map(|(key, _)| key.to_string()), &[]);
+        for kept in ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", OAUTH, "CLAUDE_CODE_GIT_BASH_PATH"] {
+            assert!(builder.get_env(kept).is_some(), "{kept} is the user's setting and must reach the child");
+        }
+        for gone in ["CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDECODE"] {
+            assert!(builder.get_env(gone).is_none(), "{gone} is another session's and must not reach the child");
         }
     }
 
@@ -2118,13 +2168,19 @@ mod tests {
     fn scrubbing_leaves_the_rest_of_the_environment_alone() {
         // An agent needs the environment it would have had in a terminal —
         // PATH above all, plus whatever the user configured for it.
-        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM", "ADE_MAILBOX", "ADE_PANE_ID"] {
-            assert!(
-                !INHERITED_SESSION_MARKERS
-                    .iter()
-                    .any(|marker| kept == *marker || kept.starts_with(marker)),
-                "{kept} must still be inherited"
-            );
+        for kept in [
+            "PATH",
+            "HOME",
+            "USERPROFILE",
+            "ANTHROPIC_API_KEY",
+            "TERM",
+            "ADE_MAILBOX",
+            "ADE_PANE_ID",
+            "CLAUDE_CODE_USE_BEDROCK",
+            concat!("CLAUDE_CODE_", "OAUTH_TOKEN"),
+            "CLAUDE_CODE_GIT_BASH_PATH",
+        ] {
+            assert!(!is_session_marker(kept), "{kept} must still be inherited");
         }
     }
 
