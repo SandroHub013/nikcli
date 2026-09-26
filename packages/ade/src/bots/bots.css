@@ -511,7 +511,9 @@
   field-sizing: content;
 }
 
-[data-slot="bots-composer-field"]:focus { outline: none; }
+/* The composer draws the ring around the field: the global :focus-visible
+   drew a second one inside it (bot-sforzo, A occhio). */
+[data-slot="bots-composer-field"]:focus { outline: none; box-shadow: none; }
 
 [data-slot="bots-composer-cap"] {
   flex: 0 1 auto;

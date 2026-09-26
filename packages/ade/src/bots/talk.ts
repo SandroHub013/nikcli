@@ -684,3 +684,13 @@ export function talkKey(path: string, project = ""): string {
 export function isLegacyTalkKey(key: string): boolean {
   return key.startsWith(TALK_KEY_PREFIX) && !key.slice(TALK_KEY_PREFIX.length).includes("\n")
 }
+
+/**
+ * Whether the thread has anything to total. Before a turn it has not, and
+ * «in questa conversazione:» stood by the composer followed by nothing
+ * (bot-sforzo, A occhio).
+ */
+export function hasThreadTotals(talk: Pick<Talk, "tokens" | "costUsd" | "byMode">): boolean {
+  if (talk.tokens > 0 || talk.costUsd > 0) return true
+  return Object.values(talk.byMode ?? {}).some((row) => row !== undefined)
+}

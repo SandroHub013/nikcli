@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { createTalkArchive, migrateTalkKeys, type TalkDisk } from "./store"
 import {
   TALK_ARCHIVE_MAX,
@@ -8,6 +10,7 @@ import {
   applyExit,
   applyJsonLine,
   emptyTalk,
+  hasThreadTotals,
   errorText,
   formatWhen,
   lastLine,
@@ -492,5 +495,24 @@ describe("a full archive", () => {
     expect(data.has(fresh)).toBe(true)
     expect(data.has(drop)).toBe(false)
     expect(data.has(keep)).toBe(true)
+  })
+})
+
+/* bot-sforzo, A occhio: «in questa conversazione:» followed by nothing. */
+describe("the thread's totals", () => {
+  test("there are none before a turn, and some once one counted", () => {
+    expect(hasThreadTotals(emptyTalk())).toBe(false)
+    expect(hasThreadTotals({ ...emptyTalk(), tokens: 12 })).toBe(true)
+    expect(hasThreadTotals({ ...emptyTalk(), costUsd: 0.01 })).toBe(true)
+    // A free or plan turn totals by its mode, with zero cost.
+    expect(hasThreadTotals({ ...emptyTalk(), byMode: { free: { tokens: 0, costUsd: 0 } } })).toBe(true)
+  })
+
+  test("the composer and the card say the totals only when there are some", () => {
+    const view = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
+    const said = view.split('{t("bots.conversation.total")}').length - 1
+    const guarded = view.split("<Show when={hasThreadTotals(props.talk)}>").length - 1
+    expect(said).toBe(2)
+    expect(guarded).toBe(2)
   })
 })
