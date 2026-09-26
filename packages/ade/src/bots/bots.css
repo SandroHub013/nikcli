@@ -801,6 +801,15 @@
 
 [data-slot="gateway-block"] > [data-slot="bots-btn"] { align-self: flex-start; }
 
+/* The Slack manifest is JSON to copy: shown as code, one line per line. */
+[data-component="bot-gateway"] [data-role="manifest"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+
 [data-slot="gateway-state"] {
   display: flex;
   flex-wrap: wrap;
