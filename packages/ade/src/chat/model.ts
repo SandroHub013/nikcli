@@ -458,6 +458,23 @@ export function defaultModelChoice(
 }
 
 /** Extracts selectable agents (excluding subagents and hidden ones). */
+/*
+ * nikcli's agents by name, for the chip (model-picker review of chat-chip,
+ * b): the chip showed the raw «build». A name not listed stays as it is.
+ */
+const AGENT_NAMES: Readonly<Record<string, "chat.agent.name.build" | "chat.agent.name.plan" | "chat.agent.name.general" | "chat.agent.name.explore">> = {
+  build: "chat.agent.name.build",
+  plan: "chat.agent.name.plan",
+  general: "chat.agent.name.general",
+  explore: "chat.agent.name.explore",
+}
+
+/** An agent as the user reads it: «Assistente» for `build`; an agent of the user's own by its name. */
+export function agentDisplayName(name: string): string {
+  const key = AGENT_NAMES[name]
+  return key ? t(key) : name
+}
+
 export function agentsFromList(
   agents?: readonly (Agent | { name: string; description?: string; mode?: string; hidden?: boolean })[] | null,
 ): readonly ChatAgentChoice[] {

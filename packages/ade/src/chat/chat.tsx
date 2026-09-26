@@ -18,6 +18,7 @@ import { t } from "../i18n"
 import type { Agent, ConfigProviders } from "@nikcli-ai/sdk/client"
 import type { ChatCatalog } from "./connection"
 import {
+  agentDisplayName,
   agentsFromList,
   defaultAgentChoice,
   defaultModelChoice,
@@ -622,13 +623,14 @@ export function Chat(props: ChatProps) {
               <ChipMenu
                 kind="agent"
                 label={t("chat.agent.label")}
-                text={agent() || t("chat.agent.none")}
+                text={agent() ? agentDisplayName(agent()) : t("chat.agent.none")}
                 value={agent()}
                 items={agents().map((entry) => ({
                   kind: "option" as const,
                   value: entry.name,
-                  label: entry.name,
-                  ...(entry.description ? { hint: entry.description } : {}),
+                  label: agentDisplayName(entry.name),
+                  // The id in the title, with what the agent is for.
+                  hint: entry.description ? `${entry.name} · ${entry.description}` : entry.name,
                 }))}
                 empty={t("chat.agent.none")}
                 disabled={foreign()}
