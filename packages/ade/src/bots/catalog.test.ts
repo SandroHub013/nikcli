@@ -114,11 +114,13 @@ describe("a nikcli model's efforts, from its catalog", () => {
 
   test("lint: the form offers the model's variants, not a fixed list (chat-bot-facili, pezzo 0)", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
-    expect(form).toContain("(model) => nikcliModelVariants(model, loadCatalog),")
+    // Since pezzo 4 the form and the composer's chip share `createEfforts`.
+    expect(form).toContain("const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))")
+    expect(form).toContain("(name) => nikcliModelVariants(name, loadCatalog),")
     // This model's only: a resource keeps the last model's value when the model is cleared (A occhio).
-    expect(form).toContain('variants: runner().id === "nikcli" && props.model ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,')
+    expect(form).toContain('variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,')
     // The catalog's first: the provider's CLI only for a model it does not list.
-    expect(form).toContain("variantsOf(props.nikcliModels, parseModelRef(props.model))")
+    expect(form).toContain("variantsOf(input().models, parseModelRef(model()))")
     expect(form).toContain("levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}")
     expect(form).not.toContain("when={runner().efforts.length > 0}")
     // Said under the row, the whole width: the effort's column cut it to «predef» (A occhio).
