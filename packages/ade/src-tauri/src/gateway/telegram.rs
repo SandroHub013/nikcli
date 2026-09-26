@@ -94,6 +94,16 @@ impl Failure {
     }
 }
 
+/// No link preview on anything the bot writes (security review, ALTO A1).
+///
+/// Telegram fetches a link in a message to preview it as soon as the message
+/// is sent. An agent's reply that carries a URL, possibly one a prompt
+/// injection put there with data in its query, was fetched by Telegram's
+/// servers without anyone clicking it: an exfiltration with no click.
+fn no_preview() -> Value {
+    json!({ "is_disabled": true })
+}
+
 /// A chat id as Telegram wants it: a number when it is one.
 fn chat_id(chat: &str) -> Value {
     chat.parse::<i64>().map(Value::from).unwrap_or_else(|_| Value::from(chat))
@@ -224,7 +234,7 @@ impl Telegram {
 
     /// One piece, as MarkdownV2, or as plain text when Telegram cannot parse it.
     async fn send_piece(&self, chat: &str, piece: &str, markup: Option<&Value>) -> Result<String, AdapterError> {
-        let mut body = json!({ "chat_id": chat_id(chat), "text": to_markdown_v2(piece), "parse_mode": "MarkdownV2" });
+        let mut body = json!({ "chat_id": chat_id(chat), "text": to_markdown_v2(piece), "parse_mode": "MarkdownV2", "link_preview_options": no_preview() });
         if let Some(markup) = markup {
             body["reply_markup"] = markup.clone();
         }
@@ -315,7 +325,7 @@ impl Adapter for Telegram {
         let message_id: i64 = message.parse().map_err(|_| AdapterError::Fatal("id del messaggio non valido".into()))?;
         let mut pieces = split(text, MAX_LEN, utf16).into_iter();
         let piece = pieces.next().ok_or_else(|| AdapterError::Fatal("il messaggio è vuoto".into()))?;
-        let mut body = json!({ "chat_id": chat_id(chat), "message_id": message_id, "text": to_markdown_v2(&piece), "parse_mode": "MarkdownV2" });
+        let mut body = json!({ "chat_id": chat_id(chat), "message_id": message_id, "text": to_markdown_v2(&piece), "parse_mode": "MarkdownV2", "link_preview_options": no_preview() });
         let edited = match self.call_patiently("editMessageText", &body).await {
             Err(failure) if failure.is_parse_error() => {
                 body["text"] = Value::from(piece);
@@ -531,6 +541,25 @@ mod tests {
         assert!(error.contains("altro servizio"), "{error}");
         assert!(api.calls_to("deleteWebhook").is_empty(), "il webhook dell'altro servizio non si tocca");
         assert!(api.calls_to("getUpdates").is_empty());
+    }
+
+    #[tokio::test]
+    async fn no_message_the_bot_writes_asks_telegram_for_a_link_preview() {
+        // Security review, ALTO A1: a preview is Telegram fetching the URL as the message goes out, no click needed.
+        let api = FakeApi::start();
+        // The first try is refused as MarkdownV2: the plain-text retry must keep the setting too.
+        api.then("sendMessage", 400, json!({ "ok": false, "error_code": 400, "description": "Bad Request: can't parse entities: x" }));
+        let telegram = adapter(&api, None);
+        let link = "guarda https://esempio.invalid/?dati=segreti";
+        telegram.send("42", link).await.unwrap();
+        telegram.send_buttons("42", link, &[Button { label: "Si'".into(), data: "si".into() }]).await.unwrap();
+        telegram.edit("42", "101", link).await.unwrap();
+        let mut bodies = api.calls_to("sendMessage");
+        bodies.extend(api.calls_to("editMessageText"));
+        assert_eq!(bodies.len(), 4, "due tentativi del primo invio, i pulsanti, la modifica");
+        for body in &bodies {
+            assert_eq!(body["link_preview_options"], json!({ "is_disabled": true }), "{body}");
+        }
     }
 
     #[tokio::test]
