@@ -23,20 +23,34 @@
 //! Web Speech voice.
 
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 use tauri::Manager;
 
-/// One file to fetch: where from, and the digest it must have.
+/// One file to fetch: where from, the digest it must have, and how many bytes
+/// it weighs when it is whole.
+///
+/// The size is `None` where it is not known without asking the network, and
+/// that is not a hole in the check: the digest is the gate, and the size buys
+/// two things - a progress fraction the interface can draw, and the noticing
+/// of a transfer that stopped early instead of waiting for a digest that will
+/// never match. Every `Some` here was measured on a copy whose SHA-256 is the
+/// pinned one, so it is the size the URL really serves.
 struct Download {
     url: &'static str,
     sha256: &'static str,
+    size: Option<u64>,
 }
 
 const RUNTIME: Download = Download {
     url: "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
     sha256: "f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea",
+    // The archive is unpacked and deleted, so its size is not written down
+    // anywhere on this machine: a guess here would fail a whole install on a
+    // transfer that was fine. K4 pins the sizes it knows from the manifest.
+    size: None,
 };
 
 /// A voice ADE knows how to fetch: the model and its config, pinned to a revision.
@@ -55,10 +69,12 @@ const VOICES: &[Voice] = &[
         model: Download {
             url: "https://huggingface.co/Einrich99/PiperTTS-UGO-Italian/resolve/3d165b2a45cb134e96eb3a30a85568b213848ad2/medium/it_IT-ugo-medium.onnx",
             sha256: "8be36a89f0f11f8a87751e7cf25ae5c07d1ff1c46c3ccb0fd3541102a1e9476d",
+            size: Some(63_516_050),
         },
         config: Download {
             url: "https://huggingface.co/Einrich99/PiperTTS-UGO-Italian/resolve/3d165b2a45cb134e96eb3a30a85568b213848ad2/medium/it_IT-ugo-medium.onnx.json",
             sha256: "feb477322e426918b978c46a80c7eb02e21014c38131dd6878fd72a5e21e4081",
+            size: Some(4_853),
         },
     },
     Voice {
@@ -67,10 +83,12 @@ const VOICES: &[Voice] = &[
         model: Download {
             url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/it/it_IT/paola/medium/it_IT-paola-medium.onnx",
             sha256: "6fc918b5a0ea6137382833dddfa567bffbe6a5060c02043c87192ee59c04210c",
+            size: Some(63_511_038),
         },
         config: Download {
             url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/it/it_IT/paola/medium/it_IT-paola-medium.onnx.json",
             sha256: "aea19c0a7fce29fbc359b93f10e7902854401e4c95ae2ea328ae516b15d296cf",
+            size: Some(7_099),
         },
     },
     Voice {
@@ -79,10 +97,15 @@ const VOICES: &[Voice] = &[
         model: Download {
             url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
             sha256: "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
+            // Nessuna copia di questa voce su questa macchina: la dimensione
+            // resta ignota invece che inventata.
+            size: None,
         },
         config: Download {
             url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
             sha256: "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0",
+            // Come il modello: nessuna copia su questa macchina.
+            size: None,
         },
     },
 ];
@@ -161,7 +184,9 @@ static SENTENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::ne
 #[derive(Default)]
 pub struct Piper {
     resident: Mutex<Option<Resident>>,
-    install: Mutex<()>,
+    /// One installer for every provider, so a second voice is not held up by
+    /// the first one's download and each provider's install is alone in its files.
+    installer: Installer,
     /// Tokens the JS abandoned while their phrases waited in the queue: each is
     /// skipped, and removed, when its own request reaches the front.
     abandoned: Mutex<HashSet<u64>>,
@@ -278,35 +303,82 @@ pub async fn tts_piper_install(app: tauri::AppHandle, voice_id: String) -> Resul
         .map_err(|e| e.to_string())?
 }
 
+/// What an install is doing, for the panel that started it.
+///
+/// One command for every provider, so the front end reads it the same way for
+/// Piper and for whatever comes next, and a provider nobody started answers
+/// instead of failing: the panel asks before it has anything to show.
+#[tauri::command]
+pub fn tts_install_status(app: tauri::AppHandle, provider: String) -> Result<InstallProgress, String> {
+    Ok(app.state::<Piper>().installer.progress_of(&provider))
+}
+
+/// Whether there was an install to stop.
+#[derive(Serialize)]
+pub struct InstallCancel {
+    cancelled: bool,
+}
+
+/// Asks the install in flight to stop. Answers whether there was one, because
+/// "nothing to cancel" and "cancelled" are different things to say in a panel.
+#[tauri::command]
+pub fn tts_install_cancel(app: tauri::AppHandle, provider: String) -> Result<InstallCancel, String> {
+    let cancelled = app.state::<Piper>().installer.cancel_of(&provider);
+    Ok(InstallCancel { cancelled })
+}
+
 fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<(), String> {
     let state = app.state::<Piper>();
-    // Two first sentences must not download the same files into each other.
-    let _one = state.install.lock().map_err(|_| "installazione bloccata")?;
     let root = root(app)?;
     std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
 
-    if !runtime_ready(&root) {
+    let model = model_path(&root, wanted.id);
+    let config = model.with_extension("onnx.json");
+    let jobs: [(&Download, PathBuf); 3] = [
+        (&RUNTIME, root.join("piper.zip")),
+        (&wanted.config, config),
+        (&wanted.model, model),
+    ];
+
+    let slot = state.installer.slot(PIPER);
+    let install = state.installer.begin(
+        &slot,
+        jobs.len() as u32,
+        bytes_pending(&jobs),
+        Instant::now() + INSTALL_DEADLINE,
+    );
+    // Two first sentences must not download the same files into each other.
+    let _one = install.lock().map_err(|_| "installazione bloccata".to_string())?;
+    let outcome = install_locked(&install, &root, &jobs);
+    install.finish(&outcome);
+    outcome
+}
+
+/// The install itself, with the provider's lock already held.
+fn install_locked(
+    install: &InstallRun<'_>,
+    root: &Path,
+    jobs: &[(&Download, PathBuf)],
+) -> Result<(), String> {
+    if !runtime_ready(root) {
         // Whatever an interrupted attempt left is discarded, not trusted.
         let _ = std::fs::remove_dir_all(root.join("piper"));
         let zip = root.join("piper.zip.part");
-        fetch(&RUNTIME, &zip)?;
+        // The archive is `tar`'s to unpack, so it is fetched and left in place
+        // for `tar` rather than renamed: the marker is what says the runtime is
+        // whole, and it is written only after the executable is there.
+        install.fetch(&RUNTIME, &zip, &Curl, &Certutil)?;
         let extracted = run(system_tool("tar.exe"), &["-xf".as_ref(), zip.as_os_str(), "-C".as_ref(), root.as_os_str()]);
         let _ = std::fs::remove_file(&zip);
         extracted?;
-        if !exe_path(&root).is_file() {
+        if !exe_path(root).is_file() {
             return Err("L'archivio di Piper non contiene piper.exe.".into());
         }
-        std::fs::write(runtime_marker(&root), RUNTIME.sha256).map_err(|e| e.to_string())?;
+        std::fs::write(runtime_marker(root), RUNTIME.sha256).map_err(|e| e.to_string())?;
+        install.counted();
     }
-    let model = model_path(&root, wanted.id);
-    let config = model.with_extension("onnx.json");
-    for (download, path) in [(&wanted.config, config), (&wanted.model, model)] {
-        if path.is_file() {
-            continue;
-        }
-        let part = path.with_extension("part");
-        fetch(download, &part)?;
-        std::fs::rename(&part, &path).map_err(|e| e.to_string())?;
+    for (download, path) in &jobs[1..] {
+        install.bring(download, path, &Curl, &Certutil)?;
     }
     Ok(())
 }
@@ -530,39 +602,6 @@ fn run(program: PathBuf, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Downloads to `path` and keeps the file only if its digest is the pinned one.
-fn fetch(download: &Download, path: &Path) -> Result<(), String> {
-    let _ = std::fs::remove_file(path);
-    run(
-        system_tool("curl.exe"),
-        // Bounded by progress, not by a total: the install lock is held for the
-        // whole download, so a stalled connection left every later request for
-        // this voice waiting, while a fixed ceiling would also cut off a slow
-        // line that is still getting there. Under 1 KB/s for a minute is stalled.
-        &[
-            "-fsSL".as_ref(),
-            "--retry".as_ref(),
-            "2".as_ref(),
-            "--connect-timeout".as_ref(),
-            "20".as_ref(),
-            "--speed-limit".as_ref(),
-            "1024".as_ref(),
-            "--speed-time".as_ref(),
-            "60".as_ref(),
-            "-o".as_ref(),
-            path.as_os_str(),
-            download.url.as_ref(),
-        ],
-    )
-    .map_err(|e| format!("Download della voce non riuscito: {e}"))?;
-    let listing = run(system_tool("certutil.exe"), &["-hashfile".as_ref(), path.as_os_str(), "SHA256".as_ref()])?;
-    if digest_in(&listing).as_deref() != Some(download.sha256) {
-        let _ = std::fs::remove_file(path);
-        return Err("Il file scaricato non corrisponde a quello atteso: scartato.".into());
-    }
-    Ok(())
-}
-
 /// The hex digest in `certutil -hashfile` output: the line of 64 hex digits, spaces removed.
 fn digest_in(listing: &str) -> Option<String> {
     listing
@@ -570,6 +609,354 @@ fn digest_in(listing: &str) -> Option<String> {
         .map(|line| line.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase())
         .find(|line| line.len() == 64 && line.chars().all(|c| c.is_ascii_hexdigit()))
 }
+
+/// How the bytes of one file arrive.
+trait Fetcher {
+    /// Writes the body of `url` into `part` and returns how many bytes it wrote.
+    ///
+    /// `report` is called with the total so far, as often as there is news.
+    /// `stop` is asked before every wait: `None` to go on, otherwise the reason
+    /// to give up - the user cancelled, or the install is past its deadline -
+    /// and the transfer must stop there. A fetcher that ignores it is a fetcher
+    /// that cannot be cancelled.
+    fn fetch(
+        &self,
+        url: &str,
+        part: &Path,
+        report: &mut dyn FnMut(u64),
+        stop: &dyn Fn() -> Option<String>,
+    ) -> Result<u64, String>;
+}
+
+/// The digest of a file on disk.
+trait Fingerprint {
+    fn sha256(&self, path: &Path) -> Result<String, String>;
+}
+
+/// `curl.exe`, the one every Windows 10+ ships, watched while it writes.
+struct Curl;
+
+impl Fetcher for Curl {
+    fn fetch(
+        &self,
+        url: &str,
+        part: &Path,
+        report: &mut dyn FnMut(u64),
+        stop: &dyn Fn() -> Option<String>,
+    ) -> Result<u64, String> {
+        let mut command = std::process::Command::new(system_tool("curl.exe"));
+        command
+            .args([
+                "-fsSL".as_ref(),
+                "--retry".as_ref(),
+                "2".as_ref(),
+                "--connect-timeout".as_ref(),
+                "20".as_ref(),
+                // Bounded by progress, not by a total: the install lock is held
+                // for the whole download, so a stalled connection left every
+                // later request for this voice waiting, while a fixed ceiling
+                // would also cut off a slow line that is still getting there.
+                // Under 1 KB/s for a minute is stalled. The ceiling that is
+                // missing here is the install's own deadline, in `stop`.
+                "--speed-limit".as_ref(),
+                "1024".as_ref(),
+                "--speed-time".as_ref(),
+                "60".as_ref(),
+                // What actually landed, which is not what the file weighs if
+                // the connection dropped: the difference is the whole point of
+                // asking curl rather than measuring the file afterwards.
+                "--write-out".as_ref(),
+                "%{size_download}".as_ref(),
+                "-o".as_ref(),
+                part.as_os_str(),
+                url.as_ref(),
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        hide_window(&mut command);
+        let mut child = command.spawn().map_err(|e| e.to_string())?;
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {}
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(e.to_string());
+                }
+            }
+            // Asked before every wait, so a cancel is at most one tick away.
+            if let Some(reason) = stop() {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(reason);
+            }
+            report(bytes_so_far(part));
+            std::thread::sleep(PROGRESS_TICK);
+        }
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+        let written = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u64>()
+            .map_err(|e| format!("curl non ha detto quanti byte ha scaricato: {e}"))?;
+        report(written);
+        Ok(written)
+    }
+}
+
+/// `certutil -hashfile`, the other tool every Windows 10+ ships.
+struct Certutil;
+
+impl Fingerprint for Certutil {
+    fn sha256(&self, path: &Path) -> Result<String, String> {
+        let listing = run(system_tool("certutil.exe"), &["-hashfile".as_ref(), path.as_os_str(), "SHA256".as_ref()])?;
+        digest_in(&listing).ok_or_else(|| "certutil non ha restituito il digest.".into())
+    }
+}
+
+/// How often the staging file is measured while it grows.
+const PROGRESS_TICK: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// The size of the file being written, or zero when it is not there yet.
+fn bytes_so_far(path: &Path) -> u64 {
+    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------
+// The installer, the same for every provider
+// ---------------------------------------------------------------------------
+
+/// Piper's own name in the installer, so its progress and its cancel are
+/// reachable with the word the front end already uses for it.
+const PIPER: &str = "piper";
+
+/// The whole install, first byte to marker. Generous on purpose: a deadline is
+/// here to end a transfer that is never going to arrive, not to cut a slow line
+/// that is still getting there - a line that stops moving is curl's own speed
+/// bound, and it is a different failure with a different fix.
+pub const INSTALL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+const ANNULLATA: &str = "Installazione annullata.";
+const SCADUTA: &str = "Installazione interrotta: il tempo è scaduto.";
+const INTERROTTA: &str = "Il download si è interrotto prima del file atteso: scartato.";
+const DIGEST: &str = "Il file scaricato non corrisponde a quello atteso: scartato.";
+
+/// What the interface is told about an install, running or just finished.
+#[derive(Serialize, Clone, Default)]
+pub struct InstallProgress {
+    provider: String,
+    running: bool,
+    /// Files already in place, over the files the install is made of. A file
+    /// that was there before the install counts as done: the bar must not jump
+    /// when the user opens the panel on a warm install.
+    files_done: u32,
+    files_total: u32,
+    /// Bytes over the bytes still to be fetched, and `None` for the total while
+    /// one of the files has no size written down. Nothing to draw is not the
+    /// same as nothing downloaded, and the two are told apart by this being
+    /// `None` rather than zero.
+    bytes_done: u64,
+    bytes_total: Option<u64>,
+    /// The user asked for this to stop.
+    cancelled: bool,
+    /// Why the last install of this provider stopped, in the user's words.
+    error: Option<String>,
+}
+
+/// One provider's install: the lock that keeps two of them apart, and what the
+/// interface is told about it.
+struct ProviderSlot {
+    lock: Mutex<()>,
+    progress: Mutex<InstallProgress>,
+}
+
+/// The installers, one slot per provider.
+///
+/// The lock is per provider and not global because a Piper install and a Kokoro
+/// one write different files: with one lock, asking for a second voice while a
+/// 63 MB download is in flight waited for it, and then for the one after that.
+#[derive(Default)]
+struct Installer {
+    providers: Mutex<HashMap<String, Arc<ProviderSlot>>>,
+}
+
+impl Installer {
+    fn slot(&self, provider: &str) -> Arc<ProviderSlot> {
+        let mut providers = self.providers.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        providers
+            .entry(provider.to_string())
+            .or_insert_with(|| {
+                Arc::new(ProviderSlot {
+                    lock: Mutex::new(()),
+                    progress: Mutex::new(InstallProgress { provider: provider.to_string(), ..Default::default() }),
+                })
+            })
+            .clone()
+    }
+
+    /// What is known about this provider's install. Never fails: a provider
+    /// nobody has installed yet has simply not started.
+    fn progress_of(&self, provider: &str) -> InstallProgress {
+        self.slot(provider).progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    /// Asks the install in flight to stop, and says whether there was one.
+    fn cancel_of(&self, provider: &str) -> bool {
+        let slot = self.slot(provider);
+        let mut progress = slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !progress.running {
+            return false;
+        }
+        progress.cancelled = true;
+        true
+    }
+
+    fn begin<'a>(&self, slot: &'a Arc<ProviderSlot>, files_total: u32, bytes_total: Option<u64>, deadline: Instant) -> InstallRun<'a> {
+        let mut progress = slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        *progress = InstallProgress {
+            provider: progress.provider.clone(),
+            running: true,
+            files_done: 0,
+            files_total,
+            bytes_done: 0,
+            bytes_total,
+            cancelled: false,
+            error: None,
+        };
+        InstallRun { slot, deadline }
+    }
+}
+
+/// One install in flight: the deadline, and the only place a cancel is read.
+struct InstallRun<'a> {
+    slot: &'a Arc<ProviderSlot>,
+    deadline: Instant,
+}
+
+impl InstallRun<'_> {
+    /// Held for the whole install: two of them for one provider must not write
+    /// the same files. Providers do not wait for each other.
+    fn lock(&self) -> Result<MutexGuard<'_, ()>, String> {
+        self.slot.lock.lock().map_err(|_| "installazione bloccata".into())
+    }
+
+    /// The reason to stop, or `None`. Asked by the fetcher between its waits, so
+    /// a cancel is at most one tick away and a deadline is exact.
+    fn stop(&self) -> Option<String> {
+        let progress = self.slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if progress.cancelled {
+            return Some(ANNULLATA.into());
+        }
+        if Instant::now() >= self.deadline {
+            return Some(SCADUTA.into());
+        }
+        None
+    }
+
+    fn publish(&self, change: impl FnOnce(&mut InstallProgress)) {
+        let mut progress = self.slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        change(&mut progress);
+    }
+
+    /// Fetches one file into its place: staging, progress, cancel, deadline,
+    /// size, digest, rename. A file already in place is left exactly as it is.
+    fn bring(
+        &self,
+        download: &Download,
+        dest: &Path,
+        curl: &dyn Fetcher,
+        print: &dyn Fingerprint,
+    ) -> Result<(), String> {
+        if dest.is_file() {
+            self.publish(|progress| progress.files_done += 1);
+            return Ok(());
+        }
+        self.fetch(download, &staging(dest), curl, print)?;
+        std::fs::rename(staging(dest), dest).map_err(|e| e.to_string())?;
+        self.publish(|progress| progress.files_done += 1);
+        Ok(())
+    }
+
+    /// Fetches one file to a staging path the caller then goes on with: the
+    /// Piper archive is unpacked by `tar`, so its staging file is not its
+    /// destination and this stops before the rename.
+    fn fetch(
+        &self,
+        download: &Download,
+        part: &Path,
+        curl: &dyn Fetcher,
+        print: &dyn Fingerprint,
+    ) -> Result<(), String> {
+        // Whatever an interrupted attempt left goes: a `.part` is never
+        // resumed, because the bytes in it are from a transfer nobody vouched
+        // for, and a file that looks whole is the one case that would not be
+        // caught by the digest later.
+        let _ = std::fs::remove_file(part);
+        let mut report = |bytes: u64| self.publish(|progress| progress.bytes_done = bytes);
+        let written = match curl.fetch(download.url, part, &mut report, &|| self.stop()) {
+            Ok(written) => written,
+            // A cancel and a deadline are this install's own reasons and they say
+            // themselves: wrapped in "download non riuscito" a person would read
+            // a choice of theirs, or a clock, as a broken connection. Every
+            // other failure is curl's, and is named as one, as it always was.
+            //
+            // Nothing half-written is left for the next attempt to find: a .part
+            // is never trusted, and litter that looks like progress is worse
+            // than none.
+            Err(reason) if reason == ANNULLATA || reason == SCADUTA => {
+                let _ = std::fs::remove_file(part);
+                return Err(reason);
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(part);
+                return Err(format!("Download della voce non riuscito: {e}"));
+            }
+        };
+        if download.size.is_some_and(|expected| written != expected) {
+            let _ = std::fs::remove_file(part);
+            return Err(INTERROTTA.into());
+        }
+        match print.sha256(part) {
+            Ok(digest) if digest == download.sha256 => Ok(()),
+            _ => {
+                let _ = std::fs::remove_file(part);
+                Err(DIGEST.into())
+            }
+        }
+    }
+
+    /// The install is over: the reason, if it failed, is what the panel shows.
+    fn finish(&self, outcome: &Result<(), String>) {
+        self.publish(|progress| {
+            progress.running = false;
+            progress.error = outcome.as_ref().err().cloned();
+        });
+    }
+
+    /// Counts a file the install brought into place by itself, without going
+    /// through `bring`: the runtime archive, which `tar` unpacks and which
+    /// becomes several files the user never names.
+    fn counted(&self) {
+        self.publish(|progress| progress.files_done += 1);
+    }
+}
+
+/// Where a file is written before it is whole. Never the destination: a reader
+/// that finds a half-written model is worse than one that finds none.
+fn staging(dest: &Path) -> PathBuf {
+    dest.with_extension("part")
+}
+
+/// The bytes this install still has to fetch, when every one of them has a size
+/// written down.
+fn bytes_pending(jobs: &[(&Download, PathBuf)]) -> Option<u64> {
+    jobs.iter().filter(|(_, path)| !path.is_file()).map(|(download, _)| download.size).sum()
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -767,5 +1154,372 @@ mod tests {
         let kept = Mutex::new(Some(7_u8));
         forget_on_error(&mut kept.lock().unwrap(), &Ok::<(), String>(()));
         assert_eq!(*kept.lock().unwrap(), Some(7));
+    }
+    // -----------------------------------------------------------------------
+    // The installer, with no network and no external tool
+    //
+    // `install_blocking` needs an app handle and runs curl, tar and certutil, so
+    // what is proved here is the part that decides whether a file is kept: the
+    // staging, the size, the digest, the cancel, the deadline and the
+    // progress. What arrives is a `Scripted` fetcher and an in-process
+    // fingerprint, and the filesystem is a directory of this machine's temp.
+    // -----------------------------------------------------------------------
+
+    /// A directory of its own for one test, removed and made again.
+    fn test_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("ade-k3-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    /// 64 hex digits from the bytes, standing in for SHA-256.
+    ///
+    /// Not a digest anyone trusts: what the tests need is a value that changes
+    /// when the file changes and holds when it does not, so that the *check* can
+    /// be proved. SHA-256 itself is certutil's, and it has its own test above.
+    fn digest_of(bytes: &[u8]) -> String {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100_0000_01b3);
+        }
+        let mut out = String::new();
+        for round in 0..4 {
+            hash = hash.wrapping_mul(0x100_0000_01b3) ^ hash.rotate_left(17) ^ round;
+            out.push_str(&format!("{hash:016x}"));
+        }
+        out
+    }
+
+    /// The in-process fingerprint the tests install with.
+    struct FingerprintInProcess;
+
+    impl Fingerprint for FingerprintInProcess {
+        fn sha256(&self, path: &Path) -> Result<String, String> {
+            Ok(digest_of(&std::fs::read(path).map_err(|e| e.to_string())?))
+        }
+    }
+
+    /// What a `Scripted` transfer does, so each test can break it differently.
+    #[derive(Clone, Copy)]
+    enum Ending {
+        /// Writes everything and says it landed.
+        Whole,
+        /// Writes everything and reports success while the file is short: a
+        /// connection that dropped and curl that did not notice.
+        Short,
+        /// Reports failure the way curl does.
+        Refused,
+    }
+
+    /// A transfer that writes `body` in `chunk` steps, asking `stop` between
+    /// them exactly as the real one does.
+    struct Scripted {
+        body: Vec<u8>,
+        chunk: usize,
+        ending: Ending,
+        started: Option<std::sync::mpsc::Sender<()>>,
+        /// The urls it was asked for, and what the staging file weighed when
+        /// each transfer walked in: a resume arrives at a file that is not empty,
+        /// and a transfer that starts from zero arrives at nothing.
+        asked: std::sync::Mutex<Vec<String>>,
+        part_len_at_entry: std::sync::Mutex<Vec<u64>>,
+    }
+
+    impl Scripted {
+        fn new(body: Vec<u8>, ending: Ending) -> Self {
+            Self {
+                body,
+                chunk: 8,
+                ending,
+                started: None,
+                asked: Mutex::new(Vec::new()),
+                part_len_at_entry: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn signalling(mut self, started: std::sync::mpsc::Sender<()>) -> Self {
+            self.started = Some(started);
+            self
+        }
+    }
+
+    impl Fetcher for Scripted {
+        fn fetch(
+            &self,
+            url: &str,
+            part: &Path,
+            report: &mut dyn FnMut(u64),
+            stop: &dyn Fn() -> Option<String>,
+        ) -> Result<u64, String> {
+            self.asked.lock().unwrap().push(url.to_string());
+            self.part_len_at_entry.lock().unwrap().push(bytes_so_far(part));
+            let mut written: Vec<u8> = Vec::new();
+            for piece in self.body.chunks(self.chunk.max(1)) {
+                // Asked before every piece, the way the real fetcher asks before
+                // every wait: a cancel is one tick away, never one file away.
+                if let Some(reason) = stop() {
+                    return Err(reason);
+                }
+                written.extend_from_slice(piece);
+                std::fs::write(part, &written).map_err(|e| e.to_string())?;
+                report(written.len() as u64);
+                if let Some(started) = &self.started {
+                    let _ = started.send(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            if let Some(reason) = stop() {
+                return Err(reason);
+            }
+            match self.ending {
+                Ending::Refused => Err("curl: (28) Operation timed out".into()),
+                // Short says success and leaves a file that is not whole: the
+                // case the size is there to catch, since the digest alone would
+                // only say "this is not the file".
+                Ending::Short => {
+                    std::fs::write(part, &self.body[..self.body.len() / 2]).map_err(|e| e.to_string())?;
+                    report((self.body.len() / 2) as u64);
+                    Ok((self.body.len() / 2) as u64)
+                }
+                Ending::Whole => Ok(self.body.len() as u64),
+            }
+        }
+    }
+
+    /// A `Download` whose pinned digest is the one these bytes really have.
+    ///
+    /// `Box::leak` because `Download` borrows for `'static`, as the pinned
+    /// artefacts do: a handful of bytes per test, and the alternative is a
+    /// digest written out by hand and never checked by anyone.
+    fn download_of(name: &str, body: &[u8], size: Option<u64>) -> Download {
+        Download {
+            url: Box::leak(format!("https://example.invalid/{name}").into_boxed_str()),
+            sha256: Box::leak(digest_of(body).into_boxed_str()),
+            size,
+        }
+    }
+
+    /// Runs an install of `jobs` the way `install_blocking` does: begin, lock,
+    /// bring each file, finish.
+    fn run_install(
+        installer: &Installer,
+        provider: &str,
+        jobs: &[(&Download, PathBuf)],
+        scripted: &Scripted,
+        deadline: Instant,
+    ) -> Result<(), String> {
+        let slot = installer.slot(provider);
+        let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(jobs), deadline);
+        let _one = install.lock().unwrap();
+        let mut outcome = Ok(());
+        for (download, path) in jobs {
+            if let Err(problem) = install.bring(download, path, scripted, &FingerprintInProcess) {
+                outcome = Err(problem);
+                break;
+            }
+        }
+        install.finish(&outcome);
+        outcome
+    }
+
+    fn far() -> Instant {
+        Instant::now() + std::time::Duration::from_secs(60)
+    }
+
+    #[test]
+    fn a_download_that_stopped_early_is_named_and_leaves_nothing() {
+        let root = test_root("interrotto");
+        let installer = Installer::default();
+        let body = b"un modello da sessanta megabyte, in questo caso venti byte".to_vec();
+        let dest = root.join("voices").join("ugo.onnx");
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Short), far()).unwrap_err();
+        assert_eq!(problem, INTERROTTA);
+        assert!(!dest.is_file(), "un file scaricato a metà non può restare al suo posto");
+        assert!(!staging(&dest).exists(), "il .part di un tentativo interrotto non resta");
+        let progress = installer.progress_of(PIPER);
+        assert!(!progress.running);
+        assert_eq!(progress.error.as_deref(), Some(INTERROTTA));
+        assert_eq!(progress.files_done, 0);
+    }
+
+    #[test]
+    fn a_file_whose_digest_is_not_the_pinned_one_is_discarded() {
+        let root = test_root("digest");
+        let installer = Installer::default();
+        let wanted = b"il file che il sito serve".to_vec();
+        let served = b"il file che qualcuno ha servito".to_vec();
+        let dest = root.join("ugo.onnx");
+        // Whole, and not the file: the size cannot catch this one, only the digest.
+        let jobs = [(&download_of("ugo.onnx", &wanted, Some(served.len() as u64)), dest.clone())];
+
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(served, Ending::Whole), far()).unwrap_err();
+        assert_eq!(problem, DIGEST);
+        assert!(!dest.is_file());
+        assert!(!staging(&dest).exists());
+    }
+
+    #[test]
+    fn a_cancelled_install_stops_and_keeps_nothing() {
+        let root = test_root("annullato");
+        let installer = Installer::default();
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+
+        // The interface's own way in: the cancel arrives while the transfer runs.
+        let installer = std::sync::Arc::new(installer);
+        let (started, seen) = std::sync::mpsc::channel();
+        let scripted = Scripted::new(body, Ending::Whole).signalling(started);
+        let cancelling = {
+            let installer = installer.clone();
+            std::thread::spawn(move || {
+                seen.recv_timeout(std::time::Duration::from_secs(5)).expect("il trasferimento deve partire");
+                installer.cancel_of(PIPER)
+            })
+        };
+        let problem = run_install(&installer, PIPER, &jobs, &scripted, far()).unwrap_err();
+        assert_eq!(problem, ANNULLATA);
+        assert!(cancelling.join().unwrap(), "un annullamento senza installazione in corso non annulla niente");
+        assert!(!dest.is_file());
+        assert!(!staging(&dest).exists());
+    }
+
+    #[test]
+    fn a_transfer_that_fails_is_named_the_way_it_always_was() {
+        let root = test_root("rifiutato");
+        let installer = Installer::default();
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+
+        // The one message this change must not touch: before it, every failure of
+        // the download was named like this, and Piper's install said it too.
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Refused), far()).unwrap_err();
+        assert_eq!(problem, "Download della voce non riuscito: curl: (28) Operation timed out");
+        assert!(!dest.is_file());
+        assert!(!staging(&dest).exists());
+        assert_eq!(installer.progress_of(PIPER).error.as_deref(), Some(problem.as_str()));
+    }
+    #[test]
+    fn a_part_left_by_an_earlier_attempt_is_never_resumed() {
+        let root = test_root("ripreso");
+        let installer = Installer::default();
+        let body = b"il modello per intero".to_vec();
+        let dest = root.join("ugo.onnx");
+        let part = staging(&dest);
+        // An attempt that got as far as a whole-looking `.part`, with bytes
+        // nobody vouched for: the case a resume would trust.
+        std::fs::write(&part, b"spazzatura di un tentativo passato").unwrap();
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+        let scripted = Scripted::new(body.clone(), Ending::Whole);
+
+        run_install(&installer, PIPER, &jobs, &scripted, far()).expect("l'installazione deve riuscire");
+        assert_eq!(std::fs::read(&dest).unwrap(), body, "il file finale è quello scaricato adesso");
+        assert_eq!(scripted.asked.lock().unwrap().len(), 1, "il download riparte da capo, non riprende");
+        assert_eq!(
+            scripted.part_len_at_entry.lock().unwrap()[0],
+            0,
+            "la spazzatura del tentativo passato non era lì quando il download è ripartito"
+        );
+        assert!(!part.exists());
+    }
+
+    #[test]
+    fn an_install_past_its_deadline_stops_with_a_reason() {
+        let root = test_root("scaduta");
+        let installer = Installer::default();
+        let body = b"un modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let jobs = [(&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone())];
+        // Already past: the deadline is absolute, not a count of retries.
+        let past = Instant::now() - std::time::Duration::from_secs(1);
+
+        let problem = run_install(&installer, PIPER, &jobs, &Scripted::new(body, Ending::Whole), past).unwrap_err();
+        assert_eq!(problem, SCADUTA);
+        assert!(!dest.is_file());
+    }
+
+    #[test]
+    fn a_file_already_in_place_is_left_alone_and_counted_as_done() {
+        let root = test_root("gia");
+        let installer = Installer::default();
+        let body = b"il modello".to_vec();
+        let dest = root.join("ugo.onnx");
+        let config = root.join("ugo.onnx.json");
+        std::fs::write(&dest, b"il modello di prima").unwrap();
+        let jobs = [
+            (&download_of("ugo.onnx", &body, Some(body.len() as u64)), dest.clone()),
+            (&download_of("ugo.onnx.json", b"{}", Some(2)), config.clone()),
+        ];
+        let scripted = Scripted::new(b"{}".to_vec(), Ending::Whole);
+
+        let slot = installer.slot(PIPER);
+        let install = installer.begin(&slot, jobs.len() as u32, bytes_pending(&jobs), far());
+        let _one = install.lock().unwrap();
+        // The one already there is not fetched again: a voice the user already
+        // installed must not be downloaded because they opened the panel.
+        assert_eq!(install.bring(&jobs[0].0, &dest, &scripted, &FingerprintInProcess), Ok(()));
+        assert_eq!(install.bring(&jobs[1].0, &config, &scripted, &FingerprintInProcess), Ok(()));
+        install.finish(&Ok(()));
+
+        let asked = scripted.asked.lock().unwrap();
+        assert_eq!(asked.len(), 1, "solo il file mancante si scarica");
+        assert!(asked[0].ends_with("ugo.onnx.json"));
+        assert_eq!(std::fs::read(&dest).unwrap(), b"il modello di prima");
+    }
+
+    #[test]
+    fn the_progress_says_what_is_left_and_how_much_of_it_is_there() {
+        let root = test_root("progresso");
+        let installer = Installer::default();
+        let body = vec![7_u8; 64];
+        let model = root.join("ugo.onnx");
+        let config = root.join("ugo.onnx.json");
+        let jobs = [
+            (&download_of("ugo.onnx", &body, Some(64)), model),
+            (&download_of("ugo.onnx.json", &body, Some(64)), config),
+        ];
+
+        let slot = installer.slot(PIPER);
+        let install = installer.begin(&slot, 3, bytes_pending(&jobs), far());
+        let _one = install.lock().unwrap();
+        let started = installer.progress_of(PIPER);
+        assert!(started.running);
+        assert_eq!(started.files_total, 3, "i tre file dell'installazione, anche quello che c'è già");
+
+        let scripted = Scripted::new(body, Ending::Whole);
+        install.bring(&jobs[0].0, &jobs[0].1, &scripted, &FingerprintInProcess).unwrap();
+        let after_one = installer.progress_of(PIPER);
+        assert_eq!(after_one.files_done, 1);
+        assert_eq!(after_one.bytes_done, 64);
+        assert_eq!(after_one.bytes_total, Some(128), "solo i byte ancora da scaricare");
+        assert!(after_one.error.is_none());
+        install.finish(&Ok(()));
+        assert!(!installer.progress_of(PIPER).running);
+    }
+
+    #[test]
+    fn one_provider_does_not_hold_up_another() {
+        let installer = Installer::default();
+        let piper = installer.slot(PIPER);
+        let kokoro = installer.slot("kokoro");
+        let _held = piper.lock.lock().unwrap();
+        // Kokoro's files are not Piper's files: asking for one while the other
+        // downloads must not wait, or a 63 MB voice holds up the next one.
+        assert!(kokoro.lock.try_lock().is_ok());
+        assert!(piper.lock.try_lock().is_err(), "two installs of one provider must not write the same files");
+    }
+
+    #[test]
+    fn a_cancel_with_nothing_running_says_so() {
+        let installer = Installer::default();
+        assert!(!installer.cancel_of("kokoro"), "non c'è installazione in corso da fermare");
+        // And it does not leave a cancelled mark on the next one.
+        assert!(!installer.progress_of("kokoro").cancelled);
     }
 }
