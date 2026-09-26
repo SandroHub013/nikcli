@@ -278,7 +278,7 @@
 }
 
 [data-slot="sim-guess"]:hover {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   background: var(--ade-hover);
 }
 
