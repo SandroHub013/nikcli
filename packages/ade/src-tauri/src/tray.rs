@@ -270,6 +270,18 @@ mod tests {
         assert_eq!(tray_tooltip("ADE Test · lavoro-1", true), "ADE Test · lavoro-1 · gateway acceso");
     }
 
+    /*
+     * G11 review, BASSO 2: on Linux the tray loads libayatana-appindicator at
+     * run time and panics without it, at every start. The packages ask for it.
+     */
+    #[test]
+    fn the_linux_packages_ask_for_the_tray_library() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let depends = |format: &str| config["bundle"]["linux"][format]["depends"].as_array().cloned().unwrap_or_default();
+        assert!(depends("deb").iter().any(|d| d == "libayatana-appindicator3-1"), "{:?}", depends("deb"));
+        assert!(depends("rpm").iter().any(|d| d == "libayatana-appindicator-gtk3"), "{:?}", depends("rpm"));
+    }
+
     #[test]
     fn esci_is_remembered_until_the_page_says_no() {
         let tray = Tray::default();
