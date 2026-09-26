@@ -1483,6 +1483,18 @@ export const it = {
   "bots.memory.done.add": (block: string) => `Memoria: aggiunta una voce (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memoria: cambiata una voce (${block}).`,
   "bots.memory.done.remove": (block: string) => `Memoria: tolta una voce (${block}).`,
+  "bots.memory.proposed": (block: string) =>
+    `Memoria: proposta una voce (${block}), in attesa che l'utente la confermi nella sezione Memoria del bot.`,
+  "bots.memory.proposals": "Da confermare",
+  "bots.memory.proposal.add": (block: string, text: string) => `Aggiungere (${block}): «${text}»`,
+  "bots.memory.proposal.replace": (block: string, match: string, text: string) =>
+    `Cambiare (${block}) «${match}» in «${text}»`,
+  "bots.memory.proposal.remove": (block: string, match: string) => `Togliere (${block}) la voce con «${match}»`,
+  "bots.memory.from.panel": "dalla conversazione",
+  "bots.memory.from.routine": "da una routine",
+  "bots.memory.from.gateway": "da una chat",
+  "bots.memory.confirm": "Conferma",
+  "bots.memory.discard": "Scarta",
   "bots.memory.undo": "Annulla",
   "bots.memory.undo.done": (block: string) => `Memoria: scrittura annullata (${block}).`,
   "bots.memory.undo.changed": (block: string) =>

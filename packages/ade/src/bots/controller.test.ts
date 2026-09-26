@@ -4,7 +4,7 @@ import { withAlways } from "./approval"
 import { createBotTurns } from "./controller"
 import { acquireTurn, turnsRunning } from "./terms"
 import { appendMessage, emptyTalk, MENU_QUIET_MS, type Talk } from "./talk"
-import { volatileMemoryStore } from "./memory"
+import { confirmProposal, volatileMemoryStore } from "./memory"
 import { clackMenu } from "./testing/clack-menu"
 import { runTurn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
 
@@ -550,10 +550,20 @@ describe("a bot's memory in its turns", () => {
     const thread = p.talks[nikcli.path]!.messages
     expect(thread.find((message) => message.role === "bot")?.text).toBe("Ciao!")
     expect(thread.at(-1)?.role).toBe("tool")
+    // The profile waits for the user's click (review), then is written.
+    expect(p.memory.get(nikcli.path).user).toEqual([])
+    const [proposal] = p.memory.get(nikcli.path).proposals ?? []
+    expect(proposal?.op).toEqual({ op: "add", block: "user", text: "Si chiama Mario." })
+    const confirmed = confirmProposal(p.memory.get(nikcli.path), proposal!.id)
+    p.memory.set(nikcli.path, confirmed.memory)
     expect(p.memory.get(nikcli.path).user).toEqual(["Si chiama Mario."])
+    expect(p.memory.get(nikcli.path).proposals).toBeUndefined()
     // Same conversation: no snapshot again, whatever changed.
     p.turns.send(nikcli, "e poi?")
-    expect(p.requests[1]!.message).toBe("e poi?")
+    // Only told that its write waits for the user.
+    expect(p.requests[1]!.message).not.toContain("NOTE DEL BOT")
+    expect(p.requests[1]!.message).toContain("in attesa che l'utente la confermi")
+    expect(p.requests[1]!.message.endsWith("e poi?")).toBe(true)
     await p.done()
     // A new conversation sees the write.
     p.turns.forget(nikcli)

@@ -274,8 +274,17 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       unreadable += taken.unreadable
     }
     if (texts.size === 0) return
-    const { memory, lines } = settleMemoryOps(store.get(path), ops, () => crypto.randomUUID())
-    const failures = lines.flatMap((line) => (line.ok ? [] : [line.text]))
+    /*
+     * The user's profile is the block the model believes most: a write to it
+     * waits for the user's click in the Memoria section (B8a review).
+     */
+    const { memory, lines } = settleMemoryOps(store.get(path), ops, () => crypto.randomUUID(), {
+      propose: (op) => op.block === "user",
+      from: "panel",
+      at: now(),
+    })
+    // The bot hears of what failed, and of what waits for the user.
+    const failures = lines.flatMap((line) => (!line.ok || line.proposal ? [line.text] : []))
     if (unreadable > 0) failures.push(t("bots.memory.error.unreadable", unreadable))
     store.set(path, { ...memory, ...(failures.length > 0 ? { pending: failures } : {}) })
     const at = now()

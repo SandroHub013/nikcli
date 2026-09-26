@@ -41,7 +41,27 @@ export interface BotMemory {
   readonly pending?: readonly string[]
   /** The last writes applied, as the thread can take them back (`undoMemoryWrite`). */
   readonly undo?: readonly MemoryUndo[]
+  /** Writes waiting for the user's click in the Memoria section (`confirmProposal`). */
+  readonly proposals?: readonly MemoryProposal[]
 }
+
+/** Where a write came from: the bot's chat in ADE, a routine, a chat on the phone. */
+export type MemorySource = "panel" | "routine" | "gateway"
+
+/**
+ * A write not applied until the user confirms it (B8a review): one on the
+ * user's profile, the block the model believes most, and every write made
+ * where the user is not there to see it.
+ */
+export interface MemoryProposal {
+  readonly id: string
+  readonly op: MemoryOp
+  readonly from: MemorySource
+  readonly at: number
+}
+
+/** Proposals kept at most: an unanswered one gives way to a newer one. */
+const PROPOSALS_KEPT = 20
 
 export const EMPTY_MEMORY: BotMemory = { notes: [], user: [] }
 
@@ -250,14 +270,26 @@ const UNDO_KEPT = 20
 
 /** What one write came to, for its line in the thread. */
 export type SettledWrite =
-  | { readonly ok: true; readonly text: string; readonly undo?: string }
+  | { readonly ok: true; readonly text: string; readonly undo?: string; readonly proposal?: string }
   | { readonly ok: false; readonly text: string }
 
-/** A turn's writes, in order: each applied one can be undone by its id (`newId`). */
+/** Which writes wait for the user, and whose they are. */
+export interface SettleOptions {
+  /** Whether `op` is a proposal rather than a write; absent, none is. */
+  readonly propose?: (op: MemoryOp) => boolean
+  readonly from?: MemorySource
+  readonly at?: number
+}
+
+/**
+ * A turn's writes, in order: each applied one can be undone by its id
+ * (`newId`); one `propose` picks is checked, kept and left for the user.
+ */
 export function settleMemoryOps(
   memory: BotMemory,
   ops: readonly MemoryOp[],
   newId: () => string,
+  options: SettleOptions = {},
 ): { memory: BotMemory; lines: SettledWrite[] } {
   let current = memory
   const lines: SettledWrite[] = []
@@ -268,6 +300,12 @@ export function settleMemoryOps(
       continue
     }
     const id = newId()
+    if (options.propose?.(op)) {
+      const proposal: MemoryProposal = { id, op, from: options.from ?? "panel", at: options.at ?? Date.now() }
+      current = { ...current, proposals: [...(current.proposals ?? []), proposal].slice(-PROPOSALS_KEPT) }
+      lines.push({ ok: true, text: t("bots.memory.proposed", blockName(op.block)), proposal: id })
+      continue
+    }
     const record: MemoryUndo = { id, block: op.block, before: current[op.block], after: result.memory[op.block] }
     current = { ...result.memory, undo: [...(current.undo ?? []), record].slice(-UNDO_KEPT) }
     lines.push({ ok: true, text: result.message, undo: id })
@@ -294,6 +332,30 @@ export function undoMemoryWrite(memory: BotMemory, id: string): MemoryResult {
     memory: { ...withBlock(memory, record.block, record.before), undo },
     message: t("bots.memory.undo.done", blockName(record.block)),
   }
+}
+
+/** A proposal as the Memoria section shows it: what it would do, in one line. */
+export function describeProposal(proposal: MemoryProposal): string {
+  const op = proposal.op
+  const block = blockName(op.block)
+  if (op.op === "add") return t("bots.memory.proposal.add", block, excerpt(op.text))
+  if (op.op === "replace") return t("bots.memory.proposal.replace", block, excerpt(op.match), excerpt(op.text))
+  return t("bots.memory.proposal.remove", block, excerpt(op.match))
+}
+
+/** The user's «Conferma»: the write applied now, against the memory as it is now. */
+export function confirmProposal(memory: BotMemory, id: string): MemoryResult {
+  const proposal = memory.proposals?.find((entry) => entry.id === id)
+  if (!proposal) return { ok: false, memory, error: t("bots.memory.undo.gone") }
+  const proposals = (memory.proposals ?? []).filter((entry) => entry.id !== id)
+  const result = applyMemoryOp({ ...memory, proposals }, proposal.op)
+  // One that no longer fits is dropped with its reason: it cannot be mended from here.
+  return result.ok ? result : { ...result, memory: { ...memory, proposals } }
+}
+
+/** The user's «Scarta». */
+export function discardProposal(memory: BotMemory, id: string): BotMemory {
+  return { ...memory, proposals: (memory.proposals ?? []).filter((entry) => entry.id !== id) }
 }
 
 /* ── the tags in an answer ────────────────────────────────────────────── */
@@ -463,12 +525,35 @@ export function parseMemory(value: unknown): BotMemory {
     if (!Array.isArray(entry["before"]) || !Array.isArray(entry["after"])) return []
     return [{ id: entry["id"], block: kind, before: strings(entry["before"]), after: strings(entry["after"]) }]
   })
+  const proposals = (Array.isArray(record["proposals"]) ? record["proposals"] : []).flatMap((value): MemoryProposal[] => {
+    if (!value || typeof value !== "object") return []
+    const entry = value as Record<string, unknown>
+    const op = parseOp(entry["op"])
+    const from = entry["from"]
+    if (typeof entry["id"] !== "string" || !op || typeof entry["at"] !== "number") return []
+    if (from !== "panel" && from !== "routine" && from !== "gateway") return []
+    return [{ id: entry["id"], op, from, at: entry["at"] }]
+  })
   return {
     notes: block("notes"),
     user: block("user"),
     ...(pending.length > 0 ? { pending } : {}),
     ...(undo.length > 0 ? { undo: undo.slice(-UNDO_KEPT) } : {}),
+    ...(proposals.length > 0 ? { proposals: proposals.slice(-PROPOSALS_KEPT) } : {}),
   }
+}
+
+function parseOp(value: unknown): MemoryOp | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const op = value as Record<string, unknown>
+  const block = op["block"]
+  if (block !== "notes" && block !== "user") return undefined
+  const text = typeof op["text"] === "string" ? op["text"] : undefined
+  const match = typeof op["match"] === "string" ? op["match"] : undefined
+  if (op["op"] === "add" && text !== undefined) return { op: "add", block, text }
+  if (op["op"] === "replace" && text !== undefined && match !== undefined) return { op: "replace", block, match, text }
+  if (op["op"] === "remove" && match !== undefined) return { op: "remove", block, match }
+  return undefined
 }
 
 const STORAGE_KEY = "ade.bots.memory"

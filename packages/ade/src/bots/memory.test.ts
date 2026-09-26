@@ -4,6 +4,10 @@ import { resetLocaleForTests, t } from "../i18n"
 import {
   applyMemoryOp,
   applyMemoryOps,
+  confirmProposal,
+  describeProposal,
+  discardProposal,
+  settleMemoryOps,
   EMPTY_MEMORY,
   ENTRY_SEPARATOR,
   MEMORY_LIMITS,
@@ -194,6 +198,40 @@ describe("B8a: the tags in an answer", () => {
   })
 })
 
+describe("B8a review: proposals wait for the user", () => {
+  test("a proposal is checked, kept, survives a reload, and is applied only on «Conferma»", () => {
+    let id = 0
+    const settled = settleMemoryOps(
+      EMPTY_MEMORY,
+      [
+        { op: "add", block: "notes", text: "Usa bun." },
+        { op: "add", block: "user", text: "Si chiama Mario." },
+        { op: "add", block: "user", text: "sk-abcdefghijklmnopqrstuvwxyz123456" },
+      ],
+      () => `w${++id}`,
+      { propose: (op) => op.block === "user", from: "routine", at: 5 },
+    )
+    expect(settled.lines.map((line) => line.ok)).toEqual([true, true, false])
+    expect(settled.memory.notes).toEqual(["Usa bun."])
+    expect(settled.memory.user).toEqual([])
+    const saved = parseMemory(JSON.parse(JSON.stringify(settled.memory)))
+    expect(saved.proposals).toEqual([
+      { id: "w2", op: { op: "add", block: "user", text: "Si chiama Mario." }, from: "routine", at: 5 },
+    ])
+    expect(describeProposal(saved.proposals![0]!)).toContain("«Si chiama Mario.»")
+    const confirmed = confirmProposal(saved, "w2")
+    expect(confirmed.ok && confirmed.memory.user).toEqual(["Si chiama Mario."])
+    expect(confirmed.memory.proposals).toEqual([])
+    expect(discardProposal(saved, "w2").user).toEqual([])
+    expect(discardProposal(saved, "w2").proposals).toEqual([])
+    // One that no longer fits is dropped, with why.
+    const full = { ...saved, user: ["Si chiama Mario."] }
+    const refused = confirmProposal(full, "w2")
+    expect(refused.ok).toBe(false)
+    expect(refused.memory.proposals).toEqual([])
+  })
+})
+
 describe("B8a: the snapshot", () => {
   test("opens a conversation with both blocks and how to change them, and only then", () => {
     const memory = applyMemoryOps(EMPTY_MEMORY, [
@@ -244,5 +282,9 @@ describe("B8a: the panel", () => {
     // Each write's line in the thread has its «Annulla» (review).
     expect(view).toContain("onUndo={() => turns.undoMemory(props.bot, message.id)}")
     expect(view).toContain("<Show when={props.message.memoryUndo && props.onUndo}>")
+    // Proposals are answered in the Memoria section, one click each.
+    const panel = readFileSync(new URL("./memory-panel.tsx", import.meta.url), "utf8")
+    expect(panel).toContain("onClick={() => answer(proposal.id, true)}")
+    expect(panel).toContain("onClick={() => answer(proposal.id, false)}")
   })
 })

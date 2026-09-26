@@ -6,7 +6,17 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
-import { applyMemoryOp, MEMORY_BLOCKS, MEMORY_LIMITS, memorySize, type MemoryBlock, type MemoryStore } from "./memory"
+import {
+  applyMemoryOp,
+  confirmProposal,
+  describeProposal,
+  discardProposal,
+  MEMORY_BLOCKS,
+  MEMORY_LIMITS,
+  memorySize,
+  type MemoryBlock,
+  type MemoryStore,
+} from "./memory"
 
 export function MemorySection(props: { bot: string; store: MemoryStore }) {
   const [drafts, setDrafts] = createSignal<Record<MemoryBlock, string>>({ notes: "", user: "" })
@@ -29,10 +39,42 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
     props.store.set(props.bot, { ...current, [block]: current[block].filter((_, index) => index !== at) })
   }
 
+  /* A proposal answered (B8a review): applied now, or dropped. */
+  const answer = (id: string, confirm: boolean) => {
+    const current = memory()
+    if (!confirm) return void props.store.set(props.bot, discardProposal(current, id))
+    const result = confirmProposal(current, id)
+    setProblem(result.ok ? undefined : result.error)
+    props.store.set(props.bot, result.memory)
+  }
+
   return (
     <section data-slot="bots-card-section">
       <span data-slot="bots-label">{t("bots.memory.label")}</span>
       <span data-slot="bots-hint">{t("bots.memory.hint")}</span>
+      <Show when={(memory().proposals ?? []).length > 0}>
+        <div data-slot="gateway-block">
+          <span data-slot="gateway-subtitle">{t("bots.memory.proposals")}</span>
+          <ul data-slot="gateway-list">
+            <For each={memory().proposals ?? []}>
+              {(proposal) => (
+                <li data-slot="memory-entry">
+                  <span data-slot="memory-text">
+                    {describeProposal(proposal)}{" "}
+                    <span data-slot="gateway-meta">{t(`bots.memory.from.${proposal.from}`)}</span>
+                  </span>
+                  <button type="button" data-slot="bots-link" onClick={() => answer(proposal.id, true)}>
+                    {t("bots.memory.confirm")}
+                  </button>
+                  <button type="button" data-slot="bots-link" data-tone="danger" onClick={() => answer(proposal.id, false)}>
+                    {t("bots.memory.discard")}
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
+      </Show>
       <For each={MEMORY_BLOCKS}>
         {(block) => {
           const entries = () => memory()[block]

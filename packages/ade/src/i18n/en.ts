@@ -1470,6 +1470,18 @@ export const en: Messages = {
     count === 1 ? "An ade-memory tag could not be read and was not applied." : `${count} ade-memory tags could not be read and were not applied.`,
   "bots.memory.done.add": (block: string) => `Memory: an entry added (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memory: an entry changed (${block}).`,
+  "bots.memory.proposed": (block: string) =>
+    `Memory: an entry proposed (${block}), waiting for the user to confirm it in the bot's Memory section.`,
+  "bots.memory.proposals": "To confirm",
+  "bots.memory.proposal.add": (block: string, text: string) => `Add (${block}): «${text}»`,
+  "bots.memory.proposal.replace": (block: string, match: string, text: string) =>
+    `Change (${block}) «${match}» to «${text}»`,
+  "bots.memory.proposal.remove": (block: string, match: string) => `Remove (${block}) the entry with «${match}»`,
+  "bots.memory.from.panel": "from the conversation",
+  "bots.memory.from.routine": "from a routine",
+  "bots.memory.from.gateway": "from a chat",
+  "bots.memory.confirm": "Confirm",
+  "bots.memory.discard": "Discard",
   "bots.memory.undo": "Undo",
   "bots.memory.undo.done": (block: string) => `Memory: write undone (${block}).`,
   "bots.memory.undo.changed": (block: string) =>
