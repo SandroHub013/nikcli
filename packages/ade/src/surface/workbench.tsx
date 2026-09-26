@@ -430,7 +430,7 @@ import {
   serialiseRegistrations,
   unknownChordMessage,
 } from "../voice/global-shortcut"
-import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
+import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
 import { createProactiveAlerts } from "../voice/proactive-alerts"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -4364,11 +4364,11 @@ export function Workbench() {
         await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
-    /* `every` and not a bare interval: a hidden window has no use for the lock,
-       and it waits for the tick instead of overlapping it. What to ask the
-       guard is the guard's own decision, and it asks nothing with the voice
-       off. */
-    const stopGuard = every(LOCK_POLL_MS, () => guard.tick())
+    /* `every` and not a bare interval, and a hidden window does not slow it: a
+       lock is what the guard is here to notice, and a minimised ADE is how
+       listening to it looks for most of the day. What to ask the guard is the
+       guard's own decision, and it asks nothing with the voice off. */
+    const stopGuard = pollListenGuard(guard)
     onCleanup(stopGuard)
   })
 

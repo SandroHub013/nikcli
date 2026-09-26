@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { createListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
+import { createListenGuard, pollListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
 
 function world() {
   const state = {
@@ -182,5 +182,55 @@ describe("the lock is not asked for nothing", () => {
     state.locked = false
     await tick()
     expect(state.calls).toEqual(["resume"])
+  })
+})
+
+describe("the guard in a hidden window", () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  const flush = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve()
+  }
+
+  /** The guard as the workbench builds it, and the calls it makes. */
+  function polled(locked: boolean) {
+    const calls: string[] = []
+    let ticks = 0
+    const guard = createListenGuard({
+      now: () => Date.now(),
+      isLocked: async () => locked,
+      shouldListen: () => true,
+      isListening: () => true,
+      isPaused: () => false,
+      isHalted: () => false,
+      pause: async () => void calls.push("pause"),
+      resume: async () => void calls.push("resume"),
+      restart: async () => {},
+    })
+    return {
+      calls,
+      ticks: () => ticks,
+      stop: pollListenGuard({ tick: async () => { ticks++; await guard.tick() } }, () => true, 100),
+    }
+  }
+
+  test("keeps ticking while hidden, because listening to ADE does not stop when the window does", async () => {
+    const { ticks, stop } = polled(false)
+    jest.advanceTimersByTime(350)
+    await flush()
+    stop()
+    // With the default of `every` this is zero, and a minimised ADE would never
+    // notice the lock.
+    expect(ticks()).toBeGreaterThanOrEqual(1)
+    expect(ticks()).toBeLessThanOrEqual(3)
+  })
+
+  test("a lock on a hidden window closes the microphone", async () => {
+    const { calls, stop } = polled(true)
+    jest.advanceTimersByTime(250)
+    await flush()
+    stop()
+    expect(calls).toContain("pause")
   })
 })
