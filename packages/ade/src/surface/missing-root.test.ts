@@ -26,6 +26,9 @@ test("a Space whose folder is gone is marked, and stays in the list", () => {
     ["nikcli", false],
     ["nikcli-ade-vecchia", true],
   ])
+})
+
+test("lint: a missing Space is marked on the name the sidebar draws", () => {
   const css = readFileSync(join(import.meta.dir, "../sidebar/sidebar.css"), "utf-8")
   expect(css).toContain('[data-slot="workspace-header"][data-missing="true"] [data-slot="workspace-name"]')
 })

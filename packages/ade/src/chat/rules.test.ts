@@ -85,9 +85,12 @@ describe("the chat session's permission rules", () => {
 })
 
 describe("what the rules cannot stop", () => {
-  test("the chat says, in both languages, that a project's saved «always» holds here too", () => {
+  test("a project's saved «always» is said, in both languages", () => {
     expect(translate("it", "chat.rules.always")).toContain("«sempre»")
     expect(translate("en", "chat.rules.always")).toContain("«always»")
+  })
+
+  test("lint: RulesNote draws that note from the chat.rules.always key", () => {
     const parts = readFileSync(new URL("./parts.tsx", import.meta.url), "utf8")
     expect(parts).toMatch(/export function RulesNote\(\)[\s\S]*?t\("chat\.rules\.always"\)/)
   })

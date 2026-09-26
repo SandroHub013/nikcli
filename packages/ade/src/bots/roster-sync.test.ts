@@ -17,12 +17,15 @@ describe("the roster and its files", () => {
     expect(rosterChanged([before], [])).toBe(true)
   })
 
-  test("looked at again on focus, on a timer while the window shows, and when the room form opens", () => {
+  test("the timer it is looked at on is short enough for a model added outside to show up", () => {
+    expect(ROSTER_CHECK_MS).toBeLessThanOrEqual(30_000)
+  })
+
+  test("lint: the roster is read again on focus, on that timer, and when the room form opens", () => {
     const bots = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
     expect(bots).toContain("every(ROSTER_CHECK_MS, () => void checkFiles())")
     expect(bots).toContain('window.addEventListener("focus", () => void checkFiles())')
     expect(bots).toContain("if (form) void checkFiles()")
     expect(bots).toContain("if (rosterChanged(roster(), await listBots(roots()))) reload()")
-    expect(ROSTER_CHECK_MS).toBeLessThanOrEqual(30_000)
   })
 })

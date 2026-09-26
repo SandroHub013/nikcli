@@ -418,29 +418,31 @@ describe("nikcli's latest conversation in this folder", () => {
   })
 
   /*
-   * What reaches the server, not what ADE builds (lettura di Mimo, F2): the
-   * request `nikcli api` makes from these arguments, by the two rules its
-   * handler follows — read from its source below, so a change there fails
-   * here — `--param` into the URL's query, `-d` into the body. `session.list`
-   * is a GET and reads only the query.
+   * What reaches the server, not what ADE builds (lettura di Mimo, F2). The
+   * first test holds the line ADE builds; the second is a `lint:` on nikcli's
+   * own handler, which is the only place the two rules it follows are written:
+   * `--param` into the URL's query, `-d` into the body. `session.list` is a
+   * GET and reads only the query, so the line must carry no `-d`.
    */
-  test("roots and the limit reach session.list's query, and a GET carries no body", () => {
+  test("roots and the limit go out as query parameters, and nothing goes in a body", () => {
+    // The whole line, not a filtered view of it: the old test ran these args through a
+    // stub of nikcli's own parsing, so the prefix and any -d were invisible.
+    expect(planLastHere("nikcli", HERE, none)!.args).toEqual([
+      "api",
+      "session.list",
+      "--log-level",
+      "warn",
+      "--param",
+      "roots=true",
+      "--param",
+      `limit=${LAST_HERE_LIMIT}`,
+    ])
+  })
+
+  test("lint: nikcli's api handler turns --param into the query and leaves a GET without a body", () => {
     const handler = readFileSync(join(import.meta.dir, "../../../nikcli/src/cli/handlers/api.ts"), "utf8")
     expect(handler).toContain("if (!resolved.route.path.includes(`{${name}}`)) url.searchParams.set(name, value)")
     expect(handler).toContain("new Request(url, { method: resolved.route.method, headers, body: args.data })")
-    const request = (args: readonly string[]) => {
-      const url = new URL("/session", "http://nikcli.local")
-      let body: string | undefined
-      for (let i = 0; i < args.length; i++) {
-        if (args[i] === "--param") {
-          const entry = args[++i]!
-          url.searchParams.set(entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1))
-        } else if (args[i] === "-d") body = args[++i]
-      }
-      return { query: Object.fromEntries(url.searchParams), body }
-    }
-    const sent = request(planLastHere("nikcli", HERE, none)!.args)
-    expect(sent).toEqual({ query: { roots: "true", limit: String(LAST_HERE_LIMIT) }, body: undefined })
   })
 })
 
@@ -529,13 +531,16 @@ describe("one folder rule, and a source the tools can read", () => {
     expect(bytes.includes(0)).toBe(false)
   })
 
-  test("the workbench compares folders by the same rule, and prints the lists wide", () => {
+  test("the lists are printed wide", () => {
+    expect(LIST_COLS).toBeGreaterThanOrEqual(2000)
+  })
+
+  test("lint: the workbench compares folders with sameFolder and prints the lists with LIST_COLS", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("sameFolder(pane.cwd || p.root, workDir)")
     expect(workbench).not.toContain("(pane.cwd || p.root) === workDir")
     expect(workbench).toContain("cols: LIST_COLS,")
     expect(workbench).not.toContain("cols: 400,")
-    expect(LIST_COLS).toBeGreaterThanOrEqual(2000)
   })
 })
 

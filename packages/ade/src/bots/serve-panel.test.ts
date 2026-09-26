@@ -454,11 +454,17 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     expect(talks[BOT.path]!.permission).toBeUndefined()
   })
 
-  test("lint: every entry point that runs a bot's turn goes through runBotTurn, so nikcli runs on ADE's server", () => {
+  /*
+   * The routine half of this used to sit here as a grep on routine.ts, next to
+   * the test above: that one already runs the routine with a fake server and
+   * waits for the prompt to arrive, so the grep was a weaker copy of a proof
+   * that exists. The gateway half stays, and it is the one that has no test:
+   * startAppGatewayController builds the bridge through tauriGatewayBridge(),
+   * so without Tauri nothing here runs the controller's runTurn.
+   */
+  test("lint: the gateway's runTurn is runBotTurn, so a turn from a gateway runs on ADE's server", () => {
     const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
     expect(bridge).toContain("runTurn: (request) => runBotTurn(request)")
-    const routine = readFileSync(new URL("./routine.ts", import.meta.url), "utf8")
-    expect(routine).toContain("return runBotTurn(request, deps.serve, deps)")
   })
 })
 
