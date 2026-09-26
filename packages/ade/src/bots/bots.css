@@ -1033,6 +1033,10 @@
 
 /* Inside the card the picker is narrow: the face above the rows, not beside them. */
 [data-slot="bots-form"][data-compact="true"] [data-slot="bots-picker"] { flex-direction: column; gap: var(--ade-space-4); }
+/* And model and effort one under the other: side by side in a column about
+   280 px wide the model read «openrouter/nvidia/n…» and the effort «predef»
+   (bot-sforzo, A occhio). */
+[data-slot="bots-form"][data-compact="true"] [data-slot="bots-row-fields"] { grid-template-columns: minmax(0, 1fr); }
 
 /* ── rooms (B8b) ─────────────────────────────────────────────────────────── */
 
