@@ -169,7 +169,7 @@ export function mintMark(paneId: string): string {
  *
  * `marks` are the other open panes' (`mintMark`): a conversation minted for
  * one of them is that pane's even when it does not hold the id. That is the
- * case of a mint past `MINT_MS`: the command is killed, nikcli may have
+ * case of a mint past `MINT_MS` (`ask-cli.ts`): the command is killed, nikcli may have
  * written the conversation anyway, and ADE never read its id. Empty and the
  * newest of the folder, it was the other pane's "here" (review of
  * ripristino-quater, BASSO 2). `session.list` says nothing of a

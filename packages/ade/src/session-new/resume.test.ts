@@ -619,7 +619,7 @@ describe("a conversation being minted is not another pane's «here»", () => {
   test("the workbench mints through the ledger and asks «here» beside it", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const mints = new MintLedger()")
-    expect(workbench).toContain("askCli(command, plan.args, cwd, plan.read).then((id) => id ?? undefined),\n      paneId,")
+    expect(workbench).toContain("askCli(command, plan.args, cwd, plan.read, timing).then((id) => id ?? undefined),\n      paneId,")
     expect(workbench).toContain("return await lastHereBesideMints(")
     expect(workbench).toContain("(owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),")
   })
