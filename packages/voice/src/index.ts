@@ -360,6 +360,7 @@ export {
   replyVoiceChoicesForLocale,
   speakingReplyVoice,
   voiceOnBackend,
+  rememberReplyVoice,
   type KokoroVoice,
   type KokoroVoiceId,
   type ReplyLanguage,

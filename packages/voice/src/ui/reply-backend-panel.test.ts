@@ -19,7 +19,10 @@ describe("the reply voice in the panel", () => {
   });
 
   test("the voice and its backend are written together", () => {
-    expect(panel).toContain("updateSettings({ replyVoice: voice, replyBackend: backendOf(voice) })");
+    expect(panel).toContain("updateSettings({ replyVoice: voice, replyBackend: backendOf(voice), ...(memory ? { replyVoiceByBackend: memory } : {}) })");
+    // Coming back to a backend asks for the voice last picked there.
+    expect(panel).toContain("rememberReplyVoice(rememberReplyVoice(props.settings.replyVoiceByBackend, props.settings.replyVoice), voice)");
+    expect(panel).toContain("voiceOnBackend(backend, props.settings.replyVoice, locale(), props.settings.replyVoiceByBackend)");
     expect(panel).not.toContain("updateSettings({ replyVoice: choice.value })");
   });
 

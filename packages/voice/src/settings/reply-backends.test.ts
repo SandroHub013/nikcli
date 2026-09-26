@@ -5,9 +5,11 @@ import {
   KOKORO_VOICE_CHOICES,
   REPLY_BACKEND_CHOICES,
   backendOf,
+  rememberReplyVoice,
   replyVoiceChoicesFor,
   voiceOnBackend,
 } from "./reply-voices";
+import { normalizeSettings, type ReplyVoice, type ReplyVoiceMemory } from "./model";
 
 /*
  * K6: the panel picks what reads the replies, then a voice of it. A Kokoro voice
@@ -55,5 +57,37 @@ describe("the reply voices, by backend", () => {
     expect(voiceOnBackend("piper", "af_heart", "en")).toBe("lessac");
     expect(voiceOnBackend("piper", "paola", "it")).toBe("paola");
     expect(voiceOnBackend("system", "am_fenrir", "it")).toBe("system");
+  });
+
+  test("going to another backend and back finds the voice picked there (K6 review)", () => {
+    // As the panel does it: the voice left and the one picked are both remembered.
+    let voice: ReplyVoice = "paola";
+    let memory: ReplyVoiceMemory | undefined;
+    const pickBackend = (backend: "piper" | "kokoro" | "system") => {
+      const next = voiceOnBackend(backend, voice, "it", memory);
+      memory = rememberReplyVoice(rememberReplyVoice(memory, voice), next);
+      voice = next;
+    };
+    // Read through a function: the closure's writes are not seen by the narrowing.
+    const current = (): ReplyVoice => voice;
+    pickBackend("kokoro");
+    expect(current()).toBe("af_heart");
+    pickBackend("piper");
+    expect(current()).toBe("paola");
+    // Kokoro, a voice of it, the system voice, then Kokoro again: the same voice.
+    pickBackend("kokoro");
+    memory = rememberReplyVoice(memory, "bm_george");
+    voice = "bm_george";
+    pickBackend("system");
+    expect(current()).toBe("system");
+    pickBackend("kokoro");
+    expect(current()).toBe("bm_george");
+  });
+
+  test("what is remembered survives normalization, and only under its own backend", () => {
+    const kept = normalizeSettings({ replyVoice: "af_heart", replyVoiceByBackend: { piper: "paola", kokoro: "bf_emma" } });
+    expect(kept.replyVoiceByBackend).toEqual({ piper: "paola", kokoro: "bf_emma" });
+    const wrong = normalizeSettings({ replyVoice: "ugo", replyVoiceByBackend: { piper: "af_heart", kokoro: "nessuna", system: "system" } });
+    expect(wrong.replyVoiceByBackend).toBeUndefined();
   });
 });

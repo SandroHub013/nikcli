@@ -21,6 +21,7 @@ import {
   REPLY_BACKEND_CHOICES,
   replyVoiceChoicesFor,
   voiceOnBackend,
+  rememberReplyVoice,
 } from "../settings/reply-voices"
 import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
 import { InstallBar, VoicePackBox } from "./voice-pack-box"
@@ -947,14 +948,18 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
    * The voice and its backend are written together: `normalizeSettings`
    * repairs a pair that disagrees, and says so, which a click must not cause.
    */
-  const pickReplyVoice = (voice: ReplyVoice) => updateSettings({ replyVoice: voice, replyBackend: backendOf(voice) })
+  const pickReplyVoice = (voice: ReplyVoice) => {
+    // The voice left and the one picked are both remembered, each on its backend: coming back finds it.
+    const memory = rememberReplyVoice(rememberReplyVoice(props.settings.replyVoiceByBackend, props.settings.replyVoice), voice)
+    updateSettings({ replyVoice: voice, replyBackend: backendOf(voice), ...(memory ? { replyVoiceByBackend: memory } : {}) })
+  }
   const replyVoiceKeys = radioGroupKeys((value) => {
     const choice = replyVoiceChoicesFor(replyBackendNow(), locale()).find((candidate) => candidate.value === value)
     if (choice) pickReplyVoice(choice.value)
   })
   const replyBackendKeys = radioGroupKeys((value) => {
     const backend = REPLY_BACKEND_CHOICES.find((choice) => choice.value === value)?.value
-    if (backend) pickReplyVoice(voiceOnBackend(backend, props.settings.replyVoice, locale()))
+    if (backend) pickReplyVoice(voiceOnBackend(backend, props.settings.replyVoice, locale(), props.settings.replyVoiceByBackend))
   })
   /** The backend the chosen voice belongs to: the one whose voices are listed. */
   const replyBackendNow = () => backendOf(props.settings.replyVoice)

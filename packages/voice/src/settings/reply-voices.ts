@@ -1,4 +1,4 @@
-import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type TtsLocale } from "./model";
+import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model";
 import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
 
 /*
@@ -356,11 +356,21 @@ export function replyVoiceChoicesFor(backend: ReplyBackend, language: Locale): R
 
 /**
  * The voice a backend is on once it is picked: the chosen one when it is
- * already that backend's, otherwise the backend's first for the language.
+ * already that backend's, then the one last picked there, otherwise the
+ * backend's first for the language.
  */
-export function voiceOnBackend(backend: ReplyBackend, chosen: ReplyVoice, language: Locale): ReplyVoice {
+export function voiceOnBackend(backend: ReplyBackend, chosen: ReplyVoice, language: Locale, memory?: ReplyVoiceMemory): ReplyVoice {
   if (backendOf(chosen) === backend) return chosen;
+  const remembered = backend === "system" ? undefined : memory?.[backend];
+  if (remembered && backendOf(remembered) === backend) return remembered;
   return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system";
+}
+
+/** `memory` with `voice` as the last one picked on its backend; the system voice has nothing to remember. */
+export function rememberReplyVoice(memory: ReplyVoiceMemory | undefined, voice: ReplyVoice): ReplyVoiceMemory | undefined {
+  const backend = backendOf(voice);
+  if (backend === "system") return memory;
+  return { ...memory, [backend]: voice };
 }
 
 /**
