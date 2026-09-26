@@ -15,7 +15,15 @@
  * - Strictly typed without type assertions or compiler suppression annotations.
  */
 
-import { activeReplyVoice, replyVoiceChoicesForLocale } from "../settings/reply-voices"
+import {
+  activeReplyVoice,
+  backendOf,
+  REPLY_BACKEND_CHOICES,
+  replyVoiceChoicesFor,
+  voiceOnBackend,
+} from "../settings/reply-voices"
+import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
+import { InstallBar, VoicePackBox } from "./voice-pack-box"
 import {
   createEffect,
   createMemo,
@@ -131,6 +139,16 @@ export interface VoiceSettingsPanelProps {
   naturalVoiceError?: string
   naturalVoiceDownloading?: boolean
   onDownloadNaturalVoice?: () => void
+  /** How the Piper download is going, while it goes (K3's `tts_install_status`). */
+  naturalVoiceProgress?: InstallProgress
+  /** Stops the install under way for a provider (K3's `tts_install_cancel`). Absent: no cancel is shown. */
+  onCancelInstall?: (provider: LocalProvider) => void
+  /** The Kokoro pack as the host reports it (K6). Its `status` is absent where the host cannot run Kokoro. */
+  kokoroPack?: PackState
+  onInstallKokoro?: () => void
+  onDeleteKokoro?: () => void
+  /** Speaks a short sample in the voice chosen. Absent: no button. */
+  onTestVoice?: () => void
   /** Optional Parakeet neural model download progress. */
   parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
@@ -925,7 +943,30 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const listenKeys = radioGroupKeys((value) => updateSettings({ alwaysListen: value === "always" }))
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
   const alertsKeys = radioGroupKeys((value) => updateSettings({ spokenAlerts: value === "on" }))
-  const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
+  /*
+   * The voice and its backend are written together: `normalizeSettings`
+   * repairs a pair that disagrees, and says so, which a click must not cause.
+   */
+  const pickReplyVoice = (voice: ReplyVoice) => updateSettings({ replyVoice: voice, replyBackend: backendOf(voice) })
+  const replyVoiceKeys = radioGroupKeys((value) => {
+    const choice = replyVoiceChoicesFor(replyBackendNow(), locale()).find((candidate) => candidate.value === value)
+    if (choice) pickReplyVoice(choice.value)
+  })
+  const replyBackendKeys = radioGroupKeys((value) => {
+    const backend = REPLY_BACKEND_CHOICES.find((choice) => choice.value === value)?.value
+    if (backend) pickReplyVoice(voiceOnBackend(backend, props.settings.replyVoice, locale()))
+  })
+  /** The backend the chosen voice belongs to: the one whose voices are listed. */
+  const replyBackendNow = () => backendOf(props.settings.replyVoice)
+  /** The voice marked in the list: a Piper one follows the interface language, as it speaks. */
+  const shownReplyVoice = () =>
+    replyBackendNow() === "piper" ? activeReplyVoice(props.settings.replyVoice, locale()) : props.settings.replyVoice
+  const kokoroView = createMemo(() => packView(props.kokoroPack ?? {}))
+  const piperDownload = createMemo(() =>
+    props.naturalVoiceProgress ? packView({ status: { installed: false }, progress: props.naturalVoiceProgress }) : undefined,
+  )
+  /** A Kokoro voice speaks once its pack is in; a Piper one installs itself on first use. */
+  const canTestVoice = () => replyBackendNow() !== "kokoro" || kokoroView().canTest
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
   const fallbackKeys = radioGroupKeys((value) => updateSettings({ codexFallback: value === "on" }))
@@ -1256,6 +1297,31 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
             <Show when={props.settings.speakReplies !== false}>
               <div data-slot="sub-choice-box">
+                <span id="reply-backend-label" data-slot="sub-choice-label">
+                  {t("vui.replies.backend")}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="reply-backend-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={replyBackendKeys}
+                >
+                  <For each={REPLY_BACKEND_CHOICES}>
+                    {(choice) => (
+                      <div
+                        role="radio"
+                        data-value={choice.value}
+                        aria-checked={replyBackendNow() === choice.value}
+                        tabIndex={replyBackendNow() === choice.value ? 0 : -1}
+                        data-slot="sub-choice-item"
+                        onClick={() => pickReplyVoice(voiceOnBackend(choice.value, props.settings.replyVoice, locale()))}
+                      >
+                        <span data-slot="sub-item-title">{choice.title}</span>
+                        <span data-slot="sub-item-desc">{choice.desc}</span>
+                      </div>
+                    )}
+                  </For>
+                </div>
                 <span id="reply-voice-label" data-slot="sub-choice-label">
                   {t("vui.replies.voice")}
                 </span>
@@ -1265,15 +1331,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-row"
                   onKeyDown={replyVoiceKeys}
                 >
-                  <For each={replyVoiceChoicesForLocale(locale())}>
+                  <For each={replyVoiceChoicesFor(replyBackendNow(), locale())}>
                     {(choice) => (
                       <div
                         role="radio"
                         data-value={choice.value}
-                        aria-checked={activeReplyVoice(props.settings.replyVoice, locale()) === choice.value}
-                        tabIndex={activeReplyVoice(props.settings.replyVoice, locale()) === choice.value ? 0 : -1}
+                        aria-checked={shownReplyVoice() === choice.value}
+                        tabIndex={shownReplyVoice() === choice.value ? 0 : -1}
                         data-slot="sub-choice-item"
-                        onClick={() => updateSettings({ replyVoice: choice.value })}
+                        onClick={() => pickReplyVoice(choice.value)}
                       >
                         <span data-slot="sub-item-title">{choice.title}</span>
                         <span data-slot="sub-item-desc">{choice.desc}</span>
@@ -1299,9 +1365,38 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     )}
                   </For>
                 </div>
-                <p data-slot="sub-choice-note">
-                  {t("vui.replies.note")}
-                </p>
+                <Show when={replyBackendNow() === "piper"}>
+                  <p data-slot="sub-choice-note">
+                    {t("vui.replies.note")}
+                  </p>
+                  <Show when={props.naturalVoiceDownloading && piperDownload()}>
+                    {(view) => (
+                      <InstallBar
+                        view={view()}
+                        {...(props.onCancelInstall ? { onCancel: () => props.onCancelInstall?.("piper") } : {})}
+                      />
+                    )}
+                  </Show>
+                </Show>
+                <Show when={replyBackendNow() === "kokoro"}>
+                  <p data-slot="sub-choice-note">{t("vui.replies.kokoroItalian")}</p>
+                  <VoicePackBox
+                    view={kokoroView()}
+                    {...(props.onInstallKokoro ? { onInstall: props.onInstallKokoro } : {})}
+                    {...(props.onCancelInstall ? { onCancel: () => props.onCancelInstall?.("kokoro") } : {})}
+                    {...(props.onDeleteKokoro ? { onDelete: props.onDeleteKokoro } : {})}
+                  />
+                </Show>
+                <Show when={props.onTestVoice}>
+                  <button
+                    type="button"
+                    data-slot="ghost-btn"
+                    disabled={!canTestVoice()}
+                    onClick={() => props.onTestVoice?.()}
+                  >
+                    {t("vui.replies.test")}
+                  </button>
+                </Show>
                 <Show when={props.naturalVoiceError}>
                   <div data-slot="reply-voice-error" role="alert">
                     <span>{props.naturalVoiceError}</span>

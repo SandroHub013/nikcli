@@ -15,9 +15,13 @@ import { ACTIVITY_CODES } from "../grid/activity"
  * above its baseline has gained an untranslated text, and a file below it has
  * lost some and should say so, so the next regression is caught at the new
  * level. `ADE_I18N_BASELINE=write bun run test:unit` rewrites the baseline.
+ *
+ * The voice package is counted too, under `voice/`: its panel reads the same
+ * catalog with the same `t()`, and it is where the Kokoro pack's texts are (K6).
  */
 
 const SRC = join(import.meta.dir, "..")
+const VOICE = join(import.meta.dir, "..", "..", "..", "voice", "src")
 const BASELINE = join(import.meta.dir, "hardcoded-baseline.json")
 
 const UI_ATTRIBUTES = new Set([
@@ -132,9 +136,11 @@ function count(path: string): number {
 
 function measure(): Record<string, number> {
   const counts: Record<string, number> = {}
-  for (const path of sources(SRC).sort()) {
-    const n = count(path)
-    if (n > 0) counts[relative(SRC, path).replace(/\\/g, "/")] = n
+  for (const [root, prefix] of [[SRC, ""], [VOICE, "voice/"]] as const) {
+    for (const path of sources(root).sort()) {
+      const n = count(path)
+      if (n > 0) counts[prefix + relative(root, path).replace(/\\/g, "/")] = n
+    }
   }
   return counts
 }
