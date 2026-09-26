@@ -9,8 +9,10 @@
  *
  * It fails when a flag's value does not parse, when the block list is not its
  * last key, when a command of the list is not denied under any of the user
- * configurations below, or when the list changes what an everyday command
- * gets. Run it after touching `SPAWN_FLAGS` or `blocked_bash_denials` in
+ * configurations below, when an everyday command is not asked or denied as
+ * the flag's own shell rule says (no flag leaves it to the user's rule: the
+ * globs count case, Windows does not), when a key of the flag does not hold
+ * over a user's "*", or when a shell denied whole is shown to the model. Run it after touching `SPAWN_FLAGS` or `blocked_bash_denials` in
  * `pty.rs`: a value nikcli cannot read would stop every bot turn at start.
  */
 
@@ -95,19 +97,17 @@ for (const [flag, raw] of flags) {
   // The block list is an object; in a flag that denies the shell whole, the key is only its alias.
   const blocks = typeof value[BLOCK_KEY] === "object"
   if (blocks) check(keys.at(-1) === BLOCK_KEY, `${flag}: ${BLOCK_KEY} non è l'ultima chiave (${keys.join(", ")})`)
-  const { [BLOCK_KEY]: _list, ...without } = value
   for (const [user, config] of Object.entries(USERS)) {
     const merged = mergeDeep(config, value)
-    const before = mergeDeep(config, without)
     if (blocks) {
       for (const command of BLOCKED) {
         check(action(merged, command) === "deny", `${flag}, ${user}: «${command}» non è negato (${action(merged, command)})`)
       }
     }
-    // The list changes nothing else: an everyday command gets what the
-    // flag says of the shell or, where it says nothing, what it got without it.
+    // No flag leaves the shell to the user (second check, ALTO): an everyday
+    // command is asked, where ADE answers, or denied with the shell.
     for (const command of EVERYDAY) {
-      const expected = typeof value["bash"] === "string" ? value["bash"] : action(before, command)
+      const expected = value["bash"]
       check(
         action(merged, command) === expected,
         `${flag}, ${user}: «${command}» dà ${action(merged, command)}, doveva dare ${expected}`,

@@ -237,7 +237,7 @@ describe("le opzioni di avvio arrivano all'host", () => {
     while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     exit(0)
     await turn.result
-    expect(seen[0]!.flags).toEqual(["no-project-config", "bot-block"])
+    expect(seen[0]!.flags).toEqual(["no-project-config", "bot-no-shell"])
   })
 
   test("Claude in abbonamento toglie le chiavi ereditate e non ne passa", async () => {

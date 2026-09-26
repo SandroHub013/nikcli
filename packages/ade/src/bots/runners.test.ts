@@ -462,8 +462,8 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
       "no-project-config",
       "bot-ask-outside",
     ])
-    // Without someone to answer, nothing is asked; the block list is denied all the same (M1).
-    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x" }).flags).toEqual(["no-project-config", "bot-block"])
+    // Without someone to answer, nothing is asked: the shell is denied (second check, ALTO).
+    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
     // A chat's turn keeps its own rules.
     expect(
       turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true, remote: { commands: false } }).flags,
@@ -472,9 +472,9 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
 
   test("il bot globale gira con no-project-config, quello di progetto no", () => {
     const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
-    expect(mine.flags).toEqual(["no-project-config", "bot-block"])
+    expect(mine.flags).toEqual(["no-project-config", "bot-no-shell"])
     const fromRepo = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x" })
-    expect(fromRepo.flags).toEqual(["bot-block"])
+    expect(fromRepo.flags).toEqual(["bot-no-shell"])
   })
 
   test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
@@ -549,11 +549,11 @@ describe("un turno da chat non ha la shell", () => {
 
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config", "bot-block"])
+    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
   })
 
-  test("M1: ogni turno su nikcli porta la lista di blocco, tranne quello con la shell negata del tutto", () => {
-    const withBlock = ["bot-block", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell"]
+  test("M1: ogni turno su nikcli ha un solo flag sui permessi, che nega la shell o la chiede", () => {
+    const withBlock = ["bot-no-shell", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell", "remote-no-shell"]
     const cases = [
       { bot: mine, message: "x" },
       { bot: { ...bot, scope: "project" as const }, message: "x" },
@@ -566,7 +566,7 @@ describe("un turno da chat non ha la shell", () => {
       // Exactly one: two flags on NIKCLI_PERMISSION are refused by Rust.
       expect(flags.filter((flag) => withBlock.includes(flag))).toHaveLength(1)
     }
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).not.toContain("bot-block")
+    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).not.toContain("bot-no-shell")
   })
 })
 

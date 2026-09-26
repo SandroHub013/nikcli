@@ -391,10 +391,11 @@ export function turnCommand(
          * it, so such a file is refused for a chat (`gateway/policy.ts`).
          * In ADE (B8c), nikcli asks about every command and every step
          * outside the project, and `controller.ts` answers by `approval.ts`.
-         * Every flag but `remote-no-shell` (the shell denied whole) also
-         * carries the block list as nikcli's own denials, and a turn with no
-         * rule of its own (a routine) gets `bot-block`, the list alone
-         * (B8c review, M1: `blocked_bash_denials` in `pty.rs`).
+         * A turn nobody answers (a routine) gets `bot-no-shell`: no flag
+         * leaves the shell to the user's own rule, since nikcli's globs count
+         * case and Windows does not (second check, ALTO; `SPAWN_FLAGS` in
+         * `pty.rs`). The asking flags carry the block list as nikcli's own
+         * denials too (B8c review, M1: `blocked_bash_denials`).
          */
         ...(() => {
           const shell = !bot.disabledTools.includes("bash")
@@ -404,7 +405,7 @@ export function turnCommand(
               ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
               : spec.approvals
                 ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
-                : ["bot-block"]),
+                : ["bot-no-shell"]),
           ]
           return flags.length > 0 ? { flags } : {}
         })(),

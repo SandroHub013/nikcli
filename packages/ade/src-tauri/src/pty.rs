@@ -170,16 +170,21 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// A turn in ADE (B8c) has nikcli ask about every command and about going
 /// outside the project, so that the page can answer each one: an everyday
 /// command at once, a blocked one never, a dangerous one after the user said
-/// so. A bot without a shell gets only the second. The bot's own file still
-/// wins over this, as it does for a chat's turn (`gateway/policy.ts`), so a
-/// bot that grants itself the shell does not start (`project-trust.ts`).
+/// so. A bot without a shell gets only the second, and the shell denied. The
+/// bot's own file still wins over this, as it does for a chat's turn
+/// (`gateway/policy.ts`), so a bot that grants itself the shell does not
+/// start (`project-trust.ts`).
 ///
-/// Every nikcli turn of a bot also carries the block list (B8c review, M1):
-/// see `blocked_bash_denials`. `bot-block` is that alone, for a turn with no
-/// rule of its own on the shell (a routine). `remote-no-shell` does without:
-/// the shell is denied whole, and a rule after it would show the tool to the
-/// model again (`disabled` in nikcli's `permission/ruleset.ts`). Every key of
-/// every flag is written again at the end under its `alias` (`with_aliases`).
+/// No flag leaves the shell to the user's own rule (second check, ALTO):
+/// nikcli's globs count case and Windows does not, so `REMOVE-ITEM`, `RD` or
+/// `SHUTDOWN` would pass a user's `"bash": "allow"` under any list of
+/// spellings. Where ADE answers the menu, every command is asked, and
+/// `approval.ts`, which ignores case, refuses the block list; where nobody
+/// answers (`bot-no-shell`, a routine), the shell is denied. The asking flags
+/// also carry the block list as nikcli's own denials (B8c review, M1: see
+/// `blocked_bash_denials`), so the common spellings never reach the menu.
+/// Every key of every flag is written again at the end under its `alias`
+/// (`with_aliases`).
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
     (
@@ -195,12 +200,12 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
         r#"{"bash":"ask","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
     ),
     ("bot-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask","external_directory":"ask"}"#),
-    ("bot-ask-outside", "nikcli", "NIKCLI_PERMISSION", r#"{"external_directory":"ask"}"#),
-    ("bot-block", "nikcli", "NIKCLI_PERMISSION", "{}"),
+    ("bot-ask-outside", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny","external_directory":"ask"}"#),
+    ("bot-no-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny"}"#),
 ];
 
 /// The flags whose `NIKCLI_PERMISSION` carries the block list.
-const BLOCK_LIST_FLAGS: &[&str] = &["remote-ask-shell", "bot-ask-shell", "bot-ask-outside", "bot-block"];
+const BLOCK_LIST_FLAGS: &[&str] = &["remote-ask-shell", "bot-ask-shell"];
 
 /*
  * The permission key the block list goes under. `?` is nikcli's wildcard for
@@ -2240,9 +2245,9 @@ mod tests {
         }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
         // A turn in ADE (B8c): every command and every step outside asked, for the page to answer.
-        assert_eq!(permission("bot-block"), serde_json::json!({}));
+        assert_eq!(permission("bot-no-shell"), serde_json::json!({ "bash": "deny" }));
         assert_eq!(permission("bot-ask-shell"), serde_json::json!({ "bash": "ask", "external_directory": "ask" }));
-        assert_eq!(permission("bot-ask-outside"), serde_json::json!({ "external_directory": "ask" }));
+        assert_eq!(permission("bot-ask-outside"), serde_json::json!({ "bash": "deny", "external_directory": "ask" }));
         assert!(super::spawn_flag_env("claude", &["bot-ask-shell".to_string()]).is_err());
     }
 
@@ -2341,18 +2346,15 @@ mod tests {
             "npm run halt-test",
             "del notes.txt",
         ] {
-            assert!(!nikcli_denies("bot-ask-shell", command), "{command}");
-            assert!(!nikcli_denies("bot-block", command), "{command}");
+            for flag in super::BLOCK_LIST_FLAGS {
+                assert!(!nikcli_denies(flag, command), "{flag}: {command}");
+            }
         }
-        // The block list goes under its own key: the user's own rule on the shell stays theirs.
-        let env = super::spawn_flag_env("nikcli", &["bot-block".to_string()]).unwrap();
-        let value: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
-        assert_eq!(value.as_object().unwrap().keys().collect::<Vec<_>>(), vec![super::BLOCK_KEY]);
-        // A flag that asks opens the list with "*": "ask", ahead of the denials; bot-block does not.
-        for (flag, opens) in [("bot-ask-shell", true), ("remote-ask-shell", true), ("bot-block", false), ("bot-ask-outside", false)] {
+        // The list opens with "*": "ask", ahead of the denials, so they still win.
+        for flag in super::BLOCK_LIST_FLAGS {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
             let list = &env[0].1[env[0].1.find("\"b?sh\":").unwrap()..];
-            assert_eq!(list.starts_with("\"b?sh\":{\"*\":\"ask\","), opens, "{flag}");
+            assert!(list.starts_with("\"b?sh\":{\"*\":\"ask\","), "{flag}");
         }
         // Not in a chat's turn with the shell denied whole: the tool stays hidden from the model.
         let env = super::spawn_flag_env("nikcli", &["remote-no-shell".to_string()]).unwrap();
@@ -2479,6 +2481,43 @@ mod tests {
         }
     }
 
+    /*
+     * Second check, ALTO: nikcli's globs count case, Windows does not. Under
+     * a user's `"bash": "allow"`, no flag lets any spelling through: the shell
+     * is denied, or every command is asked and ADE's list answers.
+     */
+    #[test]
+    fn no_spelling_passes_a_users_allow_in_any_flag() {
+        let users = [r#"{"bash":"allow"}"#, r#"{"bash":{"*":"allow"}}"#, r#"{"bash":"allow","*":"allow"}"#];
+        let spellings = [
+            "REMOVE-ITEM -Recurse -Force C:\\",
+            "rEmOvE-iTeM -Recurse -Force C:\\",
+            "RI -r C:\\",
+            "Rd /s /q C:\\",
+            "DEL /s /q C:\\",
+            "FORMAT-VOLUME -DriveLetter C",
+            "Shutdown /s",
+            "STOP-COMPUTER",
+            "reg delete HkLm\\Software",
+            "Remove-Item -Recurse -Force $env:USERPROFILE",
+        ];
+        for (name, _, variable, _) in super::SPAWN_FLAGS {
+            if *variable != "NIKCLI_PERMISSION" {
+                continue;
+            }
+            let env = super::spawn_flag_env("nikcli", &[name.to_string()]).unwrap();
+            for user in users {
+                for command in spellings {
+                    let got = nikcli_evaluate(env[0].1, user, "bash", command);
+                    assert!(got == "deny" || got == "ask", "{name}, {user}: {command} → {got}");
+                }
+                // Asked means answered: only a flag of a turn ADE answers may ask.
+                let asks = nikcli_evaluate(env[0].1, user, "bash", "git status") == "ask";
+                assert_eq!(asks, super::BLOCK_LIST_FLAGS.contains(name), "{name}, {user}");
+            }
+        }
+    }
+
     /// For `scripts/check-nikcli-permission.ts`: each flag's `NIKCLI_PERMISSION`, as set, one line each.
     #[test]
     #[ignore]
@@ -2494,9 +2533,9 @@ mod tests {
 
     #[test]
     fn two_flags_for_one_variable_are_refused() {
-        let both = vec!["bot-block".to_string(), "bot-ask-shell".to_string()];
+        let both = vec!["bot-no-shell".to_string(), "bot-ask-shell".to_string()];
         assert!(super::spawn_flag_env("nikcli", &both).is_err());
-        let fine = vec!["no-project-config".to_string(), "bot-block".to_string()];
+        let fine = vec!["no-project-config".to_string(), "bot-no-shell".to_string()];
         assert_eq!(super::spawn_flag_env("nikcli", &fine).unwrap().len(), 2);
     }
 
