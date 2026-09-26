@@ -45,6 +45,9 @@ use tokio_tungstenite::tungstenite::Message;
 pub const API: &str = "https://discord.com/api/v10";
 /// Discord counts characters, not UTF-16 units: an emoji is one.
 pub const MAX_LEN: usize = 2000;
+
+/// Discord's message flag that keeps a message's links from being embedded.
+const SUPPRESS_EMBEDS: u64 = 1 << 2;
 /// How many messages one reply may become. A degenerate turn once produced
 /// 60.698 characters in 31 messages of a row, which is a channel flooded, so
 /// the ceiling keeps the first pieces and the last one says where the rest is.
@@ -545,9 +548,13 @@ impl Core {
         }
     }
 
-    /// One message, with nothing in it Discord would read as a mention.
+    /// One message, with nothing in it Discord would read as a mention, and
+    /// no embed: `SUPPRESS_EMBEDS` (security review, ALTO A1). Discord fetches
+    /// a link in a message to embed it as soon as the message is posted, so a
+    /// URL in an agent's reply, one a prompt injection put there with data in
+    /// its query included, was fetched without anyone clicking it.
     fn body(text: &str) -> Value {
-        json!({ "content": text, "allowed_mentions": { "parse": [] } })
+        json!({ "content": text, "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS })
     }
 
     async fn post(&self, chat: &str, body: &Value) -> Result<String, Failure> {
@@ -595,7 +602,7 @@ impl Core {
         if let Some(extra) = extra {
             // The buttons go on the last message, whatever the text became.
             // A patch without a content leaves the text as it is.
-            let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] } });
+            let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
             if let Err(failure) = self
                 .call_patiently(reqwest::Method::PATCH, &format!("/channels/{chat}/messages/{last}"), Some(&body))
                 .await
@@ -1603,6 +1610,28 @@ mod tests {
         let first = nonce_of(&rest.body_of(0));
         let second = nonce_of(&rest.body_of(1));
         assert_eq!(first, second, "il nonce resta lo stesso fra un tentativo e l'altro");
+    }
+
+    #[tokio::test]
+    async fn no_message_the_bot_writes_lets_discord_embed_its_links() {
+        // Security review, ALTO A1: an embed is Discord fetching the URL as the message is posted, no click needed.
+        let rest = FakeRest::start(vec![
+            ok(&json!({ "id": "1" }).to_string()),
+            ok(&json!({ "id": "2" }).to_string()),
+            ok(&json!({ "id": "2" }).to_string()),
+            ok(&json!({ "id": "1" }).to_string()),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        let link = "guarda https://esempio.invalid/?dati=segreti";
+        discord.send("ch1", link).await.expect("inviato");
+        discord.send_buttons("ch1", link, &[Button { label: "Si'".into(), data: "si".into() }]).await.expect("inviato");
+        discord.edit("ch1", "1", &format!("{link} e ancora")).await.expect("modificato");
+        assert_eq!(rest.count(), 4, "un invio, un invio con la patch dei pulsanti, una modifica");
+        for nth in 0..rest.count() {
+            let body = rest.body_of(nth);
+            assert_eq!(body["flags"], json!(4), "{body}");
+        }
     }
 
     #[tokio::test]
