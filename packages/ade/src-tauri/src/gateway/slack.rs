@@ -790,6 +790,17 @@ async fn socket_session(
                 // The ack first, before anything is decided about the envelope:
                 // Slack's three seconds do not wait for a trust dialog.
                 if let Some(envelope) = frame["envelope_id"].as_str() {
+                    /*
+                     * No room for what it carries, the page not reading: no ack,
+                     * so Slack sends it again later, and this loop goes on
+                     * reading pings and a disconnect instead of waiting on a
+                     * full inbox with the socket unread (G10 review, 5). This
+                     * task is the only one that hands messages on, so the room
+                     * seen here is still there at the send below.
+                     */
+                    if sender.capacity() == 0 {
+                        continue;
+                    }
                     if sink.send(Message::Text(ack(envelope).into())).await.is_err() {
                         break;
                     }
@@ -1728,6 +1739,23 @@ mod tests {
         let last = taken.last().unwrap().body["text"].as_str().unwrap().to_string();
         assert!(last.contains("in ADE"), "{last}");
         assert!(taken.iter().all(|seen| characters(seen.body["text"].as_str().unwrap()) <= MAX_LEN));
+    }
+
+    #[tokio::test]
+    async fn a_full_inbox_is_not_acknowledged_and_the_socket_is_still_read() {
+        let mut first = vec![hello()];
+        for index in 0..300 {
+            first.push(envelope(&format!("e{index}"), &format!("Ev{index}"), "D1", "im", "U9", "ciao"));
+        }
+        first.push(disconnect("refresh_requested"));
+        let socket = FakeSocket::start(vec![first, vec![hello()]], 1_500);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        slack.receive().await.expect("letto");
+        // Nobody reads any more: the socket is read on anyway, to the disconnect and the next one.
+        eventually("il secondo socket", || socket.connections().len() == 2).await;
+        let acks = socket.acks().len();
+        assert!(acks < 300, "confermate {acks} buste: anche quelle che non poteva tenere");
     }
 
     #[tokio::test]
