@@ -1412,7 +1412,7 @@ function Thread(props: {
               {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
             </Show>
           </span>
-          <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
+          <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
             {t("bots.send")}
           </button>
         </div>

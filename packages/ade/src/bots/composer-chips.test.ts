@@ -41,3 +41,30 @@ describe("the bot's composer", () => {
     expect(view).toContain("void change(effortChange(value))")
   })
 })
+
+/* Review of bot-riquadro, b: the bot's Invia was the form's full teal button, the Chat's was not. */
+describe("lint: the bot's Invia", () => {
+  const strip = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "")
+  const bots = strip(readFileSync(join(import.meta.dir, "bots.css"), "utf8"))
+  const chat = strip(readFileSync(join(import.meta.dir, "..", "chat", "chat.css"), "utf8"))
+  const body = (css: string, selector: string) => {
+    const start = css.indexOf(`${selector} {`)
+    expect(start).toBeGreaterThan(-1)
+    return css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start)).replace(/\s+/g, " ").trim()
+  }
+
+  test("lint: the bot's and the room's Invia are the Chat's, not the form's primary button", () => {
+    const rooms = readFileSync(join(import.meta.dir, "room-panel.tsx"), "utf8")
+    const roomStart = rooms.indexOf('data-slot="bots-composer"')
+    expect(roomStart).toBeGreaterThan(-1)
+    // The room's composer only: the room form's «Crea» stays the form's primary button.
+    const roomComposer = rooms.slice(roomStart, rooms.indexOf("</form>", roomStart))
+    for (const view of [slice('<div data-slot="bots-composer-row">', "</form>"), roomComposer]) {
+      expect(view).toContain('type="submit" data-slot="bots-send"')
+      expect(view).not.toContain('type="submit" data-slot="bots-btn" data-tone="primary"')
+    }
+    for (const state of ["", ":disabled"]) {
+      expect(body(bots, `[data-slot="bots-send"]${state}`)).toBe(body(chat, `[data-slot="chat-send"]${state}`))
+    }
+  })
+})

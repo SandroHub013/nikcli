@@ -266,7 +266,7 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
             {/* Invia inside the box, under the text, as in a bot's thread. */}
             <div data-slot="bots-composer-row">
               <span data-slot="bots-composer-gap" />
-              <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={draft().trim().length === 0}>
+              <button type="submit" data-slot="bots-send" disabled={draft().trim().length === 0}>
                 {t("bots.send")}
               </button>
             </div>
