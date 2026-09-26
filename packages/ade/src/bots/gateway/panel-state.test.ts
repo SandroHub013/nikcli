@@ -471,4 +471,91 @@ describe("the Gateway section of a bot's card", () => {
       }
     })
   })
-})
+
+  /*
+   * Which platform the card opens on, with nothing new in the bot's file: the
+   * one whose link is on, and Telegram when neither is. A choice the user makes
+   * is theirs, so no later refresh takes it back.
+   */
+  const twoLinks = (links: Partial<GatewayStatus>[]) => async (): Promise<GatewayStatus[]> =>
+    links.map((link) => ({ enabled: false, running: false, connected: false, hasToken: false, ...link, bot: BOT.path, platform: link.platform ?? "telegram", authorized: [] }))
+
+  const panelOver = (status: () => Promise<GatewayStatus[]>) =>
+    createGatewayPanel({
+      bot: () => BOT,
+      api: {
+        status,
+        setToken: async () => {},
+        clearToken: async () => {},
+        probe: async () => "@bot",
+        setEnabled: async () => {},
+        pairingList: async () => ({ open: false, pending: [], authorized: [], attemptsLeft: 0 }),
+        pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
+        pairingReject: async () => {},
+        pairingRevoke: async () => {},
+        pairingOpen: async () => 0,
+        listen: async () => () => {},
+      },
+      project: () => PROJECT,
+      remote: memoryRemoteStore(),
+      approve: async () => ({ ok: true, fingerprint: "f" }),
+      confirm: async () => true,
+    })
+
+  test("the card opens on the platform whose link is on", async () => {
+    await createRoot(async () => {
+      const panel = panelOver(
+        twoLinks([
+          { platform: "telegram", enabled: false, running: false, connected: false, hasToken: true },
+          { platform: "discord", enabled: true, running: true, connected: true, hasToken: true },
+        ]),
+      )
+      try {
+        await panel.refresh()
+        expect(panel.platform()).toBe("discord")
+        expect(panel.link().enabled).toBe(true)
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
+
+  test("with no link on, the card opens on Telegram", async () => {
+    await createRoot(async () => {
+      const panel = panelOver(
+        twoLinks([
+          { platform: "telegram", enabled: false, running: false, connected: false, hasToken: true },
+          { platform: "discord", enabled: false, running: false, connected: false, hasToken: true },
+        ]),
+      )
+      try {
+        await panel.refresh()
+        expect(panel.platform()).toBe("telegram")
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
+
+  test("a choice the user makes is not taken back by a later refresh", async () => {
+    await createRoot(async () => {
+      const panel = panelOver(
+        twoLinks([
+          { platform: "telegram", enabled: false, running: false, connected: false, hasToken: true },
+          { platform: "discord", enabled: true, running: true, connected: true, hasToken: true },
+        ]),
+      )
+      try {
+        await panel.refresh()
+        expect(panel.platform()).toBe("discord")
+        // The user looks at Telegram, and Discord is still the one that is on.
+        panel.choose("telegram")
+        expect(panel.platform()).toBe("telegram")
+        await panel.refresh()
+        // The choice is the user's, not the state's.
+        expect(panel.platform(), "la scelta e' dell'utente, non dello stato").toBe("telegram")
+      } finally {
+        panel.dispose()
+      }
+    })
+  })})
