@@ -191,6 +191,11 @@ pub struct Hub {
     /// Links switched on that could not start (no token, a platform refused):
     /// the panel shows why, and they stay on for the user to fix.
     failed: Mutex<HashMap<(String, Platform), String>>,
+    /// Held around every change of a token: read what the keychain had,
+    /// write, record, and put the old value back if the record refused.
+    /// Two commands on the same entry at once would otherwise interleave, and
+    /// the loser would restore its old value over the winner's.
+    keychain: Mutex<()>,
     /// Whether the page listens for messages. Until it does, no gateway
     /// reads: a message read then would be handed to nobody, and its
     /// position saved as if it had been.
@@ -251,6 +256,7 @@ impl Hub {
             connect,
             links: Mutex::new(HashMap::new()),
             failed: Mutex::new(HashMap::new()),
+            keychain: Mutex::new(()),
             ready: watch::channel(false).0,
             backoff: (Duration::from_secs(1), Duration::from_secs(300)),
         }
@@ -293,6 +299,20 @@ impl Hub {
         check_bot(bot)?;
         let token = token.trim();
         check_token(token)?;
+        self.write_secret(bot, platform, kind, token)?;
+        // Outside the keychain's lock: starting a gateway again reads the token.
+        if self.store.link(bot, platform).is_some_and(|link| link.enabled) {
+            self.relaunch(bot, platform);
+        }
+        Ok(())
+    }
+
+    fn keychain(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.keychain.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn write_secret(&self, bot: &str, platform: Platform, kind: TokenKind, token: &str) -> Result<(), String> {
+        let _keychain = self.keychain();
         let hash = token_hash(token);
         let held = |link: &LinkState| {
             link.token_hash.as_deref() == Some(hash.as_str()) || link.app_token_hash.as_deref() == Some(hash.as_str())
@@ -344,9 +364,6 @@ impl Hub {
             }
             return Err(error);
         }
-        if self.store.link(bot, platform).is_some_and(|link| link.enabled) {
-            self.relaunch(bot, platform);
-        }
         Ok(())
     }
 
@@ -356,6 +373,7 @@ impl Hub {
         check_bot(bot)?;
         self.halt(bot, platform);
         self.failed().remove(&(bot.to_string(), platform));
+        let _keychain = self.keychain();
         self.vault.delete(&self.service, &token_name(bot, platform))?;
         if platform.needs_app_token() {
             self.vault.delete(&self.service, &secret_name(bot, platform, TokenKind::App))?;
@@ -1610,6 +1628,70 @@ mod tests {
         let again = "666666666:ANCORA-token-di-prova_AbCdEfGhIjKl";
         assert!(s.hub.set_token(third, Platform::Fake, again).is_err());
         assert!(s.hub.token(third, Platform::Fake).unwrap().is_none(), "voce orfana nel portachiavi");
+    }
+
+    /// A keychain whose write of one value holds for a while, and lets another
+    /// bot record that value meanwhile: the command writing it will lose.
+    struct SlowVault {
+        keys: MapVault,
+        slow: String,
+        store: Mutex<Option<(Arc<Store>, String)>>,
+        writing: std::sync::Barrier,
+    }
+    impl Vault for SlowVault {
+        fn get(&self, service: &str, name: &str) -> Result<Option<String>, String> {
+            self.keys.get(service, name)
+        }
+        fn set(&self, service: &str, name: &str, value: &str) -> Result<(), String> {
+            self.keys.set(service, name, value)?;
+            if value == self.slow {
+                if let Some((store, other)) = self.store.lock().unwrap().take() {
+                    store
+                        .update(&other, Platform::Fake, |link, _| {
+                            link.token_hash = Some(token_hash(value));
+                            Ok(())
+                        })
+                        .unwrap();
+                }
+                // The other command starts now, while this one is between its write and its record.
+                self.writing.wait();
+                std::thread::sleep(Duration::from_millis(150));
+            }
+            Ok(())
+        }
+        fn delete(&self, service: &str, name: &str) -> Result<(), String> {
+            self.keys.delete(service, name)
+        }
+    }
+
+    #[test]
+    fn two_commands_on_one_entry_leave_the_keychain_as_the_record_says() {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-two-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let lost = "555555555:PERDENTE-token-di-prova_AbCdEfGhIjKl";
+        let won = "777777777:VINCENTE-token-di-prova_AbCdEfGhIjKl";
+        let vault = Arc::new(SlowVault {
+            keys: MapVault::default(),
+            slow: lost.into(),
+            store: Mutex::new(None),
+            writing: std::sync::Barrier::new(2),
+        });
+        let s = setup_vault(dir.join("state.json"), vault.clone());
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        // A writes a token another bot records meanwhile, so A will lose;
+        // B writes its own on the same entry while A is between write and record.
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        *vault.store.lock().unwrap() = Some((s.hub.store.clone(), other.to_string()));
+        std::thread::scope(|scope| {
+            let a = scope.spawn(|| s.hub.set_token(BOT, Platform::Fake, lost));
+            vault.writing.wait();
+            let b = scope.spawn(|| s.hub.set_token(BOT, Platform::Fake, won));
+            assert!(a.join().unwrap().unwrap_err().contains("altro bot"));
+            b.join().unwrap().unwrap();
+        });
+        let recorded = s.hub.store.link(BOT, Platform::Fake).and_then(|link| link.token_hash);
+        assert_eq!(recorded.as_deref(), Some(token_hash(won).as_str()));
+        assert_eq!(s.hub.token(BOT, Platform::Fake).unwrap().as_deref(), Some(won), "il portachiavi non tiene il token registrato");
     }
 
     #[tokio::test]
