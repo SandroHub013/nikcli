@@ -240,7 +240,7 @@ describe("la catena è quella che si prova davvero", () => {
     expect(h.asked.map((unit) => unit.voice)).toEqual(["paola"])
   })
 
-  test("Kokoro scelto, non ancora installato: si scarica in background e la risposta è di Lessac", async () => {
+  test("Kokoro scelto, non ancora installato: la risposta è di Lessac e nessuno scarica", async () => {
     const asked: string[] = []
     const h = host("af_heart", {
       status: async (voice) => {
@@ -253,9 +253,9 @@ describe("la catena è quella che si prova davvero", () => {
     })
     const english = "I opened the session on the parser and the tests are green."
     await createNaturalSpeaker(h.deps).speak(english)
-    // La domanda è fatta, la scaricazione parte senza che nessuno la chieda, e la
-    // risposta non aspetta: è di Lessac, in inglese, offline.
-    expect(asked).toEqual(["status:af_heart", "install:af_heart", "status:lessac"])
+    // Il pannello promette che i 219 MB arrivano premendo Installa, quindi una
+    // risposta non li avvia: si chiede se Kokoro c'è, si va a Lessac, e basta.
+    expect(asked).toEqual(["status:af_heart", "status:lessac"])
     expect(h.asked.map((unit) => unit.voice)).toEqual(["lessac"])
     expect(h.played).toEqual([english])
     expect(h.fallback.spoken).toEqual([])
@@ -454,6 +454,100 @@ describe("il ripiego viene dalla lingua dell'interfaccia, non dall'impostazione"
       expect(interfaceLocale("en", ttsLocale).startsWith("en")).toBe(true);
       expect(interfaceLocale("it", ttsLocale)).toBe("it-IT");
     }
+  });
+});
+
+describe("una risposta non scarica mai niente", () => {
+  const english = "I opened the session and the tests are green.";
+
+  test("Kokoro scelto e non installato: nessun download, e la catena scende", async () => {
+    // Il pannello promette che i 219 MB arrivano premendo Installa. Una risposta
+    // che li avvia da sé rompe la promessa, e basta una frase inglese per
+    // metterla in moto.
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async (voice) => {
+        asked.push(`status:${voice}`)
+        return { supported: true, installed: voice === "lessac" }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(asked).toEqual(["status:af_heart", "status:lessac"])
+    expect(asked.filter((step) => step.startsWith("install"))).toEqual([])
+    // E la risposta è di Lessac, che era già lì: la catena ha usato quello che
+    // c'era senza andare a prendere niente.
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["lessac"]))
+  })
+
+  test("Kokoro scelto e non installato, e Lessac nemmeno: la voce di sistema", async () => {
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: false }),
+      install: async () => {
+        throw new Error("una risposta non scarica niente")
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(h.asked).toEqual([])
+    expect(h.fallback.spoken).toEqual([english])
+  })
+
+  test("il passo di mezzo della catena è usato solo se è già installato", async () => {
+    // La regola vale per ogni passo dopo il primo: Lessac è la voce che c'era
+    // dentro la catena, non una scelta, e non viene scaricata da una risposta.
+    const asked: string[] = []
+    const h = host("bm_george", {
+      status: async (voice) => {
+        asked.push(voice)
+        return { supported: true, installed: false }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    // Il Kokoro scelto non scarica niente, e il suo passo di mezzo è chiesto una
+    // volta e basta: nessun download.
+    expect(asked).toEqual(["bm_george", "lessac"])
+    expect(h.asked).toEqual([])
+  })
+
+  test("il warm-up non scarica niente nemmeno lui", async () => {
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: false }),
+      install: async () => {
+        throw new Error("il warm-up non scarica niente")
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(h.asked).toEqual([])
+  })
+
+  test("la voce scelta che non c'è ancora si scarica ancora, se è di Piper", async () => {
+    // La regola è sulla catena e sul backend, non sulle risposte in generale: una
+    // voce Piper scelta e non ancora presente si prende come una volta sola, e la
+    // risposta di dopo la trova già pronta.
+    const installed: string[] = []
+    let ready = false
+    const h = host("ugo", {
+      status: async () => ({ supported: true, installed: ready }),
+      install: async (voice) => {
+        installed.push(voice)
+        ready = true
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("I opened the session and the tests are green.")
+    expect(installed).toEqual(["ugo"])
+    // Il modello non c'era, quindi questa risposta la legge la voce di sotto, e la
+    // seconda la legge Ugo: è il comportamento di sempre per Piper.
+    expect(h.fallback.spoken.length).toBe(1)
+    await speaker.speak("And now the second one.")
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["ugo"]))
   });
 });
 
