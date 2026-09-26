@@ -11,6 +11,7 @@ import {
   planRestore,
   planResume,
   planStart,
+  lostConversation,
   resumePromise,
   lastNikcliHere,
   lastTakenFor,
@@ -334,6 +335,23 @@ describe("resumePromise", () => {
 
   test("an agent ADE knows nothing about promises nothing", () => {
     expect(resumePromise({ agentId: "terminal" })).toBe("none")
+  })
+
+  /*
+   * The strip that says a conversation cannot be found again is about an agent
+   * that keeps conversations and lost one. For a terminal `none` means there was
+   * never a conversation, so saying it there is the opposite of the truth — and
+   * it is what showed on every Terminal pane.
+   */
+  test("a terminal has no conversations to lose, so that strip is not for it", () => {
+    // The same `none` the strip is built on, and the two cases it must not mix.
+    expect(resumePromise({ agentId: "terminal" })).toBe("none")
+    expect(lostConversation("terminal", "none", false)).toBe(false)
+    // An agent that does keep conversations still hears it.
+    expect(resumePromise({ agentId: "nikcli", sharedDirectory: true })).toBe("none")
+    expect(lostConversation("nikcli", "none", false)).toBe(true)
+    // And nothing is announced when the conversation was in fact reopened.
+    expect(lostConversation("nikcli", "none", true)).toBe(false)
     expect(resumePromise({ agentId: "gemini", resumeId: "x" })).toBe("none")
   })
 })

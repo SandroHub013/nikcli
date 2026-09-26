@@ -63,6 +63,7 @@ import {
   LIST_COLS,
   planResume,
   planStart,
+  lostConversation,
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
@@ -6648,7 +6649,7 @@ export function Workbench() {
      * one directory is the case that is not right, and that one is said.
      */
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
-    if (!resumed && promise === "none") tellPane(paneId, t("resume.none"))
+    if (lostConversation(agentId, promise, resumed)) tellPane(paneId, t("resume.none"))
     // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
     if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {
       tellPane(paneId, t("resume.otherFolder", launched.otherDir))
