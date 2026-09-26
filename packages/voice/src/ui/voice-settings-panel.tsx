@@ -1050,6 +1050,24 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           {engineStatus().label}
         </div>
 
+        {/*
+          * The voice's own header, not the rail. In the rail this read as one
+          * more section of ADE's settings — and it is not one: it resets
+          * DEFAULT_VOICE_SETTINGS and nothing else, the transcription engine
+          * included, which comes back on `openrouter`. Beside the title it
+          * says what it resets, and a panel the host has retitled still
+          * carries a label that names the voice.
+          */}
+        <button
+          type="button"
+          data-slot="reset-voice"
+          data-armed={resetArmed() ? "true" : undefined}
+          onClick={restoreDefaults}
+          onBlur={() => setResetArmed(false)}
+        >
+          {resetArmed() ? t("vui.panel.resetVoiceConfirm") : t("vui.panel.resetVoice")}
+        </button>
+
         <Show when={!props.inline && props.onClose}>
           <button
             type="button"
@@ -1135,23 +1153,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             )}
           </For>
 
-          <span data-slot="rail-sep" aria-hidden="true" />
-
-          {/* Down here rather than beside "Fatto": a button that throws every
-              setting away must not sit a few pixels from the one that keeps them. */}
-          <button
-            type="button"
-            data-slot="rail-row"
-            data-tone="quiet"
-            data-armed={resetArmed() ? "true" : undefined}
-            onClick={restoreDefaults}
-            onBlur={() => setResetArmed(false)}
-          >
-            <span data-slot="rail-glyph" aria-hidden="true">↺</span>
-            <span data-slot="rail-label">
-              {resetArmed() ? "Confermi?" : "Ripristina"}
-            </span>
-          </button>
         </nav>
 
         {/* Body */}

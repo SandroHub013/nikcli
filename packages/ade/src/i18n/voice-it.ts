@@ -120,6 +120,8 @@ export const voiceIt = {
   "vui.panel.title": "Pannello di controllo vocale",
   "vui.panel.subtitle": "Modalità, attivazione, scorciatoie e motori di riconoscimento",
   "vui.panel.close": "Chiudi impostazioni (Esc)",
+  "vui.panel.resetVoice": "Ripristina la voce",
+  "vui.panel.resetVoiceConfirm": "Confermi?",
   "vui.panel.sections": "Sezioni delle impostazioni",
   "vui.mode.title": "Modalità predefinita",
   "vui.mode.desc": "L'assistente e la dettatura sono due cose distinte, entrambe attive: si scelgono premendo l'orb o il microfono nella barra, o la rispettiva scorciatoia. Qui si decide solo quale delle due parte quando il microfono viene aperto senza dirlo.",
