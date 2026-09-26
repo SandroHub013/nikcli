@@ -61,8 +61,12 @@ const MAX_PIECES: usize = 8;
 /// What a section block holds: a question with buttons longer than this goes
 /// as text, and the buttons in a message of their own under it.
 const SECTION_MAX: usize = 3_000;
-/// Events remembered to recognise one Slack sends again.
+/// Events and envelopes remembered to recognise one Slack sends again.
 const SEEN_EVENTS: usize = 256;
+/// How long a sender's name is waited for. It is asked inside the socket's
+/// reading loop, where every moment spent holds the acks of the envelopes
+/// behind it, and Slack's limit for those is three seconds.
+const NAME_WAIT: Duration = Duration::from_secs(1);
 const MAX_WAIT: Duration = Duration::from_secs(60);
 const RETRIES: usize = 3;
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -499,13 +503,17 @@ impl Inner {
         true
     }
 
-    /// A sender's name, from `users.info`, remembered; the id when Slack does not say.
+    /// A sender's name, from `users.info`, remembered; the id when Slack does
+    /// not say in time. One call, waited for `NAME_WAIT` at most, and none of
+    /// `call_patiently`'s retries: the reading loop waits for it, and with the
+    /// retries a slow Slack held the next envelopes' acks for tens of seconds,
+    /// so they came again (G10 review, 1).
     async fn name_of(&self, user: &str) -> String {
         if let Some(name) = hold(&self.names).get(user) {
             return name.clone();
         }
         let path = format!("/users.info?user={user}");
-        let Ok(answer) = self.call_patiently(reqwest::Method::GET, &path, Token::Bot, None).await else {
+        let Ok(Ok(answer)) = tokio::time::timeout(NAME_WAIT, self.call(reqwest::Method::GET, &path, Token::Bot, None)).await else {
             return user.to_string();
         };
         let person = &answer.body["user"];
@@ -662,6 +670,12 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
                 if let Some(envelope) = frame["envelope_id"].as_str() {
                     if sink.send(Message::Text(ack(envelope).into())).await.is_err() {
                         break;
+                    }
+                    // An envelope Slack sends again is acknowledged again and
+                    // handed on once: a command or a press has no event id to
+                    // tell a repeat by (G10 review, 1).
+                    if !inner.first_time(&format!("envelope:{envelope}")) {
+                        continue;
                     }
                 }
                 let handed = match frame["type"].as_str().unwrap_or_default() {
@@ -872,6 +886,9 @@ mod tests {
     const BOT: &str = "UBOT42";
     const ALL_SCOPES: &str = "channels:history,chat:write,commands,groups:history,im:history,mpim:history,users:read";
 
+    /// The fake's header for a reply sent this many milliseconds late.
+    const LATE: &str = "x-finto-ritardo-ms";
+
     #[derive(Clone)]
     struct Reply {
         status: u16,
@@ -934,8 +951,12 @@ mod tests {
                         "/users.info" => ok(json!({ "ok": true, "user": { "name": "qualcuno", "profile": { "display_name": "Qualcuno" } } })),
                         _ => ok(json!({ "ok": true, "ts": "1700000000.000100" })),
                     });
+                    // A reply can be late on purpose: the fake's own header, not sent.
+                    if let Some((_, ms)) = reply.headers.iter().find(|(name, _)| name == LATE) {
+                        std::thread::sleep(Duration::from_millis(ms.parse().unwrap_or(0)));
+                    }
                     let mut response = format!("HTTP/1.1 {} X\r\ncontent-type: application/json\r\n", reply.status);
-                    for (name, value) in &reply.headers {
+                    for (name, value) in reply.headers.iter().filter(|(name, _)| name != LATE) {
                         response.push_str(&format!("{name}: {value}\r\n"));
                     }
                     response.push_str(&format!("content-length: {}\r\nconnection: close\r\n\r\n{}", reply.body.len(), reply.body));
@@ -1148,6 +1169,54 @@ mod tests {
         for (at, _) in &connection.received {
             assert!(at.duration_since(started) < Duration::from_secs(3), "ack oltre i tre secondi");
         }
+    }
+
+    #[tokio::test]
+    async fn a_slow_name_does_not_hold_the_acks_behind_it() {
+        // G10 review, 1: the name of a sender is asked inside the reading loop,
+        // and Slack sends again what is not acknowledged within three seconds.
+        let socket = FakeSocket::start(
+            vec![vec![
+                hello(),
+                envelope("e1", "Ev1", "D1", "im", "U9", "ciao"),
+                envelope("e2", "Ev2", "D1", "im", "U9", "ancora"),
+            ]],
+            3_000,
+        );
+        let mut queues = HashMap::new();
+        queues.insert(
+            "/users.info",
+            vec![with_header(ok(json!({ "ok": true, "user": { "name": "lento" } })), LATE, "5000")],
+        );
+        let api = FakeApi::start(&socket.address, queues);
+        let slack = adapter(&api);
+        let started = Instant::now();
+        let first = slack.receive().await.expect("letto");
+        assert_eq!(first[0].sender.name, "U9", "senza risposta in tempo, l'id");
+        eventually("i due ack", || socket.acks().len() == 2).await;
+        let second = socket.connections()[0].received[1].0;
+        assert!(second.duration_since(started) < Duration::from_millis(2_500), "l'ack dietro al nome e' arrivato dopo {:?}", second.duration_since(started));
+    }
+
+    #[tokio::test]
+    async fn a_command_slack_sends_again_is_handed_on_once() {
+        let command = |envelope: &str| {
+            text(json!({
+                "envelope_id": envelope, "type": "slash_commands", "accepts_response_payload": true,
+                "payload": { "command": "/ferma", "text": "", "trigger_id": "T1", "user_id": "U9", "channel_id": "D9" },
+            }))
+        };
+        let socket = FakeSocket::start(vec![vec![hello(), command("s1"), command("s1"), command("s2")]], 1_500);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        assert_eq!(slack.receive().await.expect("letto")[0].id, "T1");
+        eventually("tre ack", || socket.acks().len() == 3).await;
+        // The repeat of s1 was acknowledged and not handed on: the next is s2.
+        let next = tokio::time::timeout(Duration::from_secs(2), slack.receive()).await.expect("in tempo").expect("letto");
+        assert_eq!(next.len(), 1);
+        assert_eq!(socket.acks(), vec!["s1".to_string(), "s1".to_string(), "s2".to_string()]);
+        let pending = tokio::time::timeout(Duration::from_millis(300), slack.receive()).await;
+        assert!(pending.is_err(), "il doppione di s1 e' stato consegnato");
     }
 
     #[tokio::test]
