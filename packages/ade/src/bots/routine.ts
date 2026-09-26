@@ -671,3 +671,32 @@ export function createRoutineScheduler(deps: RoutineSchedulerDeps): RoutineSched
 
   return { tick, runningId: () => current?.id }
 }
+
+/* ── words for the panel ──────────────────────────────────────────────── */
+
+export function describeEvery(every: RoutineEvery): string {
+  return every.kind === "hours" ? t("bots.routine.everyHours", every.hours) : t("bots.routine.everyDaily", every.at)
+}
+
+/** The row's cap in one line: runs a day, the gap, the money. */
+export function describeCap(cap: RoutineCap): string {
+  const parts: string[] = []
+  if (cap.perDay !== undefined) parts.push(t("bots.routine.cap.perDay", cap.perDay))
+  if (cap.minGapMin !== undefined) parts.push(t("bots.routine.cap.gap", cap.minGapMin))
+  if (cap.perRunUsd !== undefined && cap.perDayUsd !== undefined)
+    parts.push(t("bots.routine.cap.money", cap.perRunUsd, cap.perDayUsd))
+  return parts.join("; ")
+}
+
+export function modeLabel(mode: RoutineMode): string {
+  return t(`bots.routine.mode.${mode}`)
+}
+
+/** When the next run is: a time today, tomorrow, or a date. */
+export function formatNext(at: number, now: number): string {
+  const date = new Date(at)
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  if (dayOf(at) === dayOf(now)) return time
+  if (dayOf(at) === dayOf(nextDay(now))) return t("bots.routine.tomorrow", time)
+  return `${date.getDate()} ${t("bots.when.month", date.getMonth())} ${time}`
+}
