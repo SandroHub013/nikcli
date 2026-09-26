@@ -92,7 +92,7 @@ import {
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
 import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants } from "./catalog"
-import { effortChoices } from "./effort"
+import { effortChoices, effortToSave } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
@@ -1622,6 +1622,8 @@ function BotForm(props: {
   const [persona, setPersona] = createSignal("")
   const [model, setModel] = createSignal("")
   const [effort, setEffort] = createSignal("")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>("nikcli")
   const [objectives, setObjectives] = createSignal("")
   const [avatar, setAvatar] = createSignal<string>()
@@ -1663,7 +1665,7 @@ function BotForm(props: {
         description: description().trim(),
         ...(generating() ? {} : { persona: persona() }),
         ...(model() ? { model: model() } : {}),
-        ...(effort().trim() ? { effort: effort().trim() } : {}),
+        ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
         ...(runner() !== "nikcli" ? { runner: runner() } : {}),
         objectives: objectives()
@@ -1731,6 +1733,7 @@ function BotForm(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        onStale={setStaleEffort}
         onRunner={(id) => {
           setRunner(id)
           setModel("")
@@ -1823,6 +1826,8 @@ function EngineFields(props: {
   onRunner: (id: string) => void
   onModel: (value: string) => void
   onEffort: (value: string) => void
+  /** The saved level the model does not have, or undefined: the form saves it as none (`effortToSave`). */
+  onStale?: (stale: string | undefined) => void
   /** Present on a saved bot. The create form has no path yet, so no account. */
   account?: BotAccount
   onAccount?: (account: BotAccount) => void
@@ -1846,6 +1851,7 @@ function EngineFields(props: {
       saved: props.effort,
     }),
   )
+  createEffect(() => props.onStale?.(efforts().stale))
   const [pickingKey, setPickingKey] = createSignal(false)
   const [assigned] = createResource(
     () => (props.onAccount && PLAN_RUNNERS.includes(runner().id) ? runner().command : null),
@@ -2045,6 +2051,8 @@ function BotSettings(props: {
   const [description, setDescription] = createSignal(props.bot.description)
   const [model, setModel] = createSignal(props.bot.model ?? "")
   const [effort, setEffort] = createSignal(props.bot.effort ?? "")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>(runnerById(props.bot.runner).id)
   const [objectives, setObjectives] = createSignal(parts().objectives.join("\n"))
   const [persona, setPersona] = createSignal(parts().persona)
@@ -2078,6 +2086,8 @@ function BotSettings(props: {
       description() !== props.bot.description ||
       model() !== (props.bot.model ?? "") ||
       effort() !== (props.bot.effort ?? "") ||
+      // Saving clears it: the save is offered.
+      staleEffort() !== undefined ||
       runner() !== runnerById(props.bot.runner).id ||
       persona() !== parts().persona ||
       objectives() !== parts().objectives.join("\n") ||
@@ -2093,7 +2103,7 @@ function BotSettings(props: {
     const problem = await updateBot(props.bot, {
       description: description().trim(),
       model: model() || undefined,
-      effort: effort().trim() || undefined,
+      effort: effortToSave(effort(), staleEffort()),
       runner: runner() === "nikcli" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
@@ -2137,6 +2147,7 @@ function BotSettings(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        onStale={setStaleEffort}
         {...(props.bot.model ? { pinned: props.bot.model } : {})}
         onRunner={(id) => {
           setRunner(id)
