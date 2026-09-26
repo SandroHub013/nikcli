@@ -341,6 +341,14 @@ export function roomPrompt(input: {
  */
 export type RoomPay = "free" | "plan" | "paid"
 
+/**
+ * The most one user message may cost: the cap is per round, and a message
+ * sets off up to `MAX_ROUNDS` rounds (B8b review). The form says so.
+ */
+export function messageSpendMax(perRoundUsd: number): number {
+  return Math.round(perRoundUsd * MAX_ROUNDS * 100) / 100
+}
+
 /** The most a room's round may be allowed to spend, in dollars. */
 export const ROOM_ROUND_MAX_USD = 0.5
 

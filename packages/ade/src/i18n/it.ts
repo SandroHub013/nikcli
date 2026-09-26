@@ -1522,6 +1522,8 @@ export const it = {
   "bots.room.form.cap": "Tetto di spesa per giro ($)",
   "bots.room.form.capHint": (max: number) =>
     `Serve solo se un bot è a pagamento (modello a pagamento o chiave API); al massimo ${max} $. I modelli gratuiti non possono spendere nulla.`,
+  "bots.room.form.capPerMessage": (perRound: string, rounds: number, total: string) =>
+    `Il tetto vale per giro: un messaggio fa fino a ${rounds} giri, quindi può spendere fino a ${rounds} × ${perRound} $ = ${total} $.`,
   "bots.room.form.cancel": "Annulla",
   "bots.room.form.create": "Crea stanza",
   "bots.memory.confirm": "Conferma",

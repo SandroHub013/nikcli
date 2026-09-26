@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import {
   appendEntry,
   deltaFor,
@@ -6,6 +7,7 @@ import {
   isPass,
   LOG_KEPT,
   memberBudget,
+  messageSpendMax,
   MAX_MESSAGES,
   MAX_ROUNDS,
   needsYou,
@@ -208,6 +210,13 @@ describe("B8b: what a room may spend, with fake bots", () => {
     expect(roomSpendProblem([free, key], { perRoundUsd: 0.1 }, false)).toBeUndefined()
     for (const perRoundUsd of [0, -1, Number.NaN, ROOM_ROUND_MAX_USD + 0.01])
       expect(roomSpendProblem([free, key], { perRoundUsd }, false)).toBeDefined()
+  })
+
+  test("one message may spend up to three rounds' cap, and the form says so (B8b review)", () => {
+    expect(messageSpendMax(0.1)).toBe(0.3)
+    expect(messageSpendMax(ROOM_ROUND_MAX_USD)).toBe(1.5)
+    const panel = readFileSync(new URL("./room-panel.tsx", import.meta.url), "utf8")
+    expect(panel).toContain('t("bots.room.form.capPerMessage", usd().toFixed(2), MAX_ROUNDS, messageSpendMax(usd()).toFixed(2))')
   })
 
   test("a free model may spend nothing, a plan has no cap, money what is left", () => {

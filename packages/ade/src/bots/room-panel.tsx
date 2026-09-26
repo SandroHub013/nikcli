@@ -11,7 +11,7 @@ import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
 import type { AgentFile } from "./nikcli"
-import { MAX_MEMBERS, MIN_MEMBERS, ROOM_ROUND_MAX_USD, type RoomSpend } from "./room"
+import { MAX_MEMBERS, MAX_ROUNDS, messageSpendMax, MIN_MEMBERS, ROOM_ROUND_MAX_USD, type RoomSpend } from "./room"
 import { memberName, type RoomBook } from "./room-app"
 import type { PendingPermission, PermissionAnswer } from "./talk"
 
@@ -271,6 +271,10 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
   const [cap, setCap] = createSignal("")
   const [problem, setProblem] = createSignal<string>()
   const [saving, setSaving] = createSignal(false)
+  const capUsd = () => {
+    const usd = Number(cap().replace(",", "."))
+    return cap().trim().length > 0 && Number.isFinite(usd) && usd > 0 ? usd : undefined
+  }
 
   const toggle = (path: string, on: boolean) => {
     setMembers((all) => (on ? [...all, path] : all.filter((entry) => entry !== path)))
@@ -343,6 +347,14 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
           placeholder="0.10"
         />
         <span data-slot="bots-hint">{t("bots.room.form.capHint", ROOM_ROUND_MAX_USD)}</span>
+        {/* The cap is per round: a message may cost up to MAX_ROUNDS of them (B8b review). */}
+        <Show when={capUsd()}>
+          {(usd) => (
+            <span data-slot="bots-hint">
+              {t("bots.room.form.capPerMessage", usd().toFixed(2), MAX_ROUNDS, messageSpendMax(usd()).toFixed(2))}
+            </span>
+          )}
+        </Show>
       </label>
       <div data-slot="bots-form-actions">
         <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
