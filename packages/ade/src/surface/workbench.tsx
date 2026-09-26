@@ -5823,7 +5823,7 @@ export function Workbench() {
    * a pane that has one, where the transcript is hidden (`withPaneNotice`).
    */
   const tellPane = (id: string, text: string) => {
-    appendLine(id, text, "note")
+    appendLine(id, text, "note", "ade")
     setWb((w) => {
       const pane = w.panes.find((candidate) => candidate.id === id)
       return pane ? updatePane(w, id, { notices: withPaneNotice(pane.notices, text) }) : w
@@ -5831,7 +5831,14 @@ export function Workbench() {
   }
   const dismissNotices = (id: string) => setWb((w) => updatePane(w, id, { notices: undefined }))
 
-  const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note") => {
+  /*
+   * `from` says who wrote the line. ADE's own notes go in the transcript like
+   * the rest, but they are not the agent: read as its report, «Cerco l'ultima
+   * conversazione…» became the pane's activity and stayed in its header after
+   * the conversation was found and open (Verifiche, live 4). Nor is a note of
+   * ADE's a question the agent is asking.
+   */
+  const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note", from: "agent" | "ade" = "agent") => {
     /*
      * What is stored is the readable form; what is inspected below is the raw
      * line.
@@ -5865,6 +5872,7 @@ export function Workbench() {
       )
       setRevision((n) => n + 1)
     }
+    if (from === "ade") return
     watchForPermission(id, text)
 
     // Agents print what they are spending in among everything else. Reading it
@@ -6324,7 +6332,7 @@ export function Workbench() {
      * panes hold are left out. None found: a new one, asked for below.
      */
     if (resume?.kind === "here" && recipe?.byId) {
-      appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note")
+      appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note", "ade")
       const taken = new Set(
         wb()
           .panes.filter((pane) => pane.id !== paneId && pane.resumeId)
@@ -6346,7 +6354,7 @@ export function Workbench() {
        * are listed together: panes are often all called "Sessione 1 — nikcli".
        */
       const title = `${launched?.title || agent.label || agentId} · ${paneId.slice(-8)}`
-      appendLine(paneId, t("resume.asking", agent.label || agentId), "note")
+      appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")
       const minted = await mintConversation(agentId, agent.command, workDir, title)
       if (minted && recipe.byId) opening = { args: recipe.byId(minted), resumeId: minted }
       else tellPane(paneId, t("resume.noMint", agent.label || agentId))
