@@ -346,3 +346,47 @@ describe("the answers waiting for a pane", () => {
     expect(store.panes()).toEqual([])
   })
 })
+/*
+ * I due BASSI sull'ordine, dalla delta di `12a442315`.
+ *
+ * Entrambi vengono da una lista che esiste per non perdere risposte e che si
+ * poteva scavalcare: la strada diretta scriveva una risposta nuova davanti a
+ * quelle in attesa, e il giro provava la successiva anche quando la prima tornava
+ * indietro. Sono due casi rari — due righe `@ade` di fila e un prompt che si
+ * apre e si chiude in mezzo — e sono due risposte lette nell'ordine sbagliato,
+ * che per un agente è come ricevere risposte alle domande sbagliate.
+ */
+describe("l'ordine delle risposte di un pannello", () => {
+  const now = 1_000_000
+  const first = { id: "proc-1" }
+
+  test("una risposta nuova non sorpassa quelle in attesa (BASSO 1)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    // Nothing waiting: the answer goes straight out, as it always did.
+    expect(store.admit("p1", first, "Prima", now)).toBe(true)
+    // A is held, B arrives while A is still waiting.
+    store.queue("p1", first, "A", now + 1)
+    // B is not written now, and not lost either: it is behind A.
+    expect(store.admit("p1", first, "B", now + 2)).toBe(false)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // The round writes them in the order they were made.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
+  })
+
+  test("una risposta trattenuta torna in fondo, ed e' per questo che il giro si ferma (BASSO 2)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "A", now)
+    store.queue("p1", first, "B", now + 1)
+    const { waits } = store.claim("p1", now + 2)
+    // The round takes the first and cannot give it: a prompt opened again.
+    store.take("p1", "A")
+    store.restore("p1", first, "A", waits[0]!.at)
+    // A is at the end now, so B going through would arrive before it — which is
+    // what the `break` in `flushPanelReplies` prevents. This is the state that
+    // makes the break necessary, and the reason the `break` is not optional.
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["B", "A"])
+    // The next round starts from the top again, and the order it writes is the
+    // order on the pane: the held one, because it is first to be tried.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["B", "A"])
+  })
+})

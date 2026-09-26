@@ -166,6 +166,21 @@ export interface PanelReplyWait {
  * not the text.
  */
 export interface PendingPanelReplies<S> {
+  /**
+   * A new answer for a pane that is free: written out at once when nothing is
+   * waiting for it, and queued at the end when something is.
+   *
+   * That is the whole of the ordering rule, and it is here rather than in the
+   * caller so that a test can reach it. Writing straight out with answers already
+   * waiting does two wrong things at once: the new answer overtakes the old ones,
+   * and if it then cannot be given it is dropped, because the check that used to
+   * follow saw the *older* answers waiting and read them as a reason to leave
+   * this one out. The list exists so that the second answer does not cancel the
+   * first, and an answer that skips the list is the same bug wearing a hat.
+   *
+   * True when the caller may write it now; false when it has been queued instead.
+   */
+  admit(paneId: string, session: S, text: string, now?: number): boolean
   /** Waits an answer for `session`, after the ones already waiting for it. */
   queue(paneId: string, session: S, text: string, now?: number): void
   /** Takes one answer out, so the round sending it cannot send it twice. True when it was there. */
@@ -190,6 +205,13 @@ export interface PendingPanelReplies<S> {
 export function createPendingPanelReplies<S>(): PendingPanelReplies<S> {
   const entries = new Map<string, { session: S; waits: PanelReplyWait[] }>()
   return {
+    admit(paneId, session, text, now = Date.now()) {
+      if (entries.get(paneId)?.waits.length) {
+        this.queue(paneId, session, text, now)
+        return false
+      }
+      return true
+    },
     queue(paneId, session, text, now = Date.now()) {
       const entry = entries.get(paneId)
       // A different session on the same pane: the old answers were for a process
