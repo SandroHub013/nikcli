@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { CHAT_PERMISSION, type PermissionRule } from "../chat/rules"
 import type { ChatEvent } from "../chat/events"
-import type { NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
+import type { ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
@@ -542,7 +542,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
 describe("the bot's catalog read has a time limit", () => {
   test("a server that never answers gives an unknown catalog, in time", async () => {
     const never = () => new Promise<never>(() => {})
-    const client = { provider: { list: never }, config: { get: never } } as unknown as NikcliClient
+    const client = { provider: { list: never }, config: { get: never, providers: never } } as unknown as NikcliClient
     const started = Date.now()
     expect(await serveClientOf(client, 20).catalog()).toEqual({})
     expect(Date.now() - started).toBeLessThan(1000)
@@ -594,5 +594,57 @@ describe("the bots' catalog is kept", () => {
     const result = await runServeTurn(panel(), deps).result
     expect(result.status).toBe("done")
     expect(reads).toEqual([false, true])
+  })
+})
+
+/*
+ * chat-bot-facili, pezzo 0: nikcli drops a variant its model does not have
+ * without a word (`session/llm.ts`), and the turn ran at the default as if
+ * the bot's effort had been used. The variants are the server's own, after
+ * the configuration (`GET /config/providers`).
+ */
+describe("a bot's effort is one its model has", () => {
+  const MODEL = { providerID: "openrouter", modelID: "nvidia/nemotron-3-super-120b-a12b:free" }
+  const configured = (variants: Record<string, object> | undefined) =>
+    ({
+      providers: [{ id: "openrouter", name: "OpenRouter", models: { [MODEL.modelID]: { id: MODEL.modelID, ...(variants ? { variants } : {}) } } }],
+      default: {},
+    }) as unknown as ConfigProviders
+
+  test("one of the model's variants is sent", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, high: {} }) } })
+    await runServeTurn(panel(), fake.deps).result
+    expect(fake.calls.prompts.map((prompt) => prompt.variant)).toEqual(["high"])
+  })
+
+  test("a name the model does not have is not sent, and the thread says so", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, medium: {} }) } })
+    const mine = thread()
+    const result = await runServeTurn(panel({ onChange: mine.onChange }), fake.deps).result
+    expect(result.status).toBe("done")
+    expect(fake.calls.prompts).toHaveLength(1)
+    expect("variant" in fake.calls.prompts[0]!).toBe(false)
+    const note = t("bots.serve.effortDropped", "high", BOT.model!, "low, medium")
+    expect(mine.talk.messages.filter((message) => message.text === note).map((message) => message.tool)).toEqual(["ade"])
+  })
+
+  test("a model without variants sends none, and says it has no levels", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured(undefined) } })
+    const mine = thread()
+    await runServeTurn(panel({ onChange: mine.onChange }), fake.deps).result
+    expect("variant" in fake.calls.prompts[0]!).toBe(false)
+    expect(mine.talk.messages.some((message) => message.text === t("bots.serve.effortDropped", "high", BOT.model!, ""))).toBe(true)
+  })
+
+  test("the server's client reads the configured providers into the catalog", async () => {
+    const providers = configured({ low: {} })
+    const client = {
+      provider: { list: async () => ({ data: catalogOf(BOT.model!) }) },
+      config: { get: async () => ({ data: {} }), providers: async () => ({ data: providers }) },
+    } as unknown as NikcliClient
+    expect((await serveClientOf(client, 1_000).catalog()).configProviders).toBe(providers)
   })
 })
