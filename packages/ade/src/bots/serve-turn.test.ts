@@ -141,6 +141,18 @@ function thread() {
   }
 }
 
+const busyOf = (): ChatEvent => ({ type: "session.status", properties: { sessionID: SESSION, status: { type: "busy" } } })
+const askedOf = (id: string, command: string): ChatEvent => ({
+  type: "permission.asked",
+  properties: { id, sessionID: SESSION, permission: "bash", patterns: [command], metadata: {}, always: [] },
+})
+
+/** Lets the turn's promises and the stream run until `done` holds. */
+async function settleUntil(done: () => boolean) {
+  for (let i = 0; i < 200 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(done()).toBe(true)
+}
+
 const panel = (extra: Partial<TurnRequest> = {}): TurnRequest => ({
   runner: "nikcli",
   bot: BOT,
@@ -304,10 +316,10 @@ describe("B8d: a bot's turn on ADE's server", () => {
       panel({
         onPermission: (question) => {
           seen.push(question)
-          if (question.requestID === "per_1") queueMicrotask(() => turn!.answer!("once"))
+          if (question.requestID === "per_1") queueMicrotask(() => turn!.answer!("per_1", "once"))
           else
             queueMicrotask(() => {
-              turn!.answer!("reject")
+              turn!.answer!("per_2", "reject")
               fake.stream.push(status("idle"))
             })
         },
@@ -332,6 +344,24 @@ describe("B8d: a bot's turn on ADE's server", () => {
     await runServeTurn(panel({ approvals: false, onChange: mine.onChange }), alone.deps).result
     expect(alone.calls.replies).toEqual([["per_0da520816001IQYwLvYn7EtWvH", "reject"]])
     expect(mine.talk.messages.some((message) => message.text === t("bots.serve.refused", "bash", "mkdir prova-permesso"))).toBe(true)
+  })
+
+  /* B8d review, M1. */
+  test("an answer to a question the server settled meanwhile goes nowhere, not to the one shown in its place", async () => {
+    const seen: string[] = []
+    const fake = server({ onPrompt: (stream) => stream.push(busyOf(), askedOf("per_A", "git push --force"), askedOf("per_B", "rm -r x")) })
+    const turn = runServeTurn(panel({ onPermission: (question) => void seen.push(question.requestID!) }), fake.deps)
+    await settleUntil(() => seen.length === 1)
+    fake.stream.push({ type: "permission.replied", properties: { sessionID: SESSION, requestID: "per_A", reply: "reject" } })
+    await settleUntil(() => seen.length === 2)
+    expect(seen).toEqual(["per_A", "per_B"])
+    turn.answer!("per_A", "once")
+    await Promise.resolve()
+    expect(fake.calls.replies).toEqual([])
+    turn.answer!("per_B", "reject")
+    expect(fake.calls.replies).toEqual([["per_B", "reject"]])
+    fake.stream.push({ type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+    expect((await turn.result).status).toBe("done")
   })
 
   test("the server's error ends the turn as one, with its words on the thread", async () => {

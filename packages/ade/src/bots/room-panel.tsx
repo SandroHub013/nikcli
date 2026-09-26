@@ -29,7 +29,8 @@ export interface RoomPanelDeps {
   readonly speaking: (roomId: string) => string | undefined
   /** The question a member's turn in a room is waiting on. */
   readonly permission: (roomId: string, path: string) => PendingPermission | undefined
-  readonly answer: (path: string, choice: PermissionAnswer) => void
+  /** With the id of the question shown (B8d review, M1): an answer to one no longer there goes nowhere. */
+  readonly answer: (path: string, choice: PermissionAnswer, requestID: string | undefined) => void
   /** Whether the message went: one that did not comes back into the composer. */
   readonly send: (roomId: string, text: string) => Promise<boolean>
   readonly stop: (roomId: string) => void
@@ -184,15 +185,15 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                     </Show>
                   </span>
                   <span data-slot="bots-permission-actions">
-                    <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "reject")}>
+                    <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "reject", pending().requestID)}>
                       {t("bots.permission.deny")}
                     </button>
                     <Show when={(pending().always?.length ?? 0) > 0}>
-                      <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "always")}>
+                      <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "always", pending().requestID)}>
                         {t("bots.approval.always")}
                       </button>
                     </Show>
-                    <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.deps.answer(speaking()!, "once")}>
+                    <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.deps.answer(speaking()!, "once", pending().requestID)}>
                       {t("bots.permission.allow")}
                     </button>
                   </span>

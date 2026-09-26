@@ -160,8 +160,11 @@ export interface Turn {
   readonly result: Promise<TurnResult>
   /** Ends the turn early, with the CLI's child processes; the result resolves as `stopped`. */
   readonly stop: () => void
-  /** The answer to the question `onPermission` gave: nikcli on ADE's server (B8d). */
-  readonly answer?: (reply: "once" | "reject") => void
+  /**
+   * The answer to the question `onPermission` gave, by its id: nikcli on ADE's
+   * server (B8d). An answer to a question no longer on screen goes nowhere.
+   */
+  readonly answer?: (requestID: string, reply: "once" | "reject") => void
 }
 
 /* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */

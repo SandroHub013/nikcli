@@ -24,11 +24,30 @@ describe("the command shown on the phone", () => {
     const answers: string[] = []
     const ended = new AbortController()
     ended.abort()
-    permissionAnswerer({ ask: async () => "once", refuse: false, answer: (reply) => void answers.push(reply), say: () => {}, signal: ended.signal })({
+    permissionAnswerer({ ask: async () => "once", refuse: false, answer: (_id, reply) => void answers.push(reply), say: () => {}, signal: ended.signal })({
       permission: "bash",
       patterns: "rm -rf /",
       askedAt: 0,
     })
     expect(answers).toEqual([])
+  })
+
+  /* B8d review, M1: every answer names the question it is for. */
+  test("an answer carries the id of its question: refused at once, or from the phone", async () => {
+    const answers: [string | undefined, string][] = []
+    const answerer = permissionAnswerer({
+      ask: async () => "once",
+      refuse: false,
+      answer: (id, reply) => void answers.push([id, reply]),
+      say: () => {},
+      signal: new AbortController().signal,
+    })
+    answerer({ requestID: "per_blocco", permission: "bash", patterns: "rm -rf /", askedAt: 0 })
+    answerer({ requestID: "per_telefono", permission: "bash", patterns: "git push --force", askedAt: 0 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(answers).toEqual([
+      ["per_blocco", "reject"],
+      ["per_telefono", "once"],
+    ])
   })
 })

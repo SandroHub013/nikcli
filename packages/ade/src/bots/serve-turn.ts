@@ -158,7 +158,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     over = how
     resolveEnd(how)
   }
-  let answer: ((reply: "once" | "reject") => void) | undefined
+  let answer: ((requestID: string, reply: "once" | "reject") => void) | undefined
 
   const result = (async (): Promise<TurnResult> => {
     let talk = sendMessage(emptyTalk(), request.message, now())
@@ -269,9 +269,14 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         shown = next.requestID
         request.onPermission?.(next)
       }
-      answer = (reply) => {
+      /*
+       * Only the question on screen, by its id (B8d review, M1): one the
+       * server settled meanwhile, and the next one shown in its place, must
+       * not take an answer given to the first.
+       */
+      answer = (requestID, reply) => {
         const id = shown
-        if (id === undefined) return
+        if (id === undefined || id !== requestID) return
         shown = undefined
         void server.reply(id, reply).catch(() => {})
         showNext()
@@ -442,7 +447,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       stopped = true
       end({ kind: "stopped" })
     },
-    answer: (reply) => answer?.(reply),
+    answer: (requestID, reply) => answer?.(requestID, reply),
   }
 }
 

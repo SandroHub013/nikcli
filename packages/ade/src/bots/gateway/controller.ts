@@ -264,7 +264,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
           ? permissionAnswerer({
               ask: (question, choices, signal) => ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
               refuse: !remote.commands,
-              answer: (reply) => turn?.answer?.(reply),
+              answer: (requestID, reply) => {
+                if (requestID !== undefined) turn?.answer?.(requestID, reply)
+              },
               say: (text) => void reply(message, text),
               signal: ended.signal,
             })

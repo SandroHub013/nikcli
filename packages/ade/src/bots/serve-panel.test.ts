@@ -9,6 +9,7 @@ import type { AgentFile } from "./nikcli"
 import { admitProject } from "./project-trust"
 import { runRoutine } from "./routine"
 import { botPermission } from "./serve-rules"
+import { permissionAnswerer } from "./gateway/approval"
 import { appServeTurnDeps, runBotTurn, runServeTurn, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type Talk } from "./talk"
 import type { TrustStore } from "./trust"
@@ -134,7 +135,7 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     expect(view.talk().status).toBe("waiting")
     expect(view.talk().permission?.reason).toBeTruthy()
     expect(fake.replies.length).toBe(2)
-    view.turns.answer(BOT, "always")
+    view.turns.answer(BOT, "always", "per_3")
     await until(() => fake.replies.length === 3)
     expect(fake.replies[2]).toEqual(["per_3", "once"])
     expect(view.kept[BOT.path]?.length).toBeGreaterThan(0)
@@ -176,7 +177,7 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     fake.push(status("busy"), asked("per_r", "git push --force"))
     await until(() => view.talk(thread).permission?.requestID === "per_r")
     expect(view.talk().permission).toBeUndefined()
-    view.turns.answer(BOT, "reject")
+    view.turns.answer(BOT, "reject", "per_r")
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_r", "reject"])
     view.turns.stop(BOT)
@@ -213,8 +214,8 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     await started(fake, view)
     fake.push(asked("per_1", "git push --force"))
     await until(() => view.talk().permission?.requestID === "per_1")
-    view.turns.answer(BOT, "once")
-    view.turns.answer(BOT, "once")
+    view.turns.answer(BOT, "once", "per_1")
+    view.turns.answer(BOT, "once", "per_1")
     await until(() => fake.replies.length === 1)
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(fake.replies).toEqual([["per_1", "once"]])
@@ -231,7 +232,7 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     await until(() => view.talk().permission?.requestID === "per_1")
     expect(view.talk().permission).toMatchObject({ always: ["recursiveDelete", "gitRewrite"] })
     expect(fake.replies).toEqual([])
-    view.turns.answer(BOT, "always")
+    view.turns.answer(BOT, "always", "per_1")
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_1", "once"])
     expect(view.kept[BOT.path]).toEqual(["recursiveDelete", "gitRewrite"])
@@ -267,7 +268,7 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     expect(waiting).toMatchObject({ always: ["gitRewrite"] })
     expect(waiting.reason).toBeTruthy()
     expect(waiting.expiresAt! - waiting.askedAt).toBe(APPROVAL_TIMEOUT_MS)
-    view.turns.answer(BOT, "always")
+    view.turns.answer(BOT, "always", "per_1")
     await until(() => first.replies.length === 1)
     // ADE's «Sempre», sent to nikcli as a once: never nikcli's own «always».
     expect(first.replies[0]).toEqual(["per_1", "once"])
@@ -280,7 +281,7 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     second.push(asked("per_3", "git push -f"))
     await until(() => view.talk(other.path).permission?.requestID === "per_3")
     expect(view.talk(other.path).permission).toMatchObject({ always: ["gitRewrite"] })
-    view.turns.answer(other, "reject")
+    view.turns.answer(other, "reject", "per_3")
     await until(() => second.replies.length === 1)
     expect(second.replies[0]).toEqual(["per_3", "reject"])
     expect(view.kept[other.path]).toBeUndefined()
@@ -311,7 +312,7 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     await started(fake, view)
     fake.push(asked("per_1", "rm -rf build"))
     await until(() => view.talk().permission?.requestID === "per_1")
-    view.turns.answer(BOT, "once")
+    view.turns.answer(BOT, "once", "per_1")
     expect(view.timers.at(-1)!.cancelled).toBe(true)
     view.turns.stop(BOT)
   })
@@ -334,6 +335,74 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     await turn!.result
     await until(() => !view.turns.running(BOT.path))
     expect(view.turns.threadOf(BOT.path)).toBe(BOT.path)
+  })
+})
+
+/*
+ * B8d review, M1: an answer goes to the question it was given for. A question
+ * the server settles meanwhile is replaced on screen by the next one; a click
+ * or a phone's «Sì» given to the first must not approve the second.
+ */
+describe("B8d: an answer is for its own question only", () => {
+  const replied = (id: string): ChatEvent => ({ type: "permission.replied", properties: { sessionID: SESSION, requestID: id, reply: "reject" } })
+
+  for (const where of ["panel", "room"] as const) {
+    test(`${where === "panel" ? "the panel" : "a room"}: a click on the card of a question settled meanwhile does not answer the next one`, async () => {
+      const fake = server()
+      const view = panel(fake)
+      const thread = where === "room" ? `room:r1:${BOT.path}` : BOT.path
+      if (where === "room") view.turns.room(BOT, "tocca a te", thread, "C:/progetto")
+      else view.turns.send(BOT, "ciao", "C:/progetto")
+      await until(() => fake.prompts.length === 1)
+      fake.push(status("busy"), asked("per_A", "git push --force"), asked("per_B", "git push -f origin main"))
+      await until(() => view.talk(thread).permission?.requestID === "per_A")
+      fake.push(replied("per_A"))
+      await until(() => view.talk(thread).permission?.requestID === "per_B")
+      // The click was on A's card.
+      view.turns.answer(BOT, "once", "per_A")
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(fake.replies).toEqual([])
+      expect(view.talk(thread).permission?.requestID).toBe("per_B")
+      view.turns.answer(BOT, "reject", "per_B")
+      await until(() => fake.replies.length === 1)
+      expect(fake.replies).toEqual([["per_B", "reject"]])
+      view.turns.stop(BOT)
+    })
+  }
+
+  test("the phone: a «Sì» to a question settled meanwhile does not approve the next one", async () => {
+    const fake = server()
+    const phone: { question: string; answer: (value: string | undefined) => void }[] = []
+    let turn: ReturnType<typeof runServeTurn> | undefined
+    const ended = new AbortController()
+    const onPermission = permissionAnswerer({
+      ask: (question) => new Promise((resolve) => phone.push({ question, answer: resolve })),
+      refuse: false,
+      answer: (id, reply) => {
+        if (id !== undefined) turn?.answer?.(id, reply)
+      },
+      say: () => {},
+      signal: ended.signal,
+    })
+    turn = runServeTurn(
+      { runner: "nikcli", bot: BOT, message: "ciao", cwd: "C:/progetto", remote: { commands: true }, onPermission },
+      fake.deps,
+    )
+    await until(() => fake.prompts.length === 1)
+    fake.push(status("busy"), asked("per_A", "git push --force"), asked("per_B", "npm publish"))
+    await until(() => phone.length === 1)
+    fake.push(replied("per_A"))
+    await until(() => phone.length === 2)
+    expect(phone[1]!.question).toContain("npm publish")
+    phone[0]!.answer("once")
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(fake.replies).toEqual([])
+    phone[1]!.answer("reject")
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies).toEqual([["per_B", "reject"]])
+    ended.abort()
+    turn.stop()
+    await turn.result
   })
 })
 

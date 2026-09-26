@@ -87,11 +87,12 @@ export interface BotTurns {
   /** The thread of `bot`'s turn under way: its own, or its place in a room. */
   threadOf: (path: string) => string
   /**
-   * The user's answer to the question on screen: Consenti (`once`), Nega
-   * (`reject`), or Sempre (`always`), which is ADE's for this bot and goes to
-   * nikcli as a once: nikcli's own «always» is the project's, every bot's.
+   * The user's answer to the question on screen, `requestID` (B8d): Consenti
+   * (`once`), Nega (`reject`), or Sempre (`always`), which is ADE's for this
+   * bot and goes to nikcli as a once: nikcli's own «always» is the project's,
+   * every bot's. Nothing happens when the question on screen is another.
    */
-  answer: (bot: AgentFile, choice: PermissionAnswer) => void
+  answer: (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => void
   /**
    * «Annulla» on a memory line of the thread (B8a review): the write taken
    * back, while its block is as the write left it; the line says what came of it.
@@ -126,11 +127,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     expiries.delete(path)
   }
 
-  /** Answers nikcli's question and closes it; a line in the thread when there is something to say. */
-  const reply = (path: string, turn: Turn, answer: "once" | "reject", line?: string) => {
+  /** Answers nikcli's question `asked` and closes it; a line in the thread when there is something to say. */
+  const reply = (path: string, turn: Turn, asked: PendingPermission, answer: "once" | "reject", line?: string) => {
     cancelExpiry(path)
-    // On ADE's server the question has an id (B8d): the answer goes to it.
-    turn.answer?.(answer)
+    // On ADE's server the question has an id (B8d): the answer goes to it, and to no other (review, M1).
+    if (asked.requestID !== undefined) turn.answer?.(asked.requestID, answer)
     const at = now()
     deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
@@ -147,8 +148,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const path = bot.path
     const verdict = decide(asked.permission, asked.patterns, always.get(path))
     if (verdict.kind === "block")
-      return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
-    if (verdict.kind === "allow") return reply(path, turn, "once")
+      return reply(path, turn, asked, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
+    if (verdict.kind === "allow") return reply(path, turn, asked, "once")
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(threadOf(path), (talk) =>
       talk.permission === asked
@@ -170,7 +171,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         expiries.delete(path)
         const still = deps.talkOf(threadOf(path)).permission
         if (turns.get(path) !== turn || still?.askedAt !== asked.askedAt) return
-        reply(path, turn, "reject", t("bots.approval.expired", asked.patterns))
+        reply(path, turn, asked, "reject", t("bots.approval.expired", asked.patterns))
       }, APPROVAL_TIMEOUT_MS),
     )
   }
@@ -216,7 +217,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
      * not left waiting until the turn runs out of time.
      */
     const ask = (asked: PendingPermission) => {
-      if (routine) return reply(path, turn, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
+      if (routine) return reply(path, turn, asked, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
       settle(bot, turn, asked)
     }
     const request: TurnRequest = {
@@ -367,13 +368,15 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         )
       })
     },
-    answer: (bot, choice) => {
+    answer: (bot, choice, requestID) => {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(threadOf(bot.path)).permission
       if (!turn || !asked) return
+      // The card the user clicked, not whatever question took its place meanwhile (review, M1).
+      if (asked.requestID !== requestID) return
       // Every danger of the command: «Sempre» on one must not let the others through (M3).
       if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
-      reply(bot.path, turn, choice === "reject" ? "reject" : "once")
+      reply(bot.path, turn, asked, choice === "reject" ? "reject" : "once")
     },
     grant: (bot) => {
       const offer = deps.talkOf(bot.path).offer

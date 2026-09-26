@@ -429,17 +429,18 @@ describe("the tools of a turn from a chat", () => {
 
   /** Turns that record the answers given to them. */
   function typedTurns() {
-    const started: { request: TurnRequest; keys: string[]; finish: () => void }[] = []
+    const started: { request: TurnRequest; keys: string[]; ids: string[]; finish: () => void }[] = []
     const runTurn = (request: TurnRequest): Turn => {
       let resolve!: (result: TurnResult) => void
       const result = new Promise<TurnResult>((done) => (resolve = done))
       const entry = {
         request,
         keys: [] as string[],
+        ids: [] as string[],
         finish: () => resolve({ status: "done", text: "Fatto.", tokens: 0, costUsd: 0, talk: emptyTalk() }),
       }
       started.push(entry)
-      return { result, stop: () => entry.finish(), answer: (reply) => void entry.keys.push(reply) }
+      return { result, stop: () => entry.finish(), answer: (requestID, reply) => void (entry.keys.push(reply), entry.ids.push(requestID)) }
     }
     return { started, runTurn }
   }
@@ -552,6 +553,8 @@ describe("the tools of a turn from a chat", () => {
     b.emit(question.buttons[0]!.data, { button: true })
     await until("il sì", () => turn.keys.length === 1)
     expect(turn.keys).toEqual(["once"])
+    // The yes names its own question (B8d review, M1).
+    expect(turn.ids).toEqual(["per_rm -rf build"])
     // The next command is asked again: a yes is for one command.
     turn.request.onPermission!(asking("bash", "npm publish"))
     await until("la seconda domanda", () => b.questions.length === 2)

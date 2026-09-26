@@ -68,8 +68,8 @@ export function permissionAnswerer(deps: {
   readonly ask: Ask
   /** Answer no at once, without asking: the bot's remote commands are off. */
   readonly refuse: boolean
-  /** The answer to the question under way (`Turn.answer`). */
-  readonly answer: (reply: "once" | "reject") => void
+  /** The answer to the question with that id (`Turn.answer`): never to another that took its place. */
+  readonly answer: (requestID: string | undefined, reply: "once" | "reject") => void
   /** A line for the chat, when a question went unanswered. */
   readonly say: (text: string) => void
   /** Aborted when the turn ends: a question still waiting gets no answer. */
@@ -82,12 +82,12 @@ export function permissionAnswerer(deps: {
     // No «Sempre» from a chat: every command is asked, the block list refused.
     const verdict = decide(pending.permission, pending.patterns, [])
     if (verdict.kind === "block") {
-      deps.answer("reject")
+      deps.answer(pending.requestID, "reject")
       deps.say(t("gateway.approve.blocked", command, t(verdict.rule.reason)))
       return
     }
     if (deps.refuse) {
-      deps.answer("reject")
+      deps.answer(pending.requestID, "reject")
       // Said once per permission: a bot that keeps trying does not flood the chat.
       if (!refused.has(pending.permission)) {
         refused.add(pending.permission)
@@ -98,7 +98,7 @@ export function permissionAnswerer(deps: {
     const danger =
       verdict.kind === "ask" && (verdict.keys ?? []).every((key) => !key.startsWith("tool:")) ? verdict.reason : undefined
     void approveOnPhone(pending, deps.ask, deps.signal, danger).then(({ answer, expired }) => {
-      if (!deps.signal.aborted) deps.answer(answer)
+      if (!deps.signal.aborted) deps.answer(pending.requestID, answer)
       if (expired) deps.say(t("gateway.approve.expired"))
     })
   }

@@ -450,9 +450,9 @@ const roomDeps: RoomPanelDeps = {
   bots: () => shared.roster() ?? [],
   speaking: (roomId) => roomSpeaking()[roomId],
   permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
-  answer: (path, choice) => {
+  answer: (path, choice, requestID) => {
     const bot = seatBots.get(path)
-    if (bot) turns.answer(bot, choice)
+    if (bot) turns.answer(bot, choice, requestID)
   },
   send: async (roomId, text) => {
     // The run goes on after the message is in: its end and its problems are the room's note.
@@ -801,7 +801,7 @@ export function BotsMain(props: BotsMainProps) {
     return turns.send(verdict.bot, message, props.projectRoot)
   }
 
-  const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
+  const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => turns.answer(bot, choice, requestID)
 
   // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
   const gateway =
@@ -841,7 +841,7 @@ export function BotsMain(props: BotsMainProps) {
               others={identifiers().filter((name) => name !== bot().identifier)}
               expression={expression(bot())}
               onSend={(text) => send(bot(), text)}
-              onAnswer={(choice) => answer(bot(), choice)}
+              onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
               onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
             />
@@ -992,7 +992,8 @@ function Thread(props: {
   expression: Expression
   /** Whether the message went: one that did not comes back into the composer. */
   onSend: (text: string) => boolean | Promise<boolean>
-  onAnswer: (choice: PermissionAnswer) => void
+  /** With the id of the question the card shows (B8d review, M1). */
+  onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
   onGrant: () => void
   onStop: () => void
@@ -1072,16 +1073,16 @@ function Thread(props: {
                 </Show>
               </span>
               <span data-slot="bots-permission-actions">
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
+                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
                   {t("bots.permission.deny")}
                 </button>
                 {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
                 <Show when={(asked().always?.length ?? 0) > 0}>
-                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
+                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always", asked().requestID)}>
                     {t("bots.approval.always")}
                   </button>
                 </Show>
-                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
+                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once", asked().requestID)}>
                   {t("bots.permission.allow")}
                 </button>
               </span>
