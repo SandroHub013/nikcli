@@ -17,6 +17,14 @@
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import { APPROVAL_TIMEOUT_MS, decide, localAlwaysStore, type AlwaysStore } from "./approval"
+import {
+  memoryPreface,
+  settleMemoryOps,
+  takeMemoryOps,
+  undoMemoryWrite,
+  type MemoryOp,
+  type MemoryStore,
+} from "./memory"
 import type { AgentFile } from "./nikcli"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
@@ -53,6 +61,8 @@ export interface BotTurnsDeps {
   readonly accountOf?: (path: string) => BotAccount
   /** Each bot's «Sempre» (B8c). */
   readonly always?: AlwaysStore
+  /** Each bot's memory (B8a); absent, the bots have none. */
+  readonly memory?: MemoryStore
   /** Runs `run` after `ms`; the function returned cancels it. For tests. */
   readonly schedule?: (run: () => void, ms: number) => () => void
   readonly now?: () => number
@@ -75,6 +85,11 @@ export interface BotTurns {
    * nikcli as a once: nikcli's own «always» is the project's, every bot's.
    */
   answer: (bot: AgentFile, choice: PermissionAnswer) => void
+  /**
+   * «Annulla» on a memory line of the thread (B8a review): the write taken
+   * back, while its block is as the write left it; the line says what came of it.
+   */
+  undoMemory: (bot: AgentFile, messageId: string) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (`Talk.offer`): allowed from the next turn. */
   grant: (bot: AgentFile) => void
   /** «Ferma»: the turn ends, with its child processes; the thread stays. */
@@ -120,7 +135,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const settle = (bot: AgentFile, turn: Turn, asked: PendingPermission) => {
     const path = bot.path
     const verdict = decide(asked.permission, asked.patterns, always.get(path), asked.cut === true)
-    if (verdict.kind === "block") return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
+    if (verdict.kind === "block")
+      return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
     if (verdict.kind === "allow") return reply(path, turn, "once")
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(path, (talk) =>
@@ -161,6 +177,20 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
     const sessionId = deps.talkOf(path).sessionId
+    /*
+     * The bot's memory (B8a): its snapshot opens a conversation and nothing
+     * after, so it stays as it was until the next one; what the last writes
+     * came to is said once, on the turn after them.
+     */
+    const memory = deps.memory?.get(path)
+    const preface = memory ? memoryPreface(memory, !sessionId) : ""
+    if (memory?.pending && deps.memory) {
+      const { pending: _told, ...kept } = memory
+      deps.memory.set(path, kept)
+    }
+    const sent = preface ? `${preface}\n\n${message}` : message
+    /* The thread's messages from here on are this turn's. */
+    const from = deps.talkOf(path).messages.length
     const current = () => turns.get(path) === turn
     const readMenu = permissionMenuReader({
       schedule,
@@ -182,7 +212,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const request: TurnRequest = {
       runner: runner.id,
       bot,
-      message,
+      message: sent,
       account,
       ...(sessionId ? { sessionId } : {}),
       ...(cwd ? { cwd } : {}),
@@ -206,6 +236,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     turns.set(path, turn)
     void turn.result.then((result) => {
       if (!current()) return
+      settleMemory(path, from, routine ? "routine" : "panel")
       turns.delete(path)
       cancelExpiry(path)
       const at = Date.now()
@@ -220,6 +251,64 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
 
   const send = (bot: AgentFile, message: string, cwd?: string): boolean => begin(bot, message, cwd, undefined) !== undefined
 
+  /**
+   * The memory tags in what the bot said this turn: taken out of its words,
+   * applied in order, and each outcome a line in the thread. What failed
+   * reaches the bot at the start of its next turn (`memoryPreface`).
+   */
+  const settleMemory = (path: string, from: number, source: "panel" | "routine") => {
+    const store = deps.memory
+    if (!store) return
+    const said = deps
+      .talkOf(path)
+      .messages.slice(from)
+      .filter((message) => message.role === "bot")
+    const texts = new Map<string, string>()
+    const ops: MemoryOp[] = []
+    let unreadable = 0
+    for (const message of said) {
+      const taken = takeMemoryOps(message.text)
+      if (taken.ops.length === 0 && taken.unreadable === 0) continue
+      texts.set(message.id, taken.text)
+      ops.push(...taken.ops)
+      unreadable += taken.unreadable
+    }
+    if (texts.size === 0) return
+    /*
+     * The user's profile is the block the model believes most: a write to it
+     * waits for the user's click in the Memoria section (B8a review). So does
+     * every write of a routine: nobody was there to see it.
+     */
+    const { memory, lines } = settleMemoryOps(store.get(path), ops, () => crypto.randomUUID(), {
+      propose: (op) => source === "routine" || op.block === "user",
+      from: source,
+      at: now(),
+    })
+    // The bot hears of what failed, and of what waits for the user.
+    const failures = lines.flatMap((line) => (!line.ok || line.proposal ? [line.text] : []))
+    if (unreadable > 0) failures.push(t("bots.memory.error.unreadable", unreadable))
+    store.set(path, { ...memory, ...(failures.length > 0 ? { pending: failures } : {}) })
+    const at = now()
+    deps.update(path, (talk) => {
+      const messages = talk.messages
+        .map((message) => (texts.has(message.id) ? { ...message, text: texts.get(message.id)! } : message))
+        .filter((message) => !(texts.has(message.id) && message.text.length === 0))
+      let next: Talk = { ...talk, messages }
+      for (const line of lines) {
+        next = appendMessage(
+          next,
+          line.ok
+            ? { role: "tool", tool: "ade", text: line.text, ...(line.undo ? { memoryUndo: line.undo } : {}) }
+            : { role: "error", text: line.text },
+          at,
+        )
+      }
+      if (unreadable > 0)
+        next = appendMessage(next, { role: "error", text: t("bots.memory.error.unreadable", unreadable) }, at)
+      return next
+    })
+  }
+
   /** Ends the turn of `path`, if any, and forgets it: what it still says goes nowhere. */
   const end = (path: string): Turn | undefined => {
     const turn = turns.get(path)
@@ -233,6 +322,26 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   return {
     send,
     routine: (bot, message, cwd, run) => begin(bot, message, cwd, run ?? {}),
+    undoMemory: (bot, messageId) => {
+      const store = deps.memory
+      const line = deps.talkOf(bot.path).messages.find((message) => message.id === messageId)
+      if (!store || !line?.memoryUndo) return
+      const result = undoMemoryWrite(store.get(bot.path), line.memoryUndo)
+      store.set(bot.path, result.memory)
+      const at = now()
+      deps.update(bot.path, (talk) => {
+        const messages = talk.messages.map((message) => {
+          if (message.id !== messageId) return message
+          const { memoryUndo: _done, ...rest } = message
+          return rest
+        })
+        return appendMessage(
+          { ...talk, messages },
+          result.ok ? { role: "tool", tool: "ade", text: result.message } : { role: "error", text: result.error },
+          at,
+        )
+      })
+    },
     answer: (bot, choice) => {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(bot.path).permission
@@ -249,7 +358,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       for (const key of offer.always) always.add(bot.path, key)
       deps.update(bot.path, (talk) => {
         const { offer: _done, ...rest } = talk
-        return appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) }, now())
+        return appendMessage(
+          rest,
+          { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) },
+          now(),
+        )
       })
     },
     stop: (bot) => {

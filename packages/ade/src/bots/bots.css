@@ -883,6 +883,26 @@
   gap: var(--ade-space-2);
 }
 
+[data-slot="gateway-list"] li[data-slot="memory-entry"] {
+  align-items: flex-start;
+}
+
+[data-slot="memory-actions"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  flex: 0 0 auto;
+}
+
+[data-slot="memory-actions"] [data-slot="bots-link"] { margin-left: 0; }
+
+[data-slot="memory-text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ade-text);
+}
+
 [data-slot="bots-hint"][data-state="warn"] {
   color: var(--ade-warning, var(--ade-text-soft));
 }

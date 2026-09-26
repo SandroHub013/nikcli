@@ -43,6 +43,8 @@ export interface TalkMessage {
   readonly tool?: string
   /** What the tool printed, when nikcli included it (bash does). */
   readonly output?: string
+  /** A memory write this line reports, still undoable from here (`MemoryUndo`, B8a). */
+  readonly memoryUndo?: string
   readonly at: number
 }
 
@@ -558,7 +560,14 @@ function forStorage<T extends { readonly role: TalkRole; readonly text: string; 
 /** A message put on the thread, with an id of its kind. Used by the runners' adapters. */
 export function appendMessage(
   talk: Talk,
-  message: { readonly role: TalkRole; readonly text: string; readonly tool?: string; readonly output?: string; readonly id?: string },
+  message: {
+    readonly role: TalkRole
+    readonly text: string
+    readonly tool?: string
+    readonly output?: string
+    readonly id?: string
+    readonly memoryUndo?: string
+  },
   at: number,
 ): Talk {
   const prefix = message.role === "user" ? "u" : message.role === "bot" ? "b" : message.role === "tool" ? "t" : "e"
