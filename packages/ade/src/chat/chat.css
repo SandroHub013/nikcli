@@ -495,10 +495,15 @@
   color: var(--ade-text-weak);
 }
 
+/*
+ * As the bot's composer: at the focus the border is the neutral grey
+ * `--ade-border-strong`, not the accent, and the halo is grey as well. In the
+ * light theme the token is still a grey (composer-nero, DS-chat 1).
+ */
 [data-slot="chat-input"]:focus-visible {
   outline: none;
-  border-color: var(--ade-accent);
-  box-shadow: var(--ade-focus-ring);
+  border-color: var(--ade-border-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
 }
 
 [data-slot="chat-send"] {
