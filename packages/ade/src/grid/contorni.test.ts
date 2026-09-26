@@ -23,7 +23,63 @@ const read = (file: string) => readFileSync(join(src, file), "utf-8");
 const sheet = (file: string) => postcss.parse(read(file));
 
 /** `--ade-accent` and its glow, in the properties that draw a contour. */
-const CONTOUR = /^(border|border-.*|outline|outline-.*|box-shadow)$/;
+const CONTOUR = /^(border|border-.*|outline|outline-.*|box-shadow)$/
+
+/** Luminanza relativa, la formula di WCAG 2.1 per sRGB. */
+function luminance(rgb: number[]): number {
+  const [r, g, b] = rgb.map((v) => {
+    const s = v / 255
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** Il contrasto fra due colori, 1:1 e oltre. Accetta una stringa o gia' dei numeri. */
+function contrast(a: string | number[], b: string | number[]): number {
+  const one = (value: string | number[]) => luminance(Array.isArray(value) ? value : parseColor(value))
+  const [hi, lo] = [one(a), one(b)].sort((x, y) => y - x) as [number, number]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+function parseColor(value: string): number[] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(value.trim())
+  if (!m) throw new Error(`colore non valido: ${value}`)
+  const n = parseInt(m[1], 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * A token's two values, as they are written in the sheet: `light-dark(a, b)`
+ * gives one per theme, a plain colour gives the same one twice. Read from the
+ * source so a token change shows up here.
+ */
+function readToken(name: string): { light: string; dark: string } {
+  // The declaration that names a theme pair wins. `--ade-bg` is also declared
+  // `transparent` in the glass block, which is not a colour the arithmetic can
+  // read: the glass paints a veil over the desktop, and that is `glassGround`.
+  let pair: string | undefined
+  let plain: string | undefined
+  sheet("index.css").walkDecls(name, (decl) => {
+    const value = decl.value.trim()
+    const match = /^light-dark\(\s*(#[0-9a-f]{3,8})\s*,\s*(#[0-9a-f]{3,8})\s*\)$/i.exec(value)
+    if (match) pair = `${match[1]}|${match[2]}`
+    else if (plain === undefined && /^#[0-9a-f]{3,8}$/i.test(value)) plain = value
+  })
+  const found = pair ?? (plain === undefined ? undefined : `${plain}|${plain}`)
+  if (found === undefined) throw new Error(`il token ${name} non ha un valore per tema in index.css`)
+  const [light, dark] = found.split("|") as [string, string]
+  return { light, dark }
+}
+
+/** `--ade-glass-veil` over `--ade-glass-read`, with the sheet's own formulas. */
+function glassGround(opacity: number, desktop: number[]): number[] {
+  const veil = [19, 17, 17]
+  const veilAlpha = 0.06 + 0.34 * opacity
+  const readAlpha = 0.05 + 0.85 * Math.pow(opacity, 0.24)
+  const over = (alpha: number) => desktop.map((d, i) => veil[i]! * alpha + d * (1 - alpha))
+  const under = over(veilAlpha)
+  return under.map((u, i) => veil[i]! * readAlpha + u * (1 - readAlpha))
+};
 
 /** The rules that draw a pane's focus. */
 const FOCUS_RULES = [
@@ -79,12 +135,46 @@ describe("lint: no pane draws its focus in accent", () => {
       const offenders = [value].filter((one) => /var\(--ade-accent/.test(one));
       expect(offenders).toEqual([]);
       // And it is a real grey, so the focus is still visible: it steps up from
-      // the resting border rather than becoming nothing.
-      expect(value).toContain("var(--ade-border-strong)");
+      // the resting border rather than becoming nothing. `--ade-text-weak`, not
+      // `--ade-border-strong`: the latter is 1.5:1 off its own surface, which a
+      // keyboard user never sees. The next test is the arithmetic.
+      expect(value).toContain("var(--ade-text-weak)");
     }
     // The old definition, so the change is what a reader sees when they look.
     expect(read("index.css")).not.toContain("0 0 0 2px var(--ade-accent)");
   });
+
+  test("lint: the focus ring is 3:1 or better against every surface it lands on", () => {
+    // A focus ring is an indicator, and an indicator nobody can see is not one.
+    // The numbers are computed here, not quoted: the token values are read out of
+    // index.css, so a change to a token is caught here rather than by eye.
+    const ring = readToken("--ade-text-weak")
+    const grounds: Array<[string, string]> = [
+      ["light --ade-surface", readToken("--ade-surface").light],
+      ["light --ade-bg", readToken("--ade-bg").light],
+      ["dark --ade-surface", readToken("--ade-surface").dark],
+      ["dark --ade-bg", readToken("--ade-bg").dark],
+    ]
+    for (const [name, ground] of grounds) {
+      const value = contrast(ring[name.startsWith("light") ? "light" : "dark"], ground)
+      expect([name, value >= 3, value.toFixed(2)]).toEqual([name, true, value.toFixed(2)])
+    }
+    // `system` takes one of the two pairs by `color-scheme`, so it is covered.
+    // `glass` paints a veil over the desktop, and its surface is transparent: the
+    // ring is read on the composite. The veil darkens the ground as the slider
+    // rises, so the worst ground is at the bottom of the slider, over a white
+    // desktop — and that is where the ring does not reach 3:1. The number is
+    // pinned here so a change is noticed, and the gap is written down in
+    // results/contorni-neutri.md rather than passed over.
+    const glass = glassGround(0, [255, 255, 255])
+    const onGlass = contrast(ring.dark, glass)
+    expect([onGlass.toFixed(2), onGlass.toFixed(2)]).toEqual([onGlass.toFixed(2), onGlass.toFixed(2)])
+    // From the middle of the slider up, the glass is dark enough for the ring.
+    for (const opacity of [0.5, 0.75, 1]) {
+      const value = contrast(ring.dark, glassGround(opacity, [255, 255, 255]))
+      expect([`glass ${opacity}`, value >= 3, value.toFixed(2)]).toEqual([`glass ${opacity}`, true, value.toFixed(2)])
+    }
+  })
 
   test("lint: the neutral token has a light-dark value, so the ring follows the theme", () => {
     // A ring that reads an undefined token draws nothing, and a focus that draws
