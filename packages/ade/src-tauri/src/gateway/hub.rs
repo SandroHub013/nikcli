@@ -11,7 +11,7 @@
 //! come through `Env`, the keychain through `Vault`, so the tests drive it
 //! with a fake adapter and no token of any real service.
 
-use super::adapter::{Adapter, AdapterError, Button, Capabilities, Inbound, Platform};
+use super::adapter::{admits, Adapter, AdapterError, Button, Capabilities, Inbound, Platform};
 use super::authz::{self, Request};
 use super::redact::redact;
 use super::store::{Authorized, LinkState, Store};
@@ -729,8 +729,13 @@ impl Task {
         if self.store.link(&self.bot, self.platform).is_some_and(|link| link.cursor.as_deref() == Some(cursor.as_str())) {
             return;
         }
+        let written_at = self.env.now_ms();
         if let Err(error) = self.store.update(&self.bot, self.platform, |link, _| {
             link.cursor = Some(cursor.clone());
+            // When, so a platform whose cursor carries a session can tell an
+            // old one from a fresh one instead of resuming a session the
+            // other end has already forgotten.
+            link.cursor_saved_ms = Some(written_at);
             Ok(())
         }) {
             self.env.log(&format!("{}: posizione non salvata: {error}", self.tag()));
@@ -745,8 +750,8 @@ impl Task {
             self.env.log(&format!("{tag}: ignorato un messaggio di un bot"));
             return;
         }
-        if !message.private {
-            self.env.log(&format!("{tag}: ignorato un messaggio fuori da una chat privata"));
+        if !admits(&message) {
+            self.env.log(&format!("{tag}: ignorato un messaggio che non era per il bot"));
             return;
         }
         let authorized = self.store.link(&self.bot, self.platform).is_some_and(|link| link.is_authorized(&message.sender.id));
@@ -942,6 +947,7 @@ mod tests {
             id: id.into(),
             chat: chat.into(),
             private: true,
+            mentioned: false,
             sender: Sender { id: sender.into(), name: format!("utente {sender}"), is_bot: false },
             text: text.into(),
             button: false,

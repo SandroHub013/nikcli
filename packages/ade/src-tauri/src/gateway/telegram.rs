@@ -123,6 +123,9 @@ fn inbound(update: &Value) -> Option<Inbound> {
             id: id_text(&message["message_id"])?,
             chat: id_text(&message["chat"]["id"])?,
             private: message["chat"]["type"] == "private",
+            // A Telegram group is not answered at all in V1, so there is no
+            // mention to look for.
+            mentioned: false,
             sender: sender(&message["from"])?,
             text: text.to_string(),
             button: false,
@@ -134,6 +137,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
         id: id_text(&press["id"])?,
         chat: id_text(&message["chat"]["id"])?,
         private: message["chat"]["type"] == "private",
+        mentioned: false,
         sender: sender(&press["from"])?,
         text: press["data"].as_str().unwrap_or_default().to_string(),
         button: true,

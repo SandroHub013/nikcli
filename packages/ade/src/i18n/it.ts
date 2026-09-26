@@ -559,6 +559,10 @@ export const it = {
   "gateway.retrust": (name: string) =>
     `Il bot «${name}» o la configurazione del suo progetto sono cambiati da quando li hai approvati: apri ADE sul computer e riapprovali, poi riscrivimi.`,
   "gateway.noProject": "Questo gateway non ha un progetto: in ADE spegnilo e riaccendilo scegliendone uno.",
+  "gateway.channelIsPublic": (name: string) =>
+    `Nel canale «${name}» la risposta la leggono tutti i membri del canale, anche se il comando lo esegue solo il proprietario. Nelle chat private la legge solo chi ha scritto.`,
+  "gateway.noProxy":
+    "Su Discord il bot tiene aperta una connessione e il client che la parla non sa passare da un proxy: se questo computer esce su internet solo attraverso un proxy, il bot Discord non ci arriva. Su Telegram non c'è questo problema.",
   "gateway.ownerOnly": (runner: string) =>
     `Questo bot gira su ${runner} con l'account del proprietario: risponde solo al proprietario.`,
   "gateway.empty": "Il turno è finito senza una risposta.",
