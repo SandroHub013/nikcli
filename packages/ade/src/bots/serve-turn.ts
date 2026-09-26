@@ -334,7 +334,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
        * does not know without a word, and the turn ran at the default as if
        * the bot's effort had been used (chat-bot-facili, pezzo 0).
        */
-      const variants = modelVariants(catalog.configProviders, wanted)
+      const variants = wanted ? modelVariants(catalog.configProviders, wanted) : NO_MODEL_KNOWN
       const effort = effortToSend(bot.effort, variants)
 
       const profile = profileFor({
@@ -512,8 +512,10 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
       const text = !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
       if (stopped) return settled({ kind: "stopped" })
-      if (effort.dropped && wanted) {
-        const note = t("bots.serve.effortDropped", effort.dropped, serializeModelRef(wanted), (variants ?? []).join(", "))
+      if (effort.dropped) {
+        const note = wanted
+          ? t("bots.serve.effortDropped", effort.dropped, serializeModelRef(wanted), (variants ?? []).join(", "))
+          : t("bots.serve.effortNoModel", effort.dropped)
         const at = now()
         change((thread) => appendMessage(thread, { role: "tool", tool: "ade", text: note }, at))
       }
@@ -584,6 +586,14 @@ export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = ap
 }
 
 /** The calls of `ServeClient` on the SDK's client; the catalog within `catalogTimeoutMs`. */
+/*
+ * No model named by the bot, its agent or the configuration: the server picks
+ * one of its own, whose levels ADE cannot know, and an effort it lacks would
+ * be dropped without a word. None is sent, and the turn says why (review of
+ * bot-sforzo, BASSO 1).
+ */
+const NO_MODEL_KNOWN: readonly string[] = []
+
 export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
   return {
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],

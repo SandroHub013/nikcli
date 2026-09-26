@@ -1639,6 +1639,8 @@ export const en: Messages = {
   "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
   "bots.serve.noModel": (model) =>
     `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
+  "bots.serve.effortNoModel": (effort) =>
+    `The effort «${effort}» applies to a chosen model: this bot uses nikcli's default model, and this turn uses the default effort. Choose a model in the bot's settings.`,
   "bots.serve.effortDropped": (effort, model, variants) =>
     `The effort «${effort}» does not exist for ${model}: this turn uses the default. ${variants ? `This model's levels: ${variants}.` : "This model has no effort levels."} Change it in the bot's settings.`,
   "bots.serve.agentTaken": (name) =>

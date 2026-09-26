@@ -1653,6 +1653,8 @@ export const it = {
   "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
     `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+  "bots.serve.effortNoModel": (effort: string) =>
+    `Lo sforzo «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di nikcli, e questo turno usa lo sforzo predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>
     `Lo sforzo «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di sforzo."} Cambialo nelle impostazioni del bot.`,
   "bots.serve.agentTaken": (name: string) =>

@@ -639,6 +639,28 @@ describe("a bot's effort is one its model has", () => {
     expect(mine.talk.messages.some((message) => message.text === t("bots.serve.effortDropped", "high", BOT.model!, ""))).toBe(true)
   })
 
+  /* Review of bot-sforzo, BASSO 1: with no model known, the effort went unchecked. */
+  test("no model on the bot, its agent or the configuration: the effort is not sent, and the thread says so", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ high: {} }) } })
+    const mine = thread()
+    const result = await runServeTurn(panel({ bot: { ...BOT, model: undefined }, onChange: mine.onChange }), fake.deps).result
+    expect(result.status).toBe("done")
+    expect("variant" in fake.calls.prompts[0]!).toBe(false)
+    expect(mine.talk.messages.filter((message) => message.text === t("bots.serve.effortNoModel", "high")).map((message) => message.tool)).toEqual(["ade"])
+  })
+
+  test("the configured model counts as the bot's: its levels are checked", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({
+      events,
+      session: sessionIdOf(events),
+      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ high: {} }), configModel: BOT.model! },
+    })
+    await runServeTurn(panel({ bot: { ...BOT, model: undefined } }), fake.deps).result
+    expect(fake.calls.prompts.map((prompt) => prompt.variant)).toEqual(["high"])
+  })
+
   test("the server's client reads the configured providers into the catalog", async () => {
     const providers = configured({ low: {} })
     const client = {
