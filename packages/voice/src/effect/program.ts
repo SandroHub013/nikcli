@@ -47,6 +47,9 @@ const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "pro
 
 const SEND_REFUSED = "Non sono riuscito a inviare la dettatura: il testo non è partito."
 
+/** Said with a dictation that did not reach a pane, once its text is in the clipboard. */
+export const DICTATION_IN_CLIPBOARD = "Il testo dettato è negli appunti."
+
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
@@ -72,10 +75,11 @@ export function dispatchTranscription(
        * Said, not skipped. With no pane open this used to return quietly: the
        * request was paid for, the text went to the clipboard, and nothing on
        * screen said so — dictation looked broken to someone who had simply
-       * not opened a session yet.
+       * not opened a session yet. Whether the text is in the clipboard is
+       * said by the caller, which is the one that puts it there.
        */
       if (panes.length === 0) {
-        throw new Error("Nessun pannello aperto: il testo dettato è negli appunti.")
+        throw new Error("Nessun pannello aperto.")
       }
       if (!clearTarget) {
         throw new Error("Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.")
@@ -207,6 +211,14 @@ export interface VoiceProgramOptions {
    * missing channel: one call per sentence, with the text as sent.
    */
   onTranscribed?: (text: string) => void
+  /**
+   * A dictated sentence that did not reach a pane (none open, none clear, or
+   * the pane refused it): the host keeps it, in the clipboard. Resolves to
+   * whether it did, so the line on screen says where the text is. Never
+   * called for a sentence the pane took: the clipboard was written on every
+   * sentence, twice, and the user's own copy lost (verdict of area 3, A4).
+   */
+  onUndelivered?: (text: string) => boolean
   /**
    * Nothing heard is still being handled: the last sentence has been dealt
    * with, whatever the outcome, and whatever it said has been said — the
@@ -1379,7 +1391,10 @@ export function makeVoiceProgram(
             Effect.sync(() => {
               // `spokenMessage` turns every HostActionFailed into one generic
               // sentence; dictation is silent, so the specific one can be shown.
-              options.onError?.(err.message || spokenMessage(err))
+              const said = err.message || spokenMessage(err)
+              // Only now, and once: the text did not land, so it is kept where the user can paste it.
+              const kept = options.onUndelivered?.(text) === true
+              options.onError?.(kept ? `${said} ${DICTATION_IN_CLIPBOARD}` : said)
             }),
           ),
         )

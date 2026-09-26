@@ -345,6 +345,27 @@ export function holdsToTalk(settings: Pick<VoiceSettings, "activation">, mode: V
 }
 const DRAIN_POLL_MS = 25
 
+type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+
+/**
+ * Writes the clipboard through the desktop host, once. False where there is no
+ * host (the browser build, the tests): the text is then not in the clipboard,
+ * and nothing says it is. The webview's own clipboard API is not used:
+ * it was the second of two writes of every sentence (verdict of area 3, A4).
+ */
+export function writeClipboard(
+  text: string,
+  win: unknown = typeof window !== "undefined" ? window : undefined,
+): boolean {
+  const tauri = win as
+    | { __TAURI_INTERNALS__?: { invoke?: TauriInvoke }; __TAURI__?: { core?: { invoke?: TauriInvoke } } }
+    | undefined
+  const invoke = tauri?.__TAURI_INTERNALS__?.invoke ?? tauri?.__TAURI__?.core?.invoke
+  if (!invoke) return false
+  void invoke("write_clipboard", { text }).catch(() => {})
+  return true
+}
+
 export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const { host, speaker, micMeter, now } = options
   const drainTimeoutMs = options.drainTimeoutMs ?? DRAIN_TIMEOUT_MS
@@ -1146,23 +1167,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (closesAfterTurn() && activeMode() === "agent") closeAfterTurn()
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
+    /*
+     * A dictation that did not reach a pane goes to the clipboard, once,
+     * through the host (verdict of area 3, A4). It used to be written on
+     * every sentence, twice (the host's and the webview's), whatever
+     * happened, and the user's own copy was lost to each one.
+     */
+    onUndelivered: (text) => writeClipboard(text),
     onHeld: (text) => setHeld(text),
     onTranscribed: (text) => {
       setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
       record({ kind: "user", text, at: now() })
-      if (typeof window !== "undefined") {
-        const win = window as unknown as {
-          __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
-          __TAURI__?: { core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } }
-        }
-        const invoke = win.__TAURI_INTERNALS__?.invoke ?? win.__TAURI__?.core?.invoke
-        if (invoke) {
-          void invoke("write_clipboard", { text }).catch(() => {})
-        }
-      }
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {})
-      }
       if (pressHolds() && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
         void endPress()
