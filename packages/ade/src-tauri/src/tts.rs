@@ -361,12 +361,22 @@ impl Drop for Closed<'_, '_> {
     }
 }
 
-fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<(), String> {
-    let state = app.state::<Piper>();
-    let root = root(app)?;
-    std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
-
-    let model = model_path(&root, wanted.id);
+/// Where an install of one voice starts and ends, with the provider's lock not
+/// held: the caller holds it.
+///
+/// This is the body of `install_blocking` with the `AppHandle` taken off it, so
+/// the order the panel depends on is in something a test can call: the lock, and
+/// only then the state, and the budget counted from the lock. A test that faked
+/// the handle could only ever read those three lines; this way it runs them.
+fn install_voice(
+    installer: &Installer,
+    slot: &Arc<ProviderSlot>,
+    root: &Path,
+    wanted: &'static Voice,
+    curl: &dyn Fetcher,
+    print: &dyn Fingerprint,
+) -> Result<(), String> {
+    let model = model_path(root, wanted.id);
     let config = model.with_extension("onnx.json");
     /*
      * The voice's own two files, and only them.
@@ -374,7 +384,7 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
      * The runtime used to be the first job, on a `piper.zip` that is never
      * there: it is fetched as `piper.zip.part` and deleted once `tar` has it.
      * A job list is a list of files to put in place, and that one has no
-     * destination, so it was counted as missing for ever — which put its `None`
+     * destination, so it was counted as missing for ever - which put its `None`
      * size into the total and left `bytes_total` empty on every install, warm
      * or cold, and left the bar at two files out of three. The runtime is a
      * step with a condition of its own instead, and `install_locked` says
@@ -383,22 +393,27 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
     let voice_files: [(&Download, PathBuf); 2] = [(&wanted.config, config), (&wanted.model, model)];
     let files_total = 3;
 
-    let slot = state.installer.slot(PIPER);
-    // The lock, and only then the state: see `hold`. And the budget starts here,
-    // because an install that waited its turn has not spent any of its time.
-    let _one = state.installer.hold(&slot);
-    let install = state.installer.begin(
-        &slot,
-        files_total,
-        bytes_pending(&voice_files),
-        Instant::now() + state.installer.deadline(),
-    );
+    // The lock is already held here, and the state comes after it: see `hold`.
+    // And the budget starts now, because an install that waited its turn has
+    // not spent any of its time.
+    let install = installer.begin(slot, files_total, bytes_pending(&voice_files), Instant::now() + installer.deadline());
     // Closed however this ends: `running` is read by the panel, and an install
     // that is over must not leave it true.
     let mut closed = Closed { install: &install, closed: false };
-    let outcome = install_locked(&install, &root, &voice_files, &Curl, &Certutil);
+    let outcome = install_locked(&install, root, &voice_files, curl, print);
     closed.report(&outcome);
     outcome
+}
+
+fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<(), String> {
+    let state = app.state::<Piper>();
+    let root = root(app)?;
+    std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
+
+    let slot = state.installer.slot(PIPER);
+    // The lock, and only then the body: see `hold`.
+    let _one = state.installer.hold(&slot);
+    install_voice(&state.installer, &slot, &root, wanted, &Curl, &Certutil)
 }
 
 /// The install itself, with the provider's lock already held.
@@ -2057,15 +2072,37 @@ mod tests {
         assert!(!installer.progress_of("kokoro").cancelled);
     }
 
+    /// A voice of the catalog's shape whose two files are `body`, digests
+    /// included.
+    ///
+    /// The real voices carry pinned digests of files nobody has here, so an
+    /// install of one of them with a scripted transfer always ends at the digest
+    /// check. This one is installable, which is what lets a test drive
+    /// `install_voice` all the way to a finished install instead of stopping at
+    /// the first file. Leaked like `download_of` leaks its strings: a `Voice` is
+    /// `&'static str` all the way down, and a test that ran once does not need it
+    /// back.
+    fn installable_voice(id: &'static str, body: &[u8]) -> &'static Voice {
+        Box::leak(Box::new(Voice {
+            id,
+            source: "https://example.invalid/voice",
+            model: download_of("model.onnx", body, Some(body.len() as u64)),
+            config: download_of("model.onnx.json", body, Some(body.len() as u64)),
+        }))
+    }
+
     #[test]
     fn a_second_install_of_one_provider_waits_its_turn_and_leaves_the_state_alone() {
-        let root = test_root("due-install");
+        // Runtime già presente: il secondo install passa dalla riga vera e non si
+        // ferma a scaricare l'archivio, così quello che il test guarda è solo
+        // l'ordine fra lock e stato.
+        let root = root_with_runtime("due-install");
         let installer = std::sync::Arc::new(Installer::default());
         let body = b"un modello da sessanta megabyte".to_vec();
         let first_dest = root.join("ugo.onnx");
-        let second_dest = root.join("paola.onnx");
+        let second_dest = model_path(&root, "paola");
         let first_wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
-        let second_wanted = download_of("paola.onnx", &body, Some(body.len() as u64));
+        std::fs::create_dir_all(second_dest.parent().unwrap()).unwrap();
 
         // Il primo install tiene il lock e aspetta il permesso di scaricare.
         let (started_tx, started_rx) = std::sync::mpsc::channel();
@@ -2089,20 +2126,27 @@ mod tests {
         // Qualcosa è già scaricato: è lo stato che il secondo non deve toccare.
         assert!(installer.progress_of(PIPER).bytes_done > 0);
 
-        // Il secondo chiede un'altra voce mentre il primo scarica.
+        // Il secondo chiede un'altra voce mentre il primo scarica, e lo chiede
+        // come lo chiede l'applicazione: `install_voice`, la riga vera, così
+        // l'ordine che questo test dimostra è quello che gira e non una sua
+        // ricostruzione.
         let (queued_tx, queued_rx) = std::sync::mpsc::channel();
         let second = {
             let installer = installer.clone();
+            let root = root.clone();
             let body = body.clone();
-            let second_dest = second_dest.clone();
             std::thread::spawn(move || {
                 queued_tx.send(()).unwrap();
                 let slot = installer.slot(PIPER);
                 let _one = installer.hold(&slot);
-                let install = installer.begin(&slot, 1, None, far());
-                let outcome = install.bring(&second_wanted, &second_dest, &Scripted::new(body, Ending::Whole), &FingerprintInProcess);
-                install.finish(&outcome);
-                outcome
+                install_voice(
+                    &installer,
+                    &slot,
+                    &root,
+                    installable_voice("paola", &body),
+                    &Scripted::new(body, Ending::Whole),
+                    &FingerprintInProcess,
+                )
             })
         };
         queued_rx
