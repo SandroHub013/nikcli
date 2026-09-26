@@ -242,6 +242,12 @@ export interface Pane {
   gone?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
+  /**
+   * A runner's sign-in (`claude auth login`): the arguments it runs. Its
+   * restart runs them again, never the bare agent. Not saved: ADE opening
+   * does not start a sign-in nobody asked for.
+   */
+  signIn?: string[]
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
   span?: Span
   /**
@@ -499,7 +505,8 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * answer than no pane. The plugin opens its own tiles when it loads.
    */
   const saved = workbench.panes
-    .filter((p) => !isPanelPane(p))
+    // A sign-in is not a session to bring back (`Pane.signIn`).
+    .filter((p) => !isPanelPane(p) && !p.signIn)
     .map((p) => ({
       id: p.id,
       title: p.title,

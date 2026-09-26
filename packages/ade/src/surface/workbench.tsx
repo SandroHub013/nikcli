@@ -6346,6 +6346,8 @@ export function Workbench() {
   const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
     const agentId = given.agent ?? given.model
     if (running.has(given.id)) return
+    // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
+    if (given.signIn) return startProcess(given.id, agentId, "", undefined, [...given.signIn])
     const reported = await adoptLastReport(given)
     let pane = reported ? { ...given, resumeId: reported } : given
     // Another open pane holds this conversation (ripristino review, point 1): it stays there.
@@ -7175,12 +7177,18 @@ export function Workbench() {
       task: "",
       lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
       ...here(),
+      /*
+       * The bot's own flags, kept with the pane (review, ALTO 5): handed only
+       * to this start, a restart ran the bare agent, without `--agent` and on
+       * the default model, which can be a paid one.
+       */
+      ...(launch.args.length ? { spawnArgs: [...launch.args] } : {}),
     }))
     /* Narrowed to nothing, or the grid keeps showing whichever session was
        expanded and the one just started is off screen. */
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
-    void startProcess(id, launch.agentId, "", undefined, launch.args)
+    void startProcess(id, launch.agentId, "")
     return { id, index: mine.length + 1 }
   }
 
@@ -7203,6 +7211,7 @@ export function Workbench() {
       task: "",
       lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
       ...here(),
+      signIn: [...runner.login],
     }))
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
