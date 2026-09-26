@@ -542,13 +542,6 @@ export function placementFor(drawn: { parentElement: unknown } | null | undefine
 }
 
 /**
- * Draws the terminal into `element` and keeps it fitted to it.
- *
- * Returns a detach function rather than disposing: the session is still running
- * and its scrollback still matters, so leaving a pane must cost nothing more
- * than the DOM it was drawn in.
- */
-/**
  * The height of a cell as the renderer drew it. The same private field
  * FitAddon reads (`_core._renderService.dimensions`); undefined before the
  * first render, and then the fit is left as FitAddon made it.
@@ -559,6 +552,13 @@ function cellHeightOf(terminal: Terminal): number | undefined {
   return height && height > 0 ? height : undefined
 }
 
+/**
+ * Draws the terminal into `element` and keeps it fitted to it.
+ *
+ * Returns a detach function rather than disposing: the session is still running
+ * and its scrollback still matters, so leaving a pane must cost nothing more
+ * than the DOM it was drawn in.
+ */
 export function attachTerminal(id: string, element: HTMLElement, options: AttachOptions = {}): () => void {
   const session = getTerminal(id)
   session.detach?.()
@@ -632,12 +632,18 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     // fitting against that throws inside xterm's renderer.
     if (element.clientWidth < 2 || element.clientHeight < 2) return
     try {
-      session.fit.fit()
-      // FitAddon counts the box's padding as rows: the last ones, the statusline, fell below it (`fit-rows.ts`).
-      const cell = cellHeightOf(session.terminal)
-      if (cell) {
-        const rows = rowsInside(terminalBox(getComputedStyle(element)), cell)
-        if (rows < session.terminal.rows) session.terminal.resize(session.terminal.cols, rows)
+      // FitAddon's size, not its fit: its count of rows takes the box's padding as rows, and the
+      // last ones, the statusline, fell below it (`fit-rows.ts`). One resize, with the rows that fit.
+      // No size before the first render: nothing to resize, as FitAddon's fit() would do.
+      const proposed = session.fit.proposeDimensions()
+      if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
+        const cell = cellHeightOf(session.terminal)
+        const rows = cell ? Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell)) : proposed.rows
+        if (proposed.cols !== session.terminal.cols || rows !== session.terminal.rows) {
+          // As FitAddon's fit(): the renderer's layers are cleared before a resize.
+          ;(session.terminal as unknown as { _core?: { _renderService?: { clear?: () => void } } })._core?._renderService?.clear?.()
+          session.terminal.resize(proposed.cols, rows)
+        }
       }
     } catch {
       return

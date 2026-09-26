@@ -46,15 +46,18 @@ describe("the rows a terminal box holds", () => {
 })
 
 describe("lint: the fit", () => {
-  test("lint: every fit of a pane's terminal is cut to the rows inside its box, after FitAddon's", () => {
+  test("lint: every fit of a pane's terminal takes the fewer of FitAddon's rows and the rows inside its box, in one resize", () => {
     const registry = readFileSync(join(import.meta.dir, "registry.ts"), "utf8")
     const start = registry.indexOf("const applyFit = () => {")
     expect(start).toBeGreaterThan(-1)
     const body = registry.slice(start, registry.indexOf("\n  }\n", start))
-    const fit = body.indexOf("session.fit.fit()")
-    const cut = body.indexOf("rowsInside(terminalBox(getComputedStyle(element)), cell)")
-    expect(fit).toBeGreaterThan(-1)
-    expect(cut).toBeGreaterThan(fit)
-    expect(body.indexOf("session.terminal.resize(session.terminal.cols, rows)")).toBeGreaterThan(cut)
+    // FitAddon's own fit() resized once more before the cut: two resizes of the pty, two redraws.
+    expect(body.includes("session.fit.fit()")).toBe(false)
+    const proposed = body.indexOf("session.fit.proposeDimensions()")
+    const cut = body.indexOf("Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell))")
+    expect(proposed).toBeGreaterThan(-1)
+    expect(cut).toBeGreaterThan(proposed)
+    expect(body.split("session.terminal.resize(").length - 1).toBe(1)
+    expect(body.indexOf("session.terminal.resize(proposed.cols, rows)")).toBeGreaterThan(cut)
   })
 })
