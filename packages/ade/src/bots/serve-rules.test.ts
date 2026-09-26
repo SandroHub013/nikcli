@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { PermissionRule } from "../chat/rules"
 import { BLOCKED as BLOCK_RULES, classifyCommand } from "./approval"
 import { blockedBashDenials, botPermission, configDenials, hasBotRules, profileFor, type BotProfile } from "./serve-rules"
+import { it as itDict } from "../i18n/it"
+import { en as enDict } from "../i18n/en"
 
 /*
  * B8d: a bot's session rules win over its own file, as nikcli decides them:
@@ -138,6 +140,12 @@ describe("B8d: the rules of a bot's session", () => {
     const denials = configDenials()
     expect(botPermission("remote-none").slice(0, denials.length).map((entry) => entry.pattern)).toEqual(denials)
     expect(botPermission("read-only").findLast((entry) => entry.permission === "edit")).toEqual({ permission: "edit", pattern: "*", action: "deny" })
+  })
+
+  test("the note on the rules says an «always» for edits opens the configuration too", () => {
+    // Given in the project, it comes after the session's rules and wins (bot-config-chiusa review).
+    expect(itDict["bots.serve.rulesNote"]).toContain("nikcli.json")
+    expect(enDict["bots.serve.rulesNote"]).toContain("nikcli.json")
   })
 
   test("the list: every form, deduplicated", () => {

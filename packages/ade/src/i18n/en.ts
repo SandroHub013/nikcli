@@ -1610,7 +1610,7 @@ export const en: Messages = {
   "bots.serve.refused": (permission, patterns) =>
     `Refused: nikcli asked for «${permission}» (${patterns}) and nobody here can answer.`,
   "bots.serve.rulesNote":
-    "The bot asks before every command, but an «always» already given for this project (in nikcli's terminal, say) holds for it too, as in the Chat: that request will not show up.",
+    "The bot asks before every command, but an «always» already given for this project (in nikcli's terminal, say) holds for it too, as in the Chat: that request will not show up. An «always» given to a file edit also opens nikcli's configuration to it (.nikcli, nikcli.json), which a bot cannot write otherwise.",
   "bots.serve.lost": "The nikcli server closed the event stream before the turn ended.",
   "bots.runner.protectedPath": (paths) =>
     `Claude Code could not write on a path protected for project bots (${paths}): a write there becomes code that runs later, so it is refused on purpose.`,
