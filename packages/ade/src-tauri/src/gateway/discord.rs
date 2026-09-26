@@ -667,15 +667,17 @@ async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inb
             return Ending::Dropped;
         }
 
-        // The first heartbeat waits a share of the interval: a client that
-        // heartbeats at once is disconnected.
+        // The first heartbeat waits a share of the interval, since a client
+        // that heartbeats at once is disconnected; every one after it waits the
+        // whole interval. The share used to be the period of every beat, so
+        // with a small share the socket beat every millisecond, and against a
+        // server slow to acknowledge it looked dead and was dropped with the
+        // frames still unread (the Discord test that failed one run in fifteen).
         let share = adapter.jitter.load(Ordering::SeqCst).min(1000);
         let wait = Duration::from_millis(interval * share / 1000).max(Duration::from_millis(1));
-        let mut beat = tokio::time::interval(wait);
+        let period = Duration::from_millis(interval.max(1));
+        let mut beat = tokio::time::interval_at(tokio::time::Instant::now() + wait, period);
         beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // An interval's first tick is due at once: take it, so the beat that
-        // follows is one full period from now.
-        beat.tick().await;
         let mut acked = true;
 
         loop {
@@ -1707,6 +1709,23 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(gateway.ops(1), 0, "il primo battito aspetta: un client che batte subito viene chiuso");
         assert!(gateway.wait_for(1, 1).await, "il primo battito arriva");
+    }
+
+    #[tokio::test]
+    async fn after_the_first_beat_the_next_one_waits_the_whole_interval() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        // A share of nothing: the first beat goes at once, and the next one is
+        // due a whole interval later, not a share of it again.
+        gateway.push(vec![hello(400), ready("S1", &gateway.address)]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 0);
+        gateway.acking(true);
+        start(&discord).await;
+        assert!(gateway.wait_for(1, 1).await, "il primo battito arriva");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(gateway.ops(1), 1, "il secondo battito aspetta l'intervallo intero");
+        assert!(gateway.wait_for(1, 2).await, "e poi arriva");
     }
 
     #[tokio::test]
