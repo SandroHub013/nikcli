@@ -1442,6 +1442,34 @@ export const en: Messages = {
   "bots.routine.note.done": (cost: string) => (cost ? `Done, ${cost}.` : "Done."),
   "bots.routine.note.stopped": "Stopped.",
   "bots.routine.note.failed": (why: string) => (why ? `Failed: ${why}` : "Failed."),
+  "bots.memory.notes": "bot's notes",
+  "bots.memory.user": "user profile",
+  "bots.memory.error.empty": "An empty entry is not saved.",
+  "bots.memory.error.secret": "It looks like a key or a token: it is not saved in memory.",
+  "bots.memory.error.tag": "An entry cannot hold an ade-memory tag.",
+  "bots.memory.error.separator": "An entry cannot hold the § separator.",
+  "bots.memory.error.full": (block: string, size: number, limit: number) =>
+    `Memory full (${block}): it would be ${size} characters of ${limit}. Shorten or remove an entry, then try again.`,
+  "bots.memory.error.duplicate": (block: string) => `The same entry is already there (${block}): not added.`,
+  "bots.memory.error.noMatch": (block: string, match: string) => `No entry (${block}) contains «${match}».`,
+  "bots.memory.error.manyMatches": (block: string, match: string) =>
+    `Several entries (${block}) contain «${match}»: write a piece that points at only one.`,
+  "bots.memory.error.unreadable": (count: number) =>
+    count === 1 ? "An ade-memory tag could not be read and was not applied." : `${count} ade-memory tags could not be read and were not applied.`,
+  "bots.memory.done.add": (block: string) => `Memory: an entry added (${block}).`,
+  "bots.memory.done.replace": (block: string) => `Memory: an entry changed (${block}).`,
+  "bots.memory.done.remove": (block: string) => `Memory: an entry removed (${block}).`,
+  "bots.memory.prompt.head":
+    "[ADE's memory for this bot: a snapshot taken when this conversation started. It does not change until the next conversation.]",
+  "bots.memory.prompt.notes": (size: number, limit: number) => `BOT'S NOTES (${size}/${limit} characters)`,
+  "bots.memory.prompt.user": (size: number, limit: number) => `USER PROFILE (${size}/${limit} characters)`,
+  "bots.memory.prompt.empty": "(empty)",
+  "bots.memory.prompt.howTo":
+    "To change it, write one of these tags in your answer, on lines of their own; ADE takes them out of the answer and applies them when the turn ends:",
+  "bots.memory.prompt.rules": (notes: number, user: number) =>
+    `Limits: ${notes} characters for the notes, ${user} for the profile; past the limit a write is refused, not cut. No duplicates. No keys, tokens or passwords: they are refused. Keep only what another conversation will need.`,
+  "bots.memory.prompt.end": "[End of memory. The user's message follows.]",
+  "bots.memory.prompt.pending": (lines: string) => `[ADE, on your memory after the previous turn:\n${lines}]`,
   "bots.approval.alwaysSet": (reason: string) => `From now on this bot no longer asks when it ${reason}.`,
   "bots.status.replying": "replying…",
   "bots.stop": "Stop",

@@ -1454,6 +1454,34 @@ export const it = {
   "bots.routine.note.done": (cost: string) => (cost ? `Fatta, ${cost}.` : "Fatta."),
   "bots.routine.note.stopped": "Fermata.",
   "bots.routine.note.failed": (why: string) => (why ? `Non riuscita: ${why}` : "Non riuscita."),
+  "bots.memory.notes": "note del bot",
+  "bots.memory.user": "profilo dell'utente",
+  "bots.memory.error.empty": "Una voce vuota non si salva.",
+  "bots.memory.error.secret": "Sembra una chiave o un token: in memoria non si salva.",
+  "bots.memory.error.tag": "Una voce non può contenere un tag ade-memory.",
+  "bots.memory.error.separator": "Una voce non può contenere il separatore §.",
+  "bots.memory.error.full": (block: string, size: number, limit: number) =>
+    `Memoria piena (${block}): sarebbero ${size} caratteri su ${limit}. Accorcia o togli una voce, poi riprova.`,
+  "bots.memory.error.duplicate": (block: string) => `C'è già una voce uguale (${block}): non l'ho aggiunta.`,
+  "bots.memory.error.noMatch": (block: string, match: string) => `Nessuna voce (${block}) contiene «${match}».`,
+  "bots.memory.error.manyMatches": (block: string, match: string) =>
+    `Più voci (${block}) contengono «${match}»: scrivi un pezzo che ne indichi una sola.`,
+  "bots.memory.error.unreadable": (count: number) =>
+    count === 1 ? "Un tag ade-memory non era leggibile e non è stato applicato." : `${count} tag ade-memory non erano leggibili e non sono stati applicati.`,
+  "bots.memory.done.add": (block: string) => `Memoria: aggiunta una voce (${block}).`,
+  "bots.memory.done.replace": (block: string) => `Memoria: cambiata una voce (${block}).`,
+  "bots.memory.done.remove": (block: string) => `Memoria: tolta una voce (${block}).`,
+  "bots.memory.prompt.head":
+    "[Memoria di ADE per questo bot: istantanea presa all'inizio di questa conversazione. Non cambia fino alla prossima conversazione.]",
+  "bots.memory.prompt.notes": (size: number, limit: number) => `NOTE DEL BOT (${size}/${limit} caratteri)`,
+  "bots.memory.prompt.user": (size: number, limit: number) => `PROFILO DELL'UTENTE (${size}/${limit} caratteri)`,
+  "bots.memory.prompt.empty": "(vuoto)",
+  "bots.memory.prompt.howTo":
+    "Per cambiarla scrivi nella risposta uno di questi tag, su righe a sé; ADE li toglie dalla risposta e li applica alla fine del turno:",
+  "bots.memory.prompt.rules": (notes: number, user: number) =>
+    `Limiti: ${notes} caratteri per le note, ${user} per il profilo; oltre il limite la scrittura viene rifiutata, non tagliata. Niente doppioni. Niente chiavi, token o password: vengono rifiutati. Tieni solo ciò che servirà in un'altra conversazione.`,
+  "bots.memory.prompt.end": "[Fine della memoria. Segue il messaggio dell'utente.]",
+  "bots.memory.prompt.pending": (lines: string) => `[ADE, sulla tua memoria dopo il turno precedente:\n${lines}]`,
   "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",
   "bots.stop": "Ferma",
