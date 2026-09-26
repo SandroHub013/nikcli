@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { admit, fileFingerprint, memoryTrustStore, reachesShell, shellGrant } from "./trust"
+import { admit, fileFingerprint, memoryTrustStore, reachesShell } from "./trust"
 import { t } from "../i18n"
 
 /*
@@ -211,51 +211,12 @@ describe("un bot di progetto per nikcli che si pre-approva", () => {
 })
 
 /*
- * B8c: in the panel every nikcli command meets ADE's questions and block list
- * (`bot-ask-shell`). nikcli merges a bot's own rules after that and keeps the
- * last one that matches, so a bot that grants itself the shell — the user's
- * own included — does not start, and the message names the line.
+ * B8c: a grant of the shell or of a folder outside. Since B8d the panel's
+ * session rules come after the bot's own (`serve-rules.test.ts`); what is left
+ * here is how the gateway and a project's bot read the grant.
  */
 describe("un bot che si concede la shell", () => {
   const withFront = (front: string) => `---\ndescription: Revisore\n${front}\n---\nSei un revisore.`
-  const reaching: [string, string, string][] = [
-    ["permission:\n  bash: allow", "bash", "bash: allow"],
-    ["permission: { bash: allow }", "bash", "permission: { bash: allow }"],
-    ['permission: {"bash": "allow"}', "bash", 'permission: {"bash": "allow"}'],
-    ["permission: allow", "*", "permission: allow"],
-    ['permission:\n  bash:\n    "git *": allow', "bash", '"git *": allow'],
-    ['permission:\n  bash: { "*": ask, "git push *": allow }', "bash", 'bash: { "*": ask, "git push *": allow }'],
-    ['permission:\n  bash: {\n    "rm *": allow\n  }', "bash", '"rm *": allow'],
-    ['permission:\n  "*": allow', "*", '"*": allow'],
-    ['permission:\n  "b*": allow', "b*", '"b*": allow'],
-    ["permission:\n  external_directory: allow", "external_directory", "external_directory: allow"],
-    ["permission:\n  read: allow\n  bash: allow", "bash", "bash: allow"],
-    ["tools:\n  bash: true", "bash", "bash: true"],
-    ['tools: { "*": true }', "*", 'tools: { "*": true }'],
-    ["permission: &grant\n  bash: ask", "*", "permission: &grant"],
-  ]
-  for (const [front, under, line] of reaching) {
-    test(`la riga da togliere: ${JSON.stringify(front)}`, () => {
-      const grant = shellGrant(withFront(front))
-      expect(grant && { under: grant.under, line: grant.line }).toEqual({ under, line })
-    })
-  }
-
-  const harmless = [
-    "permission:\n  edit: allow",
-    'permission:\n  read: { "*": allow }',
-    'permission: { read: allow, webfetch: { "*": allow } }',
-    'permission:\n  read: {\n  "*.md": allow,\n  bash: allow }',
-    "permission:\n  bash: ask\n  external_directory: deny",
-    "tools:\n  write: true\n  bash: false",
-    "mode: primary",
-  ]
-  for (const front of harmless) {
-    test(`non tocca la shell: ${JSON.stringify(front)}`, () => {
-      expect(shellGrant(withFront(front))).toBeUndefined()
-    })
-  }
-
   test("reachesShell legge * e ? come nikcli", () => {
     expect(["bash", "*", "ba?h", "*_directory", "external_*"].map(reachesShell)).toEqual([true, true, true, true, true])
     expect(["read", "edit", "bash2", "webfetch"].map(reachesShell)).toEqual([false, false, false, false])

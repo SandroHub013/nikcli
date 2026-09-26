@@ -6,163 +6,87 @@ import {
   TALK_KEY_PREFIX,
   appendMessage,
   applyExit,
-  applyLine,
+  applyJsonLine,
   emptyTalk,
+  errorText,
   formatWhen,
   lastLine,
   mentionIn,
+  noteReportedModel,
+  noteTurnUsage,
   parseTalk,
   permissionAnswered,
-  runArgs,
   sendMessage,
   serializeTalk,
+  sumTokens,
   talkKey,
   type Talk,
 } from "./talk"
 
 const T0 = Date.UTC(2026, 8, 15, 10, 0, 0)
 
-function event(type: string, extra: Record<string, unknown>): string {
-  return JSON.stringify({ type, timestamp: T0 + 1000, sessionID: "ses_abc", ...extra })
-}
+/*
+ * One line of a CLI that prints JSON, folded by `applyJsonLine`: an event's
+ * `text` becomes the bot's words. The reassembly is the one Claude Code's and
+ * Codex's adapters share (`runners.ts`).
+ */
+const event = (text: string) => JSON.stringify({ type: "text", text })
+const fold = (talk: Talk, line: string) =>
+  applyJsonLine(talk, line, T0, (current, parsed) =>
+    typeof parsed["text"] === "string" ? appendMessage(current, { role: "bot", text: parsed["text"] }, T0) : current,
+  )
 
-describe("runArgs", () => {
-  test("names the agent, asks for json, and puts the message after --", () => {
-    expect(runArgs({ identifier: "revisore", message: "ciao" })).toEqual([
-      "run", "--agent", "revisore", "--format", "json", "--", "ciao",
-    ])
-  })
-
-  test("continues the session and pins model and effort when known", () => {
-    expect(
-      runArgs({ identifier: "revisore", message: "-x", sessionId: "ses_1", model: "anthropic/claude-sonnet-5", effort: "high" }),
-    ).toEqual([
-      "run", "--agent", "revisore", "--format", "json",
-      "--model", "anthropic/claude-sonnet-5", "--variant", "high", "--session", "ses_1",
-      "--", "-x",
-    ])
-  })
-})
-
-describe("applyLine", () => {
-  test("a text event becomes the bot's message and records the session", () => {
-    const talk = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("text", { part: { type: "text", text: "Ciao a te." } }), T0)
-    expect(talk.sessionId).toBe("ses_abc")
-    expect(talk.messages.map((m) => [m.role, m.text])).toEqual([["user", "ciao"], ["bot", "Ciao a te."]])
-    expect(talk.status).toBe("working")
-  })
-
-  test("a tool event keeps the tool, its title and its output", () => {
-    const talk = applyLine(
-      emptyTalk(),
-      event("tool_use", { part: { type: "tool", tool: "bash", state: { title: "bun test", output: "1 pass\n" } } }),
-      T0,
-    )
-    const last = talk.messages.at(-1)
-    expect(last?.role).toBe("tool")
-    expect(last?.tool).toBe("bash")
-    expect(last?.text).toBe("bun test")
-    expect(last?.output).toBe("1 pass\n")
-  })
-
-  test("a tool with no title shows its input, and one with neither shows its name", () => {
-    const withInput = applyLine(emptyTalk(), event("tool_use", { part: { tool: "read", state: { input: { path: "a.ts" } } } }), T0)
-    expect(withInput.messages.at(-1)?.text).toBe('{"path":"a.ts"}')
-    const bare = applyLine(emptyTalk(), event("tool_use", { part: { tool: "glob", state: { input: {} } } }), T0)
-    expect(bare.messages.at(-1)?.text).toBe("glob")
-  })
-
-  test("step_finish accumulates tokens across nested records and cost", () => {
-    const one = applyLine(
-      emptyTalk(),
-      event("step_finish", { part: { tokens: { input: 100, output: 20, reasoning: 0, cache: { read: 30, write: 0 } }, cost: 0.01 } }),
-      T0,
-    )
-    const two = applyLine(one, event("step_finish", { part: { tokens: { input: 50, output: 5 }, cost: 0.005 } }), T0)
-    expect(two.tokens).toBe(205)
-    expect(two.costUsd).toBeCloseTo(0.015)
-  })
-
-  /*
-   * B7, live: nikcli 1.389 answers and then does not exit inside a git
-   * repository, for minutes. The turn ends at its own last step instead.
-   */
-  test("the turn's own step_finish with reason stop ends it, with that step's tokens and cost", () => {
-    const asked = sendMessage(emptyTalk(), "ciao", T0)
-    const working = applyLine(asked, event("step_start", { part: { type: "step-start" } }), T0)
-    const text = applyLine(working, event("text", { part: { type: "text", text: "GLOBALE" } }), T0)
-    expect(text.ended).toBeUndefined()
-    const done = applyLine(text, event("step_finish", { part: { reason: "stop", tokens: { input: 100, output: 5 }, cost: 0.002 } }), T0)
-    expect(done.ended).toBe(true)
-    expect(done.tokens).toBe(105)
-    expect(done.costUsd).toBeCloseTo(0.002)
-    // The next message is a turn of its own again.
-    expect(sendMessage(done, "ancora", T0).ended).toBeUndefined()
-  })
-
-  test("a step that calls tools does not end the turn, nor does a length or error stop", () => {
-    const asked = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("step_start", {}), T0)
-    for (const reason of ["tool-calls", "tool_calls", "length", "error", undefined]) {
-      const step = applyLine(asked, event("step_finish", { part: { reason, tokens: { input: 1 } } }), T0)
-      expect(step.ended).toBeUndefined()
-    }
-  })
-
-  test("a sub-agent's step_finish stop, in another session, does not end the turn", () => {
-    const asked = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("step_start", {}), T0)
-    const child = applyLine(asked, event("step_finish", { sessionID: "ses_figlio", part: { reason: "stop", tokens: { input: 7 } } }), T0)
-    expect(child.ended).toBeUndefined()
-    expect(child.tokens).toBe(7)
-    const own = applyLine(child, event("step_finish", { part: { reason: "stop" } }), T0)
-    expect(own.ended).toBe(true)
-    // A resumed conversation ends on its own session too.
-    const resumed = applyLine(sendMessage(own, "e poi?", T0), event("step_finish", { part: { reason: "stop" } }), T0)
-    expect(resumed.ended).toBe(true)
-  })
-
-  test("an error event ends the turn as an error with its message", () => {
-    const talk = applyLine(emptyTalk(), event("error", { error: { name: "ProviderError", data: { message: "chiave scaduta" } } }), T0)
-    expect(talk.status).toBe("error")
-    expect(talk.messages.at(-1)).toMatchObject({ role: "error", text: "chiave scaduta" })
-  })
-
+describe("applyJsonLine", () => {
   test("lines that are not json are ignored, a «Permission required» line too: a question is an event with an id (B8d)", () => {
-    const quiet = applyLine(emptyTalk(), "INFO something happened", T0)
+    const quiet = fold(emptyTalk(), "INFO something happened")
     expect(quiet.messages).toHaveLength(0)
     expect(quiet.status).toBe("idle")
 
-    const line = applyLine(emptyTalk(), "[36m◆[0m  Permission required: bash (bun test)", T0)
+    const line = fold(emptyTalk(), "[36m◆[0m  Permission required: bash (bun test)")
     expect(line.status).toBe("idle")
     expect(line.permission).toBeUndefined()
   })
 
   test("a broken json line is not a message", () => {
-    const talk = applyLine(emptyTalk(), '{"type": "text", "part": ', T0)
+    const talk = fold(emptyTalk(), '{"type": "text", "text": ')
     expect(talk.messages).toHaveLength(0)
   })
 
   test("an event cut into rows by the pty is glued back together", () => {
     // ConPTY re-renders at the terminal's width: one event, three rows.
-    const whole = event("text", { part: { type: "text", text: "una risposta abbastanza lunga da essere spezzata in più righe dal terminale" } })
-    const rows = [whole.slice(0, 60), whole.slice(60, 120), whole.slice(120)]
+    const whole = event("una risposta abbastanza lunga da essere spezzata in più righe dal terminale, e oltre")
+    const rows = [whole.slice(0, 40), whole.slice(40, 80), whole.slice(80)]
     let talk = emptyTalk()
-    for (const row of rows) talk = applyLine(talk, row, T0)
+    for (const row of rows) talk = fold(talk, row)
     expect(talk.partial).toBeUndefined()
     expect(talk.messages.map((m) => m.role)).toEqual(["bot"])
     expect(talk.messages[0]?.text).toContain("spezzata in più righe")
   })
 
   test("colour codes around an event do not hide it", () => {
-    const talk = applyLine(emptyTalk(), "[0m" + event("text", { part: { text: "ok" } }) + "[K", T0)
+    const talk = fold(emptyTalk(), "[0m" + event("ok") + "[K")
     expect(talk.messages.at(-1)?.text).toBe("ok")
   })
 
   test("pieces that never become an event are dropped past the limit", () => {
-    let talk = applyLine(emptyTalk(), "{" + "x".repeat(1000), T0)
+    let talk = fold(emptyTalk(), "{" + "x".repeat(1000))
     expect(talk.partial).toBeDefined()
-    for (let i = 0; i < 300; i++) talk = applyLine(talk, "y".repeat(1000), T0)
+    for (let i = 0; i < 300; i++) talk = fold(talk, "y".repeat(1000))
     expect(talk.partial).toBeUndefined()
     expect(talk.messages).toHaveLength(0)
+  })
+})
+
+describe("usage and errors, as the events carry them", () => {
+  test("tokens are summed across nested records", () => {
+    expect(sumTokens({ input: 100, output: 20, reasoning: 0, cache: { read: 30, write: 0 } })).toBe(150)
+    expect(sumTokens(undefined)).toBe(0)
+  })
+
+  test("an error's words: its message, its data's message, or its name", () => {
+    expect(errorText({ name: "ProviderError", data: { message: "chiave scaduta" } })).toBe("chiave scaduta")
+    expect(errorText("boom")).toBe("boom")
+    expect(errorText({ name: "APIError" })).toBe("APIError")
   })
 })
 
@@ -175,6 +99,9 @@ describe("permissions", () => {
   })
 })
 
+/** A turn that ended with the CLI's own error on the thread. */
+const failedWith = (talk: Talk, text: string): Talk => ({ ...appendMessage(talk, { role: "error", text }, T0), status: "error" })
+
 describe("applyExit", () => {
   test("a clean exit ends the turn idle", () => {
     const talk = applyExit(sendMessage(emptyTalk(), "x", T0), 0, T0 + 9)
@@ -185,19 +112,19 @@ describe("applyExit", () => {
   test("a failing exit says so once, and not again after an error event", () => {
     const failed = applyExit(emptyTalk(), 1, T0)
     expect(failed.messages.at(-1)?.text).toBe("nikcli è uscito con codice 1.")
-    const afterError = applyExit(applyLine(emptyTalk(), event("error", { error: "boom" }), T0), 1, T0)
+    const afterError = applyExit(failedWith(emptyTalk(), "boom"), 1, T0)
     expect(afterError.messages).toHaveLength(1)
     expect(afterError.status).toBe("error")
   })
 
   test("a turn ended by the plan's limit says nothing will retry it, once", () => {
-    const limited = applyLine(sendMessage(emptyTalk(), "x", T0), event("error", { error: "Claude AI usage limit reached" }), T0)
+    const limited = failedWith(sendMessage(emptyTalk(), "x", T0), "Claude AI usage limit reached")
     const ended = applyExit(limited, 1, T0 + 1, "Claude Code")
     expect(ended.limited).toBe(true)
     expect(ended.messages.at(-1)?.text).toContain("ADE non riprova")
     const again = sendMessage(ended, "ancora", T0 + 3)
     expect(again.limited).toBeUndefined()
-    const done = applyExit(applyLine(again, event("text", { part: { text: "Fatto." } }), T0 + 4), 0, T0 + 5, "Claude Code")
+    const done = applyExit(appendMessage(again, { role: "bot", text: "Fatto." }, T0 + 4), 0, T0 + 5, "Claude Code")
     expect(done.limited).toBeUndefined()
     expect(parseTalk(serializeTalk(ended)).limited).toBeUndefined()
     expect(applyExit(ended, 1, T0 + 2, "Claude Code").messages).toHaveLength(ended.messages.length)
@@ -207,9 +134,9 @@ describe("applyExit", () => {
 describe("lastLine", () => {
   test("says what happened last, in one line, and the fallback when nothing has", () => {
     expect(lastLine(emptyTalk(), "Revisiona le PR")).toBe("Revisiona le PR")
-    const said = applyLine(emptyTalk(), event("text", { part: { text: "Fatto.\nDue righe." } }), T0)
+    const said = appendMessage(emptyTalk(), { role: "bot", text: "Fatto.\nDue righe." }, T0)
     expect(lastLine(said, "")).toBe("Fatto. Due righe.")
-    const ran = applyLine(said, event("tool_use", { part: { tool: "bash", state: { title: "bun test" } } }), T0)
+    const ran = appendMessage(said, { role: "tool", tool: "bash", text: "bun test" }, T0)
     expect(lastLine(ran, "")).toBe("bash: bun test")
     expect(lastLine(sendMessage(ran, "grazie", T0), "")).toBe("Tu: grazie")
     const asked: Talk = { ...ran, status: "waiting", permission: { permission: "bash", patterns: "rm", askedAt: T0 } }
@@ -241,9 +168,12 @@ describe("mentionIn", () => {
   })
 })
 
+/** A turn that answered, in session `ses_abc`. */
+const answered = (): Talk => ({ ...appendMessage(sendMessage(emptyTalk(), "ciao", T0), { role: "bot", text: "Ciao." }, T0), sessionId: "ses_abc" })
+
 describe("storage", () => {
   test("round-trips the thread, dropping the running state", () => {
-    const talk = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("text", { part: { text: "Ciao." } }), T0)
+    const talk = answered()
     const back = parseTalk(serializeTalk(talk))
     expect(back.sessionId).toBe("ses_abc")
     expect(back.messages).toEqual(talk.messages)
@@ -257,9 +187,9 @@ describe("storage", () => {
 
   test("a secret in tool output does not land in the archive, and the printout has a size cap", () => {
     const key = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
-    const talk = applyLine(
+    const talk = appendMessage(
       emptyTalk(),
-      event("tool_use", { part: { type: "tool", tool: "bash", state: { title: `echo ${key}`, output: `${key}\n${"x".repeat(TOOL_OUTPUT_MAX)}` } } }),
+      { role: "tool", tool: "bash", text: `echo ${key}`, output: `${key}\n${"x".repeat(TOOL_OUTPUT_MAX)}` },
       T0,
     )
     const stored = serializeTalk(talk)
@@ -296,8 +226,7 @@ describe("storage", () => {
       getItem: (k) => disk.get(k) ?? null,
       setItem: (k, v) => void disk.set(k, v),
     })
-    const talk = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("text", { part: { text: "Ciao." } }), T0)
-    archive.flush(keyA, talk)
+    archive.flush(keyA, answered())
     expect(archive.read(keyA).sessionId).toBe("ses_abc")
     expect(archive.read(keyB).sessionId).toBeUndefined()
     expect(archive.read(keyB).messages).toHaveLength(0)
@@ -305,18 +234,16 @@ describe("storage", () => {
   })
 
   test("the last turn keeps its own tokens and the model the event named", () => {
+    const spend = (talk: Talk, tokens: number, costUsd: number) =>
+      noteTurnUsage({ ...talk, tokens: talk.tokens + tokens, costUsd: talk.costUsd + costUsd }, tokens, costUsd, true)
     let talk = sendMessage(emptyTalk(), "uno", T0)
-    talk = applyLine(
-      talk,
-      event("step_start", { part: { type: "step-start", model: { providerID: "openai", modelID: "gpt-5" } } }),
-      T0,
-    )
-    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 10, output: 2 }, cost: 0.01 } }), T0)
+    talk = noteReportedModel(talk, { providerID: "openai", modelID: "gpt-5" })
+    talk = spend(talk, 12, 0.01)
     expect(talk.tokens).toBe(12)
     expect(talk.costUsd).toBeCloseTo(0.01)
     expect(talk.lastTurn).toEqual({ model: "openai/gpt-5", tokens: 12, costUsd: 0.01 })
     talk = sendMessage(talk, "due", T0 + 1)
-    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 4, output: 1 }, cost: 0.002 } }), T0 + 2)
+    talk = spend(talk, 5, 0.002)
     expect(talk.tokens).toBe(17)
     expect(talk.costUsd).toBeCloseTo(0.012)
     expect(talk.lastTurn).toEqual({ tokens: 5, costUsd: 0.002 })

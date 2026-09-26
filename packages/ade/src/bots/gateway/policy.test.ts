@@ -115,8 +115,8 @@ describe("the trust checked again on every turn, with no dialog", () => {
   /*
    * G5: from a chat nikcli's shell is denied through NIKCLI_PERMISSION, and an
    * agent file's own permission overrides it. The user's own bot that grants
-   * itself a tool does not run from a chat; in the panel, only a grant of the
-   * shell stops it (B8c, `project-trust.ts` `grantProblem`).
+   * itself a tool does not run from a chat; in the panel its session's rules
+   * on ADE's server come after the grant (B8d, `serve-rules.ts`).
    */
   test("the user's own nikcli bot that grants itself a tool does not run from a chat", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import type { AgentFile } from "./nikcli"
-import { admitProject, configGrant, grantProblem, projectSurface, type ProjectFs } from "./project-trust"
+import { admitProject, configGrant, projectSurface, type ProjectFs } from "./project-trust"
 import { t } from "../i18n"
 import { memoryTrustStore } from "./trust"
 
@@ -174,22 +174,11 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
 
 /*
  * B8c: a project's `nikcli.json` can grant a bot what its file does not:
- * `agent.<name>` is merged with the bot's file, after `NIKCLI_PERMISSION`.
- * The panel does not start a nikcli bot with such a grant, the user's own
- * included, and names what to take out.
+ * `agent.<name>` is merged with the bot's file. The gateway does not start a
+ * nikcli bot with such a grant (`gateway/policy.ts`); in the panel its
+ * session's rules on ADE's server come after it (B8d).
  */
 describe("i permessi concessi dal nikcli.json del progetto", () => {
-  const own: AgentFile = {
-    identifier: "mio",
-    path: "C:/Users/x/.config/nikcli/agent/mio.md",
-    scope: "global",
-    description: "",
-    mode: "primary",
-    prompt: "Sei mio.",
-    disabledTools: [],
-  }
-  const plain = "---\ndescription: Mio\n---\nSei mio."
-
   const granting: [string, string][] = [
     ['{"agent":{"mio":{"permission":{"bash":"allow"}}}}', 'agent."mio".permission."bash"'],
     ['{"agent":{"mio":{"permission":{"bash":{"*":"ask","git push *":"allow"}}}}}', 'agent."mio".permission."bash"."git push *"'],
@@ -223,35 +212,12 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
     expect(configGrant("[1, 2]", "mio")).toBeNull()
   })
 
-  test("il bot dell'utente non parte e il messaggio dice cosa togliere", async () => {
-    const fs = fakeFs({ [`${ROOT}/.nikcli/nikcli.json`]: '{"agent":{"mio":{"permission":{"bash":"allow"}}}}' })
-    const read = async () => plain
-    expect(await grantProblem(own, ROOT, { read, fs })).toBe(
-      t("bots.trust.configGrants", "mio", 'agent."mio".permission."bash"', `${ROOT}/.nikcli/nikcli.json`),
-    )
-  })
-
-  test("la riga del suo file viene prima, anche per un bot dell'utente", async () => {
-    const fs = fakeFs({})
-    const read = async () => "---\ndescription: Mio\npermission:\n  bash: allow\n---\nSei mio."
-    expect(await grantProblem(own, ROOT, { read, fs })).toBe(t("bots.trust.grantsShell", "mio", "bash: allow", own.path))
-  })
-
-  test("un nikcli.json rotto ferma il bot, uno pulito no", async () => {
-    const read = async () => plain
-    const broken = fakeFs({ [`${ROOT}/nikcli.json`]: '{"agent": ' })
-    expect(await grantProblem(own, ROOT, { read, fs: broken })).toBe(
-      t("bots.trust.configUnreadable", "mio", `${ROOT}/nikcli.json`),
-    )
-    const clean = fakeFs({ [`${ROOT}/nikcli.json`]: '{"model":"openrouter/x:free"}' })
-    expect(await grantProblem(own, ROOT, { read, fs: clean })).toBeUndefined()
-    expect(await grantProblem(own, undefined, { read, fs: clean })).toBeUndefined()
-  })
-
-  test("il pannello chiede grantProblem per ogni bot su nikcli prima di mandare il turno", () => {
+  /* B8d: the session's rules on ADE's server come after any grant, so the panel admits the project and nothing else. */
+  test("il pannello non ferma più un bot nikcli per un permesso concesso: ammette il progetto", () => {
     const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
     const checks = view.slice(view.indexOf("async function admitTurn"), view.indexOf("return { ok: true, bot: trusted }"))
-    expect(checks).toMatch(/const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"\s*if \(nikcli\) \{\s*const granted = await grantProblem\(/)
+    expect(checks).not.toContain("grantProblem")
+    expect(checks).toMatch(/const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"[\s\S]*if \(root && nikcli\) \{\s*const project = await admitProject\(/)
     // The panel's turn and a routine's run (B11) both pass there before they start.
     const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(verdict.bot"))
     expect(start).toContain("await admitTurn(bot, props.projectRoot, askTrust)")

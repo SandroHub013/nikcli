@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
 import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, spendLine, turnCommand } from "./runners"
+import { t } from "../i18n"
 import { emptyTalk, parseTalk, sendMessage, serializeTalk, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -27,11 +28,17 @@ describe("il motore di un bot", () => {
 })
 
 describe("gli argomenti di un turno", () => {
-  test("nikcli resta `run --agent`", () => {
-    const { command, args } = turnCommand(runnerById("nikcli"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" })
-    expect(command).toBe("nikcli")
-    expect(args.slice(0, 3)).toEqual(["run", "--agent", "tester"])
-    expect(args).toContain("openai/gpt-5.5")
+  /* B8d: a nikcli turn runs on ADE's server; there is no `nikcli run` to build. */
+  test("nikcli non ha un comando: il suo turno gira sul server di ADE", () => {
+    expect(() => turnCommand(runnerById("nikcli"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" })).toThrow(
+      t("bots.turn.nikcliOnServer"),
+    )
+  })
+
+  test("una riga JSON non cambia il filo di nikcli: i suoi eventi vengono dal server", () => {
+    const talk = sendMessage(emptyTalk(), "ciao", 1)
+    const line = '{"type":"text","sessionID":"ses_finta","part":{"type":"text","text":"Ciao!"}}'
+    expect(applyRunnerLine(runnerById("nikcli"), talk, line, 2)).toBe(talk)
   })
 
   test("Claude Code: stream-json, persona come system prompt, sessione ripresa, messaggio dopo --", () => {
@@ -221,10 +228,6 @@ describe("la risposta finale di un turno", () => {
     expect(finalText(sendMessage(talk, "e poi?", 2))).toBe("")
   })
 
-  test("nikcli senza agente usa quello predefinito", () => {
-    const { args } = turnCommand(runnerById("nikcli"), { bot: { ...bot, identifier: "" }, message: "ciao" })
-    expect(args).not.toContain("--agent")
-  })
 })
 
 describe("lo stato di accesso", () => {
@@ -452,20 +455,6 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
  */
 describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
   /* B8d: nikcli's rules are its session's on ADE's server (`serve-rules.ts`), not a spawn flag. */
-  test("B8d: il comando di nikcli non porta nessun flag", () => {
-    const global = { ...bot, scope: "global" as const }
-    for (const spec of [
-      { bot: global, message: "x" },
-      { bot: { ...bot, scope: "project" as const }, message: "x" },
-      { bot: global, message: "x", approvals: true },
-      { bot: { ...global, disabledTools: ["bash"] }, message: "x", approvals: true },
-      { bot: global, message: "x", remote: { commands: true } },
-      { bot: global, message: "x", unattended: true },
-    ]) {
-      expect(turnCommand(runnerById("nikcli"), spec).flags).toBeUndefined()
-    }
-  })
-
   test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
     for (const runner of ["claude", "codex"]) {
       const flags = turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags
@@ -534,17 +523,13 @@ describe("un turno da chat non ha la shell", () => {
 })
 
 describe("abbonamento o chiave", () => {
-  test("plan mette account-plan e nessuna chiave; key mette il nome; nikcli non ha il flag", () => {
+  test("plan mette account-plan e nessuna chiave; key mette il nome", () => {
     const plan = turnCommand(runnerById("claude"), { bot, message: "x" })
     expect(plan.flags).toEqual(["account-plan"])
     expect(plan.secrets).toBeUndefined()
     const key = turnCommand(runnerById("codex"), { bot, message: "x", account: { mode: "key", key: "lavoro" } })
     expect(key.flags).toEqual(["account-key"])
     expect(key.secrets).toEqual(["lavoro"])
-    const nik = turnCommand(runnerById("nikcli"), { bot, message: "x", account: { mode: "key", key: "lavoro" } })
-    expect(nik.flags ?? []).not.toContain("account-key")
-    expect(nik.flags ?? []).not.toContain("account-plan")
-    expect(nik.secrets).toBeUndefined()
     const missing = turnCommand(runnerById("claude"), { bot, message: "x", account: { mode: "key", key: "" } })
     expect(missing.flags).toEqual(["account-key"])
     expect(missing.secrets).toBeUndefined()

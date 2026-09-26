@@ -205,25 +205,15 @@ function wildcard(pattern: string): RegExp {
 }
 
 /**
- * Whether a grant under `permission` reaches what ADE asks about for a bot in
- * the panel (the `ask` rules of `serve-rules.ts`): the shell, or a folder
- * outside the project. Before B8d nikcli merged the bot's own rules after
- * ADE's, and such a grant was a command no one was asked about; on ADE's
- * server the session's rules come last, and the refusal stays as a second
- * guard.
+ * Whether a grant under `permission` reaches the shell or a folder outside
+ * the project: what the gateway refuses from a project's configuration
+ * (`project-trust.ts` `configGrant`). In the panel a bot's session on ADE's
+ * server has its rules after the bot's own (B8d, `serve-rules.ts`), so a
+ * grant there is asked about all the same.
  */
 export function reachesShell(permission: string): boolean {
   const name = wildcard(permission)
   return name.test("bash") || name.test("external_directory")
-}
-
-/**
- * The line of a bot file that grants the shell or a folder outside, or
- * `undefined`: a nikcli bot with one does not start from the panel (B8c), the
- * user's own included, and the message names the line to take out.
- */
-export function shellGrant(text: string): Grant | undefined {
-  return grantsIn(text).find((grant) => reachesShell(grant.under))
 }
 
 /** Project bots with a question on screen, so a second send does not ask again (review B3, BASSO 1). */

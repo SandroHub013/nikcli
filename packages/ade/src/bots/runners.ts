@@ -1,8 +1,9 @@
 /**
  * Which program a bot's turns run on.
  *
- * A bot is a nikcli agent file, and nikcli is still the default: its turns are
- * `nikcli run --agent`, with the providers `nikcli auth` knows. But the user's
+ * A bot is a nikcli agent file, and nikcli is still the default: its turns run
+ * on ADE's nikcli server (B8d, `serve-turn.ts`), with the providers `nikcli
+ * auth` knows. But the user's
  * subscriptions are not all reachable from there. An Anthropic subscription is
  * only usable through Claude Code — the Agent SDK is Claude Code as a library,
  * and `claude -p --output-format stream-json` is the same loop from the
@@ -13,9 +14,9 @@
  * The runner is ADE's own frontmatter key (`runner:`), like `avatar:`: nikcli
  * ignores keys it does not know, so the file still runs in nikcli's TUI.
  *
- * Every runner prints one JSON object per line, so every adapter here is the
- * same shape: the arguments for one turn, and a fold from an event to the
- * thread. Pure, in a `.ts`, and tested against lines the real CLIs printed.
+ * Claude Code and Codex print one JSON object per line, so both adapters here
+ * are the same shape: the arguments for one turn, and a fold from an event to
+ * the thread. Pure, in a `.ts`, and tested against lines the real CLIs printed.
  */
 
 import { t } from "../i18n"
@@ -28,12 +29,10 @@ import { claudeRefusals, classifyCommand } from "./approval"
 import {
   appendMessage,
   applyJsonLine,
-  applyLine,
   attachOutput,
   errorText,
   noteTurnUsage,
   noteReportedModel,
-  runArgs,
   sealTurn,
   type Talk,
 } from "./talk"
@@ -382,21 +381,8 @@ export function turnCommand(
   const { bot, message, sessionId } = spec
   switch (runner.id) {
     case "nikcli":
-      return {
-        command: runner.command,
-        args: runArgs({
-          identifier: bot.identifier,
-          message,
-          ...(sessionId ? { sessionId } : {}),
-          ...(bot.model ? { model: bot.model } : {}),
-          ...(bot.effort ? { effort: bot.effort } : {}),
-        }),
-        /*
-         * No spawn flag: a bot's nikcli turn runs on ADE's server with its
-         * session's rules (B8d, `serve-turn.ts`), and `runTurn` refuses to
-         * start one here. What `nikcli run` would be, for the record.
-         */
-      }
+      // A bot's nikcli turn runs on ADE's server with its session's rules (B8d, `serve-turn.ts`): no process.
+      throw new Error(t("bots.turn.nikcliOnServer"))
     case "claude": {
       /*
        * `-p` cannot ask for permission, so what the bot may do is decided up
@@ -501,7 +487,8 @@ export function turnCommand(
 export function applyRunnerLine(runner: Runner, talk: Talk, line: string, at: number): Talk {
   switch (runner.id) {
     case "nikcli":
-      return applyLine(talk, line, at)
+      // Its events come from ADE's server (`serve-turn.ts`), never as lines.
+      return talk
     case "claude":
       return applyJsonLine(talk, line, at, applyClaudeEvent)
     case "codex":

@@ -19,10 +19,10 @@
  *   - on the right its card: what it is for, what it runs on, its objectives,
  *     the file, and the form to change any of it.
  *
- * The conversation is `nikcli run --agent <name> --format json` one process
- * per turn, continued by session id — see `talk.ts` for the events and
- * `session.ts` for the process. "Terminale" still opens the full TUI in a
- * pane for whoever wants it.
+ * A nikcli bot's conversation is a session on ADE's nikcli server
+ * (`serve-turn.ts`); Claude Code's and Codex's are one process per turn,
+ * continued by session id (`turn.ts`). `talk.ts` is the thread. "Terminale"
+ * still opens the full TUI in a pane for whoever wants it.
  *
  * Everything with a rule in it is in the sibling `.ts` files. A `.tsx`
  * cannot be imported under `bun test` here, so nothing that matters lives in
@@ -43,7 +43,7 @@ import { PLAN_RUNNERS, routineModeOf } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
-import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runBotTurn } from "./serve-turn"
 import {
   createBot,
@@ -223,10 +223,11 @@ async function admitTurn(
   if (!verdict.ok) return verdict
   const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
   const nikcli = runnerById(trusted.runner).id === "nikcli"
-  if (nikcli) {
-    const granted = await grantProblem(trusted, root, { read: readBotText, fs: projectFs, text: read })
-    if (granted) return { ok: false, problem: granted }
-  }
+  /*
+   * A grant in the bot's file or the project's nikcli.json no longer stops
+   * it: its session's rules come after them (B8d, `serve-rules.ts`), so the
+   * shell and folders outside are asked about, the block list denied.
+   */
   // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
   if (root && nikcli) {
     const project = await admitProject(root, {
