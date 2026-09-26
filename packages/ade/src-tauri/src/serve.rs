@@ -539,24 +539,44 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
     let program = which_on_path("nikcli")
         .ok_or_else(|| "nikcli non è nel PATH: installalo per usare chat e assistente.".to_string())?;
     let inherited = std::env::var("NIKCLI_CONFIG_CONTENT").ok();
-    let user_files = user_config_texts();
-    let chosen = CHOSEN_SMALL_MODEL
+    let serving = start_with_small_model(
+        inherited.as_deref(),
+        &user_config_texts(),
+        &CHOSEN_SMALL_MODEL,
+        |content| launch(&program, directory.as_deref(), content),
+        catalog_small_model,
+    )?;
+    install(server, serving)
+}
+
+/// A started server with the small model `spawn_own` describes: `launch`
+/// starts one with a `NIKCLI_CONFIG_CONTENT`, `catalog` reads its pick, and
+/// `chosen` keeps the pick for the next start. Apart so that the tests can run
+/// it with their own processes and catalog.
+fn start_with_small_model(
+    inherited: Option<&str>,
+    user_files: &[String],
+    chosen: &Mutex<Option<String>>,
+    mut launch: impl FnMut(Option<&str>) -> Result<Serving, String>,
+    catalog: impl Fn(&Serving) -> Option<String>,
+) -> Result<Serving, String> {
+    let started_with = chosen
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
         .unwrap_or_else(|| FREE_SMALL_MODEL.to_string());
-    let content = small_model_content(inherited.as_deref(), &user_files, &chosen);
-    let mut serving = launch(&program, directory.as_deref(), content.as_deref())?;
+    let content = small_model_content(inherited, user_files, &started_with);
+    let mut serving = launch(content.as_deref())?;
     if content.is_some() {
-        if let Some(picked) = catalog_small_model(&serving) {
-            *CHOSEN_SMALL_MODEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(picked.clone());
-            if picked != chosen {
-                let content = small_model_content(inherited.as_deref(), &user_files, &picked);
-                serving = replace_when_ready(serving, || launch(&program, directory.as_deref(), content.as_deref()));
+        if let Some(picked) = catalog(&serving) {
+            *chosen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(picked.clone());
+            if picked != started_with {
+                let content = small_model_content(inherited, user_files, &picked);
+                serving = replace_when_ready(serving, || launch(content.as_deref()));
             }
         }
     }
-    install(server, serving)
+    Ok(serving)
 }
 
 /// `serving`, or the server `relaunch` starts in its place once it is up.
@@ -1013,17 +1033,86 @@ mod tests {
         assert_eq!(FREE_SMALL_MODEL, KNOWN_FREE_SMALL[0]);
     }
 
+    /// Modello assente review, M3 and B5: the start itself, with real processes and a catalog of the test's.
     #[test]
     fn the_catalogs_pick_goes_to_the_server_and_a_different_one_restarts_it_once() {
-        let source = include_str!("serve.rs");
-        let start = source.find(concat!("fn spawn_", "own(")).unwrap();
-        let body = &source[start..source[start..].find(concat!("fn replace_", "when_ready(")).unwrap() + start];
-        assert!(body.contains(concat!("catalog_small_", "model(&serving)")));
-        assert!(body.contains(concat!("if picked != ", "chosen {")));
-        assert!(body.contains(concat!("serving = replace_", "when_ready(serving,")));
-        assert!(!body.contains(concat!("serving.", "end();")));
-        // Only when the small model is ADE's to give: a user's own is never replaced.
-        assert!(body.find(concat!("if content.", "is_some()")).unwrap() < body.find(concat!("catalog_small_", "model(")).unwrap());
+        use super::{FREE_SMALL_MODEL, start_with_small_model};
+        use std::cell::RefCell;
+        use std::sync::Mutex;
+        let other = "openrouter/altro/modello:free";
+        let alive = |serving: &mut Serving| serving.child.try_wait().unwrap().is_none();
+
+        // The catalog picks the one it started with: one server, kept.
+        let chosen = Mutex::new(None);
+        let launched = RefCell::new(Vec::<Option<String>>::new());
+        let launch = |content: Option<&str>| {
+            launched.borrow_mut().push(content.map(str::to_string));
+            Ok(own(&format!("http://127.0.0.1:{}", launched.borrow().len()), sleeper()))
+        };
+        let mut one = start_with_small_model(None, &[], &chosen, launch, |_| Some(FREE_SMALL_MODEL.to_string())).unwrap();
+        assert_eq!(launched.borrow().len(), 1);
+        assert!(launched.borrow()[0].as_deref().unwrap().contains(FREE_SMALL_MODEL));
+        assert!(alive(&mut one));
+        one.end();
+
+        // Another pick: a second server with it takes the place of the first, which is ended.
+        let chosen = Mutex::new(None);
+        let launched = RefCell::new(Vec::<Option<String>>::new());
+        let first_pid = RefCell::new(0);
+        let launch = |content: Option<&str>| {
+            launched.borrow_mut().push(content.map(str::to_string));
+            let serving = own(&format!("http://127.0.0.1:{}", launched.borrow().len()), sleeper());
+            if launched.borrow().len() == 1 {
+                *first_pid.borrow_mut() = serving.child.id();
+            }
+            Ok(serving)
+        };
+        let mut two = start_with_small_model(None, &[], &chosen, launch, |_| Some(other.to_string())).unwrap();
+        assert_eq!(launched.borrow().len(), 2);
+        assert!(launched.borrow()[1].as_deref().unwrap().contains(other));
+        assert_eq!(two.url, "http://127.0.0.1:2");
+        assert!(alive(&mut two));
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing());
+        assert!(sys.process(sysinfo::Pid::from_u32(*first_pid.borrow())).is_none(), "il primo server è rimasto in vita");
+        assert_eq!(chosen.lock().unwrap().as_deref(), Some(other));
+        two.end();
+
+        // The next start begins with the pick: no second server.
+        let launched = RefCell::new(Vec::<Option<String>>::new());
+        let launch = |content: Option<&str>| {
+            launched.borrow_mut().push(content.map(str::to_string));
+            Ok(own("http://127.0.0.1:3", sleeper()))
+        };
+        let mut again = start_with_small_model(None, &[], &chosen, launch, |_| Some(other.to_string())).unwrap();
+        assert_eq!(launched.borrow().len(), 1);
+        assert!(launched.borrow()[0].as_deref().unwrap().contains(other));
+        again.end();
+
+        // The second server does not start: the first one stays, and it works.
+        let chosen = Mutex::new(None);
+        let calls = RefCell::new(0);
+        let launch = |_: Option<&str>| {
+            *calls.borrow_mut() += 1;
+            if *calls.borrow() == 1 { Ok(own("http://127.0.0.1:4", sleeper())) } else { Err("non parte".to_string()) }
+        };
+        let mut kept = start_with_small_model(None, &[], &chosen, launch, |_| Some(other.to_string())).unwrap();
+        assert_eq!(*calls.borrow(), 2);
+        assert_eq!(kept.url, "http://127.0.0.1:4");
+        assert!(alive(&mut kept), "senza server dove ce n'era uno");
+        kept.end();
+
+        // A small_model the user chose: never replaced, and the catalog is not even read.
+        let chosen = Mutex::new(None);
+        let launched = RefCell::new(Vec::<Option<String>>::new());
+        let launch = |content: Option<&str>| {
+            launched.borrow_mut().push(content.map(str::to_string));
+            Ok(own("http://127.0.0.1:5", sleeper()))
+        };
+        let theirs = [r#"{"small_model":"anthropic/claude-haiku"}"#.to_string()];
+        let mut own_choice = start_with_small_model(None, &theirs, &chosen, launch, |_| panic!("catalogo letto")).unwrap();
+        assert_eq!(*launched.borrow(), vec![None]);
+        own_choice.end();
     }
 
     /// Modello assente review, M3: a replacement that does not start keeps the server that works.
