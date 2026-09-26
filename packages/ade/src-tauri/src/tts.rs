@@ -940,6 +940,11 @@ impl InstallRun<'_> {
         change(&mut progress);
     }
 
+    /// What the bar reads now, which is the base the next file adds to.
+    fn bytes_done(&self) -> u64 {
+        self.slot.progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).bytes_done
+    }
+
     /// Fetches one file into its place: staging, progress, cancel, deadline,
     /// size, digest, rename. A file already in place is left exactly as it is.
     fn bring(
@@ -974,15 +979,22 @@ impl InstallRun<'_> {
         // for, and a file that looks whole is the one case that would not be
         // caught by the digest later.
         let _ = std::fs::remove_file(part);
-        // Bytes arrive for the file being written, while the total the interface
-        // draws against is over every file still to fetch: so what is published
-        // is the growth of this file added to what came before, and the bar does
-        // not fall back to zero when the install moves to the next file.
-        let mut already: u64 = 0;
+        /*
+         * What the bar reads is what arrived before this file plus what this
+         * file weighs now — not the sum of every report.
+         *
+         * The sum double-counted, and not by a little: `curl --retry 2` rewrites
+         * the `.part` from zero after a drop, and each report is a growth against
+         * the last one, so everything that grew again was added a second time.
+         * A file that was discarded took its bytes with it and the bar said more
+         * had been downloaded than ever had. With the base taken once per file a
+         * retry makes the bar dip to where the transfer really restarted, which
+         * is true, and grow from there once.
+         */
+        let before = self.bytes_done();
         let mut report = |bytes: u64| {
-            let grown = bytes.saturating_sub(already);
-            already = bytes;
-            self.publish(|progress| progress.bytes_done += grown);
+            let total = before + bytes;
+            self.publish(|progress| progress.bytes_done = total);
         };
         let written = match curl.fetch(download.url, part, &mut report, &|| self.stop()) {
             Ok(written) => written,
@@ -1770,6 +1782,55 @@ mod tests {
         assert!(!done.running);
         // Il runtime non è stato riscaricato: era già installato.
         assert_eq!(scripted.asked.lock().unwrap().len(), 2, "solo i due file della voce");
+    }
+
+    /// A transfer that gets halfway, is cut, and starts again from zero: what
+    /// `curl --retry 2` does to the staging file, and the reason a byte counter
+    /// that adds up every report ends up counting the same bytes twice.
+    struct Restarting {
+        body: Vec<u8>,
+    }
+
+    impl Fetcher for Restarting {
+        fn fetch(
+            &self,
+            _url: &str,
+            part: &Path,
+            report: &mut dyn FnMut(u64),
+            _stop: &dyn Fn() -> Option<String>,
+        ) -> Result<u64, String> {
+            let half = self.body.len() / 2;
+            std::fs::write(part, &self.body[..half]).map_err(|e| e.to_string())?;
+            report(half as u64);
+            std::fs::write(part, &self.body).map_err(|e| e.to_string())?;
+            report(self.body.len() as u64);
+            Ok(self.body.len() as u64)
+        }
+    }
+
+    #[test]
+    fn bytes_a_file_lost_and_written_again_are_not_counted_twice() {
+        let root = test_root("ritentativo");
+        let installer = Installer::default();
+        let body = b"il file per intero".to_vec();
+        let dest = root.join("ugo.onnx");
+        let wanted = download_of("ugo.onnx", &body, Some(body.len() as u64));
+        let files = [(&wanted, dest.clone())];
+
+        let slot = installer.slot(PIPER);
+        let _one = installer.hold(&slot);
+        let install = installer.begin(&slot, 1, bytes_pending(&files), far());
+        // Un trasferimento che si interrompe a metà e ricomincia da capo: il file
+        // si accorcia a zero e ricresce, e i byte non possono essere contati due
+        // volte. Qui si vede il numero, che è la metà del file più il file.
+        let restarting = Restarting { body: body.clone() };
+        install.fetch(&wanted, &staging(&dest), &restarting, &FingerprintInProcess).unwrap();
+        assert_eq!(
+            installer.progress_of(PIPER).bytes_done,
+            body.len() as u64,
+            "un ritentativo non gonfia il contatore"
+        );
+        install.finish(&Ok(()));
     }
 
     /// A `Fingerprint` that panics, which is the one way an install can stop
