@@ -55,6 +55,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const API: &str = "https://slack.com/api";
@@ -651,6 +653,16 @@ enum Ending {
     Dropped { greeted: bool },
     /// Slack asked for a new socket: at once, without the wait.
     Refresh,
+    /// The adapter is gone, the gateway switched off: the socket said goodbye.
+    LetGo,
+}
+
+/// Closes the socket as a client that is leaving, with a 1000: Slack sees it
+/// go rather than a connection that vanishes. At most a second, so a peer
+/// that does not read cannot hold the task.
+async fn say_goodbye<S: SinkExt<Message> + Unpin>(sink: &mut S) {
+    let close = Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() }));
+    let _ = tokio::time::timeout(Duration::from_secs(1), sink.send(close)).await;
 }
 
 fn ack(envelope: &str) -> String {
@@ -659,9 +671,19 @@ fn ack(envelope: &str) -> String {
 
 /// One socket: `auth.test` the first time, `apps.connections.open`, then read
 /// and acknowledge until it closes.
-async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, AdapterError>>) -> Ending {
+async fn socket_session(
+    inner: &Inner,
+    sender: &mpsc::Sender<Result<Inbound, AdapterError>>,
+    alive: &mut watch::Receiver<()>,
+) -> Ending {
+    // The adapter can go at any wait below: `alive` is watched at each, and
+    // once the socket is open it closes with a goodbye.
     if inner.bot_user().is_none() {
-        match inner.auth_test().await {
+        let me = tokio::select! {
+            _ = alive.changed() => return Ending::LetGo,
+            me = inner.auth_test() => me,
+        };
+        match me {
             Ok(me) => {
                 *hold(&inner.bot_user) = Some(me.user_id);
                 if !me.missing.is_empty() {
@@ -678,7 +700,11 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
             }
         }
     }
-    let address = match inner.open_socket().await {
+    let opened = tokio::select! {
+        _ = alive.changed() => return Ending::LetGo,
+        opened = inner.open_socket() => opened,
+    };
+    let address = match opened {
         Ok(address) => address,
         Err(failure) if failure.refuses_token() => {
             return Ending::Stopped(format!(
@@ -691,7 +717,11 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
             return Ending::Dropped { greeted: false };
         }
     };
-    let (mut sink, mut source) = match tokio_tungstenite::connect_async(&address).await {
+    let connected = tokio::select! {
+        _ = alive.changed() => return Ending::LetGo,
+        connected = tokio_tungstenite::connect_async(&address) => connected,
+    };
+    let (mut sink, mut source) = match connected {
         Ok((socket, _handshake)) => socket.split(),
         // The address carries a ticket: the error is said without it.
         Err(_) => {
@@ -701,7 +731,15 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
     };
     let mut greeted = false;
     let mut warned = false;
-    while let Some(incoming) = source.next().await {
+    loop {
+        let incoming = tokio::select! {
+            _ = alive.changed() => {
+                say_goodbye(&mut sink).await;
+                return Ending::LetGo;
+            }
+            incoming = source.next() => incoming,
+        };
+        let Some(incoming) = incoming else { break };
         let Ok(frame) = incoming else { break };
         match frame {
             Message::Ping(payload) => {
@@ -769,12 +807,9 @@ async fn socket_session(inner: &Inner, sender: &mpsc::Sender<Result<Inbound, Ada
 async fn run_socket(inner: Arc<Inner>, sender: mpsc::Sender<Result<Inbound, AdapterError>>, mut alive: watch::Receiver<()>, first_wait: Duration) {
     let mut backoff = first_wait;
     loop {
-        let ending = tokio::select! {
-            // The adapter is gone: its sender with it.
-            _ = alive.changed() => return,
-            ending = socket_session(&inner, &sender) => ending,
-        };
-        match ending {
+        // The session watches `alive` itself, to close its socket with a goodbye.
+        match socket_session(&inner, &sender, &mut alive).await {
+            Ending::LetGo => return,
             Ending::Stopped(why) => {
                 if !why.is_empty() {
                     let _ = sender.send(Err(AdapterError::Fatal(why))).await;
@@ -1055,6 +1090,8 @@ mod tests {
         received: Vec<(Instant, Value)>,
         /// The client closed it, rather than the fake's time running out.
         closed_by_client: bool,
+        /// The code of the close frame the client sent, if it sent one.
+        goodbye: Option<u16>,
     }
 
     /// Slack's socket on localhost: one script of frames per connection, then
@@ -1106,6 +1143,9 @@ mod tests {
                                         Some(Ok(Ws::Text(text))) => {
                                             let parsed = serde_json::from_str::<Value>(text.as_ref()).unwrap_or(Value::Null);
                                             hold(&log)[index].received.push((Instant::now(), parsed));
+                                        }
+                                        Some(Ok(Ws::Close(Some(close)))) => {
+                                            hold(&log)[index].goodbye = Some(u16::from(close.code));
                                         }
                                         Some(Ok(_)) => {}
                                         _ => {
@@ -1410,6 +1450,8 @@ mod tests {
         slack.receive().await.expect("letto");
         drop(slack);
         eventually("il socket si chiude", || socket.connections().first().is_some_and(|c| c.closed_by_client)).await;
+        // With a goodbye, the code of a client that leaves.
+        assert_eq!(socket.connections()[0].goodbye, Some(1000));
     }
 
     #[test]
