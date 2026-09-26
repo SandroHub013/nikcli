@@ -69,6 +69,26 @@ function shell(): Node | undefined {
   return document.querySelector('[data-component="ade-shell"]') ?? document.body
 }
 
+/*
+ * Shift+Tab on the panel itself, as it is when the sheet opens: the browser
+ * goes to what comes before the panel, outside it, and the trap brings the
+ * focus straight back to the panel, so the key did nothing (Verifiche,
+ * kobalte-overlay-scatti). Kobalte's sentinels only catch a Tab from inside.
+ * It goes to the last control, as Shift+Tab from the first one does.
+ */
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+
+/** Focuses the last control in `panel` that takes the focus; whether one did. */
+function focusLast(panel: HTMLElement): boolean {
+  const candidates = [...panel.querySelectorAll<HTMLElement>(TABBABLE)].filter((element) => !element.hasAttribute("data-focus-trap"))
+  for (const element of candidates.reverse()) {
+    element.focus()
+    if (document.activeElement === element) return true
+  }
+  return false
+}
+
 export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
   const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "surface", "labelledBy", "role", "children"])
   // What had the focus before: the button, the palette, the terminal. It gets it back.
@@ -153,8 +173,12 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
                   panel = element
                   own.ref?.(element)
                 },
-                get onKeyDown() {
-                  return own.onKeyDown
+                onKeyDown: (event: KeyboardEvent & { currentTarget: HTMLDivElement; target: Element }) => {
+                  if (event.key === "Tab" && event.shiftKey && event.target === panel && panel && focusLast(panel)) {
+                    event.preventDefault()
+                    return
+                  }
+                  own.onKeyDown?.(event)
                 },
                 // Not the first button: the focus is placed by `settle` above.
                 onOpenAutoFocus: (event: Event) => event.preventDefault(),
