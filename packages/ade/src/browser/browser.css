@@ -171,7 +171,7 @@
 }
 
 [data-slot="browser-design-pick"][data-active="true"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   color: var(--ade-accent);
 }
 
@@ -253,7 +253,7 @@
    active the mode group wears the accent: the control that hijacks clicks
    must be unmissable even at a glance. */
 [data-component="browser-pane"][data-mode="edit"] [data-slot="browser-mode-group"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
 }
 
 [data-component="browser-pane"][data-mode="edit"] [data-slot="browser-mode-btn"][data-active] {
@@ -289,7 +289,7 @@
 }
 
 [data-slot="browser-owner"][data-state="ready"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   color: var(--ade-accent);
 }
 
@@ -366,7 +366,7 @@
 
 [data-slot="browser-send-choice"] {
   padding: var(--ade-space-2) var(--ade-space-4);
-  border: 1px solid var(--ade-accent);
+  border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-sm);
   background: transparent;
   color: var(--ade-accent);
@@ -665,7 +665,7 @@
 [data-slot="browser-context-action"]:hover,
 [data-slot="browser-context-action"][aria-expanded="true"] {
   color: var(--ade-accent);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
 }
 
 [data-slot="browser-section-hint"] {
@@ -703,7 +703,7 @@
 }
 
 [data-slot="browser-edit-field"] input:focus {
-  outline: 1px solid var(--ade-accent);
+  outline: 1px solid var(--ade-border-strong);
 }
 
 [data-slot="browser-edit-row"] {
@@ -919,7 +919,7 @@
   gap: var(--ade-space-3);
   padding: var(--ade-space-4);
   background: var(--ade-overlay);
-  border: 1px solid var(--ade-accent);
+  border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-md);
   box-shadow: var(--ade-shadow-md);
   font-family: var(--ade-sans);
@@ -946,7 +946,7 @@
 }
 
 [data-slot="dev-server-offer-open"] {
-  border: 1px solid var(--ade-accent);
+  border: 1px solid var(--ade-border-strong);
   background: var(--ade-accent);
   color: var(--ade-accent-fg);
 }

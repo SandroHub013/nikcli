@@ -69,7 +69,7 @@
 
 [data-slot="ext-search"]:focus-visible {
   outline: none;
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   box-shadow: var(--ade-focus-ring);
 }
 

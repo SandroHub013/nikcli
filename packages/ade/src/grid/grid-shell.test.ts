@@ -213,7 +213,7 @@ describe("the pane shell stays in one place", () => {
   test("focus is the shell's line, and only the session opts out, at home", () => {
     const index = read("index.css")
     expect(index).toContain('[data-slot="grid-cell"] > [data-component][data-focused]')
-    expect(index).toContain("var(--ade-pane-focus, 1px solid var(--ade-accent))")
+    expect(index).toContain("var(--ade-pane-focus, 1px solid var(--ade-border-strong))")
     // The session keeps its ring by saying so where it lives — never by overriding the shell's line.
     expect(read("grid/pane.css")).toContain("--ade-pane-focus: none")
     const optedOut: string[] = []
@@ -249,7 +249,7 @@ describe("the focused session shows its focus", () => {
     return value
   }
 
-  test("its computed shadow carries the accent, in the order the sheets load", () => {
+  test("its computed shadow carries the neutral border, in the order the sheets load", () => {
     const sheets = ["grid/pane.css", "index.css"].map((file) => {
       const style = document.createElement("style")
       style.textContent = read(file)
@@ -258,16 +258,19 @@ describe("the focused session shows its focus", () => {
     })
     const cell = document.createElement("div")
     cell.setAttribute("data-slot", "grid-cell")
-    cell.style.setProperty("--ade-accent", "rgb(1, 2, 3)")
+    // The token the ring is drawn with, given a value nothing else uses.
+    cell.style.setProperty("--ade-border-strong", "rgb(1, 2, 3)")
     const session = document.createElement("div")
     session.setAttribute("data-component", "session-pane")
     session.setAttribute("data-focused", "true")
     cell.appendChild(session)
     document.body.appendChild(cell)
     try {
+      // The same question as before, on the cascade: the focused session shows a
+      // ring, the unfocused one does not. Only the colour is no longer the accent
+      // (contorni A), and the test is what says the mark is still there at all.
       const shadow = resolveVars(session, getComputedStyle(session).boxShadow)
       expect(shadow).toContain("rgb(1, 2, 3)")
-      // Unfocused, the shell's shadow and no ring.
       session.removeAttribute("data-focused")
       expect(resolveVars(session, getComputedStyle(session).boxShadow)).not.toContain("rgb(1, 2, 3)")
     } finally {

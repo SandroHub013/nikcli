@@ -176,8 +176,8 @@
 }
 
 [data-slot="design-variant-item"][data-selected="true"] {
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent);
+  border-color: var(--ade-border-strong);
+  box-shadow: 0 0 0 1px var(--ade-border-strong);
 }
 
 [data-slot="variant-head"] {
@@ -368,7 +368,7 @@
 }
 
 [data-slot="design-note"]:focus {
-  outline: 2px solid var(--ade-accent);
+  outline: 2px solid var(--ade-text-weak);
   outline-offset: -1px;
 }
 

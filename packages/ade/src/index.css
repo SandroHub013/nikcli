@@ -417,11 +417,20 @@ body[data-theme="glass"] #root,
     transform var(--ade-dur-fast) var(--ade-ease);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
-  /* One ring, applied everywhere through :focus-visible. The second, softer
-     ring is what keeps it visible on top of an accent-filled button. */
+  /* One ring, applied everywhere through :focus-visible, and neutral in every
+     theme (composer-nero, contorni A). It is the token ~20 sheets reach for, so
+     this is where the green stops.
+
+     The colour is `--ade-text-weak`, not `--ade-border-strong`: a focus ring is
+     an indicator, and one that sits 1.5:1 off its surface is not seen by the
+     people who reach it with the keyboard alone. `--ade-text-weak` is 4.6:1 on
+     the light surface and 5.5:1 on the dark one, and the test in
+     `grid/contorni.test.ts` computes it per theme and asks for 3:1. The softer
+     second layer is the same grey mixed with nothing, so the geometry is
+     unchanged and only the hue moved. */
   --ade-focus-ring:
-    0 0 0 2px var(--ade-accent),
-    0 0 0 4px var(--ade-accent-glow);
+    0 0 0 2px var(--ade-text-weak),
+    0 0 0 4px color-mix(in srgb, var(--ade-text-weak) 45%, transparent);
 
   --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
 
@@ -621,8 +630,11 @@ body,
   box-shadow: var(--ade-pane-shadow, 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45)));
 }
 
+/* The focused pane is told apart by a neutral grey a shade above the resting
+   border, in every theme: the accent ring round the active pane is what the
+   user asked to be rid of (contorni A). */
 [data-slot="grid-cell"] > [data-component][data-focused] {
-  outline: var(--ade-pane-focus, 1px solid var(--ade-accent));
+  outline: var(--ade-pane-focus, 1px solid var(--ade-border-strong));
   outline-offset: -1px;
 }
 
@@ -676,9 +688,12 @@ body,
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  border: 2px dashed var(--ade-accent);
+  /* A drop target says so with a dashed edge and a wash of the neutral; accent
+     here would be the one green the user asked to be rid of, and it is a border
+     drawn over a pane, not a fill. */
+  border: 2px dashed var(--ade-text-weak);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--ade-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--ade-text-weak) 18%, transparent);
 }
 
 /*

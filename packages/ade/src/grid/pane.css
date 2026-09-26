@@ -898,7 +898,7 @@
 [data-component="session-pane"][data-focused] {
   --ade-pane-focus: none;
   --ade-pane-shadow:
-    0 0 0 1.5px var(--ade-accent),
+    0 0 0 1.5px var(--ade-border-strong),
     0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
 }
 
@@ -923,10 +923,13 @@
   font-family: var(--ade-sans);
 }
 
+/* The header's inner line, like the ring around it: neutral (contorni A). It
+   was `--ade-accent-soft`, and on the focused pane it read as a second green
+   edge inside the first. */
 [data-component="session-pane"][data-focused] > [data-slot="pane-header"] {
   box-shadow:
     var(--ade-shadow-sm),
-    inset 0 0 0 1px var(--ade-accent-soft);
+    inset 0 0 0 1px var(--ade-border-subtle);
 }
 
 /* The mark in a round chip, with the status as a halo around it. */
@@ -1025,8 +1028,8 @@
   border: 0;
   border-radius: var(--ade-radius-sm);
   outline: none;
-  background: color-mix(in srgb, var(--ade-accent) 10%, transparent);
-  box-shadow: inset 0 -1.5px 0 var(--ade-accent);
+  background: var(--ade-raised);
+  box-shadow: inset 0 -1.5px 0 var(--ade-text-weak);
   font: inherit;
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);

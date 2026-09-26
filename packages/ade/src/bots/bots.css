@@ -360,7 +360,7 @@
   margin-left: auto;
   width: fit-content;
   padding: var(--ade-space-3) var(--ade-space-5);
-  border: 1px solid color-mix(in srgb, var(--ade-accent) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ade-text-weak) 30%, transparent);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-accent-soft);
 }
@@ -1077,7 +1077,7 @@
 }
 
 [data-slot="bots-picker-option"]:hover { background: var(--ade-hover); }
-[data-slot="bots-picker-option"][data-on="true"] { border-color: var(--ade-accent); background: var(--ade-accent-soft); }
+[data-slot="bots-picker-option"][data-on="true"] { border-color: var(--ade-border-strong); background: var(--ade-accent-soft); }
 
 [data-slot="bots-picker-swatch"] {
   width: 22px;
