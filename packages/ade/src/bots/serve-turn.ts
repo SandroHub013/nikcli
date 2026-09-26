@@ -27,7 +27,7 @@
 
 import type { Agent, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
-import { appChatConnectionDeps, openChat, type ChatConnectionDeps } from "../chat/connection"
+import { appChatConnectionDeps, CATALOG_TIMEOUT_MS, openChat, within, type ChatConnectionDeps } from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
 import { catalogHasModel, parseModelRef, serializeModelRef } from "../chat/model"
 import { readEvents } from "../chat/stream"
@@ -484,14 +484,15 @@ export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = ap
   return runTurn(request, deps)
 }
 
-/** The calls of `ServeClient` on the SDK's client. */
-export function serveClientOf(client: NikcliClient): ServeClient {
+/** The calls of `ServeClient` on the SDK's client; the catalog within `catalogTimeoutMs`. */
+export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
   return {
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
     catalog: async () => {
+      // Unread within the time, it is unknown and the server decides (modello assente review, M4).
       const [providers, config] = await Promise.all([
-        client.provider.list().catch(() => undefined),
-        client.config.get().catch(() => undefined),
+        within(client.provider.list(), catalogTimeoutMs),
+        within(client.config.get(), catalogTimeoutMs),
       ])
       return {
         ...(providers?.data ? { providerList: providers.data } : {}),

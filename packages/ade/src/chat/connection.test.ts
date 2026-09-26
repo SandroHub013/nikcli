@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { admitProject, surfaceFingerprint } from "../bots/project-trust"
 import { memoryTrustStore } from "../bots/trust"
-import { FRESH_MS, isChatRefused, openChat, loadChatCatalog } from "./connection"
+import { FRESH_MS, isChatRefused, openChat, loadChatCatalog, within } from "./connection"
+import type { NikcliClient } from "@nikcli-ai/sdk/client"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -198,5 +199,23 @@ describe("the chat on a folder", () => {
     const catalog = await loadChatCatalog(opened.client)
     expect(catalog).toBeDefined()
     expect(fake.sent.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+/* Modello assente review, M4: a catalog that does not come does not hold the send. */
+describe("a catalog read has a time limit", () => {
+  test("a server that never answers gives an unknown catalog, in time", async () => {
+    const never = () => new Promise<never>(() => {})
+    const client = { provider: { list: never }, app: { agents: never }, config: { get: never } } as unknown as NikcliClient
+    const started = Date.now()
+    const catalog = await loadChatCatalog(client, 20)
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(catalog).toEqual({ providerList: undefined, agents: undefined, configModel: undefined })
+  })
+
+  test("within: the value in time, undefined when late or failed", async () => {
+    expect(await within(Promise.resolve(3), 50)).toBe(3)
+    expect(await within(new Promise<number>((resolve) => setTimeout(() => resolve(3), 200)), 10)).toBeUndefined()
+    expect(await within(Promise.reject(new Error("no")), 50)).toBeUndefined()
   })
 })

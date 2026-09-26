@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { CHAT_PERMISSION, type PermissionRule } from "../chat/rules"
 import type { ChatEvent } from "../chat/events"
-import type { ProviderList } from "@nikcli-ai/sdk/client"
+import type { NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { botPermission } from "./serve-rules"
-import { agentProblem, modelRef, runServeTurn, type ServeClient, type ServeConnection } from "./serve-turn"
+import { agentProblem, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -492,5 +492,16 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(modelRef("solo")).toBeUndefined()
     expect(modelRef("/x")).toBeUndefined()
     expect(modelRef(undefined)).toBeUndefined()
+  })
+})
+
+/* Modello assente review, M4: a bot's turn does not wait for ever on the catalog. */
+describe("the bot's catalog read has a time limit", () => {
+  test("a server that never answers gives an unknown catalog, in time", async () => {
+    const never = () => new Promise<never>(() => {})
+    const client = { provider: { list: never }, config: { get: never } } as unknown as NikcliClient
+    const started = Date.now()
+    expect(await serveClientOf(client, 20).catalog()).toEqual({})
+    expect(Date.now() - started).toBeLessThan(1000)
   })
 })

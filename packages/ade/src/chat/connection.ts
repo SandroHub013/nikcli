@@ -42,13 +42,28 @@ export interface ChatCatalog {
 }
 
 /**
+ * How long a catalog read may take. A send and a bot's turn wait for it, to
+ * check the model (`catalogHasModel`); past this it counts as unread and the
+ * server decides, instead of a send that waits for ever (modello assente
+ * review, M4).
+ */
+export const CATALOG_TIMEOUT_MS = 15_000
+
+/** `promise`'s value, or undefined when it fails or takes longer than `ms`. */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), ms)))
+  return Promise.race([promise.catch(() => undefined), late]).finally(() => clearTimeout(timer))
+}
+
+/**
  * Loads provider list, agents, and config model using an admitted chat client.
  */
-export async function loadChatCatalog(client: NikcliClient): Promise<ChatCatalog> {
+export async function loadChatCatalog(client: NikcliClient, timeoutMs = CATALOG_TIMEOUT_MS): Promise<ChatCatalog> {
   const [pRes, aRes, cRes] = await Promise.all([
-    client.provider.list().catch(() => undefined),
-    client.app.agents().catch(() => undefined),
-    client.config.get().catch(() => undefined),
+    within(client.provider.list(), timeoutMs),
+    within(client.app.agents(), timeoutMs),
+    within(client.config.get(), timeoutMs),
   ])
   return {
     providerList: pRes?.data,
