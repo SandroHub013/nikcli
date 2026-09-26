@@ -561,6 +561,44 @@ describe("a bot's memory in its turns", () => {
     expect(p.requests[2]!.message).toContain("Si chiama Mario.")
   })
 
+  test("«Annulla» on the thread takes a write back, while nothing changed its block since (review)", async () => {
+    const p = memoryPanel()
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ricorda")
+    p.talks[nikcli.path] = {
+      ...appendMessage(
+        p.talks[nikcli.path]!,
+        {
+          role: "bot",
+          text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>\n<ade-memory op="add" block="notes">I test stanno in src.</ade-memory>',
+        },
+        1,
+      ),
+      sessionId: "s1",
+    }
+    await p.done()
+    const lines = p.talks[nikcli.path]!.messages.filter((message) => message.memoryUndo)
+    expect(lines).toHaveLength(2)
+    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
+    // The first write: the second changed the block after it, so it is not undone.
+    p.turns.undoMemory(nikcli, lines[0]!.id)
+    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
+    expect(p.talks[nikcli.path]!.messages.at(-1)?.role).toBe("error")
+    // The last write comes back out, and its line loses the button.
+    p.turns.undoMemory(nikcli, lines[1]!.id)
+    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun."])
+    const thread = p.talks[nikcli.path]!.messages
+    expect(thread.find((message) => message.id === lines[1]!.id)?.memoryUndo).toBeUndefined()
+    expect(thread.at(-1)?.text).toContain("annullata")
+    // Telling the bot about a failure keeps what can still be undone.
+    const kept = { id: "u1", block: "notes" as const, before: [], after: ["Usa bun."] }
+    p.memory.set(nikcli.path, { ...p.memory.get(nikcli.path), undo: [kept], pending: ["x"] })
+    await p.done()
+    p.turns.send(nikcli, "ok")
+    expect(p.memory.get(nikcli.path).pending).toBeUndefined()
+    expect(p.memory.get(nikcli.path).undo).toEqual([kept])
+  })
+
   test("a refused write is said in the thread, and to the bot on its next turn", async () => {
     const p = memoryPanel()
     const nikcli = bot("nikcli")

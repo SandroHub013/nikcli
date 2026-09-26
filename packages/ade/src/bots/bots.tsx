@@ -908,7 +908,11 @@ function Thread(props: {
           </div>
         </Show>
 
-        <For each={props.talk.messages}>{(message) => <Message message={message} bot={props.bot} />}</For>
+        <For each={props.talk.messages}>
+          {(message) => (
+            <Message message={message} bot={props.bot} onUndo={() => turns.undoMemory(props.bot, message.id)} />
+          )}
+        </For>
 
         <Show when={props.talk.permission}>
           {(asked) => (
@@ -1048,7 +1052,7 @@ function Thread(props: {
   )
 }
 
-function Message(props: { message: TalkMessage; bot: AgentFile }) {
+function Message(props: { message: TalkMessage; bot: AgentFile; onUndo?: () => void }) {
   return (
     <div data-slot="bots-msg" data-role={props.message.role}>
       <Show when={props.message.role !== "user"}>
@@ -1065,6 +1069,12 @@ function Message(props: { message: TalkMessage; bot: AgentFile }) {
               <pre data-slot="bots-tool-output">{props.message.output}</pre>
             </Show>
           </details>
+          {/* A memory write the user can take back (B8a review): no dialog for each one. */}
+          <Show when={props.message.memoryUndo && props.onUndo}>
+            <button type="button" data-slot="bots-link" onClick={() => props.onUndo?.()}>
+              {t("bots.memory.undo")}
+            </button>
+          </Show>
         </Show>
         <Show when={props.message.role !== "tool"}>
           <p data-slot="bots-msg-text">{props.message.text}</p>

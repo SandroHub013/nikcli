@@ -241,5 +241,8 @@ describe("B8a: the panel", () => {
     const turns = view.slice(view.indexOf("const turns = createBotTurns("), view.indexOf("})", view.indexOf("const turns = createBotTurns(")))
     expect(turns).toContain("memory: memories")
     expect(view).toContain("<MemorySection bot={props.bot.path} store={memories} />")
+    // Each write's line in the thread has its «Annulla» (review).
+    expect(view).toContain("onUndo={() => turns.undoMemory(props.bot, message.id)}")
+    expect(view).toContain("<Show when={props.message.memoryUndo && props.onUndo}>")
   })
 })

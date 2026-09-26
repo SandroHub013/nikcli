@@ -1483,6 +1483,11 @@ export const it = {
   "bots.memory.done.add": (block: string) => `Memoria: aggiunta una voce (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memoria: cambiata una voce (${block}).`,
   "bots.memory.done.remove": (block: string) => `Memoria: tolta una voce (${block}).`,
+  "bots.memory.undo": "Annulla",
+  "bots.memory.undo.done": (block: string) => `Memoria: scrittura annullata (${block}).`,
+  "bots.memory.undo.changed": (block: string) =>
+    `La memoria (${block}) è cambiata dopo questa scrittura: non la annullo. Togli la voce dalla sezione Memoria del bot.`,
+  "bots.memory.undo.gone": "Questa scrittura non si può più annullare.",
   "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",
   "bots.stop": "Ferma",

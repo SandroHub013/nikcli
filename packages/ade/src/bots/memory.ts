@@ -39,6 +39,8 @@ export interface BotMemory {
   readonly user: readonly string[]
   /** What the bot's last writes came to, for the start of its next turn. */
   readonly pending?: readonly string[]
+  /** The last writes applied, as the thread can take them back (`undoMemoryWrite`). */
+  readonly undo?: readonly MemoryUndo[]
 }
 
 export const EMPTY_MEMORY: BotMemory = { notes: [], user: [] }
@@ -229,6 +231,71 @@ export function applyMemoryOps(
   return { memory: current, results }
 }
 
+/* ── writes as the thread shows them ─────────────────────────────────── */
+
+/**
+ * One write applied, as «Annulla» on its line in the thread takes it back
+ * (B8a review): its block before and after it. No dialog asks about each
+ * write; the user sees each one and can undo it.
+ */
+export interface MemoryUndo {
+  readonly id: string
+  readonly block: MemoryBlock
+  readonly before: readonly string[]
+  readonly after: readonly string[]
+}
+
+/** The writes that can still be taken back: the last ones. */
+const UNDO_KEPT = 20
+
+/** What one write came to, for its line in the thread. */
+export type SettledWrite =
+  | { readonly ok: true; readonly text: string; readonly undo?: string }
+  | { readonly ok: false; readonly text: string }
+
+/** A turn's writes, in order: each applied one can be undone by its id (`newId`). */
+export function settleMemoryOps(
+  memory: BotMemory,
+  ops: readonly MemoryOp[],
+  newId: () => string,
+): { memory: BotMemory; lines: SettledWrite[] } {
+  let current = memory
+  const lines: SettledWrite[] = []
+  for (const op of ops) {
+    const result = applyMemoryOp(current, op)
+    if (!result.ok) {
+      lines.push({ ok: false, text: result.error })
+      continue
+    }
+    const id = newId()
+    const record: MemoryUndo = { id, block: op.block, before: current[op.block], after: result.memory[op.block] }
+    current = { ...result.memory, undo: [...(current.undo ?? []), record].slice(-UNDO_KEPT) }
+    lines.push({ ok: true, text: result.message, undo: id })
+  }
+  return { memory: current, lines }
+}
+
+const sameEntries = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((entry, at) => entry === b[at])
+
+/**
+ * The write `id` taken back: its block as it was before it. Only while the
+ * block is as the write left it; after another change, undoing it would undo
+ * that too, so the user removes the entry from the Memoria section instead.
+ */
+export function undoMemoryWrite(memory: BotMemory, id: string): MemoryResult {
+  const record = memory.undo?.find((entry) => entry.id === id)
+  if (!record) return { ok: false, memory, error: t("bots.memory.undo.gone") }
+  const undo = (memory.undo ?? []).filter((entry) => entry.id !== id)
+  if (!sameEntries(memory[record.block], record.after))
+    return { ok: false, memory: { ...memory, undo }, error: t("bots.memory.undo.changed", blockName(record.block)) }
+  return {
+    ok: true,
+    memory: { ...withBlock(memory, record.block, record.before), undo },
+    message: t("bots.memory.undo.done", blockName(record.block)),
+  }
+}
+
 /* ── the tags in an answer ────────────────────────────────────────────── */
 
 const OP_TAG = /<ade-memory\b([^>]*?)(?:\/>|>([\s\S]*?)<\/ade-memory\s*>)/gi
@@ -388,7 +455,20 @@ export function parseMemory(value: unknown): BotMemory {
     return memorySize(entries) <= MEMORY_LIMITS[name] ? entries : []
   }
   const pending = strings(record["pending"]).slice(-10)
-  return { notes: block("notes"), user: block("user"), ...(pending.length > 0 ? { pending } : {}) }
+  const undo = (Array.isArray(record["undo"]) ? record["undo"] : []).flatMap((value): MemoryUndo[] => {
+    if (!value || typeof value !== "object") return []
+    const entry = value as Record<string, unknown>
+    const kind = entry["block"]
+    if (typeof entry["id"] !== "string" || (kind !== "notes" && kind !== "user")) return []
+    if (!Array.isArray(entry["before"]) || !Array.isArray(entry["after"])) return []
+    return [{ id: entry["id"], block: kind, before: strings(entry["before"]), after: strings(entry["after"]) }]
+  })
+  return {
+    notes: block("notes"),
+    user: block("user"),
+    ...(pending.length > 0 ? { pending } : {}),
+    ...(undo.length > 0 ? { undo: undo.slice(-UNDO_KEPT) } : {}),
+  }
 }
 
 const STORAGE_KEY = "ade.bots.memory"

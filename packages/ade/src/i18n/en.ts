@@ -1470,6 +1470,11 @@ export const en: Messages = {
     count === 1 ? "An ade-memory tag could not be read and was not applied." : `${count} ade-memory tags could not be read and were not applied.`,
   "bots.memory.done.add": (block: string) => `Memory: an entry added (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memory: an entry changed (${block}).`,
+  "bots.memory.undo": "Undo",
+  "bots.memory.undo.done": (block: string) => `Memory: write undone (${block}).`,
+  "bots.memory.undo.changed": (block: string) =>
+    `The memory (${block}) changed after this write: I am not undoing it. Remove the entry from the bot's Memory section.`,
+  "bots.memory.undo.gone": "This write can no longer be undone.",
   "bots.memory.done.remove": (block: string) => `Memory: an entry removed (${block}).`,
   "bots.approval.alwaysSet": (reason: string) => `From now on this bot no longer asks when it ${reason}.`,
   "bots.status.replying": "replying…",
