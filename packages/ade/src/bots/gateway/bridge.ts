@@ -50,7 +50,8 @@ export function tauriGatewayBridge(): GatewayBridge {
 export function tauriGatewayPanelApi(): GatewayPanelApi {
   return {
     status: () => invoke("gateway_status"),
-    setToken: (bot, platform, token) => invoke("gateway_set_token", { bot, platform, token }),
+    setToken: (bot, platform, token, kind) => invoke("gateway_set_token", { bot, platform, token, kind: kind ?? null }),
+    slackManifest: (name) => invoke("gateway_slack_manifest", { name }),
     clearToken: (bot, platform) => invoke("gateway_clear_token", { bot, platform }),
     probe: (bot, platform) => invoke("gateway_probe", { bot, platform }),
     setEnabled: (bot, platform, enabled, project) => invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null }),

@@ -376,6 +376,78 @@ describe("the Gateway section of a bot's card", () => {
     })
   })
 
+  /* G10: Slack has a second token, and the manifest of the user's app. */
+  test("Slack asks for its App-Level Token, and switching on waits for both tokens", async () => {
+    await createRoot(async () => {
+      const seen: string[] = []
+      let status: GatewayStatus = {
+        bot: BOT.path,
+        platform: "slack",
+        enabled: false,
+        running: false,
+        connected: false,
+        hasToken: true,
+        hasAppToken: false,
+        authorized: [],
+      }
+      const api: GatewayPanelApi = {
+        status: async () => [status],
+        setToken: async (_bot, platform, token, kind) => {
+          seen.push(`setToken:${platform}:${kind ?? "bot"}:${token}`)
+          if (kind === "app") status = { ...status, hasAppToken: true }
+        },
+        slackManifest: async (name) => `{"name": "${name}"}`,
+        clearToken: async () => {},
+        probe: async () => "@bot",
+        setEnabled: async (_bot, platform, enabled) => void seen.push(`setEnabled:${platform}:${enabled}`),
+        pairingList: async () => ({ open: false, pending: [], authorized: [], attemptsLeft: 0 }),
+        pairingApprove: async () => ({ id: "U1", name: "qualcuno" }),
+        pairingReject: async () => {},
+        pairingRevoke: async () => {},
+        pairingOpen: async () => 0,
+        listen: async () => () => {},
+      }
+      const panel = createGatewayPanel({
+        bot: () => BOT,
+        api,
+        project: () => PROJECT,
+        remote: memoryRemoteStore(),
+        approve: async () => ({ ok: true, fingerprint: "f" }),
+        confirm: async () => true,
+        platform: "slack",
+      })
+      try {
+        await panel.refresh()
+        expect(panel.needsAppToken()).toBe(true)
+        expect(panel.tokensReady()).toBe(false)
+        // The bot's token alone does not switch Slack on, and says what is missing.
+        await panel.setEnabled(true)
+        expect(panel.problem()).toBe(t("gateway.panel.needAppToken"))
+        expect(seen.some((call) => call.startsWith("setEnabled"))).toBe(false)
+
+        // The second token goes one way too: the draft is emptied first.
+        panel.setAppDraft("  xapp-1-FINTO-token  ")
+        await panel.saveAppToken()
+        expect(panel.appDraft()).toBe("")
+        expect(seen).toContain("setToken:slack:app:xapp-1-FINTO-token")
+        expect(panel.tokensReady()).toBe(true)
+        await panel.setEnabled(true)
+        expect(seen).toContain("setEnabled:slack:true")
+
+        // The manifest is made for this bot's name.
+        await panel.showManifest()
+        expect(panel.manifest()).toContain("aiuto")
+
+        // Telegram needs no second token, and the manifest is Slack's.
+        panel.choose("telegram")
+        expect(panel.needsAppToken()).toBe(false)
+        expect(panel.manifest()).toBeUndefined()
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
+
   test("a name probed for one platform is dropped when the other is shown", async () => {
     await createRoot(async () => {
       const api: GatewayPanelApi = {
