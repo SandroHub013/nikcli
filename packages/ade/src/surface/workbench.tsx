@@ -191,7 +191,7 @@ import { mayReroute, pickProvider, setProviderPicker } from "../session/provider
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
+import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand, waitsForSheet } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
@@ -4042,6 +4042,8 @@ export function Workbench() {
     setVoiceSettingsSection(undefined)
     setVoiceSettingsOpen(false)
   }
+  /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
+  const sheetOpen = () => decisionsOpen() || designOpen() || voiceSettingsOpen()
   const openVoiceSettings = (section?: string) => {
     setVoiceSettingsSection(section)
     setVoiceSettingsOpen(true)
@@ -5326,6 +5328,8 @@ export function Workbench() {
 
   // Commands
   const runCommand = async (id: string) => {
+    // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+    if (sheetOpen() && waitsForSheet(id)) return
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
     if (keepsPaletteOpen(id)) {

@@ -35,4 +35,17 @@ describe("lint: the sheets are Kobalte dialogs", () => {
     expect(sheet.includes("surface={false}")).toBe(true)
     expect(/<VoiceSettingsPanel\s+framed\b/.test(sheet)).toBe(true)
   })
+
+  test("lint: runCommand asks waitsForSheet first, and sheetOpen covers every sheet the workbench renders", () => {
+    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const start = workbench.indexOf("const runCommand = async (id: string) => {")
+    expect(start).toBeGreaterThan(-1)
+    const firstLines = workbench.slice(start, start + 300)
+    expect(firstLines.includes("if (sheetOpen() && waitsForSheet(id)) return")).toBe(true)
+    const open = /const sheetOpen = \(\) => ([^\n]+)/.exec(workbench)?.[1] ?? ""
+    // Each sheet is rendered under its own <Show when={x()}>: every x() must be in sheetOpen.
+    const shown = [...workbench.matchAll(/<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:DecisionsSheet|DesignSheet|Sheet)\b/g)].map((match) => match[1]!)
+    expect(shown.length).toBe(3)
+    for (const signal of shown) expect([signal, open.includes(`${signal}()`)]).toEqual([signal, true])
+  })
 })
