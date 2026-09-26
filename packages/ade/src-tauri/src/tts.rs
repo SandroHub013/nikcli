@@ -954,7 +954,7 @@ impl InstallRun<'_> {
             return Ok(());
         }
         self.fetch(download, &staging(dest), curl, print)?;
-        std::fs::rename(staging(dest), dest).map_err(|e| e.to_string())?;
+        rename_into_place(&staging(dest), dest)?;
         self.publish(|progress| progress.files_done += 1);
         Ok(())
     }
@@ -1052,6 +1052,47 @@ impl InstallRun<'_> {
 /// that finds a half-written model is worse than one that finds none.
 fn staging(dest: &Path) -> PathBuf {
     dest.with_extension("part")
+}
+
+/// How many times a rename is tried, and how long between them.
+const RENAME_TRIES: usize = 3;
+const RENAME_WAIT: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// Moves a whole file to its place, and says which one when it cannot.
+///
+/// The rename comes right after curl has let go of the file, and on Windows that
+/// is not always the end of it: the antivirus opens what has just been written to
+/// look at it, and a rename onto a file someone else is holding fails with
+/// «Access is denied. (os error 5)». That is a moment, not a verdict, so it is
+/// tried a few times before it is believed — and the whole point of the retry is
+/// that the alternative was throwing away 63 MB that had already arrived.
+///
+/// The staging file goes when it does not work out, like every other failure
+/// here, and the message names the file, because «Access is denied» on its own
+/// sends the user looking for permissions they do not have a problem with.
+fn rename_into_place(from: &Path, dest: &Path) -> Result<(), String> {
+    let mut last = String::new();
+    for attempt in 1..=RENAME_TRIES {
+        match std::fs::rename(from, dest) {
+            Ok(()) => return Ok(()),
+            Err(problem) => {
+                last = problem.to_string();
+                if attempt < RENAME_TRIES {
+                    std::thread::sleep(RENAME_WAIT);
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_file(from);
+    Err(format!(
+        "Impossibile mettere in posto {}: {last}",
+        file_name(dest)
+    ))
+}
+
+/// The last piece of a path, for a message a person can act on.
+fn file_name(path: &Path) -> String {
+    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
 }
 
 /// The bytes this install still has to fetch, when every one of them has a size
@@ -1767,6 +1808,35 @@ mod tests {
         let progress = installer.progress_of(PIPER);
         assert!(!progress.running, "un install finito non resta in corso per sempre");
         assert_eq!(progress.error.as_deref(), Some(PANICA));
+    }
+
+    #[test]
+    fn a_rename_that_succeeds_leaves_nothing_behind() {
+        let root = test_root("rename-ok");
+        let from = root.join("ugo.onnx.part");
+        let dest = root.join("ugo.onnx");
+        std::fs::write(&from, b"il modello").unwrap();
+
+        rename_into_place(&from, &dest).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"il modello");
+        assert!(!from.exists(), "il .part non resta dopo un rename riuscito");
+    }
+
+    #[test]
+    fn a_rename_that_cannot_happen_says_which_file_and_leaves_no_part() {
+        let root = test_root("rename-fallito");
+        // Una cartella al posto del file: `rename` non può sostituirla, e su
+        // Windows è la forma che prende «qualcuno lo tiene aperto».
+        let dest = root.join("ugo.onnx");
+        std::fs::create_dir_all(&dest).unwrap();
+        let from = root.join("ugo.onnx.part");
+        std::fs::write(&from, b"il modello").unwrap();
+
+        let problem = rename_into_place(&from, &dest).unwrap_err();
+        // Il nome del file è nella frase: «Access is denied» da solo manda
+        // l'utente a cercare permessi che non è lui ad avere.
+        assert!(problem.contains("ugo.onnx"), "il messaggio nomina il file: {problem}");
+        assert!(!from.exists(), "un .part lasciato è spazzatura che sembra progresso");
     }
 
     #[test]
