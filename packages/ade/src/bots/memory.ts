@@ -58,12 +58,31 @@ export function memorySize(entries: readonly string[]): number {
 
 const TAG = /<\/?ade-memory\b/i
 
+/*
+ * What an entry must not look like: the frame the memory is read in, or a
+ * turn of someone else's. An entry that closed the frame and went on as the
+ * user, or as the system, would speak in every conversation after (B8a
+ * review, M1 b). Case aside.
+ */
+const FRAME_MARKS = [
+  "[memoria di ade",
+  "[fine della memoria",
+  "segue il messaggio dell'utente",
+  "[ade",
+  "[messaggio arrivato da",
+]
+const FRAME_LINE = /^\s*(?:==|\[\s*(?:system|user|assistant)\b|<\/?\s*(?:system|user|assistant)\b)/im
+const ROLE_LINE = /^\s*(?:user|assistant|system|human|developer|utente|assistente|sistema)\s*:/im
+
 /** Why `text` cannot be an entry; undefined when it can. */
 export function entryProblem(text: string): string | undefined {
   if (text.trim().length === 0) return t("bots.memory.error.empty")
   // A key, or one the thread already hid (B4): either way, not for the memory.
   if (scrubSecrets(text) !== text || text.includes(SECRET_MARK)) return t("bots.memory.error.secret")
   if (TAG.test(text)) return t("bots.memory.error.tag")
+  const lower = text.toLowerCase()
+  if (FRAME_MARKS.some((mark) => lower.includes(mark)) || FRAME_LINE.test(text) || ROLE_LINE.test(text))
+    return t("bots.memory.error.frame")
   if (text.includes(ENTRY_SEPARATOR.trim())) return t("bots.memory.error.separator")
   return undefined
 }

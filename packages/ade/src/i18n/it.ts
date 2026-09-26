@@ -1467,6 +1467,8 @@ export const it = {
   "bots.memory.error.secret": "Sembra una chiave o un token: in memoria non si salva.",
   "bots.memory.error.tag": "Una voce non può contenere un tag ade-memory.",
   "bots.memory.error.separator": "Una voce non può contenere il separatore §.",
+  "bots.memory.error.frame":
+    "Una voce non può somigliare alla cornice della memoria o al messaggio di un altro (User:, System:…): non si salva.",
   "bots.memory.error.full": (block: string, size: number, limit: number) =>
     `Memoria piena (${block}): sarebbero ${size} caratteri su ${limit}. Accorcia o togli una voce, poi riprova.`,
   "bots.memory.error.duplicate": (block: string) => `C'è già una voce uguale (${block}): non l'ho aggiunta.`,

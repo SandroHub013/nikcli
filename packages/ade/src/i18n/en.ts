@@ -1454,6 +1454,8 @@ export const en: Messages = {
   "bots.memory.error.empty": "An empty entry is not saved.",
   "bots.memory.error.secret": "It looks like a key or a token: it is not saved in memory.",
   "bots.memory.error.tag": "An entry cannot hold an ade-memory tag.",
+  "bots.memory.error.frame":
+    "An entry cannot look like the memory's frame or like someone else's message (User:, System:…): not saved.",
   "bots.memory.error.separator": "An entry cannot hold the § separator.",
   "bots.memory.error.full": (block: string, size: number, limit: number) =>
     `Memory full (${block}): it would be ${size} characters of ${limit}. Shorten or remove an entry, then try again.`,
