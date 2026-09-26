@@ -22,6 +22,7 @@ import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
+import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
 import {
@@ -308,7 +309,6 @@ import {
   formatFallbackLine,
   formatHandoff,
   handoffOutcome,
-  nativeLaunchArgs,
   parseHandoffs,
   parseNativeSessions,
   routeFor,
@@ -328,7 +328,7 @@ import {
   withMemoryEntry,
   type TokenUsage,
 } from "../session/shared"
-import { displayArgs, introArgs, introText, withIntro } from "../session-new/intro"
+import { displayArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -6366,7 +6366,8 @@ export function Workbench() {
   const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
     const agentId = given.agent ?? given.model
     // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
-    if (given.signIn) return startProcess(given.id, agentId, "", undefined, [...given.signIn])
+    const restart = restartOf(given)
+    if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])
     const reported = await adoptLastReport(given)
     let pane = reported ? { ...given, resumeId: reported } : given
     // Another open pane holds this conversation (ripristino review, point 1): it stays there.
@@ -6599,13 +6600,8 @@ export function Workbench() {
     }
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
-    const extraArgs = [
-      ...introArgs(agentId, introText(agentId, modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
-      ...nativeLaunchArgs(agentId, paneTitle),
-      ...(launched?.spawnArgs ?? []),
-      ...opening.args,
-      ...(extra ?? []),
-    ]
+    // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
+    const extraArgs = startArgsFor(agentId, launched, { title: paneTitle, opening: opening.args, ...(extra ? { extra } : {}) })
     const mintedId = opening.resumeId
     const openedId = openedConversation(resume, mintedId, launched?.resumeId)
 
