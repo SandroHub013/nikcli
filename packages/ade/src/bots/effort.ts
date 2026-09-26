@@ -45,3 +45,38 @@ export function effortToSend(
   if (variants === undefined || variants.includes(wanted)) return { variant: wanted }
   return { dropped: wanted }
 }
+
+/** What the bot form's effort field offers. */
+export interface EffortChoices {
+  /** The levels offered after the default. */
+  readonly options: readonly string[]
+  /** A saved value offered as itself: one that cannot be judged. */
+  readonly kept?: string
+  /** A saved value the model does not have: the default is shown, and says so. */
+  readonly stale?: string
+  /** No levels at all: the field is off. */
+  readonly none: boolean
+}
+
+/**
+ * The efforts the form offers. Claude Code's and Codex's are their flags'
+ * fixed values, and a value they do not list is theirs to judge. A nikcli
+ * bot's are its model's variants and nothing else: a fixed list offered
+ * levels a model did not have (`minimal` to `max` for models whose variants
+ * are `none` and `thinking`). While the variants are not known (no model
+ * pinned, the catalog unread) only the default is offered.
+ */
+export function effortChoices(input: {
+  readonly nikcli: boolean
+  readonly fixed: readonly string[]
+  readonly variants: readonly string[] | undefined
+  readonly saved: string
+}): EffortChoices {
+  const saved = input.saved.trim()
+  if (!input.nikcli) {
+    return { options: input.fixed, ...(saved && !input.fixed.includes(saved) ? { kept: saved } : {}), none: input.fixed.length === 0 }
+  }
+  if (input.variants === undefined) return { options: [], ...(saved ? { kept: saved } : {}), none: false }
+  if (input.variants.length === 0) return { options: [], ...(saved ? { stale: saved } : {}), none: true }
+  return { options: input.variants, ...(saved && !input.variants.includes(saved) ? { stale: saved } : {}), none: false }
+}

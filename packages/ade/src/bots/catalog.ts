@@ -15,6 +15,8 @@ export interface CatalogModel {
   readonly id: string
   readonly providerID?: string
   readonly cost?: { readonly input?: number; readonly output?: number }
+  /** Its variants, the efforts it takes (`session/llm.ts`): none is an empty list. */
+  readonly variants: readonly string[]
 }
 
 /**
@@ -33,7 +35,9 @@ export function parseModelCatalog(stdout: string): ReadonlyMap<string, CatalogMo
     try {
       const record = JSON.parse(lines.slice(i + 1, end + 1).join("\n")) as Record<string, unknown>
       const cost = record["cost"] as Record<string, unknown> | undefined
+      const variants = record["variants"]
       models.set(name, {
+        variants: variants && typeof variants === "object" && !Array.isArray(variants) ? Object.keys(variants) : [],
         id: typeof record["id"] === "string" ? record["id"] : name.slice(name.indexOf("/") + 1),
         ...(typeof record["providerID"] === "string" ? { providerID: record["providerID"] } : {}),
         ...(cost && typeof cost === "object"
@@ -74,6 +78,25 @@ export async function catalogFree(model: string, load: (provider: string) => Pro
   const entry = parseModelCatalog(stdout).get(name)
   if (!entry) return false
   return isFreeModel({ id: entry.id, providerID: entry.providerID ?? provider, ...(entry.cost ? { cost: entry.cost } : {}) })
+}
+
+/**
+ * The efforts a nikcli model takes: its variants in nikcli's catalog of its
+ * provider, the same ones `GET /config/providers` gives. Undefined when the
+ * catalog cannot be read or does not list the model: not knowing.
+ */
+export async function nikcliModelVariants(
+  model: string,
+  load: (provider: string) => Promise<string>,
+): Promise<readonly string[] | undefined> {
+  const name = model.trim()
+  const slash = name.indexOf("/")
+  if (slash <= 0) return undefined
+  try {
+    return parseModelCatalog(await load(name.slice(0, slash))).get(name)?.variants
+  } catch {
+    return undefined
+  }
 }
 
 /**

@@ -1761,6 +1761,9 @@ export const it = {
   "bots.engine.effort": "Sforzo",
   "bots.engine.effortNotSupported": "non previsto",
   "bots.engine.effortDefault": "predefinito",
+  "bots.engine.effortStaleHint": (effort: string) =>
+    `Lo sforzo «${effort}» non esiste per questo modello: il bot usa quello predefinito. Scegline uno tra quelli del modello.`,
+  "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di sforzo.",
   "bots.settings.whenToUse": "Quando usarlo",
   "bots.settings.whenToUseHint1": "È il",
   "bots.settings.whenToUseHint2": "del file: nikcli lo legge per decidere quando chiamare questo bot come subagente.",

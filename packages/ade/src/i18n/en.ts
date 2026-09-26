@@ -1747,6 +1747,9 @@ export const en: Messages = {
   "bots.engine.effort": "Reasoning effort",
   "bots.engine.effortNotSupported": "not supported",
   "bots.engine.effortDefault": "default",
+  "bots.engine.effortStaleHint": (effort) =>
+    `The effort «${effort}» does not exist for this model: the bot uses the default. Pick one of the model's.`,
+  "bots.engine.effortPickModel": "Pick a model to see its effort levels.",
   "bots.settings.whenToUse": "When to use",
   "bots.settings.whenToUseHint1": "The file's",
   "bots.settings.whenToUseHint2": "field: nikcli reads it to decide when to call this bot as a subagent.",

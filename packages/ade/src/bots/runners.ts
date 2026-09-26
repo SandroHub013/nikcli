@@ -50,6 +50,7 @@ export interface Runner {
    * new names long before a list here learns them.
    */
   readonly models: readonly string[]
+  /** The effort flag's values. Empty for nikcli, whose efforts depend on the model. */
   readonly efforts: readonly string[]
   /** How to sign in, run in a terminal pane. */
   readonly login: readonly string[]
@@ -63,7 +64,8 @@ export const RUNNERS: readonly Runner[] = [
     label: "nikcli",
     command: NIKCLI_COMMAND,
     models: [],
-    efforts: ["minimal", "low", "medium", "high", "max"],
+    // A nikcli model's efforts are its own variants, read from nikcli (`effort.ts`), not a list here.
+    efforts: [],
     login: ["auth", "login"],
     status: ["auth", "list"],
   },

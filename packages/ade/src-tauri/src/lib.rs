@@ -533,20 +533,24 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
 /// program with fixed arguments, it writes nothing and reads nothing but
 /// itself, and the top bar asks it a few times a day. A second command would
 /// have been a second thing to keep in step with this list for no gain.
-/// The providers whose catalog ADE reads, from `chat/model.ts`.
-const CATALOG_PROVIDERS: &[&str] = &["opencode", "ollama", "lmstudio"];
+/// A provider id as nikcli names one (`openrouter`, `nikcli-inference`,
+/// `amazon-bedrock`): letters, digits, `-`, `_` and `.`, starting with a letter
+/// or a digit, so it can never read as an option.
+fn is_provider_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+}
 
 fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
     match args {
         [only] if only == "--version" => Ok(()),
         [only] if only == "models" => Ok(()),
-        // One provider's catalog with its prices, for whether a routine's model is free (B11, `bots/catalog.ts`):
-        // only the providers whose price of 0 means free (`RELIABLE_COST_PROVIDERS`, `LOCAL_PROVIDERS`).
-        [models, provider, verbose]
-            if models == "models" && verbose == "--verbose" && CATALOG_PROVIDERS.contains(&provider.as_str()) =>
-        {
-            Ok(())
-        }
+        // One provider's catalog, read-only: its prices, for whether a routine's model is free (B11), and
+        // its models' variants, the efforts a bot's form offers (chat-bot-facili, pezzo 0; `bots/catalog.ts`).
+        // Any provider: the variants are every model's, not only those whose price of 0 means free.
+        [models, provider, verbose] if models == "models" && verbose == "--verbose" && is_provider_id(provider) => Ok(()),
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
                 return Err("argomenti di nikcli agent create incompleti".to_string());
@@ -2751,6 +2755,8 @@ mod tests {
         assert!(check_nikcli_args(&roots, &args(&["--version"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models", "opencode", "--verbose"])).is_ok());
+        assert!(check_nikcli_args(&roots, &args(&["models", "openrouter", "--verbose"])).is_ok());
+        assert!(check_nikcli_args(&roots, &args(&["models", "nikcli-inference", "--verbose"])).is_ok());
         assert!(check_nikcli_args(
             &roots,
             &args(&["agent", "create", "--path", &home, "--description", "a", "--mode", "primary", "--tools", ""])
@@ -2759,7 +2765,12 @@ mod tests {
         for bad in [
             &["run", "rm -rf"][..],
             &["models", "--x"],
-            &["models", "openrouter", "--verbose"],
+            &["models", "--help", "--verbose"],
+            &["models", "-x", "--verbose"],
+            &["models", "", "--verbose"],
+            &["models", "open router", "--verbose"],
+            &["models", "..\\x", "--verbose"],
+            &["models", "a/b", "--verbose"],
             &["models", "opencode", "--refresh"],
             &["models", "opencode"],
             &["models", "opencode", "--verbose", "--x"],
