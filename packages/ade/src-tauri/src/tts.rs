@@ -32,6 +32,70 @@ use tauri::Manager;
 
 mod kokoro;
 
+/**
+ * A directory of its own for one test, removed and made again.
+ *
+ * In the temporary folder and not in the crate: a test that makes folders where
+ * the sources are leaves them there, and `cargo test` runs with the crate as the
+ * working directory. Shared by this module's tests and the Kokoro ones for the
+ * same reason the helper is here rather than copied: the K3 note about the
+ * temporary folder on Windows still stands, and one name to look for is one name
+ * to clean.
+ */
+#[cfg(test)]
+pub(crate) fn test_root(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("ade-k3-{}-{name}", std::process::id()));
+    // The class is closed here rather than in each test: a root that lands inside
+    // the crate is a folder that is still there after the run, and `cargo test`
+    // works with the crate as the current directory, so a relative path is inside
+    // it without anybody writing one down. Two of these were found the hard way,
+    // in src-tauri/tts, after a run.
+    if let Some(manifest) = std::env::var_os("CARGO_MANIFEST_DIR") {
+        assert!(
+            !root.starts_with(std::path::Path::new(&manifest)),
+            "una radice di test dentro il crate: {root:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}
+
+#[cfg(test)]
+mod suite_hygiene {
+    use super::test_root;
+
+    /**
+     * The suite must not write inside the crate.
+     *
+     * `cargo test` runs with the crate as the working directory, so a relative
+     * path lands in `src-tauri` and is still there after the run. Two such
+     * folders turned up in `src-tauri/tts` — the one of the delete test and the
+     * one of `out_for` — and they were moved onto `test_root`. The assertion in
+     * `test_root` closes the class for everything that goes through it; these two
+     * close it for what does not, which is the part that only shows up afterwards.
+     */
+    #[test]
+    fn nessuna_cartella_della_suite_sotto_src_tauri() {
+        let manifest = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo dice dove sta il crate"));
+        for name in ["tts", "scratch", "out", "kokoro"] {
+            let path = manifest.join(name);
+            assert!(!path.exists(), "{} è dentro il crate dopo una suite: un test usa un percorso relativo invece di test_root", path.display());
+        }
+    }
+
+    /// And the rule itself, proved: this is where the class is closed for
+    /// everything that goes through the helper.
+    #[test]
+    fn test_root_non_e_mai_dentro_al_crate() {
+        let root = test_root("prova-che-non-entra");
+        let manifest = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo dice dove sta il crate"));
+        assert!(root.starts_with(std::env::temp_dir()));
+        assert!(!root.starts_with(&manifest));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 /// What a local voice can do on this host, for the panel and for the panel's tests.
 #[derive(serde::Serialize)]
 pub struct LocalStatus {
@@ -1571,13 +1635,6 @@ mod tests {
     // fingerprint, and the filesystem is a directory of this machine's temp.
     // -----------------------------------------------------------------------
 
-    /// A directory of its own for one test, removed and made again.
-    fn test_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("ade-k3-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        root
-    }
 
     /// 64 hex digits from the bytes, standing in for SHA-256.
     ///
