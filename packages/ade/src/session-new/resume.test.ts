@@ -616,10 +616,37 @@ describe("a conversation being minted is not another pane's «here»", () => {
     expect(await lastHereBesideMints(list, read, new Set(), mints, () => false)).toBe(minted)
   })
 
+  /*
+   * Review of ripristino-sexies, nota 1: a mint may take 30 s, and the "here"
+   * waiting on it said nothing for up to 45. It waits the list's time at
+   * most, then trusts the mark in the minted conversation's title.
+   */
+  test("a mint slower than the patience: the list read as it is, the marked conversation left out", async () => {
+    const mints = new MintLedger()
+    mints.track(new Promise<string | undefined>(() => {}), "p1")
+    const due: (() => void)[] = []
+    const timers = { set: (run: () => void) => due.push(run), clear: () => {} }
+    const marked = (output: string, taken: ReadonlySet<string>) => lastNikcliHere(output, HERE, taken, [mintMark("p1")])
+    const list = answering(listed(session(minted, 30, { title: `Sessione 1 — nikcli${mintMark("p1")}` }), session(older, 20)))
+    let settled = false
+    const here = lastHereBesideMints(list, marked, new Set(), mints, open, { ms: 15_000, timers }).then((id) => ((settled = true), id))
+    await later()
+    expect(settled).toBe(false)
+    expect(due).toHaveLength(1)
+    due[0]!()
+    expect(await here).toBe(older)
+  })
+
+  test("the patience is the list's time", () => {
+    const source = readFileSync(join(import.meta.dir, "resume.ts"), "utf8")
+    expect(source).toContain("patience: { ms: number; timers?: Timers } = { ms: LIST_MS },")
+  })
+
   test("the workbench mints through the ledger and asks «here» beside it", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const mints = new MintLedger()")
-    expect(workbench).toContain("askCli(command, plan.args, cwd, plan.read, timing).then((id) => id ?? undefined),\n      paneId,")
+    expect(workbench).toContain("askCli(command, plan.args, cwd, read, timing).then((id) => {")
+    expect(workbench).toContain("return id ?? undefined\n      }),\n      paneId,")
     expect(workbench).toContain("return await lastHereBesideMints(")
     expect(workbench).toContain("(owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),")
   })

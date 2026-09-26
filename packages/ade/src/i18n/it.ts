@@ -1168,7 +1168,7 @@ export const it = {
   "resume.noMint": (agent: string) =>
     `${agent} non ha aperto una conversazione da ritrovare: se ADE si chiude, questa sessione riparte da zero`,
   "resume.asking": (agent: string) => `Chiedo a ${agent} una conversazione da poter ritrovare…`,
-  "resume.slowMint": (agent: string) => `${agent} ci mette più del solito ad aprire la conversazione: aspetto ancora fino a 15 secondi.`,
+  "resume.slowMint": (agent: string, seconds: number) => `${agent} ci mette più del solito ad aprire la conversazione: aspetto ancora fino a ${seconds} secondi.`,
   "resume.lookingHere": (agent: string) => `Cerco l'ultima conversazione di ${agent} in questa cartella…`,
   "resume.noneHere": (agent: string) => `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>

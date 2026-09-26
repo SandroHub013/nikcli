@@ -1158,7 +1158,7 @@ export const en: Messages = {
   "note.someSession": "a session",
   "resume.noMint": (agent) => `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
-  "resume.slowMint": (agent) => `${agent} is taking longer than usual to open the conversation: waiting up to 15 more seconds.`,
+  "resume.slowMint": (agent, seconds) => `${agent} is taking longer than usual to open the conversation: waiting up to ${seconds} more seconds.`,
   "resume.lookingHere": (agent) => `Looking for ${agent}'s latest conversation in this folder…`,
   "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
   "resume.otherFolder": (dir) =>

@@ -1,7 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
-import { LIST_MS, MINT_MS, MINT_SLOW_MS, waitForAnswer } from "../session-new/ask-cli"
+import { LIST_MS, MINT_MS, MINT_SLOW_LEFT_S, MINT_SLOW_MS, mintTrace, waitForAnswer } from "../session-new/ask-cli"
 import { every, pageHidden, watchDue } from "../host/every"
 import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions, isWorkingAgentPane } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
@@ -6232,9 +6232,23 @@ export function Workbench() {
     if (!plan) return undefined
     // Past `MINT_SLOW_MS` the pane says it is still waiting; past `MINT_MS` it starts without an id.
     const label = agentById(agentId)?.label || agentId
-    const timing = { timeoutMs: MINT_MS, slow: { afterMs: MINT_SLOW_MS, say: () => tellPane(paneId, t("resume.slowMint", label)) } }
+    const timing = {
+      timeoutMs: MINT_MS,
+      slow: { afterMs: MINT_SLOW_MS, say: () => tellPane(paneId, t("resume.slowMint", label, MINT_SLOW_LEFT_S)) },
+    }
+    // How long it took and what the CLI printed first, for a slow one to be traced (`mintTrace`).
+    const began = performance.now()
+    let first: { ms: number; line: string } | undefined
+    const read = (output: string) => {
+      first ??= { ms: performance.now() - began, line: output.split("\n")[0] ?? "" }
+      return plan.read(output)
+    }
     return await mints.track(
-      askCli(command, plan.args, cwd, plan.read, timing).then((id) => id ?? undefined),
+      askCli(command, plan.args, cwd, read, timing).then((id) => {
+        const outcome = id ? "id" : id === null ? "none" : "timeout"
+        console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))
+        return id ?? undefined
+      }),
       paneId,
     )
   }

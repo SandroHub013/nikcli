@@ -13,13 +13,26 @@ export interface AskedCommand {
   kill: (options?: { tree?: boolean }) => void | Promise<boolean>
 }
 
+/** The timers a wait runs on: the page's, or a test's own clock. */
+export interface Timers {
+  set: (run: () => void, ms: number) => unknown
+  clear: (handle: unknown) => void
+}
+
+const pageTimers: Timers = {
+  set: (run, ms) => setTimeout(run, ms),
+  clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
 export function waitForAnswer(options: {
   /** Starts the command; `onLine` for each line it prints, `onExit` when it ends. */
   start: (onLine: (line: string) => void, onExit: () => void) => Promise<AskedCommand>
   read: (output: string) => string | null | undefined
   timeoutMs: number
   slow?: { afterMs: number; say: () => void }
+  timers?: Timers
 }): Promise<string | null | undefined> {
+  const timers = options.timers ?? pageTimers
   return new Promise((resolve) => {
     let text = ""
     let settled = false
@@ -27,13 +40,13 @@ export function waitForAnswer(options: {
     const finish = (answer?: string | null) => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
-      clearTimeout(slowTimer)
+      timers.clear(timer)
+      if (slowTimer !== undefined) timers.clear(slowTimer)
       void child?.kill({ tree: true })
       resolve(answer)
     }
-    const timer = setTimeout(() => finish(undefined), options.timeoutMs)
-    const slowTimer = options.slow ? setTimeout(options.slow.say, options.slow.afterMs) : undefined
+    const timer = timers.set(() => finish(undefined), options.timeoutMs)
+    const slowTimer = options.slow ? timers.set(options.slow.say, options.slow.afterMs) : undefined
     options
       .start(
         (line) => {
@@ -65,3 +78,26 @@ export function waitForAnswer(options: {
 export const MINT_MS = 30_000
 export const MINT_SLOW_MS = 15_000
 export const LIST_MS = 15_000
+
+/** What the slow note promises: the seconds left after it, as the constants say. */
+export const MINT_SLOW_LEFT_S = (MINT_MS - MINT_SLOW_MS) / 1000
+
+/**
+ * One line for the console about a mint, fast or slow, to find where a slow
+ * one stops (review of ripristino-sexies: the cause was never found). The
+ * first thing the CLI printed, with the conversation's title taken out: the
+ * title carries the user's task.
+ */
+export function mintTrace(mint: {
+  agent: string
+  ms: number
+  outcome: "id" | "none" | "timeout"
+  first?: { ms: number; line: string }
+  title: string
+}): string {
+  const head = `[ade.mint] ${mint.agent}: ${mint.outcome} in ${Math.round(mint.ms)} ms`
+  if (!mint.first) return `${head}, nothing printed`
+  const title = mint.title.trim()
+  const line = (title ? mint.first.line.split(title).join("\u2026") : mint.first.line).trim().slice(0, 200)
+  return `${head}, first output at ${Math.round(mint.first.ms)} ms: ${JSON.stringify(line)}`
+}
