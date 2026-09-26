@@ -495,10 +495,15 @@
   color: var(--ade-text-weak);
 }
 
+/*
+ * Come il composer del bot: al focus il bordo è il grigio neutro
+ * `--ade-border-strong`, non l'accent, e l'alone è grigio anche lui. Nel tema
+ * chiaro il token resta un grigio (composer-nero, DS-chat 1).
+ */
 [data-slot="chat-input"]:focus-visible {
   outline: none;
-  border-color: var(--ade-accent);
-  box-shadow: var(--ade-focus-ring);
+  border-color: var(--ade-border-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
 }
 
 [data-slot="chat-send"] {

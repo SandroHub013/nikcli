@@ -485,9 +485,15 @@
   background: var(--ade-surface);
 }
 
+/*
+ * Il campo resta nero e semplice: al focus il bordo sale di una sfumatura,
+ * `--ade-border-strong`, che è un grigio neutro in entrambi i temi, e l'alone
+ * che lo rende visibile è grigio. Niente anello teal, niente ombra colorata
+ * (composer-nero, DS-chat 1: «lo voglio semplice base nero»).
+ */
 [data-slot="bots-composer"]:focus-within {
   border-color: var(--ade-border-strong);
-  box-shadow: var(--ade-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
 }
 
 /*

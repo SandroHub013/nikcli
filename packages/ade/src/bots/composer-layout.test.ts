@@ -68,12 +68,16 @@ describe("the Memory section's blocks", () => {
   })
 })
 
-/* bot-sforzo, A occhio: two focus rings, the composer's and the global one on the field. */
-describe("the composer's focus", () => {
-  test("one ring, the composer's: the field draws none of its own", () => {
+/* bot-sforzo, A occhio: two focus rings, the composer's and the global one on the
+   field. Since composer-nero the ring is grey, so this checks the composer's own
+   and that it is the neutral one: the accent ring is gone, the field still draws
+   none of its own. */
+describe("lint: the composer's focus", () => {
+  test("lint: one ring, the composer's, and it is grey: the field draws none of its own", () => {
     expect(rule("bots-composer")).toBeDefined()
     const focused = /\[data-slot="bots-composer"\]:focus-within\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
-    expect(focused).toContain("box-shadow: var(--ade-focus-ring)")
+    expect(focused).toContain("box-shadow: 0 0 0 2px")
+    expect([focused, focused.includes("--ade-focus-ring")]).toEqual([focused, false])
     const field = /\[data-slot="bots-composer-field"\]:focus\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
     expect(field).toContain("box-shadow: none")
     expect(field).toContain("outline: none")
