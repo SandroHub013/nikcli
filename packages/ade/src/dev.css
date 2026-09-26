@@ -1009,7 +1009,8 @@
   [data-slot="bar-queue-aside"] {
     display: none;
   }
-  [data-slot="bar-queue"][data-discarded]::after,
+  /* Only what is queued keeps a mark: the discarded are history, and a red
+     dot on the corner of the pill reads as something to do. */
   [data-slot="bar-queue"][data-queued]::before {
     content: "";
     position: absolute;
@@ -1018,10 +1019,6 @@
     height: 7px;
     border-radius: var(--ade-radius-full);
     box-shadow: 0 0 0 1.5px var(--ade-raised);
-  }
-  [data-slot="bar-queue"][data-discarded]::after {
-    right: -3px;
-    background: var(--ade-error);
   }
   [data-slot="bar-queue"][data-queued]::before {
     left: -3px;

@@ -33,6 +33,22 @@ export interface QueueText {
   readonly label: string
 }
 
+/**
+ * The width under which the buttons lose their words (dev.css says the same
+ * in its `@media`): only the vial and the pill are left.
+ */
+export const NARROW_BAR = "(max-width: 1099.98px)"
+
+/**
+ * The tooltip, only on the narrow bar (review of piece 1). With the name on
+ * the button a title would repeat it (closure 4); without it, a mouse user
+ * has only the vial to tell Decisioni from Design, and no way to learn what
+ * the number is.
+ */
+export function queueTitle(text: QueueText, narrow: boolean): string | undefined {
+  return narrow ? text.label : undefined
+}
+
 /** Whether the bar shows the button at all: something waits, is queued or was thrown away. */
 export function queueShown(counts: QueueCounts): boolean {
   return counts.waiting > 0 || counts.queued > 0 || counts.discarded > 0

@@ -1,6 +1,6 @@
-import { Show } from "solid-js"
+import { createSignal, onCleanup, Show } from "solid-js"
 import type { ResolvedTheme } from "../theme"
-import { queueText, type QueueCounts, type QueueFamily } from "./bar-queue"
+import { NARROW_BAR, queueText, queueTitle, type QueueCounts, type QueueFamily } from "./bar-queue"
 import { VialMark } from "./vial/vial-mark"
 
 /**
@@ -10,7 +10,8 @@ import { VialMark } from "./vial/vial-mark"
  * bar's ink; the colour is only in the pill and the focus ring.
  *
  * Under 1100 px the name and the asides give way to the vial and the pill (the
- * stylesheet does it); the accessible name keeps every word.
+ * stylesheet does it); the accessible name keeps every word, and so does the
+ * tooltip, which is there only then.
  */
 export function BarQueueButton(props: {
   family: QueueFamily
@@ -21,6 +22,11 @@ export function BarQueueButton(props: {
   onOpen: () => void
 }) {
   const text = () => queueText(props.family, props.counts)
+  const query = typeof matchMedia === "function" ? matchMedia(NARROW_BAR) : undefined
+  const [narrow, setNarrow] = createSignal(query?.matches ?? false)
+  const follow = (event: MediaQueryListEvent) => setNarrow(event.matches)
+  query?.addEventListener("change", follow)
+  onCleanup(() => query?.removeEventListener("change", follow))
   return (
     <button
       type="button"
@@ -30,6 +36,7 @@ export function BarQueueButton(props: {
       data-queued={props.counts.queued > 0 ? "" : undefined}
       data-discarded={props.counts.discarded > 0 ? "" : undefined}
       aria-label={text().label}
+      title={queueTitle(text(), narrow())}
       aria-haspopup="dialog"
       aria-expanded={props.open}
       onClick={() => props.onOpen()}

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
-import { queueShown, queueText } from "./bar-queue"
+import { NARROW_BAR, queueShown, queueText, queueTitle } from "./bar-queue"
 
 /*
  * DS-polish, piece 1: the bar. The queue buttons speak one grammar, their
@@ -43,7 +43,10 @@ describe("the queue buttons' words", () => {
     const button = read("surface", "bar-queue-button.tsx")
     expect(button).toContain("aria-label={text().label}")
     expect(button).toContain("aria-expanded={props.open}")
-    expect(button).not.toContain("title=")
+    // The only title is the narrow one: with the name on the button it would repeat it.
+    expect(button.match(/title=/g)).toEqual(["title="])
+    expect(button).toContain("title={queueTitle(text(), narrow())}")
+    expect(button).toContain("matchMedia(NARROW_BAR)")
     const workbench = read("surface", "workbench.tsx")
     expect(workbench).toContain('family="decisions"')
     expect(workbench).toContain('family="design"')
@@ -51,6 +54,23 @@ describe("the queue buttons' words", () => {
     expect(workbench).toContain("open={designOpen()}")
     expect(workbench).not.toContain('data-slot="decisions-badge"')
     expect(workbench).not.toContain('data-slot="design-badge"')
+  })
+})
+
+describe("the narrow bar", () => {
+  test("a tooltip equal to the accessible name, and none when the name is on the button", () => {
+    const text = queueText("decisions", { waiting: 1, queued: 0, discarded: 14 })
+    expect(queueTitle(text, true)).toBe(text.label)
+    expect(queueTitle(text, false)).toBeUndefined()
+  })
+
+  test("the discarded get no dot: only what is queued keeps a mark", () => {
+    const css = read("dev.css")
+    const narrow = css.slice(css.indexOf(`@media ${NARROW_BAR}`))
+    expect(narrow.length).toBeLessThan(css.length)
+    const block = narrow.slice(0, narrow.indexOf("\n}\n"))
+    expect(block).not.toContain("[data-discarded]")
+    expect(block).toContain('[data-slot="bar-queue"][data-queued]::before')
   })
 })
 
