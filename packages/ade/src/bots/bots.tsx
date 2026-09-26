@@ -206,9 +206,8 @@ const turns = createBotTurns({
  * The checks every turn of a bot passes before it starts: a project's bot
  * is asked about first (B3, `trust.ts`), and what runs is the file as it was
  * read and trusted just now, not the copy the roster loaded earlier; a nikcli
- * bot that grants itself the shell does not start (B8c); a project's nikcli
- * bot loads the project's own configuration, so the project is asked about
- * (B3b). `confirm` is the dialog; a routine passes one that always says no.
+ * bot that grants itself the shell does not start (B8c); a nikcli bot loads
+ * the project's own configuration, so the project is asked about (B3b, B8d). `confirm` is the dialog; a routine passes one that always says no.
  */
 async function admitTurn(
   bot: AgentFile,
@@ -228,7 +227,8 @@ async function admitTurn(
     const granted = await grantProblem(trusted, root, { read: readBotText, fs: projectFs, text: read })
     if (granted) return { ok: false, problem: granted }
   }
-  if (root && trusted.scope === "project" && nikcli) {
+  // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
+  if (root && nikcli) {
     const project = await admitProject(root, {
       store: localTrustStore(PROJECT_TRUST_KEY),
       surface: () => projectSurface(root, projectFs),

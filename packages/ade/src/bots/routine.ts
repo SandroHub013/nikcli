@@ -30,7 +30,8 @@ import {
   type RoutineMode,
 } from "./terms"
 import { applyProblem, emptyTalk } from "./talk"
-import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
+import { runBotTurn, type ServeTurnDeps } from "./serve-turn"
+import type { Turn, TurnDeps, TurnRequest, TurnResult } from "./turn"
 
 /** What the scheduler cleared one run for. */
 export interface RoutineRun {
@@ -44,7 +45,11 @@ export interface RoutineRun {
  * The gate one execution passes at spawn: a runner and mode off the list
  * never start, whatever the scheduler thought a moment before.
  */
-export function runRoutine(request: TurnRequest, run: RoutineRun = {}, deps: TurnDeps = {}): Turn {
+export function runRoutine(
+  request: TurnRequest,
+  run: RoutineRun = {},
+  deps: TurnDeps & { readonly serve?: () => ServeTurnDeps } = {},
+): Turn {
   const model = request.model ?? request.bot?.model
   const offer = routineOffer(request.runner, request.account, model, run.free !== undefined ? { free: run.free } : {})
   if (!offer.allowed) {
@@ -62,7 +67,7 @@ export function runRoutine(request: TurnRequest, run: RoutineRun = {}, deps: Tur
       stop: () => {},
     }
   }
-  return runTurn(request, deps)
+  return runBotTurn(request, deps.serve, deps)
 }
 
 /* ── what a routine is ─────────────────────────────────────────────────── */

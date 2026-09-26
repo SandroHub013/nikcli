@@ -565,7 +565,7 @@ export const en: Messages = {
   "gateway.configUnreadable": (name, file) =>
     `This project's ${file} cannot be read, and it could grant the bot «${name}» the shell: not started from here.`,
   "gateway.approve.question": (permission, what) =>
-    `The bot asks for the permission «${permission}» for:\n${what}\n\nThe command is read from the terminal and may be incomplete: if you do not recognize all of it, answer No.\nAllow it this once? No answer within 5 minutes means no.`,
+    `The bot asks for the permission «${permission}» for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
   "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `I blocked «${what}»: it ${reason}. This command never runs, not even with a yes.`,

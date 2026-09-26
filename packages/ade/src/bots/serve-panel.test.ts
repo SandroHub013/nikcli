@@ -7,6 +7,8 @@ import { APPROVAL_TIMEOUT_MS, withAlways } from "./approval"
 import { createBotTurns } from "./controller"
 import type { AgentFile } from "./nikcli"
 import { admitProject } from "./project-trust"
+import { runRoutine } from "./routine"
+import { botPermission } from "./serve-rules"
 import { appServeTurnDeps, runBotTurn, runServeTurn, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type Talk } from "./talk"
 import type { TrustStore } from "./trust"
@@ -36,10 +38,11 @@ function server() {
   const replies: [string, string][] = []
   const prompts: string[] = []
   const connects: boolean[] = []
+  const created: (readonly unknown[])[] = []
   const client: ServeClient = {
     agents: async () => [{ name: "alfa", prompt: "Sei alfa." }],
     session: async () => undefined,
-    create: async () => SESSION,
+    create: async (input) => (created.push(input.permission), SESSION),
     prompt: async (input) => void prompts.push(input.text),
     abort: async () => {},
     reply: async (id, reply) => void replies.push([id, reply]),
@@ -65,6 +68,7 @@ function server() {
     replies,
     prompts,
     connects,
+    created,
     push: (...events: ChatEvent[]) => {
       items.push(...events)
       wake?.()
@@ -187,6 +191,43 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     claude.stop()
     await claude.result
     expect(fake.connects).toEqual([false])
+  })
+})
+
+describe("B8d: a routine's run and a chat's turn on the server", () => {
+  test("a routine: read-only rules, no dialog, a question refused at once, the panel's session left as it was", async () => {
+    const fake = server()
+    const talks: Record<string, Talk> = { [BOT.path]: { ...emptyTalk(), sessionId: "ses_panel" } }
+    const turns = createBotTurns({
+      runTurn: () => {
+        throw new Error("a routine goes through runRoutine")
+      },
+      runRoutine: (request, run) => runRoutine(request, run, { serve: () => fake.deps }),
+      talkOf: (path) => talks[path] ?? emptyTalk(),
+      update: (path, change) => {
+        talks[path] = change(talks[path] ?? emptyTalk())
+      },
+      always: { get: () => [], add: () => {} },
+    })
+    const free = { ...BOT, model: "openrouter/qwen/qwen3:free" }
+    expect(turns.routine(free, "controlla i log", "C:/progetto", { free: true, maxCostUsd: 0 })).toBeDefined()
+    await until(() => fake.prompts.length === 1)
+    expect(fake.connects).toEqual([false])
+    expect(fake.created).toEqual([botPermission("read-only")])
+    fake.push(status("busy"), asked("per_r", "ls"))
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_r", "reject"])
+    expect(talks[BOT.path]!.messages.some((message) => message.text === t("bots.routine.refused", "bash", "ls"))).toBe(true)
+    fake.push(status("idle"))
+    await until(() => !turns.running(BOT.path))
+    expect(talks[BOT.path]!.sessionId).toBe("ses_panel")
+  })
+
+  test("a chat's turns and a routine's go through `runBotTurn`, so nikcli's run on the server", () => {
+    const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
+    expect(bridge).toContain("runTurn: (request) => runBotTurn(request)")
+    const routine = readFileSync(new URL("./routine.ts", import.meta.url), "utf8")
+    expect(routine).toContain("return runBotTurn(request, deps.serve, deps)")
   })
 })
 

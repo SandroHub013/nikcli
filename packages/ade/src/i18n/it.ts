@@ -574,7 +574,7 @@ export const it = {
   "gateway.configUnreadable": (name: string, file: string) =>
     `Non riesco a leggere ${file} di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio.`,
   "gateway.approve.question": (permission: string, what: string) =>
-    `Il bot chiede il permesso «${permission}» per:\n${what}\n\nIl comando è letto dal terminale e può essere incompleto: se non lo riconosci per intero, rispondi No.\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
+    `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
   "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>

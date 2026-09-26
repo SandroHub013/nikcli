@@ -47,7 +47,7 @@ import {
   type Talk,
 } from "./talk"
 import { acquireTurn } from "./terms"
-import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnRequest, type TurnResult } from "./turn"
+import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
 import type { PermissionRule } from "../chat/rules"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
@@ -443,12 +443,12 @@ export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "conf
 
 /**
  * A bot's turn, on the runner it names: nikcli's on ADE's server, where a
- * question has an id (B8d), the panel's and a room's for now; the others as
- * `runTurn` runs them.
+ * question has an id (B8d) — the panel's, a room's, a routine's and a chat's;
+ * the others as `runTurn` runs them.
  */
-export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = appServeTurnDeps): Turn {
-  if (request.runner === "nikcli" && request.approvals) return runServeTurn(request, serve())
-  return runTurn(request)
+export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = appServeTurnDeps, deps: TurnDeps = {}): Turn {
+  if (request.runner === "nikcli") return runServeTurn(request, serve())
+  return runTurn(request, deps)
 }
 
 /** The calls of `ServeClient` on the SDK's client. */

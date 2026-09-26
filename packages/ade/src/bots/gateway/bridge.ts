@@ -11,7 +11,7 @@ import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trus
 import { runnerById } from "../runners"
 import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
 import { admit, localTrustStore } from "../trust"
-import { runTurn } from "../turn"
+import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
@@ -120,7 +120,7 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
 export function startAppGatewayController(): Promise<GatewayController> {
   return startGatewayController({
     bridge: tauriGatewayBridge(),
-    runTurn: (request) => runTurn(request),
+    runTurn: (request) => runBotTurn(request),
     loadBot: async (path, project) =>
       recheckTrust(path, project, {
         bots: localTrustStore(),
