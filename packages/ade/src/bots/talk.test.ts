@@ -260,6 +260,25 @@ describe("storage", () => {
     expect(named.byMode).toEqual({ api: { tokens: 2, costUsd: 0 } })
   })
 
+  test("a turn that cost something is never moved to free by a :free name", () => {
+    const spend = (talk: Talk, tokens: number, costUsd: number) =>
+      noteTurnUsage({ ...talk, tokens: talk.tokens + tokens, costUsd: talk.costUsd + costUsd }, tokens, costUsd, false)
+    const close = (talk: Talk) => noteTurnUsage(talk, 0, 0, true)
+    // Paid before the name arrived: the router fell back on a paid model, «a consumo» it stays.
+    let paid: Talk = { ...sendMessage(emptyTalk(), "uno", T0), turnMode: "metered" }
+    paid = spend(paid, 5, 0.002)
+    paid = close(noteReportedModel(paid, { modelID: "openrouter/x:free" }))
+    expect(paid.byMode).toEqual({ metered: { tokens: 5, costUsd: 0.002 } })
+    expect(paid.lastTurn?.mode).toBe("metered")
+    // Named free first, then a cost: back to «a consumo», with what it had counted.
+    let later: Talk = { ...sendMessage(emptyTalk(), "due", T0 + 1), turnMode: "metered" }
+    later = noteReportedModel(spend(later, 3, 0), { modelID: "openrouter/x:free" })
+    expect(later.byMode).toEqual({ free: { tokens: 3, costUsd: 0 } })
+    later = close(spend(later, 4, 0.001))
+    expect(later.byMode).toEqual({ metered: { tokens: 7, costUsd: 0.001 } })
+    expect(later.lastTurn?.mode).toBe("metered")
+  })
+
   test("the last turn keeps its own tokens and the model the event named", () => {
     const spend = (talk: Talk, tokens: number, costUsd: number) =>
       noteTurnUsage({ ...talk, tokens: talk.tokens + tokens, costUsd: talk.costUsd + costUsd }, tokens, costUsd, true)
