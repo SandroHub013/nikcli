@@ -39,7 +39,7 @@ import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expr
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
 import { ACCOUNT_PLAN, localAccountStore, type BotAccount } from "./account"
 import { generationSpend, runnerAccount, runnerById, RUNNERS, spendKind, spendLine, type Runner, type SpendKind } from "./runners"
-import { PLAN_RUNNERS } from "./terms"
+import { PLAN_RUNNERS, routineModeOf } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
@@ -95,6 +95,10 @@ import { catalogFree } from "./catalog"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
+import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, type RoomPay } from "./room"
+import { createRoomRunner, localRoomStore, memberName, roomThread, type RoomBook, type RoomRecord, type RoomSeat } from "./room-app"
+import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
+import { isAdeTestBuild } from "../chat/model"
 import "./bots.css"
 
 /*
@@ -384,6 +388,112 @@ const routineDeps: RoutinePanelDeps = {
   catalogFree: catalogFreeOf,
 }
 
+/* ── rooms (B8b) ────────────────────────────────────────────────────────── */
+
+/*
+ * Two to six bots in one conversation (`room.ts`, `room-app.ts`). Kept in the
+ * WebView's storage like the routines. Each member speaks through its own
+ * turn, in a thread of its own for that room, trusted as in the panel: the
+ * user sent the message, so the dialogs are the panel's.
+ */
+const roomStore = localRoomStore()
+const [roomBook, setRoomBook] = createSignal<RoomBook>(roomStore.get())
+/** The member speaking in each room, by its file. */
+const [roomSpeaking, setRoomSpeaking] = createSignal<Record<string, string>>({})
+/** The file each member was trusted as, for answering its questions. */
+const seatBots = new Map<string, AgentFile>()
+/** The project open in the main area: where a global bot's room turns run. */
+let roomProject: string | undefined
+
+async function payOf(bot: AgentFile): Promise<RoomPay> {
+  const context = await botContext(bot)
+  return roomPay(routineModeOf(context.runner, context.account?.mode, context.model, context.free))
+}
+
+const roomRunner = createRoomRunner({
+  store: roomStore,
+  seats: async (room) => {
+    const seats: RoomSeat[] = []
+    for (const path of room.members) {
+      const read = await readBotFile(path)
+      if (!read) return { problem: t("bots.room.missingBot", memberName([], path)) }
+      const verdict = await admitTurn(read, roomProject, askTrust)
+      if (!verdict.ok) return { problem: verdict.problem ?? t("bots.room.notTrusted", read.identifier) }
+      const bot = verdict.bot
+      seatBots.set(path, bot)
+      ensureLoaded([roomThread(room.id, path)])
+      const cwd = projectOfBotPath(path) ?? roomProject
+      seats.push({ member: { id: path, name: bot.identifier }, bot, pay: await payOf(bot), ...(cwd ? { cwd } : {}) })
+    }
+    return seats
+  },
+  turns,
+  testBuild: isAdeTestBuild,
+  changed: setRoomBook,
+  onTurn: (roomId, path) =>
+    setRoomSpeaking((all) => {
+      const next = { ...all }
+      if (path) next[roomId] = path
+      else delete next[roomId]
+      return next
+    }),
+})
+
+const writeRooms = (change: (book: RoomBook) => RoomBook) => {
+  const next = change(roomStore.get())
+  roomStore.set(next)
+  setRoomBook(next)
+}
+
+const roomDeps: RoomPanelDeps = {
+  book: roomBook,
+  bots: () => shared.roster() ?? [],
+  speaking: (roomId) => roomSpeaking()[roomId],
+  permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
+  answer: (path, choice) => {
+    const bot = seatBots.get(path)
+    if (bot) turns.answer(bot, choice)
+  },
+  send: async (roomId, text) => {
+    // The run goes on after the message is in: its end and its problems are the room's note.
+    void roomRunner.send(roomId, text)
+    return true
+  },
+  stop: (roomId) => void roomRunner.stop(roomId),
+  create: async (draft) => {
+    const size = roomProblem(draft.members)
+    if (size) return { problem: describeProblem(size) }
+    const roster = shared.roster() ?? []
+    const bots = draft.members.map((path) => roster.find((bot) => bot.path === path)).filter((bot): bot is AgentFile => !!bot)
+    const pays = await Promise.all(bots.map(async (bot) => ({ name: bot.identifier, pay: await payOf(bot) })))
+    const spend = roomSpendProblem(pays, draft.spend, isAdeTestBuild())
+    if (spend) return { problem: spend }
+    const room: RoomRecord = {
+      id: crypto.randomUUID(),
+      name: draft.name,
+      members: [...draft.members],
+      ...(draft.spend ? { spend: draft.spend } : {}),
+      log: EMPTY_LOG,
+      needsYou: false,
+      createdAt: Date.now(),
+    }
+    writeRooms((book) => ({ rooms: [...book.rooms, room] }))
+    return { id: room.id }
+  },
+  remove: async (roomId) => {
+    const room = roomStore.get().rooms.find((entry) => entry.id === roomId)
+    if (!room) return false
+    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), { ok: t("bots.room.delete"), cancel: t("bots.room.form.cancel") })
+    if (!yes) return false
+    await roomRunner.stop(roomId)
+    writeRooms((book) => ({ rooms: book.rooms.filter((entry) => entry.id !== roomId) }))
+    // Each member's session in the room goes with it.
+    for (const path of room.members) updateTalk(roomThread(roomId, path), () => emptyTalk())
+    return true
+  },
+  payOf,
+}
+
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
 function ensureLoaded(paths: readonly string[]) {
   const missing = paths.filter((path) => talks()[path] === undefined)
@@ -410,6 +520,9 @@ const shared = createRoot(() => {
   const [roots, setRoots] = createSignal<BotRoots>({})
   const [openId, setOpenId] = createSignal<string>()
   const [composing, setComposing] = createSignal(false)
+  /* A room open in the main area, or its form (B8b): in place of a bot's conversation. */
+  const [openRoomId, setOpenRoomId] = createSignal<string>()
+  const [roomComposing, setRoomComposing] = createSignal(false)
   const [reloads, setReloads] = createSignal(0)
   const [now, setNow] = createSignal(Date.now())
 
@@ -490,6 +603,15 @@ const shared = createRoot(() => {
   const open = (bot: AgentFile) => {
     setOpenId(bot.path)
     setComposing(false)
+    setOpenRoomId(undefined)
+    setRoomComposing(false)
+  }
+
+  const openRoom = (id: string | undefined, form = false) => {
+    setOpenRoomId(id)
+    setRoomComposing(form)
+    setOpenId(undefined)
+    setComposing(false)
   }
 
   const expression = (bot: AgentFile): Expression => {
@@ -508,6 +630,9 @@ const shared = createRoot(() => {
     setOpenId,
     composing,
     setComposing,
+    openRoomId,
+    roomComposing,
+    openRoom,
     now,
     reload,
     current,
@@ -546,8 +671,8 @@ export function BotsRoster(props: BotsRosterProps) {
           type="button"
           data-slot="bots-new"
           onClick={() => {
+            shared.openRoom(undefined)
             shared.setComposing(true)
-            shared.setOpenId(undefined)
           }}
           aria-label={t("bots.newBot")}
           title={t("bots.newBot")}
@@ -609,6 +734,13 @@ export function BotsRoster(props: BotsRosterProps) {
           </For>
         </div>
       </Show>
+
+      <RoomsRoster
+        deps={roomDeps}
+        openId={shared.openRoomId()}
+        onOpen={(id) => shared.openRoom(id)}
+        onNew={() => shared.openRoom(undefined, true)}
+      />
     </div>
   )
 }
@@ -627,6 +759,7 @@ export interface BotsMainProps {
 /** The conversation and the card, drawn in the main area. */
 export function BotsMain(props: BotsMainProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
+  createEffect(() => void (roomProject = props.projectRoot))
 
   const { roster, roots, models, composing, current, identifiers, expression, reload } = shared
 
@@ -715,7 +848,21 @@ export function BotsMain(props: BotsMainProps) {
           )}
         </Show>
 
-        <Show when={!composing() && !current()}>
+        <Show when={shared.roomComposing()}>
+          <div data-slot="bots-main-scroll">
+            <RoomForm
+              deps={roomDeps}
+              onCreated={(id) => shared.openRoom(id)}
+              onCancel={() => shared.openRoom(undefined)}
+            />
+          </div>
+        </Show>
+
+        <Show when={!composing() && !shared.roomComposing() && shared.openRoomId()}>
+          {(id) => <RoomMain deps={roomDeps} roomId={id()} onRemoved={() => shared.openRoom(undefined)} />}
+        </Show>
+
+        <Show when={!composing() && !current() && !shared.roomComposing() && !shared.openRoomId()}>
           <p data-slot="bots-blank">
             <Show when={(roster() ?? []).length > 0} fallback={<>{t("bots.blank.empty")}</>}>
               {t("bots.blank.pick")}

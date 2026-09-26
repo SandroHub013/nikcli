@@ -80,6 +80,16 @@ export interface BotTurns {
    */
   routine: (bot: AgentFile, message: string, cwd?: string, run?: RoutineRun) => Turn | undefined
   /**
+   * A member's turn in a room (B8b): its own session there, in `thread`
+   * rather than in the bot's chat; the user is watching the room, so nikcli's
+   * questions are answered as in the panel (B8c) and shown in the room; what
+   * the bot writes to its memory is only proposed. Undefined when the bot
+   * already has a turn: one at a time per bot, in a room or not.
+   */
+  room: (bot: AgentFile, message: string, thread: string, cwd?: string, maxCostUsd?: number) => Turn | undefined
+  /** The thread of `bot`'s turn under way: its own, or its place in a room. */
+  threadOf: (path: string) => string
+  /**
    * The user's answer to the question on screen: Consenti (`once`), Nega
    * (`reject`), or Sempre (`always`), which is ADE's for this bot and goes to
    * nikcli as a once: nikcli's own «always» is the project's, every bot's.
@@ -109,6 +119,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const timer = setTimeout(run, ms)
       return () => clearTimeout(timer)
     })
+  /** The thread each running turn writes to, when it is not the bot's own (a room, B8b). */
+  const threads = new Map<string, string>()
+  const threadOf = (path: string) => threads.get(path) ?? path
   /** The Nega waiting on each bot's open question. */
   const expiries = new Map<string, () => void>()
   const cancelExpiry = (path: string) => {
@@ -121,7 +134,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     cancelExpiry(path)
     turn.write?.(answerKeys(answer))
     const at = now()
-    deps.update(path, (talk) => {
+    deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
       return line ? appendMessage(answered, { role: "error", text: line }, at) : answered
     })
@@ -139,7 +152,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
     if (verdict.kind === "allow") return reply(path, turn, "once")
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
-    deps.update(path, (talk) =>
+    deps.update(threadOf(path), (talk) =>
       talk.permission === asked
         ? {
             ...talk,
@@ -158,25 +171,33 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       path,
       schedule(() => {
         expiries.delete(path)
-        const still = deps.talkOf(path).permission
+        const still = deps.talkOf(threadOf(path)).permission
         if (turns.get(path) !== turn || still?.askedAt !== asked.askedAt) return
         reply(path, turn, "reject", t("bots.approval.expired", asked.patterns))
       }, APPROVAL_TIMEOUT_MS),
     )
   }
 
-  const begin = (bot: AgentFile, message: string, cwd: string | undefined, routine: RoutineRun | undefined): Turn | undefined => {
+  const begin = (
+    bot: AgentFile,
+    message: string,
+    cwd: string | undefined,
+    routine: RoutineRun | undefined,
+    room?: { readonly thread: string; readonly maxCostUsd?: number },
+  ): Turn | undefined => {
     const path = bot.path
     if (turns.has(path)) return undefined
+    /* The thread the turn writes to: the bot's own, or its place in a room (B8b). */
+    const thread = room?.thread ?? path
     const runner = runnerById(bot.runner)
     const account = deps.accountOf?.(path) ?? { mode: "plan" as const }
-    deps.update(path, (talk) => {
+    deps.update(thread, (talk) => {
       // An offer from the last turn is not for this one.
       const { offer: _stale, ...rest } = talk
       const marked = routine ? appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.routine.thread") }, Date.now()) : rest
       return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
-    const sessionId = deps.talkOf(path).sessionId
+    const sessionId = deps.talkOf(thread).sessionId
     /*
      * The bot's memory (B8a): its snapshot opens a conversation and nothing
      * after, so it stays as it was until the next one; what the last writes
@@ -190,15 +211,15 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     }
     const sent = preface ? `${preface}\n\n${message}` : message
     /* The thread's messages from here on are this turn's. */
-    const from = deps.talkOf(path).messages.length
+    const from = deps.talkOf(thread).messages.length
     const current = () => turns.get(path) === turn
     const readMenu = permissionMenuReader({
       schedule,
       onMenu: (seen) => {
         if (!current()) return
-        const before = deps.talkOf(path).permission
-        deps.update(path, (talk) => noticePermission(talk, seen, now()))
-        const asked = deps.talkOf(path).permission
+        const before = deps.talkOf(thread).permission
+        deps.update(thread, (talk) => noticePermission(talk, seen, now()))
+        const asked = deps.talkOf(thread).permission
         if (!asked || asked === before) return
         /*
          * Nobody is there to answer a routine (B11 review, BASSO 1): whatever
@@ -222,10 +243,10 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       // A routine has nobody to answer: no approvals, and no shell (`TurnSpec.unattended`).
       ...(routine ? { unattended: true } : { approvals: true, always: always.get(path) }),
       // A routine's cap per run holds during the turn, not after it (B11 review, M1).
-      ...(routine?.maxCostUsd !== undefined ? { maxCostUsd: routine.maxCostUsd } : {}),
+      ...((routine ?? room)?.maxCostUsd !== undefined ? { maxCostUsd: (routine ?? room)!.maxCostUsd! } : {}),
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       onLine: (line) => {
-        if (current()) deps.update(path, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
+        if (current()) deps.update(thread, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
       },
       /* Only nikcli draws a permission menu, read whole (M1); the others decide up front. */
       onData: (chunk) => {
@@ -234,13 +255,15 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     }
     const turn = routine && deps.runRoutine ? deps.runRoutine(request, routine) : deps.runTurn(request)
     turns.set(path, turn)
+    if (thread !== path) threads.set(path, thread)
     void turn.result.then((result) => {
       if (!current()) return
-      settleMemory(path, from, routine ? "routine" : "panel")
+      settleMemory(path, thread, from, routine ? "routine" : room ? "room" : "panel")
       turns.delete(path)
+      threads.delete(path)
       cancelExpiry(path)
       const at = Date.now()
-      deps.update(path, (talk) => {
+      deps.update(thread, (talk) => {
         if (result.status === "stopped") return applyExit(talk, null, at, runner.label)
         if (result.exitCode !== undefined) return applyExit(talk, result.exitCode, at, runner.label, result.lastWords)
         return applyProblem(talk, result.problem ?? `${runner.label} non ha risposto.`, at)
@@ -256,11 +279,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
    * applied in order, and each outcome a line in the thread. What failed
    * reaches the bot at the start of its next turn (`memoryPreface`).
    */
-  const settleMemory = (path: string, from: number, source: "panel" | "routine") => {
+  const settleMemory = (path: string, thread: string, from: number, source: "panel" | "routine" | "room") => {
     const store = deps.memory
     if (!store) return
     const said = deps
-      .talkOf(path)
+      .talkOf(thread)
       .messages.slice(from)
       .filter((message) => message.role === "bot")
     const texts = new Map<string, string>()
@@ -277,10 +300,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     /*
      * The user's profile is the block the model believes most: a write to it
      * waits for the user's click in the Memoria section (B8a review). So does
-     * every write of a routine: nobody was there to see it.
+     * every write of a routine, nobody was there to see it, and of a room,
+     * where the user is not in front of every turn (B8b).
      */
     const { memory, lines } = settleMemoryOps(store.get(path), ops, () => crypto.randomUUID(), {
-      propose: (op) => source === "routine" || op.block === "user",
+      propose: (op) => source !== "panel" || op.block === "user",
       from: source,
       at: now(),
     })
@@ -289,7 +313,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     if (unreadable > 0) failures.push(t("bots.memory.error.unreadable", unreadable))
     store.set(path, { ...memory, ...(failures.length > 0 ? { pending: failures } : {}) })
     const at = now()
-    deps.update(path, (talk) => {
+    deps.update(thread, (talk) => {
       const messages = talk.messages
         .map((message) => (texts.has(message.id) ? { ...message, text: texts.get(message.id)! } : message))
         .filter((message) => !(texts.has(message.id) && message.text.length === 0))
@@ -314,6 +338,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const turn = turns.get(path)
     if (!turn) return undefined
     turns.delete(path)
+    threads.delete(path)
     cancelExpiry(path)
     turn.stop()
     return turn
@@ -322,6 +347,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   return {
     send,
     routine: (bot, message, cwd, run) => begin(bot, message, cwd, run ?? {}),
+    room: (bot, message, thread, cwd, maxCostUsd) =>
+      begin(bot, message, cwd, undefined, { thread, ...(maxCostUsd !== undefined ? { maxCostUsd } : {}) }),
+    threadOf,
     undoMemory: (bot, messageId) => {
       const store = deps.memory
       const line = deps.talkOf(bot.path).messages.find((message) => message.id === messageId)
@@ -344,7 +372,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     },
     answer: (bot, choice) => {
       const turn = turns.get(bot.path)
-      const asked = deps.talkOf(bot.path).permission
+      const asked = deps.talkOf(threadOf(bot.path)).permission
       if (!turn || !asked) return
       // Only Nega was offered: nothing else is sent, whatever reaches here.
       if (asked.denyOnly && choice !== "reject") return
@@ -366,8 +394,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       })
     },
     stop: (bot) => {
+      const thread = threadOf(bot.path)
       if (!end(bot.path)) return
-      deps.update(bot.path, (talk) => applyExit(talk, null, Date.now(), runnerById(bot.runner).label))
+      deps.update(thread, (talk) => applyExit(talk, null, Date.now(), runnerById(bot.runner).label))
     },
     forget: (bot) => {
       end(bot.path)

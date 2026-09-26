@@ -45,8 +45,8 @@ export interface BotMemory {
   readonly proposals?: readonly MemoryProposal[]
 }
 
-/** Where a write came from: the bot's chat in ADE, a routine, a chat on the phone. */
-export type MemorySource = "panel" | "routine" | "gateway"
+/** Where a write came from: the bot's chat in ADE, a routine, a chat on the phone, a room (B8b). */
+export type MemorySource = "panel" | "routine" | "gateway" | "room"
 
 /**
  * A write not applied until the user confirms it (B8a review): one on the
@@ -543,7 +543,7 @@ export function parseMemory(value: unknown): BotMemory {
     const op = parseOp(entry["op"])
     const from = entry["from"]
     if (typeof entry["id"] !== "string" || !op || typeof entry["at"] !== "number") return []
-    if (from !== "panel" && from !== "routine" && from !== "gateway") return []
+    if (from !== "panel" && from !== "routine" && from !== "gateway" && from !== "room") return []
     return [{ id: entry["id"], op, from, at: entry["at"] }]
   })
   return {
