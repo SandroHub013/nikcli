@@ -13,7 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
-import { rowsInside, terminalBox } from "./fit-rows"
+import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
 export interface SessionTerminal {
@@ -663,11 +663,14 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   }
 
   const observer = new ResizeObserver(() => applyFit())
+  // A new scale changes the cell and not the box: the observer above would not hear it (`watchCellSize`).
+  const stopCellWatch = watchCellSize(session.terminal, () => applyFit(), typeof window === "undefined" ? undefined : window)
   observer.observe(element)
   applyFit()
 
   const detach = () => {
     observer.disconnect()
+    stopCellWatch()
     settler.cancel()
     inputHandler?.dispose()
     stopCopy?.()
