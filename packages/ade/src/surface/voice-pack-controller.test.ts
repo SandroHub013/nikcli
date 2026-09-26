@@ -142,13 +142,14 @@ describe("K3's progress and cancel have a caller", () => {
     }
   })
 
-  test("the bridge uses the names agreed with K4b: status with its size, install, delete, speak, stop", () => {
+  test("the panel's part of the bridge: status with its size, install, delete; the speaking is K4b's", () => {
     const shell = read("src", "host", "shell.ts")
     expect(shell).toContain('invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })')
     expect(shell).toContain('invoke("tts_local_install", { provider })')
     expect(shell).toContain('invoke("tts_local_delete", { provider })')
-    expect(shell).toContain('invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId: voice, text, token, lang })')
-    expect(shell).toContain('invoke("tts_local_stop")')
+    // The speaker's commands come with K4b's bridge, not a second one here.
+    expect(shell).not.toContain('"tts_local_speak"')
+    expect(shell).not.toContain('"tts_local_stop"')
   })
 
   test("the host's size wins over the one the panel knows", async () => {

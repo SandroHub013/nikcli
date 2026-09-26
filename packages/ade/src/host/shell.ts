@@ -230,10 +230,6 @@ export interface Host {
   ttsLocalInstall?: (provider: string) => Promise<void>
   /** K4b: removes a provider's pack from disk. */
   ttsLocalDelete?: (provider: string) => Promise<void>
-  /** K4b: a WAV of `text` in a local provider's voice; `lang` is the G2P language (it | en-us | en). */
-  ttsLocalSpeak?: (provider: string, voice: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
-  /** K4b: stops the resident local host; there is one, whatever the provider. */
-  ttsLocalStop?: () => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -732,16 +728,6 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalDelete(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_local_delete", { provider })
-    },
-
-    async ttsLocalSpeak(provider, voice, text, token, lang) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId: voice, text, token, lang })
-    },
-
-    async ttsLocalStop() {
-      const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("tts_local_stop")
     },
 
     async ttsPiperSpeak(voice, text, token, lang) {
