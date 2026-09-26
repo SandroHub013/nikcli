@@ -4,7 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { acceptsReport, parseReport } from "./agent-link"
-import { NIKCLI_PLUGIN_NAME, nikcliPluginScript } from "./nikcli-plugin"
+import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
+import { HOOK_MARKER } from "./agent-hooks"
+
+/** The text Rust compiles in and writes. */
+const nikcliPluginScript = () => readFileSync(new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url), "utf8")
 
 /*
  * The plugin as nikcli's TUI loads it: the file ADE writes, imported, its
@@ -64,7 +68,8 @@ function launchedByAde() {
 describe("nikcli's TUI plugin", () => {
   test("is a module the TUI loads: a default export with an id and tui()", async () => {
     const plugin = await loadPlugin()
-    expect(plugin.id).toBe("ade-agent-session")
+    expect(plugin.id).toBe(HOOK_MARKER)
+    expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
     expect(typeof plugin.tui).toBe("function")
     // No package imports: only Node's own modules.
     const imports = [...nikcliPluginScript().matchAll(/from "([^"]+)"/g)].map((match) => match[1])

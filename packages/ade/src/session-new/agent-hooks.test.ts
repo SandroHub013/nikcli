@@ -21,7 +21,7 @@ import {
   setHook,
   usesExecForm,
 } from "./agent-hooks"
-import { NIKCLI_PLUGIN_NAME, nikcliPluginScript } from "./nikcli-plugin"
+import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
 
 /**
  * The real shape of `~/.claude/settings.json` on a machine that already has
@@ -116,6 +116,11 @@ describe("the targets here and the paths in Rust", () => {
 
   test("Rust puts the script where this module says the marker is", () => {
     expect(source).toContain(`const SCRIPT_NAME: &str = "${HOOK_MARKER}.ps1";`)
+  })
+
+  test("the plugin's text is compiled into Rust, from the file the tests load", () => {
+    expect(source).toContain('const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");')
+    expect(new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js")).toBe(true)
   })
 
   test("and nikcli's plugin under the same marker, with no configuration", () => {
@@ -607,15 +612,21 @@ describe("nikcli's TUI plugin as a target", () => {
   const nikcli = hookTarget("nikcli")!
   const PLUGIN = "C:\\Users\\x\\AppData\\Roaming\\nikcli\\plugin\\tui\\ade-agent-session.js"
 
-  function disk(scriptPresent = false, scriptText?: string) {
+  function disk(scriptPresent = false, scriptCurrent = true) {
     const writes: { configText: string; script: string | null }[] = []
-    const state = { scriptPresent, scriptText }
+    const state = { scriptPresent, scriptCurrent }
     const host = {
-      readAgentHook: async () => ({ configPath: "", configText: null, scriptPath: PLUGIN, scriptPresent: state.scriptPresent }),
+      readAgentHook: async () => ({
+        configPath: "",
+        configText: null,
+        scriptPath: PLUGIN,
+        scriptPresent: state.scriptPresent,
+        scriptCurrent: state.scriptCurrent,
+      }),
       writeAgentHook: async (_agent: string, configText: string, script: string | null) => {
         writes.push({ configText, script })
         state.scriptPresent = script !== null
-        state.scriptText = script ?? undefined
+        state.scriptCurrent = script !== null
       },
     }
     return { writes, state, host }
@@ -631,23 +642,24 @@ describe("nikcli's TUI plugin as a target", () => {
     expect(await readHookStatus(host, nikcli)).toMatchObject({ installed: false, broken: false, configPath: "", scriptPath: PLUGIN })
   })
 
-  test("installing writes only the plugin, removing takes only the plugin away", async () => {
+  test("installing asks Rust for its plugin, sending no text; removing takes only the plugin away", async () => {
     const { writes, host } = disk()
     expect((await setHook(host, nikcli, true)).installed).toBe(true)
-    expect(writes).toEqual([{ configText: "", script: nikcliPluginScript() }])
+    // BASSO 1: nothing of the page's is written, the text is the one compiled into Rust.
+    expect(writes).toEqual([{ configText: "", script: "" }])
     expect((await setHook(host, nikcli, false)).installed).toBe(false)
     expect(writes[1]).toEqual({ configText: "", script: null })
   })
 
-  test("an installed plugin is rewritten with this version's; one never installed is not", async () => {
+  test("an installed plugin that is not this version's is rewritten; one never installed is not", async () => {
     const off = disk(false)
     expect(await refreshHookScript(off.host, nikcli, undefined)).toBeUndefined()
     expect(off.writes).toEqual([])
-    const on = disk(true, "// older")
-    expect(await refreshHookScript(on.host, nikcli, "// older")).toBe(nikcliPluginScript())
-    expect(on.writes).toEqual([{ configText: "", script: nikcliPluginScript() }])
+    const older = disk(true, false)
+    await refreshHookScript(older.host, nikcli, undefined)
+    expect(older.writes).toEqual([{ configText: "", script: "" }])
     // Already this version's: nothing written.
-    expect(await refreshHookScript(on.host, nikcli, nikcliPluginScript())).toBeUndefined()
-    expect(on.writes).toHaveLength(1)
+    await refreshHookScript(older.host, nikcli, undefined)
+    expect(older.writes).toHaveLength(1)
   })
 })

@@ -48,6 +48,12 @@ const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 /// Filename of nikcli's TUI plugin. Mirrors `NIKCLI_PLUGIN_NAME` in `nikcli-plugin.ts`.
 const PLUGIN_NAME: &str = "ade-agent-session.js";
 
+/// The plugin's text, compiled in: the only one ADE writes (ripristino
+/// review, BASSO 1). The page asks for the install and sends no program, so
+/// a compromised page cannot make every nikcli TUI load one of its choosing.
+/// The TypeScript tests load this same file and run it.
+const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
+
 /// Where a target's paths start.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Base {
@@ -226,6 +232,9 @@ pub struct HookFiles {
     pub script_path: String,
     /// Whether that script is on disk right now.
     pub script_present: bool,
+    /// For a plugin: whether the file on disk is the one this ADE writes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script_current: Option<bool>,
 }
 
 fn target(agent: &str) -> Result<&'static HookTarget, String> {
@@ -280,6 +289,7 @@ pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
             config_path: String::new(),
             config_text: None,
             script_present: script.is_file(),
+            script_current: Some(fs::read_to_string(&script).ok().as_deref() == Some(PLUGIN_TEXT)),
             script_path: script.to_string_lossy().to_string(),
         });
     }
@@ -288,6 +298,7 @@ pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
         config_text: fs::read_to_string(&config).ok(),
         config_path: config.to_string_lossy().to_string(),
         script_present: script.is_file(),
+        script_current: None,
         script_path: script.to_string_lossy().to_string(),
     })
 }
@@ -316,8 +327,10 @@ pub async fn agent_hook_write(
         if !config_text.is_empty() {
             return Err(format!("{agent} non ha una configurazione da scrivere"));
         }
+        // Whatever text the page sent, the one written is ADE's own.
+        let text = script.map(|_| PLUGIN_TEXT);
         return tauri::async_runtime::spawn_blocking(move || {
-            write_plugin_file(&script_path, script.as_deref(), |path| {
+            write_plugin_file(&script_path, text, |path| {
                 let brand = crate::brand::name();
                 let question = format!(
                     "{brand} vuole installare o aggiornare il suo plugin per il TUI di {agent}:\n\n{}\n\nIl plugin viene caricato da ogni TUI di {agent} e scrive qualcosa solo in quelli avviati da {brand}, per dirgli quale conversazione mostrano. Consentire?",
@@ -811,6 +824,14 @@ mod tests {
         assert!(path.ends_with(Path::new("nikcli").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
         let roaming = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| dirs_home().unwrap().join("AppData").join("Roaming"));
         assert!(path.starts_with(&roaming), "{} is not under {}", path.display(), roaming.display());
+    }
+
+    #[test]
+    fn the_plugin_written_is_the_one_compiled_in() {
+        // The file the TypeScript tests load and run, with ADE's marker and its guard on the environment.
+        assert!(PLUGIN_TEXT.contains("ade-agent-session"));
+        assert!(PLUGIN_TEXT.contains("process.env.ADE_SPAWN_NONCE"));
+        assert!(PLUGIN_TEXT.contains("export default"));
     }
 
     #[test]

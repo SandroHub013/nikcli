@@ -1,5 +1,5 @@
 import { t } from "../i18n"
-import { NIKCLI_PLUGIN_NAME, nikcliPluginScript } from "./nikcli-plugin"
+import { NIKCLI_PLUGIN_NAME } from "./nikcli-plugin"
 /**
  * Installing ADE's reporting hook into a CLI's own configuration.
  *
@@ -411,6 +411,8 @@ export interface HookHost {
     configText: string | null
     scriptPath: string
     scriptPresent: boolean
+    /** For a plugin: whether the file on disk is this version's. */
+    scriptCurrent?: boolean
   }>
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** The first line of `claude --version`, or null. See `usesExecForm`. */
@@ -493,7 +495,8 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
 
   const files = await read(target.id)
   if (target.kind === "tui-plugin") {
-    await write(target.id, "", install ? nikcliPluginScript() : null)
+    // The text is Rust's own (`nikcli-plugin.ts`): the page only says install ("") or remove (null).
+    await write(target.id, "", install ? "" : null)
     return readHookStatus(host, target)
   }
   const current = files.configText ?? undefined
@@ -528,15 +531,15 @@ export async function refreshHookScript(
   target: HookTarget,
   lastWritten: string | undefined,
 ): Promise<string | undefined> {
-  const script = target.kind === "tui-plugin" ? nikcliPluginScript() : hookScript(target.agent)
   if (!host.readAgentHook || !host.writeAgentHook) return undefined
   const files = await host.readAgentHook(target.id)
   if (target.kind === "tui-plugin") {
-    // Only an installed plugin is rewritten, and only when this version's differs from the last written.
-    if (!files.scriptPresent || lastWritten === script) return undefined
-    await host.writeAgentHook(target.id, "", script)
-    return script
+    // Only an installed plugin is rewritten, and only when it is not this version's: Rust compares, and writes its own.
+    if (!files.scriptPresent || files.scriptCurrent !== false) return undefined
+    await host.writeAgentHook(target.id, "", "")
+    return undefined
   }
+  const script = hookScript(target.agent)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.
