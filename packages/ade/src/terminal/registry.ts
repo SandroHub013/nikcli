@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
+import { rowsInside, terminalBox } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
 export interface SessionTerminal {
@@ -552,6 +553,17 @@ export function placementFor(drawn: { parentElement: unknown } | null | undefine
 }
 
 /**
+ * The height of a cell as the renderer drew it. The same private field
+ * FitAddon reads (`_core._renderService.dimensions`); undefined before the
+ * first render, and then the fit is left as FitAddon made it.
+ */
+function cellHeightOf(terminal: Terminal): number | undefined {
+  const core = (terminal as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })._core
+  const height = core?._renderService?.dimensions?.css?.cell?.height
+  return height && height > 0 ? height : undefined
+}
+
+/**
  * Draws the terminal into `element` and keeps it fitted to it.
  *
  * Returns a detach function rather than disposing: the session is still running
@@ -631,7 +643,19 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     // fitting against that throws inside xterm's renderer.
     if (element.clientWidth < 2 || element.clientHeight < 2) return
     try {
-      session.fit.fit()
+      // FitAddon's size, not its fit: its count of rows takes the box's padding as rows, and the
+      // last ones, the statusline, fell below it (`fit-rows.ts`). One resize, with the rows that fit.
+      // No size before the first render: nothing to resize, as FitAddon's fit() would do.
+      const proposed = session.fit.proposeDimensions()
+      if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
+        const cell = cellHeightOf(session.terminal)
+        const rows = cell ? Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell)) : proposed.rows
+        if (proposed.cols !== session.terminal.cols || rows !== session.terminal.rows) {
+          // As FitAddon's fit(): the renderer's layers are cleared before a resize.
+          ;(session.terminal as unknown as { _core?: { _renderService?: { clear?: () => void } } })._core?._renderService?.clear?.()
+          session.terminal.resize(proposed.cols, rows)
+        }
+      }
     } catch {
       return
     }
