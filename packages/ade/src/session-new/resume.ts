@@ -532,6 +532,21 @@ export function lastTakenFor<P extends { id: string; agent?: string; model?: str
   )
 }
 
+/**
+ * The conversation a start opens: the one it minted or found, or the one it
+ * reopens by the id the pane saved.
+ *
+ * Reopening by id carries no id of its own in the arguments (`byId` builds
+ * them), so a check on the minted id alone never matched the case it was
+ * written for: the note that the conversation belongs to another folder was
+ * never said at a restart, and the folder was forgotten at every one
+ * (lettura di Mimo, F4).
+ */
+export function openedConversation(plan: ResumePlan | undefined, minted: string | undefined, saved: string | undefined): string | undefined {
+  if (minted) return minted
+  return plan?.kind === "resume" && plan.via === "id" ? saved : undefined
+}
+
 /** The key of "the most recent conversation" of an agent in a folder. */
 function claimKey(agentId: string, cwd: string | undefined): string {
   return `${agentId}\u0000${folderKey(cwd)}`

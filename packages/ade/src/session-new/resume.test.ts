@@ -18,6 +18,7 @@ import {
   LAST_HERE_LIMIT,
   restoreClaims,
   claimedByRestore,
+  openedConversation,
 } from "./resume"
 
 describe("planStart", () => {
@@ -474,5 +475,36 @@ describe("a restore's claims reach the panes it reopens", () => {
     expect(workbench).toContain("const claims = restoreClaims(planned)")
     expect(workbench).toContain("void reopen(pane, undefined, claims)")
     expect(workbench).toContain("lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)")
+  })
+})
+
+/*
+ * Lettura di Mimo, F4, scenario A: a pane reopened by the id it saved opens
+ * that conversation, though no id comes back from the arguments. The note
+ * «conversazione di un'altra cartella» compared the minted id alone, never
+ * matched at a restart, and the folder was dropped at every one.
+ */
+describe("the conversation a start opens", () => {
+  test("reopening by the saved id opens that one", () => {
+    const plan = planResume({ agentId: "nikcli", resumeId: "ses_abcdefgh12345678" })
+    expect(plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_abcdefgh12345678"] })
+    expect(openedConversation(plan, undefined, "ses_abcdefgh12345678")).toBe("ses_abcdefgh12345678")
+  })
+
+  test("a minted or found id is the one opened; the most recent one, or a fresh start, is not known", () => {
+    expect(openedConversation({ kind: "here" }, "ses_trovata12345678", undefined)).toBe("ses_trovata12345678")
+    expect(openedConversation({ kind: "resume", via: "last", args: ["--continue"] }, undefined, "ses_salvata")).toBeUndefined()
+    expect(openedConversation({ kind: "fresh" }, undefined, "ses_salvata")).toBeUndefined()
+    expect(openedConversation(undefined, undefined, "ses_salvata")).toBeUndefined()
+  })
+
+  test("the start says the other folder again, and keeps it, for the conversation it reopens", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const openedId = openedConversation(resume, mintedId, launched?.resumeId)")
+    expect(workbench).toContain("if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {")
+    expect(workbench).toContain("...(openedId !== launched?.resumeId ? { otherDir: undefined } : {}),")
+    expect(workbench).not.toContain("mintedId === launched.resumeId")
+    expect(workbench).toContain("otherDir: followedFolder(report, workDir, followed ?? {})")
+    expect(workbench).toContain("followedFolder(report, pane.cwd, pane)")
   })
 })

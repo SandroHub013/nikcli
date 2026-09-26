@@ -52,12 +52,13 @@ import {
   planRestore,
   restoreClaims,
   claimedByRestore,
+  openedConversation,
   planResume,
   planStart,
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { countingLines, followReports, lastReportedId, newNonce, otherFolder, parseReport } from "../session-new/agent-link"
+import { countingLines, followReports, followedFolder, lastReportedId, newNonce, otherFolder, parseReport } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -6152,7 +6153,7 @@ export function Workbench() {
    * The id in the report the pane's previous spawn left and nobody took
    * (`lastReportedId`), written onto the pane; the file is cleared once read.
    */
-  const adoptLastReport = async (pane: { id: string; cwd?: string; resumeId?: string; linkNonce?: string }) => {
+  const adoptLastReport = async (pane: { id: string; cwd?: string; resumeId?: string; otherDir?: string; linkNonce?: string }) => {
     const nonce = pane.linkNonce
     if (!nonce) return undefined
     const host = await getHost()
@@ -6162,7 +6163,7 @@ export function Workbench() {
     const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
     if (id) {
       const report = parseReport(text)
-      const elsewhere = report && pane.cwd ? otherFolder(report, pane.cwd) : undefined
+      const elsewhere = report && pane.cwd ? followedFolder(report, pane.cwd, pane) : undefined
       setWb((w) => updatePane(w, pane.id, { resumeId: id, otherDir: elsewhere }))
     }
     return id
@@ -6420,6 +6421,7 @@ export function Workbench() {
       ...(extra ?? []),
     ]
     const mintedId = opening.resumeId
+    const openedId = openedConversation(resume, mintedId, launched?.resumeId)
 
     /*
      * What ADE can promise about this session coming back, said once, here.
@@ -6441,7 +6443,7 @@ export function Workbench() {
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
     if (!resumed && promise === "none") tellPane(paneId, t("resume.none"))
     // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
-    if (resumed && launched?.otherDir && mintedId === launched.resumeId) {
+    if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {
       tellPane(paneId, t("resume.otherFolder", launched.otherDir))
     }
 
@@ -6491,7 +6493,7 @@ export function Workbench() {
         // Saved, so the next start can read what this spawn reported last.
         linkNonce: nonce,
         // Another conversation than the one followed: its folder no longer applies.
-        ...(mintedId !== launched?.resumeId ? { otherDir: undefined } : {}),
+        ...(openedId !== launched?.resumeId ? { otherDir: undefined } : {}),
         // A fresh start drops an id whose conversation is gone, so the pane
         // stops promising to reopen it.
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
@@ -6656,8 +6658,9 @@ export function Workbench() {
           onReport: (report) => {
             if (running.get(paneId) !== session) return
             const elsewhere = otherFolder(report, workDir)
-            // Kept with the pane, so a restore says it again (ripristino review, BASSO 2).
-            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId, otherDir: elsewhere }))
+            // Kept with the pane, so a restore says it again (ripristino review, BASSO 2); a report without its folder keeps what was known.
+            const followed = wb().panes.find((pane) => pane.id === paneId)
+            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId, otherDir: followedFolder(report, workDir, followed ?? {}) }))
             // Followed all the same, since the TUI does show it; but only one of the two can reopen it.
             const holder = wb().panes.find(
               (other) => other.id !== paneId && (other.agent ?? other.model) === agentId && other.resumeId === report.sessionId,
