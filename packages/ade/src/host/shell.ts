@@ -216,10 +216,11 @@ export interface Host {
   /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
   ttsPiperStop?: () => Promise<{ busy: boolean }>
   /**
-   * The same three things, for the second local backend, with the provider as a
-   * parameter: Piper is `tts_local_*` with `piper`, and Kokoro is the same
-   * commands with `kokoro`. They are their own names because the resident process
-   * is one per backend and stopping one is not stopping the other.
+   * The same things, for the second local backend, with the provider as a
+   * parameter. They are their own names because the resident process is one per
+   * backend and stopping one is not stopping the other, and they take a provider
+   * because the shape is one — but only `kokoro` is accepted today, and Piper's
+   * own commands stay where they are. A comment that said otherwise was here.
    *
    * No `voiceId` on status, install and stop: Kokoro's four voices are one
    * 219 MB download, so installing them is one operation with nothing to choose.

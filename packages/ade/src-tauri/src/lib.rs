@@ -2153,6 +2153,10 @@ pub fn run() {
                 app.state::<serve::Server>().shutdown();
                 app.state::<frontend::DevServer>().shutdown();
                 app.state::<pty::Registry>().end_all();
+                // The resident voice hosts, killed and not left to notice the
+                // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
+                // the EOF of a stdin nobody writes to again.
+                app.state::<tts::KokoroState>().stop();
             }
         });
 }

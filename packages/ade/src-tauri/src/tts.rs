@@ -64,14 +64,33 @@ pub fn tts_local_status(app: tauri::AppHandle, provider: String) -> Result<Local
 /// Refused while an install is running, and the resident host is stopped first if
 /// it is there: a process with the model open is a process that does not give the
 /// model back.
+///
+/// Both locks are held for the whole removal, and that is the point of the two
+/// lines below. Checking `install_running` and then removing is a check-then-act:
+/// «Installa» followed at once by «Rimuovi» would delete the folder under the
+/// installer that is writing into it. And the child lock is taken *before* the
+/// host is stopped and kept until the folder is gone, so a synthesis that arrives
+/// in between cannot start a new host with the model half deleted — which is a
+/// DLL locked on Windows and a cancellation that removes half of it.
 #[tauri::command]
 pub fn tts_local_delete(app: tauri::AppHandle, state: tauri::State<'_, KokoroState>) -> Result<u64, String> {
     let root = kokoro_root(&app)?;
-    if app.state::<Piper>().installer.install_running(kokoro::KOKORO) {
+    let installer = app.state::<Piper>();
+    let slot = installer.installer.slot(kokoro::KOKORO);
+    // Il lock dell'installer, e da subito il lock del figlio: in quest'ordine,
+    // cosi' nessuno dei due può essere messo in mezzo fra il controllo e la
+    // cancellazione.
+    let _install = installer.installer.hold(&slot);
+    if installer.installer.install_running(kokoro::KOKORO) {
         return Err("C'è un'installazione di Kokoro in corso: fermala prima di cancellare.".into());
     }
-    kokoro::stop(&state);
-    kokoro::delete(&root, false)
+    let mut child = state.0.lock();
+    if let Some(host) = child.as_mut() {
+        host.stop();
+    }
+    *child = None;
+    let freed = kokoro::delete(&root, false)?;
+    Ok(freed)
 }
 
 /// Kokoro's own folder, a sibling of Piper's: `…/tts/kokoro`.
@@ -96,7 +115,7 @@ pub async fn tts_local_speak(
     if provider != kokoro::KOKORO {
         return Err(format!("{provider} non è un provider locale."));
     }
-    let root = root(&app)?;
+    let root = kokoro_root(&app)?;
     let text: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     if text.trim().is_empty() {
         return Err("testo vuoto".into());
@@ -126,6 +145,18 @@ pub fn tts_local_stop(state: tauri::State<'_, KokoroState>) -> Result<(), String
 /// The resident host, kept by Tauri so there is one of it for the whole app.
 pub struct KokoroState(pub kokoro::Kokoro);
 
+impl KokoroState {
+    /// Ends the resident host, for the exit of ADE.
+    ///
+    /// Not the EOF on stdin, which is what the host would see on its own: the
+    /// host that is still loading its model is not reading stdin, so it would keep
+    /// 219 MB resident for as long as it takes, and the process outliving the app
+    /// that started it is the thing this exists to avoid.
+    pub fn stop(&self) {
+        kokoro::stop(self);
+    }
+}
+
 impl Default for KokoroState {
     fn default() -> Self {
         Self(kokoro::Kokoro::default())
@@ -141,8 +172,7 @@ pub async fn tts_local_install(
         return Err(format!("{provider} non è un provider locale."));
     }
     let state = app.state::<Piper>();
-    let root = root(&app)?;
-    std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
+    let root = kokoro_root(&app)?;
     let slot = state.installer.slot(kokoro::KOKORO);
     let _one = state.installer.hold(&slot);
     let install = state.installer.begin(

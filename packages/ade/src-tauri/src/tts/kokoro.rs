@@ -160,9 +160,14 @@ fn downloads() -> [(&'static Download, &'static str); 3] {
     ]
 }
 
-/// How many steps the panel is told about: the three files above, the model, and
-/// the host executable.
-pub const STEPS: u32 = 5;
+/// How many steps the panel is told about.
+///
+/// Six: the three files above, the model, the vocabulary that ships with ADE, and the
+/// host executable. It was five, which was right only while the host was not
+/// counted because there was no release to take it from — and the moment there is
+/// one, the bar would have gone past its own end by one file, the same bug the byte
+/// total had.
+pub const STEPS: u32 = 6;
 
 /// The bytes of the model, ready for sherpa, and the digest K1 measured on them.
 const PREPARED_MODEL_SHA256: &str = "2bbfaaaed926b05c82da1d159aca5c94515e5ca091d599b803460cc2782cd827";
@@ -226,6 +231,11 @@ pub fn install_locked(
     }
     // The runtime is a tarball, and the three files that are used are inside it.
     unpack_runtime(&home)?;
+    // And so is espeak-ng-data: it arrives the same way and is a folder of files
+    // the host phonemises with, not a single file. It was downloaded and never
+    // unpacked, so `ready()` — which asks for the folder — was never true and an
+    // install that reported success could not speak.
+    unpack_espeak(&home)?;
     // The model: downloaded, checked, and then made into a file sherpa reads.
     let model = prepared_model(root);
     if !model.is_file() {
@@ -270,12 +280,16 @@ pub fn install_locked(
 /// A tarball of an SDK, and the 17 MB that are not used are not extracted: the
 /// host is given the DLL it loads and the ONNX Runtime beside it, and nothing
 /// else, so what is on disk is what is needed.
-fn unpack_runtime(home: &Path) -> Result<(), String> {
-    let lib = home.join("lib");
+///
+/// The parameter is `root` and not `home`: it used to be called `home`, which
+/// shadowed the function of the same name, and a path inside it came out one level
+/// too deep. The test beside `unpack_espeak` is what caught it.
+fn unpack_runtime(root: &Path) -> Result<(), String> {
+    let lib = home(root).join("lib");
     if sherpa_dll_in(&lib).is_file() {
         return Ok(());
     }
-    let archive = home.join("sherpa-onnx.tar.bz2");
+    let archive = home(root).join("sherpa-onnx.tar.bz2");
     if !archive.is_file() {
         return Ok(());
     }
@@ -320,6 +334,43 @@ fn unpack_runtime(home: &Path) -> Result<(), String> {
 
 fn sherpa_dll_in(lib: &Path) -> PathBuf {
     lib.join("sherpa-onnx-c-api.dll")
+}
+
+/// Unpacks `espeak-ng-data.tar.bz2` into the folder the host is told to read.
+///
+/// The whole tree, not three files of it: espeak-ng looks its voices up by name in
+/// that folder, and a partial tree is a folder where some phonemes work and
+/// others do not — which is worse than a clear failure, because the sentences
+/// that fail are the ones with an unusual word in them.
+fn unpack_espeak(root: &Path) -> Result<(), String> {
+    let folder = espeak_data(root);
+    if folder.is_dir() {
+        return Ok(());
+    }
+    let archive = home(root).join("espeak-ng-data.tar.bz2");
+    if !archive.is_file() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    super::run(
+        system_tool("tar.exe"),
+        &["-xf".as_ref(), archive.as_os_str(), "-C".as_ref(), folder.as_os_str()],
+    )?;
+    // The tarball has a top-level folder, and the host is told where the data is
+    // rather than where the archive put it: one level up if the tarball kept it,
+    // the folder itself if it did not.
+    let nested = folder.join("espeak-ng-data");
+    if nested.is_dir() {
+        for entry in std::fs::read_dir(&nested).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let _ = std::fs::rename(entry.path(), folder.join(entry.file_name()));
+        }
+        let _ = std::fs::remove_dir_all(&nested);
+    }
+    if folder.read_dir().map(|mut it| it.next().is_none()).unwrap_or(true) {
+        return Err("L'archivio di espeak-ng è vuoto.".into());
+    }
+    Ok(())
 }
 
 /*
@@ -382,8 +433,9 @@ fn push_varint(out: &mut Vec<u8>, mut value: u64) {
 
 /// The bytes an install of this revision fetches, when there is something to fetch.
 ///
-/// For the panel's «Installa (192 MB)»: the sum of the four downloads, which is
-/// the 219 489 095 bytes K1 counted. `None` when the revision is already whole,
+/// For the panel's «Installa (… MB)»: the sum of the four downloads, which is the
+/// 219 489 095 bytes K1 counted. The number in the panel comes from here, not from
+/// a text written next to it. `None` when the revision is already whole,
 /// because a number next to «Installa» on something installed is a number
 /// nobody asked for.
 pub fn download_size(root: &Path) -> Option<u64> {
@@ -508,7 +560,12 @@ pub struct Kokoro {
 }
 
 impl Kokoro {
-    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Box<dyn Synth>>> {
+    /// The child's place, and the lock that keeps a synthesis at a time.
+    ///
+    /// pub(crate) because a delete has to hold it for the whole removal: a
+    /// folder that disappears under a host that is being started is a DLL che
+    /// non si cancella e un modello a meta'.
+    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, Option<Box<dyn Synth>>> {
         self.child.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
@@ -673,9 +730,17 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
         .stderr(Stdio::null());
     super::hide_window(&mut command);
     let mut child = command.spawn().map_err(|e| format!("L'host di Kokoro non si avvia: {e}"))?;
+    // Da qui in avanti il figlio e' vivo, e ogni uscita per errore lo uccide: un
+    // `Child` che cade non uccide il processo, e l'host che sta caricando il
+    // modello non legge stdin, quindi l'EOF che lo farebbe uscire arriva solo
+    // quando ha finito. Senza questo, una sintesi successiva ne avvia un secondo
+    // e due modelli da 219 MB stanno in memoria insieme.
     let stdin = child.stdin.take().ok_or("L'host di Kokoro senza stdin")?;
     let stdout = child.stdout.take().ok_or("L'host di Kokoro senza stdout")?;
     let rx = super::spawn_stdout_reader(stdout);
+    // Le pipe sono prese: da qui la guardia puo' tenere il figlio, e copre le
+    // uscite per errore che vengono dopo.
+    let mut spawned = Guarded::new(&mut child);
     let first = match rx.recv_timeout(std::time::Duration::from_secs(90)) {
         Ok(Ok(line)) => line,
         _ => return Err("L'host di Kokoro non ha detto la sua versione.".into()),
@@ -698,7 +763,40 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
             hello.v
         ));
     }
+    // La guardia ha finito il suo lavoro: il figlio passa alla struttura che lo tiene.
+    spawned.disarm();
+    drop(spawned);
     Ok(Box::new(Local { child, stdin, rx, fresh: true }))
+}
+
+/// A child that is killed unless someone says it has been handed over.
+///
+/// The only thing it does is make an early return kill the process: a `Child`
+/// dropped on its own is a process that keeps running, and the host is 219 MB of
+/// model. `disarm` is called when the child has become the `Local` that owns it,
+/// and after that the guard does nothing and the `Local`'s own `Drop` applies.
+struct Guarded<'a> {
+    child: &'a mut std::process::Child,
+    armed: bool,
+}
+
+impl<'a> Guarded<'a> {
+    fn new(child: &'a mut std::process::Child) -> Self {
+        Self { child, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for Guarded<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
 }
 
 /// How long a sentence may be before ADE refuses to send it.
@@ -708,6 +806,24 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
 /// queue for minutes, and every reply behind it waits. Measured in characters
 /// because that is what the text is, and a reply of this size is already a page.
 pub const TEXT_LIMIT: usize = 4_000;
+
+/// Removes the WAVs a previous session left behind.
+///
+/// A file is deleted after it is read, and a session that dies between the write
+/// and the read leaves it: nobody is going to read it, and it is tens of
+/// megabytes of a 24 kHz waveform per unit. So the folder is swept when the first
+/// sentence of a session is asked for, and the sweep is by name — `kokoro-` is
+/// the prefix this module gives its files and nothing else uses.
+pub fn sweep_orphans(root: &Path) {
+    let Ok(entries) = std::fs::read_dir(root.join("scratch")) else { return };
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("kokoro-") && name.ends_with(".wav") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
 
 /// A name for the WAV of one request, unique and never from the page.
 ///
@@ -750,6 +866,9 @@ pub fn speak_blocking(
         *guard = None;
     }
     if guard.is_none() {
+        // Nessun figlio in giro vuol dire che non c'e' niente di questa sessione
+        // in volo, quindi quello che c'e' sul disco e' di una sessione morta.
+        sweep_orphans(root);
         *guard = Some(start(root)?);
     }
     let child = guard.as_mut().expect("started above");
@@ -910,6 +1029,94 @@ mod tests {
         // E un id che non e' fra questi non e' una pagina da aprire.
         assert_eq!(source_of("https://example.invalid"), None);
         assert_eq!(source_of("ugo"), None);
+    }
+
+    #[test]
+    fn i_wav_orfani_di_una_sessione_morta_vanno_e_il_foglio_degli_altri_no() {
+        let root = Path::new("tts").join("orfani");
+        let _ = std::fs::remove_dir_all(&root);
+        let scratch = root.join("scratch");
+        std::fs::create_dir_all(&scratch).unwrap();
+        // Quello che una sessione morta lascia, e quello che non e' nostro e
+        // quindi non si tocca: il prefetto di un altro backend nella stessa
+        // cartella non e' un WAV orfano di Kokoro.
+        std::fs::write(scratch.join("kokoro-7-0.wav"), b"orfano").unwrap();
+        std::fs::write(scratch.join("kokoro-9-3.wav"), b"orfano").unwrap();
+        std::fs::write(scratch.join("noto.txt"), b"non e' un wav").unwrap();
+        sweep_orphans(&root);
+        assert!(!scratch.join("kokoro-7-0.wav").exists());
+        assert!(!scratch.join("kokoro-9-3.wav").exists());
+        assert!(scratch.join("noto.txt").is_file(), "la spazzatura toglie solo i suoi file");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn i_passi_sono_sei_e_non_cinque() {
+        // Con l'host che arriva, i passi sono tre file + modello + vocabolario +
+        // eseguibile: cinque faceva andare la barra oltre il fondo di un file,
+        // che e' la stessa cosa che il totale dei byte aveva.
+        assert_eq!(STEPS, 6);
+    }
+
+    #[test]
+    fn l_espeak_si_estrae_e_senza_di_lui_kokoro_non_e_mai_installato() {
+        // Il caso che F2 era: il tarball scaricato, la cartella mai creata, e
+        // `ready()` che la chiede per sempre. Il test non puo' scaricare 7 MB, ma
+        // puo' dire cosa deve esserci quando l'install finisce.
+        let root = Path::new("tts").join("espeak-non-estratto");
+        let _ = std::fs::remove_dir_all(&root);
+        let rev = home(&root);
+        std::fs::create_dir_all(&rev).unwrap();
+        // Il tarball c'e', la cartella no: e' esattamente lo stato in cui
+        // l'installazione diceva di aver finito e non installava niente.
+        std::fs::write(rev.join("espeak-ng-data.tar.bz2"), b"non e' un archivio").unwrap();
+        assert!(espeak_data(&root).is_dir() == false);
+        // Con un archivio che non si lascia aprire, l'errore lo dice e la
+        // cartella non resta a meta' come se fosse installata.
+        let unpacked = unpack_espeak(&root);
+        assert!(unpacked.is_err(), "un archivio che non si spacchetta non e' un install riuscita");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn la_cartella_di_kokoro_e_sorella_di_quella_di_piper_e_non_dentro() {
+        // Il percorso del brief e' `tts/kokoro/<rev>`. Dentro `tts/piper` finivano
+        // i 219 MB, che restavano sepolti li' e sparivano con una pulizia di
+        // Piper: la stessa cosa che il commento di `home` vieta.
+        let root = Path::new("tts").join("kokoro");
+        let rev = home(&root);
+        assert_eq!(rev, Path::new("tts").join("kokoro").join(REV));
+        assert!(rev.starts_with("tts/kokoro"));
+        assert!(!rev.starts_with("tts/piper"));
+        // E i file che `ready()` chiede sono tutti dentro quella cartella.
+        for needed in [host_exe(&root), sherpa_dll(&root), prepared_model(&root), voices_file(&root)] {
+            assert!(needed.starts_with(&rev), "{} sta fuori dalla revisione", needed.display());
+        }
+    }
+
+    /// The commands must agree on the folder. This is the bug F1 was, and it is
+    /// not something a unit test can call — the commands want an `AppHandle` — so
+    /// it is a test on the source: install and speak were reading Piper's root
+    /// while status and delete read Kokoro's, and Kokoro could never look
+    /// installed after a perfectly good install.
+    #[test]
+    fn i_comandi_di_kokoro_usano_tutti_la_cartella_di_kokoro() {
+        let source = include_str!("../tts.rs");
+        let mut commands = 0;
+        for chunk in source.split("pub async fn tts_local_").skip(1) {
+            let body: String = chunk.chars().take(1_400).collect();
+            if !body.contains("kokoro::KOKORO") {
+                continue;
+            }
+            commands += 1;
+            // `= root(&app)` and not `root(&app)`: the second matches inside
+            // `kokoro_root(&app)`, which is the call we want.
+            assert!(
+                !body.contains("= root(&app)"),
+                "un comando di Kokoro prende la root di Piper: i 219 MB finiscono dentro tts/piper"
+            );
+        }
+        assert_eq!(commands, 2, "i due comandi asincroni di Kokoro: install e speak");
     }
 
     #[test]
