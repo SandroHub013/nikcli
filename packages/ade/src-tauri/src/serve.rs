@@ -362,12 +362,21 @@ fn user_config_file() -> Option<PathBuf> {
 /// environment as it is.
 ///
 /// `inherited` is the variable ADE itself was started with, `user_files` the
-/// text of the config files the user writes. A `small_model` in any of them
-/// is theirs and stays; otherwise the inherited content gets `model` added,
-/// or is made of it. A file only has to mention the key: nikcli reads
-/// JSONC, and a commented-out line counting as a choice errs on the user's side.
+/// text of the config files the user writes. Two keys get the free `model`
+/// passed here when nobody chose them, each on its own:
+///
+/// - `small_model`, see `FREE_SMALL_MODEL`. A file only has to mention the
+///   key: a commented-out line counting as a choice errs on the user's side.
+/// - `model`, the one a prompt without a model gets (modello assente review,
+///   point 1): a bot with no model in its file, in its agent or in the config
+///   fell on the provider's default, with OpenRouter a paid one. Here only a
+///   top-level `model` counts, read as JSONC (`top_level_key`): `"model"`
+///   also appears inside `agent` blocks, and taking that for a choice would
+///   leave the paid default in place. A file that cannot be read counts as
+///   a choice.
+///
 /// Content that is not a JSON object is not touched: nikcli refuses it anyway.
-fn small_model_content(inherited: Option<&str>, user_files: &[String], model: &str) -> Option<String> {
+fn free_models_content(inherited: Option<&str>, user_files: &[String], model: &str) -> Option<String> {
     let mut content = match inherited.map(str::trim).filter(|text| !text.is_empty()) {
         Some(text) => match serde_json::from_str::<serde_json::Value>(text) {
             Ok(serde_json::Value::Object(object)) => object,
@@ -375,11 +384,71 @@ fn small_model_content(inherited: Option<&str>, user_files: &[String], model: &s
         },
         None => serde_json::Map::new(),
     };
-    if content.contains_key("small_model") || user_files.iter().any(|text| text.contains("\"small_model\"")) {
-        return None;
+    let mut changed = false;
+    if !content.contains_key("small_model") && !user_files.iter().any(|text| text.contains("\"small_model\"")) {
+        content.insert("small_model".into(), serde_json::Value::String(model.into()));
+        changed = true;
     }
-    content.insert("small_model".into(), serde_json::Value::String(model.into()));
-    Some(serde_json::Value::Object(content).to_string())
+    if !content.contains_key("model") && !user_files.iter().any(|text| top_level_key(text, "model")) {
+        content.insert("model".into(), serde_json::Value::String(model.into()));
+        changed = true;
+    }
+    changed.then(|| serde_json::Value::Object(content).to_string())
+}
+
+/// Whether the JSONC `text` has `key` at its top level. Comments and trailing
+/// commas are dropped first; text that still does not parse counts as having
+/// it, which leaves the user's file in charge.
+fn top_level_key(text: &str, key: &str) -> bool {
+    match serde_json::from_str::<serde_json::Value>(&plain_json(text)) {
+        Ok(serde_json::Value::Object(object)) => object.contains_key(key),
+        Ok(_) => false,
+        Err(_) => text.contains(&format!("\"{key}\"")),
+    }
+}
+
+/// JSONC as JSON: `//` and `/* */` comments and trailing commas removed,
+/// strings left as they are.
+fn plain_json(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let (mut at, mut in_string) = (0, false);
+    while at < chars.len() {
+        let c = chars[at];
+        if in_string {
+            out.push(c);
+            if c == '\\' && at + 1 < chars.len() {
+                out.push(chars[at + 1]);
+                at += 1;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else if c == '"' {
+            in_string = true;
+            out.push(c);
+        } else if c == '/' && chars.get(at + 1) == Some(&'/') {
+            while at < chars.len() && chars[at] != '\n' {
+                at += 1;
+            }
+            continue;
+        } else if c == '/' && chars.get(at + 1) == Some(&'*') {
+            at += 2;
+            while at < chars.len() && !(chars[at] == '*' && chars.get(at + 1) == Some(&'/')) {
+                at += 1;
+            }
+            at += 2;
+            continue;
+        } else if c == ',' {
+            let next = chars[at + 1..].iter().find(|next| !next.is_whitespace());
+            if !matches!(next, Some('}') | Some(']')) {
+                out.push(c);
+            }
+        } else {
+            out.push(c);
+        }
+        at += 1;
+    }
+    out
 }
 
 /// Whether a model of the catalog can title and summarise for free: free by
@@ -569,13 +638,13 @@ fn start_with_small_model(
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
         .unwrap_or_else(|| FREE_SMALL_MODEL.to_string());
-    let content = small_model_content(inherited, user_files, &started_with);
+    let content = free_models_content(inherited, user_files, &started_with);
     let mut serving = launch(content.as_deref())?;
     if content.is_some() {
         if let Some(picked) = catalog(&serving) {
             *chosen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(picked.clone());
             if picked != started_with {
-                let content = small_model_content(inherited, user_files, &picked);
+                let content = free_models_content(inherited, user_files, &picked);
                 serving = replace_when_ready(serving, || launch(content.as_deref()));
             }
         }
@@ -954,29 +1023,55 @@ mod tests {
 
     #[test]
     fn a_free_small_model_only_when_the_user_chose_none() {
-        use super::{FREE_SMALL_MODEL, small_model_content};
-        let free = format!(r#"{{"small_model":"{FREE_SMALL_MODEL}"}}"#);
-        let small_model_content = |inherited: Option<&str>, files: &[String]| small_model_content(inherited, files, FREE_SMALL_MODEL);
-        // Nothing chosen anywhere: ADE's free one.
-        assert_eq!(small_model_content(None, &[]).as_deref(), Some(free.as_str()));
-        assert_eq!(small_model_content(None, &[r#"{"model":"openrouter/x"}"#.into()]).as_deref(), Some(free.as_str()));
-        // Chosen in a config file, even empty (off), or commented out in JSONC: theirs.
+        use super::{FREE_SMALL_MODEL, free_models_content};
+        let content = |inherited: Option<&str>, files: &[String]| {
+            free_models_content(inherited, files, FREE_SMALL_MODEL).map(|text| serde_json::from_str::<serde_json::Value>(&text).unwrap())
+        };
+        // Nothing chosen anywhere: ADE's free one for both.
+        let both = content(None, &[]).unwrap();
+        assert_eq!(both["small_model"], FREE_SMALL_MODEL);
+        assert_eq!(both["model"], FREE_SMALL_MODEL);
+        // small_model chosen in a config file, even empty (off), or commented out in JSONC: theirs.
         for file in [
             r#"{"small_model":"anthropic/claude-haiku"}"#,
             r#"{"small_model":""}"#,
             "{\n  // \"small_model\": \"x/y\"\n}",
         ] {
-            assert_eq!(small_model_content(None, &[file.into()]), None, "{file}");
+            let got = content(None, &[file.into()]).unwrap();
+            assert!(got.get("small_model").is_none(), "{file}");
         }
-        // The inherited inline config: kept whole, with the free one added only if it has none.
-        let merged = small_model_content(Some(r#"{"model":"openrouter/a:free","enabled_providers":["openrouter"]}"#), &[]).unwrap();
-        let merged: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        // The inherited inline config: kept whole, with the free ones added only where it has none.
+        let merged = content(Some(r#"{"model":"openrouter/a:free","enabled_providers":["openrouter"]}"#), &[]).unwrap();
         assert_eq!(merged["model"], "openrouter/a:free");
         assert_eq!(merged["enabled_providers"][0], "openrouter");
         assert_eq!(merged["small_model"], FREE_SMALL_MODEL);
-        assert_eq!(small_model_content(Some(r#"{"small_model":"x/y"}"#), &[]), None);
-        assert_eq!(small_model_content(Some("non json"), &[]), None);
+        assert_eq!(content(Some(r#"{"small_model":"x/y","model":"x/z"}"#), &[]), None);
+        assert_eq!(content(Some("non json"), &[]), None);
         assert!(FREE_SMALL_MODEL.ends_with(":free"));
+    }
+
+    /// Modello assente review, point 1: a prompt without a model never falls on a paid default.
+    #[test]
+    fn the_server_gets_a_free_model_when_no_config_has_one() {
+        use super::{FREE_SMALL_MODEL, free_models_content, top_level_key};
+        let model_of = |files: &[&str]| {
+            let files: Vec<String> = files.iter().map(|file| file.to_string()).collect();
+            free_models_content(None, &files, FREE_SMALL_MODEL)
+                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).unwrap().get("model").cloned())
+        };
+        // No model anywhere: the server's default is the free one.
+        let free = model_of(&[]).unwrap();
+        assert!(free.as_str().unwrap().ends_with(":free"));
+        // A model only inside an agent block, or commented out, is not a default: the free one still goes.
+        assert!(model_of(&[r#"{"agent":{"build":{"model":"openai/gpt-6-astra-pro"}}}"#]).is_some());
+        assert!(model_of(&["{\n  // \"model\": \"openai/gpt-6\",\n  \"theme\": \"x\",\n}"]).is_some());
+        // The user's own default, in plain JSON or JSONC with comments and trailing commas: theirs.
+        assert!(model_of(&[r#"{"model":"anthropic/claude-x"}"#]).is_none());
+        assert!(model_of(&["{\n  /* mio */ \"model\": \"anthropic/claude-x\", // sì\n  \"x\": [1, 2,],\n}"]).is_none());
+        // A file that cannot be read and names the key: counts as theirs.
+        assert!(model_of(&["{ \"model\": \"a/b\" oops"]).is_none());
+        // Strings with slashes and commas are not taken for comments.
+        assert!(top_level_key(r#"{"url":"http://a/b//c","model":"x, }"}"#, "model"));
     }
 
     /// A catalog as `GET /provider` gives it: these models, of these providers,
@@ -1109,14 +1204,14 @@ mod tests {
         assert!(alive(&mut kept), "senza server dove ce n'era uno");
         kept.end();
 
-        // A small_model the user chose: never replaced, and the catalog is not even read.
+        // A small_model and a model the user chose: never replaced, and the catalog is not even read.
         let chosen = Mutex::new(None);
         let launched = RefCell::new(Vec::<Option<String>>::new());
         let launch = |content: Option<&str>| {
             launched.borrow_mut().push(content.map(str::to_string));
             Ok(own("http://127.0.0.1:5", sleeper()))
         };
-        let theirs = [r#"{"small_model":"anthropic/claude-haiku"}"#.to_string()];
+        let theirs = [r#"{"small_model":"anthropic/claude-haiku","model":"anthropic/claude-x"}"#.to_string()];
         let mut own_choice = start_with_small_model(None, &theirs, &chosen, launch, |_| panic!("catalogo letto")).unwrap();
         assert_eq!(*launched.borrow(), vec![None]);
         own_choice.end();
