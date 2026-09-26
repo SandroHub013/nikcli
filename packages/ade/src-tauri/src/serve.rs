@@ -51,6 +51,12 @@ use crate::pty::which_on_path;
  */
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 
+/// How long a second caller waits for a start under way: as long as one can
+/// take, two servers and the catalog between them (`spawn_own`), so it is not
+/// told the server did not answer while the start is still going and then
+/// succeeds (modello assente review, B2).
+const START_WAIT: Duration = Duration::from_secs(2 * 45 + 15 + 5);
+
 /// The line `serve` prints once it is actually listening.
 const READY_PREFIX: &str = "nikcli server listening";
 
@@ -304,13 +310,13 @@ fn claim_start(server: &Server) -> Result<Option<ServerInfo>, String> {
             Step::Wait => {
                 let (next, timeout) = server
                     .settled
-                    .wait_timeout(slot, READY_TIMEOUT)
+                    .wait_timeout(slot, START_WAIT)
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 slot = next;
                 if timeout.timed_out() {
                     return Err(format!(
                         "nikcli serve non ha risposto entro {} secondi.",
-                        READY_TIMEOUT.as_secs()
+                        START_WAIT.as_secs()
                     ));
                 }
             }
@@ -1039,6 +1045,13 @@ mod tests {
         sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing());
         assert!(sys.process(sysinfo::Pid::from_u32(first_id)).is_none(), "il primo server è rimasto in vita");
         replaced.end();
+    }
+
+    /// Modello assente review, B2: a second caller waits as long as a start can take.
+    #[test]
+    fn a_waiting_caller_outlasts_a_start_with_a_replacement() {
+        use super::{CATALOG_TIMEOUT, READY_TIMEOUT, START_WAIT};
+        assert!(START_WAIT > READY_TIMEOUT * 2 + CATALOG_TIMEOUT);
     }
 
     #[test]
