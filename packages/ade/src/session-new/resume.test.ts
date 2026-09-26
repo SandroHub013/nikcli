@@ -9,6 +9,8 @@ import {
   planResume,
   planStart,
   resumePromise,
+  lastNikcliHere,
+  planLastHere,
 } from "./resume"
 
 describe("planStart", () => {
@@ -124,13 +126,20 @@ describe("planResume", () => {
   })
 
   test("an agent that takes an id but was never given one asks for the last", () => {
-    // nikcli, opencode, kimi, agy and the rest: the flag exists, but nothing
+    // opencode, kimi, agy and the rest: the flag exists, but nothing
     // tells ADE which conversation the CLI opened.
-    expect(planResume({ agentId: "nikcli" })).toEqual({
+    expect(planResume({ agentId: "opencode" })).toEqual({
       kind: "resume",
       via: "last",
       args: ["--continue"],
     })
+  })
+
+  test("nikcli without an id asks for this folder's latest, never --continue", () => {
+    // `--continue` is the whole project's latest: in a git repository, another worktree's.
+    expect(planResume({ agentId: "nikcli" })).toEqual({ kind: "here" })
+    expect(RESUME["nikcli"]!.last).toBeUndefined()
+    expect(planResume({ agentId: "nikcli", lastTaken: true })).toEqual({ kind: "fresh" })
   })
 })
 
@@ -240,13 +249,38 @@ describe("asking nikcli for a conversation", () => {
     expect(plans[1]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_two"] })
   })
 
-  test("and without ids it is still the old story, which is why the pane says so", () => {
+  test("two panes saved on one conversation: only the first reopens it (review, point 1)", () => {
+    const plans = planRestore([
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+    ])
+    expect(plans.filter((entry) => entry.plan.kind === "resume")).toHaveLength(1)
+    expect(plans[0]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_one"] })
+    expect(plans[0]!.sharedWith).toBeUndefined()
+    // The second looks for its folder's latest (the held id is left out there); the third gets a new one.
+    expect(plans[1]!.plan).toEqual({ kind: "here" })
+    expect(plans[2]!.plan).toEqual({ kind: "fresh" })
+    expect(plans[1]!.sharedWith).toBe(plans[0]!.session)
+    expect(plans[2]!.sharedWith).toBe(plans[0]!.session)
+  })
+
+  test("the same id for another agent is another conversation", () => {
+    const plans = planRestore([
+      { agentId: "claude-code", cwd: "/p", resumeId: "abc" },
+      { agentId: "claude-code", cwd: "/p", resumeId: "abc" },
+      { agentId: "codex", cwd: "/p", resumeId: "abc" },
+    ])
+    expect(plans.map((entry) => entry.plan.kind)).toEqual(["resume", "fresh", "resume"])
+  })
+
+  test("without ids, the folder's latest goes to one pane only", () => {
     const plans = planRestore([
       { agentId: "nikcli", cwd: "/p" },
       { agentId: "nikcli", cwd: "/p" },
+      { agentId: "nikcli", cwd: "/q" },
     ])
-    expect(plans[0]!.plan).toEqual({ kind: "resume", via: "last", args: ["--continue"] })
-    expect(plans[1]!.plan).toEqual({ kind: "fresh" })
+    expect(plans.map((entry) => entry.plan)).toEqual([{ kind: "here" }, { kind: "fresh" }, { kind: "here" }])
   })
 })
 
@@ -264,5 +298,76 @@ describe("resumePromise", () => {
   test("an agent ADE knows nothing about promises nothing", () => {
     expect(resumePromise({ agentId: "terminal" })).toBe("none")
     expect(resumePromise({ agentId: "gemini", resumeId: "x" })).toBe("none")
+  })
+})
+
+/*
+ * What `nikcli api session.list -d {"directory":…,"roots":true}` prints
+ * (1.399), under a pty: pretty JSON, most recent first. In a git repository
+ * the command then stays up, so the list is read as it arrives.
+ */
+const HERE = "C:\\Users\\me\\Favorites\\relbuild-tmp\\p1-git"
+const session = (id: string, updated: number, extra: Record<string, unknown> = {}) => ({
+  id,
+  slug: "stellar-forest",
+  projectID: "3d5878689b15aed8d6226331fb5617dbc0082589",
+  directory: HERE,
+  title: "Sessione 1 — nikcli · 9269-1-1",
+  version: "1.399.0",
+  time: { created: updated - 1000, updated },
+  skills: [],
+  ...extra,
+})
+const listed = (...entries: unknown[]) => JSON.stringify(entries, null, 2).replace(/\n/g, "\r\n") + "\r\n"
+
+describe("nikcli's latest conversation in this folder", () => {
+  const none = new Set<string>()
+
+  test("the most recent of the folder, read from what the command printed", () => {
+    const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    // With the other slash and case Windows hands back.
+    expect(lastNikcliHere(output, "c:/users/me/favorites/relbuild-tmp/p1-git/", none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+  })
+
+  test("a conversation another pane holds is left out", () => {
+    const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
+    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0"]))).toBe("ses_f2303a230ffeVeq2JI9TTxJVBW")
+    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0", "ses_f2303a230ffeVeq2JI9TTxJVBW"]))).toBeNull()
+  })
+
+  test("another folder's, a child's, or a malformed id is never taken, even if the server let it through", () => {
+    const output = listed(
+      session("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa", 40, { directory: "C:\\Users\\me\\Favorites\\nikcli" }),
+      session("ses_bbbbbbbbbbbbbbbbbbbbbbbbbb", 30, { parentID: "ses_cccccccccccccccccccccccccc" }),
+      session("not-a-session", 25),
+      session("ses_dddddddddddddddddddddddddd", 5),
+    )
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_dddddddddddddddddddddddddd")
+  })
+
+  test("an empty list is a final no; a list still arriving is not an answer yet", () => {
+    expect(lastNikcliHere("[]\r\n", HERE, none)).toBeNull()
+    const whole = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20))
+    expect(lastNikcliHere(whole.slice(0, whole.indexOf('"skills"') + 14), HERE, none)).toBeUndefined()
+    expect(lastNikcliHere("", HERE, none)).toBeUndefined()
+  })
+
+  test("a log line with a bracket after the list does not hide it (review, BASSO 3)", () => {
+    const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20)) + "[warn] plugin loaded [tui]\r\n"
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastNikcliHere("[]\r\n[warn] x [y]\r\n", HERE, none)).toBeNull()
+  })
+
+  test("a warning line above the list does not hide it", () => {
+    const output = "[warn] something about plugins\r\n" + listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20))
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+  })
+
+  test("the command asks the server for this folder's root conversations", () => {
+    const plan = planLastHere("nikcli", HERE, none)!
+    expect(plan.args.slice(0, 5)).toEqual(["api", "session.list", "--log-level", "warn", "-d"])
+    expect(JSON.parse(plan.args[5]!)).toEqual({ directory: HERE, roots: true, limit: 5 })
+    expect(planLastHere("claude-code", HERE, none)).toBeUndefined()
   })
 })

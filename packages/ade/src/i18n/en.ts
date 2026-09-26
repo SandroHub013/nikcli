@@ -236,6 +236,7 @@ export const en: Messages = {
   "hooks.state.broken": "needs reinstalling",
   "hooks.state.off": "off",
   "hooks.broken": "The configuration has an ADE entry that doesn't match the script on disk, so the CLI is running a hook that does nothing. Reinstall to fix it.",
+  "hooks.plugin": "A plugin of nikcli's TUI, not a configuration entry: it tells ADE which conversation the pane shows, also after /new, /sessions or a change of tab. It does nothing in a nikcli ADE did not start.",
   "hooks.install": "Install",
   "hooks.reinstall": "Reinstall",
   "hooks.remove": "Remove",
@@ -1124,6 +1125,14 @@ export const en: Messages = {
   "note.someSession": "a session",
   "resume.noMint": (agent) => `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
+  "resume.lookingHere": (agent) => `Looking for ${agent}'s latest conversation in this folder…`,
+  "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
+  "resume.otherFolder": (dir) =>
+    `This conversation belongs to another folder (${dir}): nikcli's tabs are shared by every project. The pane follows it now, on a restart too`,
+  "resume.shared": (pane) =>
+    `This conversation is already open in the pane «${pane}»: another one starts here, so the two do not write into the same one`,
+  "resume.alsoOpen": (pane) =>
+    `This conversation is also open in the pane «${pane}»: on a restart only one of the two reopens it`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",

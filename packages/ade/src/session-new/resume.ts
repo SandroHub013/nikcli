@@ -41,6 +41,27 @@ export interface ResumeRecipe {
   /** Arguments that reopen the most recent conversation in this directory. */
   readonly last?: () => string[]
   /**
+   * A command that lists this directory's conversations, for a CLI whose own
+   * "most recent" is not this directory's.
+   *
+   * nikcli is the case: `--continue` takes the latest conversation of the
+   * whole project, and a git project spans every worktree of the repository,
+   * so a pane came back inside another worktree's conversation. `nikcli api
+   * session.list` filters by directory on the server; ADE reads the first
+   * one no other pane holds and opens it with `byId`. When there is none, or
+   * the command does not answer, a new conversation is asked for (`mint`):
+   * an empty one is better than someone else's.
+   *
+   * Run under a pty like `mint`, and like `mint` the command may print and
+   * never exit (inside a git repository), so `read` is called on what has
+   * arrived so far: an id, `null` when the list is complete and has none,
+   * `undefined` while it is still coming.
+   */
+  readonly lastHere?: {
+    readonly args: (cwd: string) => string[]
+    readonly read: (output: string, cwd: string, taken: ReadonlySet<string>) => string | null | undefined
+  }
+  /**
    * A command that asks the CLI itself for a new conversation, for a CLI that
    * refuses an id ADE invented.
    *
@@ -136,6 +157,55 @@ export function mintedNikcliId(output: string): string | undefined {
 }
 
 /**
+ * The most recent root conversation of `cwd` in what `nikcli api
+ * session.list` printed, leaving out the ones in `taken`.
+ *
+ * The list is a pretty-printed JSON array, most recent first; it is parsed
+ * only once it is whole, which is what tells a list still arriving from an
+ * empty one. Each entry is checked again for its directory, its parent and
+ * the shape of its id, so a server that ignored the filter would still not
+ * hand over another folder's conversation.
+ */
+export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<string>): string | null | undefined {
+  const text = output.replace(/\r/g, "")
+  // A line that is the array opening, not a "[warn] …" above it.
+  const start = text.search(/^\[(?:\]|[ \t]*$)/m)
+  if (start < 0) return undefined
+  /*
+   * And the line that closes it: `[]`, or the first `]` at the start of a
+   * line after it (pretty-printed, the ones inside are indented). Not the
+   * last `]` of the output: a "[warn] …" line after the list would move it.
+   */
+  const closing = text.startsWith("[]", start) ? start : text.slice(start).search(/^\]/m)
+  if (closing < 0) return undefined
+  const end = text.startsWith("[]", start) ? start + 1 : start + closing
+  let list: unknown
+  try {
+    list = JSON.parse(text.slice(start, end + 1))
+  } catch {
+    return undefined
+  }
+  if (!Array.isArray(list)) return undefined
+  const updated = (entry: Record<string, unknown>) => {
+    const time = entry["time"] as Record<string, unknown> | undefined
+    return typeof time?.["updated"] === "number" ? time["updated"] : 0
+  }
+  const mine = list
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .filter(
+      (entry) =>
+        typeof entry["id"] === "string" &&
+        /^ses_[A-Za-z0-9]{8,64}$/.test(entry["id"]) &&
+        !entry["parentID"] &&
+        typeof entry["directory"] === "string" &&
+        sameDir(entry["directory"], cwd) &&
+        !taken.has(entry["id"]),
+    )
+    .sort((a, b) => updated(b) - updated(a))
+  return (mine[0]?.["id"] as string | undefined) ?? null
+}
+
+/**
  * Claude Code's project folder: every character that is not a letter or digit
  * becomes `-`. Past 200 characters it shortens the name with a hash this does
  * not reproduce, so a long path answers "unknown" rather than "missing".
@@ -160,7 +230,8 @@ function claudeTranscript(home: string, cwd: string, id: string): string | undef
  *   kimi      -S, --session <id>    / -c, --continue
  *   agy       --conversation <id>   / -c, --continue
  *   prime     -r, --resume <id>     / -c, --continue
- *   nikcli    -s, --session <id>    / -c, --continue
+ *   nikcli    -s, --session <id>    / -c, --continue, the whole project's
+ *             latest: `api session.list` with a directory instead
  *   opencode  -s, --session <id>    / -c, --continue
  *   grok      -s, --session-id <uuid>   start under a given id
  *             -r, --resume <id>     reopen it / -c, --continue
@@ -201,7 +272,10 @@ export const RESUME: Record<string, ResumeRecipe> = {
   },
   nikcli: {
     byId: (id) => ["--session", id],
-    last: () => ["--continue"],
+    lastHere: {
+      args: (cwd) => ["api", "session.list", "--log-level", "warn", "-d", JSON.stringify({ directory: cwd, roots: true, limit: 5 })],
+      read: lastNikcliHere,
+    },
     mint: {
       args: (title) => ["api", "session.create", "--log-level", "warn", "-d", JSON.stringify({ title })],
       read: mintedNikcliId,
@@ -233,6 +307,19 @@ export const RESUME: Record<string, ResumeRecipe> = {
     byId: (id) => ["--resume", id],
     last: () => ["--continue"],
   },
+}
+
+/**
+ * How to ask this agent's CLI for its most recent conversation in `cwd`, for
+ * a `here` plan. Pure: the caller runs the command and hands the output back.
+ */
+export function planLastHere(
+  agentId: string,
+  cwd: string,
+  taken: ReadonlySet<string>,
+): { args: string[]; read: (output: string) => string | null | undefined } | undefined {
+  const lastHere = RESUME[agentId]?.lastHere
+  return lastHere ? { args: lastHere.args(cwd), read: (output) => lastHere.read(output, cwd, taken) } : undefined
 }
 
 /**
@@ -268,7 +355,7 @@ export function resumePromise(input: {
   const recipe = RESUME[input.agentId]
   if (!recipe) return "none"
   if (input.resumeId && recipe.byId) return "exact"
-  if (recipe.last && !input.sharedDirectory) return "last"
+  if ((recipe.last || recipe.lastHere) && !input.sharedDirectory) return "last"
   return "none"
 }
 
@@ -357,6 +444,11 @@ export type ResumePlan =
    */
   | { readonly kind: "resume"; readonly via: "id" | "last"; readonly args: string[] }
   /**
+   * Ask the CLI for this directory's most recent conversation, then reopen
+   * it by id; a new one when there is none. See `ResumeRecipe.lastHere`.
+   */
+  | { readonly kind: "here" }
+  /**
    * Nothing to reopen: start fresh and type the task, as ADE always did.
    *
    * `resumeId` is the id to start under again when the recorded one was never
@@ -375,6 +467,7 @@ export function planResume(request: ResumeRequest): ResumePlan {
   if (request.resumeId && recipe.byId) {
     return { kind: "resume", via: "id", args: recipe.byId(request.resumeId) }
   }
+  if (recipe.lastHere && !request.lastTaken) return { kind: "here" }
   if (recipe.last && !request.lastTaken) {
     return { kind: "resume", via: "last", args: recipe.last() }
   }
@@ -387,13 +480,29 @@ export function planResume(request: ResumeRequest): ResumePlan {
  * Sessions are given in the order they were saved, and the first one in a
  * directory that needs "the most recent conversation" gets it. The rest of
  * that directory start fresh rather than all reopening the same one.
+ *
+ * The same goes for an exact id (ripristino review, point 1): nikcli's tabs
+ * are one list for every TUI, so a pane that followed a tab can hold the
+ * conversation another pane holds, and two `--session <id>` would write into
+ * one conversation. The first pane keeps it; a later one gets `here` when
+ * its directory's claim is still free (which leaves out the ids the other
+ * panes hold), a new conversation otherwise, and `sharedWith` names the pane
+ * that kept it, for the caller to say so.
  */
 export function planRestore<T extends { agentId: string; cwd: string; resumeId?: string; missing?: boolean }>(
   sessions: readonly T[],
-): { session: T; plan: ResumePlan }[] {
+): { session: T; plan: ResumePlan; sharedWith?: T }[] {
   const claimed = new Set<string>()
+  const holders = new Map<string, T>()
   return sessions.map((session) => {
     const key = `${session.agentId} ${session.cwd}`
+    const held = session.resumeId !== undefined ? holders.get(`${session.agentId} ${session.resumeId}`) : undefined
+    if (held) {
+      const plan: ResumePlan = RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
+      if (plan.kind === "here") claimed.add(key)
+      return { session, plan, sharedWith: held }
+    }
+    if (session.resumeId !== undefined) holders.set(`${session.agentId} ${session.resumeId}`, session)
     const plan = planResume({
       agentId: session.agentId,
       ...(session.resumeId !== undefined ? { resumeId: session.resumeId } : {}),
@@ -402,7 +511,7 @@ export function planRestore<T extends { agentId: string; cwd: string; resumeId?:
     })
     // Claimed only when it was actually used: a session resumed by its own id
     // leaves "the most recent one" free for the next pane.
-    if (plan.kind === "resume" && plan.via === "last") claimed.add(key)
+    if ((plan.kind === "resume" && plan.via === "last") || plan.kind === "here") claimed.add(key)
     return { session, plan }
   })
 }

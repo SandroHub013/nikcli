@@ -1,4 +1,5 @@
 import { t } from "../i18n"
+import { NIKCLI_PLUGIN_NAME } from "./nikcli-plugin"
 /**
  * Installing ADE's reporting hook into a CLI's own configuration.
  *
@@ -67,6 +68,11 @@ export interface HookTarget {
   readonly activityEvents?: readonly string[]
   /** avviato con args, senza shell: formato verificato in Claude Code 2.1.280 */
   readonly execForm?: boolean
+  /**
+   * `tui-plugin`: no configuration to edit, only a file of ADE's in the CLI's
+   * plugin folder (`nikcli-plugin.ts`). `config` is then empty.
+   */
+  readonly kind?: "tui-plugin"
 }
 
 /**
@@ -98,6 +104,20 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     agent: "codex",
     config: [".codex", "hooks.json"],
     script: [".codex", `${HOOK_MARKER}.ps1`],
+  },
+  /*
+   * nikcli: a plugin of its TUI rather than a hook, read off nikcli's own
+   * loader (`plugin/tui` under its config folder, `%APPDATA%\nikcli` on
+   * Windows, where Rust puts it). Off until the user switches it on, like
+   * the other two.
+   */
+  {
+    id: "nikcli",
+    label: "nikcli",
+    agent: "nikcli",
+    config: [],
+    script: ["AppData", "Roaming", "nikcli", "plugin", "tui", NIKCLI_PLUGIN_NAME],
+    kind: "tui-plugin",
   },
 ]
 
@@ -391,6 +411,8 @@ export interface HookHost {
     configText: string | null
     scriptPath: string
     scriptPresent: boolean
+    /** For a plugin: whether the file on disk is this version's. */
+    scriptCurrent?: boolean
   }>
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** The first line of `claude --version`, or null. See `usesExecForm`. */
@@ -433,6 +455,10 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
   }
   try {
     const files = await read(target.id)
+    // A plugin has no entry to point at it: the file being there is the whole install.
+    if (target.kind === "tui-plugin") {
+      return { target, installed: files.scriptPresent, broken: false, configPath: "", scriptPath: files.scriptPath }
+    }
     const command = installedCommand(files.configText ?? undefined)
     const wanted = hookCommand(files.scriptPath)
     return {
@@ -468,6 +494,11 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
   if (!read || !write) return readHookStatus(host, target)
 
   const files = await read(target.id)
+  if (target.kind === "tui-plugin") {
+    // The text is Rust's own (`nikcli-plugin.ts`): the page only says install ("") or remove (null).
+    await write(target.id, "", install ? "" : null)
+    return readHookStatus(host, target)
+  }
   const current = files.configText ?? undefined
   if (install) {
     const command = hookCommand(files.scriptPath)
@@ -500,9 +531,15 @@ export async function refreshHookScript(
   target: HookTarget,
   lastWritten: string | undefined,
 ): Promise<string | undefined> {
-  const script = hookScript(target.agent)
   if (!host.readAgentHook || !host.writeAgentHook) return undefined
   const files = await host.readAgentHook(target.id)
+  if (target.kind === "tui-plugin") {
+    // Only an installed plugin is rewritten, and only when it is not this version's: Rust compares, and writes its own.
+    if (!files.scriptPresent || files.scriptCurrent !== false) return undefined
+    await host.writeAgentHook(target.id, "", "")
+    return undefined
+  }
+  const script = hookScript(target.agent)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.

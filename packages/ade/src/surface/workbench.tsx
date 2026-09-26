@@ -47,6 +47,7 @@ import { detectAgents } from "../session-new/availability"
 import {
   RESUME,
   planFork,
+  planLastHere,
   planMint,
   planRestore,
   planResume,
@@ -54,7 +55,7 @@ import {
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { countingLines, followReports, newNonce } from "../session-new/agent-link"
+import { countingLines, followReports, lastReportedId, newNonce, otherFolder, parseReport } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -4651,15 +4652,25 @@ export function Workbench() {
          * `p.root` (see `startProcess`), so that is where its transcript is.
          */
         const sessions = await Promise.all(
-          sessionsToResume(restored).map(async (pane) => ({
-            agentId: pane.agent,
-            cwd: pane.cwd || p.root,
-            ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-            missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
-            pane,
-          })),
+          sessionsToResume(restored).map(async (saved) => {
+            // The conversation the pane last switched to, when ADE closed before reading it.
+            const reported = await adoptLastReport(saved)
+            const pane = reported ? { ...saved, resumeId: reported } : saved
+            return {
+              agentId: pane.agent,
+              cwd: pane.cwd || p.root,
+              ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
+              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              pane,
+            }
+          }),
         )
-        for (const { session, plan } of planRestore(sessions)) {
+        for (const { session, plan, sharedWith } of planRestore(sessions)) {
+          if (sharedWith) {
+            // The conversation stays with the other pane: this one must not reopen it by its saved id.
+            setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
+            appendLine(session.pane.id, t("resume.shared", sharedWith.pane.title), "note")
+          }
           void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
         }
 
@@ -5965,13 +5976,40 @@ export function Workbench() {
    */
   const mintConversation = async (agentId: string, command: string, cwd: string, title: string) => {
     const plan = planMint(agentId, title)
+    if (!plan) return undefined
+    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+  }
+
+  /**
+   * The most recent conversation of `cwd` that no other pane holds, asked of
+   * the CLI (`ResumeRecipe.lastHere`). Undefined when there is none or the
+   * command did not answer in time.
+   */
+  const lastConversationHere = async (agentId: string, command: string, cwd: string, taken: ReadonlySet<string>) => {
+    const plan = planLastHere(agentId, cwd, taken)
+    if (!plan) return undefined
+    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+  }
+
+  /**
+   * Runs a short CLI command under a pty until `read` finds its answer in the
+   * output, then kills it: `null` from `read` is a final "nothing", undefined
+   * means "not yet". Gives up after `MINT_MS`.
+   */
+  const askCli = async (
+    command: string,
+    args: string[],
+    cwd: string,
+    readAnswer: (output: string) => string | null | undefined,
+  ): Promise<string | null | undefined> => {
     const host = await getHost()
-    if (!plan || !host) return undefined
-    return await new Promise<string | undefined>((resolve) => {
+    if (!host) return undefined
+    const plan = { args, read: readAnswer }
+    return await new Promise<string | null | undefined>((resolve) => {
       let text = ""
       let settled = false
       let child: SpawnedSession | undefined
-      const finish = (id?: string) => {
+      const finish = (id?: string | null) => {
         if (settled) return
         settled = true
         clearTimeout(timer)
@@ -5982,7 +6020,7 @@ export function Workbench() {
       const read = (line: string) => {
         text += `${stripAnsi(line)}\n`
         const id = plan.read(text)
-        if (id) finish(id)
+        if (id !== undefined) finish(id)
       }
       host
         .spawn({
@@ -6006,6 +6044,26 @@ export function Workbench() {
   }
 
   /**
+   * The id in the report the pane's previous spawn left and nobody took
+   * (`lastReportedId`), written onto the pane; the file is cleared once read.
+   */
+  const adoptLastReport = async (pane: { id: string; cwd?: string; resumeId?: string; linkNonce?: string }) => {
+    const nonce = pane.linkNonce
+    if (!nonce) return undefined
+    const host = await getHost()
+    const text = (await host?.readAgentLink?.(nonce).catch(() => null)) ?? null
+    if (text === null) return undefined
+    await host?.clearAgentLink?.(nonce).catch(() => {})
+    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
+    if (id) {
+      const report = parseReport(text)
+      const elsewhere = report && pane.cwd ? otherFolder(report, pane.cwd) : undefined
+      setWb((w) => updatePane(w, pane.id, { resumeId: id, otherDir: elsewhere }))
+    }
+    return id
+  }
+
+  /**
    * Brings a session with no process back from its own pane.
    *
    * A restored session whose agent had already exited — or one that exited
@@ -6014,9 +6072,20 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (pane: Pane, line?: string) => {
-    const agentId = pane.agent ?? pane.model
-    if (running.has(pane.id)) return
+  const reopen = async (given: Pane, line?: string) => {
+    const agentId = given.agent ?? given.model
+    if (running.has(given.id)) return
+    const reported = await adoptLastReport(given)
+    let pane = reported ? { ...given, resumeId: reported } : given
+    // Another open pane holds this conversation (ripristino review, point 1): it stays there.
+    const holder = pane.resumeId
+      ? wb().panes.find((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId && other.resumeId === pane.resumeId)
+      : undefined
+    if (holder) {
+      pane = { ...pane, resumeId: undefined }
+      setWb((w) => updatePane(w, pane.id, { resumeId: undefined }))
+      appendLine(pane.id, t("resume.shared", holder.title), "note")
+    }
     const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
@@ -6026,7 +6095,8 @@ export function Workbench() {
       lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
       missing,
     })
-    const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
+    // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
+    const text = line?.trim() ? line : plan.kind === "fresh" || plan.kind === "here" ? (pane.task ?? "") : ""
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
   }
 
@@ -6172,9 +6242,11 @@ export function Workbench() {
      * because a pane that is running under an id ADE did not write down is
      * a session that cannot be resumed and looks like one that can.
      */
-    const resumed = resume?.kind === "resume"
+    let resumed = resume?.kind === "resume"
     let opening: { args: string[]; resumeId?: string } =
-      resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
+      resume?.kind === "resume"
+        ? { args: resume.args }
+        : planStart(agentId, resume?.kind === "fresh" ? resume.resumeId : undefined)
     /*
      * The `ade-msg` notice first: `codex -c …` has to precede a `resume`
      * subcommand, and for the rest the order does not matter. The shell has
@@ -6199,6 +6271,25 @@ export function Workbench() {
      * than discovering at the next restart.
      */
     const recipe = RESUME[agentId]
+    /*
+     * "The most recent conversation here", asked of the CLI for this folder
+     * rather than left to its `--continue`, which for nikcli is the whole
+     * repository's latest: another worktree's conversation. The ids other
+     * panes hold are left out. None found: a new one, asked for below.
+     */
+    if (resume?.kind === "here" && recipe?.byId) {
+      appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note")
+      const taken = new Set(
+        wb()
+          .panes.filter((pane) => pane.id !== paneId && pane.resumeId)
+          .map((pane) => pane.resumeId as string),
+      )
+      const found = await lastConversationHere(agentId, agent.command, workDir, taken)
+      if (found) {
+        opening = { args: recipe.byId(found), resumeId: found }
+        resumed = true
+      } else appendLine(paneId, t("resume.noneHere", agent.label || agentId), "note")
+    }
     if (!resumed && !opening.resumeId && launched?.resumeId && recipe?.byId) {
       // Already has one: a restart reopens it. Minting here is what made the
       // pane lose its conversation on the second start.
@@ -6244,6 +6335,10 @@ export function Workbench() {
      */
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
     if (!resumed && promise === "none") appendLine(paneId, t("resume.none"), "note")
+    // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
+    if (resumed && launched?.otherDir && mintedId === launched.resumeId) {
+      appendLine(paneId, t("resume.otherFolder", launched.otherDir), "note")
+    }
 
     /*
      * And the other direction: the CLI telling ADE which conversation it
@@ -6286,6 +6381,10 @@ export function Workbench() {
           : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
         status: hasTask ? "working" : "idle",
         activity: resumed ? "resumed" : (hasTask ? "running" : "ready"),
+        // Saved, so the next start can read what this spawn reported last.
+        linkNonce: nonce,
+        // Another conversation than the one followed: its folder no longer applies.
+        ...(mintedId !== launched?.resumeId ? { otherDir: undefined } : {}),
         // A fresh start drops an id whose conversation is gone, so the pane
         // stops promising to reopen it.
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
@@ -6444,7 +6543,15 @@ export function Workbench() {
           linesSent: () => linesSent.get(paneId) ?? 0,
           onReport: (report) => {
             if (running.get(paneId) !== session) return
-            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+            const elsewhere = otherFolder(report, workDir)
+            // Kept with the pane, so a restore says it again (ripristino review, BASSO 2).
+            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId, otherDir: elsewhere }))
+            // Followed all the same, since the TUI does show it; but only one of the two can reopen it.
+            const holder = wb().panes.find(
+              (other) => other.id !== paneId && (other.agent ?? other.model) === agentId && other.resumeId === report.sessionId,
+            )
+            if (holder) appendLine(paneId, t("resume.alsoOpen", holder.title), "note")
+            if (elsewhere) appendLine(paneId, t("resume.otherFolder", elsewhere), "note")
           },
         })
       }

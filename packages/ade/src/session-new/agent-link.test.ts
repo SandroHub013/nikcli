@@ -4,7 +4,9 @@ import {
   acceptsReport,
   countingLines,
   followReports,
+  lastReportedId,
   newNonce,
+  otherFolder,
   parseReport,
   reportFile,
   watchForReport,
@@ -54,6 +56,16 @@ describe("parseReport", () => {
   test("drops a timestamp that is not a number, keeping the report", () => {
     const odd = JSON.stringify({ pane: "p", nonce: "n", agent: "a", sessionId: "s", at: "ieri" })
     expect(parseReport(odd)).toEqual({ pane: "p", nonce: "n", agent: "a", sessionId: "s" })
+  })
+})
+
+describe("the conversation's folder", () => {
+  test("read when the CLI says it, left out when it does not or is not a path", () => {
+    const withDir = JSON.stringify({ ...JSON.parse(good), source: "switch", sessionDir: "C:\\Users\\me\\altro" })
+    expect(parseReport(withDir)?.sessionDir).toBe("C:\\Users\\me\\altro")
+    expect(parseReport(good)?.sessionDir).toBeUndefined()
+    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: 7 }))?.sessionDir).toBeUndefined()
+    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: "x".repeat(5000) }))?.sessionDir).toBeUndefined()
   })
 })
 
@@ -239,6 +251,19 @@ describe("followReports", () => {
   test("the same id reported again is not a move", async () => {
     expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
   })
+
+  test("nikcli's switch of tab, /new or /sessions moves the pane", async () => {
+    expect(await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")])).toEqual([
+      "ses_first",
+      "ses_new",
+      "ses_tab",
+    ])
+  })
+
+  test("a switch written under another spawn's nonce does not", async () => {
+    const foreign = JSON.stringify({ ...JSON.parse(report("ses_other", "switch")), nonce: "ffffff" })
+    expect(await run([report("ses_first", "switch"), foreign])).toEqual(["ses_first"])
+  })
 })
 describe("followReports slows down when nothing comes (P1-C2b)", () => {
   const expected = { pane: "pane-7", nonce: "a1b2c3" }
@@ -283,5 +308,41 @@ describe("followReports slows down when nothing comes (P1-C2b)", () => {
     counted.write("ume\r")
     expect(lines).toBe(1)
     expect(written).toEqual(["/res", "ume\r"])
+  })
+})
+
+/* At a restore: the report the previous spawn left wins over the saved id. */
+describe("lastReportedId", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const left = (sessionId: string, source: string, nonce = "a1b2c3") =>
+    JSON.stringify({ pane: "pane-7", nonce, agent: "nikcli", sessionId, source })
+
+  test("a switch the pane never read beats the id saved with it", () => {
+    expect(lastReportedId(left("ses_tab", "switch"), expected, "ses_saved")).toBe("ses_tab")
+    // No saved id: the report is the id.
+    expect(lastReportedId(left("ses_tab", "switch"), expected, undefined)).toBe("ses_tab")
+  })
+
+  test("nothing left, another spawn's, the same id, or a nested startup: the saved id stays", () => {
+    expect(lastReportedId(null, expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId("", expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_tab", "switch", "ffffff"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_saved", "switch"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_child", "startup"), expected, "ses_saved")).toBeUndefined()
+  })
+})
+
+/* nikcli's tabs are shared by every project: a pane can be moved to another folder's conversation. */
+describe("otherFolder", () => {
+  const report = (sessionDir?: string) =>
+    parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "nikcli", sessionId: "ses_x", source: "switch", ...(sessionDir ? { sessionDir } : {}) }))!
+
+  test("another folder is named", () => {
+    expect(otherFolder(report("C:\\Users\\me\\altro"), "C:\\Users\\me\\progetto")).toBe("C:\\Users\\me\\altro")
+  })
+
+  test("the pane's own folder, however it is spelled, or no folder said: nothing", () => {
+    expect(otherFolder(report("C:\\Users\\me\\progetto"), "c:/users/me/progetto/")).toBeUndefined()
+    expect(otherFolder(report(), "C:\\Users\\me\\progetto")).toBeUndefined()
   })
 })

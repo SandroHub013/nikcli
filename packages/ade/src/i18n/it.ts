@@ -241,6 +241,7 @@ export const it = {
   "hooks.state.broken": "da reinstallare",
   "hooks.state.off": "non attivo",
   "hooks.broken": "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
+  "hooks.plugin": "Un plugin del TUI di nikcli, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un nikcli che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.remove": "Rimuovi",
@@ -1134,6 +1135,14 @@ export const it = {
   "resume.noMint": (agent: string) =>
     `${agent} non ha aperto una conversazione da ritrovare: se ADE si chiude, questa sessione riparte da zero`,
   "resume.asking": (agent: string) => `Chiedo a ${agent} una conversazione da poter ritrovare…`,
+  "resume.lookingHere": (agent: string) => `Cerco l'ultima conversazione di ${agent} in questa cartella…`,
+  "resume.noneHere": (agent: string) => `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
+  "resume.otherFolder": (dir: string) =>
+    `Questa conversazione è di un'altra cartella (${dir}): le schede di nikcli sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
+  "resume.shared": (pane: string) =>
+    `La conversazione è già aperta nel pannello «${pane}»: qui ne parte un'altra, per non scrivere in due nella stessa`,
+  "resume.alsoOpen": (pane: string) =>
+    `Questa conversazione è aperta anche nel pannello «${pane}»: al riavvio la riprende uno solo dei due`,
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",

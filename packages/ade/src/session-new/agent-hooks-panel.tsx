@@ -91,9 +91,15 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   </p>
                 </Show>
 
+                <Show when={target.kind === "tui-plugin"}>
+                  <p data-slot="hook-note">{t("hooks.plugin")}</p>
+                </Show>
+
                 <Show when={state() && !state()?.error}>
                   <p data-slot="hook-paths">
-                    <code>{state()?.configPath}</code>
+                    <Show when={state()?.configPath}>
+                      <code>{state()?.configPath}</code>
+                    </Show>
                     <code>{state()?.scriptPath}</code>
                   </p>
                 </Show>
