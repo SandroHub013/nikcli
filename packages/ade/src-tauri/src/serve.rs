@@ -86,6 +86,12 @@ const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP
 /// `NIKCLI_CONFIG_DIR` are merged after it (`config/config.ts`, the
 /// `directories` loop) and win.
 ///
+/// The same holds for `model` (`free_models_content`): a model chosen in the
+/// project's root `nikcli.json` does not count for ADE's server, which uses
+/// the free one; to choose one for it, put it in `<project>/.nikcli/nikcli.json`.
+/// It errs on the free side, as for `small_model` (modello assente, second
+/// reading, BASSO 2).
+///
 /// Models leave the catalog (`nex-agi/nex-n2.5-mini:free` did), and a small
 /// model that is not there makes those calls fail quietly: nikcli does not
 /// fall back to another. So the one ADE gives is chosen from the server's own
@@ -408,8 +414,17 @@ fn top_level_key(text: &str, key: &str) -> bool {
 }
 
 /// JSONC as JSON: `//` and `/* */` comments and trailing commas removed,
-/// strings left as they are.
+/// strings left as they are. Comments first, then commas: in `1, // nota`
+/// before a `}` the comma is only trailing once the comment is gone
+/// (modello assente, second reading, BASSO 1).
 fn plain_json(text: &str) -> String {
+    without_trailing_commas(&without_comments(text))
+}
+
+/// Walks `text` outside its strings: `step` sees each character there with
+/// the rest of the text, and says how many characters it took and what to
+/// write for them. Strings, escapes included, are copied as they are.
+fn outside_strings(text: &str, mut step: impl FnMut(&[char], usize) -> (usize, Option<char>)) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
     let (mut at, mut in_string) = (0, false);
@@ -423,32 +438,44 @@ fn plain_json(text: &str) -> String {
             } else if c == '"' {
                 in_string = false;
             }
+            at += 1;
         } else if c == '"' {
             in_string = true;
             out.push(c);
-        } else if c == '/' && chars.get(at + 1) == Some(&'/') {
-            while at < chars.len() && chars[at] != '\n' {
-                at += 1;
-            }
-            continue;
-        } else if c == '/' && chars.get(at + 1) == Some(&'*') {
-            at += 2;
-            while at < chars.len() && !(chars[at] == '*' && chars.get(at + 1) == Some(&'/')) {
-                at += 1;
-            }
-            at += 2;
-            continue;
-        } else if c == ',' {
-            let next = chars[at + 1..].iter().find(|next| !next.is_whitespace());
-            if !matches!(next, Some('}') | Some(']')) {
-                out.push(c);
-            }
+            at += 1;
         } else {
-            out.push(c);
+            let (taken, written) = step(&chars, at);
+            out.extend(written);
+            at += taken.max(1);
         }
-        at += 1;
     }
     out
+}
+
+/// `//` to the end of the line and `/* */`, each left as one space.
+fn without_comments(text: &str) -> String {
+    outside_strings(text, |chars, at| match (chars[at], chars.get(at + 1)) {
+        ('/', Some('/')) => {
+            let end = chars[at..].iter().position(|c| *c == '\n').map_or(chars.len(), |n| at + n);
+            (end - at, Some(' '))
+        }
+        ('/', Some('*')) => {
+            let end = (at + 2..chars.len().saturating_sub(1))
+                .find(|&i| chars[i] == '*' && chars[i + 1] == '/')
+                .map_or(chars.len(), |i| i + 2);
+            (end - at, Some(' '))
+        }
+        (c, _) => (1, Some(c)),
+    })
+}
+
+/// A comma followed, past any whitespace, by `}` or `]` is dropped.
+fn without_trailing_commas(text: &str) -> String {
+    outside_strings(text, |chars, at| {
+        let c = chars[at];
+        let trailing = c == ',' && matches!(chars[at + 1..].iter().find(|next| !next.is_whitespace()), Some('}') | Some(']'));
+        (1, (!trailing).then_some(c))
+    })
 }
 
 /// Whether a model of the catalog can title and summarise for free: free by
@@ -1072,6 +1099,13 @@ mod tests {
         assert!(model_of(&["{ \"model\": \"a/b\" oops"]).is_none());
         // Strings with slashes and commas are not taken for comments.
         assert!(top_level_key(r#"{"url":"http://a/b//c","model":"x, }"}"#, "model"));
+        // BASSO 1: a trailing comma with a comment after it, and a model only in an agent: not the user's default.
+        let commented = "{\n  \"agent\": { \"build\": { \"model\": \"openai/gpt-6-astra-pro\" } },\n  \"theme\": \"x\", // nota\n}";
+        assert!(!top_level_key(commented, "model"));
+        assert!(model_of(&[commented]).is_some());
+        let block = "{\n  \"agent\": { \"build\": { \"model\": \"x/y\", /* sì */ } },\n  \"x\": [1, 2, /* fine */ ],\n}";
+        assert!(model_of(&[block]).is_some());
+        assert_eq!(super::plain_json("{\"a\":1, // nota\n}"), "{\"a\":1  \n}");
     }
 
     /// A catalog as `GET /provider` gives it: these models, of these providers,
