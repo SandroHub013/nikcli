@@ -32,6 +32,23 @@ use tauri::Manager;
 
 mod kokoro;
 
+/**
+ * A directory of its own for one test, removed and made again.
+ *
+ * In the temporary folder and not in the crate: a test that makes folders where
+ * the sources are leaves them there, and `cargo test` runs with the crate as the
+ * working directory. Shared by this module's tests and the Kokoro ones for the
+ * same reason the helper is here rather than copied: the K3 note about the
+ * temporary folder on Windows still stands, and one name to look for is one name
+ * to clean.
+ */
+#[cfg(test)]
+pub(crate) fn test_root(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("ade-k3-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}
 /// What a local voice can do on this host, for the panel and for the panel's tests.
 #[derive(serde::Serialize)]
 pub struct LocalStatus {
@@ -1571,13 +1588,6 @@ mod tests {
     // fingerprint, and the filesystem is a directory of this machine's temp.
     // -----------------------------------------------------------------------
 
-    /// A directory of its own for one test, removed and made again.
-    fn test_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("ade-k3-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        root
-    }
 
     /// 64 hex digits from the bytes, standing in for SHA-256.
     ///

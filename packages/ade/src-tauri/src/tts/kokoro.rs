@@ -843,6 +843,26 @@ fn out_for(root: &Path, token: u64) -> Result<PathBuf, String> {
     Ok(scratch.join(format!("kokoro-{token}-{n}.wav")))
 }
 
+/// How a child comes into being.
+///
+/// The same trick as `install_voice` in K3, one level down: that function took
+/// the `Installer` so a test could drive the real lock-then-begin order, and this
+/// takes the spawn so a test can drive the real line that decides the language,
+/// the speaker number and the WAV name. Without it the language was only ever
+/// tested on a `Synth` built by hand, which is a test of the fake.
+pub trait Spawner: Send + Sync {
+    fn spawn(&self, root: &Path) -> Result<Box<dyn Synth>, String>;
+}
+
+/// The process, for real.
+struct RealSpawn;
+
+impl Spawner for RealSpawn {
+    fn spawn(&self, root: &Path) -> Result<Box<dyn Synth>, String> {
+        start(root)
+    }
+}
+
 /// One sentence through whichever child is running, starting one if needed.
 ///
 /// The lock is the resident one: a synthesis at a time, and a child that has
@@ -851,6 +871,25 @@ fn out_for(root: &Path, token: u64) -> Result<PathBuf, String> {
 pub fn speak_blocking(
     root: &Path,
     state: &crate::tts::KokoroState,
+    voice: &str,
+    text: &str,
+    token: u64,
+    locale: &str,
+) -> Result<Vec<u8>, String> {
+    let mut guard = state.0.lock();
+    speak_locked(&mut guard, root, &RealSpawn, voice, text, token, locale)
+}
+
+/// The body of `speak_blocking`, with the child already locked and the spawn given.
+///
+/// Everything that decides something lives here: the speaker number, the
+/// language, the ceiling on the text, the WAV's name, the sweep of the orphans,
+/// the version, and what a failure does to the child. A test calls this and gets
+/// the production line with a process in place of the one process.
+fn speak_locked(
+    guard: &mut Option<Box<dyn Synth>>,
+    root: &Path,
+    spawn: &dyn Spawner,
     voice: &str,
     text: &str,
     token: u64,
@@ -874,7 +913,6 @@ pub fn speak_blocking(
         ));
     }
     let out = out_for(root, token)?;
-    let mut guard = state.0.lock();
     if guard.as_mut().is_some_and(|child| !child.alive()) {
         // A process that died keeps its slot until something replaces it, and
         // what replaces it is this sentence.
@@ -884,7 +922,7 @@ pub fn speak_blocking(
         // Nessun figlio in giro vuol dire che non c'e' niente di questa sessione
         // in volo, quindi quello che c'e' sul disco e' di una sessione morta.
         sweep_orphans(root);
-        *guard = Some(start(root)?);
+        *guard = Some(spawn.spawn(root)?);
     }
     let child = guard.as_mut().expect("started above");
     // La versione si controlla una volta per bambino, prima della prima frase: e'
@@ -923,6 +961,8 @@ pub fn stop(state: &crate::tts::KokoroState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Un solo 	est_root per il crate: quello di sopra, non una copia.
+    use crate::tts::test_root;
 
     #[test]
     fn il_manifest_e_completo_e_i_digest_sono_quelli_misurati() {
@@ -944,7 +984,7 @@ mod tests {
         // Finché K4a non pubblica la release, la voce nel manifest non c'è, e
         // nessuno deve leggere un digest che nessuno ha misurato.
         assert!(HOST_EXE.is_none(), "il digest dell'host si scrive quando la release esiste");
-        let root = Path::new("tts").join("assenza");
+        let root = test_root("kokoro-assenza");
         assert_eq!(missing(&root), Some("L'host di Kokoro non è ancora scaricato."));
         assert!(!ready(&root));
     }
@@ -1053,13 +1093,13 @@ mod tests {
     #[test]
     fn la_dimensione_del_download_e_quel_la_di_k1() {
         assert_eq!(DOWNLOAD_BYTES, 219_489_095, "i 219 MB di K1, dalla tabella e non scritti due volte");
-        let root = Path::new("tts").join("vuoto-per-il-download");
+        let root = test_root("kokoro-vuoto-per-il-download");
         assert_eq!(download_size(&root), Some(219_489_095));
     }
 
     #[test]
     fn cancellare_toglie_la_cartella_e_rifiuta_durante_un_install() {
-        let root = Path::new("tts").join("da-cancellare");
+        let root = test_root("kokoro-da-cancellare");
         let _ = std::fs::remove_dir_all(&root);
         let rev = home(&root);
         std::fs::create_dir_all(&rev).unwrap();
@@ -1093,7 +1133,7 @@ mod tests {
 
     #[test]
     fn i_wav_orfani_di_una_sessione_morta_vanno_e_il_foglio_degli_altri_no() {
-        let root = Path::new("tts").join("orfani");
+        let root = test_root("kokoro-orfani");
         let _ = std::fs::remove_dir_all(&root);
         let scratch = root.join("scratch");
         std::fs::create_dir_all(&scratch).unwrap();
@@ -1123,7 +1163,7 @@ mod tests {
         // Il caso che F2 era: il tarball scaricato, la cartella mai creata, e
         // `ready()` che la chiede per sempre. Il test non puo' scaricare 7 MB, ma
         // puo' dire cosa deve esserci quando l'install finisce.
-        let root = Path::new("tts").join("espeak-non-estratto");
+        let root = test_root("kokoro-espeak-non-estratto");
         let _ = std::fs::remove_dir_all(&root);
         let rev = home(&root);
         std::fs::create_dir_all(&rev).unwrap();
@@ -1203,7 +1243,7 @@ mod tests {
 
     #[test]
     fn il_wav_si_genera_qui_e_ha_un_nome_per_ogni_richiesta() {
-        let root = Path::new("tts").join("prova-out");
+        let root = test_root("kokoro-prova-out");
         let first = out_for(&root, 7).unwrap();
         let second = out_for(&root, 7).unwrap();
         // Due richieste con lo stesso token non possono scrivere sullo stesso
@@ -1231,22 +1271,38 @@ mod tests {
     }
 
     /// A child that answers what the test tells it to, and counts what it was asked.
+    /// What the child was asked, and what it answered, and whether it is there.
+    ///
+    /// `asked` is behind a lock because the child is handed to `speak_locked` and
+    /// lives inside the slot afterwards: a test that spawns a fake through the real
+    /// line has to be able to read it back once it is boxed away.
     struct Fake {
         hello: Result<u32, String>,
         answers: Vec<Result<(), String>>,
-        asked: Vec<(u64, String, u32, String)>,
+        asked: std::sync::Arc<std::sync::Mutex<Vec<(u64, String, u32, String)>>>,
         alive: bool,
         stopped: usize,
     }
 
     impl Fake {
         fn new() -> Self {
-            Self { hello: Ok(PROTOCOL), answers: Vec::new(), asked: Vec::new(), alive: true, stopped: 0 }
+            Self {
+                hello: Ok(PROTOCOL),
+                answers: Vec::new(),
+                asked: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+                alive: true,
+                stopped: 0,
+            }
         }
 
         /// A process that is not there any more: `try_wait` already answered.
         fn dead() -> Self {
             Self { alive: false, ..Self::new() }
+        }
+
+        /// The handle a test keeps after the child has gone into the slot.
+        fn asked_by(self) -> std::sync::Arc<std::sync::Mutex<Vec<(u64, String, u32, String)>>> {
+            self.asked
         }
     }
 
@@ -1255,10 +1311,15 @@ mod tests {
             self.hello.clone()
         }
 
-        fn say(&mut self, id: u64, text: &str, sid: u32, lang: &str, _out: &Path) -> Result<(), String> {
-            self.asked.push((id, text.to_string(), sid, lang.to_string()));
+        fn say(&mut self, id: u64, text: &str, sid: u32, lang: &str, out: &Path) -> Result<(), String> {
+            if let Ok(mut asked) = self.asked.lock() {
+                asked.push((id, text.to_string(), sid, lang.to_string()));
+            }
             if self.answers.is_empty() {
-                return Ok(());
+                // Un finto che non scrive l'audio fa fallire la riga vera al
+                // momento di leggerlo, e allora il test proverebbe la riga vera
+                // solo per meta'. Scrive, come un figlio.
+                return std::fs::write(out, text.as_bytes()).map_err(|e| e.to_string());
             }
             self.answers.remove(0)
         }
@@ -1273,26 +1334,77 @@ mod tests {
         }
     }
 
+    /// A spawner that hands over a fake and keeps the handle to what it was asked.
+    struct FakeSpawn {
+        asked: std::sync::Arc<std::sync::Mutex<Vec<(u64, String, u32, String)>>>,
+    }
+
+    impl Spawner for FakeSpawn {
+        fn spawn(&self, _root: &Path) -> Result<Box<dyn Synth>, String> {
+            Ok(Box::new(Fake { asked: self.asked.clone(), ..Fake::new() }))
+        }
+    }
+
     #[test]
     fn il_bambino_finto_riceve_voce_e_lingua_come_chiede_il_rilevatore() {
-        let mut child = Fake::new();
-        let (sid, lang) = speaker_of("bf_emma").unwrap();
-        child.say(7, "I opened the session.", sid, lang, Path::new("out.wav")).unwrap();
+        // Dalla riga vera, non da un `say` chiamato a mano: `speak_locked` e' la
+        // funzione che gira in produzione, e il finto sta dove sta il processo.
+        let root = test_root("kokoro-lingua-dalla-riga-vera");
+        let fake = Fake::new();
+        let asked = fake.asked_by();
+        let spawn = FakeSpawn { asked: asked.clone() };
+        let mut child: Option<Box<dyn Synth>> = None;
+        let spoken = speak_locked(&mut child, &root, &spawn, "bf_emma", "I opened the session.", 7, "en-GB");
         // La lingua che arriva al figlio è quella della voce, per intero: è
-        // quello che il protocollo accetta.
-        assert_eq!(child.asked, vec![(7, "I opened the session.".to_string(), 21, "en".to_string())]);
+        // quello che il protocollo accetta, e non `en` unito a una seconda lingua.
+        assert!(spoken.is_ok(), "{:?}", spoken.err());
+        let asked = asked.lock().expect("il registro del finto");
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0], (7, "I opened the session.".to_string(), 21, "en".to_string()));
+        // E il WAV che la riga vera ha letto è sparito: la cancellazione dopo la
+        // lettura e' parte di quello che il test sta provando.
+        assert!(!root.join("scratch").exists() || std::fs::read_dir(root.join("scratch")).unwrap().next().is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ogni_voce_del_catalogo_manda_la_sua_lingua_e_nientaltro() {
+        let root = test_root("kokoro-lingue-del-catalogo");
+        for (voice, (_, expected)) in [
+            ("af_heart", speaker_of("af_heart").unwrap()),
+            ("am_fenrir", speaker_of("am_fenrir").unwrap()),
+            ("bf_emma", speaker_of("bf_emma").unwrap()),
+            ("bm_george", speaker_of("bm_george").unwrap()),
+        ] {
+            let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let spawn = FakeSpawn { asked: asked.clone() };
+            let mut child: Option<Box<dyn Synth>> = None;
+            speak_locked(&mut child, &root, &spawn, voice, "Done.", 1, "en-US").expect("una voce del catalogo");
+            let asked = asked.lock().expect("il registro del finto");
+            assert_eq!(asked[0].3, expected, "{voice} manda una lingua che non e' la sua");
+            assert!(HOST_LANGS.contains(&asked[0].3.as_str()));
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn una_risposta_non_inglese_non_raggiunge_l_host() {
         // Le voci Kokoro sono inglesi: una risposta in italiano non è una lingua da
         // mandare, è una voce che non può dirla. Errore qui, prima di scrivere al
-        // figlio, invece di un bad-lang che-arriva-dall'host-e-non-si-capisce.
-        let state = crate::tts::KokoroState::default();
-        let root = Path::new("tts").join("locale-non-inglese");
-        let problem = speak_blocking(&root, &state, "af_heart", "Ho aperto la sessione.", 1, "it-IT");
+        // figlio, invece di un bad-lang che arriva dall'host e non si capisce.
+        // E dalla riga vera, così quello che si prova è il rifiuto come lo vede
+        // la produzione e non una funzione chiamata a mano.
+        let root = test_root("kokoro-locale-non-inglese");
+        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let spawn = FakeSpawn { asked: asked.clone() };
+        let mut child: Option<Box<dyn Synth>> = None;
+        let problem = speak_locked(&mut child, &root, &spawn, "af_heart", "Ho aperto la sessione.", 1, "it-IT");
         assert!(problem.is_err());
         assert!(problem.unwrap_err().contains("inglesi"));
+        // Niente è stato scritto al figlio, e nessun figlio è partito: il rifiuto
+        // è prima.
+        assert!(asked.lock().expect("il registro del finto").is_empty());
+        assert!(child.is_none());
         let _ = std::fs::remove_dir_all(&root);
     }
 
