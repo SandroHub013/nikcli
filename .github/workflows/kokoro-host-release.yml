@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: kokoro-host-release
+
+# Builds the Kokoro TTS host, a GPL-3.0-or-later program of its own in
+# packages/ade/kokoro-host/, and publishes the executable with its SHA-256.
+#
+# It is deliberately a workflow of its own. ADE's release flow is not touched
+# here: `ade-release` and `ade-auto-release` keep their `ade-v*` tags, and this
+# one never tags ADE and never runs on an `ade-v*` tag.
+#
+# The tag shape follows `ade-release`: the program, a dash, a v, and three
+# numbers, pushed as an annotated tag.
+#
+#   git tag -a -m "kokoro-host 0.1.0" kokoro-host-v0.1.0
+#   git push origin kokoro-host-v0.1.0
+#
+# A push of that tag builds the executable on Windows and attaches it, with
+# its SHA-256, to the release for that tag. A pull request touching the crate
+# builds and tests it without releasing anything.
+#
+# The host loads its runtime at run time from the paths its command line gives
+# it, so nothing here downloads a model: the build needs no network beyond
+# cargo's own registry.
+on:
+  push:
+    tags:
+      - "kokoro-host-v*.*.*"
+  pull_request:
+    paths:
+      - "packages/ade/kokoro-host/**"
+      - ".github/workflows/kokoro-host-release.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. kokoro-host-v0.1.0"
+        required: true
+        type: string
+
+concurrency:
+  group: kokoro-host-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    if: github.repository == 'SandroHub013/nikcli'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: packages/ade/kokoro-host
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/ade/kokoro-host -> target
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      # The checksum travels beside the executable, so whoever installs it can
+      # check it without downloading the whole release first.
+      - name: SHA-256
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "kokoro-host"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target/release/kokoro-host.exe" -Destination $stage
+          $hash = (Get-FileHash -Algorithm SHA256 (Join-Path $stage "kokoro-host.exe")).Hash.ToLower()
+          Set-Content -Path (Join-Path $stage "kokoro-host.exe.sha256") `
+            -Value "$hash  kokoro-host.exe" -NoNewline -Encoding ascii
+          "STAGE=$stage" >> $env:GITHUB_ENV
+          "kokoro-host.exe $hash" >> $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kokoro-host-windows-x64
+          path: ${{ env.STAGE }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.repository == 'SandroHub013/nikcli' && (startsWith(github.ref, 'refs/tags/') || inputs.tag)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: kokoro-host-windows-x64
+          path: dist
+
+      - name: Create the release and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^kokoro-host-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "tag '$TAG' is not kokoro-host-v<major>.<minor>.<patch>"
+            exit 1
+          fi
+          VERSION="${TAG#kokoro-host-v}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists; the executable will replace what is in it"
+          else
+            printf 'kokoro-host %s\n\nBuild of `packages/ade/kokoro-host`, GPL-3.0-or-later.\n' "$VERSION" > notes.md
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "kokoro-host $VERSION" --notes-file notes.md --verify-tag
+          fi
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
