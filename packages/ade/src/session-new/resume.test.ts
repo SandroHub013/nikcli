@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { AGENTS } from "./agents"
 import { BOT_SESSION_MARK, botPermission } from "../bots/serve-rules"
 import {
@@ -13,6 +15,7 @@ import {
   lastNikcliHere,
   lastTakenFor,
   planLastHere,
+  LAST_HERE_LIMIT,
 } from "./resume"
 
 describe("planStart", () => {
@@ -402,8 +405,33 @@ describe("nikcli's latest conversation in this folder", () => {
 
   test("the command asks the server for this folder's root conversations", () => {
     const plan = planLastHere("nikcli", HERE, none)!
-    expect(plan.args.slice(0, 5)).toEqual(["api", "session.list", "--log-level", "warn", "-d"])
-    expect(JSON.parse(plan.args[5]!)).toEqual({ directory: HERE, roots: true, limit: 5 })
+    expect(plan.args.slice(0, 4)).toEqual(["api", "session.list", "--log-level", "warn"])
     expect(planLastHere("claude-code", HERE, none)).toBeUndefined()
+  })
+
+  /*
+   * What reaches the server, not what ADE builds (lettura di Mimo, F2): the
+   * request `nikcli api` makes from these arguments, by the two rules its
+   * handler follows — read from its source below, so a change there fails
+   * here — `--param` into the URL's query, `-d` into the body. `session.list`
+   * is a GET and reads only the query.
+   */
+  test("roots and the limit reach session.list's query, and a GET carries no body", () => {
+    const handler = readFileSync(join(import.meta.dir, "../../../nikcli/src/cli/handlers/api.ts"), "utf8")
+    expect(handler).toContain("if (!resolved.route.path.includes(`{${name}}`)) url.searchParams.set(name, value)")
+    expect(handler).toContain("new Request(url, { method: resolved.route.method, headers, body: args.data })")
+    const request = (args: readonly string[]) => {
+      const url = new URL("/session", "http://nikcli.local")
+      let body: string | undefined
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === "--param") {
+          const entry = args[++i]!
+          url.searchParams.set(entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1))
+        } else if (args[i] === "-d") body = args[++i]
+      }
+      return { query: Object.fromEntries(url.searchParams), body }
+    }
+    const sent = request(planLastHere("nikcli", HERE, none)!.args)
+    expect(sent).toEqual({ query: { roots: "true", limit: String(LAST_HERE_LIMIT) }, body: undefined })
   })
 })

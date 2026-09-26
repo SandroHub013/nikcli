@@ -210,6 +210,14 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
 }
 
 /**
+ * How many of the folder's most recent conversations `session.list` returns.
+ * Not 5: bots' conversations and the ones other panes hold are left out here,
+ * after the server has counted them, and five taken ones would hide the
+ * pane's own.
+ */
+export const LAST_HERE_LIMIT = 50
+
+/**
  * Claude Code's project folder: every character that is not a letter or digit
  * becomes `-`. Past 200 characters it shortens the name with a hash this does
  * not reproduce, so a long path answers "unknown" rather than "missing".
@@ -277,7 +285,15 @@ export const RESUME: Record<string, ResumeRecipe> = {
   nikcli: {
     byId: (id) => ["--session", id],
     lastHere: {
-      args: (cwd) => ["api", "session.list", "--log-level", "warn", "-d", JSON.stringify({ directory: cwd, roots: true, limit: 5 })],
+      /*
+       * A GET's parameters go in the query: `nikcli api` puts `-d` in the
+       * request's body and only `--param` in its URL, and `session.list`
+       * reads the query. Sent as `-d`, `roots` and `limit` never arrived and
+       * every restore read the folder's whole list (lettura di Mimo, F2;
+       * measured, 781 conversations for `limit: 1`). The folder is the
+       * process's own directory, which the command sends by itself.
+       */
+      args: () => ["api", "session.list", "--log-level", "warn", "--param", "roots=true", "--param", `limit=${LAST_HERE_LIMIT}`],
       read: lastNikcliHere,
     },
     mint: {
