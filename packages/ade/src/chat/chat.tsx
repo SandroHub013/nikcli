@@ -31,7 +31,7 @@ import {
   type ModelRef,
 } from "./model"
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
-import { isOpenOn, useFolder } from "./first-use"
+import { isOpenOn, sectionShown, useFolder } from "./first-use"
 import { stopAnswer } from "./stop"
 import {
   addAttachment,
@@ -169,8 +169,8 @@ export function Chat(props: ChatProps) {
       forgetLegacyConversation()
     }
     composer?.focus()
-    // Back to a folder already in use: its catalog is the store's, kept per opening.
-    if (isOpenOn(store, props.projectRoot)) void use()
+    // Nothing is called because the section showed; a folder already in use gives back its catalog (C9).
+    void sectionShown(store, props.projectRoot, applyCatalog)
   })
 
   // Another project: its sessions are not the ones open here.

@@ -31,9 +31,9 @@ describe("restoreView", () => {
     expect(restoreView("code")).toBe("code")
   })
 
-  test("a workbench saved in the hidden Chat reopens in the grid, one saved in Bot reopens there (B7)", () => {
-    // Otherwise the window opens in a section the bar does not list, with no way back to it.
-    expect(restoreView("chat")).toBe("code")
+  test("a workbench saved in Chat (C9) or Bot (B7) reopens there", () => {
+    // A hidden section would reopen in the grid instead (`reachableView`): see state.test.ts.
+    expect(restoreView("chat")).toBe("chat")
     expect(restoreView("bot")).toBe("bot")
   })
 

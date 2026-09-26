@@ -56,10 +56,10 @@ describe("section commands", () => {
     }
   })
 
-  test("in the app the palette offers Bot and not Chat (B7)", () => {
+  test("in the app the palette offers Bot (B7) and Chat (C9)", () => {
     const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
     expect(ids).toContain("view.bot")
-    expect(ids).not.toContain("view.chat")
+    expect(ids).toContain("view.chat")
   })
 
   test("the section you are already in is offered as disabled, not hidden", () => {
@@ -77,8 +77,9 @@ describe("section commands", () => {
       buildCommands(context({ workbench: { ...createWorkbench(), view } })).find((c) => c.id === "view.toggle")?.title
 
     expect(at("agent")).toBe("Sezione successiva (Code)")
-    // With Chat hidden the cycle skips it: Code goes on to Bot.
-    expect(at("code")).toBe("Sezione successiva (Bot)")
+    // With Chat on (C9) the cycle goes through it: Code, Chat, Bot.
+    expect(at("code")).toBe("Sezione successiva (Chat)")
+    expect(at("chat")).toBe("Sezione successiva (Bot)")
     // The wrap is the point of the test, and `bot` is the last section.
     expect(at("bot")).toBe("Sezione successiva (Agent)")
   })
