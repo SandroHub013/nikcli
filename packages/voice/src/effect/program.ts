@@ -174,6 +174,16 @@ export interface VoiceProgramOptions {
   onOutcome?: (outcome: DispatchOutcome) => void
   /** Notification hook fired when an error occurs. */
   onError?: (error: string) => void
+  /**
+   * Fired with what the planning provider said when its call could not be made.
+   *
+   * Separate from `onError` because that one is the sentence the user hears,
+   * and this is the thing that explains it: a "riprova fra un momento" that
+   * comes back is a rate limit, a refused key or a network, and the sentence
+   * alone does not say which. It can quote the key that was refused, so whoever
+   * shows it takes the keys out first; it is never spoken and never stored.
+   */
+  onProviderError?: (detail: string) => void
   /** Notification hook fired with each parsed utterance result. */
   onParseResult?: (result: ParseResult) => void
   /**
@@ -866,6 +876,9 @@ export function makeVoiceProgram(
             currentState = { ...currentState, status: "idle" }
             options.onStateChange?.(currentState)
           }
+          // What the provider said, for whoever has to work out why the same
+          // sentence keeps being refused. The user is told the Italian one.
+          if (planned.detail) options.onProviderError?.(planned.detail)
           yield* say(planned.failure)
           return true
         }

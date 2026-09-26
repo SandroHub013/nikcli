@@ -161,6 +161,7 @@ import {
 } from "../agent/onboarding"
 import { Chat } from "../chat/chat"
 import { BotsMain, BotsRoster } from "../bots/bots"
+import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
@@ -4185,6 +4186,14 @@ export function Workbench() {
     speaker,
     micMeter,
     now: () => Date.now(),
+    /*
+     * What the planning provider said, beside the sentence the user heard. It
+     * is the only way to tell a "riprova fra un momento" that keeps coming back
+     * because of a rate limit from one that will because the key is wrong, and
+     * a 401 quotes the key it refused — so it is scrubbed before it is shown,
+     * and the Italian sentence is the only thing said out loud.
+     */
+    onProviderError: (detail) => report(scrubSecrets(detail)),
     getContext: () => ({
       focusedPaneId: wb().focusedId,
     }),

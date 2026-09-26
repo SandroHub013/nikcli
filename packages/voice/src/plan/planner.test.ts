@@ -90,6 +90,31 @@ describe("planUtterance", () => {
     expect(result.failure).toContain("chiave OpenRouter")
   })
 
+  test("l'errore del provider resta, per capire il «riprova» che si ripete", async () => {
+    const result = await planUtterance("qualsiasi cosa", context, async () => {
+      throw new Error("401 Unauthorized: Bearer sk-or-v1-abcdefghijklmnopqrstuvwxyz012345 refused")
+    })
+
+    // What the user is told, and what explains it, are two different things.
+    expect(result.failure).toContain("chiave del servizio")
+    expect(result.failure).not.toContain("sk-or-v1")
+    // The detail is what the provider said, untouched: whoever shows it takes
+    // the keys out, and that is not this module's job to guess.
+    expect(result.detail).toContain("401 Unauthorized")
+    expect(result.detail).toContain("sk-or-v1-abcdefghijklmnopqrstuvwxyz012345")
+  })
+
+  test("un annullamento non lascia nessun dettaglio", async () => {
+    const abort = new Error("The operation was aborted")
+    abort.name = "AbortError"
+    const result = await planUtterance("qualsiasi cosa", context, async () => {
+      throw abort
+    })
+
+    expect(result.failure).toBeUndefined()
+    expect(result.detail).toBeUndefined()
+  })
+
   test("una risposta illeggibile viene detta, non ignorata", async () => {
     const result = await planUtterance("qualsiasi cosa", context, async () => "boh")
     expect(result.failure).toBeDefined()

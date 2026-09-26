@@ -38,6 +38,25 @@ export interface PlannerResult extends ValidatedPlan {
    * having got an answer at all, and the user is told different things.
    */
   failure?: string
+  /**
+   * The provider's own words for the failure, when it had any.
+   *
+   * Not for the user: `failure` is what they hear, and this is the thing that
+   * explains it — a "riprova fra un momento" that keeps coming back is a rate
+   * limit, a wrong key or a network, and the sentence alone says which of the
+   * three to go and look at. It can quote the key that was refused, so whoever
+   * shows it takes the keys out first: this is never said, never written to a
+   * log, and never stored.
+   */
+  detail?: string
+}
+
+/** What the provider said, as an error's name and message, however it arrived. */
+function providerError(error: unknown): { name: string; message: string } {
+  return {
+    name: error instanceof Error ? error.name : "",
+    message: error instanceof Error ? error.message : String(error ?? ""),
+  }
 }
 
 /**
@@ -183,8 +202,7 @@ function tryParse(text: string): unknown {
  * the one thing wrong is that something is being said at all.
  */
 export function plannerFailure(error: unknown): string | undefined {
-  const name = error instanceof Error ? error.name : ""
-  const raw = error instanceof Error ? error.message : String(error ?? "")
+  const { name, message: raw } = providerError(error)
   // Case and punctuation vary between runtimes, and the message is the only
   // thing a fetch failure has.
   const text = raw.toLowerCase()
@@ -231,7 +249,13 @@ export async function planUtterance(
     answer = await complete({ ...prompt, signal: options.signal })
   } catch (error) {
     const failure = plannerFailure(error)
-    return failure ? { steps: [], refusals: [], failure } : { steps: [], refusals: [] }
+    // What the user is told, and what explains it, are two different things:
+    // the first is a sentence in Italian, the second is what the provider
+    // said. Both, because the second used to be thrown away with the error.
+    const detail = providerError(error).message
+    return failure
+      ? { steps: [], refusals: [], failure, ...(detail ? { detail } : {}) }
+      : { steps: [], refusals: [] }
   }
 
   const raw = extractJson(answer)

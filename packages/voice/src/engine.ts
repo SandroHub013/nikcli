@@ -103,6 +103,12 @@ export interface VoiceEngineOptions {
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
+  /**
+   * Where what the planning provider said goes when its call could not be
+   * made — the notice strip, in the app. Takes the keys out of it first: the
+   * provider quotes the key it refused, and this is not a place to write one.
+   */
+  onProviderError?: (detail: string) => void
 }
 
 export interface VoiceEngine {
@@ -1093,6 +1099,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     },
     onNameGate: () => refreshHearing(),
     onPartialTranscript: (text) => setPartialTranscript(text),
+    onProviderError: options.onProviderError,
     onSpeaking: (text) => {
       if (activeMode() !== "transcription") setLastSpoken(text)
     },
