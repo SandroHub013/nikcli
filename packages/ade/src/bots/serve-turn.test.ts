@@ -256,6 +256,26 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(agentProblem([{ name: "alfa" }], BOT)).toBe(t("bots.serve.agentTaken", "alfa"))
   })
 
+  test("a user's bot where the project has an agent file of its name, even with the same words: refused", async () => {
+    const asked: [string, string][] = []
+    const fake = server()
+    const projectHasAgent = async (directory: string, identifier: string) => (asked.push([directory, identifier]), true)
+    const result = await runServeTurn(panel(), { ...fake.deps, projectHasAgent }).result
+    expect(result.problem).toBe(t("bots.serve.agentTaken", "alfa"))
+    expect(asked).toEqual([["C:/progetto", "alfa"]])
+    expect(fake.calls.created).toEqual([])
+    expect(fake.calls.prompts).toEqual([])
+
+    // A project's bot is that file: it runs.
+    const own = server({ events: FIRST, session: FIRST_SESSION })
+    const mine = await runServeTurn(panel({ bot: { ...BOT, scope: "project" } }), { ...own.deps, projectHasAgent }).result
+    expect(mine.status).toBe("done")
+    // No such file: the user's bot runs.
+    const free = server({ events: FIRST, session: FIRST_SESSION })
+    const runs = await runServeTurn(panel(), { ...free.deps, projectHasAgent: async () => false }).result
+    expect(runs.status).toBe("done")
+  })
+
   test("no folder, or a project not admitted: nothing is sent", async () => {
     const none = server()
     const noFolder = await runServeTurn(panel({ cwd: undefined }), none.deps).result

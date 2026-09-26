@@ -31,7 +31,8 @@ import { readEvents } from "../chat/stream"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
 import { localTrustStore } from "./trust"
-import type { AgentFile } from "./nikcli"
+import { agentDirs, type AgentFile } from "./nikcli"
+import { joinPath } from "../host/path"
 import { finalText, spendKind } from "./runners"
 import { botPermission, hasBotRules, profileFor } from "./serve-rules"
 import {
@@ -75,6 +76,8 @@ export type ServeConnection =
 export interface ServeTurnDeps {
   /** The server for `directory`, once its project is admitted: asked about when `interactive`, refused otherwise. */
   readonly connect: (directory: string, interactive: boolean) => Promise<ServeConnection>
+  /** Whether the project at `directory` has an agent file named `identifier` (`.nikcli/agent/<name>.md`). */
+  readonly projectHasAgent?: (directory: string, identifier: string) => Promise<boolean>
   readonly now?: () => number
 }
 
@@ -213,6 +216,13 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         const agents = await server.agents()
         const problem = agentProblem(agents, bot)
         if (problem) return finish("error", problem)
+        /*
+         * A user's bot and a project's agent of its name, with the same words:
+         * the server runs the project's file, whose rules and model are its
+         * own. Refused as well; a project's bot is that file.
+         */
+        if (bot.scope === "global" && (await deps.projectHasAgent?.(cwd, bot.identifier)))
+          return finish("error", t("bots.serve.agentTaken", bot.identifier))
       }
 
       const profile = profileFor({
@@ -503,6 +513,17 @@ export function appServeTurnDeps(
       admitted.ok ? admitted : { ok: false as const, problem: t("bots.serve.notAdmitted", directory) },
     )
   return {
+    projectHasAgent: async (directory, identifier) => {
+      for (const folder of agentDirs(directory, "project")) {
+        try {
+          await projectFs.readText(joinPath(folder, `${identifier}.md`))
+          return true
+        } catch {
+          // Not there: the next spelling of the folder.
+        }
+      }
+      return false
+    },
     connect: async (directory, interactive) => {
       const base = connection()
       const opened = await openChat(directory, interactive ? base : { ...base, admit: unattended })
