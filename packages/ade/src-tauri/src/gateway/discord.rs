@@ -1777,6 +1777,8 @@ mod tests {
         gateway.push(vec![hello(200), ready("S1", &gateway.address)]);
         let discord = adapter(&rest, &gateway);
         start(&discord).await;
+        // The fake records a frame when it gets to reading it, not when the client sends it.
+        assert!(gateway.wait_for(2, 1).await, "l'identify e' stato mandato");
         let identify = gateway.op(2).expect("l'identify e' stato mandato");
         assert_eq!(identify["d"]["intents"], json!(INTENTS));
         assert_eq!(identify["d"]["token"], json!(TOKEN));
@@ -1830,6 +1832,13 @@ mod tests {
         set_jitter(&discord, 500);
         discord.receive().await.expect("il primo");
         discord.receive().await.expect("il secondo, dopo la ripresa");
+        /*
+         * Waited for, not read at once: the fake sends a connection's frames
+         * before it reads any, so the client can have the second message
+         * while its resume is still unread on the fake's side. Under load the
+         * record came up empty (seen in a full `cargo test`).
+         */
+        assert!(gateway.wait_for(6, 1).await, "la ripresa");
         assert_eq!(gateway.op(6).map(|resume| resume["d"]["session_id"].clone()), Some(json!("S1")));
         assert_eq!(gateway.goodbye(), None, "chiuso con un codice che non si riprende");
         // Switched off: a goodbye, with the code of a client that leaves.
