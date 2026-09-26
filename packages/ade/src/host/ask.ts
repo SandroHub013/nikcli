@@ -58,7 +58,10 @@ export async function askDialog(
   // is in: a bot's trust asked from a Telegram message went unseen
   // (chat-bot-facili, prove). The window flashes in the taskbar; it does not
   // take the focus, which would hand a keystroke meant elsewhere to the question.
-  await deps.attention(true).catch(() => undefined)
+  // Not awaited: a window call that never returned kept the question from
+  // opening (review of chat-difetti, BASSO 1). The stop comes after the start,
+  // so a late start cannot leave ADE flashing once answered.
+  const eye = deps.attention(true).catch(() => undefined)
   try {
     return (
       (await ask(question, {
@@ -69,7 +72,7 @@ export async function askDialog(
       })) === true
     )
   } finally {
-    await deps.attention(false).catch(() => undefined)
+    void eye.then(() => deps.attention(false)).catch(() => undefined)
   }
 }
 

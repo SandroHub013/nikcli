@@ -9,6 +9,9 @@ import { askDialog, askYesNo, type AskDeps, type AskOptions } from "./ask"
  * an `if` reads as yes, so the editor's questions were never asked.
  */
 
+/** Lets the promises already resolved run their callbacks: the stop is not awaited. */
+const settle = () => new Promise((resolve) => setImmediate(resolve))
+
 function deps(over: Partial<AskDeps> = {}): AskDeps & { asked: [string, AskOptions][] } {
   const asked: [string, AskOptions][] = []
   return {
@@ -81,7 +84,39 @@ describe("una domanda sì/no in ADE", () => {
       load: async () => ({ ask: async () => (steps.push("domanda"), true) }),
     })
     expect(await askDialog("Lo usi?", {}, d)).toBe(true)
+    await settle()
     expect(steps).toEqual(["attenzione", "domanda", "basta"])
+  })
+
+  /* Review of chat-difetti, BASSO 1: the question waited on the window's call. */
+  test("un'attenzione che non torna mai non tiene chiusa la domanda", async () => {
+    const steps: string[] = []
+    const d = deps({
+      attention: (on) => (steps.push(on ? "attenzione" : "basta"), new Promise<void>(() => {})),
+      load: async () => ({ ask: async () => (steps.push("domanda"), false) }),
+    })
+    expect(await askDialog("Lo usi?", {}, d)).toBe(false)
+    await settle()
+    // Never started, so nothing to stop.
+    expect(steps).toEqual(["attenzione", "domanda"])
+  })
+
+  test("un'attenzione arrivata dopo la risposta si spegne lo stesso, dopo", async () => {
+    const steps: string[] = []
+    let started!: () => void
+    const d = deps({
+      attention: (on) => {
+        steps.push(on ? "attenzione" : "basta")
+        return on ? new Promise<void>((resolve) => (started = () => (steps.push("accesa"), resolve()))) : Promise.resolve()
+      },
+      load: async () => ({ ask: async () => (steps.push("domanda"), true) }),
+    })
+    expect(await askDialog("Lo usi?", {}, d)).toBe(true)
+    await settle()
+    expect(steps).toEqual(["attenzione", "domanda"])
+    started()
+    await settle()
+    expect(steps).toEqual(["attenzione", "domanda", "accesa", "basta"])
   })
 
   test("un'attenzione rifiutata non ferma la domanda, e un rifiuto della domanda la spegne lo stesso", async () => {
@@ -93,11 +128,13 @@ describe("una domanda sì/no in ADE", () => {
       },
     })
     expect(await askDialog("Lo usi?", {}, refusedEye)).toBe(true)
+    await settle()
     const refusedAsk = deps({
       attention: async (on) => void steps.push(on ? "attenzione" : "basta"),
       load: async () => ({ ask: () => Promise.reject("dialog.ask not allowed") }),
     })
     await expect(askDialog("Lo usi?", {}, refusedAsk)).rejects.toBe("dialog.ask not allowed")
+    await settle()
     expect(steps).toEqual(["attenzione", "basta", "attenzione", "basta"])
   })
 
