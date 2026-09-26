@@ -27,6 +27,10 @@
 //! - Sending: pieces of 3.900 characters (Slack takes 40.000 in one message, but
 //!   a wall of text is not read), at most `MAX_PIECES` of them, cut so a code
 //!   block survives, the rest really left out and said to be in ADE.
+//! - What arrives: direct messages (`message.im`) and, from channels, only
+//!   the messages that name the bot (`app_mention`). The bot does not read the
+//!   rest of a channel it sits in, which a `*:history` scope for every kind of
+//!   channel would hand it, to be thrown away here: least given, least held.
 //! - Nothing in a reply can ping anyone. Slack has no `allowed_mentions`: what
 //!   pings is markup, `<!channel>`, `<!here>`, `<@U…>`. `&`, `<` and `>` are
 //!   escaped in every text this adapter sends, as Slack asks
@@ -74,12 +78,11 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = concat!("nikcli-ade/", env!("CARGO_PKG_VERSION"), " (gateway)");
 
 /// The bot scopes this adapter uses, and the only ones the manifest asks for:
-/// the four `*:history` receive the four message events below, `chat:write`
-/// sends and edits, `commands` brings the slash commands, `users:read` gives a
-/// sender's name. `connections:write` is not here: it belongs to the App-Level
-/// Token, not to the bot.
-pub const BOT_SCOPES: &[&str] =
-    &["channels:history", "chat:write", "commands", "groups:history", "im:history", "mpim:history", "users:read"];
+/// `app_mentions:read` for a mention in a channel, `im:history` for a direct
+/// message, `chat:write` sends and edits, `commands` brings the slash
+/// commands, `users:read` gives a sender's name. `connections:write` is not
+/// here: it belongs to the App-Level Token, not to the bot.
+pub const BOT_SCOPES: &[&str] = &["app_mentions:read", "chat:write", "commands", "im:history", "users:read"];
 
 /// The chat commands (`policy.ts`), registered as the app's slash commands.
 pub const SLASH_COMMANDS: &[(&str, &str)] = &[
@@ -89,10 +92,11 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/aiuto", "Mostra i comandi del bot"),
 ];
 
-/// The events the manifest subscribes to. `app_mention` is left out on
-/// purpose: a message that names the bot in a channel already arrives as
-/// `message.channels`, and both would make two turns of one message.
-pub const BOT_EVENTS: &[&str] = &["message.channels", "message.groups", "message.im", "message.mpim"];
+/// The events the manifest subscribes to: a mention in any channel the bot is
+/// in, and a direct message. Not `message.channels`, `message.groups` or
+/// `message.mpim`: they bring every message of a channel, and a mention would
+/// come twice, once of them and once as `app_mention` (G10 review).
+pub const BOT_EVENTS: &[&str] = &["app_mention", "message.im"];
 
 /// The manifest of the user's Slack app for a bot called `name`: Socket Mode,
 /// the scopes and events above, and the Messages tab open so a person can
@@ -294,10 +298,12 @@ fn button_blocks(text: Option<&str>, buttons: &[Button]) -> Value {
     Value::Array(blocks)
 }
 
-/// A message event as the hub sees it, or `None` for what the gateway does not
-/// take: an edit, a deletion, a join, a message with no text.
+/// A direct message or a mention as the hub sees it, or `None` for what the
+/// gateway does not take: an edit, a deletion, a join, a message with no text,
+/// and a channel's other messages.
 fn to_inbound(event: &Value, bot: Option<&str>) -> Option<Inbound> {
-    if event["type"].as_str() != Some("message") {
+    let kind = event["type"].as_str()?;
+    if kind != "message" && kind != "app_mention" {
         return None;
     }
     // Every change to a message and every notice has a subtype; a message a
@@ -311,18 +317,25 @@ fn to_inbound(event: &Value, bot: Option<&str>) -> Option<Inbound> {
     }
     let chat = event["channel"].as_str()?.to_string();
     let user = event["user"].as_str()?.to_string();
-    // A direct message is `im`; a channel, a private channel and a group DM
-    // need the bot named. An event without the type is told by the channel's
-    // id: a direct message's starts with D.
+    // A direct message is `im`; an event without the type is told by the
+    // channel's id, which for a direct message starts with D.
     let private = match event["channel_type"].as_str() {
         Some(kind) => kind == "im",
         None => chat.starts_with('D'),
     };
+    // From a channel only the mention, which Slack sends as `app_mention`: a
+    // channel's `message` would be the same mention a second time, from an
+    // app whose manifest still subscribes to it. And a mention in a direct
+    // message is that message, which has already come as `message.im`.
+    if (kind == "message") != private {
+        return None;
+    }
     Some(Inbound {
         id: event["ts"].as_str()?.to_string(),
         chat,
         private,
-        mentioned: bot.is_some_and(|bot| names_bot(raw, bot)),
+        // Read in the text as well: what Slack calls a mention is what names the bot.
+        mentioned: kind == "app_mention" && bot.is_some_and(|bot| names_bot(raw, bot)),
         sender: Sender {
             is_bot: !event["bot_id"].is_null() || bot == Some(user.as_str()),
             // The name comes from `users.info`; the id until then.
@@ -900,7 +913,7 @@ mod tests {
     const BOT_TOKEN: &str = "xoxb-FINTO-0000000000-token-del-bot";
     const APP_TOKEN: &str = "xapp-1-FINTO-0000000000-token-app";
     const BOT: &str = "UBOT42";
-    const ALL_SCOPES: &str = "channels:history,chat:write,commands,groups:history,im:history,mpim:history,users:read";
+    const ALL_SCOPES: &str = "app_mentions:read,chat:write,commands,im:history,users:read";
 
     /// The fake's header for a reply sent this many milliseconds late.
     const LATE: &str = "x-finto-ritardo-ms";
@@ -1158,6 +1171,10 @@ mod tests {
         json!({ "type": "message", "channel": "C1", "channel_type": "channel", "user": "U1", "text": words, "ts": "1.1" })
     }
 
+    fn mention(channel: &str, words: &str) -> Value {
+        json!({ "type": "app_mention", "channel": channel, "user": "U1", "text": words, "ts": "1.4", "event_ts": "1.4" })
+    }
+
     /* Reading. */
 
     #[tokio::test]
@@ -1165,8 +1182,8 @@ mod tests {
         let socket = FakeSocket::start(
             vec![vec![
                 hello(),
-                // A channel message that does not name the bot: nothing follows
-                // from it, and it is acknowledged all the same.
+                // A channel message the bot is not given: nothing follows from
+                // it, and it is acknowledged all the same.
                 envelope("e1", "Ev1", "C1", "channel", "U9", "si parla d'altro"),
                 envelope("e2", "Ev2", "D1", "im", "U9", "ciao"),
             ]],
@@ -1178,7 +1195,7 @@ mod tests {
         // One read only, to start the socket: the second message is never
         // asked for, and its ack must not wait for that.
         let first = tokio::time::timeout(Duration::from_secs(3), slack.receive()).await.expect("in tempo").expect("letto");
-        assert!(!admits(&first[0]), "il primo e' in un canale e non nomina il bot");
+        assert_eq!(first[0].text, "ciao", "il messaggio del canale non passa");
         eventually("i due ack", || socket.acks().len() == 2).await;
         assert_eq!(socket.acks(), vec!["e1".to_string(), "e2".to_string()]);
         let connection = &socket.connections()[0];
@@ -1350,19 +1367,24 @@ mod tests {
     }
 
     #[test]
-    fn a_channel_message_needs_the_mention_and_a_direct_one_does_not() {
-        let named = to_inbound(&channel_event(&format!("ciao <@{BOT}> guarda")), Some(BOT)).expect("messaggio");
+    fn from_a_channel_only_a_mention_comes_and_a_direct_message_always() {
+        let named = to_inbound(&mention("C1", &format!("ciao <@{BOT}> guarda")), Some(BOT)).expect("menzione");
         assert!(named.mentioned && !named.private && admits(&named));
-        let with_label = to_inbound(&channel_event(&format!("ciao <@{BOT}|bot>")), Some(BOT)).expect("messaggio");
+        let with_label = to_inbound(&mention("C1", &format!("ciao <@{BOT}|bot>")), Some(BOT)).expect("menzione");
         assert!(with_label.mentioned);
-        let other = to_inbound(&channel_event("ciao <@U777> guarda"), Some(BOT)).expect("messaggio");
-        assert!(!other.mentioned && !admits(&other));
+        // A channel's message is not taken, named or not: the mention comes as
+        // `app_mention`, and taking both would be two turns of one message.
+        assert!(to_inbound(&channel_event(&format!("ciao <@{BOT}>")), Some(BOT)).is_none());
+        assert!(to_inbound(&channel_event("si parla d'altro"), Some(BOT)).is_none());
+        let group = json!({ "type": "message", "channel": "G1", "channel_type": "mpim", "user": "U1", "text": "ciao", "ts": "1.3" });
+        assert!(to_inbound(&group, Some(BOT)).is_none());
         let direct = json!({ "type": "message", "channel": "D1", "channel_type": "im", "user": "U1", "text": "ciao", "ts": "1.2" });
         let direct = to_inbound(&direct, Some(BOT)).expect("messaggio");
         assert!(direct.private && admits(&direct));
-        // A group DM is several people: it needs the mention like a channel.
-        let group = json!({ "type": "message", "channel": "G1", "channel_type": "mpim", "user": "U1", "text": "ciao", "ts": "1.3" });
-        assert!(!to_inbound(&group, Some(BOT)).expect("messaggio").private);
+        // A mention in a direct message is that message, already come.
+        assert!(to_inbound(&mention("D1", &format!("<@{BOT}> ciao")), Some(BOT)).is_none());
+        // Without the bot's id a mention is not taken for one.
+        assert!(!admits(&to_inbound(&mention("C1", &format!("<@{BOT}>")), None).expect("menzione")));
     }
 
     #[test]
@@ -1379,8 +1401,8 @@ mod tests {
 
     #[test]
     fn the_text_reaches_the_turn_as_it_was_typed() {
-        let typed = to_inbound(&channel_event("a &lt; b &amp;&amp; c &gt; d"), Some(BOT)).expect("messaggio");
-        assert_eq!(typed.text, "a < b && c > d");
+        let typed = to_inbound(&mention("C1", &format!("<@{BOT}> a &lt; b &amp;&amp; c &gt; d")), Some(BOT)).expect("menzione");
+        assert_eq!(typed.text, format!("<@{BOT}> a < b && c > d"));
     }
 
     #[test]
@@ -1449,7 +1471,7 @@ mod tests {
         let slack = adapter(&api);
         let error = slack.whoami().await.unwrap_err().message();
         let first = error.lines().next().unwrap_or_default();
-        assert!(first.contains("channels:history") && first.contains("im:history"), "{error}");
+        assert!(first.contains("app_mentions:read") && first.contains("im:history"), "{error}");
         assert!(first.contains("reinstalla l'app"), "{error}");
         assert!(!first.contains("chat:write,"), "uno scope che c'e' non e' fra i mancanti: {error}");
         // With every scope, the name.
@@ -1480,7 +1502,8 @@ mod tests {
         let events: Vec<&str> =
             parsed["settings"]["event_subscriptions"]["bot_events"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert_eq!(events, BOT_EVENTS);
-        assert!(!events.contains(&"app_mention"), "una menzione arriverebbe due volte");
+        assert!(events.contains(&"app_mention") && !events.contains(&"message.channels"), "una menzione arriverebbe due volte");
+        assert!(!scopes.contains(&"channels:history"), "il bot non legge il resto dei canali");
         let commands: Vec<&str> =
             parsed["features"]["slash_commands"].as_array().unwrap().iter().filter_map(|c| c["command"].as_str()).collect();
         assert_eq!(commands, ["/nuova", "/ferma", "/stato", "/aiuto"]);
