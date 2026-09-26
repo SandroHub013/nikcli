@@ -233,6 +233,33 @@ describe("storage", () => {
     expect(disk.get(keyA)).not.toContain("sk-")
   })
 
+  test("a turn on the default model that names a free one is free, and so is what it already counted", () => {
+    const spend = (talk: Talk, tokens: number) =>
+      noteTurnUsage({ ...talk, tokens: talk.tokens + tokens }, tokens, 0, false)
+    const close = (talk: Talk) => noteTurnUsage(talk, 0, 0, true)
+    // An earlier turn on a model the default resolved to, not free: metered it stays.
+    let talk: Talk = { ...sendMessage(emptyTalk(), "uno", T0), turnMode: "metered" }
+    talk = noteReportedModel(talk, { providerID: "openrouter", modelID: "vendor/a-pagamento" })
+    talk = close(spend(talk, 7))
+    expect(talk.byMode).toEqual({ metered: { tokens: 7, costUsd: 0 } })
+    // «Predefinito» and a :free model: usage before the model is named moves over too.
+    talk = { ...sendMessage(talk, "due", T0 + 1), turnMode: "metered" }
+    talk = spend(talk, 3)
+    talk = noteReportedModel(talk, { providerID: "openrouter", modelID: "nvidia/nemotron-3.5-lightning:free" })
+    talk = close(spend(talk, 15))
+    expect(talk.byMode).toEqual({ metered: { tokens: 7, costUsd: 0 }, free: { tokens: 18, costUsd: 0 } })
+    expect(talk.lastTurn?.mode).toBe("free")
+    // A thread only ever on the free model has no «a consumo» row at all.
+    let only: Talk = { ...sendMessage(emptyTalk(), "tre", T0 + 2), turnMode: "metered" }
+    only = spend(only, 4)
+    only = noteReportedModel(only, { modelID: "openrouter/x:free" })
+    expect(only.byMode).toEqual({ free: { tokens: 4, costUsd: 0 } })
+    // A named model chose its mode at the start: a free id reported later changes nothing.
+    let named: Talk = { ...sendMessage(emptyTalk(), "quattro", T0 + 3), turnMode: "api" }
+    named = noteReportedModel(spend(named, 2), { modelID: "x:free" })
+    expect(named.byMode).toEqual({ api: { tokens: 2, costUsd: 0 } })
+  })
+
   test("the last turn keeps its own tokens and the model the event named", () => {
     const spend = (talk: Talk, tokens: number, costUsd: number) =>
       noteTurnUsage({ ...talk, tokens: talk.tokens + tokens, costUsd: talk.costUsd + costUsd }, tokens, costUsd, true)
