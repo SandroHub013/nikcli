@@ -1635,15 +1635,23 @@ export function Workbench() {
       pendingPanelReplies.queue(paneId, session, handled.reply)
       return appendLine(paneId, t("note.panelReplyHeld", hold), "note", "ade")
     }
+    /*
+     * Something already waiting for this pane: this answer goes to the end of that
+     * list and the round writes them in order. Typing it straight out here would
+     * overtake the ones before it, and if it could not be given it would be
+     * dropped — the check after the write used to see the *older* answers waiting
+     * and read them as a reason to leave this one out, when it is the newest of
+     * the three.
+     */
+    if (!pendingPanelReplies.admit(paneId, session, handled.reply)) return
     // Out of the waiting before it is typed, so the round below cannot send it a
     // second time while this one is still in the queue.
     pendingPanelReplies.take(paneId, handled.reply)
     void typeLine(session, handled.reply, { unlessBusy: true }).then((given) => {
-      // Given, nothing to retry. Something else waiting for this pane means a
-      // newer answer arrived while this one was in the queue, and that one is
-      // first: this text is the stale half of the pair, not a lost answer.
-      if (given || pendingPanelReplies.waiting(paneId).length > 0) return
-      pendingPanelReplies.queue(paneId, session, handled.reply)
+      // Given, nothing to retry. Not given, back in the waiting with the age it
+      // was made at, where the round will find it in the right place in the order.
+      if (given) return
+      pendingPanelReplies.restore(paneId, session, handled.reply, Date.now())
     })
   }
 
@@ -1667,11 +1675,17 @@ export function Workbench() {
       for (const wait of waits) {
         pendingPanelReplies.take(paneId, wait.text)
         const outcome = await typeLineOutcome(session, wait.text, { unlessBusy: true })
+        if (deliveryResult(outcome, running.get(paneId) === session) !== "held") continue
         // Not given — a prompt opened again, or the user is typing: back in the
-        // waiting, still as old as it was, so it cannot be kept alive by trying.
-        if (deliveryResult(outcome, running.get(paneId) === session) === "held") {
-          pendingPanelReplies.restore(paneId, session, wait.text, wait.at)
-        }
+        // waiting, still as old as it was, so it cannot be kept alive by trying,
+        // and in the place that age puts it, so the answers asked after it do not
+        // overtake it (`restore`).
+        pendingPanelReplies.restore(paneId, session, wait.text, wait.at)
+        // And the round stops here, which is the other half of the same thing:
+        // `restore` puts the order back for the next round, and this stops the
+        // one after it from sending a later answer off while this one is still
+        // unanswered. Either alone leaves an inversion, one round apart.
+        break
       }
     }
   }

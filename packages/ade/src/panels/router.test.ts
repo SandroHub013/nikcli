@@ -346,3 +346,53 @@ describe("the answers waiting for a pane", () => {
     expect(store.panes()).toEqual([])
   })
 })
+/*
+ * I due BASSI sull'ordine, dalla delta di `12a442315`.
+ *
+ * Entrambi vengono da una lista che esiste per non perdere risposte e che si
+ * poteva scavalcare: la strada diretta scriveva una risposta nuova davanti a
+ * quelle in attesa, e il giro provava la successiva anche quando la prima tornava
+ * indietro. Sono due casi rari — due righe `@ade` di fila e un prompt che si
+ * apre e si chiude in mezzo — e sono due risposte lette nell'ordine sbagliato,
+ * che per un agente è come ricevere risposte alle domande sbagliate.
+ */
+describe("l'ordine delle risposte di un pannello", () => {
+  const now = 1_000_000
+  const first = { id: "proc-1" }
+
+  test("una risposta nuova non sorpassa quelle in attesa (BASSO 1)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    // Nothing waiting: the answer goes straight out, as it always did.
+    expect(store.admit("p1", first, "Prima", now)).toBe(true)
+    // A is held, B arrives while A is still waiting.
+    store.queue("p1", first, "A", now + 1)
+    // B is not written now, and not lost either: it is behind A.
+    expect(store.admit("p1", first, "B", now + 2)).toBe(false)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // The round writes them in the order they were made.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
+  })
+
+  test("una risposta trattenuta torna al suo posto, non in fondo (BASSO 2)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "A", now)
+    store.queue("p1", first, "B", now + 1)
+    const { waits } = store.claim("p1", now + 2)
+    // The round takes the first and cannot give it: a prompt opened again.
+    store.take("p1", "A")
+    store.restore("p1", first, "A", waits[0]!.at)
+    // Back where it was made, and not at the end. Appending here looks harmless
+    // and is the same inversion the break was meant to stop: the round after this
+    // one would send B first, and the agent would read the answer to its second
+    // question before the answer to its first. The break only puts the inversion
+    // off by a round, so the order has to be restored here too.
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // And the ages are still the ages: an answer is not kept alive by trying, and
+    // a later one does not jump ahead of it by being restored.
+    expect(store.waiting("p1").map((wait) => wait.at)).toEqual([now, now + 1])
+    // The next round finds the same order, so the held one is the first tried
+    // again — and the break stops the round there, rather than sending B off
+    // while A is still unanswered.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
+  })
+})
