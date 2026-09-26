@@ -337,6 +337,11 @@ impl Hub {
         if platform.needs_app_token() {
             self.vault.delete(&self.service, &secret_name(bot, platform, TokenKind::App))?;
         }
+        // A platform the bot never had: nothing to write down. A deleted bot's
+        // tokens are cleared on every platform, and each would leave a link.
+        if self.store.link(bot, platform).is_none() {
+            return Ok(());
+        }
         self.store.update(bot, platform, |link, _| {
             link.token_hash = None;
             link.app_token_hash = None;
@@ -1441,6 +1446,19 @@ mod tests {
         s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
         assert_eq!(s.made.lock().unwrap().len(), 2);
         assert!(!s.hub.status()[0].running);
+    }
+
+    #[tokio::test]
+    async fn clearing_a_platform_the_bot_never_had_leaves_nothing_behind() {
+        let s = setup("clear-nothing");
+        start(&s);
+        // A deleted bot's tokens are cleared on every platform, not only its own.
+        s.hub.clear_token(BOT, Platform::Telegram).unwrap();
+        s.hub.clear_token(BOT, Platform::Discord).unwrap();
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+        let links = s.hub.status();
+        assert_eq!(links.len(), 1, "un collegamento per ogni piattaforma svuotata");
+        assert!(!links[0].enabled && !links[0].has_token && !links[0].running);
     }
 
     #[tokio::test]

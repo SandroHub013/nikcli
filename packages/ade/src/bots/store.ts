@@ -378,10 +378,39 @@ export const projectFs: ProjectFs = {
   },
 }
 
-/** Removes a bot's file. The roster is the directory, so this is the deletion. */
-export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
-  const host = await getHost()
+/** The platforms a bot's gateway can be on, as the Rust side names them (`Platform`, adapter.rs). */
+export const GATEWAY_PLATFORMS = ["telegram", "discord", "slack"] as const
+
+/** Takes a bot's token for `platform` out of the keychain, and switches that gateway off. */
+export type ClearGatewayToken = (bot: string, platform: string) => Promise<void>
+
+const clearGatewayToken: ClearGatewayToken = async (bot, platform) => {
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("gateway_clear_token", { bot, platform })
+}
+
+/**
+ * Removes a bot's file. The roster is the directory, so this is the deletion.
+ *
+ * Its gateways go first: each platform's token leaves the keychain and the
+ * gateway stops. Before, a bot deleted here went on answering its chats until
+ * ADE closed, and its token stayed in the keychain for good. When one cannot
+ * be cleared the file stays, and the card says why.
+ */
+export async function deleteBot(
+  bot: AgentFile,
+  clearToken: ClearGatewayToken = clearGatewayToken,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<string | undefined> {
+  const host = await hostOf()
   if (!host?.deleteBotFile) return t("bots.store.hostMissing")
+  for (const platform of GATEWAY_PLATFORMS) {
+    try {
+      await clearToken(bot.path, platform)
+    } catch (error) {
+      return t("bots.store.gatewayKept", platform, error instanceof Error ? error.message : String(error))
+    }
+  }
   /*
    * A command of its own, which deletes only a bot's file. This used to go
    * through `host.run("cmd", ["/c", "del", …])`, which `run` refuses — it runs
