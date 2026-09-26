@@ -83,13 +83,18 @@ const WRAPPER = String.raw`\b(?:sudo|doas|exec|env|command|builtin|nohup|nice|ti
  * (`git commit -m 'rm -rf …'`), not a command.
  */
 const START = String.raw`(?:^|[;&|({\x60\n]\s*|${NESTED}|${WRAPPER})["']?(?:\\|[^\s;&|'"(]*[\\/])?`
-const ROOT = String.raw`(?:\/|\/\*|~|~\/|\$HOME|\$\{HOME\}|[A-Za-z]:\\?|[A-Za-z]:\\\*|[A-Za-z]:\/)`
+/*
+ * The folder of one user (`/home/mario`, `/Users/mario`, `C:\Users\mario`),
+ * itself and not what is inside it: projects live there (second check, MEDIO).
+ */
+const USER_DIR = String.raw`(?:\/(?:home|Users)|[A-Za-z]:[\\/]Users)[\\/][^\\/\s;&|"'*]+[\\/]?\*?`
+const ROOT = String.raw`(?:\/|\/\*|~|~\/|\$HOME|\$\{HOME\}|[A-Za-z]:\\?|[A-Za-z]:\\\*|[A-Za-z]:\/|${USER_DIR})`
 /*
  * A drive's root or the user's folder, as PowerShell and cmd write them
  * (second check, MEDIO): `C:\`, `~`, `$HOME`, `$env:USERPROFILE`,
- * `%USERPROFILE%`, with or without a final separator and `*`.
+ * `%USERPROFILE%`, `C:\Users\mario`, with or without a final separator and `*`.
  */
-const WINDOWS_ROOT = String.raw`(?:[A-Za-z]:|~|\$HOME|\$\{HOME\}|\$env:(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)|\$\{env:USERPROFILE\}|%(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)%)[\\/]?\*?`
+const WINDOWS_ROOT = String.raw`(?:${USER_DIR}|[A-Za-z]:|~|\$HOME|\$\{HOME\}|\$env:(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)|\$\{env:USERPROFILE\}|%(?:USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir)%)[\\/]?\*?`
 const END = String.raw`(?=\s|$|[;&|)"'])`
 const re = (source: string) => new RegExp(source, "i")
 

@@ -324,6 +324,28 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
     }
   })
 
+  test("one user's folder itself, not the projects inside it", () => {
+    for (const command of [
+      "Remove-Item -Recurse -Force C:\\Users\\mario",
+      "Remove-Item -Recurse -Force C:\\Users\\mario\\",
+      "rd /s /q \"C:\\Users\\mario\"",
+      "rm -rf C:/Users/mario",
+      "rm -rf /home/mario",
+      "rm -rf /Users/mario/",
+      "sudo rm -rf /home/mario/*",
+    ]) {
+      expect([command, kind(command).startsWith("block:delete")]).toEqual([command, true])
+    }
+    for (const command of [
+      "Remove-Item -Recurse -Force C:\\Users\\mario\\progetto\\dist",
+      "rd /s /q C:\\Users\\mario\\tmp",
+      "rm -rf /home/mario/progetto/build",
+      "rm -rf C:/Users/mario/progetto/dist",
+    ]) {
+      expect([command, kind(command).startsWith("block")]).toEqual([command, false])
+    }
+  })
+
   test("every spelling nikcli asks about is refused by ADE", () => {
     const rust = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
     const start = rust.indexOf("let spellings = [", rust.indexOf("fn no_spelling_passes_a_users_allow_in_any_flag"))
