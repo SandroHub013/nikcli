@@ -264,18 +264,40 @@ fn names_bot(text: &str, bot: &str) -> bool {
     text.contains(&format!("<@{bot}>")) || text.contains(&format!("<@{bot}|"))
 }
 
-/// `text` in pieces Slack shows well, cut so a code block survives, at most
-/// `MAX_PIECES` of them; past that the last one says where the rest is.
-fn pieces(text: &str) -> Vec<String> {
-    let all = chunk::split(text, MAX_LEN, characters);
-    if all.len() <= MAX_PIECES {
-        return all;
+/// The length Slack counts: the text as it is sent, with its three characters escaped.
+fn escaped_characters(text: &str) -> usize {
+    characters(&escape(text))
+}
+
+/// The last message of a reply that did not fit.
+fn rest_in_ade(dropped: usize) -> String {
+    format!("(il resto, {dropped} caratteri, è in ADE: la risposta si è fermata a {MAX_PIECES} messaggi)")
+}
+
+/// What may still go after `sent` messages: `queue` as it is when it fits,
+/// otherwise the pieces that fit before one last message saying where the
+/// rest is, and how many characters that rest holds (added to `dropped`).
+fn capped(sent: usize, mut queue: VecDeque<String>, dropped: usize) -> (VecDeque<String>, usize) {
+    let room = MAX_PIECES.saturating_sub(sent);
+    if dropped == 0 && queue.len() <= room {
+        return (queue, 0);
     }
-    let dropped: usize = all.iter().skip(MAX_PIECES - 1).map(|piece| characters(piece)).sum();
-    let mut kept: Vec<String> = all.into_iter().take(MAX_PIECES - 1).collect();
-    kept.push(format!(
-        "(il resto, {dropped} caratteri, è in ADE: la risposta si è fermata a {MAX_PIECES} messaggi)"
-    ));
+    // One message goes to saying where the rest is.
+    let keep = room.saturating_sub(1).min(queue.len());
+    let more: usize = queue.iter().skip(keep).map(|piece| characters(piece)).sum();
+    queue.truncate(keep);
+    (queue, dropped + more)
+}
+
+/// `text` in pieces Slack shows well, measured as Slack counts them, cut so a
+/// code block survives, at most `MAX_PIECES` of them; past that the last one
+/// says where the rest is.
+fn pieces(text: &str) -> Vec<String> {
+    let (kept, dropped) = capped(0, chunk::split(text, MAX_LEN, escaped_characters).into(), 0);
+    let mut kept: Vec<String> = kept.into();
+    if dropped > 0 {
+        kept.push(rest_in_ade(dropped));
+    }
     kept
 }
 
@@ -604,31 +626,48 @@ impl Inner {
     /// Sends `text` in pieces, with `buttons` under the last, and returns the
     /// id of the message that holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, buttons: Option<&[Button]>) -> Result<String, AdapterError> {
-        let mut queue: VecDeque<String> = pieces(text).into();
-        if queue.is_empty() {
+        let (mut queue, mut dropped) = capped(0, chunk::split(text, MAX_LEN, escaped_characters).into(), 0);
+        if queue.is_empty() && dropped == 0 {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
         }
         let mut last = String::new();
         let mut placed = buttons.is_none();
-        while let Some(piece) = queue.pop_front() {
+        // Messages Slack took, for the cap: a piece cut in two is one more.
+        let mut sent = 0;
+        let mut noted = false;
+        loop {
+            let piece = match queue.pop_front() {
+                Some(piece) => piece,
+                None if dropped > 0 && !noted => {
+                    noted = true;
+                    rest_in_ade(dropped)
+                }
+                None => break,
+            };
+            let final_one = queue.is_empty() && (dropped == 0 || noted);
             // The last piece carries the buttons when it fits in a section.
             let blocks = match buttons {
-                Some(buttons) if queue.is_empty() && characters(&escape(&piece)) <= SECTION_MAX => {
+                Some(buttons) if final_one && escaped_characters(&piece) <= SECTION_MAX => {
                     placed = true;
                     Some(button_blocks(Some(&piece), buttons))
                 }
                 _ => None,
             };
             match self.post(chat, &piece, blocks).await {
-                Ok(id) => last = id,
+                Ok(id) => {
+                    last = id;
+                    sent += 1;
+                }
                 Err(failure) if failure.code() == "msg_too_long" => {
                     let (head, tail) = cut_in_half(&piece);
-                    if tail.is_empty() {
+                    if tail.is_empty() || noted {
                         return Err(failure.for_sending());
                     }
                     placed = buttons.is_none();
                     queue.push_front(tail);
                     queue.push_front(head);
+                    // Two halves are one message more: still within the cap, or the rest is said to be in ADE.
+                    (queue, dropped) = capped(sent, queue, dropped);
                 }
                 Err(failure) => return Err(failure.for_sending()),
             }
@@ -1658,6 +1697,37 @@ mod tests {
         let slack = adapter(&api);
         assert_eq!(slack.send("C1", "ciao").await.expect("inviato"), "1700000000.000100");
         assert_eq!(api.to("/chat.postMessage").len(), 2, "il 429 e poi il tentativo");
+    }
+
+    #[test]
+    fn a_piece_is_measured_as_slack_counts_it_escaped() {
+        // 3 000 `<` are 12 000 characters once escaped: one piece of them was over Slack's limit.
+        for text in ["<".repeat(3_000), format!("```\n{}\n```", "a < b && c > d\n".repeat(600))] {
+            let all = pieces(&text);
+            assert!(all.len() <= MAX_PIECES, "{} messaggi", all.len());
+            for piece in &all {
+                assert!(escaped_characters(piece) <= MAX_LEN, "un pezzo di {} caratteri con gli escape", escaped_characters(piece));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_piece_cut_in_two_never_goes_past_the_cap() {
+        let socket = FakeSocket::start(vec![], 100);
+        let mut queues = HashMap::new();
+        queues.insert("/chat.postMessage", vec![ok(json!({ "ok": false, "error": "msg_too_long" }))]);
+        let api = FakeApi::start(&socket.address, queues);
+        let slack = adapter(&api);
+        // Eight pieces exactly, and Slack refuses the first: its halves would make nine.
+        let text = format!("{}\n", "e".repeat(3_800)).repeat(MAX_PIECES);
+        assert_eq!(pieces(&text).len(), MAX_PIECES);
+        slack.send("C1", &text).await.expect("inviato");
+        let sent = api.to("/chat.postMessage");
+        let taken = &sent[1..];
+        assert!(taken.len() <= MAX_PIECES, "{} messaggi oltre il rifiuto", taken.len());
+        let last = taken.last().unwrap().body["text"].as_str().unwrap().to_string();
+        assert!(last.contains("in ADE"), "{last}");
+        assert!(taken.iter().all(|seen| characters(seen.body["text"].as_str().unwrap()) <= MAX_LEN));
     }
 
     #[tokio::test]
