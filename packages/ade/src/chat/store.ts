@@ -47,6 +47,7 @@ import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type Chat
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { insideProject, isEnvFile, pathOfFileUrl } from "./attachments"
 import { configuredHasModel, serializeModelRef } from "./model"
+import { effortToSend, modelVariants } from "../bots/effort"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -87,6 +88,8 @@ export interface ChatStore {
     model: ModelRef,
     agent?: string,
     files?: readonly FilePartInput[],
+    /** The effort: sent only when the model has that level, or when its levels are not known. */
+    variant?: string,
   ): Promise<string>
   /** The folder's files whose path matches `query`, relative to it, for `@`. */
   findFiles(query: string): Promise<string[]>
@@ -371,7 +374,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       void run(connection, mine, stop.signal)
     },
     close,
-    async send(sessionID, text, model, agent, files = []) {
+    async send(sessionID, text, model, agent, files = [], variant) {
       const connection = opened()
       const mine = generation
       const folder = state.directory ?? ""
@@ -404,11 +407,14 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       } else mustBeOurs(id)
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
+      // A level the model does not have is not sent: nikcli would drop it without a word (`bots/effort.ts`).
+      const level = effortToSend(variant, modelVariants((await catalog()).configProviders, model)).variant
       await connection.client.session.promptAsync({
         sessionID: id,
         parts: [{ type: "text", text }, ...files],
         model,
         ...(agent ? { agent } : {}),
+        ...(level ? { variant: level } : {}),
       })
       return id
     },

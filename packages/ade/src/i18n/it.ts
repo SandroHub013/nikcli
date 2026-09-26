@@ -1358,6 +1358,7 @@ export const it = {
   "picker.loading": "Carico i modelli…",
   "picker.failed": (reason: string) => `Modelli non disponibili: ${reason}`,
   "picker.retry": "Riprova",
+  "picker.notConnected": "la Chat non si è collegata a questo progetto",
   "picker.effort": "Sforzo",
   "picker.effortDefault": "predefinito",
   "effort.none": "nessuno",

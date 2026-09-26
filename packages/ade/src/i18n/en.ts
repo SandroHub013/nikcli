@@ -1347,6 +1347,7 @@ export const en: Messages = {
   "picker.loading": "Loading models…",
   "picker.failed": (reason) => `Models unavailable: ${reason}`,
   "picker.retry": "Retry",
+  "picker.notConnected": "the Chat could not connect to this project",
   "picker.effort": "Effort",
   "picker.effortDefault": "default",
   "effort.none": "none",

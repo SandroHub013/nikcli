@@ -107,6 +107,14 @@
   min-width: 14rem;
 }
 
+/* A menu without a search, the effort's: as wide as its words, not a model list's 24rem. */
+[data-slot="chip-menu"]:not([data-below])[data-kind="effort"] [data-slot="chip-popover"],
+[data-slot="chip-menu"]:not([data-below])[data-kind="agent"] [data-slot="chip-popover"] {
+  width: max-content;
+  min-width: 10rem;
+  max-width: min(20rem, 90vw);
+}
+
 [data-slot="chip-search"] {
   margin: var(--ade-space-3);
   padding: var(--ade-space-2) var(--ade-space-3);

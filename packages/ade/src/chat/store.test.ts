@@ -422,6 +422,29 @@ describe("the chat's store", () => {
     expect(server.calls("POST", /^\/session\/ses_nuova\/abort$/)).toHaveLength(1)
   })
 
+  /* Composer-chip, pezzo 3: the effort chip's level goes with the message only when the model has it. */
+  test("the effort is sent as the variant only when the model has that level", async () => {
+    const server = fakeServer()
+    server.routes.providers = {
+      providers: [
+        {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter", variants: { none: {}, thinking: {} } } },
+        },
+      ],
+      default: {},
+    }
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const id = await store.send(undefined, "Pensa", FREE, undefined, [], "thinking")
+    await store.send(id, "Forte", FREE, undefined, [], "high")
+    await store.send(id, "Normale", FREE)
+    const bodies = server.calls("POST", /\/prompt_async$/).map((call) => JSON.parse(call.body!) as { variant?: string })
+    expect(bodies.map((body) => body.variant)).toEqual(["thinking", undefined, undefined])
+  })
+
   /* A model the server does not have: said before anything is sent, not a turn that never answers. */
   test("a model missing from the catalog, or whose provider is not connected, is refused before anything is sent", async () => {
     const server = fakeServer()

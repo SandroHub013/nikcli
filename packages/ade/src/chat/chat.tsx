@@ -23,10 +23,12 @@ import {
   defaultModelChoice,
   isAdeTestBuild,
   modelsFromConfigProviders,
+  recentModels,
   rememberModel,
   sameModel,
   serializeModelRef,
   validateSelectedModel,
+  variantsOf,
   type ChatAgentChoice,
   type ChatModelChoice,
   type ModelRef,
@@ -62,9 +64,15 @@ import {
 } from "./sessions"
 import { appChatStore, type ChatStore } from "./store"
 import "./chat.css"
+import { ChipMenu } from "./chip-menu"
+import { ModelPicker } from "./model-picker"
+import { EffortPicker } from "./effort-picker"
+import type { ModelSourceState } from "./model-source"
+import { effortValue } from "./picker"
 
 const MODEL_KEY = "ade.chat.model"
 const AGENT_KEY = "ade.chat.agent"
+const EFFORT_KEY = "ade.chat.effort"
 // The direct path's old conversation (`legacy.ts`) goes the first time the Chat starts in this window.
 let legacyForgotten = false
 
@@ -121,6 +129,41 @@ export function Chat(props: ChatProps) {
   const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(agentsFromList(props.agents))
   const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
   const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
+  // The effort last chosen; sent only when the model has it (`effortValue`).
+  const [effort, setEffort] = createSignal<string>(
+    (() => {
+      try {
+        return localStorage.getItem(EFFORT_KEY) ?? ""
+      } catch {
+        return ""
+      }
+    })(),
+  )
+  /** The chosen model's levels: none, or not known, and there is no effort chip. */
+  const levels = () => {
+    const ref = model()
+    return ref ? variantsOf(models(), ref) : undefined
+  }
+  /*
+   * The model chip's list: the catalog read when its menu opens, through the
+   * folder's first use (C9). While it comes the chip says the current model;
+   * if the folder could not be opened, the menu says so and offers Riprova.
+   */
+  const [catalogAsked, setCatalogAsked] = createSignal<ModelSourceState>({ kind: "idle" })
+  const modelState = (): ModelSourceState => (models().length > 0 ? { kind: "ready", models: models() } : catalogAsked())
+  const openCatalog = async () => {
+    if (models().length > 0 || catalogAsked().kind === "loading") return
+    setCatalogAsked({ kind: "loading" })
+    const opened = await use().catch(() => false)
+    setCatalogAsked(opened ? { kind: "ready", models: models() } : { kind: "failed", reason: t("picker.notConnected") })
+  }
+  const recent = () => {
+    try {
+      return recentModels(localStorage, props.projectRoot)
+    } catch {
+      return []
+    }
+  }
   const [opened, setOpened] = createSignal<OpenSession>({ seen: false })
   const setCurrent = (id: string | undefined) => setOpened({ id, seen: false })
   const [sending, setSending] = createSignal(false)
@@ -339,7 +382,9 @@ export function Chat(props: ChatProps) {
         setProblem(t("chat.model.choose"))
         return
       }
-      const id = await store.send(open(), text, ref, agent() || undefined, attachmentParts(attachments()))
+      // Only a level this model has: the chip cannot choose another, and one saved for another model is not sent.
+      const variant = effortValue(effort(), levels()) || undefined
+      const id = await store.send(open(), text, ref, agent() || undefined, attachmentParts(attachments()), variant)
       setCurrent(id)
       setDraft("")
       setAttachments([])
@@ -369,6 +414,15 @@ export function Chat(props: ChatProps) {
     }
   }
 
+  const chooseEffort = (level: string) => {
+    setEffort(level)
+    try {
+      localStorage.setItem(EFFORT_KEY, level)
+    } catch {
+      // This session keeps the choice regardless.
+    }
+  }
+
   const chooseAgent = (name: string) => {
     setAgent(name)
     try {
@@ -393,48 +447,6 @@ export function Chat(props: ChatProps) {
   return (
     <section data-component="ade-chat">
       <header data-slot="chat-head">
-        <div data-slot="chat-selectors">
-          <select
-            data-slot="chat-agent"
-            value={agent() || ""}
-            onFocus={() => void use()}
-            onChange={(event) => chooseAgent(event.currentTarget.value)}
-            aria-label={t("chat.agent.label")}
-          >
-            <Show when={agents().length === 0}>
-              <option value="" disabled selected>
-                {t("chat.agent.none")}
-              </option>
-            </Show>
-            <For each={agents()}>{(entry) => <option value={entry.name}>{entry.name}</option>}</For>
-            <Show when={agent() && !agents().some((entry) => entry.name === agent())}>
-              <option value={agent()}>{agent()}</option>
-            </Show>
-          </select>
-
-          <select
-            data-slot="chat-model"
-            value={model() ? serializeModelRef(model()!) : ""}
-            onFocus={() => void use()}
-            onChange={(event) => chooseModel(event.currentTarget.value)}
-            aria-label={t("chat.model.label")}
-          >
-            <Show when={models().length === 0}>
-              <option value="" disabled selected>
-                {t("chat.model.none")}
-              </option>
-            </Show>
-            <Show when={models().length > 0 && !model()}>
-              <option value="" disabled selected>
-                {t("chat.model.choose")}
-              </option>
-            </Show>
-            <For each={models()}>{(entry) => <option value={serializeModelRef(entry)}>{entry.label}</option>}</For>
-            <Show when={model() && !models().some((entry) => sameModel(entry, model()))}>
-              <option value={serializeModelRef(model()!)}>{serializeModelRef(model()!)}</option>
-            </Show>
-          </select>
-        </div>
         <div data-slot="chat-head-actions">
           <button type="button" data-slot="chat-action" disabled={open() === undefined} onClick={newSession}>
             {t("chat.new")}
@@ -569,15 +581,6 @@ export function Chat(props: ChatProps) {
           </Show>
 
           <div data-slot="chat-composer">
-            <button
-              type="button"
-              data-slot="chat-attach"
-              title={t("chat.attach.addHint")}
-              disabled={!props.projectRoot || foreign()}
-              onClick={() => void attach()}
-            >
-              {t("chat.attach.add")}
-            </button>
             <textarea
               ref={(el) => (composer = el)}
               data-slot="chat-input"
@@ -599,23 +602,70 @@ export function Chat(props: ChatProps) {
               onBlur={closeMention}
               onKeyDown={onKeyDown}
             />
-            <Show
-              when={answering() && !foreign()}
-              fallback={
-                <button
-                  type="button"
-                  data-slot="chat-send"
-                  disabled={!draft().trim() || !canSend()}
-                  onClick={() => void send()}
-                >
-                  {t("chat.send")}
-                </button>
-              }
-            >
-              <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
-                {t("chat.stop")}
+            {/*
+              Under the field, the chips (composer-chip, pezzo 3): «il tasto
+              nella zona dove scrivo». The agent, the model and, when the
+              model has levels, the effort; each reads the catalog when it
+              opens, and sends only what the model has.
+            */}
+            <div data-slot="chat-composer-row">
+              <button
+                type="button"
+                data-slot="chat-attach"
+                aria-label={t("chat.attach.addHint")}
+                title={t("chat.attach.addHint")}
+                disabled={!props.projectRoot || foreign()}
+                onClick={() => void attach()}
+              >
+                +
               </button>
-            </Show>
+              <ChipMenu
+                kind="agent"
+                label={t("chat.agent.label")}
+                text={agent() || t("chat.agent.none")}
+                value={agent()}
+                items={agents().map((entry) => ({
+                  kind: "option" as const,
+                  value: entry.name,
+                  label: entry.name,
+                  ...(entry.description ? { hint: entry.description } : {}),
+                }))}
+                empty={t("chat.agent.none")}
+                disabled={foreign()}
+                onOpen={() => void use()}
+                onChoose={chooseAgent}
+              />
+              <ModelPicker
+                label={t("chat.model.label")}
+                value={model() ? serializeModelRef(model()!) : ""}
+                models={models()}
+                state={modelState()}
+                recent={recent()}
+                disabled={foreign()}
+                onOpen={() => void openCatalog()}
+                onRetry={() => void openCatalog()}
+                onChoose={chooseModel}
+              />
+              <EffortPicker value={effort()} levels={levels()} disabled={foreign()} onChoose={chooseEffort} />
+              <span data-slot="chat-composer-gap" />
+              <Show
+                when={answering() && !foreign()}
+                fallback={
+                  <button
+                    type="button"
+                    data-slot="chat-send"
+                    disabled={!draft().trim() || !canSend()}
+                    onClick={() => void send()}
+                  >
+                    {t("chat.send")}
+                  </button>
+                }
+              >
+                <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
+                  {t("chat.stop")}
+                </button>
+              </Show>
+            </div>
           </div>
         </div>
       </div>
