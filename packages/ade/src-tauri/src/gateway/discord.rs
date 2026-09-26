@@ -708,52 +708,79 @@ async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inb
                             if let Some(seq) = frame.s {
                                 adapter.shared.note_seq(seq);
                             }
-                            let kind = frame.t.clone().unwrap_or_default();
-                            match kind.as_str() {
-                                "READY" => {
-                                    let session_id = frame.d["session_id"].as_str().unwrap_or_default().to_string();
-                                    if !session_id.is_empty() {
-                                        if let Some(id) = id_text(&frame.d["user"]["id"]) {
-                                            *hold(&adapter.shared.bot) = Some(id);
+                            // On the opcode first: only a dispatch carries the
+                            // name of an event. HEARTBEAT, RECONNECT,
+                            // INVALID_SESSION and HEARTBEAT_ACK arrive with a
+                            // null event, and reading them by name meant the
+                            // acknowledgement never arrived, so every socket
+                            // looked dead at the second beat.
+                            match frame.op {
+                                // A dispatch, named by its event.
+                                0 => {
+                                    let kind = frame.t.clone().unwrap_or_default();
+                                    match kind.as_str() {
+                                        "READY" => {
+                                            let session_id =
+                                                frame.d["session_id"].as_str().unwrap_or_default().to_string();
+                                            if !session_id.is_empty() {
+                                                if let Some(id) = id_text(&frame.d["user"]["id"]) {
+                                                    *hold(&adapter.shared.bot) = Some(id);
+                                                }
+                                                let resume_url = frame.d["resume_gateway_url"]
+                                                    .as_str()
+                                                    .unwrap_or(&address)
+                                                    .to_string();
+                                                adapter.shared.remember(Session {
+                                                    session_id,
+                                                    seq: 0,
+                                                    resume_url,
+                                                    at_ms: adapter.now(),
+                                                });
+                                            }
+                                            adapter.shared.mark_ready();
                                         }
-                                        let resume_url = frame.d["resume_gateway_url"].as_str().unwrap_or(&address).to_string();
-                                        adapter.shared.remember(Session {
-                                            session_id,
-                                            seq: 0,
-                                            resume_url,
-                                            at_ms: adapter.now(),
-                                        });
+                                        "RESUMED" => adapter.shared.mark_ready(),
+                                        "MESSAGE_CREATE" => {
+                                            if let Some(inbound) = to_inbound(&frame.d, &adapter.shared) {
+                                                if sender.send(Ok(inbound)).await.is_err() {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        "INTERACTION_CREATE" => {
+                                            if let Some(press) = to_press(&frame.d) {
+                                                let _ = sender.send(Ok(press)).await;
+                                            }
+                                        }
+                                        _ => {}
                                     }
-                                    adapter.shared.mark_ready();
                                 }
-                                // Discord asking for a heartbeat at once means
-                                // it is about to drop this socket: answer now.
-                                "HEARTBEAT" => {
+                                // Discord asking for a beat at once: it is about
+                                // to drop this socket, so the answer goes now.
+                                1 => {
                                     if sink.send(Message::Text(json!({ "op": 1, "d": null }).to_string().into())).await.is_err() {
                                         break;
                                     }
                                     acked = false;
                                 }
-                                "HEARTBEAT_ACK" => acked = true,
-                                "MESSAGE_CREATE" => {
-                                    if let Some(inbound) = to_inbound(&frame.d, &adapter.shared) {
-                                        if sender.send(Ok(inbound)).await.is_err() {
-                                            break;
-                                        }
+                                // Discord wants the socket back: reconnect and
+                                // resume, which is what the outer loop does.
+                                7 => break,
+                                // The session is no longer good. A false in the
+                                // payload means it cannot be resumed at all.
+                                9 => {
+                                    let resumable = frame.d.as_bool().unwrap_or(false);
+                                    if !resumable {
+                                        adapter.shared.forget_session();
                                     }
-                                }
-                                "INTERACTION_CREATE" => {
-                                    if let Some(press) = to_press(&frame.d) {
-                                        let _ = sender.send(Ok(press)).await;
-                                    }
-                                }
-                                "RESUMED" => adapter.shared.mark_ready(),
-                                // A session the other end will not resume: the
-                                // only way on is a new identify.
-                                "INVALID_SESSION" => {
-                                    adapter.shared.forget_session();
+                                    // Discord asks for one to five seconds
+                                    // before trying again, so that a gateway
+                                    // that is restarting is not hammered.
+                                    tokio::time::sleep(Duration::from_millis(1000)).await;
                                     break;
                                 }
+                                // The beat arrived: the socket is alive.
+                                11 => acked = true,
                                 _ => {}
                             }
                         }
@@ -1078,6 +1105,7 @@ mod tests {
         address: String,
         seen: Arc<Mutex<Vec<Value>>>,
         queue: Arc<Mutex<VecDeque<Vec<Ws>>>>,
+        acking: Arc<AtomicBool>,
     }
 
     impl FakeGateway {
@@ -1090,6 +1118,8 @@ mod tests {
             // The thread takes the queue by move: the fake keeps a copy of its
             // own, so a test can add frames after the thread has started.
             let mine = queue.clone();
+            let acking = Arc::new(AtomicBool::new(false));
+            let for_the_fake = acking.clone();
             std::thread::spawn(move || {
                 let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
                 for incoming in listener.incoming() {
@@ -1101,46 +1131,62 @@ mod tests {
                     }
                     let queue = queue.clone();
                     let seen = thread_seen.clone();
+                    let acking = acking.clone();
                     // One connection at a time: the client reconnects after the
                     // one before it is gone.
                     runtime.block_on(async move {
                         let Ok(stream) = tokio::net::TcpStream::from_std(stream) else { return };
                         let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else { return };
                         let (mut sink, mut source) = socket.split();
-                        let reader_seen = seen.clone();
-                        let reader = tokio::spawn(async move {
-                            while let Some(Ok(frame)) = source.next().await {
-                                if let Ws::Text(text) = frame {
-                                    if let Ok(parsed) = serde_json::from_str::<Value>(text.as_ref()) {
-                                        reader_seen.lock().unwrap().push(parsed);
-                                    }
-                                }
-                            }
-                        });
-                        // One list per connection: the frames for the next
-                        // one are still waiting for the next one.
+                        // One list per connection: the frames for the next one
+                        // are still waiting for the next one.
                         let frames = queue.lock().unwrap().pop_front().unwrap_or_default();
                         for frame in frames {
                             if sink.send(frame).await.is_err() {
-                                break;
+                                return;
                             }
                         }
-                        // The client answers the Hello, resumes or identifies,
-                        // and beats: the connection stays open long enough for
-                        // those to arrive and be recorded.
-                        tokio::time::sleep(Duration::from_millis(700)).await;
+                        // Then read and answer for a while: the client answers
+                        // the Hello, resumes or identifies, and beats, and this
+                        // is where a beat gets its op 11 the way Discord sends
+                        // it. One loop, because the writer has to be here to
+                        // answer and the reader has to be here to see.
+                        let until = tokio::time::Instant::now() + Duration::from_millis(900);
+                        loop {
+                            tokio::select! {
+                                incoming = source.next() => {
+                                    let Some(Ok(frame)) = incoming else { break };
+                                    let Ws::Text(text) = frame else { continue };
+                                    let Ok(parsed) = serde_json::from_str::<Value>(text.as_ref()) else { continue };
+                                    if parsed["op"].as_i64() == Some(1) && acking.load(Ordering::SeqCst) {
+                                        let ack = json!({ "op": 11, "d": null, "t": null, "s": null });
+                                        if sink.send(Ws::Text(ack.to_string().into())).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    seen.lock().unwrap().push(parsed);
+                                }
+                                _ = tokio::time::sleep_until(until) => break,
+                            }
+                        }
                         // The stream is split, so this is the sink's own close.
                         let _ = sink.close().await;
-                        reader.abort();
                     });
                 }
             });
-            FakeGateway { address, seen, queue: mine }
+            FakeGateway { address, seen, queue: mine, acking: for_the_fake }
         }
 
         /// Says what the next connection will be sent.
         fn push(&self, frames: Vec<Ws>) {
             self.queue.lock().unwrap().push_back(frames);
+        }
+
+        /// Whether a connection answers every beat with an op 11, as Discord
+        /// does. Without it a socket looks dead at the second beat, which is
+        /// what the old tests were really measuring.
+        fn acking(&self, on: bool) {
+            self.acking.store(on, Ordering::SeqCst);
         }
 
         fn frames(&self) -> Vec<Value> {
@@ -1790,6 +1836,96 @@ mod tests {
             // The session was not spent, so it is resumed rather than started
             // over: an identify here would spend one of the thousand a day.
             assert!(gateway.wait_for(6, 1).await, "il codice {code} deve essere ritentato con la ripresa");
+        }
+    }
+
+    /* The opcodes, which are not events. */
+
+    #[tokio::test]
+    async fn a_socket_that_is_answered_stays_open_for_five_beats() {
+        // The bug this catches: the acknowledgement is an opcode, not an event,
+        // so reading it by name meant every socket looked dead at the second
+        // beat and the gateway resumed for ever. A server that answers op 11
+        // every time, as Discord does, and the socket has to still be the same
+        // one after five intervals.
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        // Forty milliseconds a beat, so five of them are a moment.
+        gateway.push(vec![hello(40), ready("S5", &gateway.address)]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        gateway.acking(true);
+        start(&discord).await;
+        for _ in 0..300 {
+            if gateway.ops(1) >= 6 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(gateway.ops(1) >= 5, "il socket deve battere: ne ha mandati {}", gateway.ops(1));
+        assert_eq!(gateway.ops(6), 0, "un socket sano non si riprende");
+        assert_eq!(gateway.ops(2), 1, "un socket sano si identifica una volta sola");
+    }
+
+    #[tokio::test]
+    async fn a_beat_asked_for_by_discord_is_answered_at_once() {
+        // op 1 from the server: Discord wants a beat now. The client answers
+        // without waiting for its own turn.
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        gateway.push(vec![hello(60_000), ready("S1", &gateway.address)]);
+        gateway.push(vec![Ws::Text(json!({ "op": 1, "d": null, "t": null, "s": null }).to_string().into())]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 0);
+        start(&discord).await;
+        // One beat is the answer to the one that was asked for; the interval is
+        // a minute, so any second beat could only be the answer.
+        assert!(gateway.wait_for(1, 1).await, "op 1 dal server resta senza risposta");
+    }
+
+    #[tokio::test]
+    async fn a_reconnect_asked_for_by_discord_resumes_the_session() {
+        // op 7: Discord wants the socket back. The session is good, so the next
+        // connection resumes it rather than spending an identify.
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        gateway.push(vec![
+            hello(60_000),
+            ready("S7", &gateway.address),
+            Ws::Text(json!({ "op": 7, "d": null, "t": null, "s": null }).to_string().into()),
+        ]);
+        gateway.push(vec![hello(60_000)]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        gateway.acking(true);
+        start(&discord).await;
+        assert!(gateway.wait_for(6, 1).await, "op 7 non porta a riprendere la sessione");
+        let resume = gateway.op(6).expect("resume");
+        assert_eq!(resume["d"]["session_id"], "S7");
+    }
+
+    #[tokio::test]
+    async fn a_session_discord_will_not_resume_opens_a_new_one() {
+        // op 9 with false: the session is not resumable, so the next connection
+        // has to identify. Discord asks for one to five seconds first.
+        for (payload, still_good, name) in [
+            (json!({ "op": 9, "d": false, "t": null, "s": null }), false, "non riprendibile"),
+            (json!({ "op": 9, "d": true, "t": null, "s": null }), true, "ancora riprendibile"),
+        ] {
+            let rest = FakeRest::start(vec![]);
+            let gateway = FakeGateway::start(vec![]);
+            gateway.push(vec![hello(60_000), ready("S9", &gateway.address), Ws::Text(payload.to_string().into())]);
+            gateway.push(vec![hello(60_000)]);
+            let discord = adapter(&rest, &gateway);
+            set_jitter(&discord, 500);
+            gateway.acking(true);
+            start(&discord).await;
+            if still_good {
+                assert!(gateway.wait_for(6, 1).await, "{name}: la sessione si riprende");
+            } else {
+                assert!(gateway.wait_for(2, 1).await, "{name}: si identifica di nuovo");
+                assert_eq!(gateway.op(6), None, "{name}: la sessione non viene ripresa");
+            }
         }
     }
 }
