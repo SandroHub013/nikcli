@@ -605,9 +605,11 @@ enum Ending {
 /// One run of the socket: connect, resume or identify, read, heartbeat, until
 /// the socket closes or the user is told why it cannot go on.
 async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inbound, AdapterError>>, first: &str) -> Ending {
-    let now = adapter.now();
     let mut fresh_identifies = 0usize;
     loop {
+        // Read at every turn, not once at the start: a session that lives for
+        // days has to age, or a cursor from yesterday still looks resumable.
+        let now = adapter.now();
         // A session that came up puts the count of failed attempts back to
         // zero: what the budget is there to stop is a socket that never starts.
         if adapter.shared.take_ready() {
@@ -749,6 +751,13 @@ async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inb
                                         }
                                         "INTERACTION_CREATE" => {
                                             if let Some(press) = to_press(&frame.d) {
+                                                // Answered here, on the spot: Discord
+                                                // wants the confirmation within three
+                                                // seconds, and the hub may be busy.
+                                                if let Some((path, body)) = confirm_press(&frame.d) {
+                                                    let _ =
+                                                        adapter.call(reqwest::Method::POST, &path, Some(&body)).await;
+                                                }
                                                 let _ = sender.send(Ok(press)).await;
                                             }
                                         }
@@ -837,9 +846,10 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
     Some(Inbound {
         id: id_text(&d["id"])?,
         chat,
-        // A direct message is a conversation the user opened; a channel needs
-        // the bot named in it, or the bot would answer a room it sits in.
-        private: d["channel_type"].as_i64() == Some(1),
+        // A direct message is a conversation the user opened, and it belongs to
+        // no guild; a channel needs the bot named in it, or the bot would
+        // answer a room it sits in.
+        private: d["guild_id"].is_null(),
         mentioned: shared.bot_id().is_some_and(|id| names_bot(text, &id)),
         sender: Sender {
             id: id_text(&author["id"])?,
@@ -850,6 +860,21 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
         text: text.to_string(),
         button: false,
     })
+}
+
+/// The confirmation an interaction has to be given: Discord expects one
+/// within three seconds, and shows «Interazione non riuscita» without it.
+///
+/// The token in the path is a temporary credential, so it goes nowhere else:
+/// not in a log, not in an error.
+///
+/// Returns the path to post to and the body to post.
+fn confirm_press(d: &Value) -> Option<(String, Value)> {
+    let id = id_text(&d["id"])?;
+    let token = d["token"].as_str()?;
+    // 6 is DEFERRED_UPDATE_MESSAGE: the button is answered, the message stays
+    // as it is for ADE to edit later.
+    Some((format!("/interactions/{id}/{token}/callback"), json!({ "type": 6 })))
 }
 
 /// A button press: not a message, and the data comes back as the text.
@@ -865,7 +890,9 @@ fn to_press(d: &Value) -> Option<Inbound> {
     Some(Inbound {
         id: id_text(&d["id"])?,
         chat: id_text(&d["channel_id"])?,
-        private: d["channel_type"].as_i64() == Some(1),
+        // An interaction has no channel type of its own: what tells a private
+        // chat is that it belongs to no guild.
+        private: d["guild_id"].is_null(),
         mentioned: false,
         sender: Sender { id: id_text(&who["id"])?, name, is_bot: false },
         text: data.to_string(),
@@ -933,14 +960,15 @@ impl Adapter for Discord {
         let Some(first) = all.first() else {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
         };
-        // An edit keeps whatever the message already had, mentions included,
-        // and there is nothing here to replace, so no field is sent but the
-        // text: the mention list of a replaced answer is its own.
+        // Discord works the mentions of an edited message out of the new text with
+        // its own default, so the same "nothing is a mention" goes here as on
+        // every other message this adapter sends.
+        let body = Discord::body(first);
         if let Err(failure) = self
             .call_patiently(
                 reqwest::Method::PATCH,
                 &format!("/channels/{chat}/messages/{message}"),
-                Some(&json!({ "content": first })),
+                Some(&body),
             )
             .await
         {
@@ -951,13 +979,12 @@ impl Adapter for Discord {
                 return Err(failure.for_sending());
             }
         }
-        // What does not fit in one message goes on after it, never cut off.
-        let mut last = message.to_string();
-        for piece in &all[1..] {
-            last = self.post(chat, &Discord::body(piece)).await.map_err(Failure::for_sending)?;
-        }
+        // Only the first piece: an edit is the live text, and posting the rest
+        // on every call would flood the channel as the text grows, once per
+        // update. What does not fit goes out once, at the end of the turn, with
+        // the sending call.
         hold(&self.shared.preview).insert(key, text.to_string());
-        Ok(last)
+        Ok(message.to_string())
     }
 
     async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
@@ -1230,10 +1257,13 @@ mod tests {
         )
     }
 
-    fn message(id: &str, channel: &str, channel_type: i64, author: &str, text: &str) -> Ws {
+    /// A message as Discord sends it. `guild` is the server it was written
+    /// in, and a direct message has none: that is what tells the two apart.
+    fn message(id: &str, channel: &str, guild: Option<&str>, author: &str, text: &str) -> Ws {
         Ws::Text(
             json!({ "op": 0, "t": "MESSAGE_CREATE", "s": 2, "d": {
-                "id": id, "channel_id": channel, "channel_type": channel_type,
+                "id": id, "channel_id": channel,
+                "guild_id": guild.map(Value::from).unwrap_or(Value::Null),
                 "content": text,
                 "author": { "id": author, "username": "qualcuno", "bot": false },
             } })
@@ -1309,7 +1339,7 @@ mod tests {
     fn a_group_message_is_answered_only_when_it_names_the_bot() {
         let shared = shared();
         let named: Value = json!({
-            "id": "c1", "channel_id": "ch1", "channel_type": 0,
+            "id": "c1", "channel_id": "ch1", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let named = to_inbound(&named, &shared).expect("messaggio");
@@ -1318,7 +1348,7 @@ mod tests {
         assert!(admits(&named));
 
         let quiet: Value = json!({
-            "id": "c2", "channel_id": "ch1", "channel_type": 0,
+            "id": "c2", "channel_id": "ch1", "guild_id": "9001",
             "content": "si parla di altro", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let quiet = to_inbound(&quiet, &shared).expect("messaggio");
@@ -1326,7 +1356,7 @@ mod tests {
         assert!(!admits(&quiet), "senza menzione il canale non e' per il bot");
 
         let direct: Value = json!({
-            "id": "c3", "channel_id": "d1", "channel_type": 1,
+            "id": "c3", "channel_id": "d1", "guild_id": Value::Null,
             "content": "ciao", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let direct = to_inbound(&direct, &shared).expect("messaggio");
@@ -1340,7 +1370,7 @@ mod tests {
         // that trust the list answer each other for ever.
         let shared = shared();
         let quoted: Value = json!({
-            "id": "c9", "channel_id": "ch1", "channel_type": 0,
+            "id": "c9", "channel_id": "ch1", "guild_id": "9001",
             "content": "come stai?",
             "mentions": [{ "id": BOT }],
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
@@ -1352,12 +1382,12 @@ mod tests {
     fn a_bot_and_a_webhook_are_never_answered() {
         let shared = shared();
         let from_bot: Value = json!({
-            "id": "b1", "channel_id": "d1", "channel_type": 1, "content": "ciao",
+            "id": "b1", "channel_id": "d1", "content": "ciao",
             "author": { "id": "u2", "username": "robot", "bot": true },
         });
         assert!(to_inbound(&from_bot, &shared).expect("messaggio").sender.is_bot);
         let from_hook: Value = json!({
-            "id": "b2", "channel_id": "d1", "channel_type": 1, "content": "ciao",
+            "id": "b2", "channel_id": "d1", "content": "ciao",
             "webhook_id": "w1", "author": { "id": "u3", "username": "hook", "bot": false },
         });
         assert!(to_inbound(&from_hook, &shared).expect("messaggio").sender.is_bot);
@@ -1369,7 +1399,7 @@ mod tests {
         // Without MESSAGE_CONTENT a guild message the bot was not named in
         // arrives with no text at all: it must not become an empty turn.
         let empty: Value = json!({
-            "id": "m2", "channel_id": "ch1", "channel_type": 0, "content": "",
+            "id": "m2", "channel_id": "ch1", "guild_id": "9001", "content": "",
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         assert!(to_inbound(&empty, &shared).is_none());
@@ -1503,18 +1533,104 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_edit_too_long_goes_on_in_new_messages_and_returns_the_last_id() {
-        let rest = FakeRest::start(vec![
-            ok(&json!({ "id": "7" }).to_string()),
-            ok(&json!({ "id": "8" }).to_string()),
-            ok(&json!({ "id": "9" }).to_string()),
-        ]);
+    async fn a_long_edit_moves_only_its_first_piece() {
+        // An edit is the live text. Posting the rest on every call would put one
+        // message more in the channel each time the text grows, which with a
+        // streaming preview is a flood. What does not fit goes out once, at the
+        // end of the turn, with the sending call.
+        let rest = FakeRest::start(vec![ok("{}"), ok(&json!({ "id": "8" }).to_string())]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         let last = discord.edit("ch1", "7", &"d".repeat(4500)).await.expect("modificato");
-        assert_eq!(rest.count(), 3, "una modifica e i due pezzi che non ci stanno");
-        assert_eq!(last, "9", "l'id di chi tiene la fine del testo");
+        assert_eq!(rest.count(), 1, "una modifica e nient'altro");
+        assert_eq!(last, "7", "l'id non cambia: e' la stessa risposta che si aggiorna");
         assert!(rest.requests()[0].0.contains("PATCH"));
+        let body = rest.body_of(0);
+        let content = body["content"].as_str().unwrap_or_default();
+        assert!(characters(content) <= MAX_LEN, "il pezzo mandato resta nel limite");
+    }
+
+    /// A press as Discord sends it, with the fields the documents give it:
+    /// an id, a token, the guild it happened in, and the author either under
+    /// `member` in a server or directly in a private chat.
+    fn interaction(guild: bool) -> Value {
+        let who = json!({ "id": "u1", "username": "qualcuno", "global_name": "Qualcuno" });
+        json!({
+            "id": "5001",
+            "application_id": "3001",
+            "type": 3,
+            "token": "TOKEN-INTERAZIONE-DA-NON-MOSTRARE",
+            "version": 1,
+            "channel_id": "ch1",
+            "guild_id": if guild { json!("9001") } else { Value::Null },
+            "member": if guild { json!({ "user": who }) } else { Value::Null },
+            "user": if guild { Value::Null } else { who },
+            "data": { "custom_id": "continua", "component_type": 2 },
+            "message": { "id": "4001", "content": "vuoi continuare?" },
+        })
+    }
+
+    #[tokio::test]
+    async fn a_press_is_confirmed_and_a_private_one_is_a_chat_with_no_guild() {
+        // The fake refuses, so there is an error to look at.
+        let rest = FakeRest::start(vec![unauthorized(&json!({ "message": "401: Unauthorized" }).to_string())]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        // A press in a private chat: no guild, the author at the top level.
+        let press = to_press(&interaction(false)).expect("pressione");
+        assert!(press.private, "una interazione privata non ha guild_id");
+        assert!(admits(&press), "una pressione in privato deve passare: e' il caso di G5");
+        // And it is confirmed, with the deferred type, on the documented path.
+        let (path, body) = confirm_press(&interaction(false)).expect("conferma");
+        assert_eq!(path, "/interactions/5001/TOKEN-INTERAZIONE-DA-NON-MOSTRARE/callback");
+        assert_eq!(body["type"], 6);
+        // The token of the interaction is a credential and stays out of errors.
+        let error = discord
+            .call(reqwest::Method::POST, "/interactions/5001/xyz/callback", Some(&body))
+            .await
+            .err()
+            .expect("il finto non risponde a una rotta sconosciuta")
+            .text();
+        assert!(!error.contains("TOKEN-INTERAZIONE"), "il token dell'interazione compare: {error}");
+
+        // In a server the press has a guild, so it is not a private chat: it
+        // gets through because the hub checks the author and the code.
+        let in_server = to_press(&interaction(true)).expect("pressione");
+        assert!(!in_server.private, "una pressione in un canale ha guild_id");
+        assert!(admits(&in_server), "una pressione arriva comunque: e' ADE ad averla messa");
+    }
+
+    #[test]
+    fn a_message_is_private_when_it_belongs_to_no_guild() {
+        let shared = shared();
+        let direct: Value = json!({
+            "id": "m1", "channel_id": "d1", "content": "ciao",
+            // A direct message: no guild. There is no channel type to read.
+            "author": { "id": "u1", "username": "qualcuno", "bot": false },
+        });
+        assert!(to_inbound(&direct, &shared).expect("messaggio").private);
+        let in_server: Value = json!({
+            "id": "m2", "channel_id": "ch1", "guild_id": "9001",
+            "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
+        });
+        let in_server = to_inbound(&in_server, &shared).expect("messaggio");
+        assert!(!in_server.private, "in un canale di un server non e' privato");
+        assert!(in_server.mentioned, "ma la menzione lo abilita");
+    }
+
+    #[tokio::test]
+    async fn an_edit_carries_no_mentions_either() {
+        let rest = FakeRest::start(vec![ok("{}")]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        discord.edit("ch1", "7", "@everyone guardate").await.expect("modificato");
+        let body = rest.body_of(0);
+        assert!(body["content"].as_str().unwrap_or_default().contains("@everyone"));
+        assert_eq!(
+            body["allowed_mentions"]["parse"],
+            json!([]),
+            "un edit ricalcola le menzioni dal testo nuovo: devono essere spente anche li'"
+        );
     }
 
     #[tokio::test]
@@ -1713,7 +1829,7 @@ mod tests {
         let gateway = FakeGateway::start(vec![vec![
             hello(60_000),
             ready("S1", "ws://x"),
-            message("m1", "d1", 1, "u1", "ciao, sono qui"),
+            message("m1", "d1", None, "u1", "ciao, sono qui"),
         ]]);
         let discord = adapter(&rest, &gateway);
         set_jitter(&discord, 0);

@@ -73,8 +73,13 @@ pub struct Inbound {
 /// without that, the bot would answer every message in a room it happens to sit
 /// in. A platform that cannot tell the two apart says so with `private`, and
 /// the same rule as Telegram applies.
+///
+/// A button is the exception: it is not a message, and it can only be pressed by
+/// someone who is already talking to the bot, who pressed a button ADE itself
+/// put there. The hub checks who may run a turn and that the code is the one it
+/// issued, so a press needs no mention to be answered.
 pub fn admits(inbound: &Inbound) -> bool {
-    inbound.private || inbound.mentioned
+    inbound.private || inbound.mentioned || inbound.button
 }
 
 /// A button under a message: what it shows, and what comes back when pressed.
