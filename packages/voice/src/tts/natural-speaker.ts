@@ -18,6 +18,8 @@
 
 import { markVoice } from "../timing"
 import { cleanForSpeech } from "./clean"
+import { isKokoroVoice } from "../settings/reply-voices"
+import type { ReplyVoice, TtsLocale } from "../settings/model"
 import type { Speaker } from "./speaker"
 
 /**
@@ -81,16 +83,28 @@ export function synthesisLimitMs(state: {
 
 export interface NaturalSpeakerDeps {
   voice: () => string
+  /**
+   * The G2P locale the replies are spoken in, and the only place it comes from.
+   *
+   * Not deduced from the voice id and not the interface's language: a voice is
+   * not a language, and a locale the synthesiser does not know fails on the
+   * sentence rather than on the setting. Required, because a default here would
+   * be a silent Italian on an English machine.
+   */
+  ttsLocale: () => TtsLocale
   /** Whether the voice can speak now, and whether it can ever on this host. */
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
   /** Downloads what the voice needs. Called once per voice, in the background. */
   install: (voice: string) => Promise<void>
   /**
-   * One sentence as WAV bytes. `token` names this request on the host, so
-   * `cancel` can tell it to skip the sentence if the reply is abandoned while
-   * the sentence still waits its turn in the queue.
+   * One unit as WAV bytes. `token` names this request on the host, so `cancel`
+   * can tell it to skip the unit if the reply is abandoned while it still waits
+   * its turn in the queue, and `locale` is the G2P locale to synthesise it in.
+   *
+   * `locale` is last because it was added last, and a Piper bridge does not
+   * read it: a Piper voice is one language, and which one is in its name.
    */
-  synthesize: (voice: string, text: string, token: number) => Promise<ArrayBuffer>
+  synthesize: (voice: string, text: string, token: number, locale: TtsLocale) => Promise<ArrayBuffer>
   /**
    * Abandons the named requests: the host skips their queued sentences at
    * their turn, and the one already being synthesised finishes on its own.
@@ -140,6 +154,127 @@ export function splitSentences(text: string, minLength = 12): string[] {
     else sentences.push(piece)
   }
   return sentences
+}
+
+/**
+ * What one character costs to say: a digit four, anything else one.
+ *
+ * "2026" is said with more words than it is written with, so a first unit of
+ * thirty characters that happens to be a date is three times the work of one
+ * that is not — and the cap is the only thing standing between the user and a
+ * second of silence.
+ */
+function charWeight(character: string): number {
+  return character >= "0" && character <= "9" ? 4 : 1
+}
+
+/** How heavy a piece of text is to speak, in the units K1 measured. */
+export function speechWeight(text: string): number {
+  let weight = 0
+  for (const character of text) weight += charWeight(character)
+  return weight
+}
+
+/** The cap on the first unit, in weight. K1's first unit is a fraction of a second. */
+export const FIRST_UNIT_WEIGHT = 30
+
+/**
+ * Past this cap the progressive cut stops paying.
+ *
+ * A unit of 160 weight is about 2,5 s of audio, and a synthesis costs a fixed
+ * 150 ms plus 0,3 ms per millisecond of it: past that the request is longer
+ * than the audio it produces, and a whole sentence is a better unit than a
+ * piece of one.
+ */
+export const WHOLE_SENTENCES_ABOVE_WEIGHT = 160
+
+/** How much bigger than everything queued so far the next unit may be. */
+export const UNIT_GROWTH = 2.5
+
+/** Where a unit may be cut: a pause is worth more than a word boundary. */
+const CUT_AFTER = ",:;—–)"
+
+/**
+ * The reply as the units the host synthesises, for a voice that is slow to
+ * start.
+ *
+ * Kokoro does not answer with audio it can play while it keeps thinking: a
+ * synthesis is about 150 ms plus three tenths of the audio it produces, and it
+ * produces all of it at once. So the time to the first sound is the time to
+ * synthesise the whole first unit, and a first sentence of three seconds is
+ * three seconds of silence in front of the answer. K1 measured it on this
+ * machine: a flat 60-character cut left gaps, and a first unit under a cap that
+ * grows with what is already queued left none.
+ *
+ * The cap grows, and that is the point: the first unit is short because the
+ * user is waiting, and the second may be two and a half times as long because
+ * the first is already playing. Past a unit of 160 weight the units are whole
+ * sentences again, because by then the queue is deep enough to cover the
+ * synthesis of the next.
+ *
+ * Not used for Piper: its sentences already arrive in a fraction of a second,
+ * and a voice that works is not worth re-chopping.
+ */
+export function splitUnits(text: string): string[] {
+  const units: string[] = []
+  /** The weight of everything produced so far: the base the next cap grows from. */
+  let queued = 0
+  for (const sentence of splitSentences(text)) {
+    const cap = queued === 0 ? FIRST_UNIT_WEIGHT : queued * UNIT_GROWTH
+    if (speechWeight(sentence) <= cap || cap > WHOLE_SENTENCES_ABOVE_WEIGHT) {
+      units.push(sentence)
+      queued += speechWeight(sentence)
+      continue
+    }
+    for (const piece of cutTo(sentence, cap)) {
+      units.push(piece)
+      queued += speechWeight(piece)
+    }
+  }
+  return units.filter((unit) => unit.length > 0)
+}
+
+/** `sentence` in pieces of at most `cap` weight each, never ending mid-word. */
+function cutTo(sentence: string, cap: number): string[] {
+  const pieces: string[] = []
+  let rest = sentence.trim()
+  while (speechWeight(rest) > cap) {
+    const head = rest.slice(0, headLength(rest, cap)).trim()
+    if (head.length === 0) break
+    pieces.push(head)
+    rest = rest.slice(head.length).trim()
+  }
+  if (rest.length > 0) pieces.push(rest)
+  return pieces
+}
+
+/** How much of `rest` the first piece takes, in characters. */
+function headLength(rest: string, cap: number): number {
+  const half = cap / 2
+  let weight = 0
+  /** A pause at or before half the cap: better than a space, used second. */
+  let pause = 0
+  /** The last space whose piece still fits in the cap, in weight and not in
+   * characters — a date is three times the words it is written with. */
+  let space = 0
+  /** The first place the cap is passed, for a word too long to fit at all. */
+  let overCap = 0
+  for (let at = 0; at < rest.length; at++) {
+    const character = rest[at]!
+    if (overCap === 0 && weight > cap) overCap = at
+    if (character === " " && weight <= cap) space = at
+    if (CUT_AFTER.includes(character) && rest[at + 1] === " ") {
+      // Past half the cap and at a pause: where a speaker would have breathed.
+      if (weight > half) return at + 1
+      pause = at + 1
+    }
+    weight += charWeight(character)
+  }
+  if (pause > 0) return pause
+  if (space > 0) return space
+  // A single word longer than the cap: cut where the cap is passed, so the
+  // piece still ends somewhere and the next one starts on a character.
+  return overCap > 0 ? overCap : rest.length
 }
 
 export interface NaturalSpeaker extends Speaker {
@@ -272,7 +407,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     inflight.add(token)
     const send = (): Promise<ArrayBuffer> => {
       residentStarted = true
-      return deps.synthesize(voice, sentence, token)
+      return deps.synthesize(voice, sentence, token, deps.ttsLocale())
     }
     const pending = stopping ? stopping.catch(() => {}).then(send) : send()
     const forget = () => {
@@ -346,6 +481,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   }
 
   /**
+   * The reply as the units this voice is played in.
+   *
+   * Whole sentences for Piper, which answers one in a fraction of a second, and
+   * the growing cut for Kokoro, which does not answer until it has synthesised
+   * all of a unit: see `splitUnits`.
+   */
+  function unitsOf(voice: string, text: string): string[] {
+    return (isKokoroVoice(voice as ReplyVoice) ? splitUnits : splitSentences)(text)
+  }
+
+  /**
    * Drops everything of the old reply. The sentences still queued in the host
    * are abandoned there too — they would only delay the next reply — except
    * those kept: the ones already asked for ahead of the reply to come.
@@ -390,7 +536,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         fallbackNotified = false
         if (mine !== generation) return
 
-        const sentences = splitSentences(clean)
+        const sentences = unitsOf(voice, clean)
         // Requested together, played in order: the host works through them while the first plays.
         const audio = sentences.map((sentence) => synthesize(voice, sentence))
         audio.forEach((pending) => pending.catch(() => {}))
@@ -448,7 +594,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       const voice = deps.voice()
       if (voice === "system" || !ready.has(voice)) return
       cancelIdleTimer()
-      for (const sentence of splitSentences(clean)) {
+      for (const sentence of unitsOf(voice, clean)) {
         const key = aheadKey(voice, sentence)
         if (ahead.has(key)) continue
         residentStarted = true

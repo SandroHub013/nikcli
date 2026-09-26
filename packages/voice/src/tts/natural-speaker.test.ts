@@ -19,15 +19,21 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
   const installs: string[] = []
   const events: string[] = []
   const stops: number[] = []
+  /** The locale each synthesis was asked for, in the order they were asked. */
+  const locales: string[] = []
   let installed = true
   const deps: NaturalSpeakerDeps = {
     voice: () => "ugo",
+    ttsLocale: () => "it-IT",
     status: async () => ({ supported: true, installed }),
     install: async (voice) => {
       installs.push(voice)
       installed = true
     },
-    synthesize: async (_voice, text) => wav(text),
+    synthesize: async (_voice, text, _token, locale) => {
+      locales.push(locale)
+      return wav(text)
+    },
     play: async (buffer) => {
       played.push(said(buffer))
     },
@@ -39,7 +45,7 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
     onInstall: (voice, state) => events.push(`${voice}:${state}`),
     ...overrides,
   }
-  return { deps, fallback, played, installs, events, stops, setInstalled: (value: boolean) => (installed = value) }
+  return { deps, fallback, played, installs, events, stops, locales, setInstalled: (value: boolean) => (installed = value) }
 }
 
 describe("tts/natural-speaker", () => {
