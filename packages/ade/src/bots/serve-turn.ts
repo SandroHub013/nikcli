@@ -125,6 +125,8 @@ export interface ServeTurnDeps {
   /** Whether the project at `directory` has an agent file named `identifier` (`.nikcli/agent/<name>.md`). */
   readonly projectHasAgent?: (directory: string, identifier: string) => Promise<boolean>
   readonly now?: () => number
+  /** How long the server's reload is waited for: the catalog's `CATALOG_TIMEOUT_MS` when absent. */
+  readonly reloadTimeoutMs?: number
 }
 
 /** `provider/model` as the server wants it; the model's own id may hold more slashes. */
@@ -266,10 +268,11 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
          * The server reads the agent files once per folder: a bot made, or
          * its words changed, while it runs is not there yet, or not as the
          * file says (Verifiche, bots.serve.noAgent). It reads them again,
-         * without touching its sessions, and is asked once more.
+         * without touching its sessions, and is asked once more. Waited for
+         * as the catalog is: late or failed, the refusal stays as it was.
          */
-        if (problem && server.reload) {
-          await server.reload()
+        const reload = server.reload
+        if (problem && reload && (await within(reload().then(() => true), deps.reloadTimeoutMs ?? CATALOG_TIMEOUT_MS))) {
           agents = await server.agents()
           problem = agentProblem(agents, bot)
         }
