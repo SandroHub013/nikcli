@@ -851,18 +851,33 @@ struct Installer {
     deadline: Option<std::time::Duration>,
 }
 
+/// The providers this installer knows. Anything else is not a provider: the
+/// strings arrive from the interface, and a slot per string is a map that grows
+/// for as long as the app is open. K4 adds `kokoro` here and nowhere else.
+const PROVIDERS: &[&str] = &[PIPER, "kokoro"];
+
+/// Whether this name is a provider this installer can speak for.
+fn is_provider(provider: &str) -> bool {
+    PROVIDERS.contains(&provider)
+}
+
 impl Installer {
+    /// The slot for a provider, and a new one for a name that is not a provider.
+    ///
+    /// The new one is not kept: nobody installs as a name the front end invented,
+    /// so there is nothing to remember, and remembering it is how the map grew.
     fn slot(&self, provider: &str) -> Arc<ProviderSlot> {
-        let mut providers = self.providers.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        providers
-            .entry(provider.to_string())
-            .or_insert_with(|| {
-                Arc::new(ProviderSlot {
-                    lock: Mutex::new(()),
-                    progress: Mutex::new(InstallProgress { provider: provider.to_string(), ..Default::default() }),
-                })
+        let fresh = || {
+            Arc::new(ProviderSlot {
+                lock: Mutex::new(()),
+                progress: Mutex::new(InstallProgress { provider: provider.to_string(), ..Default::default() }),
             })
-            .clone()
+        };
+        if !is_provider(provider) {
+            return fresh();
+        }
+        let mut providers = self.providers.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        providers.entry(provider.to_string()).or_insert_with(fresh).clone()
     }
 
     /// What is known about this provider's install. Never fails: a provider
@@ -1977,6 +1992,24 @@ mod tests {
         // l'utente a cercare permessi che non è lui ad avere.
         assert!(problem.contains("ugo.onnx"), "il messaggio nomina il file: {problem}");
         assert!(!from.exists(), "un .part lasciato è spazzatura che sembra progresso");
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_provider_does_not_stay_in_the_map() {
+        let installer = Installer::default();
+        // Le stringhe arrivano dall'interfaccia: una mappa che cresce per ognuna
+        // cresce per tutta la durata dell'app.
+        for i in 0..500 {
+            installer.progress_of(&format!("provider-{i}"));
+            installer.cancel_of(&format!("provider-{i}"));
+        }
+        assert_eq!(installer.providers.lock().unwrap().len(), 0, "nessuno di quelli è un provider");
+
+        // Quelli che lo sono, invece, ci restano: e uno solo per provider.
+        installer.progress_of(PIPER);
+        installer.progress_of("kokoro");
+        installer.progress_of(PIPER);
+        assert_eq!(installer.providers.lock().unwrap().len(), 2);
     }
 
     #[test]
