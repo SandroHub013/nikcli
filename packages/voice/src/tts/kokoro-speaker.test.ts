@@ -314,6 +314,36 @@ describe("la catena è quella che si prova davvero", () => {
     expect(h.fallback.spoken).toEqual([])
   })
 
+  test("i pezzi della voce abbandonata non restano in coda al posto di quella che segue", async () => {
+    // I pezzi sono chiesti tutti insieme, quindi quando Kokoro non risponte
+    // quelli dopo il primo restano in coda sull'host: la voce dopo deve poter
+    // passare, non aspettare un pezzo che nessuno suona.
+    const cancelled: number[][] = [];
+    const english = [
+      "I opened the session on the parser and the toolchain.",
+      "Then I ran the whole suite on the worktree, twice, because the first run looked green.",
+      "Now I am reading the diff and the numbers again.",
+    ].join(" ");
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: true }),
+      cancel: async (tokens) => {
+        cancelled.push([...tokens])
+      },
+      synthesize: async (voice, text) => {
+        // Kokoro non risponde: nessun pezzo arriva, e gli altri restano in coda
+        // sull'host anche se nessuno li suona.
+        if (voice === "af_heart") throw new Error("runtime crash")
+        return wav(text);
+      },
+    });
+    await createNaturalSpeaker(h.deps).speak(english)
+    // I pezzi di Kokoro dopo quello in corso sono stati annullati, e la risposta
+    // l'ha letta Lessac dall'inizio, tutta quanta e a frasi intere.
+    expect(cancelled.flat().length).toBeGreaterThan(0);
+    expect(h.played.join(" ")).toBe(english);
+    expect(h.fallback.spoken).toEqual([]);
+  });
+
   test("Kokoro che parte a metà: la voce non cambia sotto una risposta già iniziata", async () => {
     const english = [
       "I opened the session on the parser and the toolchain.",

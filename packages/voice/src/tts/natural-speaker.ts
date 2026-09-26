@@ -493,7 +493,14 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   /* Sentences asked for ahead of their turn, by voice and text. */
   const ahead = new Map<string, { token: number; pending: Promise<ArrayBuffer> }>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
-  function synthesize(voice: string, locale: TtsLocale, sentence: string): Promise<ArrayBuffer> {
+  /**
+   * Asks the host for one unit, and hands back the token that names it.
+   *
+   * The token is part of the answer because a reply that gives up on this voice
+   * has to be able to drop the units it is not going to play: they are all queued
+   * in the host, and the next voice in the chain stands behind them.
+   */
+  function synthesize(voice: string, locale: TtsLocale, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
     // The voice is needed again, so a stop in flight has nothing left to free.
     askedFor = true
     residentStarted = true
@@ -501,9 +508,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     const early = ahead.get(key)
     if (early) {
       ahead.delete(key)
-      return early.pending
+      return early
     }
-    return invokeSynthesize(voice, locale, sentence).pending
+    return invokeSynthesize(voice, locale, sentence)
   }
 
   function ensure(voice: string): void {
@@ -577,11 +584,24 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
    * the unit that failed, whether the host refused it or the player would not
    * play it: the two are the same to the caller, which is the rest of the reply
    * in another voice.
+   *
+   * The units that were never played are dropped from the host's queue on the way
+   * out. They were all asked for at once, so after a failure the next voice in
+   * the chain would otherwise stand behind a Kokoro that is not answering: not
+   * heard, but waited for, which is the delay this chain exists to take away.
    */
   async function speakWith(voice: string, units: string[], locale: TtsLocale, mine: number): Promise<number> {
     // Requested together, played in order: the host works through them while the first plays.
-    const audio = units.map((unit) => synthesize(voice, locale, unit));
+    const asked = units.map((unit) => synthesize(voice, locale, unit));
+    const audio = asked.map((entry) => entry.pending);
     audio.forEach((pending) => pending.catch(() => {}));
+    // The one in course finishes alone, so it is left alone too: the host drops
+    // each token when it reaches the front of its own queue.
+    const dropFrom = (index: number): number => {
+      const abandoned = asked.slice(index + 1).map((entry) => entry.token);
+      if (abandoned.length > 0) void deps.cancel?.(abandoned);
+      return index;
+    };
     for (let i = 0; i < units.length; i++) {
       let wav: ArrayBuffer;
       try {
@@ -590,9 +610,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       } catch {
         // Synthesised nothing: the rest of the reply goes out in another voice
         // rather than not at all.
-        return i;
+        return dropFrom(i);
       }
-      if (mine !== generation) return i;
+      if (mine !== generation) return dropFrom(i);
       const controller = new AbortController();
       playing = controller;
       markVoice("audio-start", units[i]);
@@ -600,9 +620,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         await deps.play(wav, controller.signal);
       } catch {
         // Synthesised but not playable: the old voice still gets the words out.
-        return i;
+        return dropFrom(i);
       }
-      if (mine !== generation) return i;
+      if (mine !== generation) return dropFrom(i);
     }
     playing = undefined;
     return units.length;
