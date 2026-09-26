@@ -6,7 +6,7 @@
  * anything that lives in the component is untestable by construction.
  */
 
-import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import type { ConfigProviders, ProviderList, Agent } from "@nikcli-ai/sdk/client"
 import type { ModelRef } from "./store"
 import { t } from "../i18n"
 
@@ -27,6 +27,15 @@ export interface ChatModelChoice {
   /** The model's context window, in tokens, when the provider says it. */
   readonly context?: number
   readonly label: string
+  /**
+   * Its effort levels, nikcli's variants after the configuration's overrides:
+   * only from `/config/providers`. Empty when it has none; absent when the
+   * catalog did not say (`provider.list`).
+   */
+  readonly variants?: readonly string[]
+  /** Whether it reasons, and whether it calls tools, when the catalog says. */
+  readonly reasoning?: boolean
+  readonly tools?: boolean
 }
 
 export interface ChatAgentChoice {
@@ -211,14 +220,60 @@ export function modelsFromProviderList(
   if (!providerList || !Array.isArray(providerList.all)) {
     return []
   }
-
-  const isTest = options?.isTest ?? false
   const connected = Array.isArray(providerList.connected) ? new Set(providerList.connected) : undefined
+  return choicesOf(
+    providerList.all.filter((provider) => provider && (!connected || connected.has(provider.id))),
+    options,
+  )
+}
+
+/**
+ * The one catalog of the Chat and the bots (composer-chip, pezzo 1): the
+ * models of `GET /config/providers`, which lists the providers the server
+ * can run and gives each model its variants after the configuration's
+ * overrides. Same rules as `modelsFromProviderList` for what is a chat model
+ * and what is free; the variants come along, for the effort.
+ */
+export function modelsFromConfigProviders(
+  configured?: ConfigProviders | null,
+  options?: ModelListOptions,
+): readonly ChatModelChoice[] {
+  if (!configured || !Array.isArray(configured.providers)) return []
+  return choicesOf(configured.providers, options, true)
+}
+
+/** The shape both catalogs share: a provider and its models, keyed. */
+interface CatalogProvider {
+  readonly id: string
+  readonly name?: string
+  readonly models?: Readonly<Record<string, CatalogEntry | undefined>>
+}
+
+interface CatalogEntry {
+  readonly id?: string
+  readonly providerID?: string
+  readonly name?: string
+  readonly status?: string
+  readonly cost?: { readonly input?: number; readonly output?: number }
+  readonly limit?: { readonly context?: number }
+  readonly capabilities?: {
+    readonly reasoning?: boolean
+    readonly toolcall?: boolean
+    readonly output?: { readonly text?: boolean }
+  }
+  readonly variants?: Readonly<Record<string, unknown>>
+}
+
+function choicesOf(
+  providers: readonly (CatalogProvider | null | undefined)[],
+  options: ModelListOptions | undefined,
+  withVariants = false,
+): readonly ChatModelChoice[] {
+  const isTest = options?.isTest ?? false
   const result: ChatModelChoice[] = []
 
-  for (const provider of providerList.all) {
+  for (const provider of providers) {
     if (!provider || !provider.models) continue
-    if (connected && !connected.has(provider.id)) continue
     for (const [id, model] of Object.entries(provider.models)) {
       if (!model || model.status === "deprecated") continue
       // The Chat asks a model for text and for tool calls: a text-to-speech or
@@ -235,22 +290,110 @@ export function modelsFromProviderList(
         model.cost && typeof model.cost.input === "number" && typeof model.cost.output === "number"
           ? { input: model.cost.input, output: model.cost.output }
           : undefined
+      const name = readableModelName(model.name || modelId, free)
 
       result.push({
         id: modelId,
         providerID: providerId,
         modelID: modelId,
-        name: model.name || modelId,
+        name,
         providerName: provider.name || providerId,
         free,
         cost,
         ...(typeof model.limit?.context === "number" && model.limit.context > 0 ? { context: model.limit.context } : {}),
-        label: formatModelLabel(model.name || modelId, cost, free),
+        label: formatModelLabel(name, cost, free),
+        ...(withVariants ? { variants: variantNames(model.variants) } : {}),
+        ...(typeof model.capabilities?.reasoning === "boolean" ? { reasoning: model.capabilities.reasoning } : {}),
+        ...(typeof model.capabilities?.toolcall === "boolean" ? { tools: model.capabilities.toolcall } : {}),
       })
     }
   }
 
   return result
+}
+
+/** A variant the configuration turned off is not one (`disabled: true`). */
+function variantNames(variants: Readonly<Record<string, unknown>> | undefined): readonly string[] {
+  return Object.entries(variants ?? {})
+    .filter(([, value]) => !(value && typeof value === "object" && (value as { disabled?: unknown }).disabled === true))
+    .map(([name]) => name)
+}
+
+/**
+ * A model's name to read: without the «(free)» or «:free» its provider puts in
+ * it, since the catalog says free on its own, in the user's language. The
+ * Chat used to show «Qwen3 Coder (free) (gratis)» (chat-bot-facili, prove).
+ * A free model's name ending in the word Free loses it too: «Space Bunny
+ * Free (gratis)» said it twice.
+ */
+export function readableModelName(name: string, free = false): string {
+  const tagless = name
+    .trim()
+    .replace(/\s*\((?:free|gratis)\)\s*$/i, "")
+    .replace(/:free$/i, "")
+    .trim()
+  const plain = free ? tagless.replace(/[\s-]+free$/i, "").trim() : tagless
+  return plain || name.trim()
+}
+
+/**
+ * Whether the server can run `ref`, by `/config/providers`: undefined when
+ * the catalog is not known, and the server decides (`catalogHasModel`).
+ */
+export function configuredHasModel(configured: ConfigProviders | null | undefined, ref: ModelRef): boolean | undefined {
+  if (!configured || !Array.isArray(configured.providers)) return undefined
+  const models = configured.providers.find((provider) => provider?.id === ref.providerID)?.models
+  if (!models) return false
+  return Object.hasOwn(models, ref.modelID) || Object.values(models).some((model) => model?.id === ref.modelID)
+}
+
+/** The effort levels of `ref` in a catalog; undefined when the catalog does not know them. */
+export function variantsOf(models: readonly ChatModelChoice[], ref: ModelRef | undefined): readonly string[] | undefined {
+  if (!ref) return undefined
+  return models.find((model) => sameModel(model, ref))?.variants
+}
+
+// ---------------------------------------------------------------------------
+// Recent models, per project
+// ---------------------------------------------------------------------------
+
+/** Where the recent models of each project are kept (`recentModels`). */
+export const RECENT_MODELS_KEY = "ade.models.recent"
+export const RECENT_MODELS_MAX = 5
+
+export interface RecentStorage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+
+function recentKey(root: string): string {
+  return `${RECENT_MODELS_KEY}:${root.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()}`
+}
+
+/** The models last chosen in `root`, newest first; nothing that cannot be read. */
+export function recentModels(storage: RecentStorage | undefined, root: string | undefined): readonly ModelRef[] {
+  if (!storage || !root) return []
+  try {
+    const parsed = JSON.parse(storage.getItem(recentKey(root)) ?? "[]") as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((raw) => (typeof raw === "string" ? parseModelRef(raw) : undefined))
+      .filter((ref): ref is ModelRef => ref !== undefined)
+      .slice(0, RECENT_MODELS_MAX)
+  } catch {
+    return []
+  }
+}
+
+/** Puts `ref` first among `root`'s recent models, once, and keeps `RECENT_MODELS_MAX`. */
+export function rememberModel(storage: RecentStorage | undefined, root: string | undefined, ref: ModelRef): void {
+  if (!storage || !root) return
+  const next = [ref, ...recentModels(storage, root).filter((kept) => !sameModel(kept, ref))].slice(0, RECENT_MODELS_MAX)
+  try {
+    storage.setItem(recentKey(root), JSON.stringify(next.map(serializeModelRef)))
+  } catch {
+    // Storage full or refused: the recents are a convenience.
+  }
 }
 
 /**

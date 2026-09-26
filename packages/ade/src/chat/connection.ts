@@ -27,7 +27,7 @@
  * no answer, and that request fails as one that can be tried again.
  */
 
-import { createNikcliClient, type NikcliClient, type ProviderList, type Agent } from "@nikcli-ai/sdk/client"
+import { createNikcliClient, type NikcliClient, type ConfigProviders, type Agent } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import { askDialog } from "../host/ask"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "../bots/project-trust"
@@ -36,7 +36,12 @@ import { localTrustStore } from "../bots/trust"
 import { SERVER_BASE, serverFetch, tauriServerBridge, type ServerBridge } from "./transport"
 
 export interface ChatCatalog {
-  readonly providerList?: ProviderList
+  /**
+   * `GET /config/providers`: the providers the server can run, their models
+   * with their variants after the configuration's overrides (composer-chip,
+   * pezzo 1). It took the place of `GET /provider`, the raw registry.
+   */
+  readonly configProviders?: ConfigProviders
   readonly agents?: readonly Agent[]
   readonly configModel?: string
 }
@@ -57,16 +62,16 @@ export function within<T>(promise: Promise<T>, ms: number): Promise<T | undefine
 }
 
 /**
- * Loads provider list, agents, and config model using an admitted chat client.
+ * Loads the configured providers, agents, and config model using an admitted chat client.
  */
 export async function loadChatCatalog(client: NikcliClient, timeoutMs = CATALOG_TIMEOUT_MS): Promise<ChatCatalog> {
   const [pRes, aRes, cRes] = await Promise.all([
-    within(client.provider.list(), timeoutMs),
+    within(client.config.providers(), timeoutMs),
     within(client.app.agents(), timeoutMs),
     within(client.config.get(), timeoutMs),
   ])
   return {
-    providerList: pRes?.data,
+    configProviders: pRes?.data,
     agents: aRes?.data,
     configModel: cRes?.data?.model,
   }

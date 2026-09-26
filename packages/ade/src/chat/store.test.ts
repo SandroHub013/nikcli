@@ -43,11 +43,10 @@ function fakeServer() {
     status: {} as Record<string, object>,
     /** Holds the answer to GET /session/status until it settles. */
     statusGate: undefined as Promise<void> | undefined,
-    /** The catalog: the free model the tests send, on a connected OpenRouter. */
+    /** The catalog (`/config/providers`): the free model the tests send, on OpenRouter, which the server can run. */
     providers: {
-      all: [{ id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } }],
+      providers: [{ id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } }],
       default: {},
-      connected: ["openrouter"],
     } as object | undefined,
   }
   const reply = (onEvent: (event: ProxyEvent) => void, status: number, body?: unknown) =>
@@ -91,7 +90,7 @@ function fakeServer() {
         const status = routes.status
         void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
       }
-      else if (request.method === "GET" && path === "/provider") {
+      else if (request.method === "GET" && path === "/config/providers") {
         if (routes.providers) reply(onEvent, 200, routes.providers)
         else reply(onEvent, 500, { error: "catalogo non disponibile" })
       }
@@ -452,18 +451,17 @@ describe("the chat's store", () => {
     const later = { providerID: "anthropic", modelID: "claude-x" }
     // Connected after the catalog was read.
     server.routes.providers = {
-      all: [
+      providers: [
         { id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } },
         { id: "anthropic", name: "Anthropic", models: { "claude-x": { id: "claude-x", providerID: "anthropic" } } },
       ],
       default: {},
-      connected: ["openrouter", "anthropic"],
     }
     expect(await store.send(undefined, "Ciao", later)).toBe("ses_nuova")
     // One read at the opening and one before the refusal that did not happen; the model it had goes with no new read.
-    expect(server.calls("GET", /^\/provider$/)).toHaveLength(2)
+    expect(server.calls("GET", /^\/config\/providers$/)).toHaveLength(2)
     await store.send(undefined, "Ancora", FREE)
-    expect(server.calls("GET", /^\/provider$/)).toHaveLength(2)
+    expect(server.calls("GET", /^\/config\/providers$/)).toHaveLength(2)
   })
 
   test("a catalog that cannot be read does not stop the message: the server decides", async () => {
@@ -678,7 +676,7 @@ describe("the chat's store", () => {
     expect(one.configModel).toBe("openrouter/x:free")
     expect(one.agents?.map((agent) => agent.name)).toEqual(["build"])
     expect(connects).toBe(1)
-    const catalog = [...server.calls("GET", /^\/provider$/), ...server.calls("GET", /^\/agent$/), ...server.calls("GET", /^\/config$/)]
+    const catalog = [...server.calls("GET", /^\/config\/providers$/), ...server.calls("GET", /^\/agent$/), ...server.calls("GET", /^\/config$/)]
     expect(catalog).toHaveLength(3)
     for (const request of catalog) {
       expect(decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")).toBe(A)

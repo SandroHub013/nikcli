@@ -46,7 +46,7 @@ import {
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { insideProject, isEnvFile, pathOfFileUrl } from "./attachments"
-import { catalogHasModel, serializeModelRef } from "./model"
+import { configuredHasModel, serializeModelRef } from "./model"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -228,7 +228,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     const mine = generation
     if (fresh || catalogLoad?.mine !== mine) {
       const promise = loadChatCatalog(connection.client).then((catalog) => {
-        if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
+        if (!catalog.configProviders && catalogLoad?.promise === promise) catalogLoad = undefined
         return catalog
       })
       catalogLoad = { mine, promise }
@@ -381,8 +381,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
        * refusal it is read again: a provider connected since then counts
        * (modello assente review, M2).
        */
-      if (catalogHasModel((await catalog()).providerList, model) === false) {
-        if (catalogHasModel((await catalog(true)).providerList, model) === false) {
+      if (configuredHasModel((await catalog()).configProviders, model) === false) {
+        if (configuredHasModel((await catalog(true)).configProviders, model) === false) {
           throw new Error(t("chat.model.missing", serializeModelRef(model)))
         }
       }
