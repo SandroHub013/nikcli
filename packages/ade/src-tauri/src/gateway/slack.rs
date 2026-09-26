@@ -512,6 +512,11 @@ impl Inner {
         if let Some(name) = hold(&self.names).get(user) {
             return name.clone();
         }
+        // Slack's user ids are capitals and digits: anything else is not put
+        // in a URL, and the id stands for the name (G10 review, BASSO 1).
+        if user.is_empty() || !user.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+            return user.to_string();
+        }
         let path = format!("/users.info?user={user}");
         let Ok(Ok(answer)) = tokio::time::timeout(NAME_WAIT, self.call(reqwest::Method::GET, &path, Token::Bot, None)).await else {
             return user.to_string();
@@ -1196,6 +1201,17 @@ mod tests {
         eventually("i due ack", || socket.acks().len() == 2).await;
         let second = socket.connections()[0].received[1].0;
         assert!(second.duration_since(started) < Duration::from_millis(2_500), "l'ack dietro al nome e' arrivato dopo {:?}", second.duration_since(started));
+    }
+
+    #[tokio::test]
+    async fn a_user_id_that_is_not_one_never_reaches_a_url() {
+        let socket = FakeSocket::start(vec![], 100);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        assert_eq!(slack.inner.name_of("U1&user=U2").await, "U1&user=U2");
+        assert_eq!(slack.inner.name_of("").await, "");
+        assert!(api.to("/users.info").is_empty(), "un id che non e' di Slack e' finito in un indirizzo");
+        assert_eq!(slack.inner.name_of("U09AB").await, "Qualcuno");
     }
 
     #[tokio::test]
