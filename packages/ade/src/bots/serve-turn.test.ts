@@ -320,6 +320,41 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect((await runServeTurn(panel({ bot: noModel }), nothing.deps).result).status).toBe("done")
   })
 
+  test("a bot made while the server runs: the server reads its files again, and the turn goes", async () => {
+    let reloads = 0
+    const fake = server({ events: FIRST, session: FIRST_SESSION })
+    const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
+    const agents = async () => (reloads === 0 ? [{ name: "build", prompt: "" }] : [{ name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" }])
+    const connect = async () => ({ ...connection, client: { ...connection.client, agents, reload: async () => void reloads++ } })
+    const result = await runServeTurn(panel(), { ...fake.deps, connect }).result
+    expect(result.status).toBe("done")
+    expect(reloads).toBe(1)
+  })
+
+  test("still not there after the reload, or no reload to ask for: refused, with one reload at most", async () => {
+    let reloads = 0
+    const fake = server({ agents: [{ name: "build", prompt: "" }] })
+    const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
+    const connect = async () => ({ ...connection, client: { ...connection.client, reload: async () => void reloads++ } })
+    expect((await runServeTurn(panel(), { ...fake.deps, connect }).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+    expect(reloads).toBe(1)
+    expect(fake.calls.prompts).toEqual([])
+    expect((await runServeTurn(panel(), server({ agents: [] }).deps).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+  })
+
+  test("a reload that does not answer, or fails, leaves the refusal as it was, within the limit", async () => {
+    const fake = server({ agents: [{ name: "build", prompt: "" }] })
+    const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
+    const hanging = async () => ({ ...connection, client: { ...connection.client, reload: () => new Promise<void>(() => {}) } })
+    const started = Date.now()
+    const late = await runServeTurn(panel(), { ...fake.deps, connect: hanging, reloadTimeoutMs: 50 }).result
+    expect(late.problem).toBe(t("bots.serve.noAgent", "alfa"))
+    expect(Date.now() - started).toBeLessThan(5_000)
+    const failing = async () => ({ ...connection, client: { ...connection.client, reload: async () => Promise.reject(new Error("500")) } })
+    expect((await runServeTurn(panel(), { ...fake.deps, connect: failing }).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+    expect(fake.calls.prompts).toEqual([])
+  })
+
   test("a user's bot where the project has an agent file of its name, even with the same words: refused", async () => {
     const asked: [string, string][] = []
     const fake = server()

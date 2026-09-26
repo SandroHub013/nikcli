@@ -96,6 +96,7 @@ import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, type RoomPay } from "./room"
+import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
 import { createRoomRunner, localRoomStore, memberName, roomThread, type RoomBook, type RoomRecord, type RoomSeat } from "./room-app"
 import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
 import { isAdeTestBuild } from "../chat/model"
@@ -401,6 +402,8 @@ const roomStore = localRoomStore()
 const [roomBook, setRoomBook] = createSignal<RoomBook>(roomStore.get())
 /** The member speaking in each room, by its file. */
 const [roomSpeaking, setRoomSpeaking] = createSignal<Record<string, string>>({})
+/** The rooms waiting on a trust dialog before their first turn. */
+const [roomAsking, setRoomAsking] = createSignal<Record<string, true>>({})
 /** The file each member was trusted as, for answering its questions. */
 const seatBots = new Map<string, AgentFile>()
 /** The project open in the main area: where a global bot's room turns run. */
@@ -413,12 +416,21 @@ async function payOf(bot: AgentFile): Promise<RoomPay> {
 
 const roomRunner = createRoomRunner({
   store: roomStore,
-  seats: async (room) => {
+  seats: async (room, asking) => {
     const seats: RoomSeat[] = []
+    // The dialog is native and may be behind the window: the room says what it waits for.
+    const ask = async (question: string) => {
+      asking(true)
+      try {
+        return await askTrust(question)
+      } finally {
+        asking(false)
+      }
+    }
     for (const path of room.members) {
       const read = await readBotFile(path)
       if (!read) return { problem: t("bots.room.missingBot", memberName([], path)) }
-      const verdict = await admitTurn(read, roomProject, askTrust)
+      const verdict = await admitTurn(read, roomProject, ask)
       if (!verdict.ok) return { problem: verdict.problem ?? t("bots.room.notTrusted", read.identifier) }
       const bot = verdict.bot
       seatBots.set(path, bot)
@@ -431,6 +443,14 @@ const roomRunner = createRoomRunner({
   turns,
   testBuild: isAdeTestBuild,
   changed: setRoomBook,
+  onAsking: (roomId, waiting) =>
+    setRoomAsking((all) => {
+      if (Boolean(all[roomId]) === waiting) return all
+      const next = { ...all }
+      if (waiting) next[roomId] = true
+      else delete next[roomId]
+      return next
+    }),
   onTurn: (roomId, path) =>
     setRoomSpeaking((all) => {
       const next = { ...all }
@@ -450,6 +470,7 @@ const roomDeps: RoomPanelDeps = {
   book: roomBook,
   bots: () => shared.roster() ?? [],
   speaking: (roomId) => roomSpeaking()[roomId],
+  asking: (roomId) => Boolean(roomAsking()[roomId]),
   permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
   answer: (path, choice, requestID) => {
     const bot = seatBots.get(path)
@@ -598,6 +619,26 @@ const shared = createRoot(() => {
     void refetch()
   }
 
+  /*
+   * And changed from outside ADE: looked at again when the window comes back
+   * and every ROSTER_CHECK_MS while it shows, moved only when the files differ
+   * (`roster-sync.ts`).
+   */
+  let checking = false
+  const checkFiles = async () => {
+    if (checking || roster.loading) return
+    checking = true
+    try {
+      if (rosterChanged(roster(), await listBots(roots()))) reload()
+    } catch {
+      // Unreadable now: the roster shown stays until the next look.
+    } finally {
+      checking = false
+    }
+  }
+  every(ROSTER_CHECK_MS, () => void checkFiles())
+  if (typeof window !== "undefined") window.addEventListener("focus", () => void checkFiles())
+
   const current = () => (roster() ?? []).find((bot) => bot.path === openId())
   const identifiers = () => (roster() ?? []).map((bot) => bot.identifier)
 
@@ -609,6 +650,8 @@ const shared = createRoot(() => {
   }
 
   const openRoom = (id: string | undefined, form = false) => {
+    // The form says how each bot is paid for: from the files as they are now.
+    if (form) void checkFiles()
     setOpenRoomId(id)
     setRoomComposing(form)
     setOpenId(undefined)

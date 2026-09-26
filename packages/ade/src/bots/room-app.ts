@@ -200,14 +200,20 @@ export interface RoomSeat {
 
 export interface RoomRunnerDeps {
   readonly store: RoomStore
-  /** The members, trusted as a turn in the panel is (B3, B8c); the problem when one is not. */
-  readonly seats: (room: RoomRecord) => Promise<readonly RoomSeat[] | { readonly problem: string }>
+  /**
+   * The members, trusted as a turn in the panel is (B3, B8c); the problem when
+   * one is not. `asking(true)` while a trust dialog waits for the user, then
+   * `asking(false)`: the room says it is waiting, rather than keep silent.
+   */
+  readonly seats: (room: RoomRecord, asking: (waiting: boolean) => void) => Promise<readonly RoomSeat[] | { readonly problem: string }>
   readonly turns: Pick<BotTurns, "room" | "stop">
   /** ADE Test: only free models (B8b brief). */
   readonly testBuild: () => boolean
   readonly changed?: (book: RoomBook) => void
   /** Who is on turn in a room; undefined when nobody is. */
   readonly onTurn?: (roomId: string, path: string | undefined) => void
+  /** Whether a room is waiting on a trust dialog before its first turn. */
+  readonly onAsking?: (roomId: string, waiting: boolean) => void
   readonly now?: () => number
   readonly newId?: () => string
 }
@@ -316,7 +322,13 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
   const admit = async (room: RoomRecord): Promise<string | { seats: readonly RoomSeat[] }> => {
     const size = roomProblem(room.members)
     if (size) return describeProblem(size)
-    const seats = await deps.seats(room)
+    let seats: Awaited<ReturnType<RoomRunnerDeps["seats"]>>
+    try {
+      seats = await deps.seats(room, (waiting) => deps.onAsking?.(room.id, waiting))
+    } finally {
+      // Whatever the dialogs said, or if one failed: the room is no longer waiting on them.
+      deps.onAsking?.(room.id, false)
+    }
     if ("problem" in seats) return seats.problem
     const spend = roomSpendProblem(
       seats.map((seat) => ({ name: seat.member.name, pay: seat.pay })),

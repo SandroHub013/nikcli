@@ -1406,6 +1406,7 @@ export const en: Messages = {
   "bots.approval.refused": (command: string, reason: string) =>
     `Claude Code did not run «${command}»: it ${reason}. It can from the next turn if you choose «Always for this bot».`,
   "bots.approval.offer": (command: string) => `Allow this bot commands like «${command}», from the next turn?`,
+  "bots.approval.denied": (command: string) => `Denied: «${command}» was not run.`,
   "bots.approval.expired": (command: string) => `No answer: «${command}» was denied.`,
   "bots.routine.label": "Routines",
   "bots.routine.off": (reason: string) => `This bot cannot have routines: ${reason}.`,
@@ -1535,6 +1536,7 @@ export const en: Messages = {
   "bots.room.notTrusted": (name: string) => `@${name} does not have your trust: the room does not start.`,
   "bots.room.empty": "Write a message: everyone answers, or only whoever you name with @name (@everyone for all). A round in which nobody has anything to say ends the exchange.",
   "bots.room.speaking": (name: string) => `@${name} is writing…`,
+  "bots.room.askingTrust": "Waiting for your answer in ADE's trust dialog: it may be behind the main window.",
   "bots.room.stop": "Stop",
   "bots.room.everyone": "everyone",
   "bots.room.user": "user",

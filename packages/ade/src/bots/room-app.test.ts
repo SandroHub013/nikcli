@@ -229,3 +229,47 @@ describe("B8b: the rooms as saved", () => {
     expect(room.log.seen).toEqual({ a: 0 })
   })
 })
+
+/* Verifiche: the room kept silent while a trust dialog waited for the user. */
+describe("a room waiting on a trust dialog", () => {
+  test("says so while the dialog is open, and stops saying it when the answer comes, or the check fails", async () => {
+    const said: [string, boolean][] = []
+    let answer: (() => void) | undefined
+    const store = memoryRoomStore({ rooms: [{ id: "r", name: "stanza", members: [], log: EMPTY_LOG, needsYou: false, createdAt: 0 }] })
+    const runner = createRoomRunner({
+      store,
+      seats: async (_room, asking) => {
+        asking(true)
+        await new Promise<void>((resolve) => (answer = resolve))
+        asking(false)
+        return { problem: "negato" }
+      },
+      turns: { room: () => undefined, stop: () => {} },
+      testBuild: () => false,
+      onAsking: (roomId, waiting) => void said.push([roomId, waiting]),
+    })
+    // Two members, or the size check refuses before any dialog.
+    store.set({ rooms: [{ ...store.get().rooms[0]!, members: ["/a.md", "/b.md"] }] })
+    const sent = runner.send("r", "ciao")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(said).toEqual([["r", true]])
+    answer!()
+    await sent
+    expect(said.at(-1)).toEqual(["r", false])
+
+    // A check that throws mid-dialog leaves the room not waiting either.
+    said.length = 0
+    const failing = createRoomRunner({
+      store,
+      seats: async (_room, asking) => {
+        asking(true)
+        throw new Error("dialogo chiuso")
+      },
+      turns: { room: () => undefined, stop: () => {} },
+      testBuild: () => false,
+      onAsking: (roomId, waiting) => void said.push([roomId, waiting]),
+    })
+    await failing.send("r", "di nuovo").catch(() => undefined)
+    expect(said.at(-1)).toEqual(["r", false])
+  })
+})

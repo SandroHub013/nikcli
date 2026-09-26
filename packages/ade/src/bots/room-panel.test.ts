@@ -20,8 +20,11 @@ describe("B8b: the room in the Bot section", () => {
   })
 
   test("each member is trusted as a turn in the panel is, with the panel's dialog, before the room runs", () => {
-    const seats = bots.slice(bots.indexOf("  seats: async (room)"), bots.indexOf("  turns,\n  testBuild: isAdeTestBuild"))
-    expect(seats).toContain("admitTurn(read, roomProject, askTrust)")
+    const seats = bots.slice(bots.indexOf("  seats: async (room, asking)"), bots.indexOf("  turns,\n  testBuild: isAdeTestBuild"))
+    // The panel's dialog, with the room saying it waits while it is open (Verifiche).
+    expect(seats).toContain("admitTurn(read, roomProject, ask)")
+    expect(seats).toContain("return await askTrust(question)")
+    expect(seats).toContain("asking(true)")
     expect(seats).toContain("pay: await payOf(bot)")
   })
 

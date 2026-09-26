@@ -153,6 +153,21 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     expect(fake.replies.every(([, reply]) => reply !== "always")).toBe(true)
   })
 
+  test("a Nega is said in the thread (Verifiche): refused by the user, not silently", async () => {
+    const fake = server()
+    const view = panel(fake)
+    view.turns.send(BOT, "ciao", "C:/progetto")
+    await until(() => fake.prompts.length === 1)
+    fake.push(status("busy"), asked("per_n", "git push --force"))
+    await until(() => view.talk().permission?.requestID === "per_n")
+    view.turns.answer(BOT, "reject", "per_n")
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies[0]).toEqual(["per_n", "reject"])
+    expect(view.talk().permission).toBeUndefined()
+    expect(view.talk().messages.at(-1)).toMatchObject({ role: "error", text: t("bots.approval.denied", "git push --force") })
+    view.turns.stop(BOT)
+  })
+
   test("no answer in time is a Nega, by the question's id", async () => {
     const fake = server()
     const view = panel(fake)

@@ -488,9 +488,15 @@
   box-shadow: var(--ade-focus-ring);
 }
 
+/*
+ * The field keeps room to write in: a long caption (a model id like
+ * openrouter/nvidia/…:free, the figures, the mode) used to take the whole
+ * line, nowrap and unshrinkable, and squeeze the field to one column. Now
+ * the caption gives way, up to wrapping on its own lines (Verifiche).
+ */
 [data-slot="bots-composer-field"] {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: min(14rem, 55%);
   max-height: 8rem;
   padding: var(--ade-space-2) 0;
   border: 0;
@@ -506,12 +512,15 @@
 [data-slot="bots-composer-field"]:focus { outline: none; }
 
 [data-slot="bots-composer-cap"] {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
   align-self: center;
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
-  white-space: nowrap;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 /* ── the card ────────────────────────────────────────────────────────────── */
@@ -767,7 +776,12 @@
 
 /* ── the Gateway section (G6) ───────────────────────────────────────────── */
 
-[data-component="bot-gateway"] [data-slot="gateway-block"] {
+/*
+ * The Memory section's blocks too: laid out inline, «0/2200 caratteri» and
+ * «Vuoto.» read as one word, «caratteriVuoto.» (Verifiche).
+ */
+[data-component="bot-gateway"] [data-slot="gateway-block"],
+[data-slot="bots-card-section"] > [data-slot="gateway-block"] {
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-2);
