@@ -489,8 +489,8 @@
   font-size: var(--ade-font-md);
 }
 [data-slot="search-input"]:focus {
-  outline: 1px solid var(--ade-accent);
-  border-color: var(--ade-accent);
+  outline: 1px solid var(--ade-text-weak);
+  border-color: var(--ade-border-strong);
 }
 
 /*
