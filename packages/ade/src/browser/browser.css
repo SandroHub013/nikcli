@@ -66,7 +66,12 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="browser-nav-btn"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 /* `hidden` would lose to `display: grid` above: the arrows Design mode hides (D2 review, BASSO 1). */
@@ -227,7 +232,12 @@
   cursor: pointer;
   transition:
     color var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease);
+    background var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="browser-mode-btn"]:active {
+  transform: var(--ade-press);
 }
 
 /* Device presets and rotate are icon-only, so they sit square like the
@@ -236,6 +246,13 @@
 [data-slot="browser-rotate-btn"] {
   width: 22px;
   padding: 0;
+  transition: var(--ade-btn-transition);
+}
+[data-slot="browser-rotate-btn"]:active {
+  transform: var(--ade-press);
+}
+[data-slot="browser-device-btn"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-mode-btn"]:hover,
@@ -290,6 +307,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-owner"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-owner"][data-state="ready"] {
@@ -333,6 +355,11 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-owner-menu"] button:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-owner-menu"] button:hover {
@@ -376,6 +403,11 @@
   color: var(--ade-accent);
   font: inherit;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-send-choice"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-send-choice"]:hover {
@@ -401,7 +433,12 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="browser-action"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-action"]:hover {
@@ -668,6 +705,11 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-context-action"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-context-action"]:hover,
@@ -708,6 +750,9 @@
   color: var(--ade-text);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease-out);
 }
 
 [data-slot="browser-edit-field"] input:focus {
@@ -751,6 +796,11 @@
   color: var(--ade-text-weak);
   cursor: pointer;
   border-radius: 2px;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-context-remove"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-context-remove"]:hover {
@@ -778,6 +828,11 @@
   cursor: pointer;
   padding: var(--ade-space-1) var(--ade-space-2);
   border-radius: var(--ade-radius-sm);
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="browser-clear-selection"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-clear-selection"]:hover {
@@ -826,8 +881,13 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    opacity var(--ade-dur-fast) var(--ade-ease);
+    opacity var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
   flex: 0 0 auto;
+}
+
+[data-slot="browser-send-btn"]:not(:disabled):active {
+  transform: var(--ade-press);
 }
 
 [data-slot="browser-send-btn"]:hover:not(:disabled) {

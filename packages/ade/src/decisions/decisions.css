@@ -51,6 +51,11 @@
   background: transparent;
   color: var(--ade-text-weak);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="sheet-close"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="sheet-count"] + [data-slot="sheet-close"],
@@ -163,6 +168,9 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="decision-option"]:hover {
@@ -216,6 +224,9 @@
   font: inherit;
   font-size: 11.5px;
   resize: vertical;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease-out);
 }
 
 [data-slot="decision-note"]:focus {
@@ -245,6 +256,11 @@
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-submit"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-ghost"],
@@ -253,11 +269,21 @@
   background: transparent;
   color: var(--ade-text-soft);
   font-weight: 500;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-ghost"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-chip"] {
   height: 22px;
   padding: 0 8px;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-chip"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-ghost"]:hover:not(:disabled),
@@ -400,6 +426,9 @@
   font: inherit;
   font-size: 12px;
   text-align: left;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease);
 }
 
 button[data-slot="decision-row"] {

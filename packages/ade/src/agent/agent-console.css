@@ -124,7 +124,12 @@
   transition:
     border-color var(--ade-dur-fast) var(--ade-ease),
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="agent-action"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="agent-action"]:hover {

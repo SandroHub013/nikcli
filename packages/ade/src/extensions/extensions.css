@@ -32,6 +32,15 @@
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="ext-filter"]:active {
+  transform: var(--ade-press);
+}
+
+[data-slot="ext-tab"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="ext-tab"]:hover,
@@ -65,6 +74,9 @@
   color: var(--ade-text);
   font: inherit;
   font-size: 12.5px;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ext-search"]:focus-visible {
@@ -97,6 +109,9 @@
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-raised);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ext-card-head"] {
@@ -230,6 +245,7 @@
   font-size: 11px;
   text-decoration: underline;
   cursor: pointer;
+  transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ext-link"]:hover {

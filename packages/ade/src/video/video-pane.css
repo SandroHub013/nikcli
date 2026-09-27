@@ -84,6 +84,11 @@
   color: var(--ade-text);
   font: inherit;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="video-open"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="video-open"]:hover {
@@ -115,6 +120,11 @@
   background: transparent;
   color: var(--ade-text-weak);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="video-button"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="video-button"]:hover {

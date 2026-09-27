@@ -515,7 +515,12 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="ade-icon"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="ade-icon"]:hover {
