@@ -800,8 +800,11 @@
   border: 0;
   background: none;
 }
+/* One ring, the box's: without the shadow here the field also took the global
+   `:focus-visible` ring, a second one inside the first (contorni-terzo, 4). */
 [data-slot="search-input"]:focus {
   outline: none;
+  box-shadow: none;
 }
 [data-slot="search-leading"] {
   display: block;
