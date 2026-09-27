@@ -215,6 +215,28 @@ export function unknownChordMessage(chord: string): string {
   return t("voice.shortcut.unknown", chord)
 }
 
+/** What to say about a chord the system would not give ADE. */
+export function busyMessage(mode: VoiceMode, chord: string): string {
+  return t(
+    "voice.shortcut.busy",
+    chord,
+    t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription"),
+  )
+}
+
+/**
+ * The refusals the voice settings show beside each chord, until a save claims it.
+ *
+ * The notice strip says it once, at startup, and goes; someone who comes back
+ * later to find out why the chord does nothing looks in the voice settings,
+ * and a refused chord there looked exactly like one that works.
+ */
+export function refusalsOf(failed: readonly { mode: VoiceMode; chord: string }[]): Partial<Record<VoiceMode, string>> {
+  const refusals: Partial<Record<VoiceMode, string>> = {}
+  for (const { mode, chord } of failed) refusals[mode] = busyMessage(mode, chord)
+  return refusals
+}
+
 export interface RegisterVoiceShortcutsDeps {
   /** Drops every hotkey ADE holds, so a changed chord stops answering. */
   unregisterAll: () => Promise<void>
@@ -257,13 +279,7 @@ export async function registerVoiceShortcuts(
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err)
       failed.push({ mode, chord, problem })
-      deps.report?.(
-        t(
-          "voice.shortcut.busy",
-          chord,
-          t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription"),
-        ),
-      )
+      deps.report?.(busyMessage(mode, chord))
     }
   }
 

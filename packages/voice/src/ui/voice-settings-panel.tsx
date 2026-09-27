@@ -108,6 +108,12 @@ export interface VoiceSettingsPanelProps {
   settingsNotice?: string
   /** Optional existing ADE keymap bindings to evaluate for shortcut collision. */
   existingBindings?: readonly Binding[]
+  /**
+   * The chords the system would not register, each with what to say: another
+   * application holds it. Shown beside the chord, because a refused one looks
+   * exactly like one that works until it is pressed and nothing happens.
+   */
+  shortcutRefusals?: { agent?: string; transcription?: string }
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
   onOpenVoiceSource?: (voice: ReplyVoice) => void
   naturalVoiceError?: string
@@ -936,7 +942,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
   /** The recording attempt's complaint, or the saved chord's, in that order. */
   const shortcutIssue = (field: "agent" | "transcription") =>
-    (field === "agent" ? agentConflict() : transcriptionConflict()) ?? storedIssue(field)
+    (field === "agent" ? agentConflict() : transcriptionConflict()) ??
+    storedIssue(field) ??
+    props.shortcutRefusals?.[field]
 
   /**
    * What the recorder button says while it is listening.
