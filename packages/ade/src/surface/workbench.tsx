@@ -3148,8 +3148,9 @@ export function Workbench() {
       }
       await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)
       // The session stays: it may have other work, and closing is `ade-msg close`'s decision.
-      const session = running.get(request.to)
-      if (session && !questionOpen(request.to)) void typeLine(session, formatCancel(request.id, sender))
+      // Held, like every other note: typed at once it landed mid-turn or inside
+      // the user's draft (review area 2). The round types it when the line is free.
+      if (running.has(request.to)) heldLines.push({ paneId: request.to, text: formatCancel(request.id, sender) })
       await answer(`ok: richiesta ${request.id} annullata; la sessione resta aperta (chiudila con ade-msg close se non serve più)`)
       return true
     }

@@ -471,6 +471,31 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(mine.talk.messages.at(-1)).toMatchObject({ role: "error", text: "Provider returned error" })
   })
 
+  test("Ferma ends the turn while a call to the server hangs (review area 2)", async () => {
+    // A server that never answers the prompt, or the session: the turn and its
+    // slot stayed taken, while /ferma had already said «fermato».
+    const within = <T,>(promise: Promise<T>) =>
+      Promise.race([promise, new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 200))])
+    for (const hang of ["prompt", "create"] as const) {
+      const hanging = server()
+      const turn = runServeTurn(panel({ onUpdate: () => {} }), {
+        ...hanging.deps,
+        connect: async (directory, interactive) => {
+          const connection = await hanging.deps.connect(directory, interactive)
+          if (!connection.ok) return connection
+          const never = () => new Promise<never>(() => {})
+          return { ...connection, client: { ...connection.client, [hang]: never } }
+        },
+      })
+      setTimeout(() => turn.stop(), 10)
+      const result = await within(turn.result)
+      expect([hang, result === "hung" ? "hung" : result.status]).toEqual([hang, "stopped"])
+      await Promise.resolve()
+      // A prompt that went is stopped on the server too.
+      if (hang === "prompt") expect(hanging.calls.aborted).toEqual([SESSION])
+    }
+  })
+
   test("Ferma, the time limit and the spend cap stop the turn on the server too", async () => {
     const busy: ChatEvent = { type: "session.status", properties: { sessionID: SESSION, status: { type: "busy" } } }
     const stopping = server({ onPrompt: (stream) => stream.push(busy) })
