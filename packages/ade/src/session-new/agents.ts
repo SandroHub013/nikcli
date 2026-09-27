@@ -69,6 +69,13 @@ export const AGENTS: AgentOption[] = [
   { id: "kilo", label: "Kilo", command: "kilo" },
   { id: "goose", label: "goose", command: "goose" },
   { id: "copilot", label: "Copilot", command: "copilot" },
+  /*
+   * Cursor's CLI calls itself `agent`, and that name is not Cursor's alone:
+   * here it is also Grok Build's alias, found first on PATH. The installer
+   * puts `cursor-agent` beside it (`%LOCALAPPDATA%\cursor-agent`), a name
+   * nothing else claims.
+   */
+  { id: "cursor", label: "Cursor", command: "cursor-agent" },
   { id: "t3", label: "T3 Code", command: "t3", kind: "app" },
   {
     id: "terminal",

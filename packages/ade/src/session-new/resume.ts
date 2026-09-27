@@ -408,6 +408,11 @@ export const RESUME: Record<string, ResumeRecipe> = {
    *   copilot  --continue: «the most recent session for the current
    *            repository» (copilot-cli changelog 1.0.64, 1.0.78). `--resume`
    *            takes an id ADE has no way to learn.
+   *   cursor   --continue, «Continue previous session» (`cursor-agent --help`,
+   *            2026.09.15, read here: it is installed). Its chats are kept per
+   *            folder, under `~/.cursor/chats/<md5 of the folder's path>/`, so
+   *            the previous one is this folder's. `--resume [chatId]` wants an
+   *            id ADE does not learn.
    *
    * And the ones left out on purpose:
    *   goose    `session --resume` reopens the most recently used session of
@@ -421,6 +426,9 @@ export const RESUME: Record<string, ResumeRecipe> = {
     last: () => ["--continue"],
   },
   copilot: {
+    last: () => ["--continue"],
+  },
+  cursor: {
     last: () => ["--continue"],
   },
 }

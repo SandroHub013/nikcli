@@ -420,6 +420,7 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("crush")) return "crush"
   if (t.includes("kilo")) return "kilo"
   if (t.includes("goose")) return "goose"
+  if (t.includes("cursor")) return "cursor"
   if (/\bt3\b/.test(t)) return "t3"
   if (t.includes("ohmypi")) return "ohmypi"
   if (t.includes("pi")) return "pi"

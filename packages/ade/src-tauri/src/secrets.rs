@@ -272,6 +272,7 @@ pub fn agent_for_command(command: &str) -> Option<&'static str> {
         "goose" => Some("goose"),
         "copilot" => Some("copilot"),
         "t3" => Some("t3"),
+        "cursor-agent" => Some("cursor"),
         "cmd" | "powershell" | "pwsh" | "sh" | "bash" | "zsh" | "fish" => Some("terminal"),
         _ => None,
     }
