@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import { createHash } from "crypto"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { pathToFileURL } from "url"
+import { importPlugin, PluginExitError } from "@nikcli-ai/util/plugin-shared"
 import { Flag } from "@nikcli-ai/util/flag"
 import { ToolRegistry } from "@/tool/registry"
 
@@ -68,5 +73,65 @@ describe("ToolRegistry custom tool autoload security", () => {
     expect(ToolRegistry.isCustomToolPinSatisfied(actual.toUpperCase(), actual)).toBe(true)
     expect(ToolRegistry.isCustomToolPinSatisfied(actual.replace(/.$/, "0"), actual)).toBe(false)
     expect(ToolRegistry.isCustomToolPinSatisfied("", actual)).toBe(true)
+  })
+})
+
+describe("importPlugin", () => {
+  // A stray script in a plugin directory (every .ts there is loaded) used to
+  // end the whole CLI at startup by calling process.exit when run without args.
+  async function pluginDir(files: Record<string, string>) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-plugin-exit-"))
+    for (const [name, body] of Object.entries(files)) await fs.writeFile(path.join(dir, name), body)
+    return dir
+  }
+
+  it("refuses process.exit from a plugin while it loads, and restores process.exit", async () => {
+    const dir = await pluginDir({ "probe.ts": "await Bun.sleep(5)\nprocess.exit(2)\n" })
+    const exit = process.exit
+    try {
+      const file = pathToFileURL(path.join(dir, "probe.ts")).href
+      const error = await importPlugin(file, file).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PluginExitError)
+      expect((error as PluginExitError).code).toBe(2)
+      expect(process.exit).toBe(exit)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("still lets anything else end the process while a plugin loads", async () => {
+    const dir = await pluginDir({ "slow.ts": "await Bun.sleep(50)\nexport default {}\n" })
+    const exit = process.exit
+    const calls: unknown[] = []
+    process.exit = ((code?: number) => {
+      calls.push(code)
+      return undefined as never
+    }) as typeof process.exit
+    try {
+      const file = pathToFileURL(path.join(dir, "slow.ts")).href
+      const loading = importPlugin(file, file)
+      // The user quitting mid-load: not the plugin's call, so it goes through.
+      process.exit(0)
+      await loading
+      expect(calls).toEqual([0])
+    } finally {
+      process.exit = exit
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps guarding a directory while another plugin from it is still loading", async () => {
+    const dir = await pluginDir({
+      "fast.ts": "export default {}\n",
+      "late.ts": "await Bun.sleep(30)\nprocess.exit(3)\n",
+    })
+    try {
+      const fast = pathToFileURL(path.join(dir, "fast.ts")).href
+      const late = pathToFileURL(path.join(dir, "late.ts")).href
+      const [, error] = await Promise.all([importPlugin(fast, fast), importPlugin(late, late).catch((e: unknown) => e)])
+      expect(error).toBeInstanceOf(PluginExitError)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
   })
 })

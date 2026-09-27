@@ -203,3 +203,65 @@ export async function resolvePluginId(source: PluginSource, spec: string, target
   }
   return pkg.json.name.trim()
 }
+
+/**
+ * Thrown in place of `process.exit` when a plugin being loaded tries to end the
+ * process: the import fails like any other broken plugin, and nikcli stays up.
+ */
+export class PluginExitError extends Error {
+  constructor(
+    readonly plugin: string,
+    readonly code: unknown,
+  ) {
+    super(`Plugin ${plugin} called process.exit(${code === undefined ? "" : String(code)}) while loading`)
+    this.name = "PluginExitError"
+  }
+}
+
+/** Directories of the plugins currently being imported, with how many imports each has in flight. */
+const loadingPlugins = new Map<string, number>()
+let exitBeforeGuard: typeof process.exit | undefined
+
+function guardedExit(code?: number | string | null) {
+  // Only a call made from a plugin's own code is refused. Anything else — the
+  // user quitting while plugins load — must still end the process.
+  const stack = new Error().stack ?? ""
+  for (const directory of loadingPlugins.keys()) {
+    if (stack.includes(directory)) throw new PluginExitError(directory, code)
+  }
+  return exitBeforeGuard!.call(process, code as number | undefined)
+}
+
+function pluginDirectory(location: string) {
+  const file = location.startsWith("file://") ? fileURLToPath(location) : location
+  return path.extname(file) ? path.dirname(file) : file
+}
+
+/**
+ * `import()` a plugin module without letting it end the process.
+ *
+ * Every `.ts`/`.tsx` in a plugin directory is loaded, so a stray script there —
+ * one that exits when run without arguments — used to take the whole CLI (or
+ * the background service) down at startup. Import errors were already caught;
+ * `process.exit` was not. `location` is the plugin's entry file or package
+ * directory: calls whose stack runs through that directory are refused.
+ */
+export async function importPlugin<T = Record<string, unknown>>(specifier: string, location: string): Promise<T> {
+  const directory = pluginDirectory(location)
+  if (loadingPlugins.size === 0) {
+    exitBeforeGuard = process.exit
+    process.exit = guardedExit as typeof process.exit
+  }
+  loadingPlugins.set(directory, (loadingPlugins.get(directory) ?? 0) + 1)
+  try {
+    return (await import(specifier)) as T
+  } finally {
+    const left = (loadingPlugins.get(directory) ?? 1) - 1
+    if (left > 0) loadingPlugins.set(directory, left)
+    else loadingPlugins.delete(directory)
+    if (loadingPlugins.size === 0 && exitBeforeGuard) {
+      if (process.exit === (guardedExit as typeof process.exit)) process.exit = exitBeforeGuard
+      exitBeforeGuard = undefined
+    }
+  }
+}

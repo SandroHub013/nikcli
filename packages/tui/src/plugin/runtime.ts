@@ -20,6 +20,7 @@ import { isRecord } from "@nikcli-ai/util/record"
 import {
   checkPluginCompatibility,
   getPluginIdFromPackage,
+  importPlugin,
   isDeprecatedPlugin,
   parsePluginSpecifier,
   pluginSource,
@@ -312,7 +313,7 @@ async function loadExternalPlugin(
   const mtime = source === "file" ? entrypointMtime(entry) : undefined
   const version = mtime === undefined ? entry : freshSpecifier(entry, mtime)
 
-  const mod = await import(version)
+  const mod = await importPlugin(version, source === "file" ? entry : target)
     .then((raw) => {
       const value = raw as Record<string, unknown>
       // v1 wins the detection race; a module that is not v1-shaped falls

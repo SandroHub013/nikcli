@@ -23,6 +23,7 @@ import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { XAIAuthPlugin } from "./xai"
 import { CursorAuthPlugin } from "./cursor"
 import {
+  importPlugin,
   readV1Plugin,
   readPluginId,
   resolvePluginId,
@@ -862,7 +863,7 @@ export namespace Plugin {
         plugin = await BunProc.install(pkg, version)
       }
       evictModules(spec)
-      const mod = await import(importSpecifier(plugin))
+      const mod = await importPlugin<Record<string, PluginInstance>>(importSpecifier(plugin), plugin)
       const hooks: Hooks[] = []
       const v1 = readV1Plugin(mod, spec, "server", "detect")
       if (v1) {
