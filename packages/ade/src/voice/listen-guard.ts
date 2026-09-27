@@ -34,6 +34,8 @@ export interface ListenGuardDeps {
   isHidden?(): boolean
   /** Whether the open microphone is a dictation, which only the user opens. */
   isDictating?(): boolean
+  /** Whether a tap left the microphone open until the next one: nobody is holding it. */
+  isLatched?(): boolean
   /** Whether ADE should be listening by itself, from the settings. */
   shouldListen(): boolean
   /** Whether any microphone is open, dictation included. */
@@ -69,11 +71,13 @@ export function createListenGuard(deps: ListenGuardDeps) {
         if (deps.isListening()) await deps.pause()
         return
       }
-      /* In the tray only what listens by itself closes. A microphone open
-         with listening switched off, or a dictation, was opened by the user
-         after the window went away. */
+      /* In the tray only what listens by itself closes, and a dictation left
+         open by a tap: nobody is holding that one, and in a window nobody
+         sees it could be forgotten. A microphone open with listening switched
+         off, or a dictation held on its chord, was opened by the user after
+         the window went away. */
       if (deps.isHidden?.() === true) {
-        const opened = !deps.shouldListen() || deps.isDictating?.() === true
+        const opened = (!deps.shouldListen() || deps.isDictating?.() === true) && deps.isLatched?.() !== true
         if (deps.isListening() && !opened) await deps.pause()
         return
       }

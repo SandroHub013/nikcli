@@ -8,6 +8,7 @@ function world() {
     locked: false,
     hidden: false,
     dictating: false,
+    latched: false,
     wanted: true,
     listening: true,
     paused: false,
@@ -23,6 +24,7 @@ function world() {
     },
     isHidden: () => state.hidden,
     isDictating: () => state.dictating,
+    isLatched: () => state.latched,
     shouldListen: () => state.wanted,
     isListening: () => state.listening,
     isPaused: () => state.paused,
@@ -206,9 +208,20 @@ describe("a microphone the user opens while ADE is in the tray", () => {
     expect(state.calls).toEqual(["pause"])
   })
 
-  test("the workbench says which microphone is a dictation", () => {
+  test("a dictation left open by a tap, as a switch, closes: nobody is holding it", async () => {
+    const { state, tick } = world()
+    state.hidden = true
+    state.wanted = false
+    state.dictating = true
+    state.latched = true
+    await tick()
+    expect(state.calls).toEqual(["pause"])
+  })
+
+  test("the workbench says which microphone is a dictation, and which a tap left open", () => {
     const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
     expect(source).toContain('isDictating: () => voiceEngine.activeMode() === "transcription"')
+    expect(source).toContain("isLatched: () => voiceEngine.isLatched()")
   })
 })
 

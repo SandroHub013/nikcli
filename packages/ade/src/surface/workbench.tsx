@@ -5249,6 +5249,7 @@ export function Workbench() {
       isLocked: isScreenLocked,
       isHidden: () => hiddenInTray,
       isDictating: () => voiceEngine.activeMode() === "transcription",
+      isLatched: () => voiceEngine.isLatched(),
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
