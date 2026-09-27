@@ -200,6 +200,21 @@ describe("the chat on a folder", () => {
     expect(catalog).toBeDefined()
     expect(fake.sent.length).toBeGreaterThanOrEqual(1)
   })
+
+  /*
+   * Review area 2, MEDIO: the test above answers every call with one payload,
+   * so a catalog that swapped its fields, or came back empty, passed it. Each
+   * call answers with its own here.
+   */
+  test("loadChatCatalog takes each field from its own call", async () => {
+    const providers = { providers: [{ id: "openrouter" }], default: {} }
+    const agents = [{ name: "build" }]
+    const client = {
+      config: { providers: async () => ({ data: providers }), get: async () => ({ data: { model: "openrouter/x:free" } }) },
+      app: { agents: async () => ({ data: agents }) },
+    } as unknown as NikcliClient
+    expect(await loadChatCatalog(client)).toEqual({ configProviders: providers, agents, configModel: "openrouter/x:free" })
+  })
 })
 
 /* Modello assente review, M4: a catalog that does not come does not hold the send. */
