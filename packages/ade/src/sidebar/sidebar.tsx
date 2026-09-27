@@ -176,6 +176,8 @@ export function WorkspaceHeaderRow(props: {
       data-expanded={props.row.isExpanded ? "true" : undefined}
       data-active={props.isActive ? "true" : undefined}
       data-selected={props.isActive ? "true" : undefined}
+      // The open project is told by the row's ground alone; a screen reader hears it here.
+      aria-current={props.isActive ? "true" : undefined}
       data-missing={props.row.workspace.missing ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
@@ -239,11 +241,6 @@ export function WorkspaceHeaderRow(props: {
       <Show when={props.row.workspace.path?.startsWith("ssh://")}>
         <Badge tone="accent" data-slot="space-badge" title={props.row.workspace.path}>
           ssh
-        </Badge>
-      </Show>
-      <Show when={props.isActive}>
-        <Badge tone="waiting" data-slot="space-badge">
-          {t("sidebar.active")}
         </Badge>
       </Show>
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>

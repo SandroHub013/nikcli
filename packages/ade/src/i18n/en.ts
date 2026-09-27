@@ -154,7 +154,6 @@ export const en: Messages = {
   "restore.note.rerun": "The process didn't survive the shutdown, so the task starts again.",
 
   // Sidebar
-  "sidebar.active": "active",
   "sidebar.project": "project",
   "sidebar.elapsed": "Time elapsed",
   "sidebar.spaces": "Spaces",
