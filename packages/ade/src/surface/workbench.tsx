@@ -5051,6 +5051,9 @@ export function Workbench() {
   const voiceEngine = createVoiceEngine({
     host: voiceHost,
     settings: voiceSettings(),
+    // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
+    onDictationTap: () =>
+      report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
     ...(voiceAvailable ? {} : { transcriber: noMicrophone }),
     speaker,
     micMeter,

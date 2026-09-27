@@ -283,6 +283,7 @@ export {
   type NormalizedVoiceSettings,
   type ParakeetExecutionBackend,
   type TranscriptionSendMode,
+  type DictationPress,
   type VoiceActivation,
   type VoiceMode,
   type VoiceSettings,
