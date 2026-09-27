@@ -244,100 +244,181 @@ describe("terminal selection & copy (S50)", () => {
   })
 
   describe("copyOnRelease (S76)", () => {
-    const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
-    const setup = (selected: boolean) => {
+    /*
+     * A model of the xterm 6 pieces copyOnRelease meets, written from its source
+     * (node_modules/@xterm/xterm/src/browser), not a fake that fires the listener
+     * by hand: the old test did that on every drag, and so gave itself the very
+     * change it was meant to prove (nik, barra-versione-seguito point 3).
+     *
+     * - SelectionService: `_fireEventIfSelectionChanged` compares with the last
+     *   selection it fired for and says nothing when it is the same;
+     *   `clearSelection` fires without recording that; `setSelection` goes
+     *   through the comparison. The redraw is queued for the next frame.
+     * - DomRenderer: `handleSelectionChanged` empties the layer and returns early
+     *   for an empty selection, without touching its `_selectionRenderModel`;
+     *   `handleResize` redraws from that model; `refresh` redraws rows only.
+     */
+    type Cell = [number, number]
+    const same = (a?: Cell, b?: Cell) => !!a && !!b && a[0] === b[0] && a[1] === b[1]
+
+    function xterm() {
       const listeners: Array<() => void> = []
-      const repaints: Array<[number, number]> = []
-      const rows: [number] = [24]
-      let isSelected = selected
+      let start: Cell | undefined
+      let end: Cell | undefined
+      let old: { start?: Cell; end?: Cell; has: boolean } = { has: false }
+      let frame: (() => void) | undefined
+      // DomRenderer's `_selectionRenderModel` and the divs in `.xterm-selection`.
+      let renderModel: { start?: Cell; end?: Cell } = {}
+      let divs = 0
+
+      const has = () => !!start && !!end && !same(start, end)
+      const fire = () => {
+        for (const listener of [...listeners]) listener()
+      }
+      const fireIfChanged = () => {
+        const hasNow = has()
+        if (!hasNow) {
+          if (old.has) {
+            old = { start, end, has: false }
+            fire()
+          }
+          return
+        }
+        if (!old.start || !old.end || !same(start, old.start) || !same(end, old.end)) {
+          old = { start, end, has: true }
+          fire()
+        }
+      }
+      const renderSelection = (s?: Cell, e?: Cell) => {
+        divs = 0
+        if (!s || !e) return // the early return: the model keeps what it had
+        if (same(s, e)) {
+          renderModel = {} // SelectionRenderModel.update → clear()
+          return
+        }
+        renderModel = { start: s, end: e }
+        divs = Math.min(3, e[1] - s[1] + 1)
+      }
+      const refresh = () => {
+        frame ??= () => {
+          frame = undefined
+          renderSelection(start, end)
+        }
+      }
       const terminal = {
-        hasSelection: () => isSelected,
-        clearSelection: () => {
-          isSelected = false
-        },
-        refresh: (start: number, end: number) => {
-          repaints.push([start, end])
-        },
-        get rows() {
-          return rows[0]
-        },
-        // il fit cambia rows: il renderer ridisegna, ed e li che il blocco tornava
-        setRows: (next: number) => {
-          rows[0] = next
-        },
+        rows: 24,
+        hasSelection: has,
         onSelectionChange: (listener: () => void) => {
           listeners.push(listener)
           return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) }
         },
-      }
-      const element = new EventTarget()
-      const release = new EventTarget()
-      let copies = 0
-      const stop = copyOnRelease(terminal as any, element, release, () => copies++)
-      // The order the Architect measured in ADE Test: the mouseup goes through
-      // capture and bubble, and only then does xterm report the selection.
-      const drag = async () => {
-        element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
-        release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
-        if (selected) for (const listener of [...listeners]) listener()
-        await tick()
+        clearSelection: () => {
+          start = end = undefined
+          refresh()
+          fire()
+        },
+        select: (col: number, row: number, length: number) => {
+          start = [col, row]
+          end = [col + length, row]
+          refresh()
+          fireIfChanged()
+        },
+        refresh: (_from: number, _to: number) => {},
       }
       return {
-        drag,
-        copies: () => copies,
-        stop,
-        selected: () => isSelected,
-        repaints: () => repaints,
-        setRows: (next: number) => {
-          rows[0] = next
+        terminal,
+        /** The user drags over `from`..`to`; xterm's own mouseup runs after ours (capture). */
+        drag(element: EventTarget, release: EventTarget, from?: Cell, to?: Cell) {
+          element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
+          start = from
+          end = to
+          // The move is drawn frame by frame while the button is down.
+          refresh()
+          frame?.()
+          release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
+          fireIfChanged()
         },
+        /** The next animation frame, then the decision's turn. */
+        async settle() {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          frame?.()
+        },
+        resize() {
+          renderSelection(renderModel.start, renderModel.end)
+        },
+        divs: () => divs,
       }
     }
 
+    const setup = () => {
+      const model = xterm()
+      const element = new EventTarget()
+      const release = new EventTarget()
+      let copies = 0
+      const stop = copyOnRelease(model.terminal as any, element, release, () => copies++)
+      const drag = async (from?: Cell, to?: Cell) => {
+        model.drag(element, release, from, to)
+        await model.settle()
+        await model.settle()
+      }
+      return { model, drag, copies: () => copies, stop }
+    }
+
     it("copies once when the selection is reported after the release", async () => {
-      const { drag, copies } = setup(true)
-      await drag()
+      const { drag, copies } = setup()
+      await drag([2, 3], [10, 5])
       expect(copies()).toBe(1)
     })
 
     it("copies nothing when there is no selection", async () => {
-      const { drag, copies } = setup(false)
+      const { drag, copies } = setup()
       await drag()
       expect(copies()).toBe(0)
     })
 
-    it("repaints every row after the copy, so the teal block cannot come back on a resize", async () => {
-      const { drag, repaints, setRows, selected } = setup(true)
-      await drag()
-      // Il fatto che distingue il fix dal vecchio: il refresh viene chiamato.
-      // hasSelection resta false anche senza il fix, quindi da solo non dimostra niente.
-      expect(repaints()).toEqual([[0, 23]])
-      // E il blocco che tornava al resize non ha piu niente su cui tornare.
-      setRows(40)
-      expect(selected()).toBe(false)
+    it("after the copy a resize draws no teal block (point 2)", async () => {
+      const { model, drag } = setup()
+      await drag([2, 3], [10, 5])
+      expect(model.divs()).toBe(0)
+      // The fit after a resize: DomRenderer.handleResize redraws from its model.
+      model.resize()
+      expect(model.divs()).toBe(0)
     })
 
-    it("copies the same selection twice, because a second identical drag is not a change", async () => {
-      // Punto 3: riselezionare le stesse celle non segnala un cambio a xterm, quindi
-      // senza questo la seconda copia non avviene e il teal resta.
-      const { drag, copies } = setup(true)
-      await drag()
-      await drag()
-      expect(copies()).toBe(1)
+    it("the same cells dragged again copy again, and leave no teal (point 3)", async () => {
+      const { model, drag, copies } = setup()
+      await drag([2, 3], [10, 5])
+      await drag([2, 3], [10, 5])
+      expect(copies()).toBe(2)
+      expect(model.divs()).toBe(0)
     })
 
-    it("takes the selection away once it has been copied", async () => {
-      const { drag, selected } = setup(true)
-      await drag()
-      // Left standing, a resize repainted the block over different text and
-      // only Ctrl+C cleared it, which is what the key path always did.
-      expect(selected()).toBe(false)
+    it("nothing is left selected, so Ctrl+C interrupts again", async () => {
+      const { model, drag } = setup()
+      await drag([2, 3], [10, 5])
+      expect(model.terminal.hasSelection()).toBe(false)
+    })
+
+    it("lint: the installed xterm still behaves as the model says", () => {
+      // The model above is only as good as its reading of xterm. Pinned to the
+      // installed source, so an update that changes either behaviour fails here
+      // and the model (and forgetSelection) get read again.
+      const root = join(Bun.resolveSync("@xterm/xterm/package.json", import.meta.dir), "..", "src", "browser")
+      const renderer = readFileSync(join(root, "renderer", "dom", "DomRenderer.ts"), "utf8")
+      const service = readFileSync(join(root, "services", "SelectionService.ts"), "utf8")
+      // handleResize redraws from the render model, and an empty selection returns
+      // before the model is updated.
+      expect(renderer).toContain("this.handleSelectionChanged(this._selectionRenderModel.selectionStart")
+      expect(renderer).toMatch(/if \(!start \|\| !end\) \{\s*return;\s*\}\s*this\._selectionRenderModel\.update/)
+      // clearSelection fires without recording it; setSelection compares.
+      expect(service).toMatch(/public clearSelection\(\): void \{[^}]*this\._onSelectionChange\.fire\(\);/)
+      expect(service).toMatch(/public setSelection\([^)]*\): void \{[^}]*this\._fireEventIfSelectionChanged\(\);/)
     })
 
     it("stops listening when detached", async () => {
-      const { drag, copies, stop } = setup(true)
+      const { drag, copies, stop } = setup()
       stop()
-      await drag()
+      await drag([2, 3], [10, 5])
       expect(copies()).toBe(0)
     })
   })
