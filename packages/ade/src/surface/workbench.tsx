@@ -337,6 +337,7 @@ import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
 import { acceptsRequests, panelsHelp } from "../panels/protocol"
+import { alternateRows, createScreenRequests } from "../panels/screen-requests"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
 import { devServerUrl, offerKey, shouldOffer, type DevServerOffer } from "../browser/dev-server"
@@ -435,7 +436,7 @@ import {
 } from "@nikcli-ai/voice"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
-import { disposeTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
+import { disposeTerminal, getTerminal, hasTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
@@ -1631,6 +1632,23 @@ export function Workbench() {
    * retry is not politeness, it is the delivery.
    */
   const pendingPanelReplies = createPendingPanelReplies<SpawnedSession>()
+
+  /*
+   * The requests of an agent that draws its screen with the cursor (nikcli),
+   * which never reach `onLine` as a line: read from the screen once the pane
+   * goes quiet (`panels/screen-requests.ts`, which says why each rule is there).
+   */
+  const onAlternateScreen = (paneId: string) =>
+    hasTerminal(paneId) && getTerminal(paneId).terminal.buffer.active.type === "alternate"
+  const screenRequests = createScreenRequests({
+    rows: (paneId) => {
+      const pane = wb().panes.find((candidate) => candidate.id === paneId)
+      // Only from an agent, as on `onLine` (`acceptsRequests`).
+      if (!pane || !acceptsRequests(pane.agent ?? pane.model) || !hasTerminal(paneId)) return undefined
+      return alternateRows(getTerminal(paneId).terminal)
+    },
+    onRequest: (paneId, line) => void handlePanelRequest(paneId, line),
+  })
 
   /**
    * Acts on one line of agent output, if it was addressed to a panel.
@@ -5654,6 +5672,7 @@ export function Workbench() {
     if (pane.status === "working") settleWhenQuiet(paneId)
 
     writeToTerminal(paneId, chunk)
+    screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
     }
@@ -5779,6 +5798,7 @@ export function Workbench() {
     records.forget(id)
     rawWindows.forget(id)
     forgetQuiet(id)
+    screenRequests.forget(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
@@ -6774,6 +6794,8 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      // A conversation reopened is drawn again, requests and all: those were acted on.
+      screenRequests.start(paneId, resumed || (launched?.resumeId !== undefined && opening.resumeId === launched.resumeId))
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const session = await host.spawn({
@@ -6803,7 +6825,8 @@ export function Workbench() {
            * text, and this is text.
            */
           // Only from an agent: a terminal's output is the user's own, and may be anything (`acceptsRequests`).
-          if (acceptsRequests(agentId)) void handlePanelRequest(paneId, line)
+          // Not from a screen drawn with the cursor: those lines are the screen's words run together, and its requests are read from the screen (`screenRequests`).
+          if (acceptsRequests(agentId) && !onAlternateScreen(paneId)) void handlePanelRequest(paneId, line)
           noticeDevServer(paneId, line)
         },
         /*
