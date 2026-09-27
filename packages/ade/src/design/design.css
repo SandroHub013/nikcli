@@ -663,3 +663,21 @@
   cursor: default;
   opacity: 0.6;
 }
+
+/* A proposal published as a claude.ai page: where to choose, and the button that says it is done. */
+[data-slot="design-url"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-2) var(--ade-space-3);
+  padding: var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="design-url"] > span {
+  flex: 1 1 240px;
+}

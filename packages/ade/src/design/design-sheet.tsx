@@ -4,6 +4,7 @@ import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
+import { openExternally } from "../browser/host-bridge"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
@@ -183,6 +184,8 @@ export function DesignSheet(props: {
                   pick(k, index, Boolean(proposal().multi))
                   if (!proposal().multi) void submit()
                 }}
+                onOpenUrl={() => void openExternally(proposal().url!)}
+                onSheetChosen={() => void props.hub.sheetChosen(proposal()).then((done) => done && surface?.focus())}
                 noteRef={(element) => (note = element)}
               />
             )

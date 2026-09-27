@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
+import { openExternally } from "../browser/host-bridge"
 import { recipientHint } from "./design-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
@@ -59,6 +60,8 @@ export function DesignPane(props: {
         props.hub.pick(proposal, index)
         if (!proposal.multi) void props.hub.submit(proposal, "primary")
       }}
+      onOpenUrl={() => void openExternally(proposal.url!)}
+      onSheetChosen={() => void props.hub.sheetChosen(proposal)}
     />
   )
 

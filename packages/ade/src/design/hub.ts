@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { againEvent, answerEvent, reopenEvent, togglePick } from "./answer"
+import { againEvent, answerEvent, reopenEvent, sheetAnswerEvent, togglePick } from "./answer"
 import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
@@ -65,6 +65,8 @@ export interface DesignHub {
    * picked, that session is chosen first.
    */
   again: (proposal: DesignProposal) => Promise<boolean>
+  /** «Ho scelto sul foglio»: the choice was made on the claude.ai page; the answer says to read it there. */
+  sheetChosen: (proposal: DesignProposal) => Promise<boolean>
   /**
    * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
    * or the pane already showing this proposal. Resolves to why it could
@@ -202,6 +204,7 @@ export function createDesignHub(deps: {
         answer: () => answer(proposal),
       })
     },
+    sheetChosen: (proposal) => record(proposal, sheetAnswerEvent(proposal, draft(proposal.k).note, new Date())),
     again: (proposal) => {
       const event = againEvent(proposal, draft(proposal.k).note, new Date())
       if (typeof event === "string") return record(proposal, event)

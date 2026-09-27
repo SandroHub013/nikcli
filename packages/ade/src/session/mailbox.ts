@@ -1401,6 +1401,12 @@ export const USAGE =
   "                                          release X»); 5) context al massimo 3 frasi, dettagli in facts o in un\n" +
   "                                          file results/…; 6) scrivi con gli accenti (è, perché, più), mai e' o piu\n" +
   "                                          al loro posto\n" +
+  "                                          design, url: se sei una sessione Claude Code, pubblica il foglio con\n" +
+  "                                          tutte le varianti come pagina artifact claude.ai, con il database per\n" +
+  "                                          salvare la scelta, e metti il link in url (https://claude.ai/…); le\n" +
+  "                                          varianti restano, con nome e descrizione. ADE apre la pagina nel\n" +
+  "                                          browser; quando l'utente preme «Ho scelto sul foglio» ti arriva la\n" +
+  "                                          risposta, e la scelta si legge con ArtifactData read_db\n" +
   '  ade-msg kv set <chiave> "<valore>" | get <chiave> | del <chiave> | list [<prefisso>]\n' +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   '  ade-msg kv lock <chiave> [--ttl <sec>] ["<nota>"] | unlock <chiave> [--force]\n' +

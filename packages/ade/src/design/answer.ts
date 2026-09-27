@@ -154,3 +154,20 @@ export function formatMoment(ms: number, now: Date): string {
 export function countLabel(count: number): string {
   return t("design.count", count)
 }
+
+/**
+ * «Ho scelto sul foglio»: the answer to a proposal chosen on its claude.ai
+ * page. The choice itself is in the page's database; the answer says so, and
+ * the delivered line tells the session to read it there (notifiche-design).
+ */
+export function sheetAnswerEvent(proposal: Pick<DesignProposal, "k">, note: string, at: Date): AnsweredDesignEvent {
+  const trimmed = note.trim()
+  return {
+    type: "risposta",
+    k: proposal.k,
+    at: at.toISOString(),
+    by: USER,
+    words: [t("design.url.words"), trimmed].filter(Boolean).join(" — "),
+    ...(trimmed ? { note: trimmed } : {}),
+  }
+}

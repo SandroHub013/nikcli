@@ -29,6 +29,10 @@ export function DesignCard(props: {
   onAgain: () => void
   /** «Scegli questa»: picks and sends; on a `multi` question, ticks. Without it, it picks. */
   onChoose?: (index: number) => void
+  /** Opens the proposal's claude.ai page in the system browser. */
+  onOpenUrl?: () => void
+  /** «Ho scelto sul foglio». */
+  onSheetChosen?: () => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
   return (
@@ -66,6 +70,25 @@ export function DesignCard(props: {
 
       <Show when={props.proposal.context}>
         <p data-slot="design-context">{props.proposal.context}</p>
+      </Show>
+
+      {/* The sheet as a claude.ai page, from a Claude Code session: chosen there, told here (notifiche-design). */}
+      <Show when={props.proposal.url}>
+        <div data-slot="design-url">
+          <span>{t("design.url.note")}</span>
+          <button type="button" data-slot="design-ghost" onClick={() => props.onOpenUrl?.()}>
+            {t("design.url.open")}
+          </button>
+          <button
+            type="button"
+            data-slot="design-ghost"
+            data-action="sheet-chosen"
+            disabled={props.busy}
+            onClick={() => props.onSheetChosen?.()}
+          >
+            {t("design.url.chosen")}
+          </button>
+        </div>
       </Show>
 
       <Show when={sharedPreview(props.proposal.variants)}>

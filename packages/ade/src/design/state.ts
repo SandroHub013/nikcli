@@ -32,6 +32,8 @@ export interface DesignProposal {
   readonly variants: readonly DesignVariant[]
   /** More than one variant may be picked. */
   readonly multi?: true
+  /** The sheet as a claude.ai page, when a Claude Code session published one. */
+  readonly url?: string
   readonly order?: number
   readonly raisedBy: string
   /** The pane that asked, when ADE wrote the event: the answer goes back there. */
@@ -104,6 +106,7 @@ export function foldProposals(
         ...(event.keeps && event.keeps.length > 0 ? { keeps: event.keeps } : {}),
         variants: event.variants,
         ...(event.multi ? { multi: true as const } : {}),
+        ...(event.url ? { url: event.url } : {}),
         order: event.order,
         raisedBy: event.by,
         raisedFrom: event.fromPane,
@@ -232,6 +235,8 @@ export function resolvedMessage(proposal: DesignProposal): string {
   }
   if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)
   else if (answer.choice) parts.push(`scelta: ${answer.choice}`)
+  // Chosen on the claude.ai page: the choice is in the page's own database, not here.
+  else if (proposal.url) parts.push(`scelta sul foglio ${proposal.url}: leggila con ArtifactData read_db`)
   if (answer.note) parts.push(`nota: ${answer.note}`)
   parts.push(`parole: "${answer.words}"`)
   if (proposal.spec) parts.push(`spec: ${proposal.spec}`)
