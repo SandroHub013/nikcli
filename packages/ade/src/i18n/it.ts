@@ -483,6 +483,7 @@ export const it = {
   "choices.samePane": (title: string, place: number) => `${title} (${place})`,
   "choices.brief.why": "Perché",
   "choices.recommended": "Consigliata",
+  "choices.recommended.said": ", consigliata,",
   "choices.brief.recommend": (option: string, because?: string) =>
     because ? `Consigliata: ${option}, perché ${because}` : `Consigliata: ${option}`,
   "choices.age.now": "adesso",

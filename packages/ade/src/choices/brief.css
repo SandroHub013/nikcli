@@ -33,6 +33,17 @@
   white-space: nowrap;
 }
 
+/* The words of the badge for the screen reader, where the badge itself is hidden from the name. */
+[data-slot="choice-recommended-said"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 [data-slot="brief-why"] b {
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);

@@ -421,6 +421,7 @@ import { DecisionsSheet } from "../decisions/decisions-sheet"
 import { ChoicesSheet } from "../choices/choices-sheet"
 import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
 import { createToast } from "./toast"
+import { createSettled } from "./settled"
 import {
   deliveryLine,
   deliveryState,
@@ -1700,12 +1701,15 @@ export function Workbench() {
             designHub.delivery(proposal).state === "in coda",
         ).length ?? 0,
   )
-  const choicesCounts = createMemo(() =>
-    choiceCounts(
+  // An answer on its way to the pane that asked is queued for half a second: not «0» on the button (`createSettled`).
+  const settledQueued = createSettled(() => decisionsQueued() + designQueued())
+  const choicesCounts = createMemo(() => ({
+    ...choiceCounts(
       { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
       { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
     ),
-  )
+    queued: settledQueued(),
+  }))
   // Not a memo: it reads the panes (`mailPanes`), defined further down, and a memo runs at once.
   const choices = () =>
     choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? [], paneNames())

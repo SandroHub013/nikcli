@@ -91,9 +91,16 @@ export function DecisionCard(props: {
                 <span data-slot="decision-option-text">
                   <b>
                     {option.label}
-                    {/* The one the writer recommends, on its own option too (rifiniture 3). */}
+                    {/*
+                      The one the writer recommends, on its own option too (rifiniture 3).
+                      The badge is hidden from the name, which read «SìConsigliata va bene»:
+                      the screen reader hears «Sì, consigliata» (ultimi 1).
+                    */}
                     <Show when={isRecommended(props.decision.recommend, option.label)}>
-                      <span data-slot="choice-recommended">{t("choices.recommended")}</span>
+                      <span data-slot="choice-recommended" aria-hidden="true">
+                        {t("choices.recommended")}
+                      </span>
+                      <span data-slot="choice-recommended-said">{t("choices.recommended.said")}</span>
                     </Show>
                   </b>
                   <Show when={option.detail}>
