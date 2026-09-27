@@ -228,13 +228,16 @@ pub fn install_locked(
     curl: &dyn Fetcher,
     print: &dyn Fingerprint,
 ) -> Result<(), String> {
-    let home = home(root);
-    std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    // `rev`, not `home`: a local called `home` shadowed the function, and the
+    // unpackers, which take `root` and call `home` themselves, were handed it and
+    // looked one level too deep (`v1.0/v1.0`).
+    let rev = home(root);
+    std::fs::create_dir_all(&rev).map_err(|e| e.to_string())?;
     for (download, name) in downloads() {
         if let Some(reason) = install.stop() {
             return Err(reason);
         }
-        let dest = home.join(name);
+        let dest = rev.join(name);
         if dest.is_file() {
             install.counted();
             continue;
@@ -242,26 +245,26 @@ pub fn install_locked(
         install.bring(download, &dest, curl, print)?;
     }
     // The runtime is a tarball, and the three files that are used are inside it.
-    unpack_runtime(&home)?;
+    unpack_runtime(root)?;
     // And so is espeak-ng-data: it arrives the same way and is a folder of files
     // the host phonemises with, not a single file. It was downloaded and never
     // unpacked, so `ready()` — which asks for the folder — was never true and an
     // install that reported success could not speak.
-    unpack_espeak(&home)?;
+    unpack_espeak(root)?;
     // The model: downloaded, checked, and then made into a file sherpa reads.
     let model = prepared_model(root);
     if !model.is_file() {
         if let Some(reason) = install.stop() {
             return Err(reason);
         }
-        let fetched = install.fetch(&MODEL, &home.join("kokoro-v1.0.fp16.onnx.download"), curl, print)?;
-        prepare_model(&home.join("kokoro-v1.0.fp16.onnx.download"), &model)?;
+        let fetched = install.fetch(&MODEL, &rev.join("kokoro-v1.0.fp16.onnx.download"), curl, print)?;
+        prepare_model(&rev.join("kokoro-v1.0.fp16.onnx.download"), &model)?;
         let _ = fetched;
     }
     install.counted();
     // The vocabulary ships with ADE, and it is one of the steps the panel is
     // told about: a file that appears is a step that finishes.
-    let tokens = home.join("tokens.txt");
+    let tokens = rev.join("tokens.txt");
     if !tokens.is_file() {
         // The vocabulary ADE carries is the one K1 measured. A different one would
         // give the wrong voices and nothing would say so, because it still sounds
@@ -293,9 +296,14 @@ pub fn install_locked(
 /// host is given the DLL it loads and the ONNX Runtime beside it, and nothing
 /// else, so what is on disk is what is needed.
 ///
-/// The parameter is `root` and not `home`: it used to be called `home`, which
-/// shadowed the function of the same name, and a path inside it came out one level
-/// too deep. The test beside `unpack_espeak` is what caught it.
+/// Both unpackers take `root`, the Kokoro folder, and find the revision inside it
+/// with `home` themselves; callers pass `root` too, never `home(root)`. That was
+/// the bug twice: once as a parameter named `home`, once as `install_locked`
+/// passing its own `home`, and each time the archive was looked for one level
+/// too deep, not found, and the install said it had finished.
+///
+/// Already unpacked is fine; an archive that is not where the install put it is
+/// an error, never a quiet `Ok`.
 fn unpack_runtime(root: &Path) -> Result<(), String> {
     let lib = home(root).join("lib");
     if sherpa_dll_in(&lib).is_file() {
@@ -303,7 +311,7 @@ fn unpack_runtime(root: &Path) -> Result<(), String> {
     }
     let archive = home(root).join("sherpa-onnx-1.13.8.tar.bz2");
     if !archive.is_file() {
-        return Ok(());
+        return Err(format!("L'archivio del runtime di Kokoro non c'è: {}", archive.display()));
     }
     std::fs::create_dir_all(&lib).map_err(|e| e.to_string())?;
     let listing = super::run(system_tool("tar.exe"), &["-tf".as_ref(), archive.as_os_str()])?;
@@ -362,7 +370,7 @@ fn unpack_espeak(root: &Path) -> Result<(), String> {
     }
     let archive = home(root).join("espeak-ng-data-kokoro-v1.0.tar.bz2");
     if !archive.is_file() {
-        return Ok(());
+        return Err(format!("L'archivio di espeak-ng non c'è: {}", archive.display()));
     }
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     super::run(
@@ -1222,6 +1230,121 @@ mod tests {
             assert_eq!(String::from_utf8_lossy(&bytes), format!("finta {name}"), "{name} non e' in lib");
         }
         assert!(!lib.join("non-serve.lib").exists(), "si estrae solo quello che l'host carica");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Un archivio `.tar.bz2` vero, fatto con lo stesso `tar.exe` che lo apre, da
+    /// una cartella con i file dati. Restituisce i byte.
+    #[cfg(windows)]
+    fn tarball(scratch: &Path, top: &str, files: &[(&str, &str)]) -> Vec<u8> {
+        let staging = scratch.join(format!("sorgente-{top}"));
+        for (path, body) in files {
+            let file = staging.join(top).join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, body).unwrap();
+        }
+        let archive = scratch.join(format!("{top}.tar.bz2"));
+        super::super::run(
+            system_tool("tar.exe"),
+            &["-cjf".as_ref(), archive.as_os_str(), "-C".as_ref(), staging.as_os_str(), top.as_ref()],
+        )
+        .expect("archivio di prova");
+        std::fs::read(archive).unwrap()
+    }
+
+    /// Il fetcher e l'impronta finti, in uno: scrive il corpo previsto per l'URL,
+    /// dice che pesa quanto il manifest si aspetta e che ha il suo digest. Così
+    /// passa dal vero `InstallRun::bring` senza scaricare niente.
+    #[cfg(windows)]
+    struct Finto {
+        corpi: Vec<(&'static str, Vec<u8>)>,
+        ultimo: Mutex<Option<&'static Download>>,
+    }
+
+    #[cfg(windows)]
+    impl Fetcher for Finto {
+        fn fetch(
+            &self,
+            url: &str,
+            part: &Path,
+            report: &mut dyn FnMut(u64),
+            _stop: &dyn Fn() -> Option<String>,
+        ) -> Result<u64, String> {
+            let (_, body) = self.corpi.iter().find(|(u, _)| *u == url).ok_or(format!("URL non previsto: {url}"))?;
+            std::fs::write(part, body).map_err(|e| e.to_string())?;
+            report(body.len() as u64);
+            let download = [&RUNTIME_TARBALL, &VOICES, &ESPEAK_DATA, &MODEL]
+                .into_iter()
+                .find(|d| d.url == url)
+                .unwrap();
+            *self.ultimo.lock().unwrap() = Some(download);
+            Ok(download.size.unwrap())
+        }
+    }
+
+    #[cfg(windows)]
+    impl Fingerprint for Finto {
+        fn sha256(&self, _path: &Path) -> Result<String, String> {
+            Ok(self.ultimo.lock().unwrap().expect("un digest prima di un download").sha256.to_string())
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn l_install_estrae_davvero_e_alla_fine_kokoro_e_pronto() {
+        // ALTO della review area 3: `install_locked` passava `home(root)` a
+        // funzioni che rifanno `home` da sole, cercavano gli archivi in
+        // `v1.0/v1.0`, non li trovavano e tornavano `Ok`. L'installazione diceva
+        // «riuscita» senza aver estratto niente. Qui l'install vero, dall'inizio
+        // alla fine, con due tar veri e piccoli.
+        let root = test_root("kokoro-install-intero");
+        let scratch = root.join("archivi");
+        std::fs::create_dir_all(&scratch).unwrap();
+        let runtime = tarball(
+            &scratch,
+            "sherpa-onnx-v1.13.8-win-x64-shared",
+            &[
+                ("lib/sherpa-onnx-c-api.dll", "finta"),
+                ("lib/onnxruntime.dll", "finta"),
+                ("lib/onnxruntime_providers_shared.dll", "finta"),
+            ],
+        );
+        let espeak = tarball(&scratch, "espeak-ng-data", &[("phontab", "finto"), ("voices/it", "finta")]);
+        let finto = Finto {
+            corpi: vec![(RUNTIME_TARBALL.url, runtime), (VOICES.url, b"voci finte".to_vec()), (ESPEAK_DATA.url, espeak)],
+            ultimo: Mutex::new(None),
+        };
+        // Quello che il test non può fare: il modello preparato ha un digest che
+        // solo i 163 MB veri danno, e l'host non ha ancora una release. Messi al
+        // loro posto, come li lascerebbe un install precedente e l'host finto.
+        std::fs::create_dir_all(home(&root)).unwrap();
+        std::fs::write(prepared_model(&root), b"modello finto").unwrap();
+        std::fs::write(host_exe(&root), b"host finto").unwrap();
+
+        let installer = super::super::Installer::default();
+        let slot = installer.slot(KOKORO);
+        let install = installer.begin(&slot, STEPS, None, std::time::Instant::now() + std::time::Duration::from_secs(600));
+        install_locked(&install, &root, &finto, &finto).expect("l'install finisce");
+
+        assert!(sherpa_dll(&root).is_file(), "la DLL non è stata estratta");
+        assert!(espeak_data(&root).join("phontab").is_file(), "espeak-ng-data non è stato estratto");
+        assert!(ready(&root), "dopo un install riuscito Kokoro è pronto");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn un_archivio_che_manca_e_un_errore_e_uno_gia_estratto_no() {
+        // «Riuscita» senza archivio era il successo finto: ora lo dice.
+        let root = test_root("kokoro-archivio-assente");
+        std::fs::create_dir_all(home(&root)).unwrap();
+        assert!(unpack_runtime(&root).is_err(), "il runtime senza archivio non è installato");
+        assert!(unpack_espeak(&root).is_err(), "espeak senza archivio non è installato");
+        // Già estratto, e l'archivio non serve più: va bene.
+        std::fs::create_dir_all(home(&root).join("lib")).unwrap();
+        std::fs::write(sherpa_dll(&root), b"finta").unwrap();
+        std::fs::create_dir_all(espeak_data(&root)).unwrap();
+        assert_eq!(unpack_runtime(&root), Ok(()));
+        assert_eq!(unpack_espeak(&root), Ok(()));
         let _ = std::fs::remove_dir_all(&root);
     }
 
