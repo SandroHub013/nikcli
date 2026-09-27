@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.404.0 (September 2026)
+
+## Core
+
+- Enhance restart mechanism and improve event handling (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(cli): enhance restart mechanism and improve event handling
+
 ## v1.403.0 (September 2026)
 
 ## Core
