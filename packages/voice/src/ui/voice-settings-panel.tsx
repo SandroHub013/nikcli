@@ -1077,17 +1077,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           * DEFAULT_VOICE_SETTINGS and nothing else, the transcription engine
           * included, which comes back on `openrouter`. Beside the title it
           * says what it resets, and a panel the host has retitled still
-          * carries a label that names the voice.
+          * carries a label that names the voice. Only on the voice's own
+          * sections: on one the host added (Tema, Lingua…) it offered to reset
+          * something that page does not show.
           */}
-        <button
-          type="button"
-          data-slot="ghost-btn"
-          data-armed={resetArmed() ? "true" : undefined}
-          onClick={restoreDefaults}
-          onBlur={() => setResetArmed(false)}
-        >
-          {resetArmed() ? t("vui.panel.resetVoiceConfirm") : t("vui.panel.resetVoice")}
-        </button>
+        <Show when={SECTIONS.some((section) => section.id === activeSection())}>
+          <button
+            type="button"
+            data-slot="ghost-btn"
+            data-armed={resetArmed() ? "true" : undefined}
+            onClick={restoreDefaults}
+            onBlur={() => setResetArmed(false)}
+          >
+            {resetArmed() ? t("vui.panel.resetVoiceConfirm") : t("vui.panel.resetVoice")}
+          </button>
+        </Show>
 
         <Show when={!props.inline && props.onClose}>
           <button
