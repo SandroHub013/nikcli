@@ -37,7 +37,7 @@
 export const INTRO_TEXT =
   "Sei una sessione dentro ADE, con altre sessioni di agenti. Dalla shell usa ade-msg: " +
   "ade-msg list per le sessioni aperte; ade-msg ask SESSIONE TESTO per una richiesta; " +
-  "ade-msg spawn AGENTE COMPITO per aprire una sessione nuova (--name NOME, --worktree se deve modificare file, --model ID per compiti semplici); " +
+  "ade-msg spawn AGENTE COMPITO per aprire una sessione nuova, con --name NOME, --worktree se deve modificare file, --model ID per compiti semplici; " +
   "ade-msg send SESSIONE TESTO per una nota. SESSIONE e numero, id, titolo o agente. " +
   "Non fare polling: con --no-wait continua il tuo lavoro o chiudi il turno, la risposta ti arriva da sola come [Risposta alla richiesta ...]; " +
   "usa ade-msg wait ID solo se ti serve subito, e non ripeterlo in ciclo. " +
