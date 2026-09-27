@@ -1194,7 +1194,6 @@ export const en: Messages = {
   "record.partial": (problems) => `Video saved, but not every track was: ${problems}`,
   "record.busy": "A recording is already in progress.",
   "record.closingPrevious": "The previous recording is still finishing its file. Try again in a moment.",
-  "remote.label": "Add remote environment",
   "remote.title": "Remote environment (ssh)",
   "remote.noSsh": "ssh not found in PATH",
   "remote.target": "Host, user@host or user@host:port",

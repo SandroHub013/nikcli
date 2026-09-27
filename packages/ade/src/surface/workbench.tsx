@@ -4616,7 +4616,12 @@ export function Workbench() {
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
   const sheetOpen = () =>
-    decisionsOpen() || designOpen() || voiceSettingsOpen() || Boolean(recordAsk()) || Boolean(keyRequest())
+    decisionsOpen() ||
+    designOpen() ||
+    voiceSettingsOpen() ||
+    remoteOpen() ||
+    Boolean(recordAsk()) ||
+    Boolean(keyRequest())
   const openVoiceSettings = (section?: string) => {
     setVoiceSettingsSection(section)
     setVoiceSettingsOpen(true)
