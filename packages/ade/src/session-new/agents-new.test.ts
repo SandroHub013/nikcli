@@ -64,6 +64,16 @@ test("Cursor starts as cursor-agent: `agent` is also Grok Build's name on this P
   expect(AGENTS.some((agent) => agent.command === "agent")).toBe(false)
 })
 
+test("an `agent` on PATH that is somebody else's does not make Cursor present", async () => {
+  // Grok Build's alias here, or any other: only Cursor installs `cursor-agent`.
+  const onlyAgent = async (command: string) => (command === "agent" ? "C:/Users/x/.grok/bin/agent.exe" : null)
+  const statuses = await detectAgents(onlyAgent)
+  expect(statuses.find((status) => status.agent.id === "cursor")?.availability).toBe("assente")
+  const withCursor = async (command: string) =>
+    command === "cursor-agent" ? "C:/Users/x/AppData/Local/cursor-agent/cursor-agent.cmd" : null
+  expect((await detectAgents(withCursor)).find((status) => status.agent.id === "cursor")?.availability).toBe("presente")
+})
+
 describe("coming back after a restart", () => {
   test("Kilo and Copilot reopen this folder's latest conversation", () => {
     expect(RESUME.kilo?.last?.()).toEqual(["--continue"])
