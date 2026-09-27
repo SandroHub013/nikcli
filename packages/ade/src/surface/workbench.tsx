@@ -47,6 +47,7 @@ import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
+import { RunningSessions } from "./running"
 import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
@@ -1964,7 +1965,9 @@ export function Workbench() {
     return { ok: true }
   }
 
-  const running = new Map<string, SpawnedSession>()
+  // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
+  const running = new RunningSessions()
+  onCleanup(() => running.endAll())
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
   const [runningTick, setRunningTick] = createSignal(0)
