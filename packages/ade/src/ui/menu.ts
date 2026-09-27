@@ -13,7 +13,11 @@
  * - a press outside the menu and its button closes it.
  */
 export function bindMenu(menu: HTMLElement, options: { close: () => void; anchor?: HTMLElement | null }): () => void {
-  const doc = menu.ownerDocument
+  // The page's document, not `menu.ownerDocument`: Solid runs the ref on a
+  // clone of its template before inserting it, and the clone still belongs to
+  // the template's inert document, where no press or focus ever happens
+  // (Verifiche, medi-restyle).
+  const doc = document
   const items = () =>
     [
       ...menu.querySelectorAll<HTMLElement>(

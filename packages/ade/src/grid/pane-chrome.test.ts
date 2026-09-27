@@ -170,7 +170,8 @@ describe("pane chrome", () => {
       const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
       for (const rule of css.split("}")) {
         if (!/padding-top:\s*42px/.test(rule)) continue
-        clearances.push(`${file}: ${rule.slice(0, rule.indexOf("{")).trim()}`)
+        // One space for any run of them: a long selector is split over lines.
+        clearances.push(`${file}: ${rule.slice(0, rule.indexOf("{")).replace(/\s+/g, " ").trim()}`)
       }
     }
     expect(clearances).toHaveLength(1)
@@ -178,6 +179,8 @@ describe("pane chrome", () => {
     expect(clearance!.startsWith("grid/pane.css: ")).toBe(true)
     expect(clearance).toContain('[data-component="session-pane"] > [data-slot="pane-header"] ~ *')
     expect(clearance).toContain(':not([data-slot="pane-dock"])')
+    // The «Copiato» toast floats in a corner: 42 pixels of clearance made it a tall empty box.
+    expect(clearance).toContain(':not([data-slot="pane-toast"])')
     for (const body of ["pane-terminal", "pane-transcript", "pane-plugin"]) {
       expect(clearance).not.toContain(body)
     }
