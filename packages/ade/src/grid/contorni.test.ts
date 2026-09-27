@@ -176,6 +176,50 @@ describe("lint: no pane draws its focus in accent", () => {
     }
   })
 
+  test("lint: every focus ring of every sheet is 3:1 or better, not only the token", () => {
+    // The token passes, but a sheet can draw its own ring beside it: the two
+    // composers did, with `--ade-border-strong` mixed 70% into transparent —
+    // 1.77:1 in light and 1.47:1 in dark (contorni-terzo, 1). So every
+    // `box-shadow` and `outline` in a `:focus` rule, in ADE's sheets and the
+    // voice panel's, is either the token or a colour read here at 3:1 or more.
+    // A `color-mix` is refused outright: its share of transparent is a
+    // contrast this arithmetic cannot vouch for.
+    const grounds = ["--ade-surface", "--ade-bg"].map(readToken)
+    const passes = (token: string) => {
+      const ring = readToken(token)
+      return grounds.every((ground) => contrast(ring.light, ground.light) >= 3 && contrast(ring.dark, ground.dark) >= 3)
+    }
+    // A queue item's ring is its own state colour (dev.css): a signal, like the
+    // drop zone, not a neutral contour. Named so it is read, not missed.
+    const OWN_TONE = /var\(--queue-(tone|glow)\)/
+    const offenders: string[] = []
+    const roots = [src, join(src, "..", "..", "voice", "src")]
+    let rings = 0
+    for (const root of roots) {
+      for (const entry of new Bun.Glob("**/*.css").scanSync(root)) {
+        const file = join(root, entry)
+        postcss.parse(readFileSync(file, "utf-8")).walkRules((rule) => {
+          if (!/:focus/.test(rule.selector)) return
+          for (const node of rule.nodes) {
+            if (node.type !== "decl" || !/^(box-shadow|outline)$/.test(node.prop)) continue
+            const value = node.value.trim()
+            if (/^(none|0)$/.test(value) || OWN_TONE.test(value)) continue
+            rings++
+            // The token, with or without the fallback the voice package gives it
+            // for a host that does not define it.
+            if (/^var\(--ade-focus-ring[,)]/.test(value)) continue
+            const tokens = [...value.matchAll(/var\((--ade-[a-z-]+)\)/g)].map((m) => m[1]!)
+            const ok = !value.includes("color-mix") && tokens.length > 0 && tokens.every(passes)
+            if (!ok) offenders.push(`${entry.split("\\").join("/")} ${rule.selector} { ${node.prop}: ${value} }`)
+          }
+        })
+      }
+    }
+    // Rule 22: a scan that found nothing proves nothing.
+    expect([rings, rings > 20]).toEqual([rings, true])
+    expect(offenders).toEqual([])
+  })
+
   test("lint: the neutral token has a light-dark value, so the ring follows the theme", () => {
     // A ring that reads an undefined token draws nothing, and a focus that draws
     // nothing is the accessibility cost of this change. ADE's themes are `light`,

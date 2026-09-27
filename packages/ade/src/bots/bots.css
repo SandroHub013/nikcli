@@ -499,7 +499,7 @@
  */
 [data-slot="bots-composer"]:focus-within {
   border-color: var(--ade-border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+  box-shadow: var(--ade-focus-ring);
 }
 
 /*
@@ -574,7 +574,7 @@
 
 [data-slot="bots-send"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* The card's line for a model the catalog no longer has (bot-riquadro, a). */

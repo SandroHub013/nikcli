@@ -44,14 +44,12 @@ describe("lint: neither composer takes colour at the focus", () => {
   test("lint: the bot's composer draws no accent at the focus, only a grey border", () => {
     const body = rule(bots, BOT_FOCUS);
     expect([body, body.includes("--ade-accent")]).toEqual([body, false]);
-    expect([body, body.includes("--ade-focus-ring")]).toEqual([body, false]);
     expect(body).toContain("border-color: var(--ade-border-strong)");
   });
 
   test("lint: the Chat's field draws no accent at the focus, only a grey border", () => {
     const body = rule(chat, CHAT_FOCUS);
     expect([body, body.includes("--ade-accent")]).toEqual([body, false]);
-    expect([body, body.includes("--ade-focus-ring")]).toEqual([body, false]);
     expect(body).toContain("border-color: var(--ade-border-strong)");
   });
 
@@ -59,10 +57,12 @@ describe("lint: neither composer takes colour at the focus", () => {
     const bodies = [rule(bots, BOT_FOCUS), rule(chat, CHAT_FOCUS)];
     // Rule 22: a cycle over a list checks the list is not empty first.
     expect(bodies).toHaveLength(2);
+    // The shared ring, grey since contorni-neutri: their own mix of
+    // `--ade-border-strong` was 1.77:1 in light and 1.47:1 in dark
+    // (contorni-terzo, 1), under the 3:1 a focus indicator needs.
     for (const body of bodies) {
-      expect(body).toMatch(
-        /box-shadow:\s*0 0 0 2px color-mix\(in srgb, var\(--ade-border-strong\) \d+%,\s*transparent\)/,
-      );
+      expect(body).toContain("box-shadow: var(--ade-focus-ring)");
+      expect([body, body.includes("color-mix")]).toEqual([body, false]);
     }
   });
 
