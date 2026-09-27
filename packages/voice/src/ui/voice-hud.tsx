@@ -56,6 +56,7 @@ export interface VoiceHudProps {
   onCycleTarget?: () => void
   /** Fired when the user dismisses the widget. */
   onClose?: () => void
+  naturalVoiceError?: string
   /** Fired when the user asks to open settings from a configuration/key error. */
   onOpenSettings?: () => void
 }
@@ -81,6 +82,8 @@ function Wave(props: { level: number; running: boolean }) {
 export function VoiceHud(props: VoiceHudProps) {
   const status = () => props.engine.status()
   const running = () => props.engine.isRunning()
+  /* What the orb shows: whether the next sentence is heard, not whether the microphone is open (D74). */
+  const hearing = () => props.engine.hearing()
   const partial = () => props.engine.partialTranscript()
   const spoken = () => props.engine.lastSpoken()
   const level = () => props.engine.micLevel()
@@ -130,11 +133,17 @@ export function VoiceHud(props: VoiceHudProps) {
    * is how "no API key" and "model would not load" both reached the user as a
    * button that does nothing when pressed. The failure gets the pill instead.
    */
-  const failure = createMemo(() => {
+  const engineFailure = createMemo(() => {
     const message = props.engine.lastError()
     if (!message || running() || preparing()) return undefined
     return message === dismissedError() ? undefined : message
   })
+  const installFailure = createMemo(() => {
+    const message = props.naturalVoiceError
+    if (!message || running() || preparing() || message === dismissedError()) return undefined
+    return message
+  })
+  const failure = createMemo(() => installFailure() ?? engineFailure())
 
   /*
    * Visible whenever the mic is open — not only when there is something to
@@ -181,6 +190,7 @@ export function VoiceHud(props: VoiceHudProps) {
       partial: partial(),
       spoken: spoken(),
       readback: readback(),
+      confirmationPrompt: dialog().pendingAction?.confirmPrompt,
       wakeWord: props.engine.settings().wakeWord,
       ...latestExchange(props.engine.history()),
     })
@@ -236,7 +246,7 @@ export function VoiceHud(props: VoiceHudProps) {
               data-kind="failure"
               data-tone="failed"
               role="alert"
-              aria-label={t("vui.hud.failed.label")}
+              aria-label={installFailure() ? t("vui.hud.voiceFailed.label") : t("vui.hud.failed.label")}
             >
               {/* Shut, because it is: a start that failed left the microphone
                   closed, and the orb is the one thing on screen that can say
@@ -245,7 +255,7 @@ export function VoiceHud(props: VoiceHudProps) {
                 <OrbMark awake={false} status="asleep" level={0} rim={rim()} />
               </span>
               <span data-slot="hud-body">
-                <span data-slot="hud-label">{t("vui.hud.failed")}</span>
+                <span data-slot="hud-label">{installFailure() ? t("vui.hud.voiceFailed") : t("vui.hud.failed")}</span>
                 <span data-slot="hud-line">{message()}</span>
               </span>
               <Show when={props.onOpenSettings}>
@@ -305,10 +315,10 @@ export function VoiceHud(props: VoiceHudProps) {
               */}
                 <span data-slot="hud-orb">
                   <OrbMark
-                    awake={running()}
+                    awake={hearing()}
                     status={status()}
                     mode={mode()}
-                    level={orbLevel(level(), running())}
+                    level={orbLevel(level(), hearing())}
                     rim={rim()}
                   />
                 </span>
@@ -375,10 +385,10 @@ export function VoiceHud(props: VoiceHudProps) {
             >
               <span data-slot="hud-mark">
                 <OrbMark
-                  awake={running()}
+                  awake={hearing()}
                   status={status()}
                   mode="transcription"
-                  level={orbLevel(level(), running())}
+                  level={orbLevel(level(), hearing())}
                   rim={rim()}
                 />
               </span>
@@ -423,9 +433,9 @@ export function VoiceHud(props: VoiceHudProps) {
         {/* Errors ride under the pill rather than replacing it: the mic is
             still open, and the widget must go on saying so. Not while the
             failure pill is up — that one is already the message. */}
-        <Show when={error() && !failure()}>
+        <Show when={(props.naturalVoiceError ?? error()) && !failure()}>
           <p data-slot="hud-error" role="alert">
-            {error()}
+            {props.naturalVoiceError ?? error()}
           </p>
         </Show>
       </div>

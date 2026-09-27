@@ -1,0 +1,670 @@
+import { describe, expect, test } from "bun:test"
+import { enterReady, togglePick } from "./answer"
+import { queuedBadge, submitControl } from "./card"
+import { createDesignHub } from "./hub"
+import type { DesignRegister } from "./register"
+import type { RecipientStatus } from "./delivery"
+import { answerEvent, countLabel, sheetKey } from "./answer"
+import {
+  chooseRecipient,
+  deliveryLine,
+  deliveryState,
+  enqueue,
+  markDelivered,
+  parseOutbox,
+  parseRecipients,
+  pendingFor,
+  pruneOutbox,
+  recipientChange,
+  recipientOptions,
+  reopenLine,
+  resolveDeliveryTarget,
+  resolveRecipient,
+  type DeliveryCandidate,
+  type OutboxItem,
+} from "./delivery"
+import {
+  frameProps,
+  isHtmlPreview,
+  isImagePreview,
+  isInsideRoot,
+  loadFailure,
+  previewPlan,
+  previewSize,
+  resolvePreviewPath,
+  sharedPreview,
+  shortenPath,
+  VARIANT_SANDBOX,
+} from "./preview-plan"
+import { mediaUrl } from "../video/video"
+import { foldProposals, type DesignProposal } from "./state"
+import type { DesignEvent } from "./log"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+describe("the design sheet keys", () => {
+  test("digits pick variant, Enter records, Esc closes, arrows navigate", () => {
+    expect(sheetKey({ key: "Escape" }, 3, false, false)).toEqual({ kind: "close" })
+    expect(sheetKey({ key: "1" }, 3, false, false)).toEqual({ kind: "pick", index: 0 })
+    expect(sheetKey({ key: "3" }, 3, false, false)).toEqual({ kind: "pick", index: 2 })
+    expect(sheetKey({ key: "4" }, 3, false, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 3, false, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "Enter" }, 3, false, false)).toEqual({ kind: "need-choice" })
+    expect(sheetKey({ key: "ArrowRight" }, 3, false, false)).toEqual({ kind: "next" })
+    expect(sheetKey({ key: "ArrowLeft" }, 3, false, false)).toEqual({ kind: "previous" })
+    expect(sheetKey({ key: "f" }, 3, false, false)).toBeUndefined()
+  })
+
+  test("in the note textarea, keys type normally; Ctrl+Enter submits", () => {
+    expect(sheetKey({ key: "1" }, 3, true, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 3, true, true)).toBeUndefined()
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 3, true, false)).toEqual({ kind: "submit" })
+  })
+})
+
+describe("an answer event for design", () => {
+  const proposal: DesignProposal = {
+    k: "DS1",
+    title: "Settings UI",
+    variants: [
+      { name: "A", description: "Rail", preview: "a.html" },
+      { name: "B", description: "Cards", preview: "b.html" },
+    ],
+    raisedBy: "fable",
+    openedAt: "2026-09-21T10:00:00Z",
+    status: "aperta",
+    history: [],
+  }
+
+  test("carries variant name and note together as user words", () => {
+    const event = answerEvent(proposal, 0, "Bello il rail", new Date("2026-09-21T11:00:00Z"))
+    expect(event).toMatchObject({
+      type: "risposta",
+      k: "DS1",
+      choice: "A",
+      note: "Bello il rail",
+      words: "A — Bello il rail",
+    })
+  })
+
+  test("cannot be empty", () => {
+    expect(answerEvent(proposal, undefined, "  ", new Date())).toBe("scegli una variante o scrivi una nota")
+  })
+})
+
+describe("who receives design answers", () => {
+  const candidates: DeliveryCandidate[] = [
+    { id: "p1", title: "Master", project: "nikcli", running: true },
+    { id: "p2", title: "fable", project: "nikcli", running: false },
+  ]
+
+  test("resolves chosen session or non scelta", () => {
+    expect(resolveRecipient(candidates, undefined)).toEqual({ state: "non scelta" })
+    expect(resolveRecipient(candidates, { id: "p1", title: "Master" })).toEqual({
+      state: "pronta",
+      id: "p1",
+      title: "Master",
+    })
+    expect(resolveRecipient(candidates, { id: "p2", title: "fable" })).toEqual({
+      state: "non attiva",
+      id: "p2",
+      title: "fable",
+    })
+  })
+
+  test("deliveryLine formats with [Design da utente]", () => {
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Impostazioni",
+      spec: "S54",
+      variants: [{ name: "A", description: "", preview: "" }],
+      raisedBy: "fable",
+      openedAt: "2026-09-21T10:00:00Z",
+      status: "risposta",
+      answer: {
+        choice: "A",
+        words: "A — approvata",
+        at: "2026-09-21T11:00:00Z",
+        by: "utente",
+      },
+      history: [],
+    }
+    expect(deliveryLine(proposal)).toBe(
+      '[Design da utente] design [k=DS1] Impostazioni — scelta: A — parole: "A — approvata" — spec: S54',
+    )
+  })
+
+  test("outbox queueing and delivery state tracking", () => {
+    let outbox: OutboxItem[] = []
+    outbox = enqueue(outbox, {
+      path: "C:\\p\\.ade\\design.jsonl",
+      k: "DS1",
+      answeredAt: "2026-09-21T11:00:00Z",
+      queuedAt: 1000,
+    })
+    expect(pendingFor(outbox, "C:\\p\\.ade\\design.jsonl").length).toBe(1)
+
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 2000)
+    expect(pendingFor(outbox, "C:\\p\\.ade\\design.jsonl").length).toBe(0)
+  })
+
+  test("reopening a delivered design enqueues a riaperta notice and keeps it until delivered", () => {
+    const path = "C:\\p\\.ade\\design.jsonl"
+    const events: DesignEvent[] = [
+      {
+        type: "aperta",
+        k: "DS1",
+        at: "2026-09-21T10:00:00Z",
+        by: "fable",
+        title: "Impostazioni",
+        spec: "S54",
+        variants: [
+          { name: "A", description: "", preview: "" },
+          { name: "B", description: "", preview: "" },
+        ],
+      },
+      {
+        type: "risposta",
+        k: "DS1",
+        at: "2026-09-21T11:00:00Z",
+        by: "utente",
+        choice: "A",
+        words: "A",
+      },
+    ]
+    let outbox = enqueue([], { path, k: "DS1", answeredAt: "2026-09-21T11:00:00Z", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 99)
+
+    // Reopen event occurs: status becomes "aperta"
+    const reopened = foldProposals([
+      ...events,
+      { type: "riaperta", k: "DS1", at: "2026-09-21T11:10:00Z", by: "utente" },
+    ]).proposals
+
+    // Old delivered answer is pruned
+    outbox = pruneOutbox(outbox, path, reopened)
+    expect(outbox).toHaveLength(0)
+
+    // Reopening enqueues a riaperta message in the outbox
+    const notice = reopenLine("DS1")
+    expect(notice).toBe("[Design da utente] riaperta [k=DS1]: la scelta di prima non vale più, aspetta la nuova")
+
+    outbox = enqueue(outbox, {
+      path,
+      k: "DS1",
+      answeredAt: "2026-09-21T11:10:00Z",
+      queuedAt: 2,
+      kind: "riaperta",
+      text: notice,
+    })
+
+    expect(pendingFor(outbox, path)).toHaveLength(1)
+    expect(outbox[0]!.kind).toBe("riaperta")
+    expect(outbox[0]!.text).toBe(notice)
+
+    // While aperta and pending delivery, pruneOutbox retains the reopen message
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(1)
+
+    // Once delivered, pruneOutbox cleans it up
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 100)
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(0)
+  })
+
+  test("reopen notice goes to original recipient A even when current recipient changed to B (M1)", () => {
+    const candidates: DeliveryCandidate[] = [
+      { id: "s-a", title: "Sessione A", project: "nikcli", running: true },
+      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+    ]
+    // 1. Design DS1 was answered and delivered to Sessione A
+    let outbox = enqueue([], {
+      path: "C:\\p\\.ade\\design.jsonl",
+      k: "DS1",
+      answeredAt: "2026-09-21T11:00:00Z",
+      queuedAt: 1,
+    })
+    outbox = markDelivered(outbox, outbox[0]!, "Sessione A", 99)
+
+    // 2. Later, current recipient changes to Sessione B
+    const recipientB: RecipientStatus = { state: "pronta", id: "s-b", title: "Sessione B" }
+
+    // 3. User reopens design DS1: onReopened sets to = "Sessione A" (deliveredTo)
+    const notice = reopenLine("DS1")
+    outbox = enqueue(outbox, {
+      path: "C:\\p\\.ade\\design.jsonl",
+      k: "DS1",
+      answeredAt: "2026-09-21T11:10:00Z",
+      queuedAt: 2,
+      kind: "riaperta",
+      text: notice,
+      to: "Sessione A",
+    })
+
+    const reopenItem = outbox.find((item) => item.k === "DS1" && item.kind === "riaperta")!
+    expect(reopenItem).toBeDefined()
+    expect(reopenItem.to).toBe("Sessione A")
+
+    // 4. resolveDeliveryTarget routes to Sessione A, NOT Sessione B
+    const target = resolveDeliveryTarget(reopenItem, candidates, recipientB)
+    expect(target).toEqual({ id: "s-a", title: "Sessione A" })
+
+    // 5. If Sessione A is closed, it falls back to current recipient (Sessione B)
+    const candidatesWithoutA: DeliveryCandidate[] = [
+      { id: "s-a", title: "Sessione A", project: "nikcli", running: false },
+      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+    ]
+    const fallbackTarget = resolveDeliveryTarget(reopenItem, candidatesWithoutA, recipientB)
+    expect(fallbackTarget).toEqual({ id: "s-b", title: "Sessione B" })
+  })
+
+  test("two sessions with the same title: the notice goes to the saved id, and an old entry still uses the title", () => {
+    const same: DeliveryCandidate[] = [
+      { id: "s-1", title: "Master", project: "nikcli", running: true },
+      { id: "s-2", title: "Master", project: "nikcli", running: true },
+    ]
+    const current: RecipientStatus = { state: "pronta", id: "s-1", title: "Master" }
+    const file = "C:\\p\\.ade\\design.jsonl"
+    const byId = resolveDeliveryTarget(
+      { path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master", toId: "s-2" },
+      same,
+      current,
+    )
+    expect(byId).toEqual({ id: "s-2", title: "Master" })
+    const byTitle = resolveDeliveryTarget(
+      { path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master" },
+      same,
+      current,
+    )
+    expect(byTitle).toEqual({ id: "s-1", title: "Master" })
+    let outbox = enqueue([], { path: file, k: "DS1", answeredAt: "t", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, { id: "s-2", title: "Master" }, 50)
+    expect(outbox[0]).toMatchObject({ deliveredTo: "Master", deliveredToId: "s-2" })
+  })
+})
+
+describe("preview type security detection and path resolution", () => {
+  test("identifies HTML and images correctly", () => {
+    expect(isHtmlPreview("C:/results/S54-anteprima.html")).toBe(true)
+    expect(isHtmlPreview("<!doctype html><html><body>Test</body></html>")).toBe(true)
+    expect(isHtmlPreview("mockup.png")).toBe(false)
+
+    expect(isImagePreview("screen.png")).toBe(true)
+    expect(isImagePreview("photo.jpg")).toBe(true)
+    expect(isImagePreview("data:image/png;base64,abc")).toBe(true)
+    expect(isImagePreview("S54-anteprima.html")).toBe(false)
+  })
+
+  test("resolvePreviewPath resolves project-relative and preserves absolute paths", () => {
+    const projectRoot = "C:/Users/39349/Favorites/nikcli"
+
+    // Relative paths resolved against project root
+    expect(resolvePreviewPath(".ade/ostile-anteprima.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/.ade/ostile-anteprima.html",
+    )
+    expect(resolvePreviewPath("./results/preview.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/results/preview.html",
+    )
+    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe("C:/Users/39349/Favorites/nikcli/shots/mockup.png")
+
+    // Absolute paths preserved as-is
+    expect(resolvePreviewPath("C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html",
+    )
+    expect(resolvePreviewPath("C:\\Users\\39349\\Favorites\\ade-team\\results\\S54-anteprima.html", projectRoot)).toBe(
+      "C:\\Users\\39349\\Favorites\\ade-team\\results\\S54-anteprima.html",
+    )
+    expect(resolvePreviewPath("/var/tmp/preview.html", projectRoot)).toBe("/var/tmp/preview.html")
+
+    // Strips query strings and hashes
+    expect(resolvePreviewPath(".ade/preview.html#glass,A", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/.ade/preview.html",
+    )
+    expect(resolvePreviewPath("C:/preview.html?theme=dark", projectRoot)).toBe("C:/preview.html")
+
+    // Without projectRoot, returns cleaned path
+    expect(resolvePreviewPath(".ade/preview.html")).toBe(".ade/preview.html")
+  })
+
+  test("shortenPath produces clean shortened paths with filename and parent directory", () => {
+    expect(shortenPath("C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html")).toBe(
+      "…/results/S54-anteprima.html",
+    )
+    expect(shortenPath("C:\\repo\\project\\nested-long-path-directory\\sub\\preview.html")).toBe("…\\sub\\preview.html")
+    expect(shortenPath("C:\\repo\\project\\sub\\preview.html", 20)).toBe("…\\sub\\preview.html")
+    expect(shortenPath(".ade/preview.html")).toBe(".ade/preview.html")
+  })
+})
+
+describe("top bar narrow window layout, and what the eye has to check", () => {
+  test("lint: under 1100px the queue buttons keep the vial and the pill, and the project's facts go in the «i»", () => {
+    const css = readFileSync(join(__dirname, "../dev.css"), "utf-8")
+    const narrow = css.slice(css.indexOf("@media (max-width: 1099.98px)"))
+    expect(narrow).toContain('[data-slot="bar-queue-name"],\n  [data-slot="bar-queue-aside"] {\n    display: none;')
+    expect(narrow).toContain('[data-slot="ade-project-meta"] {\n    display: none;')
+    expect(narrow).toContain('[data-slot="ade-project-info"] {\n    display: inline-block;')
+  })
+
+  test("lint: under 640px the bar, the view tab and the window controls are compacted, with the controls' margin pulled back to the bar's padding", () => {
+    const devCssPath = join(__dirname, "../dev.css")
+    const css = readFileSync(devCssPath, "utf-8")
+
+    expect(css).toContain("@media (max-width: 640px)")
+    expect(css).toContain('[data-slot="ade-bar"]')
+    expect(css).toContain("padding: 0 var(--ade-space-3);")
+    expect(css).toContain('[data-slot="ade-window-controls"]')
+    expect(css).toContain("margin-right: calc(-1 * var(--ade-space-3));")
+    expect(css).toContain('[data-slot="ade-bar-center"]')
+    expect(css).toContain('[data-slot="ade-view-tab"]')
+    expect(css).toContain("padding: 0 var(--ade-space-3);")
+  })
+
+  test("lint: variant-preview-source sits outside variant-preview-wrap, so overflow: hidden cannot clip it", () => {
+    const cardTsxPath = join(__dirname, "design-card.tsx")
+    const tsx = readFileSync(cardTsxPath, "utf-8")
+
+    // The wrapper has overflow: hidden and fixed height
+    expect(tsx).toContain('data-slot="variant-preview-wrap"')
+    expect(tsx).toContain('data-slot="variant-preview-source"')
+
+    // Ensure variant-preview-source is placed AFTER variant-preview-wrap closes, not inside it
+    const wrapIndex = tsx.indexOf('data-slot="variant-preview-wrap"')
+    const wrapCloseIndex = tsx.indexOf("</div>", wrapIndex)
+    const sourceIndex = tsx.indexOf('data-slot="variant-preview-source"')
+
+    expect(sourceIndex).toBeGreaterThan(wrapCloseIndex)
+  })
+
+  /*
+   * The 426px overflow of 0.6.x. Under 640px the window controls hang past the
+   * right edge unless the bar's horizontal padding and their negative
+   * margin-right are the same distance: the padding reserves the room the
+   * negative margin then hands back. `--ade-space-3` is 6px and
+   * `--ade-space-6` is 12px, which is exactly how the two drifted apart.
+   *
+   * What this is not is a measurement, and the reason is worth writing down.
+   * happy-dom has no box model: in `bun test` `scrollWidth`, `offsetWidth` and
+   * `getBoundingClientRect()` all answer 0, checked even for a 900px child
+   * inside a 420px parent. So `document.scrollWidth` cannot be read here at
+   * all, and the test that stood in this place declared 6px, 120px and 160px,
+   * then overwrote `scrollWidth` with its own arithmetic and read it back. It
+   * compared its numbers with themselves: every value in the stylesheet could
+   * change and it would stay green.
+   *
+   * Whether the bar really fits is a thing for the eye (rule 21): Verifiche's
+   * screenshots at 900 and 1400px, light and dark, with the bar focused.
+   */
+  test("lint: under 640px the bar's padding and the window controls' margin are one distance", () => {
+    const dev = readFileSync(join(__dirname, "../dev.css"), "utf-8")
+    const narrow = /@media\s*\(max-width:\s*640px\)\s*\{([\s\S]*?)\n\}/.exec(dev)?.[1]
+    expect([narrow !== undefined]).toEqual([true])
+    const bar = /\[data-slot="ade-bar"\]\s*\{([^}]*)\}/.exec(narrow!)?.[1] ?? ""
+    const controls = /\[data-slot="ade-window-controls"\]\s*\{([^}]*)\}/.exec(narrow!)?.[1] ?? ""
+    const padding = /padding:\s*0\s+var\((--ade-space-\d+)\)/.exec(bar)?.[1]
+    const margin = /margin-right:\s*calc\(-1\s*\*\s*var\((--ade-space-\d+)\)/.exec(controls)?.[1]
+    expect([padding, margin, padding !== undefined && padding === margin]).toEqual([padding, margin, true])
+  })
+})
+
+/*
+ * The card's answer buttons (S75 point 1). The spec asks for these as UI
+ * tests; Solid components are not rendered in `bun test` on this repo, so the
+ * card only draws `submitControl` and the hub runs `submitSteps`, and the
+ * same scenarios are asserted here against those functions.
+ */
+describe("answering with nobody to receive", () => {
+  const sessions = [
+    { id: "p1", title: "Master", project: "nikcli", running: true },
+    { id: "p2", title: "fable", project: "nikcli", running: false },
+  ]
+  const proposal: DesignProposal = {
+    k: "DS30",
+    title: "Tasto",
+    variants: [
+      { name: "A", description: "", preview: "" },
+      { name: "B", description: "", preview: "" },
+    ],
+    raisedBy: "fable",
+    openedAt: "2026-09-23T10:00:00Z",
+    status: "aperta",
+    history: [],
+  }
+
+  const setup = (recipient: () => RecipientStatus) => {
+    const calls: string[] = []
+    const register = {
+      path: () => "C:\p\.ade\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      now: () => new Date(),
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        calls.push(`answer:${event.type}`)
+      },
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient,
+      sessions: () => sessions,
+      choose: (id) => calls.push(`choose:${id}`),
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    hub.setDraft(proposal.k, { picked: 1, note: "" })
+    const control = () =>
+      submitControl({ recipient: recipient(), sessions, inline: hub.inlineRecipient(), busy: false, label: "Registra" })
+    return { hub, calls, control }
+  }
+
+  test("the card shows the inline select, «Scegli e invia» disabled, and Enter records nothing", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "non scelta" }))
+    expect(control().options?.map((option) => option.value)).toEqual(["", "p1", "p2"])
+    expect(control().label).toBe("Scegli e invia")
+    expect(control().disabled).toBe(true)
+    expect(control().recordOnly).toBe(true)
+    // Enter, with a variant picked: the sheet turns it into the main button's press.
+    expect(sheetKey({ key: "Enter" }, 2, false, true)).toEqual({ kind: "submit" })
+    expect(await hub.submit(proposal, "primary")).toBe(false)
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true, true)).toEqual({ kind: "submit" })
+    expect(await hub.submit(proposal, "primary")).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  test("a stopped session picked inline does not enable it", () => {
+    const { hub, control } = setup(() => ({ state: "non scelta" }))
+    hub.setInlineRecipient("p2")
+    expect(control().disabled).toBe(true)
+  })
+
+  test("with a running session picked, the button chooses it and then answers, in that order", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "non scelta" }))
+    hub.setInlineRecipient("p1")
+    expect(control().disabled).toBe(false)
+    expect(control().options?.find((option) => option.selected)?.value).toBe("p1")
+    expect(await hub.submit(proposal, "primary")).toBe(true)
+    expect(calls).toEqual(["choose:p1", "answer:risposta"])
+  })
+
+  test("«Registra senza inviare» answers without choosing", async () => {
+    const { hub, calls } = setup(() => ({ state: "non attiva", id: "p2", title: "fable" }))
+    expect(await hub.submit(proposal, "record")).toBe(true)
+    expect(calls).toEqual(["answer:risposta"])
+  })
+
+  test("with a ready recipient the card is today's: no select, no second button", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "pronta", id: "p1", title: "Master" }))
+    expect(control()).toEqual({ gate: "invia", label: "Registra", disabled: false, recordOnly: false })
+    expect(await hub.submit(proposal, "primary")).toBe(true)
+    expect(calls).toEqual(["answer:risposta"])
+  })
+
+  test("the bar button says how many answers wait", () => {
+    expect(queuedBadge(0)).toBeUndefined()
+    expect(queuedBadge(2)).toBe("· 2 in coda")
+  })
+})
+
+/*
+ * Multiple answers (S75 point 6). As for point 1, the spec's UI test is run
+ * against the functions the card and the sheet use: `sheetKey` for the key,
+ * `togglePick` for the box, `enterReady` for Enter, the hub for the answer.
+ */
+describe("a multiple question", () => {
+  const multi = {
+    k: "M1",
+    variants: [
+      { name: "opzione 1", description: "", preview: "" },
+      { name: "opzione 2", description: "", preview: "" },
+      { name: "opzione 3", description: "", preview: "" },
+    ],
+    multi: true as const,
+  }
+
+  test("answerEvent: boxes 3 and 1 give choices in the options' order, and the words", () => {
+    const at = new Date("2026-09-23T10:00:00Z")
+    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({
+      choices: ["opzione 1", "opzione 3"],
+      words: "opzione 1 + opzione 3",
+    })
+    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({
+      words: "opzione 1 + opzione 3 — ma piano",
+      note: "ma piano",
+    })
+    expect(answerEvent(multi, [], "", at)).toBeTypeOf("string")
+    expect((answerEvent(multi, [0], "", at) as { choice?: string }).choice).toBeUndefined()
+  })
+
+  test("«1» then «3» tick two boxes, «1» again unticks the first, and Enter records choices with option 3 only", async () => {
+    const appended: DesignEvent[] = []
+    const register = {
+      path: () => "C:\\p\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      now: () => new Date(),
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        appended.push(event)
+      },
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+      sessions: () => [{ id: "p1", title: "Master", running: true }],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    const proposal = {
+      ...multi,
+      title: "Quali",
+      raisedBy: "fable",
+      openedAt: "2026-09-23T10:00:00Z",
+      status: "aperta",
+      history: [],
+    } as never
+    const press = (key: string) => {
+      const draft = hub.draft("M1")
+      const action = sheetKey({ key }, 3, false, enterReady(true, draft.picked, draft.note, true))
+      if (action?.kind === "pick")
+        hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
+      return action
+    }
+    press("1")
+    press("3")
+    expect(hub.draft("M1").picked).toEqual([0, 2])
+    press("1")
+    expect(hub.draft("M1").picked).toEqual([2])
+    expect(press("Enter")).toEqual({ kind: "submit" })
+    expect(await hub.submit(proposal, "primary")).toBe(true)
+    expect(appended[0]).toMatchObject({ choices: ["opzione 3"], words: "opzione 3" })
+  })
+
+  test("Enter with no box and no note asks, as today", () => {
+    expect(sheetKey({ key: "Enter" }, 3, false, enterReady(true, [], "", true))).toEqual({ kind: "need-choice" })
+    expect(sheetKey({ key: "Enter" }, 3, false, enterReady(true, [], "solo nota", true))).toEqual({ kind: "submit" })
+  })
+
+  test("a single question keeps today's picking", () => {
+    expect(togglePick(0, 2, false)).toBe(2)
+    expect(enterReady(false, 1, "", false)).toBe(false)
+    expect(enterReady(false, 1, "", true)).toBe(true)
+  })
+})
+
+/*
+ * The previews (S75 point 3). The frame's attributes are `frameProps`, spread
+ * as they are on the iframe; the error texts are `previewPlan` and
+ * `loadFailure`. Solid is not rendered in bun test here, so these and a look
+ * at the component's source stand in for the spec's DOM checks.
+ */
+describe("a variant's preview", () => {
+  const root = "C:/p"
+  const html = previewPlan(".ade/design/DS-PROVA/2.html", root, "DS-PROVA", true)
+
+  test("an HTML page is a frame whose src is the ade-media URL, sized from its meta, with no srcdoc", () => {
+    expect(html).toEqual({
+      kind: "html",
+      path: "C:/p/.ade/design/DS-PROVA/2.html",
+      src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true),
+    })
+    const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
+    expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
+    expect(props).toMatchObject({ width: "360", height: "240", sandbox: VARIANT_SANDBOX, loading: "lazy" })
+    expect("srcdoc" in props).toBe(false)
+    expect("style" in props).toBe(false)
+  })
+
+  test("a page outside the project root gets no frame: Fuori dal progetto", () => {
+    expect(previewPlan("C:/altrove/confronto.html", root, "DS1", true)).toEqual({
+      kind: "error",
+      text: "Fuori dal progetto: C:/altrove/confronto.html — le anteprime stanno in .ade/design/DS1/",
+    })
+    expect(previewPlan("../fuori.html", root, "DS1", true).kind).toBe("error")
+    expect(isInsideRoot(String.raw`C:\P\.ade\design\x.html`, "c:/p")).toBe(true)
+  })
+
+  test("a failure names the path: Non si carica", () => {
+    expect(loadFailure("C:/p/.ade/design/DS1/4.html", new Error("file non trovato"))).toBe(
+      "Non si carica: C:/p/.ade/design/DS1/4.html — file non trovato",
+    )
+    // The host repeats the path in its message (seen live in ADE Test): said once.
+    expect(loadFailure("C:/p/x.html", "C:/p/x.html: Impossibile trovare il file specificato. (os error 2)")).toBe(
+      "Non si carica: C:/p/x.html — Impossibile trovare il file specificato. (os error 2)",
+    )
+    const image = previewPlan("shots/a.png", root, "DS1", true)
+    expect(image).toMatchObject({ kind: "image", path: "C:/p/shots/a.png" })
+  })
+
+  test("lint: the image's onError names the path through loadFailure", () => {
+    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
+    expect(tsx).toContain('onError={() => setFailure(loadFailure(current.path, t("design.preview.imageBroken")))}')
+  })
+
+  test("two variants on the same page are flagged", () => {
+    expect(sharedPreview([{ preview: "results/c.html#a" }, { preview: "results/c.html#b" }])).toBe(true)
+    expect(sharedPreview([{ preview: ".ade/design/DS1/1.html" }, { preview: ".ade/design/DS1/2.html" }])).toBe(false)
+    expect(sharedPreview([{ preview: "" }, { preview: "" }])).toBe(false)
+  })
+
+  test("HTML written into the register is an error, not a srcdoc", () => {
+    expect(previewPlan("<!doctype html><p>x</p>", root, "DS1", true).kind).toBe("error")
+  })
+
+  test("remote images are not loaded in preview: only ade-media and data (Punto 13)", () => {
+    expect(previewPlan("https://example.com/p.png", root, "DS1", true)).toEqual({ kind: "none" })
+    expect(previewPlan("http://example.com/p.png", root, "DS1", true)).toEqual({ kind: "none" })
+    expect(isImagePreview("https://example.com/p.png")).toBe(false)
+    expect(previewPlan("data:image/png;base64,abc", root, "DS1", true)).toEqual({
+      kind: "image",
+      path: "data:image/png;base64,abc",
+      src: "data:image/png;base64,abc",
+    })
+    expect(previewPlan("ade-media://localhost/p.png", root, "DS1", true)).toEqual({
+      kind: "image",
+      path: "ade-media://localhost/p.png",
+      src: "ade-media://localhost/p.png",
+    })
+  })
+})

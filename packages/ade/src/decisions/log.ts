@@ -25,7 +25,21 @@ export type DecisionEventType = (typeof DECISION_EVENT_TYPES)[number]
 
 export interface DecisionOption {
   readonly label: string
+  /** A name for the option beside its label: "Sospendi su richiesta". */
+  readonly title?: string
   readonly detail?: string
+  /** What changes for the user if it is picked. */
+  readonly effect?: string
+  /** Only when it helps to choose: "1 consegna, ~1 giorno". */
+  readonly cost?: string
+  readonly risk?: string
+}
+
+/** The option the writer recommends, and why: said once, not at the end of the context. */
+export interface Recommendation {
+  /** An option's label. */
+  readonly option: string
+  readonly because?: string
 }
 
 interface EventBase {
@@ -35,13 +49,29 @@ interface EventBase {
   readonly at: string
   /** Who wrote it: a session title, "utente", "Master". */
   readonly by: string
+  /** The pane that wrote it, when ADE wrote it: the answer goes back there. */
+  readonly fromPane?: string
+  /** That pane's agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly agent?: string
 }
 
 export interface OpenedEvent extends EventBase {
   readonly type: "aperta"
   readonly title: string
+  /*
+   * The format of the polish-aaa plan (point 3), every field optional. A build
+   * that does not know them shows `context` alone, which is why a line that
+   * uses them must still carry one.
+   */
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   /** What the user needs to know to answer, in plain words. */
   readonly context?: string
+  /** Measures and facts, short. */
+  readonly facts?: readonly string[]
+  readonly recommend?: Recommendation
   readonly options?: readonly DecisionOption[]
   /** The work waiting on it: `S16`, `S16 realizzazione`. */
   readonly unlocks?: string
@@ -49,12 +79,16 @@ export interface OpenedEvent extends EventBase {
   readonly spec?: string
   /** Lower comes first. Absent: after every ordered one, by time. */
   readonly order?: number
+  /** More than one option may be picked; needs at least two options. */
+  readonly multi?: true
 }
 
 export interface AnsweredEvent extends EventBase {
   readonly type: "risposta"
   /** The option picked, when one was. */
   readonly choice?: string
+  /** The options picked, in a decision opened with `multi`. Never with `choice`. */
+  readonly choices?: readonly string[]
   /** A note added to the choice. */
   readonly note?: string
   /** What the user said, exactly. Required: it is what gets executed. */
@@ -148,7 +182,7 @@ export function toEvent(value: unknown): DecisionEvent | string {
   if (!at || Number.isNaN(Date.parse(at))) return t("decisions.log.date")
   const by = text(record.by)
   if (!by) return t("decisions.log.author")
-  const base = { k, at, by }
+  const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
 
   switch (type as DecisionEventType) {
     case "aperta": {
@@ -158,25 +192,54 @@ export function toEvent(value: unknown): DecisionEvent | string {
       if (typeof options === "string") return options
       const order = record.order
       if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("decisions.log.order")
+      const multi = record.multi === true
+      if (multi && options.length < 2) return t("decisions.log.multi")
+      const facts = factsOf(record.facts)
+      if (facts && "error" in facts) return t("decisions.log.facts")
+      const recommend = recommendationOf(record.recommend)
+      if (recommend && "error" in recommend) return t("decisions.log.recommend")
+      if (recommend && !options.some((option) => option.label === recommend.option))
+        return t("decisions.log.recommendOption", recommend.option)
+      const question = text(record.question)
+      const why = text(record.why)
+      const context = text(record.context)
+      const newFormat = Boolean(
+        question ||
+        why ||
+        facts ||
+        recommend ||
+        options.some((option) => option.title || option.effect || option.cost || option.risk),
+      )
+      // A build that knows none of them shows the context alone: without one it would show an empty card.
+      if (newFormat && !context) return t("decisions.log.contextNeeded")
       return compact({
         type: "aperta",
         ...base,
         title,
-        context: text(record.context),
+        question,
+        why,
+        context,
+        facts,
+        recommend,
         options: options.length > 0 ? options : undefined,
         unlocks: text(record.unlocks),
         spec: text(record.spec),
         order: order as number | undefined,
+        multi: multi ? true : undefined,
       }) as OpenedEvent
     }
     case "risposta": {
       const words = text(record.words)
       if (!words) return t("decisions.log.words")
+      const choices = choicesOf(record.choices, t("decisions.log.choices"))
+      if (choices && "error" in choices) return choices.error
+      if (choices && record.choice !== undefined) return t("decisions.log.choiceAndChoices")
       return compact({
         type: "risposta",
         ...base,
         words,
         choice: text(record.choice),
+        choices,
         note: text(record.note),
       }) as AnsweredEvent
     }
@@ -198,17 +261,65 @@ function text(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
+/**
+ * The options picked in a multiple answer: a non-empty list of distinct,
+ * non-empty texts. `undefined` when the field is absent.
+ */
+function choicesOf(value: unknown, bad: string): string[] | undefined | { error: string } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length === 0) return { error: bad }
+  const seen = new Set<string>()
+  for (const item of value) {
+    const label = text(item)
+    if (!label || seen.has(label)) return { error: bad }
+    seen.add(label)
+  }
+  return [...seen]
+}
+
 function optionsOf(value: unknown): DecisionOption[] | string {
   if (value === undefined) return []
   if (!Array.isArray(value)) return t("decisions.log.options")
   const options: DecisionOption[] = []
   for (const item of value) {
-    const label = item && typeof item === "object" ? text((item as Record<string, unknown>).label) : text(item)
+    const record = item && typeof item === "object" ? (item as Record<string, unknown>) : undefined
+    const label = record ? text(record.label) : text(item)
     if (!label) return t("decisions.log.optionLabel")
-    const detail = item && typeof item === "object" ? text((item as Record<string, unknown>).detail) : undefined
-    options.push(detail ? { label, detail } : { label })
+    options.push(
+      compact({
+        label,
+        title: text(record?.title),
+        detail: text(record?.detail),
+        effect: text(record?.effect),
+        cost: text(record?.cost),
+        risk: text(record?.risk),
+      }) as DecisionOption,
+    )
   }
   return options
+}
+
+/** Short texts; `undefined` when absent or empty, an error when not a list of texts. */
+function factsOf(value: unknown): string[] | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return { error: true }
+  const facts: string[] = []
+  for (const item of value) {
+    const fact = text(item)
+    if (!fact) return { error: true }
+    facts.push(fact)
+  }
+  return facts.length > 0 ? facts : undefined
+}
+
+/** `{ option, because? }`; an error when it is something else or names no option. */
+function recommendationOf(value: unknown): Recommendation | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { error: true }
+  const record = value as Record<string, unknown>
+  const option = text(record.option)
+  if (!option) return { error: true }
+  return compact({ option, because: text(record.because) }) as Recommendation
 }
 
 /** Drops undefined fields, so the line on disk holds only what was said. */

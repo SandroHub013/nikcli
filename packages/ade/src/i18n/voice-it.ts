@@ -23,6 +23,7 @@ export const voiceIt = {
   "vui.orb.confirming": "L'assistente attende una conferma (premi per chiudere)",
   "vui.orb.executing": "L'assistente sta eseguendo un comando",
   "vui.orb.listening": "Assistente in ascolto (premi per chiudere)",
+  "vui.orb.title": (chord: string) => `Microfono · ${chord}`,
   "vui.agentOrb.speaking": "L'assistente sta parlando: premi per interrompere",
   "vui.agentOrb.working": "L'assistente sta lavorando: premi per annullare",
   "vui.listening.text": (wakeWord: string) => `In ascolto · «${wakeWord}»`,
@@ -49,6 +50,8 @@ export const voiceIt = {
   "vui.hud.modelPercent": (percent: number) => `modello vocale · ${percent}%`,
   "vui.hud.failed": "non parte",
   "vui.hud.failed.label": "Controllo vocale non avviato",
+  "vui.hud.voiceFailed": "voce naturale non disponibile",
+  "vui.hud.voiceFailed.label": "Download della voce naturale non riuscito",
   "vui.hud.settings": "impostazioni",
   "vui.hud.settings.label": "Apri impostazioni vocali",
   "vui.hud.close": "Chiudi (Esc)",
@@ -103,6 +106,11 @@ export const voiceIt = {
   "vui.speed.fast.desc": "Claude Sonnet 5 con poco ragionamento; Codex con poco ragionamento",
   "vui.speed.cli": "Come la CLI",
   "vui.speed.cli.desc": "Il modello e il ragionamento impostati nella CLI: più lenta, a volte più accurata",
+  "vui.codexFallback.title": "Ricaduta su Codex al limite di Claude",
+  "vui.codexFallback.on": "Attiva",
+  "vui.codexFallback.on.desc": "Se Claude Code raggiunge il limite del piano, ripete la richiesta su Codex",
+  "vui.codexFallback.off": "Disattivata",
+  "vui.codexFallback.off.desc": "Riferisce il limite senza passare a Codex (predefinito)",
   "vui.engine.note":
     "L'agente usa il tuo account della CLI, per uso personale: ADE non legge le tue credenziali, tiene pochi turni insieme e non riprova quando raggiungi il limite. Non modifica file e non esegue comandi nel progetto: il lavoro lo affida alle sessioni. Per un uso intensivo accedi alla CLI con una chiave API.",
   "vui.download.starting": "Avvio download modello Parakeet (~640 MB)...",
@@ -115,6 +123,8 @@ export const voiceIt = {
   "vui.panel.title": "Pannello di controllo vocale",
   "vui.panel.subtitle": "Modalità, attivazione, scorciatoie e motori di riconoscimento",
   "vui.panel.close": "Chiudi impostazioni (Esc)",
+  "vui.panel.resetVoice": "Ripristina la voce",
+  "vui.panel.resetVoiceConfirm": "Confermi?",
   "vui.panel.sections": "Sezioni delle impostazioni",
   "vui.mode.title": "Modalità predefinita",
   "vui.mode.desc":
@@ -129,10 +139,17 @@ export const voiceIt = {
   "vui.replies.speak.desc": "Ti legge cosa ha risposto la sessione",
   "vui.replies.silent": "Resta in silenzio",
   "vui.replies.silent.desc": "La risposta la leggi tu nel pannello",
+  "vui.alerts.title": "Avvisi vocali di propria iniziativa",
+  "vui.alerts.on": "Accesi",
+  "vui.alerts.on.desc": "Annuncia a voce permessi, completamenti e decisioni",
+  "vui.alerts.off": "Spenti",
+  "vui.alerts.off.desc": "Nessun avviso di propria iniziativa (predefinito)",
   "vui.replies.voice": "Voce delle risposte",
   "vui.replies.source": "Fonte",
   "vui.replies.note":
     "Le voci naturali si scaricano la prima volta che servono (circa 85 MB, solo su Windows) e poi funzionano senza rete. Finché il download non finisce risponde la voce di sistema.",
+  "vui.replies.retry": "Riprova",
+  "vui.replies.downloading": "Download in corso…",
   "vui.reply.male": "Maschile",
   "vui.reply.ugo": "Ugo (Piper), naturale e offline",
   "vui.reply.ugo.licence": "Modello CC-BY-4.0, derivato dalla voce lessac, il cui dataset è concesso per sola ricerca.",
@@ -140,8 +157,51 @@ export const voiceIt = {
   "vui.reply.paola": "Paola (Piper), naturale e offline",
   "vui.reply.paola.licence":
     "Dataset CC0, modello derivato dalla voce lessac, il cui dataset è concesso per sola ricerca.",
+  "vui.reply.lessac.title": "Lessac (Inglese)",
+  "vui.reply.lessac.desc": "Lessac (Piper), naturale e offline",
+  "vui.reply.lessac.licence": "Modello concesso per sola ricerca.",
   "vui.reply.system": "Voce di sistema",
   "vui.reply.system.desc": "Quella di Windows, senza scaricare nulla",
+  "vui.reply.fallbackNotice": "Voce naturale non disponibile: uso la voce di sistema.",
+  "vui.replies.backend": "Motore",
+  "vui.backend.piper": "Piper",
+  "vui.backend.piper.desc": "Voci locali, italiane e una inglese",
+  "vui.backend.kokoro": "Kokoro",
+  "vui.backend.kokoro.desc": "Quattro voci inglesi locali, più naturali, con un download a parte",
+  "vui.backend.system": "Sistema",
+  "vui.backend.system.desc": "La voce del sistema, niente da scaricare",
+  "vui.reply.kokoro.af_heart": "Heart",
+  "vui.reply.kokoro.af_heart.desc": "Femminile, inglese americano",
+  "vui.reply.kokoro.am_fenrir": "Fenrir",
+  "vui.reply.kokoro.am_fenrir.desc": "Maschile, inglese americano",
+  "vui.reply.kokoro.bf_emma": "Emma",
+  "vui.reply.kokoro.bf_emma.desc": "Femminile, inglese britannico",
+  "vui.reply.kokoro.bm_george": "George",
+  "vui.reply.kokoro.bm_george.desc": "Maschile, inglese britannico",
+  "vui.reply.kokoro.licence": "Modello Kokoro-82M, Apache-2.0.",
+  "vui.replies.kokoroItalian":
+    "Le voci Kokoro sono inglesi: una risposta in italiano la legge Ugo o Paola, dello stesso genere.",
+  "vui.replies.test": "Prova la voce",
+  "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
+  "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
+  "vui.pack.installing": "Installazione in corso",
+  "vui.pack.bytesOf": (done: string, total: string, percent: string) => `${done} di ${total} (${percent}%)`,
+  "vui.pack.filesOf": (done: string, file: string, files: string) => `${done}, file ${file} di ${files}`,
+  "vui.pack.cancel": "Annulla",
+  "vui.pack.cancelling": "Annullo…",
+  "vui.pack.install": "Installa",
+  "vui.pack.installSize": (size: string) => `Installa (${size})`,
+  "vui.pack.delete": "Elimina",
+  "vui.pack.deleting": "Elimino…",
+  "vui.pack.kokoro.unavailable":
+    "Kokoro non è ancora disponibile in questa versione di ADE: finché non lo è, le risposte le legge Piper.",
+  "vui.pack.kokoro.absent":
+    "Le voci Kokoro non sono installate: finché non lo sono, le risposte le legge Piper. Si scaricano solo quando premi Installa.",
+  "vui.pack.kokoro.installed": "Voci Kokoro installate: funzionano senza rete.",
+  "vui.pack.kokoro.model":
+    "Modello: Kokoro-82M di hexgrad (huggingface.co/hexgrad/Kokoro-82M), licenza Apache-2.0, nei file preparati da kokoro-onnx (MIT).",
+  "vui.pack.kokoro.host":
+    "Lo legge kokoro-host, un programma separato da ADE, con il runtime sherpa-onnx (Apache-2.0) e ONNX Runtime (MIT); espeak-ng (GPL-3.0-or-later) sta nella DLL di sherpa-onnx scaricata con il runtime, non nell'host.",
   "vui.send.title": "Comportamento invio trascrizione",
   "vui.send.manual": "Trascrivi e basta",
   "vui.send.manual.desc": "Il testo resta lì, lo invii tu",
@@ -161,9 +221,13 @@ export const voiceIt = {
     "Disattivata: la parola di richiamo non è supportata in modalità trascrizione; è valida solo per eseguire comandi dell'agente.",
   "vui.listen.title": "Ascolto",
   "vui.listen.always": "Sempre attivo",
-  "vui.listen.always.desc": (wakeWord: string) => `Il microfono si apre con ADE e aspetta «${wakeWord}»`,
+  "vui.listen.always.desc": (wakeWord: string) =>
+    `Il microfono si apre con ADE e aspetta «${wakeWord}». Consuma crediti: ogni voce in stanza viene mandata al servizio che trascrive, circa 0,02 $ l'ora con la televisione accesa, niente quando c'è silenzio. Si ferma da solo dopo 30 minuti senza che tu lo chiami o se supera 120 frasi in un'ora.`,
+  "vui.listen.spend": (calls: number, cost: string) =>
+    `Oggi la voce ha mandato ${calls} ${calls === 1 ? "richiesta" : "richieste"} a OpenRouter, per ${cost}.`,
   "vui.listen.manual": "Solo quando lo apri",
-  "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia",
+  "vui.listen.manual.desc":
+    "Con il pulsante in alto o la scorciatoia; senza una frase accettata si spegne dopo 30 secondi.",
   "vui.shortcuts.title": "Scorciatoie da tastiera",
   "vui.shortcuts.desc":
     "Due combinazioni libere: fai clic su una scorciatoia e premi i tasti che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a scrivere",
@@ -276,7 +340,7 @@ export const voiceIt = {
 
   // Voice wake word hint
   "vui.wake.hint": (wakeWord: string) =>
-    `Inizia la frase con "${wakeWord}" (va bene anche "ehi nik" o "hey nick"), per esempio "${wakeWord}, apri il browser". Il silenzio non costa niente. Mentre aspetta il nome, anche mentre sta lavorando, delle frasi più lunghe di due secondi manda al servizio di trascrizione solo il primo secondo e mezzo, e il resto solo se inizia con il nome; le frasi più corte, come «annulla», partono intere. Detto il nome da solo, o premuto il pulsante, ascolta senza nome per dieci secondi. Se in un'ora le richieste sono più di 120 te lo dice. Si mette in pausa solo con il PC bloccato o in sospensione e riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.`,
+    `Basta dire "nik" per chiamarlo. Pronuncia "ei nik" staccato, con una pausa dopo il nome. Inizia la frase con "${wakeWord}" (va bene anche "ehi nik" o "hey nick"), per esempio "${wakeWord}, apri il browser". Il silenzio non costa niente. Mentre aspetta il nome, anche mentre sta lavorando, delle frasi più lunghe di due secondi manda al servizio di trascrizione solo il primo secondo e mezzo, e il resto solo se inizia con il nome; le frasi più corte, come «annulla», partono intere. Detto il nome da solo, o premuto il pulsante, ascolta senza nome per dieci secondi. L'ascolto da solo è spento di serie, perché ogni frase che sente si paga: lo accendi nelle impostazioni della voce, dove c'è scritto quanto costa e quanto ha speso oggi. Acceso, si ferma da solo se in un'ora manda più di 120 frasi o se per mezz'ora nessuno lo chiama, e resta fermo finché non lo riaccendi tu. Con il PC bloccato o in sospensione si mette in pausa e riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.`,
 
   // Voice microphone errors, settings repairs, shortcut warnings
   "vui.error.unknown": "errore sconosciuto",
@@ -316,10 +380,15 @@ export const voiceIt = {
   "vui.fix.wordsDropped": (dropped: string) => `Parole personalizzate non testuali ignorate: ${dropped}.`,
   "vui.fix.wordsInvalid": "Elenco di parole personalizzate non valido: svuotato.",
   "vui.fix.speakReplies": "Lettura delle risposte non valida: ripristinata attiva.",
+  "vui.fix.spokenAlerts": "Avvisi di propria iniziativa non validi: ripristinati spenti.",
   "vui.fix.replyVoice": (value: string) => `Voce delle risposte '${value}' non riconosciuta: ripristinata Ugo.`,
+  "vui.fix.replyBackend": (value: string, fallback: string) =>
+    `Le voci Kokoro leggono in inglese: la risposta ora usa il backend '${fallback}' invece di '${value}'.`,
+  "vui.fix.ttsLocale": (value: string) => `Lingua della voce '${value}' non riconosciuta: ripristinato l'italiano.`,
   "vui.fix.agentSpeed": (value: string) =>
     `Velocità dell'agente '${value}' non riconosciuta: ripristinata quella rapida.`,
   "vui.fix.agentEngine": (value: string) => `Motore dell'agente '${value}' non riconosciuto: ripristinato automatico.`,
+  "vui.fix.codexFallback": "Impostazione ricaduta su Codex non valida: ripristinata disattivata.",
   "vui.command.palette": "Tavolozza comandi",
   "vui.command.sessionNew": "Nuova sessione",
   "vui.command.paneClose": "Chiudi pannello",
@@ -327,6 +396,7 @@ export const voiceIt = {
   "vui.command.paneRename": "Rinomina pannello",
   "vui.command.viewToggle": "Cambia vista",
   "vui.command.themeToggle": "Cambia tema",
+  "vui.command.sidebarToggle": "Mostra o nascondi la barra laterale",
   "vui.command.agent": "Modalità agente",
   "vui.command.transcription": "Modalità trascrizione",
   "vui.clash.taken": (label: string, chord: string, winner: string) =>

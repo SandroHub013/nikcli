@@ -19,7 +19,7 @@ import {
 } from "./errors"
 import { Speaker, Transcriber, VoiceHostService } from "./services"
 import { SpeakerFake, TranscriberFake, VoiceHostLive, bridgeTranscriber } from "./layers"
-import { makeVoiceProgram } from "./program"
+import { PROBE_ERROR_SPEECH_COOLDOWN_MS, WAKE_WINDOW_MS, makeVoiceProgram } from "./program"
 import { createFakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"
 import type { PaneSummary, VoiceHost, VoiceStateSnapshot, AdeView } from "../bridge/host"
@@ -299,6 +299,40 @@ describe("Effect-TS Voice Backend", () => {
     await Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(appLayer))))
   })
 
+  test("probe failures stay visible but only one speaks per cooldown; turns and legacy errors still speak", async () => {
+    const fakeTranscriber = createFakeTranscriber()
+    const fakeSpeaker = createFakeSpeaker()
+    const mockHost = new MockVoiceHost()
+    const visible: string[] = []
+    let clock = 100_000
+    const appLayer = Layer.mergeAll(TranscriberFake(fakeTranscriber), SpeakerFake(fakeSpeaker), VoiceHostLive(mockHost))
+
+    const program = Effect.gen(function* () {
+      yield* makeVoiceProgram({
+        getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }),
+        now: () => clock,
+        onError: (error) => visible.push(error),
+      })
+
+      fakeTranscriber.emitError(new Error("Errore di rete temporaneo"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Troppe richieste (429)"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Errore di rete durante la richiesta"), { purpose: "turn" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Errore di rete legacy"))
+      yield* Effect.sleep(Duration.millis(20))
+      clock += PROBE_ERROR_SPEECH_COOLDOWN_MS
+      fakeTranscriber.emitError(new Error("Servizio non disponibile (503)"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+    })
+
+    await Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(appLayer))))
+
+    expect(fakeSpeaker.spoken).toHaveLength(4)
+    expect(visible).toHaveLength(5)
+  })
+
   test("dialogue timeouts advance deterministically via TestClock with zero real waiting", async () => {
     const fakeTranscriber = createFakeTranscriber()
     const fakeSpeaker = createFakeSpeaker()
@@ -352,5 +386,108 @@ describe("problems said in plain words", () => {
     )
     expect(plainProblem("TypeError: Failed to fetch")).toBe("Non ho rete in questo momento: ti sento appena torna.")
     expect(plainProblem("qualcosa di nuovo")).toBeUndefined()
+  })
+})
+
+describe("nameGate: the rule the orb shows (D74)", () => {
+  const settings = {
+    ...DEFAULT_VOICE_SETTINGS,
+    mode: "agent" as const,
+    activation: "wake-word" as const,
+    alwaysListen: true,
+  }
+
+  async function withProgram(
+    body: (
+      handle: Effect.Effect.Success<ReturnType<typeof makeVoiceProgram>>,
+      tools: {
+        advance: (ms: number) => void
+        at: () => number
+        hear: (text: string) => Effect.Effect<void>
+        spoken: string[]
+      },
+    ) => Effect.Effect<void>,
+  ) {
+    let clock = 50_000
+    const transcriber = createFakeTranscriber()
+    const spoken: string[] = []
+    const layer = Layer.mergeAll(
+      TranscriberFake(transcriber),
+      SpeakerFake(createFakeSpeaker()),
+      VoiceHostLive(new MockVoiceHost()),
+    )
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* makeVoiceProgram({
+            getSettings: () => settings,
+            now: () => clock,
+            onOutcome: (outcome) => spoken.push(outcome.spoken ?? ""),
+          })
+          const hear = (text: string) =>
+            Effect.gen(function* () {
+              transcriber.emit(text, true)
+              yield* Effect.sleep(Duration.millis(30))
+            })
+          yield* body(handle, { advance: (ms) => (clock += ms), at: () => clock, hear, spoken })
+        }),
+      ).pipe(Effect.provide(layer)),
+    )
+  }
+
+  test("closed at rest; after the name or the button, open until the window ends", async () => {
+    await withProgram((handle, { advance, at }) =>
+      Effect.gen(function* () {
+        expect(handle.nameGate()).toEqual({ open: false })
+        yield* handle.wake
+        expect(handle.nameGate()).toEqual({ open: true, until: at() + WAKE_WINDOW_MS })
+        advance(WAKE_WINDOW_MS)
+        expect(handle.nameGate().open).toBe(true)
+        advance(1)
+        expect(handle.nameGate()).toEqual({ open: false })
+      }),
+    )
+  })
+
+  test("sleep and cancel close it", async () => {
+    await withProgram((handle) =>
+      Effect.gen(function* () {
+        yield* handle.wake
+        yield* handle.sleep
+        expect(handle.nameGate()).toEqual({ open: false })
+        yield* handle.wake
+        yield* handle.cancel
+        expect(handle.nameGate()).toEqual({ open: false })
+      }),
+    )
+  })
+
+  test("a held key holds it open, with no end of its own", async () => {
+    await withProgram((handle) =>
+      Effect.gen(function* () {
+        yield* handle.pressToTalk
+        expect(handle.nameGate()).toEqual({ open: true })
+        yield* handle.releaseToTalk
+        expect(handle.nameGate()).toEqual({ open: false })
+      }),
+    )
+  })
+
+  test("a sentence without the name is dropped exactly when the gate was closed", async () => {
+    await withProgram((handle, { hear, spoken }) =>
+      Effect.gen(function* () {
+        const before = handle.nameGate().open
+        yield* hear("qual è la capitale della Francia")
+        expect(before).toBe(false)
+        expect(spoken.some((line) => line.startsWith("Ignorata"))).toBe(true)
+
+        spoken.length = 0
+        yield* handle.wake
+        const open = handle.nameGate().open
+        yield* hear("apri una nuova sessione")
+        expect(open).toBe(true)
+        expect(spoken.some((line) => line.startsWith("Ignorata"))).toBe(false)
+      }),
+    )
   })
 })

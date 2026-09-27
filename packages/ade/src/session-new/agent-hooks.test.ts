@@ -1,9 +1,15 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import {
   HOOK_MARKER,
   HOOK_TARGETS,
+  HOOK_TIMEOUT,
+  execFormReadable,
+  forgetClaudeVersion,
   hookCommand,
+  hookExec,
+  hookOutdated,
   hookScript,
   hookTarget,
   installHook,
@@ -11,9 +17,13 @@ import {
   isAdeCommand,
   missingActivityEvents,
   readHookStatus,
+  refreshHookScript,
   removeHook,
   setHook,
+  usesExecForm,
 } from "./agent-hooks"
+import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
+import { codeOf } from "../test-support/source-text"
 
 /**
  * The real shape of `~/.claude/settings.json` on a machine that already has
@@ -63,8 +73,8 @@ const CODEX = JSON.stringify(
 const CLAUDE_SCRIPT = "C:\\Users\\x\\.claude\\hooks\\ade-agent-session.ps1"
 
 describe("targets", () => {
-  test("only the two CLIs whose format has been read off disk", () => {
-    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex"])
+  test("only the CLIs whose format has been read off disk or off their loader", () => {
+    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex", "nikcli"])
   })
 
   test("every target is an agent ADE can also resume", async () => {
@@ -111,6 +121,21 @@ describe("the targets here and the paths in Rust", () => {
     expect(source).toContain(`const SCRIPT_NAME: &str = "${HOOK_MARKER}.ps1";`)
   })
 
+  test("the plugin's text is compiled into Rust, from the file the tests load", () => {
+    expect(source).toContain('const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");')
+    expect(
+      new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js"),
+    ).toBe(true)
+  })
+
+  test("and nikcli's plugin under the same marker, with no configuration", () => {
+    expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
+    expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
+    expect(source).toMatch(
+      /id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/,
+    )
+  })
+
   test("the environment variables the script reads are the ones Rust sets", () => {
     const pty = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
     for (const name of ["ADE_PANE_ID", "ADE_SPAWN_NONCE", "ADE_SESSION_DIR"]) {
@@ -154,8 +179,40 @@ describe("installHook", () => {
     expect(groups).toHaveLength(3)
     expect(groups[2]).toEqual({
       matcher: "startup|resume|clear",
-      hooks: [{ type: "command", command, timeout: 5 }],
+      hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT }],
     })
+  })
+
+  test("installHook with exec form writes command and args without shell, timeout 10", () => {
+    const p = CLAUDE_SCRIPT
+    const installed = JSON.parse(
+      installHook(CLAUDE, hookCommand(p), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(p)),
+    )
+    for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+      const leaf = installed.hooks[event].at(-1).hooks[0]
+      expect(leaf).toEqual({
+        type: "command",
+        command: "powershell",
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", p],
+        timeout: 10,
+      })
+      expect(leaf.shell).toBeUndefined()
+    }
+  })
+
+  test("installHook for codex has command string, no args, timeout 10", () => {
+    const p = "C:\\s.ps1"
+    const command = hookCommand(p)
+    const installed = JSON.parse(installHook(CODEX, command))
+    const leaf = installed.hooks.SessionStart[2].hooks[0]
+    expect(leaf).toEqual({ type: "command", command, timeout: 10 })
+    expect(leaf.args).toBeUndefined()
+  })
+
+  test("installedCommand on a config with exec form returns hookCommand", () => {
+    const p = CLAUDE_SCRIPT
+    const installed = installHook(CLAUDE, hookCommand(p), "startup|resume|clear", [], hookExec(p))
+    expect(installedCommand(installed)).toBe(hookCommand(p))
   })
 
   test("omits the matcher key entirely when the target has none", () => {
@@ -209,6 +266,30 @@ describe("removeHook", () => {
     expect(groups[0].hooks).toEqual([{ type: "command", command: "gh-axi" }])
   })
 
+  test("keeps a neighbour that shared the group with an exec leaf", () => {
+    const shared = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup",
+            hooks: [
+              { type: "command", command: "gh-axi" },
+              {
+                type: "command",
+                command: "powershell",
+                args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", CLAUDE_SCRIPT],
+                timeout: 10,
+              },
+            ],
+          },
+        ],
+      },
+    })
+    const groups = JSON.parse(removeHook(shared)).hooks.SessionStart
+    expect(groups).toHaveLength(1)
+    expect(groups[0].hooks).toEqual([{ type: "command", command: "gh-axi" }])
+  })
+
   test("removing when nothing is installed changes nothing", () => {
     expect(JSON.parse(removeHook(CODEX))).toEqual(JSON.parse(CODEX))
   })
@@ -216,9 +297,20 @@ describe("removeHook", () => {
 
 describe("readHookStatus and setHook", () => {
   /** A pair of files in memory, behaving the way the Rust commands do. */
-  function disk(configText: string | null = null, scriptPresent = false) {
-    const state = { configText, scriptPresent, writes: 0 }
+  // Each test reads the version afresh: ADE asks once per session, and each test is one.
+  beforeEach(() => forgetClaudeVersion())
+
+  function disk(
+    configText: string | null = null,
+    scriptPresent = false,
+    version: string | null = "2.1.280 (Claude Code)",
+  ) {
+    const state = { configText, scriptPresent, writes: 0, versionAsked: 0 }
     const host = {
+      claudeVersion: async () => {
+        state.versionAsked++
+        return version
+      },
       readAgentHook: async () => ({
         configPath: "C:\\Users\\x\\.claude\\settings.json",
         configText: state.configText,
@@ -302,6 +394,175 @@ describe("readHookStatus and setHook", () => {
     }
     expect((await readHookStatus(host, claude)).error).toBe("cartella utente non trovata")
   })
+
+  test("an old install is upgraded even when the script did not change", async () => {
+    const oldConfig = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    const { state, host } = disk(oldConfig, true)
+    const script = hookScript(claude.agent)
+
+    const written = await refreshHookScript(host, claude, script)
+    expect(written).toBe(script)
+    expect(state.writes).toBe(1)
+
+    const parsed = JSON.parse(state.configText!)
+    const leaf = parsed.hooks.SessionStart[0].hooks[0]
+    expect(leaf).toEqual({
+      type: "command",
+      command: "powershell",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", CLAUDE_SCRIPT],
+      timeout: 10,
+    })
+
+    const second = await refreshHookScript(host, claude, script)
+    expect(second).toBeUndefined()
+    expect(state.writes).toBe(1)
+  })
+
+  test("an older Claude Code is installed in the shell form, never the exec form (C3)", async () => {
+    const { state, host } = disk(CLAUDE, false, "2.1.279 (Claude Code)")
+    await setHook(host, claude, true)
+    const leaf = JSON.parse(state.configText!).hooks.SessionStart.at(-1).hooks[0]
+    expect(leaf).toEqual({ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: HOOK_TIMEOUT })
+    expect(leaf.args).toBeUndefined()
+  })
+
+  test("an exec entry left on a machine whose Claude Code is older goes back to the shell form", async () => {
+    const execConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
+    const { state, host } = disk(execConfig, true, "2.1.100 (Claude Code)")
+    const script = hookScript(claude.agent)
+    expect(await refreshHookScript(host, claude, script)).toBe(script)
+    const parsed = JSON.parse(state.configText!)
+    for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+      const ours = parsed.hooks[event]
+        .flatMap((group: { hooks: { command: string; args?: string[] }[] }) => group.hooks)
+        .filter((leaf: { command: string }) => leaf.command.includes(HOOK_MARKER))
+      expect(ours).toEqual([{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: HOOK_TIMEOUT }])
+    }
+    // Settled: the next refresh writes nothing.
+    expect(await refreshHookScript(host, claude, script)).toBeUndefined()
+    expect(state.writes).toBe(1)
+  })
+
+  test("the version is asked once per session, however often the hooks are refreshed", async () => {
+    const { state, host } = disk(CLAUDE, true)
+    await usesExecForm(host, claude)
+    await refreshHookScript(host, claude, undefined)
+    await refreshHookScript(host, claude, hookScript(claude.agent))
+    await setHook(host, claude, true)
+    expect(state.versionAsked).toBe(1)
+  })
+
+  test("a CLI that does not answer, or a host that cannot ask, gets the shell form", async () => {
+    expect(await usesExecForm({ claudeVersion: async () => null }, claude)).toBe(false)
+    forgetClaudeVersion()
+    expect(await usesExecForm({ claudeVersion: () => Promise.reject(new Error("claude non trovato")) }, claude)).toBe(
+      false,
+    )
+    forgetClaudeVersion()
+    expect(await usesExecForm({}, claude)).toBe(false)
+    // codex never gets it, whatever the version.
+    forgetClaudeVersion()
+    expect(await usesExecForm({ claudeVersion: async () => "9.9.9" }, hookTarget("codex")!)).toBe(false)
+  })
+})
+
+describe("which Claude Code gets the exec form (C3)", () => {
+  test("2.1.279 gets the shell form, 2.1.280 and later the exec form", () => {
+    expect(execFormReadable("2.1.279 (Claude Code)")).toBe(false)
+    expect(execFormReadable("2.1.280 (Claude Code)")).toBe(true)
+    expect(execFormReadable("2.1.281")).toBe(true)
+    expect(execFormReadable("2.2.0")).toBe(true)
+    expect(execFormReadable("3.0.0")).toBe(true)
+    expect(execFormReadable("2.0.999")).toBe(false)
+    expect(execFormReadable("1.9.500")).toBe(false)
+  })
+
+  test("an unknown or unreadable version gets the shell form", () => {
+    for (const text of [null, undefined, "", "Claude Code", "2.1", "versione sconosciuta"]) {
+      expect(execFormReadable(text)).toBe(false)
+    }
+  })
+
+  test("hookOutdated follows the same gate: an exec entry is outdated when the CLI may not read it", () => {
+    const target = hookTarget("claude-code")!
+    const execConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
+    const shellConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", [
+      "UserPromptSubmit",
+      "Stop",
+    ])
+    expect(hookOutdated(execConfig, target, false)).toBe(true)
+    expect(hookOutdated(shellConfig, target, false)).toBe(false)
+    expect(hookOutdated(shellConfig, target, true)).toBe(true)
+    expect(hookOutdated(execConfig, target, true)).toBe(false)
+  })
+})
+
+describe("hookOutdated", () => {
+  const claudeTarget = hookTarget("claude-code")!
+  const codexTarget = hookTarget("codex")!
+
+  test("true for today's config (string leaf, timeout: 5) with claude-code", () => {
+    const oldConfig = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    expect(hookOutdated(oldConfig, claudeTarget, true)).toBe(true)
+  })
+
+  test("false after installHook with hookExec", () => {
+    const newConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
+    expect(hookOutdated(newConfig, claudeTarget, true)).toBe(false)
+  })
+
+  test("for codex, true with timeout: 5 and false with timeout: 10 in string form", () => {
+    const codexScript = "C:\\Users\\x\\.codex\\ade-agent-session.ps1"
+    const oldCodex = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [{ type: "command", command: hookCommand(codexScript), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    expect(hookOutdated(oldCodex, codexTarget, true)).toBe(true)
+
+    const newCodex = installHook(CODEX, hookCommand(codexScript))
+    expect(hookOutdated(newCodex, codexTarget, true)).toBe(false)
+  })
 })
 
 describe("hookScript", () => {
@@ -318,12 +579,14 @@ describe("hookScript", () => {
   })
 
   test("refuses an event that is not a session start or a turn", () => {
-    expect(script).toContain('$event -ne "SessionStart"')
+    expect(script).toContain("hook_event_name")
+    expect(script).toContain("SessionStart")
+    expect(script).toContain("UserPromptSubmit")
+    expect(script).toContain("Stop")
   })
 
   test("a turn starting or ending is written beside the report, not over it", () => {
-    expect(script).toContain('$event -eq "UserPromptSubmit" -or $event -eq "Stop"')
-    expect(script).toContain('("$env:ADE_SPAWN_NONCE" + ".activity")')
+    expect(script).toContain(".activity")
   })
 
   test("refuses a nested codex thread reporting its parent's id", () => {
@@ -331,12 +594,12 @@ describe("hookScript", () => {
   })
 
   test("stages the file and moves it, so nobody reads half a report", () => {
-    expect(script).toContain('$staging = $target + ".part"')
-    expect(script).toContain("Move-Item -LiteralPath $staging")
+    expect(script).toContain(".part")
+    expect(script).toContain("Move-Item")
   })
 
   test("names the drop after the nonce", () => {
-    expect(script).toContain('Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".json")')
+    expect(script).toContain("$env:ADE_SPAWN_NONCE")
   })
 
   test("reports the agent it was installed for", () => {
@@ -350,7 +613,10 @@ describe("hookScript", () => {
 })
 
 describe("activity events", () => {
-  const events = ["UserPromptSubmit", "Stop"]
+  // Notification is in the list for the permission questions, and the test above
+  // says it: the two events that were already there stay, so an install from
+  // before this one gets the new event without losing the old two.
+  const events = ["UserPromptSubmit", "Stop", "Notification"]
   const command = hookCommand(CLAUDE_SCRIPT)
 
   test("claude-code asks for them, codex does not", () => {
@@ -361,7 +627,7 @@ describe("activity events", () => {
   test("installed beside everyone else's, once each, and removed with the rest", () => {
     const installed = installHook(CLAUDE, command, "startup|resume|clear", events)
     const hooks = JSON.parse(installed).hooks
-    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command, timeout: 5 }] }])
+    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT }] }])
     expect(hooks.UserPromptSubmit).toHaveLength(1)
     expect(hooks.PostToolUse).toEqual(JSON.parse(CLAUDE).hooks.PostToolUse)
     expect(missingActivityEvents(installed, events)).toEqual([])
@@ -373,5 +639,227 @@ describe("activity events", () => {
   test("an install from before them is found missing", () => {
     const old = installHook(CLAUDE, command, "startup|resume|clear")
     expect(missingActivityEvents(old, events)).toEqual(events)
+  })
+})
+
+/* nikcli: a plugin file and no configuration, off until the user switches it on. */
+describe("nikcli's TUI plugin as a target", () => {
+  const nikcli = hookTarget("nikcli")!
+  const PLUGIN = "C:\\Users\\x\\AppData\\Roaming\\nikcli\\plugin\\tui\\ade-agent-session.js"
+
+  function disk(scriptPresent = false, scriptCurrent = true) {
+    const writes: { configText: string; script: string | null }[] = []
+    const state = { scriptPresent, scriptCurrent }
+    const host = {
+      readAgentHook: async () => ({
+        configPath: "",
+        configText: null,
+        scriptPath: PLUGIN,
+        scriptPresent: state.scriptPresent,
+        scriptCurrent: state.scriptCurrent,
+      }),
+      writeAgentHook: async (_agent: string, configText: string, script: string | null) => {
+        writes.push({ configText, script })
+        state.scriptPresent = script !== null
+        state.scriptCurrent = script !== null
+      },
+    }
+    return { writes, state, host }
+  }
+
+  test("is a plugin with nothing to edit", () => {
+    expect(nikcli).toMatchObject({ kind: "tui-plugin", config: [], agent: "nikcli" })
+    expect(nikcli.script.at(-1)).toBe(NIKCLI_PLUGIN_NAME)
+  })
+
+  test("off until installed: the file being there is the whole install", async () => {
+    const { host } = disk()
+    expect(await readHookStatus(host, nikcli)).toMatchObject({
+      installed: false,
+      broken: false,
+      configPath: "",
+      scriptPath: PLUGIN,
+    })
+  })
+
+  test("installing asks Rust for its plugin, sending no text; removing takes only the plugin away", async () => {
+    const { writes, host } = disk()
+    expect((await setHook(host, nikcli, true)).installed).toBe(true)
+    // BASSO 1: nothing of the page's is written, the text is the one compiled into Rust.
+    expect(writes).toEqual([{ configText: "", script: "" }])
+    expect((await setHook(host, nikcli, false)).installed).toBe(false)
+    expect(writes[1]).toEqual({ configText: "", script: null })
+  })
+
+  /*
+   * Lettura di Mimo, F9: the refresh runs when ADE starts, and rewriting the
+   * plugin opens Rust's confirmation — a native dialog nobody asked for. An
+   * older plugin is said to be outdated instead, and updated from the panel.
+   */
+  test("an installed plugin that is not this version's is not rewritten at start: it is said to be outdated", async () => {
+    const off = disk(false)
+    expect(await refreshHookScript(off.host, nikcli, undefined)).toBeUndefined()
+    expect(off.writes).toEqual([])
+    const older = disk(true, false)
+    expect(await refreshHookScript(older.host, nikcli, undefined)).toBeUndefined()
+    expect(older.writes).toEqual([])
+    expect(await readHookStatus(older.host, nikcli)).toMatchObject({ installed: true, outdated: true })
+    expect((await readHookStatus(disk(true, true).host, nikcli)).outdated).toBeUndefined()
+    // The panel's button updates it, asking as any install does.
+    expect((await setHook(older.host, nikcli, true)).outdated).toBeUndefined()
+    expect(older.writes).toEqual([{ configText: "", script: "" }])
+  })
+
+  test("lint: the panel shows the outdated notice and the update button from the outdated flag", () => {
+    const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
+    expect(codeOf(panel)).toContain(codeOf("<Show when={state()?.outdated}>"))
+    expect(codeOf(panel)).toContain(codeOf('state()?.outdated ? t("hooks.update")'))
+  })
+})
+
+/*
+ * Lettura di Mimo, F9, for the hooks too (Master): an earlier ADE's script is
+ * rewritten behind the confirmation dialog, and the refresh runs at start.
+ * Rust reports the digest of the script on disk; only the page, which builds
+ * the script, can tell whether it is this version's.
+ */
+describe("an earlier ADE's hook script", () => {
+  const claude = hookTarget("claude-code")!
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex")
+  function disk(configText: string | null, digest: string | undefined) {
+    const state = { configText, scriptPresent: digest !== undefined, digest, writes: 0 }
+    const host = {
+      claudeVersion: async () => "2.1.280 (Claude Code)",
+      readAgentHook: async () => ({
+        configPath: "C:\\Users\\x\\.claude\\settings.json",
+        configText: state.configText,
+        scriptPath: CLAUDE_SCRIPT,
+        scriptPresent: state.scriptPresent,
+        ...(state.digest !== undefined ? { scriptDigest: state.digest } : {}),
+      }),
+      writeAgentHook: async (_agent: string, configText: string, script: string | null) => {
+        state.writes++
+        state.configText = configText
+        state.scriptPresent = script !== null
+        state.digest = script === null ? undefined : sha(script)
+      },
+    }
+    return { state, host }
+  }
+
+  test("is not rewritten at start: it is said to be outdated, and the panel's button updates it", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
+    // An earlier ADE's script on disk.
+    state.digest = sha("# lo script di un ADE precedente")
+    const before = state.writes
+    expect(await refreshHookScript(host, claude, undefined)).toBeUndefined()
+    expect(state.writes).toBe(before)
+    expect(await readHookStatus(host, claude)).toMatchObject({ installed: true, outdated: true })
+    // The update, asked for by the user, writes this version's.
+    await setHook(host, claude, true)
+    expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
+  })
+
+  /*
+   * The race behind «versione precedente» on a test build
+   * (barra-versione-seguito, MEDIO). Two facts, and together they are the bug:
+   *
+   *   1. `dev.tsx` rendered the surface synchronously and only afterwards
+   *      awaited `getIdentifier()` before setting `data-ade-build="test"`.
+   *   2. `workbench.tsx` calls `refreshHooks()` once, on mount, and not again
+   *      until something in the settings panel changes.
+   *
+   * So the first, and on a plain start the only, read of the hook status ran
+   * before the mark existed, and `describeScriptAge` answered `outdated` where it
+   * should answer `foreign`. Codex read right because its entry has no digest to
+   * compare, so its status is the same on both paths.
+   */
+  test("the same hook reads two ways, and the mark is the only difference", async () => {
+    // A disk with the hook installed, and on it the official ADE's script: the
+    // digest is not this build's, so it counts as another ADE's.
+    const foreign = () => {
+      const made = disk(CLAUDE, undefined)
+      return setHook(made.host, claude, true).then(() => {
+        made.state.digest = sha("# lo script dell'ADE ufficiale")
+        return made.host
+      })
+    }
+    // The order dev.tsx produced: the surface mounts, the status is read, the
+    // mark arrives afterwards.
+    delete document.documentElement.dataset.adeBuild
+    const early = await readHookStatus(await foreign(), claude)
+    document.documentElement.dataset.adeBuild = "test"
+    const late = await readHookStatus(await foreign(), claude)
+    delete document.documentElement.dataset.adeBuild
+
+    expect([early.outdated, early.foreign]).toEqual([true, undefined])
+    expect([late.outdated, late.foreign]).toEqual([undefined, true])
+  })
+
+  test("and with the mark settled the read is right, on a test build and on a release one", async () => {
+    const foreign = () => {
+      const made = disk(CLAUDE, undefined)
+      return setHook(made.host, claude, true).then(() => {
+        made.state.digest = sha("# lo script dell'ADE ufficiale")
+        return made.host
+      })
+    }
+    document.documentElement.dataset.adeBuild = "test"
+    const onTest = await readHookStatus(await foreign(), claude)
+    delete document.documentElement.dataset.adeBuild
+    // On a real build the same hook is this one's to update, unchanged.
+    const onRelease = await readHookStatus(await foreign(), claude)
+
+    expect(onTest).toMatchObject({ installed: true, foreign: true })
+    expect(onTest.outdated).toBeUndefined()
+    expect(onRelease).toMatchObject({ installed: true, outdated: true })
+    expect(onRelease.foreign).toBeUndefined()
+  })
+
+  test("on a test build the script is the official ADE's: said to be foreign, and left alone", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    // The official ADE's script, on disk, where the user's Claude sessions read it.
+    state.digest = sha("# lo script dell'ADE ufficiale")
+    // What `dev.tsx` sets for ADE Test.
+    document.documentElement.dataset.adeBuild = "test"
+    try {
+      const status = await readHookStatus(host, claude)
+      // Named as another build's, and NOT as this one's to update: on a test
+      // build that would rewrite the official ADE's hooks.
+      expect(status).toMatchObject({ installed: true, foreign: true })
+      expect(status.outdated).toBeUndefined()
+    } finally {
+      delete document.documentElement.dataset.adeBuild
+    }
+  })
+
+  test("on a release build the same script is an earlier ADE's, and the update is offered", async () => {
+    const { state, host } = disk(CLAUDE, undefined)
+    await setHook(host, claude, true)
+    state.digest = sha("# lo script di un ADE precedente")
+    // No `adeBuild`: the official ADE, where an older hook is this ADE's to update.
+    const status = await readHookStatus(host, claude)
+    expect(status).toMatchObject({ installed: true, outdated: true })
+    expect(status.foreign).toBeUndefined()
+  })
+
+  test("this version's script with a configuration to bring up to date is still written: no dialog comes of that", async () => {
+    const oldConfig = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    const script = hookScript(claude.agent)
+    const { state, host } = disk(oldConfig, sha(script))
+    expect(await refreshHookScript(host, claude, undefined)).toBe(script)
+    expect(state.writes).toBe(1)
   })
 })

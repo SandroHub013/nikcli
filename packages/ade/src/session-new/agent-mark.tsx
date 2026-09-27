@@ -35,11 +35,19 @@
  *   pi           `pi.dev/logo-auto.svg`
  *   ohmypi       can1357/oh-my-pi, `assets/icon.svg`
  *   nikcli       `packages/console/app/src/asset/brand/nikcli-logo-dark.svg`
+ *   grok         xAI's Grok mark, from `@lobehub/icons-static-svg`, kept in
+ *                `vendor-paths.ts`. The product's mark, not the company's
  *   hermes       Nous Research's profile portrait, from `@lobehub/icons-static-svg`,
  *                kept in `vendor-paths.ts`. What stood here was the word NOUS
  *                set in a serif inside a red ring — a description of the logo,
  *                not the logo
  *   terminal     ADE's own icon — a shell is not somebody's product
+ *   copilot      simple-icons `githubcopilot.svg`, kept in `vendor-paths.ts`
+ *   cline        simple-icons `cline.svg`, kept in `vendor-paths.ts`
+ *   goose        `@lobehub/icons-static-svg` `goose.svg`, kept in `vendor-paths.ts`
+ *   kilo         `@lobehub/icons-static-svg` `kilocode.svg`, kept in `vendor-paths.ts`
+ *   cursor       simple-icons `cursor.svg`, kept in `vendor-paths.ts`
+ *   crush, freebuff, t3   in neither set: the neutral monogram, not a guess
  *
  * simple-icons normalises a vendor's mark onto a 24×24 grid and releases the
  * SVG code as CC0; the mark itself stays the owner's. Every mark here is
@@ -65,7 +73,19 @@
 
 import { For, type JSX } from "solid-js"
 import { initialOf } from "./marks"
-import { ANTIGRAVITY_ARCH, ANTIGRAVITY_BLOBS, CODEX_GRADIENT, CODEX_PATH, NOUS_PATHS } from "./vendor-paths"
+import {
+  ANTIGRAVITY_ARCH,
+  ANTIGRAVITY_BLOBS,
+  CLINE_PATH,
+  CODEX_GRADIENT,
+  CODEX_PATH,
+  COPILOT_PATH,
+  CURSOR_PATH,
+  GOOSE_PATH,
+  GROK_PATH,
+  KILO_PATH,
+  NOUS_PATHS,
+} from "./vendor-paths"
 
 /**
  * What a black-and-white mark is painted with.
@@ -352,6 +372,33 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
   },
 
   /*
+   * xAI's Grok mark, in ink.
+   *
+   * The set ships it `currentColor` and nothing else, so there is no vendor
+   * colour to be faithful to and the theme's ink is the honest fill — the
+   * same treatment Prime, pi and Nous get.
+   */
+  copilot: (size, colored) => inkMark("copilot", COPILOT_PATH, size, colored),
+  cline: (size, colored) => inkMark("cline", CLINE_PATH, size, colored),
+  goose: (size, colored) => inkMark("goose", GOOSE_PATH, size, colored),
+  kilo: (size, colored) => inkMark("kilo", KILO_PATH, size, colored),
+  cursor: (size, colored) => inkMark("cursor", CURSOR_PATH, size, colored),
+
+  grok: (size, colored) => (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill={colored() ? INK : "currentColor"}
+      fill-rule="evenodd"
+      aria-hidden="true"
+      data-mark="grok"
+    >
+      <path d={GROK_PATH} />
+    </svg>
+  ),
+
+  /*
    * Nous Research's profile portrait, which is what Hermes ships under.
    *
    * Black and white is the brand — their booklet gives no second colour — so
@@ -405,24 +452,39 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
   ),
 }
 
+/** A single-path mark in the theme's ink, or in `currentColor` when monochrome. */
+function inkMark(id: string, path: string, size: () => number, colored: () => boolean): JSX.Element {
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill={colored() ? INK : "currentColor"}
+      fill-rule="evenodd"
+      aria-hidden="true"
+      data-mark={id}
+    >
+      <path d={path} />
+    </svg>
+  )
+}
+
+/*
+ * Neutral in both modes: the letter and its ring in the ink the text around it
+ * has. It used to be red when coloured (#EF4444, on a red wash), which on a
+ * launcher tile reads as an error, and Crush, Freebuff and T3 Code now wear it
+ * because no usable mark of theirs exists.
+ */
 function Monogram(props: { letter: string; size: number; colored?: boolean }): JSX.Element {
   return (
     <svg width={props.size} height={props.size} viewBox="0 0 24 24" aria-hidden="true" data-mark="monogram">
-      <circle
-        cx="12"
-        cy="12"
-        r="9.6"
-        fill={props.colored ? "rgba(239, 68, 68, 0.12)" : "none"}
-        stroke={props.colored ? "#EF4444" : "currentColor"}
-        stroke-width="1.4"
-        opacity={props.colored ? 1 : 0.55}
-      />
+      <circle cx="12" cy="12" r="9.6" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55" />
       <text
         x="12"
         y="12.5"
         text-anchor="middle"
         dominant-baseline="central"
-        fill={props.colored ? "#EF4444" : "currentColor"}
+        fill="currentColor"
         font-family="var(--ade-sans, system-ui)"
         font-size="11"
         font-weight="700"

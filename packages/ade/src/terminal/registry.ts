@@ -12,6 +12,9 @@
  */
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
+import { registerLinks, type LinkRequest } from "./links"
+import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
+import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
 export interface SessionTerminal {
   terminal: Terminal
@@ -19,6 +22,14 @@ export interface SessionTerminal {
   /** Where it is currently drawn, if anywhere. */
   element?: HTMLElement
   detach?: () => void
+  /** Stops the take's row reader, while one runs. See `coverTerminals`. */
+  uncover?: () => void
+  /** The pane that draws it says a copy was refused during a take. */
+  copyBlocked?: () => void
+  /** The pane that draws it says a selection was copied, by Ctrl+C as on release. */
+  copied?: () => void
+  /** The last size that held still in its cell and was handed to `onResize` (S77). */
+  settled?: { cols: number; rows: number }
 }
 
 const terminals = new Map<string, SessionTerminal>()
@@ -111,11 +122,295 @@ function readTheme(): ITheme {
  * except the part of it the user is actually reading, until the launch screen
  * happened to unmount the grid.
  */
+/**
+ * Whether the resolved background lets what is behind it through.
+ *
+ * In the glass theme the background token is `transparent`, and xterm draws
+ * an opaque cell layer unless it is told otherwise — a terminal painted black
+ * over a window the user asked to see through.
+ */
+function isTranslucent(theme: ITheme): boolean {
+  const background = theme.background
+  if (!background) return false
+  const alpha = /rgba?\([^)]*,\s*([\d.]+)\s*\)/.exec(background)
+  return alpha ? Number(alpha[1]) < 1 : false
+}
+
+/**
+ * The contrast xterm enforces between a cell's text and its background.
+ *
+ * 4.5 in the light theme and in the dark one. Claude Code draws in the
+ * truecolour of the theme it started in, not ADE's: on ADE's light background
+ * its text measured 1.83:1 («❯ No, exit»), and in dark its prompt measured
+ * 1.92:1 in auto mode after starting while ADE was light. ADE had never set
+ * the option (audit 0.7.7, Architect). xterm only changes colours below the
+ * threshold, so the ones already readable stay as they are.
+ *
+ * Glass keeps 1: its background is transparent, and xterm would compute the
+ * contrast against the background colour it was given, not the window seen
+ * through it — the correction would be a guess, and could make text worse.
+ * An unknown theme keeps 1 too: nothing to measure against.
+ */
+export function contrastFor(theme: string | undefined): number {
+  return theme === "light" || theme === "dark" ? 4.5 : 1
+}
+
+/** The theme ADE's shell is drawn in now, as `data-theme` on it says. */
+function currentThemeName(): string | undefined {
+  if (typeof document === "undefined") return undefined
+  return document.querySelector('[data-component="ade-shell"]')?.getAttribute("data-theme") ?? undefined
+}
+
+/** What a repaint touches of a terminal: its options, nothing else. */
+interface Paintable {
+  terminal: { options: { theme?: ITheme; allowTransparency?: boolean; minimumContrastRatio?: number } }
+}
+
+/**
+ * Paints each terminal in `palette` for the theme named `themeName`: the
+ * colours, the transparency and the contrast, always together, so a terminal
+ * already open follows a theme change the same way a new one starts in it.
+ */
+export function paintTerminals(sessions: Iterable<Paintable>, palette: ITheme, themeName: string | undefined): void {
+  for (const session of sessions) {
+    session.terminal.options.theme = palette
+    session.terminal.options.allowTransparency = isTranslucent(palette)
+    session.terminal.options.minimumContrastRatio = contrastFor(themeName)
+  }
+}
+
 export function refreshTerminalThemes(): void {
   if (terminals.size === 0) return
-  const theme = readTheme()
-  for (const session of terminals.values()) {
-    session.terminal.options.theme = theme
+  paintTerminals(terminals.values(), readTheme(), currentThemeName())
+}
+
+/**
+ * Copies text to the system clipboard.
+ * Uses navigator.clipboard when available, falling back to a hidden textarea execCommand.
+ *
+ * Writing only. Never `navigator.clipboard.readText`: in WebView2 it opens a
+ * permission dialog that blocks the page until someone answers it, and ADE Test
+ * can only be restarted to get out of it.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false
+  if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      /* fallback below */
+    }
+  }
+
+  if (typeof document !== "undefined" && document.body) {
+    try {
+      const active = document.activeElement as HTMLElement | null
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.left = "-9999px"
+      textarea.style.top = "-9999px"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      const success = document.execCommand("copy")
+      textarea.remove()
+      active?.focus?.()
+      return success
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * Identifies if a keyboard event is a Copy shortcut (Ctrl+C, Cmd+C, or Ctrl+Shift+C).
+ */
+export function isCopyShortcut(event: KeyboardEvent): boolean {
+  const isMod = event.ctrlKey || event.metaKey
+  if (!isMod) return false
+  const key = event.key?.toLowerCase()
+  return key === "c" || event.code === "KeyC"
+}
+
+/**
+ * The left button is ADE's: it selects, even when the program has asked for the mouse.
+ *
+ * xterm consults this only while the program has mouse reporting on, so a shell
+ * or Codex keeps Alt+drag as today's column selection.
+ *
+ * The trade-off: a program that uses the left click, a clickable menu for
+ * instance, gets it only with Alt held. Claude Code and Codex are driven from
+ * the keyboard, and a plain drag in Claude Code was measured to do nothing at
+ * all. The wheel and the right and middle buttons stay the program's, because
+ * in the alternate buffer scrolling is the program's to do, not xterm's.
+ */
+export function configureTerminalSelection(terminal: Terminal): void {
+  const core = (terminal as any)._core
+  const sel = core?._selectionService
+  if (sel && typeof sel.shouldForceSelection === "function") {
+    sel.shouldForceSelection = (event: MouseEvent) =>
+      (event.button === 0 || event.button === undefined) && !event.altKey
+  }
+}
+
+/**
+ * What a selection copies as text.
+ *
+ * In the normal buffer xterm's own text is right: it already joins the lines
+ * the pane wrapped. In the alternate buffer every line is put there by the
+ * program, which marks most of them as wrapped; joining those turned four
+ * copied lines into one, padded with spaces. So there it is one line per
+ * screen row, with the padding cut.
+ */
+export function selectionText(terminal: Terminal): string {
+  const buffer = terminal.buffer.active
+  let text: string
+  if (buffer.type === "alternate") {
+    // Zero-based cells, end exclusive: xterm's typings say otherwise, its code does this.
+    const range = terminal.getSelectionPosition()
+    if (!range) return ""
+    const rows: string[] = []
+    for (let y = range.start.y; y <= range.end.y; y++) {
+      const start = y === range.start.y ? range.start.x : 0
+      const end = y === range.end.y ? range.end.x : terminal.cols
+      rows.push((buffer.getLine(y)?.translateToString(true, start, end) ?? "").trimEnd())
+    }
+    text = rows.join("\n")
+  } else {
+    text = terminal.getSelection()
+  }
+  return text.replace(/(?:\r?\n[^\S\r\n]*)+$/, "")
+}
+
+/** What `copyOnRelease` needs from a terminal: little enough to fake in a test. */
+export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "select">
+
+/**
+ * Takes a copied selection away for good, which `clearSelection` does not do in
+ * xterm 6 (read in node_modules/@xterm/xterm/src/browser):
+ *
+ * - `DomRenderer.handleSelectionChanged` empties `.xterm-selection` for an empty
+ *   selection but returns before it updates `_selectionRenderModel`, and
+ *   `handleResize` redraws from that model: the teal block came back on a resize.
+ *   `refresh` only redraws rows, never the selection layer.
+ * - `SelectionService.clearSelection` fires `onSelectionChange` without recording
+ *   it in `_oldSelectionStart/_oldSelectionEnd`, so dragging over the same cells
+ *   again compared equal and fired nothing: no copy, and the teal stayed.
+ *
+ * `select(0, 0, 0)` goes through `setSelection` instead: the renderer is handed a
+ * defined, empty range, which clears its model (`SelectionRenderModel.update`),
+ * and the service records it as the last selection. It selects nothing, so
+ * `hasSelection` is false and Ctrl+C still interrupts.
+ */
+export function forgetSelection(terminal: Pick<Terminal, "select">): void {
+  terminal.select(0, 0, 0)
+}
+
+/**
+ * Copies a selection the moment the button that made it comes up.
+ *
+ * Only a selection that changed during this press: a click that selects
+ * nothing new must not copy an old selection again. The release is listened
+ * for on `release` (the document), because a drag often ends outside the pane.
+ *
+ * The decision waits a turn after the release. xterm reports the selection's
+ * last change only after the mouseup has gone through both phases, so a
+ * decision taken in the handler saw no change and never copied. xterm itself
+ * finishes a selection in a `setTimeout` 0, and so does this.
+ */
+export function copyOnRelease(
+  terminal: CopySource,
+  element: EventTarget,
+  release: EventTarget,
+  copy: () => void,
+): () => void {
+  let pressed = false
+  let changed = false
+  let decision: ReturnType<typeof setTimeout> | undefined
+  const down = (event: Event) => {
+    if ((event as MouseEvent).button !== 0) return
+    if (decision) clearTimeout(decision)
+    decision = undefined
+    pressed = true
+    changed = false
+  }
+  const up = (event: Event) => {
+    if (!pressed || (event as MouseEvent).button !== 0) return
+    // Still pressed until the decision: the change xterm reports after the
+    // release belongs to this press.
+    decision = setTimeout(() => {
+      decision = undefined
+      pressed = false
+      /*
+       * Copied and then cleared, in the same decision and not in the handler:
+       * xterm reports the selection's last change after the mouseup, so a clear
+       * taken there would wipe the selection the copy was about to read. Left
+       * standing, it was worse than a stale highlight: a resize repainted the
+       * teal block over different text, and only Ctrl+C took it away — which is
+       * what the key path has always done here.
+       */
+      if (changed && terminal.hasSelection()) {
+        copy()
+        // Not `clearSelection`: see `forgetSelection` for what it leaves behind.
+        forgetSelection(terminal)
+      }
+    }, 0)
+  }
+  const selection = terminal.onSelectionChange(() => {
+    if (pressed) changed = true
+  })
+  element.addEventListener("mousedown", down, true)
+  release.addEventListener("mouseup", up, true)
+  return () => {
+    if (decision) clearTimeout(decision)
+    selection.dispose()
+    element.removeEventListener("mousedown", down, true)
+    release.removeEventListener("mouseup", up, true)
+  }
+}
+
+/**
+ * Key event handler for terminal emulator:
+ * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
+ * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and forgets the selection
+ * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
+ */
+export function createTerminalKeyHandler(
+  terminal: Terminal,
+  onCopyBlocked?: () => void,
+  onCopied?: () => void,
+): (event: KeyboardEvent) => boolean {
+  return (event: KeyboardEvent) => {
+    const isMod = event.ctrlKey || event.metaKey
+    if (isMod && event.shiftKey) {
+      const k = event.key?.toLowerCase()
+      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
+        return false
+      }
+    }
+
+    if (isCopyShortcut(event)) {
+      if (terminal.hasSelection()) {
+        if (event.type === "keydown") {
+          if (copyIsCovered(terminal)) onCopyBlocked?.()
+          // «Copiato», as a copy on release says it: Ctrl+C said nothing (Verifiche).
+          else
+            void copyToClipboard(selectionText(terminal)).then((copied) => {
+              if (copied) onCopied?.()
+            })
+          // Not `clearSelection`: its teal comes back on a resize (see `forgetSelection`).
+          forgetSelection(terminal)
+        }
+        return false
+      }
+      return true
+    }
+
+    return true
   }
 }
 
@@ -123,6 +418,7 @@ export function getTerminal(id: string): SessionTerminal {
   const existing = terminals.get(id)
   if (existing) return existing
 
+  const initialTheme = readTheme()
   const terminal = new Terminal({
     /*
      * Scrollback is what makes a session reviewable after the fact. Agents are
@@ -142,25 +438,25 @@ export function getTerminal(id: string): SessionTerminal {
     cursorStyle: "block",
     allowProposedApi: true,
     convertEol: false,
-    theme: readTheme(),
+    theme: initialTheme,
+    allowTransparency: isTranslucent(initialTheme),
+    minimumContrastRatio: contrastFor(currentThemeName()),
+    macOptionClickForcesSelection: true,
+    rightClickSelectsWord: true,
   })
 
   const fit = new FitAddon()
   terminal.loadAddon(fit)
 
-  terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-    // Allow voice shortcuts (Mod+Shift+J / Mod+Shift+K) to bypass xterm and bubble to window
-    const isMod = event.ctrlKey || event.metaKey
-    if (isMod && event.shiftKey) {
-      const k = event.key.toLowerCase()
-      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
-        return false
-      }
-    }
-    return true
-  })
-
   const created: SessionTerminal = { terminal, fit }
+  terminal.attachCustomKeyEventHandler(
+    createTerminalKeyHandler(
+      terminal,
+      () => created.copyBlocked?.(),
+      () => created.copied?.(),
+    ),
+  )
+
   terminals.set(id, created)
   return created
 }
@@ -207,6 +503,74 @@ export interface AttachOptions {
   onInput?: (data: string) => void
   /** The terminal's new size after a fit, in character cells. */
   onResize?: (cols: number, rows: number) => void
+  /** A selection was copied on release; the pane says so for a moment. */
+  onCopied?: () => void
+  /** A copy was refused because the selection reaches a line blurred in a take (D68). */
+  onCopyBlocked?: () => void
+  /** Whether the program has mouse reporting on, whenever that changes. */
+  onMouseMode?: (reporting: boolean) => void
+  /** A URL or a file path in the output was clicked. See `links.ts`. */
+  onLink?: (request: LinkRequest) => void
+}
+
+/**
+ * The size a process in `id` should have, or undefined if the pane cannot say.
+ *
+ * A process started before its pane was fitted was born at the host's 120×30,
+ * and the fit that came while `host.spawn` was awaited found no session to
+ * resize: the pty stayed at 120 columns in a cell of 80 (S77). With this the
+ * process is born at the pane's size, and resized to it once registered.
+ *
+ * Only a terminal drawn in a cell, and only a size that has held still there
+ * (`settled`): a size read mid-layout is the one-column screen of the next note.
+ */
+export function ptySize(id: string): { cols: number; rows: number } | undefined {
+  const session = terminals.get(id)
+  return session ? ptySizeOf(session) : undefined
+}
+
+export function ptySizeOf(
+  session: Pick<SessionTerminal, "element" | "settled">,
+): { cols: number; rows: number } | undefined {
+  const size = session.settled
+  if (!session.element || !size || size.cols < 2 || size.rows < 1) return undefined
+  return { cols: size.cols, rows: size.rows }
+}
+
+/**
+ * How long a fitted size must hold before the process is told (S77).
+ *
+ * A cell passes through sizes that are not its own while the grid lays out:
+ * restored panes all mount at once, and a pane can measure a few dozen pixels
+ * wide for a frame. Every fit used to go straight to the pty, and a program that
+ * prints once and never reflows, like Claude Code replaying a `--resume`, wrote
+ * its history at that width: one word per line, «sked / or / that». The
+ * terminal still fits at once; only the process waits for the size to settle.
+ */
+export const SETTLE_MS = 80
+
+/** Calls `send` with the last size pushed, once none has come for `wait` ms, and never twice with the same one. */
+export function createSizeSettler(
+  send: (cols: number, rows: number) => void,
+  wait = SETTLE_MS,
+): { push: (cols: number, rows: number) => void; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let sent: string | undefined
+  return {
+    push(cols, rows) {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        if (sent === `${cols}x${rows}`) return
+        sent = `${cols}x${rows}`
+        send(cols, rows)
+      }, wait)
+    },
+    cancel() {
+      if (timer) clearTimeout(timer)
+      timer = undefined
+    },
+  }
 }
 
 /**
@@ -232,6 +596,19 @@ export function placementFor(
 }
 
 /**
+ * The height of a cell as the renderer drew it. The same private field
+ * FitAddon reads (`_core._renderService.dimensions`); undefined before the
+ * first render, and then the fit is left as FitAddon made it.
+ */
+function cellHeightOf(terminal: Terminal): number | undefined {
+  const core = (
+    terminal as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } }
+  )._core
+  const height = core?._renderService?.dimensions?.css?.cell?.height
+  return height && height > 0 ? height : undefined
+}
+
+/**
  * Draws the terminal into `element` and keeps it fitted to it.
  *
  * Returns a detach function rather than disposing: the session is still running
@@ -242,7 +619,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const session = getTerminal(id)
   session.detach?.()
 
-  session.terminal.options.theme = readTheme()
+  paintTerminals([session], readTheme(), currentThemeName())
 
   const drawn = session.terminal.element
   const placement = placementFor(drawn, element)
@@ -260,33 +637,153 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     }
   }
   session.element = element
+  configureTerminalSelection(session.terminal)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
+
+  const terminal = session.terminal
+  const stopCopy =
+    typeof document === "undefined"
+      ? undefined
+      : copyOnRelease(terminal, element, document, () => {
+          if (copyIsCovered(terminal)) return options.onCopyBlocked?.()
+          void copyToClipboard(selectionText(terminal)).then((copied) => {
+            if (copied) options.onCopied?.()
+          })
+        })
+
+  const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+
+  session.copyBlocked = options.onCopyBlocked
+  session.copied = options.onCopied
+
+  // A pane drawn or moved during a take is born covered, with a reader of its own.
+  if (covering) cover(session)
+
+  // xterm has no event for a mode change, so the mode is read after parsed
+  // output, at most every 500 ms.
+  let reporting: boolean | undefined
+  let modeTimer: ReturnType<typeof setTimeout> | undefined
+  const readMode = () => {
+    modeTimer = undefined
+    const now = terminal.modes.mouseTrackingMode !== "none"
+    if (now === reporting) return
+    reporting = now
+    options.onMouseMode?.(now)
+  }
+  readMode()
+  const modeWatch = options.onMouseMode
+    ? terminal.onWriteParsed(() => {
+        if (!modeTimer) modeTimer = setTimeout(readMode, 500)
+      })
+    : undefined
+
+  // The process hears only a size that has held still: see `SETTLE_MS`.
+  const settler = createSizeSettler((cols, rows) => {
+    session.settled = { cols, rows }
+    options.onResize?.(cols, rows)
+  })
 
   const applyFit = () => {
     // A pane can be zero-sized for a frame — collapsed, or mid-layout — and
     // fitting against that throws inside xterm's renderer.
     if (element.clientWidth < 2 || element.clientHeight < 2) return
     try {
-      session.fit.fit()
+      // FitAddon's size, not its fit: its count of rows takes the box's padding as rows, and the
+      // last ones, the statusline, fell below it (`fit-rows.ts`). One resize, with the rows that fit.
+      // No size before the first render: nothing to resize, as FitAddon's fit() would do.
+      const proposed = session.fit.proposeDimensions()
+      if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
+        const cell = cellHeightOf(session.terminal)
+        const rows = cell
+          ? Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell))
+          : proposed.rows
+        if (proposed.cols !== session.terminal.cols || rows !== session.terminal.rows) {
+          // As FitAddon's fit(): the renderer's layers are cleared before a resize.
+          ;(
+            session.terminal as unknown as { _core?: { _renderService?: { clear?: () => void } } }
+          )._core?._renderService?.clear?.()
+          session.terminal.resize(proposed.cols, rows)
+        }
+      }
     } catch {
       return
     }
-    options.onResize?.(session.terminal.cols, session.terminal.rows)
+    settler.push(session.terminal.cols, session.terminal.rows)
   }
 
   const observer = new ResizeObserver(() => applyFit())
+  // A new scale changes the cell and not the box: the observer above would not hear it (`watchCellSize`).
+  const stopCellWatch = watchCellSize(
+    session.terminal,
+    () => applyFit(),
+    typeof window === "undefined" ? undefined : window,
+  )
   observer.observe(element)
   applyFit()
 
   const detach = () => {
     observer.disconnect()
+    stopCellWatch()
+    settler.cancel()
     inputHandler?.dispose()
+    stopCopy?.()
+    stopLinks?.()
+    modeWatch?.dispose()
+    if (modeTimer) clearTimeout(modeTimer)
+    session.uncover?.()
+    session.uncover = undefined
+    session.copyBlocked = undefined
+    session.copied = undefined
     session.element = undefined
     session.detach = undefined
   }
   session.detach = detach
   return detach
+}
+
+/*
+ * The take (D68). While one runs, every row of every terminal is blurred by
+ * the CSS in `index.css`, and a reader per terminal (`recording-cover.ts`)
+ * shows the rows it judges clean. A terminal with no rows drawn has nothing to
+ * read and stays blurred as a whole.
+ */
+let covering = false
+
+function cover(session: SessionTerminal): void {
+  session.uncover?.()
+  session.uncover = undefined
+  const rows = session.terminal.element?.querySelector(".xterm-rows")
+  if (!rows || typeof MutationObserver === "undefined") return
+  session.uncover = watchRows(rows, () => session.terminal.buffer.active as unknown as CoverBuffer)
+}
+
+/** Starts or stops the readers of every open terminal; `coverSecrets` calls it. */
+export function coverTerminals(on: boolean): void {
+  covering = on
+  for (const session of terminals.values()) {
+    if (on && session.element) cover(session)
+    else {
+      session.uncover?.()
+      session.uncover = undefined
+    }
+  }
+}
+
+/**
+ * Whether copying the selection now would take a blurred line off the screen
+ * in the clear: during a take, a selection that reaches a line the reader
+ * would not show is not copied.
+ */
+function copyIsCovered(terminal: Terminal): boolean {
+  if (!covering) return false
+  const range = terminal.getSelectionPosition()
+  if (!range) return false
+  try {
+    return selectionReachesSecret(terminal.buffer.active as unknown as CoverBuffer, range.start.y, range.end.y)
+  } catch {
+    return true
+  }
 }
 
 /** Ends a terminal for good. Called when its pane closes, not when it hides. */
@@ -295,5 +792,27 @@ export function disposeTerminal(id: string): void {
   if (!session) return
   session.detach?.()
   session.terminal.dispose()
+  releaseDisposed(session.terminal)
   terminals.delete(id)
+}
+
+/**
+ * Cuts what a disposed terminal's IntersectionObserver still holds (P1-C5).
+ *
+ * xterm disconnects the observer on dispose, and WebView2 (Chromium 153)
+ * keeps it anyway, reachable from the document's IntersectionObserverController.
+ * Its callback closes over the RenderService, and through it the whole
+ * terminal stayed alive, its textarea, canvases, rows and mouse listeners, one
+ * more at every pane closed. Emptying the service leaves the observer holding
+ * an empty object. The terminal is disposed: nothing reads these fields again.
+ *
+ * `_core._renderService` is private to xterm (6.0.0): a version that renames
+ * it makes this return false and do nothing, and the leak comes back.
+ * `release-disposed.test.ts` fails on such an update.
+ */
+export function releaseDisposed(terminal: object): boolean {
+  const service = (terminal as { _core?: { _renderService?: object } })._core?._renderService
+  if (!service || typeof service !== "object") return false
+  for (const key of Object.keys(service)) delete (service as Record<string, unknown>)[key]
+  return true
 }

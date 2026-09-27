@@ -19,10 +19,10 @@
  *   - on the right its card: what it is for, what it runs on, its objectives,
  *     the file, and the form to change any of it.
  *
- * The conversation is `nikcli run --agent <name> --format json` one process
- * per turn, continued by session id — see `talk.ts` for the events and
- * `session.ts` for the process. "Terminale" still opens the full TUI in a
- * pane for whoever wants it.
+ * A nikcli bot's conversation is a session on ADE's nikcli server
+ * (`serve-turn.ts`); Claude Code's and Codex's are one process per turn,
+ * continued by session id (`turn.ts`). `talk.ts` is the thread. "Terminale"
+ * still opens the full TUI in a pane for whoever wants it.
  *
  * Everything with a rule in it is in the sibling `.ts` files. A `.tsx`
  * cannot be imported under `bun test` here, so nothing that matters lives in
@@ -31,32 +31,119 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
+import { APPROVAL_TIMEOUT_MS } from "./approval"
+import { askDialog, askYesNo } from "../host/ask"
+import { getHost } from "../host/shell"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
-import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
-import { applyRunnerLine, runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
-import { PLAN_RUNNERS } from "./terms"
-import { startTurn, type TurnHandle } from "./session"
-import { createBot, deleteBot, listBots, listModels, resolveRoots, updateBot, type BotRoots } from "./store"
 import {
-  answerKeys,
-  applyExit,
-  applyProblem,
+  COMMON_EFFORTS,
+  OBJECTIVES_HEADING,
+  readAgentFile,
+  splitPrompt,
+  type AgentFile,
+  type AgentScope,
+} from "./nikcli"
+import { ACCOUNT_PLAN, localAccountStore, type BotAccount } from "./account"
+import {
+  generationSpend,
+  runnerAccount,
+  runnerById,
+  RUNNERS,
+  spendKind,
+  spendLine,
+  type Runner,
+  type SpendKind,
+} from "./runners"
+import { PLAN_RUNNERS, routineModeOf } from "./terms"
+import { createBotTurns } from "./controller"
+import { admit, localTrustStore } from "./trust"
+import { effortChange, modelChange, runnerModelItems, submitDraft } from "./composer"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { runBotTurn } from "./serve-turn"
+import {
+  createBot,
+  createTalkArchive,
+  migrateTalkKeys,
+  deleteBot,
+  projectOfBotPath,
+  listBots,
+  modelCatalogText,
+  readModelCatalog,
+  projectFs,
+  readBotText,
+  resolveRoots,
+  updateBot,
+  type BotChanges,
+  type BotRoots,
+} from "./store"
+import {
   emptyTalk,
   formatWhen,
+  hasThreadTotals,
   lastLine,
   mentionIn,
-  noticePermission,
-  parseTalk,
-  permissionAnswered,
-  sendMessage,
-  serializeTalk,
+  applyProblem,
   talkKey,
   type PermissionAnswer,
   type Talk,
   type TalkMessage,
 } from "./talk"
+import { gatewayVisible } from "../surface/state"
+import { appGatewayPanelDeps } from "./gateway/bridge"
+import { GatewaySection } from "./gateway/panel"
+import { openExternally } from "../browser/host-bridge"
+import {
+  addRoutine,
+  createRoutineScheduler,
+  localRoutineStore,
+  offerFor,
+  pauseRoutine,
+  reconsent,
+  removeRoutine,
+  routineConsent,
+  routineProblem,
+  runRoutine,
+  type Routine,
+  type RoutineBook,
+  type RoutineContext,
+} from "./routine"
+import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
+import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
+import { effortChoices, effortToSave } from "./effort"
+import { appMemoryStore } from "./memory-app"
+import { MemorySection } from "./memory-panel"
+import type { GatewayPanelDeps } from "./gateway/panel-state"
+import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, type RoomPay } from "./room"
+import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
+import {
+  createRoomRunner,
+  localRoomStore,
+  memberName,
+  roomThread,
+  type RoomBook,
+  type RoomRecord,
+  type RoomSeat,
+} from "./room-app"
+import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
+import {
+  isAdeTestBuild,
+  modelsFromConfigProviders,
+  parseModelRef,
+  recentModels,
+  serializeModelRef,
+  variantsOf,
+  type ChatModelChoice,
+  type ModelRef,
+} from "../chat/model"
+import { isOpenOn } from "../chat/first-use"
+import { appChatStore } from "../chat/store"
 import "./bots.css"
+import { ModelPicker } from "../chat/model-picker"
+import { EffortPicker } from "../chat/effort-picker"
+import { ChipMenu } from "../chat/chip-menu"
+import { readableModelName } from "../chat/picker"
+import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 
 /*
  * The conversations, outside any component.
@@ -66,24 +153,61 @@ import "./bots.css"
  * here, at module level, and the components only read them. Keyed by the
  * bot's path, because the identifier repeats across project and global scope.
  */
-const [talks, setTalks] = createSignal<Record<string, Talk>>({})
-const turns = new Map<string, TurnHandle>()
+/*
+ * The trust question (B3, B3b), through the dialog ADE may open (B7): one that
+ * cannot be put rejects, and `admit` says why on screen.
+ */
+const askTrust = (question: string) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") })
 
-function readStored(path: string): Talk {
-  try {
-    return parseTalk(localStorage.getItem(talkKey(path)))
-  } catch {
-    return emptyTalk()
-  }
+const [talks, setTalks] = createSignal<Record<string, Talk>>({})
+
+/** The open project the archive is bound to. A global bot's key includes it. */
+let openProject = ""
+/** Project pinned while a turn runs, so a switch does not file that turn under the new one. */
+const pinnedProject = new Map<string, string>()
+
+const talkDisk = {
+  getItem: (key: string) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key: string, value: string) => localStorage.setItem(key, value),
+  removeItem: (key: string) => localStorage.removeItem(key),
+  keys: (): string[] => {
+    const found: string[] = []
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key) found.push(key)
+      }
+    } catch {
+      // Storage blocked: there is nothing old to move.
+    }
+    return found
+  },
 }
 
-function store(path: string, talk: Talk) {
-  try {
-    localStorage.setItem(talkKey(path), serializeTalk(talk))
-  } catch {
-    // Quota, or a browser set to block site data. The thread still works
-    // for this session; only its survival across a reload is lost.
+const archive = createTalkArchive(talkDisk)
+let legacyMoved = false
+
+function readStored(path: string): Talk {
+  return archive.read(talkKey(path, openProject))
+}
+
+function remember(path: string, talk: Talk): string {
+  const busy = talk.status === "working" || talk.status === "waiting" || !!talk.partial
+  if (busy && !pinnedProject.has(path)) pinnedProject.set(path, openProject)
+  const project = pinnedProject.get(path) ?? openProject
+  const key = talkKey(path, project)
+  if (busy) archive.save(key, talk)
+  else {
+    pinnedProject.delete(path)
+    archive.flush(key, talk)
   }
+  return project
 }
 
 function talkOf(path: string): Talk {
@@ -93,9 +217,383 @@ function talkOf(path: string): Talk {
 function updateTalk(path: string, change: (talk: Talk) => Talk) {
   setTalks((all) => {
     const next = change(all[path] ?? emptyTalk())
-    store(path, next)
+    const wrote = remember(path, next)
+    const quiet = next.status !== "working" && next.status !== "waiting" && !next.partial
+    if (quiet && wrote !== openProject) return { ...all, [path]: readStored(path) }
     return { ...all, [path]: next }
   })
+}
+
+/*
+ * The running turns, one per bot, through `runBotTurn` (B2, B8d): a stop ends the
+ * turn with its child processes and gives the plan's place back, and a
+ * runner that does not start says so in the thread. See `controller.ts`.
+ */
+const accounts = localAccountStore()
+
+/*
+ * Each bot's memory (B8a), read through a signal so the card follows the
+ * writes a turn makes, a chat's proposals and the user's own (`memory-app.ts`).
+ */
+const memories = appMemoryStore
+
+const turns = createBotTurns({
+  runTurn: (request) => runBotTurn(request),
+  runRoutine: (request, run) => runRoutine(request, run),
+  talkOf,
+  update: updateTalk,
+  accountOf: (path) => accounts.get(path),
+  memory: memories,
+})
+
+/*
+ * The checks every turn of a bot passes before it starts: a project's bot
+ * is asked about first (B3, `trust.ts`), and what runs is the file as it was
+ * read and trusted just now, not the copy the roster loaded earlier; a nikcli
+ * bot that grants itself the shell does not start (B8c); a nikcli bot loads
+ * the project's own configuration, so the project is asked about (B3b, B8d). `confirm` is the dialog; a routine passes one that always says no.
+ */
+async function admitTurn(
+  bot: AgentFile,
+  root: string | undefined,
+  confirm: (question: string) => boolean | Promise<boolean>,
+): Promise<{ ok: true; bot: AgentFile } | { ok: false; problem?: string }> {
+  let read: string | undefined
+  const verdict = await admit(bot, {
+    store: localTrustStore(),
+    read: async (path) => (read = await readBotText(path)),
+    confirm,
+  })
+  if (!verdict.ok) return verdict
+  const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+  const nikcli = runnerById(trusted.runner).id === "nikcli"
+  /*
+   * A grant in the bot's file or the project's nikcli.json no longer stops
+   * it: its session's rules come after them (B8d, `serve-rules.ts`), so the
+   * shell and folders outside are asked about, the block list denied.
+   */
+  // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
+  if (root && nikcli) {
+    const project = await admitProject(root, {
+      store: localTrustStore(PROJECT_TRUST_KEY),
+      surface: () => projectSurface(root, projectFs),
+      confirm,
+    })
+    if (!project.ok) return project
+  }
+  return { ok: true, bot: trusted }
+}
+
+/* ── routines (B11) ─────────────────────────────────────────────────────── */
+
+/*
+ * Kept in the WebView's storage and looked at once a minute by a timer that
+ * lives and dies with the page: nothing runs while ADE is closed, and no
+ * process is left behind. A routine's run is the bot's own turn
+ * (`turns.routine`), after the checks above with no dialog: a routine never
+ * asks, it is suspended and says why.
+ */
+const routineStore = localRoutineStore()
+const [routineBook, setRoutineBook] = createSignal<RoutineBook>(routineStore.get())
+const [routineNow, setRoutineNow] = createSignal(Date.now())
+/** The file each routine was cleared to run, between `prepare` and `start`. */
+const clearedBots = new Map<string, AgentFile>()
+
+async function readBotFile(path: string): Promise<AgentFile | undefined> {
+  try {
+    const text = await readBotText(path)
+    return readAgentFile({ path, scope: projectOfBotPath(path) ? "project" : "global", text })
+  } catch {
+    return undefined
+  }
+}
+
+/* nikcli's catalog of one provider, read again after ten minutes; one that could not be read is not kept. */
+const catalogs = new Map<string, { at: number; text: Promise<string> }>()
+const loadCatalog = (provider: string) => {
+  const kept = catalogs.get(provider)
+  if (kept && Date.now() - kept.at < 10 * 60_000) return kept.text
+  const text = modelCatalogText(provider)
+  catalogs.set(provider, { at: Date.now(), text })
+  void text.then((read) => {
+    if (!read) catalogs.delete(provider)
+  })
+  return text
+}
+
+/**
+ * The models a bot can be pinned to, from the Chat's catalog (composer-chip,
+ * pezzo 1): `/config/providers` when ADE's server is already open on the
+ * folder, otherwise the same records from `nikcli models --verbose`. The
+ * form used to list nikcli's 385 bare ids, free and paid alike. Nothing is
+ * started for it: opening a folder asks for its trust, and a form cannot.
+ */
+async function botModels(cwd: string): Promise<ModelRead> {
+  const options = { isTest: isAdeTestBuild() }
+  const chat = appChatStore()
+  if (cwd && isOpenOn(chat, cwd)) {
+    const configured = (await chat.catalog().catch(() => undefined))?.configProviders
+    if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }
+  }
+  const read = await readModelCatalog(undefined, cwd || undefined)
+  if (!read.ok) return read
+  return { ok: true, models: modelsFromConfigProviders(catalogFromText(read.text), options) }
+}
+
+/* Read when a model menu opens, kept for the session per folder; a failure is not kept (`model-source.ts`). */
+const botModelSource = createModelSource(botModels)
+
+/** The bot forms' view of the catalog: its state, and the two ways to read it. */
+export interface BotCatalog {
+  readonly state: () => ModelSourceState
+  /** The menu opened: read, unless the list is there or on its way. */
+  readonly open: () => void
+  readonly retry: () => void
+  /** The folder's recent models, the Chat's too (`rememberModel`). */
+  readonly recent: () => readonly ModelRef[]
+}
+
+/** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
+async function catalogFreeOf(bot: AgentFile): Promise<boolean | undefined> {
+  if (runnerById(bot.runner).id !== "nikcli" || !bot.model) return undefined
+  return catalogFree(bot.model, loadCatalog)
+}
+
+const botContext = async (bot: AgentFile): Promise<RoutineContext> => ({
+  runner: runnerById(bot.runner).id,
+  model: bot.model,
+  account: accounts.get(bot.path),
+  free: await catalogFreeOf(bot),
+})
+
+const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
+  const next = change(routineStore.get())
+  routineStore.set(next)
+  setRoutineBook(next)
+}
+
+const routineScheduler = createRoutineScheduler({
+  store: routineStore,
+  botOf: async (path) => {
+    const bot = await readBotFile(path)
+    return bot ? botContext(bot) : undefined
+  },
+  prepare: async (routine) => {
+    const bot = await readBotFile(routine.bot)
+    if (!bot) return { ok: false, problem: t("bots.routine.suspended.noBot") }
+    // Codex on a subscription only in a project the user trusts (B11, «B11 in dettaglio»).
+    if (runnerById(bot.runner).id === "codex") {
+      const root = routine.cwd
+      if (!root) return { ok: false, problem: t("bots.routine.suspended.noProject") }
+      const project = await admitProject(root, {
+        store: localTrustStore(PROJECT_TRUST_KEY),
+        surface: () => projectSurface(root, projectFs),
+        confirm: () => false,
+      })
+      if (!project.ok) return { ok: false, problem: project.problem ?? t("bots.routine.suspended.trust") }
+    }
+    const verdict = await admitTurn(bot, routine.cwd, () => false)
+    if (!verdict.ok) return { ok: false, problem: verdict.problem ?? t("bots.routine.suspended.trust") }
+    clearedBots.set(routine.id, verdict.bot)
+    return { ok: true, context: await botContext(verdict.bot) }
+  },
+  start: (routine, run) => {
+    const bot = clearedBots.get(routine.id)
+    clearedBots.delete(routine.id)
+    if (!bot) return undefined
+    ensureLoaded([bot.path])
+    return turns.routine(bot, routine.prompt, routine.cwd, run)
+  },
+  running: (path) => turns.running(path),
+  changed: setRoutineBook,
+})
+
+if (typeof window !== "undefined") {
+  // One timer per page, also when this module is loaded again in development.
+  const holder = window as { __adeRoutineTimer?: ReturnType<typeof setInterval> }
+  if (holder.__adeRoutineTimer !== undefined) clearInterval(holder.__adeRoutineTimer)
+  holder.__adeRoutineTimer = setInterval(() => {
+    setRoutineNow(Date.now())
+    void routineScheduler.tick()
+  }, 60_000)
+  // The first look once ADE has settled: a run missed while it was closed goes then, once.
+  setTimeout(() => void routineScheduler.tick(), 20_000)
+}
+
+const routineDeps: RoutinePanelDeps = {
+  book: routineBook,
+  runningId: () => {
+    routineBook()
+    return routineScheduler.runningId()
+  },
+  now: routineNow,
+  add: async (bot, draft, cwd) => {
+    const context = await botContext(bot)
+    const problem = routineProblem(draft, offerFor(context))
+    if (problem) return problem
+    const where = projectOfBotPath(bot.path) ?? cwd
+    if (context.runner === "codex" && !where) return t("bots.routine.suspended.noProject")
+    const fields = {
+      prompt: draft.prompt.trim(),
+      every: draft.every,
+      ...(draft.spend ? { spend: draft.spend } : {}),
+    }
+    const routine: Routine = {
+      id: crypto.randomUUID(),
+      bot: bot.path,
+      ...fields,
+      ...(where ? { cwd: where } : {}),
+      consent: await routineConsent(fields, context),
+      createdAt: Date.now(),
+    }
+    writeRoutines((book) => addRoutine(book, routine))
+    return undefined
+  },
+  remove: (id) => writeRoutines((book) => removeRoutine(book, id)),
+  pause: (id, paused) => writeRoutines((book) => pauseRoutine(book, id, paused)),
+  reconsent: async (bot, id) => {
+    const routine = routineStore.get().routines.find((entry) => entry.id === id)
+    if (!routine) return undefined
+    const context = await botContext(bot)
+    const problem = routineProblem(routine, offerFor(context))
+    if (problem) return problem
+    const consent = await routineConsent(routine, context)
+    writeRoutines((book) => reconsent(book, id, consent))
+    return undefined
+  },
+  openSource: (url) => void openExternally(url),
+  catalogFree: catalogFreeOf,
+}
+
+/* ── rooms (B8b) ────────────────────────────────────────────────────────── */
+
+/*
+ * Two to six bots in one conversation (`room.ts`, `room-app.ts`). Kept in the
+ * WebView's storage like the routines. Each member speaks through its own
+ * turn, in a thread of its own for that room, trusted as in the panel: the
+ * user sent the message, so the dialogs are the panel's.
+ */
+const roomStore = localRoomStore()
+const [roomBook, setRoomBook] = createSignal<RoomBook>(roomStore.get())
+/** The member speaking in each room, by its file. */
+const [roomSpeaking, setRoomSpeaking] = createSignal<Record<string, string>>({})
+/** The rooms waiting on a trust dialog before their first turn. */
+const [roomAsking, setRoomAsking] = createSignal<Record<string, true>>({})
+/** The file each member was trusted as, for answering its questions. */
+const seatBots = new Map<string, AgentFile>()
+/** The project open in the main area: where a global bot's room turns run. */
+let roomProject: string | undefined
+
+async function payOf(bot: AgentFile): Promise<RoomPay> {
+  const context = await botContext(bot)
+  return roomPay(routineModeOf(context.runner, context.account?.mode, context.model, context.free))
+}
+
+const roomRunner = createRoomRunner({
+  store: roomStore,
+  seats: async (room, asking) => {
+    const seats: RoomSeat[] = []
+    // The dialog is native, over ADE but behind the app in front when ADE is not: the room says what it waits for.
+    const ask = async (question: string) => {
+      asking(true)
+      try {
+        return await askTrust(question)
+      } finally {
+        asking(false)
+      }
+    }
+    for (const path of room.members) {
+      const read = await readBotFile(path)
+      if (!read) return { problem: t("bots.room.missingBot", memberName([], path)) }
+      const verdict = await admitTurn(read, roomProject, ask)
+      if (!verdict.ok) return { problem: verdict.problem ?? t("bots.room.notTrusted", read.identifier) }
+      const bot = verdict.bot
+      seatBots.set(path, bot)
+      ensureLoaded([roomThread(room.id, path)])
+      const cwd = projectOfBotPath(path) ?? roomProject
+      seats.push({ member: { id: path, name: bot.identifier }, bot, pay: await payOf(bot), ...(cwd ? { cwd } : {}) })
+    }
+    return seats
+  },
+  turns,
+  testBuild: isAdeTestBuild,
+  changed: setRoomBook,
+  onAsking: (roomId, waiting) =>
+    setRoomAsking((all) => {
+      if (Boolean(all[roomId]) === waiting) return all
+      const next = { ...all }
+      if (waiting) next[roomId] = true
+      else delete next[roomId]
+      return next
+    }),
+  onTurn: (roomId, path) =>
+    setRoomSpeaking((all) => {
+      const next = { ...all }
+      if (path) next[roomId] = path
+      else delete next[roomId]
+      return next
+    }),
+})
+
+const writeRooms = (change: (book: RoomBook) => RoomBook) => {
+  const next = change(roomStore.get())
+  roomStore.set(next)
+  setRoomBook(next)
+}
+
+const roomDeps: RoomPanelDeps = {
+  book: roomBook,
+  bots: () => shared.roster() ?? [],
+  speaking: (roomId) => roomSpeaking()[roomId],
+  asking: (roomId) => Boolean(roomAsking()[roomId]),
+  permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
+  answer: (path, choice, requestID) => {
+    const bot = seatBots.get(path)
+    if (bot) turns.answer(bot, choice, requestID)
+  },
+  send: async (roomId, text) => {
+    // The run goes on after the message is in: its end and its problems are the room's note.
+    void roomRunner.send(roomId, text)
+    return true
+  },
+  stop: (roomId) => void roomRunner.stop(roomId),
+  create: async (draft) => {
+    const size = roomProblem(draft.members)
+    if (size) return { problem: describeProblem(size) }
+    const roster = shared.roster() ?? []
+    const bots = draft.members
+      .map((path) => roster.find((bot) => bot.path === path))
+      .filter((bot): bot is AgentFile => !!bot)
+    const pays = await Promise.all(bots.map(async (bot) => ({ name: bot.identifier, pay: await payOf(bot) })))
+    const spend = roomSpendProblem(pays, draft.spend, isAdeTestBuild())
+    if (spend) return { problem: spend }
+    const room: RoomRecord = {
+      id: crypto.randomUUID(),
+      name: draft.name,
+      members: [...draft.members],
+      ...(draft.spend ? { spend: draft.spend } : {}),
+      log: EMPTY_LOG,
+      needsYou: false,
+      createdAt: Date.now(),
+    }
+    writeRooms((book) => ({ rooms: [...book.rooms, room] }))
+    return { id: room.id }
+  },
+  remove: async (roomId) => {
+    const room = roomStore.get().rooms.find((entry) => entry.id === roomId)
+    if (!room) return false
+    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), {
+      ok: t("bots.room.delete"),
+      cancel: t("bots.room.form.cancel"),
+    })
+    if (!yes) return false
+    await roomRunner.stop(roomId)
+    writeRooms((book) => ({ rooms: book.rooms.filter((entry) => entry.id !== roomId) }))
+    // Each member's session in the room goes with it.
+    for (const path of room.members) updateTalk(roomThread(roomId, path), () => emptyTalk())
+    return true
+  },
+  payOf,
 }
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
@@ -124,10 +622,39 @@ const shared = createRoot(() => {
   const [roots, setRoots] = createSignal<BotRoots>({})
   const [openId, setOpenId] = createSignal<string>()
   const [composing, setComposing] = createSignal(false)
+  /* A room open in the main area, or its form (B8b): in place of a bot's conversation. */
+  const [openRoomId, setOpenRoomId] = createSignal<string>()
+  const [roomComposing, setRoomComposing] = createSignal(false)
   const [reloads, setReloads] = createSignal(0)
   const [now, setNow] = createSignal(Date.now())
 
   createEffect(on(projectRoot, (root) => void resolveRoots(root).then(setRoots)))
+
+  /*
+   * A global bot's file does not change when the project does, but its
+   * session must. Idle threads are dropped so the next read takes the
+   * archive of the project just opened; a turn already running keeps
+   * writing under the project it started in.
+   */
+  createEffect(
+    on(projectRoot, (root) => {
+      const next = root ?? ""
+      // Project bots are recognised from their path, so this runs with no project open too.
+      if (!legacyMoved) {
+        legacyMoved = true
+        migrateTalkKeys(talkDisk, next)
+      }
+      if (next === openProject) return
+      openProject = next
+      setTalks((all) => {
+        const kept: Record<string, Talk> = {}
+        for (const [path, talk] of Object.entries(all)) {
+          if (turns.running(path)) kept[path] = talk
+        }
+        return kept
+      })
+    }),
+  )
 
   // The clocks in the roster: "ora" has to become "09:12" on its own. Paused
   // while the window is hidden, like every other timer in ADE.
@@ -147,15 +674,63 @@ const shared = createRoot(() => {
   )
 
   createEffect(() => {
+    const root = projectRoot() ?? ""
+    if (root !== openProject) return
     const bots = roster()
     if (bots) ensureLoaded(bots.map((bot) => bot.path))
   })
 
-  /* Asked of nikcli, once. These are the models a bot can be pinned to. */
-  const [models] = createResource(
-    () => projectRoot() ?? "",
-    (cwd) => listModels(cwd || undefined),
+  /*
+   * The models a bot can be pinned to: the one catalog, the Chat's
+   * (`botModels`), read when a model menu opens. As a resource it was read
+   * as the section mounted, even for no folder at all (review of
+   * catalogo-modelli, BASSO): `nikcli models --verbose`, 2.6 s, for a user
+   * who never opened the menu.
+   */
+  const [catalogState, setCatalogState] = createSignal<ModelSourceState>({ kind: "idle" })
+  let catalogFor: string | undefined
+  const readModels = () => {
+    const cwd = projectRoot() ?? ""
+    catalogFor = cwd
+    const kept = botModelSource.kept(cwd)
+    if (kept) return void setCatalogState({ kind: "ready", models: kept })
+    setCatalogState({ kind: "loading" })
+    void botModelSource.read(cwd).then((read) => {
+      if (catalogFor === cwd) setCatalogState(stateOf(read))
+    })
+  }
+  // Another folder has its own list: the one kept for it, or none until its menu opens.
+  createEffect(
+    on(
+      () => projectRoot() ?? "",
+      (cwd) => {
+        if (cwd === catalogFor) return
+        catalogFor = undefined
+        const kept = botModelSource.kept(cwd)
+        setCatalogState(kept ? { kind: "ready", models: kept } : { kind: "idle" })
+      },
+      { defer: true },
+    ),
   )
+  const catalog: BotCatalog = {
+    state: catalogState,
+    open: () => {
+      const now = catalogState()
+      if (now.kind === "idle" || now.kind === "failed") readModels()
+    },
+    retry: readModels,
+    recent: () => {
+      try {
+        return recentModels(localStorage, projectRoot())
+      } catch {
+        return []
+      }
+    },
+  }
+  const models = (): readonly ChatModelChoice[] => {
+    const now = catalogState()
+    return now.kind === "ready" ? now.models : []
+  }
 
   /*
    * By activity, the way a contact list is ordered: whoever spoke last is
@@ -172,11 +747,42 @@ const shared = createRoot(() => {
     void refetch()
   }
 
+  /*
+   * And changed from outside ADE: looked at again when the window comes back
+   * and every ROSTER_CHECK_MS while it shows, moved only when the files differ
+   * (`roster-sync.ts`).
+   */
+  let checking = false
+  const checkFiles = async () => {
+    if (checking || roster.loading) return
+    checking = true
+    try {
+      if (rosterChanged(roster(), await listBots(roots()))) reload()
+    } catch {
+      // Unreadable now: the roster shown stays until the next look.
+    } finally {
+      checking = false
+    }
+  }
+  every(ROSTER_CHECK_MS, () => void checkFiles())
+  if (typeof window !== "undefined") window.addEventListener("focus", () => void checkFiles())
+
   const current = () => (roster() ?? []).find((bot) => bot.path === openId())
   const identifiers = () => (roster() ?? []).map((bot) => bot.identifier)
 
   const open = (bot: AgentFile) => {
     setOpenId(bot.path)
+    setComposing(false)
+    setOpenRoomId(undefined)
+    setRoomComposing(false)
+  }
+
+  const openRoom = (id: string | undefined, form = false) => {
+    // The form says how each bot is paid for: from the files as they are now.
+    if (form) void checkFiles()
+    setOpenRoomId(id)
+    setRoomComposing(form)
+    setOpenId(undefined)
     setComposing(false)
   }
 
@@ -191,11 +797,15 @@ const shared = createRoot(() => {
     roots,
     roster,
     models,
+    catalog,
     ordered,
     openId,
     setOpenId,
     composing,
     setComposing,
+    openRoomId,
+    roomComposing,
+    openRoom,
     now,
     reload,
     current,
@@ -234,8 +844,8 @@ export function BotsRoster(props: BotsRosterProps) {
           type="button"
           data-slot="bots-new"
           onClick={() => {
+            shared.openRoom(undefined)
             shared.setComposing(true)
-            shared.setOpenId(undefined)
           }}
           aria-label={t("bots.newBot")}
           title={t("bots.newBot")}
@@ -299,6 +909,13 @@ export function BotsRoster(props: BotsRosterProps) {
           </For>
         </div>
       </Show>
+
+      <RoomsRoster
+        deps={roomDeps}
+        openId={shared.openRoomId()}
+        onOpen={(id) => shared.openRoom(id)}
+        onNew={() => shared.openRoom(undefined, true)}
+      />
     </div>
   )
 }
@@ -310,13 +927,16 @@ export interface BotsMainProps {
   onLaunch?: (bot: AgentFile) => void
   /** Opens the bot's own file in the editor. */
   onOpenFile?: (path: string) => void
+  /** Opens Impostazioni › Chiavi API. */
+  onOpenKeys?: () => void
 }
 
 /** The conversation and the card, drawn in the main area. */
 export function BotsMain(props: BotsMainProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
+  createEffect(() => void (roomProject = props.projectRoot))
 
-  const { roster, roots, models, composing, current, identifiers, expression, reload } = shared
+  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload } = shared
 
   /*
    * One message, one process.
@@ -326,9 +946,10 @@ export function BotsMain(props: BotsMainProps) {
    * smallest version of "call another bot in", and the one that costs no
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
-  const send = (from: AgentFile, raw: string) => {
+  /** Resolves to whether the message went; one that did not goes back into the composer. */
+  const send = async (from: AgentFile, raw: string): Promise<boolean> => {
     const text = raw.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return false
 
     let bot = from
     let message = text
@@ -342,50 +963,32 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    if (turns.has(bot.path)) return
-    const path = bot.path
-    const at = Date.now()
-    const runner = runnerById(bot.runner)
-    updateTalk(path, (talk) => sendMessage(talk, message, at))
-
-    const cwd = props.projectRoot
-    const sessionId = talkOf(path).sessionId
-    void startTurn({
-      bot,
-      message,
-      ...(sessionId ? { sessionId } : {}),
-      ...(cwd ? { cwd } : {}),
-      onLine: (line) => updateTalk(path, (talk) => applyRunnerLine(runner, talk, line, Date.now())),
-      /* Only nikcli draws a permission menu; the others decide up front. */
-      onData: (chunk) =>
-        runner.id === "nikcli" && updateTalk(path, (talk) => noticePermission(talk, chunk, Date.now())),
-      onExit: (code) => {
-        turns.delete(path)
-        updateTalk(path, (talk) => applyExit(talk, code, Date.now(), runner.label))
-      },
-    }).then((started) => {
-      if (started.ok) {
-        turns.set(path, started.handle)
-      } else {
-        updateTalk(path, (talk) => applyProblem(talk, started.problem, Date.now()))
-      }
-    })
+    return start(bot, message)
   }
 
-  const answer = (bot: AgentFile, choice: PermissionAnswer) => {
-    turns.get(bot.path)?.write(answerKeys(choice))
-    updateTalk(bot.path, (talk) => permissionAnswered(talk, Date.now()))
+  /* The checks of `admitTurn`, with the user's dialog. */
+  const start = async (bot: AgentFile, message: string): Promise<boolean> => {
+    const verdict = await admitTurn(bot, props.projectRoot, askTrust)
+    if (!verdict.ok) {
+      if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
+      return false
+    }
+    return turns.send(verdict.bot, message, props.projectRoot)
   }
 
-  const stop = (bot: AgentFile) => {
-    turns.get(bot.path)?.kill()
-  }
+  const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
+    turns.answer(bot, choice, requestID)
+
+  // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
+  const gateway =
+    gatewayVisible() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+      ? appGatewayPanelDeps(() => props.projectRoot)
+      : undefined
+
+  const stop = (bot: AgentFile) => turns.stop(bot)
 
   /** A fresh thread: the session id goes with it, so the model starts over too. */
-  const forget = (bot: AgentFile) => {
-    turns.get(bot.path)?.kill()
-    updateTalk(bot.path, () => emptyTalk())
-  }
+  const forget = (bot: AgentFile) => turns.forget(bot)
 
   return (
     <section data-component="ade-bots">
@@ -394,7 +997,8 @@ export function BotsMain(props: BotsMainProps) {
           <div data-slot="bots-main-scroll">
             <BotForm
               roots={roots()}
-              models={models() ?? []}
+              models={models()}
+              catalog={catalog}
               hasProject={Boolean(props.projectRoot)}
               onCreated={(path) => {
                 shared.setComposing(false)
@@ -414,13 +1018,36 @@ export function BotsMain(props: BotsMainProps) {
               others={identifiers().filter((name) => name !== bot().identifier)}
               expression={expression(bot())}
               onSend={(text) => send(bot(), text)}
-              onAnswer={(choice) => answer(bot(), choice)}
+              onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
+              onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
+              models={models()}
+              catalog={catalog}
+              onSettings={async (changes) => {
+                // The form's save: the file, then the roster read again.
+                const problem = await updateBot(bot(), changes)
+                if (!problem) reload()
+                return problem
+              }}
             />
           )}
         </Show>
 
-        <Show when={!composing() && !current()}>
+        <Show when={shared.roomComposing()}>
+          <div data-slot="bots-main-scroll">
+            <RoomForm
+              deps={roomDeps}
+              onCreated={(id) => shared.openRoom(id)}
+              onCancel={() => shared.openRoom(undefined)}
+            />
+          </div>
+        </Show>
+
+        <Show when={!composing() && !shared.roomComposing() && shared.openRoomId()}>
+          {(id) => <RoomMain deps={roomDeps} roomId={id()} onRemoved={() => shared.openRoom(undefined)} />}
+        </Show>
+
+        <Show when={!composing() && !current() && !shared.roomComposing() && !shared.openRoomId()}>
           <p data-slot="bots-blank">
             <Show when={(roster() ?? []).length > 0} fallback={<>{t("bots.blank.empty")}</>}>
               {t("bots.blank.pick")}
@@ -435,10 +1062,14 @@ export function BotsMain(props: BotsMainProps) {
             <BotCard
               bot={bot()}
               talk={talkOf(bot().path)}
-              models={models() ?? []}
+              models={models()}
+              catalog={catalog}
               expression={expression(bot())}
+              {...(gateway ? { gateway } : {})}
+              {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
               {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
+              {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
               onForget={() => forget(bot())}
               onChanged={() => reload()}
               onDeleted={() => {
@@ -545,9 +1176,18 @@ function Thread(props: {
   talk: Talk
   others: readonly string[]
   expression: Expression
-  onSend: (text: string) => void
-  onAnswer: (choice: PermissionAnswer) => void
+  /** Whether the message went: one that did not comes back into the composer. */
+  onSend: (text: string) => boolean | Promise<boolean>
+  /** With the id of the question the card shows (B8d review, M1). */
+  onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
+  /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
+  onGrant: () => void
   onStop: () => void
+  /** The catalog, as the card's form reads it: when the model chip opens. */
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
+  /** A chip's choice, saved as the form saves it; resolves to the problem, if any. */
+  onSettings: (changes: BotChanges) => Promise<string | undefined>
 }) {
   const [draft, setDraft] = createSignal("")
   let scroller: HTMLDivElement | undefined
@@ -578,14 +1218,67 @@ function Thread(props: {
   const submit = () => {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
-    setDraft("")
-    props.onSend(text)
+    void submitDraft(text, props.onSend, { get: draft, set: setDraft })
   }
 
   const subagent = () => props.bot.mode === "subagent"
 
+  /*
+   * The model and effort chips (composer-chip, pezzo 4). A choice shows at
+   * once and is written to the bot's file; the file is the truth, so the
+   * chip goes back to it when it changes, or when the save fails.
+   */
+  const [shown, setShown] = createSignal<{ readonly model: string; readonly effort: string }>()
+  const [chipProblem, setChipProblem] = createSignal<string>()
+  createEffect(
+    on(
+      () => [props.bot.path, props.bot.model, props.bot.effort],
+      () => setShown(undefined),
+    ),
+  )
+  createEffect(
+    on(
+      () => props.bot.path,
+      () => setChipProblem(undefined),
+    ),
+  )
+  const runner = createMemo(() => runnerById(props.bot.runner))
+  const model = () => shown()?.model ?? props.bot.model ?? ""
+  const effort = () => shown()?.effort ?? props.bot.effort ?? ""
+  const efforts = createEfforts(() => ({
+    runner: props.bot.runner,
+    model: model(),
+    effort: effort(),
+    models: props.models,
+  }))
+  const gone = createGone(() => ({ runner: props.bot.runner, model: model() }))
+  const change = async (changes: BotChanges) => {
+    setShown({
+      model: "model" in changes ? (changes.model ?? "") : model(),
+      effort: "effort" in changes ? (changes.effort ?? "") : effort(),
+    })
+    setChipProblem(undefined)
+    const problem = await props.onSettings(changes)
+    if (problem) {
+      setShown(undefined)
+      setChipProblem(problem)
+    }
+  }
+  const chooseModel = (value: string) => {
+    if (value === model()) return
+    const variants = runner().id === "nikcli" && value ? variantsOf(props.models, parseModelRef(value)) : undefined
+    void change(modelChange(value, effort(), variants))
+  }
+  const chooseEffort = (value: string) => {
+    if (value === (efforts().stale ? "" : effort())) return
+    void change(effortChange(value))
+  }
+
   return (
     <div data-slot="bots-thread">
+      <Show when={runnerById(props.bot.runner).id === "nikcli"}>
+        <p data-slot="bots-rules-note">{t("bots.serve.rulesNote")}</p>
+      </Show>
       <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
         <Show when={props.talk.messages.length === 0 && !props.talk.problem}>
           <div data-slot="bots-thread-empty">
@@ -602,7 +1295,11 @@ function Thread(props: {
           </div>
         </Show>
 
-        <For each={props.talk.messages}>{(message) => <Message message={message} bot={props.bot} />}</For>
+        <For each={props.talk.messages}>
+          {(message) => (
+            <Message message={message} bot={props.bot} onUndo={() => turns.undoMemory(props.bot, message.id)} />
+          )}
+        </For>
 
         <Show when={props.talk.permission}>
           {(asked) => (
@@ -614,16 +1311,51 @@ function Thread(props: {
                   {" "}
                   {t("bots.permission.on")} <code>{asked().patterns}</code>
                 </Show>
+                {/* B8c: why ADE stops it, and that silence is a no. */}
+                <Show when={asked().reason}>
+                  {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
+                </Show>
+                <Show when={asked().expiresAt}>
+                  <span data-slot="bots-permission-why">
+                    {t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}
+                  </span>
+                </Show>
               </span>
               <span data-slot="bots-permission-actions">
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
-                  {t("bots.permission.reject")}
+                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
+                  {t("bots.permission.deny")}
                 </button>
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
-                  {t("bots.permission.always")}
-                </button>
-                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
+                {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
+                <Show when={(asked().always?.length ?? 0) > 0}>
+                  <button
+                    type="button"
+                    data-slot="bots-btn"
+                    onClick={() => props.onAnswer("always", asked().requestID)}
+                  >
+                    {t("bots.approval.always")}
+                  </button>
+                </Show>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  data-tone="primary"
+                  onClick={() => props.onAnswer("once", asked().requestID)}
+                >
                   {t("bots.permission.allow")}
+                </button>
+              </span>
+            </div>
+          )}
+        </Show>
+
+        {/* B8c: Claude Code cannot ask mid-turn; a refused danger is offered for the next turn. */}
+        <Show when={!props.talk.permission && props.talk.offer}>
+          {(offer) => (
+            <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
+              <span data-slot="bots-permission-text">{t("bots.approval.offer", offer().command)}</span>
+              <span data-slot="bots-permission-actions">
+                <button type="button" data-slot="bots-btn" onClick={() => props.onGrant()}>
+                  {t("bots.approval.always")}
                 </button>
               </span>
             </div>
@@ -663,6 +1395,8 @@ function Thread(props: {
         </div>
       </Show>
 
+      <Show when={chipProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+
       <form
         data-slot="bots-composer"
         onSubmit={(event) => {
@@ -689,21 +1423,77 @@ function Thread(props: {
             }
           }}
         />
-        <span data-slot="bots-composer-cap">
-          <Show when={props.talk.tokens > 0}>
-            {t("bots.tokens", formatCount(props.talk.tokens))}
-            <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
+        {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
+        <div data-slot="bots-composer-row">
+          <Show
+            when={runner().id === "nikcli"}
+            fallback={
+              <ChipMenu
+                kind="model"
+                label={t("bots.engine.model")}
+                text={model() || t("bots.engine.modelDefaultOf", runner().label)}
+                value={model()}
+                items={runnerModelItems(runner().models, model(), t("bots.engine.modelDefaultOf", runner().label))}
+                onChoose={chooseModel}
+              />
+            }
+          >
+            <ModelPicker
+              label={t("bots.engine.model")}
+              value={model()}
+              gone={gone()}
+              models={props.models}
+              {...(props.catalog ? { state: props.catalog.state() } : {})}
+              recent={props.catalog?.recent() ?? []}
+              defaultLabel={t("bots.engine.nikcliDefault")}
+              {...(props.bot.model ? { kept: props.bot.model } : {})}
+              fallback={(value) => botModelLabel(value)}
+              onOpen={() => props.catalog?.open()}
+              onRetry={() => props.catalog?.retry()}
+              onChoose={chooseModel}
+            />
           </Show>
-        </span>
-        <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
-          {t("bots.send")}
-        </button>
+          <Show when={!efforts().none}>
+            <EffortPicker
+              label={t("bots.engine.effort")}
+              value={efforts().stale ? "" : effort()}
+              levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
+              onChoose={chooseEffort}
+            />
+          </Show>
+          <span data-slot="bots-composer-gap" />
+          <span data-slot="bots-composer-cap">
+            <Show when={props.talk.lastTurn}>
+              {(turn) => (
+                <>
+                  {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                  {" · "}
+                  <LastFigures
+                    {...(turn().mode ? { mode: turn().mode } : {})}
+                    runner={props.bot.runner}
+                    model={turn().model}
+                    tokens={turn().tokens}
+                    costUsd={turn().costUsd}
+                  />
+                  {" · "}
+                </>
+              )}
+            </Show>
+            <Show when={hasThreadTotals(props.talk)}>
+              {t("bots.conversation.total")}{" "}
+              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            </Show>
+          </span>
+          <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
+            {t("bots.send")}
+          </button>
+        </div>
       </form>
     </div>
   )
 }
 
-function Message(props: { message: TalkMessage; bot: AgentFile }) {
+function Message(props: { message: TalkMessage; bot: AgentFile; onUndo?: () => void }) {
   return (
     <div data-slot="bots-msg" data-role={props.message.role}>
       <Show when={props.message.role !== "user"}>
@@ -720,6 +1510,12 @@ function Message(props: { message: TalkMessage; bot: AgentFile }) {
               <pre data-slot="bots-tool-output">{props.message.output}</pre>
             </Show>
           </details>
+          {/* A memory write the user can take back (B8a review): no dialog for each one. */}
+          <Show when={props.message.memoryUndo && props.onUndo}>
+            <button type="button" data-slot="bots-link" onClick={() => props.onUndo?.()}>
+              {t("bots.memory.undo")}
+            </button>
+          </Show>
         </Show>
         <Show when={props.message.role !== "tool"}>
           <p data-slot="bots-msg-text">{props.message.text}</p>
@@ -735,8 +1531,101 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-function formatUsd(usd: number): string {
-  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
+function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" | "bots.spend.metered" {
+  if (kind === "plan") return "bots.spend.plan"
+  if (kind === "free") return "bots.spend.free"
+  if (kind === "metered") return "bots.spend.metered"
+  return "bots.spend.api"
+}
+
+function Figures(props: {
+  runner?: string
+  model?: string
+  account?: BotAccount
+  kind?: SpendKind
+  tokens: number
+  costUsd: number
+}) {
+  const line = () =>
+    spendLine({
+      runnerId: props.runner,
+      model: props.model,
+      tokens: props.tokens,
+      costUsd: props.costUsd,
+      ...(props.account ? { account: props.account } : {}),
+      ...(props.kind ? { kind: props.kind } : {}),
+    })
+  return (
+    <>
+      <Show when={props.tokens > 0}>{t("bots.tokens", formatCount(props.tokens))}</Show>
+      <Show when={line().usd}>
+        {(usd) => (
+          <>
+            {props.tokens > 0 ? " · " : ""}
+            {usd()}
+          </>
+        )}
+      </Show>
+      <Show when={line().unreported}>
+        {props.tokens > 0 ? " · " : ""}
+        {t("bots.spend.unreported")}
+      </Show>
+    </>
+  )
+}
+
+function LastFigures(props: { runner?: string; model?: string; mode?: SpendKind; tokens: number; costUsd: number }) {
+  const kind = props.mode ?? (props.runner === "claude" || props.runner === "codex" ? "plan" : undefined)
+  return (
+    <Figures
+      {...(kind ? { kind } : {})}
+      runner={props.runner}
+      model={props.model}
+      tokens={props.tokens}
+      costUsd={props.costUsd}
+    />
+  )
+}
+
+/** One total per mode, so a subscription's figures are not added to a key's. */
+function ThreadTotals(props: { runner?: string; model?: string; talk: Talk }) {
+  const rows = () => {
+    const by = props.talk.byMode
+    if (!by) return []
+    return (["plan", "api", "free", "metered"] as const).flatMap((mode) => {
+      const row = by[mode]
+      return row ? [{ mode, tokens: row.tokens, costUsd: row.costUsd }] : []
+    })
+  }
+  return (
+    <Show
+      when={rows().length > 0}
+      fallback={
+        <Figures
+          runner={props.runner}
+          model={props.model}
+          tokens={props.talk.tokens}
+          costUsd={props.runner === "claude" || props.runner === "codex" ? 0 : props.talk.costUsd}
+        />
+      }
+    >
+      <For each={rows()}>
+        {(row, index) => (
+          <>
+            {index() > 0 ? " · " : ""}
+            {t(spendKey(row.mode))}{" "}
+            <Figures kind={row.mode} runner={props.runner} tokens={row.tokens} costUsd={row.costUsd} />
+          </>
+        )}
+      </For>
+    </Show>
+  )
+}
+
+function generationNotice(model: string): string {
+  const spend = generationSpend(model)
+  if (!spend.model) return t("bots.form.generateCostDefault")
+  return spend.paid ? t("bots.form.generateCostPaid", spend.model) : t("bots.form.generateCostFree", spend.model)
 }
 
 /* ── the card ───────────────────────────────────────────────────────────── */
@@ -744,14 +1633,22 @@ function formatUsd(usd: number): string {
 function BotCard(props: {
   bot: AgentFile
   talk: Talk
-  models: readonly string[]
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
   expression: Expression
+  /** The Gateway section's dependencies; absent, no section. */
+  gateway?: Omit<GatewayPanelDeps, "bot">
+  /** The open project: where a routine made now runs (B11). */
+  projectRoot?: string
   onLaunch?: (bot: AgentFile) => void
   onOpenFile?: (path: string) => void
   onForget: () => void
   onChanged: () => void
   onDeleted: () => void
+  onOpenKeys?: () => void
 }) {
+  const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
+  const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
   const [editing, setEditing] = createSignal(false)
   const [confirming, setConfirming] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
@@ -764,6 +1661,7 @@ function BotCard(props: {
         setEditing(false)
         setConfirming(false)
         setProblem(undefined)
+        setAccount(accounts.get(props.bot.path))
       },
     ),
   )
@@ -785,7 +1683,21 @@ function BotCard(props: {
         <h2 data-slot="bots-card-name">{props.bot.identifier}</h2>
         <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
         <span data-slot="bots-card-meta">
-          {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
+          {runnerById(props.bot.runner).label} ·{" "}
+          {/* A model the catalog no longer has: its name in words and why, the id in the tooltip (bot-riquadro, a). */}
+          <Show
+            when={modelIsGone()}
+            fallback={
+              <>
+                {props.bot.model ?? t("bots.defaultModel")} ·{" "}
+                {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
+              </>
+            }
+          >
+            <span data-slot="bots-card-gone" title={t("picker.goneTitle", props.bot.model ?? "")}>
+              {t("picker.gone", readableModelName(props.bot.model ?? ""))}
+            </span>
+          </Show>
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
           {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
@@ -838,9 +1750,27 @@ function BotCard(props: {
           <span data-slot="bots-label">{t("bots.card.conversation")}</span>
           <span data-slot="bots-card-stat">
             {t("bots.card.messages", props.talk.messages.length)}
-            <Show when={props.talk.tokens > 0}> · {t("bots.tokens", formatCount(props.talk.tokens))}</Show>
-            <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
+            <Show when={hasThreadTotals(props.talk)}>
+              {" · "}
+              {t("bots.conversation.total")}{" "}
+              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            </Show>
           </span>
+          <Show when={props.talk.lastTurn}>
+            {(turn) => (
+              <span data-slot="bots-card-stat">
+                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                {" · "}
+                <LastFigures
+                  {...(turn().mode ? { mode: turn().mode } : {})}
+                  runner={props.bot.runner}
+                  model={turn().model}
+                  tokens={turn().tokens}
+                  costUsd={turn().costUsd}
+                />
+              </span>
+            )}
+          </Show>
           <Show when={props.talk.sessionId}>
             {(sessionId) => (
               <span data-slot="bots-card-path" title={sessionId()}>
@@ -854,6 +1784,19 @@ function BotCard(props: {
             </button>
           </Show>
         </section>
+
+        <Show when={props.gateway}>
+          {(deps) => (
+            <Show when={props.bot.path} keyed>
+              <GatewaySection bot={props.bot} deps={deps()} />
+            </Show>
+          )}
+        </Show>
+
+        <Show when={props.bot.mode !== "subagent"}>
+          <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
+          <MemorySection bot={props.bot.path} store={memories} />
+        </Show>
 
         <section data-slot="bots-card-section">
           <span data-slot="bots-label">{t("bots.card.file")}</span>
@@ -887,7 +1830,18 @@ function BotCard(props: {
       </Show>
 
       <Show when={editing()}>
-        <BotSettings bot={props.bot} models={props.models} onSaved={() => props.onChanged()} />
+        <BotSettings
+          bot={props.bot}
+          models={props.models}
+          {...(props.catalog ? { catalog: props.catalog } : {})}
+          account={account()}
+          onAccount={(next) => {
+            accounts.set(props.bot.path, next)
+            setAccount(accounts.get(props.bot.path))
+          }}
+          {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
+          onSaved={() => props.onChanged()}
+        />
       </Show>
     </div>
   )
@@ -909,7 +1863,8 @@ function BotCard(props: {
  */
 function BotForm(props: {
   roots: BotRoots
-  models: readonly string[]
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
   hasProject: boolean
   onCreated: (path: string) => void
   onCancel: () => void
@@ -920,6 +1875,8 @@ function BotForm(props: {
   const [persona, setPersona] = createSignal("")
   const [model, setModel] = createSignal("")
   const [effort, setEffort] = createSignal("")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>("nikcli")
   const [objectives, setObjectives] = createSignal("")
   const [avatar, setAvatar] = createSignal<string>()
@@ -944,6 +1901,14 @@ function BotForm(props: {
       return
     }
 
+    if (generating()) {
+      const yes = await askYesNo(generationNotice(model()), {
+        ok: t("bots.form.generateWithNikcli"),
+        cancel: t("bots.form.cancel"),
+      })
+      if (!yes) return
+    }
+
     setProblem(undefined)
     setBusy(true)
     const result = await createBot(
@@ -953,7 +1918,7 @@ function BotForm(props: {
         description: description().trim(),
         ...(generating() ? {} : { persona: persona() }),
         ...(model() ? { model: model() } : {}),
-        ...(effort().trim() ? { effort: effort().trim() } : {}),
+        ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
         ...(runner() !== "nikcli" ? { runner: runner() } : {}),
         objectives: objectives()
@@ -1019,6 +1984,8 @@ function BotForm(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        {...(props.catalog ? { catalog: props.catalog } : {})}
+        onStale={setStaleEffort}
         onRunner={(id) => {
           setRunner(id)
           setModel("")
@@ -1068,6 +2035,10 @@ function BotForm(props: {
 
       <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 
+      <Show when={generating()}>
+        <p data-slot="bots-hint">{generationNotice(model())}</p>
+      </Show>
+
       <div data-slot="bots-form-actions">
         <button type="button" data-slot="bots-btn" onClick={() => props.onCancel()} disabled={busy()}>
           {t("bots.form.cancel")}
@@ -1096,19 +2067,93 @@ function BotForm(props: {
  * before a list here learns them, and refuse a wrong one in their own words.
  */
 
+/**
+ * The efforts a bot's model offers, for the form and the composer's chip
+ * alike. A nikcli model's are its variants: the catalog's, or its provider's
+ * for a model the catalog lacks.
+ */
+function createEfforts(
+  input: () => {
+    readonly runner: string | undefined
+    readonly model: string
+    readonly effort: string
+    readonly models: readonly ChatModelChoice[]
+  },
+) {
+  const runner = createMemo<Runner>(() => runnerById(input().runner))
+  const model = () => input().model
+  const listed = createMemo(() =>
+    runner().id === "nikcli" && model() ? variantsOf(input().models, parseModelRef(model())) : undefined,
+  )
+  const [variants] = createResource(
+    () => (runner().id === "nikcli" && model() && listed() === undefined ? model() : null),
+    (name) => nikcliModelVariants(name, loadCatalog),
+  )
+  return createMemo(() =>
+    effortChoices({
+      nikcli: runner().id === "nikcli",
+      fixed: runner().efforts,
+      // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
+      variants:
+        runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
+      saved: input().effort,
+    }),
+  )
+}
+
+/**
+ * Whether a nikcli bot's model has left its provider's catalog, as the card,
+ * the composer's chip and the form say it (review of bot-riquadro, a). Read
+ * with the provider's catalog the efforts already read; false while it is
+ * read, and for the other runners.
+ */
+function createGone(input: () => { readonly runner: string | undefined; readonly model: string }) {
+  const [gone] = createResource(
+    () => (runnerById(input().runner).id === "nikcli" && input().model ? input().model : null),
+    (model) => modelGone(model, loadCatalog),
+  )
+  // A resource keeps the last model's answer: only this model's, read.
+  return () => runnerById(input().runner).id === "nikcli" && Boolean(input().model) && !gone.loading && gone() === true
+}
+
 function EngineFields(props: {
   listId: string
   runner: string
   model: string
   effort: string
-  nikcliModels: readonly string[]
+  nikcliModels: readonly ChatModelChoice[]
+  /** How the list is read: when the model menu opens (`BotCatalog`). */
+  catalog?: BotCatalog
   /** The model the file already names, kept selectable when a list lacks it. */
   pinned?: string
   onRunner: (id: string) => void
   onModel: (value: string) => void
   onEffort: (value: string) => void
+  /** The saved level the model does not have, or undefined: the form saves it as none (`effortToSave`). */
+  onStale?: (stale: string | undefined) => void
+  /** Present on a saved bot. The create form has no path yet, so no account. */
+  account?: BotAccount
+  onAccount?: (account: BotAccount) => void
+  onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
+  const efforts = createEfforts(() => ({
+    runner: props.runner,
+    model: props.model,
+    effort: props.effort,
+    models: props.nikcliModels,
+  }))
+  const gone = createGone(() => ({ runner: props.runner, model: props.model }))
+  createEffect(() => props.onStale?.(efforts().stale))
+  const [pickingKey, setPickingKey] = createSignal(false)
+  const [assigned] = createResource(
+    () => (props.onAccount && PLAN_RUNNERS.includes(runner().id) ? runner().command : null),
+    async (command) => (await (await getHost())?.assignedSecrets?.(command)) ?? [],
+  )
+  const showKey = () => props.account?.mode === "key" || pickingKey()
+  const names = () => assigned() ?? []
+  const savedName = () => (props.account?.mode === "key" ? props.account.key : "")
+  const savedKeyMissing = () => savedName().length > 0 && !names().some((row) => row.name === savedName())
   return (
     <>
       <label data-slot="bots-field">
@@ -1129,9 +2174,85 @@ function EngineFields(props: {
           </span>
         </Show>
       </label>
+      <Show when={PLAN_RUNNERS.includes(runner().id) && props.onAccount}>
+        <label data-slot="bots-field">
+          <span data-slot="bots-label">{t("bots.account.label")}</span>
+          <select
+            data-slot="bots-input"
+            value={showKey() ? "key" : "plan"}
+            onChange={(event) => {
+              if (event.currentTarget.value === "plan") {
+                setPickingKey(false)
+                props.onAccount?.(ACCOUNT_PLAN)
+                return
+              }
+              setPickingKey(true)
+            }}
+          >
+            <option value="plan">{t("bots.account.plan")}</option>
+            <option value="key">{t("bots.account.key")}</option>
+          </select>
+          <Show when={showKey()}>
+            <Show
+              when={names().length > 0 || props.account?.mode === "key"}
+              fallback={
+                <span data-slot="bots-hint">
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      props.onOpenKeys?.()
+                    }}
+                  >
+                    {t("bots.account.settings")}
+                  </button>{" "}
+                  {t("bots.account.empty")}
+                </span>
+              }
+            >
+              <select
+                data-slot="bots-input"
+                value={savedName()}
+                onChange={(event) => {
+                  const key = event.currentTarget.value
+                  if (!key) return
+                  setPickingKey(false)
+                  props.onAccount?.({ mode: "key", key })
+                }}
+              >
+                <option value="">{t("bots.account.pick")}</option>
+                <For each={names()}>
+                  {(row) => <option value={row.name}>{t("bots.account.option", row.name, row.env)}</option>}
+                </For>
+                <Show when={savedKeyMissing()}>
+                  <option value={savedName()}>{savedName()}</option>
+                </Show>
+              </select>
+              <Show when={names().length === 0}>
+                <span data-slot="bots-hint">
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      props.onOpenKeys?.()
+                    }}
+                  >
+                    {t("bots.account.settings")}
+                  </button>{" "}
+                  {t("bots.account.empty")}
+                </span>
+              </Show>
+            </Show>
+          </Show>
+          <span data-slot="bots-hint">{showKey() ? t("bots.account.hintKey") : t("bots.account.hintPlan")}</span>
+        </label>
+      </Show>
 
       <div data-slot="bots-row-fields">
-        <label data-slot="bots-field">
+        {/* A div, not a label: a click on the menu's headings would reach the chip and close it. */}
+        <div data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.model")}</span>
           <Show
             when={runner().id === "nikcli"}
@@ -1139,6 +2260,7 @@ function EngineFields(props: {
               <>
                 <input
                   data-slot="bots-input"
+                  aria-label={t("bots.engine.model")}
                   list={`${props.listId}-models`}
                   value={props.model}
                   placeholder={t("bots.engine.modelDefaultOf", runner().label)}
@@ -1150,57 +2272,77 @@ function EngineFields(props: {
               </>
             }
           >
-            <select
-              data-slot="bots-input"
+            <ModelPicker
+              below
+              label={t("bots.engine.model")}
               value={props.model}
-              onChange={(event) => props.onModel(event.currentTarget.value)}
-            >
-              <option value="">{t("bots.engine.nikcliDefault")}</option>
-              {/* The bot's own model stays offered when it is not in the list:
-                  dropping the pin would silently move the bot to another model. */}
-              <Show when={props.pinned && !props.nikcliModels.includes(props.pinned)}>
-                <option value={props.pinned}>{props.pinned}</option>
-              </Show>
-              <For each={props.nikcliModels}>{(id) => <option value={id}>{id}</option>}</For>
-            </select>
-            <Show when={props.nikcliModels.length === 0}>
-              <span data-slot="bots-hint">{t("bots.engine.modelsUnavailable")}</span>
-            </Show>
+              gone={gone()}
+              models={props.nikcliModels}
+              {...(props.catalog ? { state: props.catalog.state() } : {})}
+              recent={props.catalog?.recent() ?? []}
+              defaultLabel={t("bots.engine.nikcliDefault")}
+              {...(props.pinned ? { kept: props.pinned } : {})}
+              fallback={(value) => botModelLabel(value)}
+              onOpen={() => props.catalog?.open()}
+              onRetry={() => props.catalog?.retry()}
+              onChoose={props.onModel}
+            />
           </Show>
-        </label>
+        </div>
 
-        <label data-slot="bots-field">
+        <div data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.effort")}</span>
           <Show
-            when={runner().efforts.length > 0}
+            when={!efforts().none}
             fallback={
-              <input data-slot="bots-input" value="" placeholder={t("bots.engine.effortNotSupported")} disabled />
+              <input
+                data-slot="bots-input"
+                aria-label={t("bots.engine.effort")}
+                value=""
+                placeholder={t("bots.engine.effortNotSupported")}
+                disabled
+              />
             }
           >
-            <select
-              data-slot="bots-input"
-              value={props.effort}
-              onChange={(event) => props.onEffort(event.currentTarget.value)}
-            >
-              <option value="">{t("bots.engine.effortDefault")}</option>
-              <Show when={props.effort && !runner().efforts.includes(props.effort)}>
-                <option value={props.effort}>{props.effort}</option>
-              </Show>
-              <For each={runner().efforts}>{(value) => <option value={value}>{value}</option>}</For>
-            </select>
+            <EffortPicker
+              below
+              label={t("bots.engine.effort")}
+              value={efforts().stale ? "" : props.effort}
+              levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
+              onChoose={props.onEffort}
+            />
           </Show>
-        </label>
+        </div>
       </div>
+      {/* Under the row, the whole width: in the effort's narrow column the words were cut to «predef». */}
+      <Show when={efforts().stale}>
+        <span data-slot="bots-hint" data-state="warn">
+          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}
+        </span>
+      </Show>
+      <Show when={runner().id === "nikcli" && !props.model}>
+        <span data-slot="bots-hint">{t("bots.engine.effortPickModel")}</span>
+      </Show>
     </>
   )
 }
 
-function BotSettings(props: { bot: AgentFile; models: readonly string[]; onSaved: () => void }) {
+function BotSettings(props: {
+  bot: AgentFile
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
+  account: BotAccount
+  onAccount: (account: BotAccount) => void
+  onOpenKeys?: () => void
+  onSaved: () => void
+}) {
   const parts = createMemo(() => splitPrompt(props.bot.prompt))
 
   const [description, setDescription] = createSignal(props.bot.description)
   const [model, setModel] = createSignal(props.bot.model ?? "")
   const [effort, setEffort] = createSignal(props.bot.effort ?? "")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>(runnerById(props.bot.runner).id)
   const [objectives, setObjectives] = createSignal(parts().objectives.join("\n"))
   const [persona, setPersona] = createSignal(parts().persona)
@@ -1238,6 +2380,8 @@ function BotSettings(props: { bot: AgentFile; models: readonly string[]; onSaved
       description() !== props.bot.description ||
       model() !== (props.bot.model ?? "") ||
       effort() !== (props.bot.effort ?? "") ||
+      // Saving clears it: the save is offered.
+      staleEffort() !== undefined ||
       runner() !== runnerById(props.bot.runner).id ||
       persona() !== parts().persona ||
       objectives() !== parts().objectives.join("\n") ||
@@ -1253,7 +2397,7 @@ function BotSettings(props: { bot: AgentFile; models: readonly string[]; onSaved
     const problem = await updateBot(props.bot, {
       description: description().trim(),
       model: model() || undefined,
-      effort: effort().trim() || undefined,
+      effort: effortToSave(effort(), staleEffort()),
       runner: runner() === "nikcli" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
@@ -1297,6 +2441,8 @@ function BotSettings(props: { bot: AgentFile; models: readonly string[]; onSaved
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        {...(props.catalog ? { catalog: props.catalog } : {})}
+        onStale={setStaleEffort}
         {...(props.bot.model ? { pinned: props.bot.model } : {})}
         onRunner={(id) => {
           setRunner(id)
@@ -1310,6 +2456,9 @@ function BotSettings(props: { bot: AgentFile; models: readonly string[]; onSaved
         }}
         onModel={setModel}
         onEffort={setEffort}
+        account={props.account}
+        onAccount={props.onAccount}
+        {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
       />
 
       <label data-slot="bots-field">

@@ -41,14 +41,30 @@ devtools = ["tauri/devtools"]
 test-exe = []
 
 [dependencies]
-tauri = { version = "2.9.5", features = [] }
+# `macos-private-api`: the glass theme asks for a transparent window, and on
+# macOS `WebviewWindowBuilder::transparent` exists only behind this feature —
+# without it the release build failed with E0599 and 0.7.3 never shipped. It
+# is also what `window-vibrancy` asks for, together with `macOSPrivateApi` in
+# `tauri.conf.json`; Tauri refuses to build if only one of the two is set.
+# `tray-icon`: ADE in the tray while a bot's gateway is on (G11, `src/tray.rs`).
+tauri = { version = "2.9.5", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# One ADE per identity: a second start brings the first one's window forward,
+# out of the tray too, instead of a second gateway on the same bots (G11).
+tauri-plugin-single-instance = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
+# `time` and `select!` for the updater's stall watchdog and the gateways'
+# reading loops, `sync` for their stop signal; the runtime is Tauri's.
+tokio = { version = "1", features = ["time", "macros", "sync", "net"] }
+# The gateways (src/gateway): the platform adapters' trait, and hashing a bot
+# into a keychain name and a token into the check that refuses it twice.
+async-trait = "0.1"
+sha2 = "0.10"
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
 serde_json = "1"
@@ -58,8 +74,27 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
 # Cropping and blanking a capture before it reaches the disk (S35); PNG only.
 image = { version = "0.25", default-features = false, features = ["png"] }
+window-vibrancy = "0.6.0"
+# The chat's calls to the nikcli server go from here, not from the WebView (C1):
+# the page's origin is `tauri.localhost` in a release, which the server's CORS
+# does not know, and the server's password must not reach the page. Already
+# built for the updater, so no new crate: no default features, no TLS.
+reqwest = { version = "0.13", default-features = false }
+# reqwest is built with `rustls-no-provider` for the updater, and refuses to
+# build a client, even a plain-HTTP one, until a provider is installed. The
+# same `ring` the updater installs, already in the tree.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# The nikcli server's random password, and the gateways' pairing codes.
+getrandom = "0.3"
+# The Discord gateway holds a WebSocket open, so the adapters need a client
+# that speaks it. TLS comes from the same rustls the proxy already installs.
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+# Splitting a WebSocket into a reader and a writer needs the futures the
+# socket is built on.
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-version = "0.1"
 # Directory junctions need no elevation, unlike symlinks. One small crate is a
 # far narrower grant than putting `cmd` on the shell allowlist, which would be
 # arbitrary execution for anything the page decides to run.
@@ -69,7 +104,14 @@ junction = "1"
 webview2-com = "0.38"
 windows-core = "0.61"
 # IStream for the window capture, same version Tauri builds with.
-windows = { version = "0.61", features = ["Win32_System_Com", "Win32_System_Com_StructuredStorage"] }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 # Windows.Graphics.Capture for S36: captures a window's composed pixels, which
 # includes the WebView2 content that a GDI grab misses, and brings its own
 # hardware H.264 encoder. MIT.

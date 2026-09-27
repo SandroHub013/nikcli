@@ -4,7 +4,14 @@
  */
 
 // Bridge and host contract
-export type { AdeView, PaneStatus, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
+export type {
+  AdeView,
+  PaneStatus,
+  PaneSummary,
+  PermissionSpeechKind,
+  VoiceHost,
+  VoiceStateSnapshot,
+} from "./bridge/host"
 
 // The agent console's record of the session
 export { appendEntry, groupIntoTurns, MAX_AGENT_ENTRIES, type AgentEntry, type AgentTurn } from "./agent/log"
@@ -46,6 +53,8 @@ export {
   type PartialTranscriptCallback,
   type Transcriber,
   type TranscriberErrorCallback,
+  type TranscriberErrorContext,
+  type TranscriberErrorPurpose,
   type TranscriberOptions,
   type TranscriptEvent,
 } from "./asr/transcriber"
@@ -124,6 +133,7 @@ export {
   type ReplySummaryOptions,
   type SpeakableLine,
 } from "./tts/reply"
+export { cleanForSpeech } from "./tts/clean"
 
 // Planning: what the hand-written grammar cannot match
 export { announceExecution, executePlan, type PlanExecution } from "./plan/execute"
@@ -307,6 +317,11 @@ export {
   AGENT_ENGINES,
   REPLY_VOICES,
   type ReplyVoice,
+  REPLY_BACKENDS,
+  type ReplyBackend,
+  REPLY_BACKEND_BY_VOICE,
+  TTS_LOCALES,
+  type TtsLocale,
   DEFAULT_VOICE_SETTINGS,
   WAKE_PHRASE,
   WAKE_WORD_ENABLED,
@@ -328,14 +343,57 @@ export {
 } from "./settings/model"
 
 export {
+  REPLY_VOICE_CHOICES,
+  REPLY_BACKEND_CHOICES,
+  KOKORO_VOICES,
+  KOKORO_VOICE_CHOICES,
+  activeReplyVoice,
+  backendOf,
+  detectReplyLanguage,
+  g2pLocale,
+  interfaceLocale,
+  isKokoroVoice,
+  kokoroVoice,
+  replyVoiceChain,
+  replyVoiceChainFrom,
+  replyLocale,
+  replyVoiceFor,
+  replyVoiceChoicesFor,
+  replyVoiceChoicesForLocale,
+  speakingReplyVoice,
+  voiceOnBackend,
+  rememberReplyVoice,
+  type KokoroVoice,
+  type KokoroVoiceId,
+  type ReplyLanguage,
+} from "./settings/reply-voices"
+
+export {
+  formatBytes,
+  KOKORO_DOWNLOAD_BYTES,
+  packView,
+  watchInstall,
+  type InstallProgress,
+  type LocalProvider,
+  type PackPhase,
+  type PackState,
+  type PackStatus,
+  type PackView,
+} from "./settings/voice-pack"
+
+export {
   VOICE_API_KEY_STORAGE_KEY,
+  VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
+  clearOpenRouterKeyRemoved,
   clearVoiceSettings,
   // The point of `exportVoiceSettings` is that other code can hand settings
   // out with the credential provably absent. Left off this list, it could
   // not be reached from outside the package and the safe route did not exist.
   exportVoiceSettings,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
+  markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./settings/storage"

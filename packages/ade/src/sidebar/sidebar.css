@@ -12,9 +12,6 @@
   flex: 0 0 auto;
   padding: var(--ade-space-5) var(--ade-space-6);
   border-bottom: 1px solid var(--ade-border);
-  /* A whisper of background lift so the project header reads as a header, not
-     another row. */
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--ade-text) 2%, transparent), transparent 60%);
 }
 
 /*
@@ -88,23 +85,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-3);
-  padding: var(--ade-space-1) var(--ade-space-4);
+  padding: 1px var(--ade-space-4);
   border-radius: var(--ade-radius-full);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   font-variant-numeric: tabular-nums;
-  font-weight: var(--ade-weight-medium);
-  line-height: var(--ade-leading);
-  /* Subtle scale on hover — pills are metrics, not buttons, but a tiny
-     response makes them feel alive. */
-  transition:
-    transform var(--ade-dur-fast) var(--ade-ease),
-    filter var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="sidebar-pill"]:hover {
-  transform: scale(1.02);
-  filter: brightness(1.05);
 }
 
 [data-slot="sidebar-pill-dot"] {
@@ -130,12 +115,27 @@
 
 /* ── sections ─────────────────────────────────────────────────────────────── */
 
+/*
+ * As tall as the sections it holds, and never taller.
+ *
+ * It used to be `flex: 1`, which handed it the whole column: with "File" shut
+ * — three headers and nothing else — the box ran to the foot of the sidebar
+ * and half the column was an empty card. `0 1 auto` keeps the shrink that
+ * lets the scrolling section give way when the content is taller than the
+ * column, and drops the growth that was filling the sidebar with nothing.
+ */
 [data-slot="sidebar-sections"] {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-sections"]::-webkit-scrollbar {
+  display: none;
 }
 
 /*
@@ -160,12 +160,13 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: fit-content;
   border-bottom: 1px solid var(--ade-border-subtle);
 }
 
 [data-slot="sidebar-section"][data-scrolls] {
   flex: 0 1 auto;
+  min-height: fit-content;
   overflow: hidden;
 }
 
@@ -191,8 +192,11 @@
 [data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"] {
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── project search results ───────────────────────────────────────────────── */
@@ -201,6 +205,11 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+[data-component="file-results"]::-webkit-scrollbar {
+  display: none;
 }
 
 [data-slot="file-result"] {
@@ -215,14 +224,11 @@
   user-select: none;
   -webkit-user-select: none;
   position: relative;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="file-result"]:active {
   cursor: grabbing;
-  transform: scale(0.99);
 }
 
 [data-slot="file-result"]:hover {
@@ -231,17 +237,6 @@
 
 [data-slot="file-result"][data-selected] {
   background: var(--ade-active);
-}
-
-[data-slot="file-result"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--ade-space-1);
-  bottom: var(--ade-space-1);
-  width: 2px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="file-result"]:focus-visible {
@@ -280,8 +275,6 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   line-height: var(--ade-leading);
-  text-align: left;
-  font-style: italic;
 }
 
 /*
@@ -293,20 +286,12 @@
  * 260px rail, and the odd one out reads as a different kind of thing.
  * The plugin and shot-tray headers are pulled into this shape further down.
  */
-/*
- * A section header in the column.
- *
- * 24px of vertical padding is what makes the headers read as section
- * boundaries rather than as another row. The 6px of horizontal padding
- * (instead of the 12px the rest of the column uses) is what keeps the
- * count and the chevron aligned with the rows beneath them.
- */
 [data-slot="section-header"] {
   display: flex;
   align-items: center;
   gap: var(--ade-space-4);
   width: 100%;
-  padding: var(--ade-space-4) var(--ade-space-3) var(--ade-space-2);
+  padding: var(--ade-space-4) var(--ade-space-6);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
@@ -316,20 +301,11 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  transition:
-    color var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform 120ms var(--ade-ease-out);
+  transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="section-header"]:hover {
-    color: var(--ade-text-soft);
-  }
-}
-
-[data-slot="section-header"]:active {
-  transform: scale(0.99);
+[data-slot="section-header"]:hover {
+  color: var(--ade-text-soft);
 }
 
 [data-slot="section-header"]:focus-visible {
@@ -361,9 +337,8 @@
 [data-slot="section-chevron"] {
   flex: 0 0 auto;
   color: var(--ade-text-weak);
-  width: 16px;
-  height: 16px;
-  transition: transform var(--ade-dur) var(--ade-spring);
+  transform: rotate(-90deg);
+  transition: transform var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="sidebar-section"][data-open] [data-slot="section-chevron"] {
@@ -372,7 +347,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   [data-slot="section-chevron"] {
-    transition: transform var(--ade-dur-fast) var(--ade-ease);
+    transition: none;
   }
 }
 
@@ -467,9 +442,11 @@
   opacity: 0;
   transition:
     opacity var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
     transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="section-add"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="section-header-row"]:hover [data-slot="section-add"],
@@ -480,10 +457,6 @@
 [data-slot="section-add"]:hover {
   background: var(--ade-hover);
   color: var(--ade-text);
-}
-
-[data-slot="section-add"]:active {
-  transform: scale(0.92);
 }
 
 [data-slot="section-add"]:focus-visible {
@@ -509,8 +482,11 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* A closed section is a header and nothing else, with no border doubling up
@@ -534,8 +510,8 @@
   font-size: var(--ade-font-md);
 }
 [data-slot="search-input"]:focus {
-  outline: 1px solid var(--ade-accent);
-  border-color: var(--ade-accent);
+  outline: 1px solid var(--ade-text-weak);
+  border-color: var(--ade-border-strong);
 }
 
 /*
@@ -559,6 +535,12 @@
   color: var(--ade-text);
 }
 
+/* A project whose folder is gone: still listed, read as absent. */
+[data-slot="workspace-header"][data-missing="true"] [data-slot="workspace-name"] {
+  color: var(--ade-text-weak);
+  text-decoration: line-through;
+}
+
 [data-slot="session-activity"] {
   display: block;
   font-size: var(--ade-font-sm);
@@ -568,8 +550,6 @@
   text-overflow: ellipsis;
   margin-left: var(--ade-space-8);
   font-variant-numeric: tabular-nums;
-  line-height: var(--ade-leading);
-  padding-top: var(--ade-space-1);
 }
 
 /* Highlight match */
@@ -658,26 +638,9 @@
  * modifica.
  */
 
-/* The selection veil — a subtle accent tint, slightly translucent so the
-   resting state bleeds through softly. A stronger tint reads as a button. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected],
-[data-component="ade-sidebar"] [data-slot="workspace-header"][data-active],
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="active-agent-card"][data-selected] {
-  background: var(--ade-accent-soft);
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--ade-text);
-  font-weight: var(--ade-weight-medium);
-}
-
-/* On the accent veil, the status dot and its halo would muddy together —
-   a hairline of the panel colour cuts them back out. */
-[data-slot="session-row"][data-selected] [data-slot="agent-status-dot"],
-[data-slot="active-agent-card"][data-selected] [data-slot="agent-status-dot"] {
-  outline: 2px solid var(--ade-raised);
-  outline-offset: 1px;
+/* ── il fondo e la testata ── */
+[data-component="ade-sidebar"] {
+  background: var(--ade-sunken);
 }
 /* Non più una carta: il nome del progetto è il titolo della colonna, e un
    titolo non ha bisogno di un riquadro per farsi riconoscere. */
@@ -774,9 +737,6 @@
   color: var(--ade-text);
   box-shadow: none;
 }
-[data-slot="tree-row"][data-selected]::before {
-  content: none;
-}
 [data-slot="tree-guide"]::before {
   background: var(--ade-border-subtle);
 }
@@ -786,16 +746,8 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
 }
-/* Anche la riga di un risultato di ricerca perde la striscia colorata. */
 [data-slot="file-result"] {
   border-radius: var(--ade-radius-sm);
-}
-
-[data-slot="file-result"][data-selected]::before {
-  content: none;
-}
-[data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 /* Il pezzo che corrisponde a quanto è stato digitato: in grassetto e in
    inchiostro pieno, non in tinta. Su una riga tenue il contrasto basta a
@@ -815,13 +767,10 @@
   opacity: 0;
   background-image: radial-gradient(circle, var(--ade-text-weak) 0.9px, transparent 1px);
   background-size: 3px 3px;
-  transition:
-    opacity var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+  transition: opacity var(--ade-dur-fast) var(--ade-ease);
 }
 [data-slot="tree-row"]:hover [data-slot="row-grip"] {
   opacity: 0.9;
-  transform: scale(1.05);
 }
 [data-slot="workspace-count"] {
   background: transparent;
@@ -853,18 +802,16 @@
   height: 28px;
   padding: 0 var(--ade-space-4);
   border: 1px solid transparent;
-  border-radius: var(--ade-radius-md);
+  border-radius: var(--ade-radius-sm);
   background: var(--ade-active);
   transition:
     border-color var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease),
     box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 /* Il fuoco in inchiostro, non in tinta: il contorno è già il segnale, e
    l'alone colorato era l'unico verde rimasto in fondo alla colonna. */
 [data-slot="search-field"]:focus-within {
   border-color: var(--ade-text);
-  background: var(--ade-raised);
   box-shadow: 0 0 0 1px var(--ade-text);
 }
 [data-slot="search-input"] {
@@ -874,8 +821,11 @@
   border: 0;
   background: none;
 }
+/* One ring, the box's: without the shadow here the field also took the global
+   `:focus-visible` ring, a second one inside the first (contorni-terzo, 4). */
 [data-slot="search-input"]:focus {
   outline: none;
+  box-shadow: none;
 }
 [data-slot="search-leading"] {
   display: block;
@@ -898,7 +848,20 @@
   align-items: stretch;
   gap: var(--ade-space-2);
   flex: 0 0 auto;
-  padding: var(--ade-space-3) var(--ade-space-4) var(--ade-space-4);
+  /*
+   * In fondo alla colonna, non sotto l'ultima sezione.
+   *
+   * Finché il riquadro delle sezioni era `flex: 1` il fondo ci finiva per
+   * conseguenza: le sezioni si prendevano tutto l'avanzo e spingevano giù il
+   * piede. Quando quel `flex: 1` è stato tolto — perché con "File" chiusa il
+   * riquadro diventava mezza colonna di carta vuota — nessuno spingeva più
+   * niente, e il vassoio risaliva fin sotto l'ultima sezione, con l'avanzo
+   * sotto di lui. Il margine automatico si prende l'avanzo senza darlo a
+   * nessuno: le sezioni restano alte quanto il loro contenuto e il piede
+   * resta in fondo in ogni combinazione di sezioni aperte e chiuse.
+   */
+  margin-top: auto;
+  padding: var(--ade-space-3) var(--ade-space-4);
   border-top: 1px solid var(--ade-border);
   background: var(--ade-sunken);
 }
@@ -922,9 +885,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ade-space-3);
+  gap: var(--ade-space-2);
   flex: 0 0 auto;
-  padding-top: var(--ade-space-3);
+  padding-top: var(--ade-space-2);
   border-top: 1px solid var(--ade-border-subtle);
 }
 
@@ -961,9 +924,11 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    border-color var(--ade-dur-fast) var(--ade-ease),
     color var(--ade-dur-fast) var(--ade-ease),
-    transform 120ms var(--ade-ease-out);
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+[data-slot="sidebar-settings"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="sidebar-settings"] svg {
@@ -977,16 +942,9 @@
   white-space: nowrap;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="sidebar-settings"]:hover {
-    background: var(--ade-hover);
-    color: var(--ade-text);
-  }
-}
-
-[data-slot="sidebar-settings"]:active {
-  transform: scale(0.92);
-  transition: transform 80ms var(--ade-ease-out);
+[data-slot="sidebar-settings"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="sidebar-settings"]:focus-visible {
@@ -1020,17 +978,67 @@
   color: var(--ade-text);
 }
 
-/* Look and tone from `Badge` in `ui/layout`; here only where it sits in the row.
-   The chip sits between name and count, so a touch of left margin reads as a
-   separator without drawing a line. */
-[data-slot="space-badge"] {
-  margin-left: var(--ade-space-2);
-  flex: 0 0 auto;
-  transition: filter var(--ade-dur-fast) var(--ade-ease);
+/*
+ * The name takes whatever the row has left: it is what the row is for. The
+ * badges and the count keep their width, and the name gives way last.
+ *
+ * The button that opens the project's sessions is not in that race. It is
+ * seen only on hover or focus, so it sits over the empty space right of the
+ * count — the same slot as the "add" buttons of the section headers — instead
+ * of holding 26px of the row while invisible. In 0.8.0 it did, and with the
+ * name at `flex: 0 1 auto` a project at 200px read "C…", and the active one
+ * only its badge (fix-sidebar-nomi).
+ */
+[data-slot="workspace-name"] {
+  flex: 1 1 0;
 }
 
-[data-slot="space-badge"]:hover {
-  filter: brightness(1.05);
+[data-component="ade-sidebar"] [data-slot="workspace-header"] {
+  position: relative;
+}
+
+[data-slot="workspace-open-project"] {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--ade-space-5) + var(--ade-space-4) + 2px);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="workspace-header"]:hover [data-slot="workspace-open-project"],
+[data-slot="workspace-open-project"]:focus-visible {
+  opacity: 1;
+}
+
+[data-slot="workspace-open-project"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="workspace-open-project"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* Look and tone from `Badge` in `ui/layout`; here only where it sits in the row. */
+[data-slot="space-badge"] {
+  margin-left: var(--ade-space-2);
 }
 
 [data-slot="session-mark-wrap"] {
@@ -1038,26 +1046,9 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--ade-radius-full);
-  /* Subtle gradient ring as the avatar's ground; the mark sits over it. */
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--ade-text) 12%, transparent),
-    color-mix(in srgb, var(--ade-text) 4%, transparent)
-  );
-  transition:
-    transform var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="session-mark-wrap"]:hover {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--ade-text) 18%, transparent),
-    color-mix(in srgb, var(--ade-text) 8%, transparent)
-  );
+  width: 18px;
+  height: 18px;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="session-main"] {
@@ -1065,29 +1056,17 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  gap: var(--ade-space-1);
+  gap: 1px;
 }
 
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected]::before {
-  display: none !important;
-  content: none !important;
-}
-
-/*
- * A session card in the active-agents list.
- *
- * The card is a card: full border, raised fill, radius-sm. It sits inside a
- * list (Rule B from the panels), and the margin-block: 1px 4px is what makes
- * one card visibly end and the next visibly begin without a separator line.
- */
 [data-slot="session-row"],
 [data-slot="active-agent-card"] {
   display: flex;
   align-items: center;
   gap: var(--ade-space-3);
   width: 100%;
-  padding: var(--ade-space-3) var(--ade-space-4);
-  margin-block: var(--ade-space-1);
+  padding: var(--ade-space-3);
+  margin-block: 2px;
   box-sizing: border-box;
   background: var(--ade-surface);
   border: 1px solid var(--ade-border-subtle);
@@ -1098,21 +1077,13 @@
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
     border-color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease),
-    transform 120ms var(--ade-ease-out);
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="session-row"]:hover,
-  [data-slot="active-agent-card"]:hover {
-    background: var(--ade-hover);
-    border-color: var(--ade-border);
-  }
-}
-
-[data-slot="session-row"]:active,
-[data-slot="active-agent-card"]:active {
-  transform: scale(0.99);
+[data-slot="session-row"]:hover,
+[data-slot="active-agent-card"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-border);
 }
 
 [data-slot="session-row"][data-selected],
@@ -1143,7 +1114,7 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  gap: var(--ade-space-1);
+  gap: 3px;
 }
 
 [data-slot="session-top"],
@@ -1157,7 +1128,7 @@
 
 [data-slot="session-title"],
 [data-slot="active-agent-title"] {
-  font-size: var(--ade-font-md-half);
+  font-size: 12.5px;
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text);
   white-space: nowrap;
@@ -1166,50 +1137,45 @@
   flex: 1 1 auto;
   min-width: 0;
   line-height: 1.25;
-  letter-spacing: -0.005em;
   transition: color var(--ade-dur-fast) var(--ade-ease);
-}
-
-/* On the accent veil, the title needs slightly tighter tracking to keep its
-   visual weight close to what it had at the resting size. */
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected] [data-slot="session-title"],
-[data-component="ade-sidebar"] [data-slot="active-agent-card"][data-selected] [data-slot="active-agent-title"] {
-  color: var(--ade-text);
-  font-weight: var(--ade-weight-semibold);
-  letter-spacing: -0.01em;
 }
 
 /* ── Status Dot Only ── */
 
 [data-slot="agent-status-dot"] {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  flex: 0 0 8px;
+  flex: 0 0 7px;
   margin-left: auto;
   transition:
     transform var(--ade-dur-fast) var(--ade-ease),
-    background-color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease);
+    background-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* 1. Disponibile (Green / Idle) */
 [data-slot="agent-status-dot"][data-agent-status="disponibile"] {
   background-color: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.65);
+  box-shadow: 0 0 5px rgba(34, 197, 94, 0.55);
 }
 
 /* 2. A lavoro (Yellow / Working con pulse) */
 [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
   background-color: #facc15;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.65);
+  box-shadow: 0 0 5px rgba(250, 204, 21, 0.55);
+}
+
+/* Sospesa (P1-C6): no process, so no colour and no glow. */
+[data-slot="agent-status-dot"][data-agent-status="sospesa"] {
+  background-color: var(--ade-text-weak);
+  box-shadow: none;
 }
 
 /* 3. In attesa di input (Orange / Blocked-Waiting con pulse) */
 [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
   background-color: #f97316;
-  box-shadow: 0 0 6px rgba(249, 115, 22, 0.65);
+  box-shadow: 0 0 5px rgba(249, 115, 22, 0.55);
 }
 
 /*
@@ -1320,31 +1286,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ade-space-3);
-  font-size: var(--ade-font-sm);
+  gap: 6px;
+  font-size: 11px;
   color: var(--ade-text-weak);
   min-width: 0;
-  line-height: var(--ade-leading);
-  padding-top: var(--ade-space-1);
-  /* The meta is read on squinting — give it a touch more air between the two halves. */
-  letter-spacing: 0.01em;
-}
-
-/* The separator between folder and branch — a hairline dot, kept narrow so it
-   never reads as its own character. */
-[data-slot="agent-card-sep"] {
-  color: var(--ade-border-strong);
-  flex-shrink: 0;
-  font-size: 8px;
-  margin-inline: var(--ade-space-1);
-  opacity: 0.8;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 [data-slot="agent-card-loc"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-2);
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1353,41 +1305,48 @@
 }
 
 [data-slot="agent-card-folder"] {
-  display: inline-flex;
-  align-items: center;
+  /* A block, not a flex box: `text-overflow` does not reach the text of a
+     flex container, so the name was cut without its "…". */
+  display: block;
   color: var(--ade-text-soft);
   font-weight: var(--ade-weight-medium);
-  font-size: var(--ade-font-sm);
+  font-size: 11px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
+  /* At most under half the line, and never shrunk below that: the
+     branch takes the rest. Shrinking both in proportion to their length left
+     "ni · feat/brows" at 200px (fix-sidebar-nomi). */
+  max-width: min(120px, 45%);
+  flex: 0 0 auto;
 }
 
 [data-slot="agent-card-sep"] {
   color: var(--ade-border);
   flex-shrink: 0;
-  font-size: var(--ade-font-xs);
-  margin-inline: var(--ade-space-1);
+  font-size: 9px;
+  margin-inline: 1px;
   opacity: 0.7;
 }
 
 [data-slot="agent-card-branch"] {
-  display: inline-flex;
-  align-items: center;
+  /* A block, not a flex box: `text-overflow` does not reach the text of a
+     flex container, so the name was cut without its "…". */
+  display: block;
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-sm);
+  font-size: 10.5px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100px;
+  flex: 0 1 auto;
 }
 
 [data-slot="agent-card-icon"] {
-  flex: 0 0 auto;
+  flex: 0 0 11px;
   width: 11px;
   height: 11px;
   opacity: 0.65;
@@ -1396,7 +1355,7 @@
 [data-slot="agent-card-time"] {
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: var(--ade-font-xs);
+  font-size: 10px;
   font-family: var(--ade-mono);
   color: var(--ade-text-weak);
   font-variant-numeric: tabular-nums;
@@ -1407,8 +1366,8 @@
 [data-slot="active-agents-list"] {
   display: flex;
   flex-direction: column;
-  gap: var(--ade-space-1);
-  padding: var(--ade-space-1) var(--ade-space-3) var(--ade-space-4);
+  gap: 3px;
+  padding: 2px var(--ade-space-3) var(--ade-space-4);
 }
 
 [data-slot="active-agents-empty"] {
@@ -1424,7 +1383,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-2);
-  padding: var(--ade-space-2) var(--ade-space-4);
+  padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-sm);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
@@ -1434,22 +1393,16 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    border-color var(--ade-dur-fast) var(--ade-ease),
     transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="empty-action-btn"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="empty-action-btn"]:hover {
   background: var(--ade-hover);
   border-color: var(--ade-text-weak);
-}
-
-[data-slot="empty-action-btn"]:active {
-  transform: scale(0.97);
-}
-
-[data-slot="empty-action-btn"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* ══ Conchiglia · C2 "Perla" ══════════════════════════════════════════════════
@@ -1517,18 +1470,18 @@ aside[data-component="ade-sidebar"] {
 
 /* ── la testata, senza linea sotto ── */
 [data-slot="sidebar-header-project"] {
-  padding: var(--ade-space-6) var(--ade-space-7) var(--ade-space-4);
+  padding: 12px 14px 8px;
   border-bottom: 0;
 }
 
 [data-slot="project-name-text"] {
-  font-size: var(--ade-font-lg);
+  font-size: 14px;
 }
 
 /* ── i gruppi: nessun divisore, solo due pixel d'aria ── */
 [data-slot="sidebar-sections"] {
-  padding: var(--ade-space-1) var(--ade-space-3) var(--ade-space-3);
-  gap: var(--ade-space-1);
+  padding: 2px 6px 6px;
+  gap: 2px;
 }
 
 [data-slot="sidebar-section"] + [data-slot="sidebar-section"] {
@@ -1542,25 +1495,18 @@ aside[data-component="ade-sidebar"] {
 /* L'etichetta del gruppo è una pillola come le righe sotto di lei: la stessa
    forma per la stessa cosa, qualcosa che si preme. */
 [data-slot="section-header"] {
-  padding: var(--ade-space-3) var(--ade-space-5);
+  padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-full);
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="section-header"]:hover {
   background: var(--ade-hover);
 }
 
-[data-slot="section-header"]:active {
-  transform: scale(0.99);
-}
-
 [data-slot="section-header"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
   border-radius: var(--ade-radius-full);
 }
 
@@ -1571,14 +1517,12 @@ aside[data-component="ade-sidebar"] {
   min-width: 24px;
   box-sizing: border-box;
   text-align: center;
-  padding: 0 var(--ade-space-4);
+  padding: 0 var(--ade-space-3);
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
   color: var(--ade-text-soft);
-  font-size: var(--ade-font-xs);
-  line-height: var(--ade-space-8);
-  font-variant-numeric: tabular-nums;
-  font-family: var(--ade-mono);
+  font-size: 10px;
+  line-height: 16px;
 }
 
 [data-slot="section-content"] {
@@ -1592,9 +1536,7 @@ aside[data-component="ade-sidebar"] {
 }
 
 [data-slot="search-field"] {
-  /* 4px margin lets the focus ring sit *around* the field without being
-     cropped by the column's own border-radius. */
-  margin: var(--ade-space-1) var(--ade-space-1) var(--ade-space-3);
+  margin: 2px 2px 6px;
   border-radius: var(--ade-radius-full);
   background: var(--ade-sunken);
 }
@@ -1624,15 +1566,13 @@ aside[data-component="ade-sidebar"] {
  */
 [data-component="ade-sidebar"] [data-slot="session-row"],
 [data-component="ade-sidebar"] [data-slot="active-agent-card"] {
-  padding: var(--ade-space-3) var(--ade-space-4);
-  margin-block: 0 var(--ade-space-1);
-  border-radius: var(--ade-radius-lg);
+  padding: var(--ade-space-3) var(--ade-space-5);
+  margin-block: 0 2px;
+  border-radius: var(--ade-radius-xl);
   background: transparent;
   border-color: transparent;
   box-shadow: none;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="active-agents-list"] {
@@ -1640,33 +1580,27 @@ aside[data-component="ade-sidebar"] {
   gap: 0;
 }
 
-[data-component="ade-sidebar"] [data-slot="workspace-header"]:hover,
-[data-component="ade-sidebar"] [data-slot="tree-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="session-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="active-agent-card"]:hover {
+/*
+ * L'hover e la selezione si agganciano alla forma che la riga dichiara dove
+ * nasce (`data-selectable`), non al suo slot: una riga nuova entra
+ * abilitandosi una volta nel markup, senza che un elenco di nomi vada
+ * cercato e aggiornato di nuovo nella busta. Il prefisso del componente
+ * resta: vale un punto di specificità in più su index.css, che altrimenti
+ * vince il pari e rimetterebbe i vecchi fondi sopra questo velo.
+ */
+[data-component="ade-sidebar"] [data-selectable]:hover {
   background: var(--ade-hover);
   border-color: transparent;
 }
 
 /* La selezione è un velo, non un anello: il colore dice già quale riga è
-   quella, e il contorno lo direbbe una seconda volta. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected],
-[data-component="ade-sidebar"] [data-slot="workspace-header"][data-active],
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="active-agent-card"][data-selected] {
+   quella, e il contorno lo direbbe una seconda volta. La stessa forma
+   dell'hover porta lo stato: `data-selectable` con `data-selected`. */
+[data-component="ade-sidebar"] [data-selectable][data-selected] {
   background: var(--ade-accent-soft);
   border-color: transparent;
   box-shadow: none;
   color: var(--ade-text);
-}
-
-/* E niente barretta sul bordo sinistro: era il segno della selezione quando
-   la riga non cambiava fondo, e sopra il velo diventa una seconda risposta
-   alla stessa domanda. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected]::before,
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 
 /* Il segno dell'agente è tondo come tutto il resto, e senza contorno: il
@@ -1704,18 +1638,19 @@ aside[data-component="ade-sidebar"] {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  margin-right: var(--ade-space-2);
+  margin-right: 4px;
   border: 0;
   border-radius: var(--ade-radius-full);
   background: transparent;
   color: var(--ade-text-weak);
-  font-size: var(--ade-font-lg);
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="search-clear"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="search-clear"]:hover {
@@ -1723,55 +1658,41 @@ aside[data-component="ade-sidebar"] {
   color: var(--ade-text);
 }
 
-[data-slot="search-clear"]:active {
-  transform: scale(0.88);
-}
-
-[data-slot="search-clear"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
 [data-slot="search-kinds"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-2);
-  margin: calc(var(--ade-space-1) * -1) var(--ade-space-2) var(--ade-space-3);
+  gap: 4px;
+  margin: -2px 4px 6px;
 }
 
 [data-slot="search-kind"] {
-  padding: var(--ade-space-1) var(--ade-space-4);
-  border: 1px solid var(--ade-border);
+  padding: 1px 9px;
+  border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-full);
   background: transparent;
-  color: var(--ade-text-soft);
+  color: var(--ade-text-weak);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
-  line-height: var(--ade-leading);
-  font-weight: var(--ade-weight-medium);
+  line-height: 16px;
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    border-color var(--ade-dur-fast) var(--ade-ease),
     color var(--ade-dur-fast) var(--ade-ease),
     transform var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="search-kind"]:hover {
-  color: var(--ade-text);
-  background: var(--ade-hover);
-  border-color: var(--ade-border-strong);
+[data-slot="search-kind"]:active {
+  transform: var(--ade-press);
 }
 
-[data-slot="search-kind"]:active {
-  transform: scale(0.95);
+[data-slot="search-kind"]:hover {
+  color: var(--ade-text);
 }
 
 [data-slot="search-kind"][data-active] {
   border-color: transparent;
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font-weight: var(--ade-weight-semibold);
+  background: var(--ade-accent-soft);
+  color: var(--ade-text);
 }
 
 [data-slot="search-kind"]:focus-visible {
@@ -1784,14 +1705,12 @@ aside[data-component="ade-sidebar"] {
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
 }
 
 [data-component="ade-sidebar"] [data-slot="file-result"] {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
-  column-gap: var(--ade-space-3);
+  column-gap: 6px;
   row-gap: 0;
   align-items: center;
 }
@@ -1835,29 +1754,44 @@ aside[data-component="ade-sidebar"] {
 [data-slot="sidebar-settings-strip"] {
   flex-wrap: nowrap;
   justify-content: flex-start;
-  gap: var(--ade-space-3);
+  gap: 6px;
 }
 
 [data-slot="sidebar-footer-group"] {
   display: inline-flex;
   align-items: center;
-  gap: var(--ade-space-1);
+  gap: 1px;
   flex: 0 0 auto;
 }
 
 [data-slot="sidebar-footer-group"] [data-slot="sidebar-footer-actions"] {
-  gap: var(--ade-space-1);
+  gap: 1px;
 }
 
+/*
+ * The readings give way; the buttons never do.
+ *
+ * This row was `flex: 0 0 auto` with `nowrap`, so at the column's minimum
+ * width — 180px, where the gear, the theme, the bell and three readings want
+ * 173 of the 164 available — it simply ran past the rounded edge of the
+ * sidebar and the last reading was cut in half. Measured in ADE Test: the
+ * strip overflowed by 15px and `sidebar-stats` stuck 7px out of the column.
+ *
+ * What yields is decided below rather than by the order the browser happens to
+ * reach: a reading is something you can also find in the panel, a button is
+ * the only way to reach what it opens.
+ */
 [data-slot="sidebar-stats"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--ade-space-4);
-  flex: 0 0 auto;
+  gap: var(--ade-space-3);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--ade-text-soft);
   white-space: nowrap;
@@ -1866,7 +1800,7 @@ aside[data-component="ade-sidebar"] {
 [data-slot="sidebar-stat"] {
   display: inline-flex;
   align-items: center;
-  gap: var(--ade-space-2);
+  gap: var(--ade-space-1);
   cursor: default;
   transition: color var(--ade-dur-fast) var(--ade-ease);
 }
@@ -1891,21 +1825,69 @@ aside[data-component="ade-sidebar"] {
   container-type: inline-size;
 }
 
+/*
+ * A narrow column gives the projects' names the room kept for alignment.
+ *
+ * Right of a project's count sat 56px, the width of the section headers'
+ * two "add" buttons, so that every count ends on one line. At 260px and less
+ * that line cost the active project its name: with its badge it had under
+ * 40px. Here the room shrinks to the open-project button alone, and the
+ * counts of the projects end a little right of the headers' ones.
+ */
+aside[data-component="ade-sidebar"] {
+  container: ade-sidebar / inline-size;
+}
+
+@container ade-sidebar (max-width: 279px) {
+  [data-component="ade-sidebar"] [data-slot="workspace-count"] {
+    margin-right: calc(18px + var(--ade-space-4));
+  }
+
+  [data-slot="workspace-open-project"] {
+    right: calc(var(--ade-space-5) + var(--ade-space-1));
+  }
+}
+
 @container (max-width: 230px) {
   [data-slot="sidebar-settings"],
   [data-slot="sidebar-footer-actions"] [data-slot="ade-icon"] {
     width: 22px;
     height: 22px;
-    border-radius: var(--ade-radius-sm);
   }
 
   [data-slot="sidebar-stats"] {
-    gap: var(--ade-space-3);
-    font-size: var(--ade-font-xs);
+    gap: 5px;
+  }
+}
+
+/*
+ * Below this width the readings go to a line of their own.
+ *
+ * They used to leave one at a time — disk, then memory — and at the column's
+ * 180px minimum that left the processor alone on the row, which reads as a
+ * truncated line rather than as a decision. So the form changes instead of the
+ * contents: the buttons keep the first line, the three readings take the
+ * second, and all of them stay inside the rounded edge.
+ *
+ * Measured in ADE Test: the three buttons want 68px, the three readings 105,
+ * and with the 6px between them the row needs 179. The query is on the
+ * footer's content box, which is 16px narrower than the column, so 184 here is
+ * a column of 200 — the row's real limit is 195, and the five spare pixels
+ * keep the buttons and the numbers from touching.
+ */
+@container (max-width: 184px) {
+  [data-slot="sidebar-settings-strip"] {
+    flex-wrap: wrap;
+    row-gap: 4px;
   }
 
-  [data-slot="sidebar-settings-strip"] {
-    gap: var(--ade-space-2);
+  [data-slot="sidebar-stats"] {
+    /* A whole line of its own, read from the left like everything else on
+       this column, rather than pushed to the edge by a margin. */
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    gap: 10px;
   }
 }
 

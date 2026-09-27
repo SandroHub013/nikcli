@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
+import type { VoiceAgent } from "./agent"
 import { AGENTS } from "../session-new/agents"
 import { createWorkbench, type Pane, type Workbench } from "../surface/state"
 import type { PermissionAnswer, PermissionRequest } from "../session/permission"
@@ -9,6 +10,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
   deps: AdeVoiceHostDeps
   written: Record<string, string[]>
   appendedLines: { paneId: string; text: string; kind?: string }[]
+  told: { paneId: string; text: string }[]
   commandsRun: string[]
   permissionsAnswered: { paneId: string; answer: PermissionAnswer }[]
   currentWb: () => Workbench
@@ -19,6 +21,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
   const runningSessions = new Map<string, { write: (line: string) => void; kill?: () => void }>()
   const written: Record<string, string[]> = {}
   const appendedLines: { paneId: string; text: string; kind?: string }[] = []
+  const told: { paneId: string; text: string }[] = []
   const commandsRun: string[] = []
   const permissionsAnswered: { paneId: string; answer: PermissionAnswer }[] = []
 
@@ -37,6 +40,9 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
     appendLine: (paneId, text, kind) => {
       appendedLines.push({ paneId, text, kind })
     },
+    tellPane: (paneId, text) => {
+      told.push({ paneId, text })
+    },
     permissions: () => permissionsState,
     answerPermission: (paneId, answer) => {
       permissionsAnswered.push({ paneId, answer })
@@ -49,6 +55,7 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
     deps,
     written,
     appendedLines,
+    told,
     commandsRun,
     permissionsAnswered,
     currentWb: () => wbState,
@@ -282,6 +289,32 @@ describe("createAdeVoiceHost", () => {
     expect(answered[1].send).toBe("n")
   })
 
+  test("permission speech exposes only the safe kind while the raw request still identifies the answer", () => {
+    const raw = "curl -H 'Authorization: Bearer API_KEY_SECRET' https://example.test/export"
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({
+        p1: {
+          what: raw,
+          kind: "shell",
+          answers: [
+            { label: "Sì", send: "y", tone: "primary" },
+            { label: "No", send: "n", tone: "secondary" },
+          ],
+        },
+      }),
+      answerPermission: (_id, answer) => void answered.push(answer),
+      locale: () => "it",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    expect(host.pendingPermissionWhat?.("p1")).toBe(raw)
+    expect(host.pendingPermissionKind?.("p1")).toBe("shell")
+    expect(host.answerPermission("p1", "allow", "another raw request")).toBe(false)
+    expect(host.answerPermission("p1", "allow", raw)).toBe(true)
+    expect(answered.map((answer) => answer.send)).toEqual(["y"])
+  })
+
   /*
    * The one failure this path must not have. "Deny" used to fall back to the
    * second option, whatever it was — so on a question whose options are
@@ -300,7 +333,7 @@ describe("createAdeVoiceHost", () => {
 
     test("nothing is sent when no answer is a refusal", () => {
       const answered: PermissionAnswer[] = []
-      const { deps, appendedLines } = createMockDeps({
+      const { deps, told } = createMockDeps({
         permissions: () => ({ p1: permissive }),
         answerPermission: (_id, ans) => {
           answered.push(ans)
@@ -310,8 +343,8 @@ describe("createAdeVoiceHost", () => {
       createAdeVoiceHost(deps).answerPermission("p1", "deny")
 
       expect(answered).toHaveLength(0)
-      // And the user is told, so the request does not simply appear ignored.
-      expect(appendedLines.some((line) => line.text.includes("rifiuto"))).toBe(true)
+      // And the user is told, over the terminal too, so the request does not simply appear ignored.
+      expect(told.some((line) => line.text.includes("rifiuto"))).toBe(true)
     })
 
     test("a refusal is still found when one is offered third", () => {
@@ -414,6 +447,45 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("completata")
   })
 
+  test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
+    // 0 sessions
+    const { deps: deps0 } = createMockDeps({ locale: () => "en" })
+    const host0 = createAdeVoiceHost(deps0)
+    const state0 = host0.describeState()
+    expect(state0.totalSessions).toBe(0)
+    expect(state0.spokenSummary.toLowerCase()).toContain("no open sessions")
+
+    // 1 session
+    const { deps: deps1 } = createMockDeps({ locale: () => "en" })
+    deps1.setWb((w) => ({
+      ...w,
+      panes: [makePane({ id: "p1", status: "working" })],
+    }))
+    const host1 = createAdeVoiceHost(deps1)
+    const state1 = host1.describeState()
+    expect(state1.totalSessions).toBe(1)
+    expect(state1.spokenSummary.toLowerCase()).toContain("one session")
+    expect(state1.spokenSummary).toContain("running")
+
+    // 3 sessions
+    const { deps: deps3 } = createMockDeps({ locale: () => "en" })
+    deps3.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", status: "working" }),
+        makePane({ id: "p2", status: "waiting" }),
+        makePane({ id: "p3", status: "done" }),
+      ],
+    }))
+    const host3 = createAdeVoiceHost(deps3)
+    const state3 = host3.describeState()
+    expect(state3.totalSessions).toBe(3)
+    expect(state3.spokenSummary.toLowerCase()).toContain("three open sessions")
+    expect(state3.spokenSummary).toContain("running")
+    expect(state3.spokenSummary).toContain("waiting")
+    expect(state3.spokenSummary).toContain("completed")
+  })
+
   test("focusPane and browserNavigate update workbench state", () => {
     const { deps, currentWb } = createMockDeps()
     deps.setWb((w) => ({
@@ -427,6 +499,31 @@ describe("createAdeVoiceHost", () => {
 
     host.browserNavigate("b1", "http://localhost:5173")
     expect(currentWb().panes[0].browserUrl).toBe("http://localhost:5173")
+  })
+
+  test("releasing the voice cancels a prepare waiting for a project", async () => {
+    let project: Project | undefined
+    let prepares = 0
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: false, text: "", ran: false }),
+      prepare: () => {
+        prepares++
+      },
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({
+      project: () => project,
+      voiceAgentFactory: async () => agent,
+    })
+    const host = createAdeVoiceHost(deps)
+
+    host.prepareAgent!({ engine: "claude" })
+    host.releaseAgent!()
+    project = { root: "C:/project", name: "project", git: true }
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    expect(prepares).toBe(0)
   })
 })
 
@@ -545,8 +642,8 @@ describe("createAdeVoiceHost, spoken planning", () => {
   test("startSession refuses an agent that does not exist, and opens nothing", async () => {
     const { deps, started } = planningDeps({ project: () => nikcli })
 
-    await expect(createAdeVoiceHost(deps).startSession!({ agent: "copilot", task: "qualsiasi cosa" })).rejects.toThrow(
-      /Non conosco l'agente «copilot»/,
+    await expect(createAdeVoiceHost(deps).startSession!({ agent: "aider", task: "qualsiasi cosa" })).rejects.toThrow(
+      /Non conosco l'agente «aider»/,
     )
     expect(started).toHaveLength(0)
   })
@@ -610,5 +707,101 @@ describe("createAdeVoiceHost, spoken planning", () => {
     await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
       "Non posso avviare sessioni da qui.",
     )
+  })
+})
+
+/*
+ * V1-bis, ALTO 3: the grant is for the request whose question was read. A
+ * pane whose request changed since then (the first answered by hand, a new
+ * one asked) is not answered.
+ */
+describe("answerPermission answers only the request that was asked", () => {
+  const request = (what: string): PermissionRequest => ({
+    what,
+    kind: "shell",
+    answers: [
+      { label: "Sì", send: "y", tone: "primary" },
+      { label: "No", send: "n", tone: "secondary" },
+    ],
+  })
+
+  test("a different request on the pane is not granted", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: request("rm -rf ~") }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(false)
+    expect(answered).toEqual([])
+  })
+
+  test("the same request is", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: request("cat README") }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(true)
+    expect(answered.map((a) => a.send)).toEqual(["y"])
+  })
+  test("a stale deny cannot answer a changed request", () => {
+    let pending = request("curl first-secret")
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: pending }),
+      answerPermission: (_id, answer) => void answered.push(answer),
+    })
+    const host = createAdeVoiceHost(deps)
+
+    pending = request("curl second-secret")
+    expect(host.answerPermission("p1", "deny", "curl first-secret")).toBe(false)
+    expect(answered).toEqual([])
+
+    pending = request("curl first-secret")
+    expect(host.answerPermission("p1", "deny", "curl first-secret")).toBe(true)
+    expect(answered.map((answer) => answer.send)).toEqual(["n"])
+  })
+})
+
+/*
+ * V1-bis, ALTO 6: dictating to a pane whose agent has a permission question
+ * open, «invia» typed the text and Enter into the menu, and Enter picks the
+ * highlighted option — the permission granted without a word about it. A
+ * pane with a question open takes no text from the voice until it is answered.
+ */
+describe("no voice text into a pane asking a permission", () => {
+  const asking: PermissionRequest = {
+    what: "rm -rf build",
+    kind: "shell",
+    answers: [
+      { label: "Sì", send: "1", tone: "primary" },
+      { label: "No", send: "3", tone: "secondary" },
+    ],
+  }
+
+  test("sendPrompt refuses, and nothing reaches the terminal", async () => {
+    const writtenLines: string[] = []
+    const { deps } = createMockDeps({
+      isRunning: (id) => id === "p1",
+      getRunningSession: (id) => (id === "p1" ? { write: (line: string) => void writtenLines.push(line) } : undefined),
+      permissions: () => ({ p1: asking }),
+    })
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "sistema i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+  })
+
+  test("insertText into the terminal refuses too", async () => {
+    const writtenLines: string[] = []
+    const { deps } = createMockDeps({
+      isRunning: (id) => id === "p1",
+      getRunningSession: (id) => (id === "p1" ? { write: (line: string) => void writtenLines.push(line) } : undefined),
+      permissions: () => ({ p1: asking }),
+    })
+    const host = createAdeVoiceHost(deps)
+    await expect(host.insertText("p1", "sistema i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
   })
 })

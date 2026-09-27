@@ -11,19 +11,44 @@ import { it } from "./it"
 
 /** Texts that are the same word in both languages, or are names. */
 const SAME_IN_BOTH = new Set<string>([
+  "choices.kind.design",
+  // «Sessione 1 — Terminal (2)»: a title and a number, in any language.
+  "choices.samePane",
   "settings.language.it",
   "settings.language.en",
   "preset.solo",
   "sidebar.spaces",
   "pane.quota",
   "settings.grid.auto",
+  "gateway.panel.platformTelegram",
+  "gateway.panel.platformDiscord",
+  "gateway.panel.platformSlack",
+  "gateway.panel.tokenPlaceholderSlack",
+  "gateway.panel.appTokenPlaceholder",
   "record.consent.no",
+  "bots.ask.no",
   "vui.hud.no",
   "pane.video.title",
   "vui.audio.title",
   "browser.owner.ready",
   "bots.card.file",
   "bots.form.persona",
+  "settings.providers.desc2After",
+  "agent.empty.example1",
+  "agent.empty.example2",
+  "agent.empty.example3",
+  "design.title",
+  "newPane.design",
+  "update.dialog.escKey",
+  "vui.backend.piper",
+  "vui.backend.kokoro",
+  "vui.reply.kokoro.af_heart",
+  "vui.reply.kokoro.am_fenrir",
+  "vui.reply.kokoro.bf_emma",
+  "vui.reply.kokoro.bm_george",
+  "vui.replies.sample.it",
+  "vui.replies.sample.en",
+  "bar.meta.ade",
 ])
 
 type Key = keyof typeof it
@@ -35,6 +60,21 @@ function sample(entry: unknown): string {
 }
 
 describe("the catalogs", () => {
+  test("the voice hint explains the pause in ei nik and that nik alone is enough", () => {
+    const italian = it["vui.wake.hint"]("nik")
+    expect(italian).toContain('Basta dire "nik"')
+    expect(italian).toContain('"ei nik" staccato, con una pausa dopo il nome')
+    const english = en["vui.wake.hint"]("nik")
+    expect(english).toContain('Just say "nik"')
+    expect(english).toContain('"ei nik" as separate words, with a pause after the name')
+    expect(english).toContain('for example "nik, open the browser"')
+    expect(english).not.toContain("apri il browser")
+  })
+
+  test("the English voice hint calls the configured name", () => {
+    expect(en["vui.wake.hint"]("jarvis")).toStartWith('Just say "jarvis" to call it.')
+  })
+
   test("have the same keys", () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(it).sort())
   })

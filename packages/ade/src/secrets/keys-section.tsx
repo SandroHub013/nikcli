@@ -1,13 +1,16 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
-import type { AgentOption } from "../session-new/agents"
-import { Overlay, Surface } from "../ui/layout"
+import { agentLabel, type AgentOption } from "../session-new/agents"
+import { Sheet, SheetTitle } from "../ui/sheet"
 import {
   addedLabel,
   billingWarning,
   envProblem,
+  keyRequestAgents,
+  keyRequestText,
   nameProblem,
   suggestEnv,
   valueProblem,
+  type KeyAsker,
   type KeyDraft,
   type KeyInfo,
 } from "./keys"
@@ -77,7 +80,13 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
 
       <Show when={props.host}>
         <Show when={keys().length > 0} fallback={<p data-slot="settings-meta">{t("keys.none")}</p>}>
-          <ul data-slot="settings-list">
+          {/*
+           * Marcata come zona di segreti, non campo per campo: qui dentro
+           * vivono i valori delle chiavi, e una riga aggiunta domani nasce
+           * coperta durante una registrazione senza che nessuno si ricordi
+           * di marcarla. Vedi record/sensitive.ts.
+           */}
+          <ul data-slot="settings-list" data-secrets>
             <For each={keys()}>
               {(key) => (
                 <li data-slot="keys-row">
@@ -223,7 +232,12 @@ export function KeyForm(props: {
   const [name, setName] = createSignal(props.existing?.name ?? "")
   const [env, setEnv] = createSignal(props.existing?.env ?? props.initialEnv ?? "")
   const [envTouched, setEnvTouched] = createSignal(Boolean(props.existing || props.initialEnv))
-  const [agents, setAgents] = createSignal<readonly string[]>(props.existing?.agents ?? props.initialAgents ?? [])
+  // A requested key goes to the asking agent too, even one that exists (`keyRequestAgents`).
+  const [agents, setAgents] = createSignal<readonly string[]>(
+    props.existing
+      ? [...new Set([...props.existing.agents, ...(props.initialAgents ?? [])])]
+      : (props.initialAgents ?? []),
+  )
   const [busy, setBusy] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
   let valueField: HTMLInputElement | undefined
@@ -272,7 +286,7 @@ export function KeyForm(props: {
   }
 
   return (
-    <form data-slot="keys-form" onSubmit={(event) => void submit(event)} autocomplete="off">
+    <form data-slot="keys-form" data-secrets onSubmit={(event) => void submit(event)} autocomplete="off">
       <label data-slot="keys-field">
         <span>{t("keys.field.name")}</span>
         <input
@@ -341,56 +355,74 @@ export function KeyForm(props: {
  * An agent asked for a key (`@ade keys ask ENV motivo`): the same form, with
  * the variable filled in and the reason shown. Never opens a second time for
  * the same request while one is on screen.
+ *
+ * On `Sheet`: the request comes when the agent sends it, possibly with another
+ * sheet open, and on the old Overlay it opened under that sheet's focus trap,
+ * visible and deaf. Kobalte stacks it on top, with the keys.
  */
 export function KeyRequestDialog(props: {
   host: KeysHost
   agents: readonly AgentOption[]
   env: string
   reason: string
+  /** The session that asked; absent for a request with no known sender. */
+  asker?: KeyAsker
   onClose: (savedName: string | undefined) => void
 }) {
   const [keys, setKeys] = createSignal<KeyInfo[]>([])
+  const text = createMemo(() =>
+    keyRequestText({
+      env: props.env,
+      reason: props.reason,
+      ...(props.asker ? { asker: props.asker } : {}),
+      agentLabel,
+    }),
+  )
+  const given = (existing?: KeyInfo) => keyRequestAgents(existing?.agents, props.asker)
   onMount(() => void props.host.list().then(setKeys, () => undefined))
   const existing = () => keys().find((key) => key.env === props.env)
 
   return (
-    <Overlay data-component="key-request" onClose={() => props.onClose(undefined)}>
-      <Surface
-        size="md"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("keys.request")}
-        onKeyDown={(event: KeyboardEvent) => {
-          if (event.key === "Escape") props.onClose(undefined)
-        }}
-      >
-        <header data-slot="keys-dialog-head">
-          <strong>{t("keys.request.title", props.env)}</strong>
-          <Show when={props.reason}>
-            <span>«{props.reason}»</span>
-          </Show>
-          <span>{t("keys.request.hint")}</span>
-        </header>
-        <div data-slot="keys-dialog-body">
-          <Show
-            when={existing()}
-            keyed
-            fallback={
-              <KeyForm
-                host={props.host}
-                agents={props.agents}
-                others={keys()}
-                initialEnv={props.env}
-                onDone={props.onClose}
-              />
-            }
-          >
-            {(key) => (
-              <KeyForm host={props.host} agents={props.agents} existing={key} others={keys()} onDone={props.onClose} />
-            )}
-          </Show>
-        </div>
-      </Surface>
-    </Overlay>
+    <Sheet component="key-request" size="md" onClose={() => props.onClose(undefined)}>
+      <header data-slot="keys-dialog-head">
+        <SheetTitle as="strong">{text().title}</SheetTitle>
+        {/* The agent's words, as the agent's: not a line of ADE's. */}
+        <Show when={text().says}>
+          {(says) => (
+            <blockquote data-slot="keys-dialog-says">
+              <span data-slot="keys-dialog-says-who">{t("keys.request.says")}</span> «{says()}»
+            </blockquote>
+          )}
+        </Show>
+        <span>{text().goes}</span>
+      </header>
+      <div data-slot="keys-dialog-body">
+        <Show
+          when={existing()}
+          keyed
+          fallback={
+            <KeyForm
+              host={props.host}
+              agents={props.agents}
+              others={keys()}
+              initialEnv={props.env}
+              initialAgents={given()}
+              onDone={props.onClose}
+            />
+          }
+        >
+          {(key) => (
+            <KeyForm
+              host={props.host}
+              agents={props.agents}
+              existing={key}
+              others={keys()}
+              initialAgents={given(key)}
+              onDone={props.onClose}
+            />
+          )}
+        </Show>
+      </div>
+    </Sheet>
   )
 }

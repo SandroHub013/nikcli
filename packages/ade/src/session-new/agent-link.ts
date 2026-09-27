@@ -36,6 +36,8 @@
  * for one, which is the only thing the user ever notices going wrong.
  */
 
+import { sameFolder } from "./folder"
+
 /** The directory a hook drops its report into. */
 export const LINK_DIR_ENV = "ADE_SESSION_DIR"
 
@@ -73,9 +75,15 @@ export interface LinkReport {
   /**
    * Why the session started, as the CLI says it: Claude Code sends
    * `startup`, `resume`, `clear` or `compact`. Absent from older scripts and
-   * from CLIs that do not say.
+   * from CLIs that do not say. nikcli's TUI plugin sends `switch`.
    */
   readonly source?: string
+  /**
+   * The folder the conversation belongs to, where the CLI says it: nikcli's
+   * session tabs are shared by every TUI of every project, so a tab clicked
+   * in a pane can be another folder's conversation.
+   */
+  readonly sessionDir?: string
 }
 
 /** Ids longer than this are not ids. Matches herdr's own ceiling. */
@@ -106,7 +114,19 @@ export function parseReport(text: string): LinkReport | undefined {
 
   const at = typeof raw.at === "number" && Number.isFinite(raw.at) ? raw.at : undefined
   const source = asId(raw.source)
-  return { pane, nonce, agent, sessionId, ...(at !== undefined ? { at } : {}), ...(source ? { source } : {}) }
+  const sessionDir =
+    typeof raw.sessionDir === "string" && raw.sessionDir.trim() && raw.sessionDir.length <= 4096
+      ? raw.sessionDir.trim()
+      : undefined
+  return {
+    pane,
+    nonce,
+    agent,
+    sessionId,
+    ...(at !== undefined ? { at } : {}),
+    ...(source ? { source } : {}),
+    ...(sessionDir ? { sessionDir } : {}),
+  }
 }
 
 function isTable(value: unknown): value is Record<string, unknown> {
@@ -222,8 +242,12 @@ export async function watchForReport(watch: LinkWatch): Promise<LinkReport | und
  * environment, nonce included), and taking its id would resume the pane into
  * a conversation it never had. `compact` keeps the id, so it has nothing to
  * say.
+ *
+ * `switch` is nikcli's: its TUI plugin reports the conversation the TUI shows
+ * whenever it changes, by `/new`, `/sessions`, a tab or «+ new». It is the
+ * user acting in the TUI too, and only the TUI of this spawn has its nonce.
  */
-const LATER_SOURCES: ReadonlySet<string> = new Set(["resume", "clear"])
+const LATER_SOURCES: ReadonlySet<string> = new Set(["resume", "clear", "switch"])
 
 /** Whether a report after the first one moves the pane to a new conversation. */
 export function acceptsLaterReport(report: LinkReport, current: string): boolean {
@@ -233,6 +257,34 @@ export function acceptsLaterReport(report: LinkReport, current: string): boolean
 export interface LinkFollow extends LinkWatch {
   /** Every conversation the pane moves to, the first one included. */
   readonly onReport: (report: LinkReport) => void
+  /**
+   * How many lines have been sent into the pane so far. A change brings the
+   * check back to every {@link WATCH_MAX_GAP_MS}: `/resume` and `/clear` are
+   * lines, and nothing else writes a later report.
+   */
+  readonly linesSent?: () => number
+}
+
+/**
+ * The gaps between checks after the first report (P1-C2b), longer each time
+ * nothing is there. The report after it only follows a `/resume` or `/clear`
+ * the user types, and polling every pane every two seconds for that was 1.95
+ * invokes a second, minimised or not.
+ */
+export const FOLLOW_GAPS_MS = [2_000, 4_000, 8_000, 15_000] as const
+
+/**
+ * Wraps a session's `write` so every line it submits is counted, for
+ * {@link LinkFollow.linesSent}. The same object is returned, since panes are
+ * matched to their session by identity.
+ */
+export function countingLines<T extends { write: (data: string) => void }>(session: T, counted: () => void): T {
+  const write = session.write.bind(session)
+  session.write = (data: string) => {
+    if (data.includes("\r")) counted()
+    write(data)
+  }
+  return session
 }
 
 /**
@@ -255,19 +307,88 @@ export async function followReports(follow: LinkFollow): Promise<void> {
   if (first) follow.onReport(first)
   if (!follow.cancelled) return
 
+  let step = 0
+  let waited = 0
+  let lines = follow.linesSent?.()
   while (!follow.cancelled()) {
-    await sleep(WATCH_MAX_GAP_MS)
+    const gap = FOLLOW_GAPS_MS[step]!
+    // Short sleeps, and no read until the gap is over: a line sent meanwhile is seen within two seconds.
+    const nap = Math.min(WATCH_MAX_GAP_MS, gap - waited)
+    await sleep(nap)
     if (follow.cancelled()) return
+    waited += nap
+    const sent = follow.linesSent?.()
+    if (sent !== lines) {
+      lines = sent
+      step = 0
+    } else if (waited < gap) continue
+    waited = 0
     const text = await follow.read(follow.nonce)
-    if (text === null) continue
-    const report = parseReport(text)
-    if (report === undefined) continue
+    const report = text === null ? undefined : parseReport(text)
+    if (report === undefined) {
+      step = Math.min(step + 1, FOLLOW_GAPS_MS.length - 1)
+      continue
+    }
+    step = 0
     await follow.clear(follow.nonce)
     if (!acceptsReport(report, follow)) continue
     if (current !== undefined && !acceptsLaterReport(report, current)) continue
     current = report.sessionId
     follow.onReport(report)
   }
+}
+
+/**
+ * The folder of the reported conversation, when it is not the pane's.
+ *
+ * nikcli's session tabs are one list for every TUI of every project, so a
+ * tab clicked in a pane can open another folder's conversation, and the pane
+ * follows it. That cannot be stopped from here; it can be said. Windows hands
+ * the same folder back with either slash and any case.
+ */
+export function otherFolder(report: LinkReport, cwd: string): string | undefined {
+  if (!report.sessionDir || !cwd) return undefined
+  return sameFolder(report.sessionDir, cwd) ? undefined : report.sessionDir
+}
+
+/**
+ * The folder to keep with the pane after a report: where the followed
+ * conversation lives when it is not the pane's.
+ *
+ * A report that does not say its folder — nikcli's plugin leaves it out when
+ * its `session.get` fails — says nothing about it: for the conversation the
+ * pane already follows, what was known stays; for another one, nothing is
+ * known. It used to be written as "the pane's own folder", and a restart
+ * stopped saying the conversation belonged elsewhere (lettura di Mimo, F4).
+ */
+export function followedFolder(
+  report: LinkReport,
+  cwd: string,
+  previous: { readonly resumeId?: string; readonly otherDir?: string },
+): string | undefined {
+  if (report.sessionDir) return otherFolder(report, cwd)
+  return report.sessionId === previous.resumeId ? previous.otherDir : undefined
+}
+
+/**
+ * The conversation the previous spawn of a pane last reported, when that
+ * report was never taken.
+ *
+ * After its first report a pane is checked every 2 to 15 s
+ * ({@link FOLLOW_GAPS_MS}); a switch of tab made with the mouse just before
+ * ADE closed is still in the drop file at the next start. Read once, before
+ * the saved id is used: the same rules as while the pane ran, so only this
+ * pane's spawn is believed, and after a saved id only a later reason moves it.
+ */
+export function lastReportedId(
+  text: string | null | undefined,
+  expected: { pane: string; nonce: string },
+  current: string | undefined,
+): string | undefined {
+  const report = text ? parseReport(text) : undefined
+  if (!report || !acceptsReport(report, expected)) return undefined
+  if (current !== undefined && !acceptsLaterReport(report, current)) return undefined
+  return report.sessionId
 }
 
 export function newNonce(): string {

@@ -70,134 +70,162 @@ export function newFrameSecret(): string {
 }
 
 /**
- * The frame-guard source as a string. It is the single source of truth for
- * what runs inside every framed document: `frameScript()` writes it to the
- * committed artifact, and `frameGuard` below is compiled from the same string
- * so behaviour and serialised source can never drift.
+ * The script's body. Serialised with `toString`, so it must not refer to
+ * anything outside itself: the constants above are repeated inside on purpose.
  *
- * The script must not refer to anything outside itself: the constants in this
- * module are repeated inside on purpose. Page scripts run after it, so
- * whatever it needs later — getters, `call`, `postMessage` — it takes now,
- * before the page can replace them.
- *
- * Hand-written, not extracted from `frameGuard`. Bun's transpiler embeds a
- * reformatted copy of a TS function into the emitted JS, and that reformat
- * differs between bun builds (baseline vs full, x64 vs arm). Using
- * `frameGuard.toString()` therefore produced an artifact that matched the test
- * on one machine and not on another; a literal string is stable everywhere.
+ * Page scripts run after it, so whatever it needs later — getters, `call`,
+ * `postMessage` — it takes now, before the page can replace them.
  */
-const FRAME_GUARD_SOURCE = `function frameGuard(win, bridge) {
+export function frameGuard(win: any, bridge: (shim: any) => void): void {
   if (win.top === win) return
-  const define = Object.defineProperty,
-    uncurry = Function.prototype.bind.bind(Function.prototype.call)
+  const define = Object.defineProperty
+  const uncurry = Function.prototype.bind.bind(Function.prototype.call)
   if (win.__ADE_FRAME__) return
-  define(win, "__ADE_FRAME__", { value: !0 })
+  define(win, "__ADE_FRAME__", { value: true })
+  /*
+   * A frame that has become ADE itself (navigated onto the window's origin
+   * or tauri.localhost) can read the window. Blank it. A cross-origin page
+   * cannot read `top.location`, and that throw is the all-clear.
+   */
+  try {
+    const here = String((win.location && win.location.origin) || "")
+    const topOrigin = String((win.top && win.top.location && win.top.location.origin) || "")
+    const host = String((win.location && win.location.hostname) || "").toLowerCase()
+    if (host === "tauri.localhost" || (here && topOrigin && here === topOrigin)) {
+      try {
+        win.location.replace("about:blank")
+      } catch {}
+      return
+    }
+  } catch {}
+
+  // 1. IPC: no Tauri-* header can be set in a frame.
   try {
     const Base = win.Headers
     if (typeof Base === "function") {
-      const test = uncurry(RegExp.prototype.test),
-        tauriHeader = /^\\s*tauri-/i,
-        isTauri = (name) => typeof name === "string" && test(tauriHeader, name),
-        refuse = () => {
-          throw TypeError("ADE: Tauri IPC is not available in a frame")
-        }
-
+      const test = uncurry(RegExp.prototype.test)
+      const tauriHeader = /^\s*tauri-/i
+      // Tauri names its headers with string literals; a page's own names pass.
+      const isTauri = (name: unknown) => typeof name === "string" && test(tauriHeader, name)
+      const refuse = () => {
+        throw new TypeError("ADE: Tauri IPC is not available in a frame")
+      }
       class FrameHeaders extends Base {
-        set(name, value) {
+        set(name: unknown, value: unknown) {
           if (isTauri(name)) refuse()
           return super.set(name, value)
         }
-        append(name, value) {
+        append(name: unknown, value: unknown) {
           if (isTauri(name)) refuse()
           return super.append(name, value)
         }
       }
       Object.freeze(FrameHeaders.prototype)
       Object.freeze(FrameHeaders)
-      define(win, "Headers", { value: FrameHeaders, writable: !1, configurable: !1 })
+      define(win, "Headers", { value: FrameHeaders, writable: false, configurable: false })
     }
   } catch {}
   try {
-    if (win.chrome && win.chrome.webview) {
+    const webview = win.chrome && win.chrome.webview
+    if (webview) {
       const inert = Object.freeze({
         postMessage() {},
         addEventListener() {},
         removeEventListener() {},
       })
-      define(win.chrome, "webview", { value: inert, writable: !1, configurable: !1 })
+      define(win.chrome, "webview", { value: inert, writable: false, configurable: false })
     }
   } catch {}
+
+  // 2. The inspector, in a browser pane's frame only.
   if (win.parent !== win.top || win.name !== "ade-browser") return
-  const location = win.location || {},
-    scheme = String(location.protocol)
-  if (!(scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"))
-    return
-  const eventProto = win.MessageEvent.prototype,
-    getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get),
-    getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get),
-    listen = uncurry(win.EventTarget.prototype.addEventListener),
-    parent = win.parent,
-    postToParent = uncurry(parent.postMessage),
-    portProto = win.MessagePort.prototype,
-    portPost = uncurry(portProto.postMessage),
-    portStart = uncurry(portProto.start),
-    computed = uncurry(win.getComputedStyle),
-    push = uncurry(Array.prototype.push),
-    shift = uncurry(Array.prototype.shift),
-    trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"),
-    isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0,
-    trusted = (event) => {
-      try {
-        return isTrustedOf ? isTrustedOf(event) === !0 : !1
-      } catch {
-        return !1
-      }
+  /*
+   * The bridge goes into a page or the mirror (about:srcdoc), not into the
+   * frame's first empty document or the webview's error page: either would
+   * announce the bridge over a page that never loads ("connection refused",
+   * a site that refuses framing). Those documents do not ask.
+   */
+  const location = win.location || {}
+  const scheme = String(location.protocol)
+  const bridgeHere =
+    scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"
+
+  if (!bridgeHere) return
+
+  const eventProto = win.MessageEvent.prototype
+  const getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data")!.get!)
+  const getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source")!.get!)
+  const listen = uncurry(win.EventTarget.prototype.addEventListener)
+  const parent = win.parent
+  const postToParent = uncurry(parent.postMessage)
+  const portProto = win.MessagePort.prototype
+  const portPost = uncurry(portProto.postMessage)
+  const portStart = uncurry(portProto.start)
+  const computed = uncurry(win.getComputedStyle)
+  const push = uncurry(Array.prototype.push)
+  const shift = uncurry(Array.prototype.shift)
+  // `isTrusted` is each event's own getter; on anything but a real event it throws.
+  const trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted")
+  const isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : undefined
+  const trusted = (event: unknown) => {
+    try {
+      return isTrustedOf ? isTrustedOf(event) === true : false
+    } catch {
+      return false
     }
-  define(win, "__NIKCLI_INSPECTOR_ACTIVE__", { value: !0, writable: !1, configurable: !1 })
-  let secret,
-    started = !1
-  const queue = [],
-    channel = new win.MessageChannel(),
-    port = channel.port1,
-    send = (message) => {
-      if (secret === void 0) {
-        push(queue, message)
-        return
-      }
-      portPost(port, { type: "ade-browser:bridge", secret, message })
-    },
-    listenTrusted = (target, type, handler, options) =>
-      listen(
-        target,
-        type,
-        (event) => {
-          if (trusted(event)) handler(event)
-        },
-        options,
-      )
-  listen(port, "message", (event) => {
+  }
+
+  // A site's own copy of the bridge stays out: this one is the one ADE trusts.
+  define(win, "__NIKCLI_INSPECTOR_ACTIVE__", { value: true, writable: false, configurable: false })
+
+  let secret: string | undefined
+  let started = false
+  const queue: unknown[] = []
+  const channel = new win.MessageChannel()
+  const port = channel.port1
+  const send = (message: unknown) => {
+    if (secret === undefined) {
+      push(queue, message)
+      return
+    }
+    portPost(port, { type: "ade-browser:bridge", secret, message })
+  }
+  // A listener on the page's DOM that only real input reaches: a page's
+  // `dispatchEvent(new MouseEvent("click"))` selects nothing.
+  const listenTrusted = (target: unknown, type: string, handler: (event: unknown) => void, options?: unknown) =>
+    listen(
+      target,
+      type,
+      (event: unknown) => {
+        if (trusted(event)) handler(event)
+      },
+      options,
+    )
+
+  listen(port, "message", (event: unknown) => {
     const data = getData(event)
     if (!data || typeof data !== "object") return
     if (data.type === "ade-browser:ping") {
       portPost(port, { type: "ade-browser:pong" })
       return
     }
-    if (data.type !== "ade-browser:hello" || secret !== void 0 || typeof data.secret !== "string") return
-    secret = data.secret
+    if (data.type !== "ade-browser:hello" || secret !== undefined || typeof data.secret !== "string") return
+    secret = data.secret as string
     while (queue.length) send(shift(queue))
     if (started) return
-    started = !0
+    started = true
     bridge({
-      __NIKCLI_INSPECTOR_ACTIVE__: !1,
+      __NIKCLI_INSPECTOR_ACTIVE__: false,
       __ADE_LISTEN__: listenTrusted,
-      parent: { postMessage: (message) => send(message) },
-      getComputedStyle: (element, pseudo) => computed(win, element, pseudo),
-      addEventListener: (type, handler, options) => {
+      parent: { postMessage: (message: unknown) => send(message) },
+      getComputedStyle: (element: unknown, pseudo?: unknown) => computed(win, element, pseudo),
+      addEventListener: (type: string, handler: (event: unknown) => void, options?: unknown) => {
         if (type !== "message") return listen(win, type, handler, options)
+        // Only what the pane sends reaches the bridge.
         return listen(
           win,
           "message",
-          (event) => {
+          (event: unknown) => {
             if (getSource(event) !== parent) return
             handler({ data: getData(event), source: parent })
           },
@@ -208,27 +236,7 @@ const FRAME_GUARD_SOURCE = `function frameGuard(win, bridge) {
   })
   portStart(port)
   postToParent(parent, { type: "ade-browser:ask" }, "*", [channel.port2])
-}`
-
-/**
- * The guard, compiled from `FRAME_GUARD_SOURCE`. Behaviour and serialised
- * source are tied to the same string, so the test that pins the generated
- * artifact (`bun scripts/gen-frame-script.ts`) and the runtime guard can
- * never diverge.
- *
- * Compiled on the first call and never while the module loads. The packaged
- * app serves its bundle under the CSP in `tauri.conf.json`, which allows no
- * 'unsafe-eval'; a `new Function` evaluated at module scope throws there and
- * takes the whole entry chunk — and therefore the window — down with it. A
- * dev run never sees it, because Tauri applies that CSP only to the embedded
- * protocol, not to the Vite server. Nothing in the app calls this: the host
- * injects the generated `browser-frame.js` into every frame instead, and the
- * tests are the only caller, so the eval never happens in a packaged window.
- */
-type FrameGuard = (win: any, bridge: (shim: any) => void) => void
-let compiledGuard: FrameGuard | undefined
-const compileGuard = (): FrameGuard => (compiledGuard ??= new Function("return (" + FRAME_GUARD_SOURCE + ")")())
-export const frameGuard: FrameGuard = (win, bridge) => compileGuard()(win, bridge)
+}
 
 /** What `FrameGate` needs of a port: a browser `MessagePort`, or a test's. */
 export type GatePort = Pick<MessagePort, "postMessage" | "close" | "onmessage">
@@ -336,14 +344,7 @@ function isPong(data: unknown): boolean {
 export function frameScript(): string {
   return [
     "// Generated by packages/ade/scripts/gen-frame-script.ts from src/browser/frame-script.ts. Do not edit.",
-    `;(${FRAME_GUARD_SOURCE})(window, function (window) {${INSPECTOR_BRIDGE_SCRIPT}});`,
+    `;(${frameGuard.toString()})(window, function (window) {${INSPECTOR_BRIDGE_SCRIPT}});`,
     "",
   ].join("\n")
 }
-
-/**
- * The canonical source of the guard. Exported so the test can assert the
- * function compiled from it behaves like `frameGuard`, which keeps the two
- * views (runtime + serialised) anchored to the same string.
- */
-export const FRAME_GUARD_BODY = FRAME_GUARD_SOURCE

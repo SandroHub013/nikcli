@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { createPanelRouter, ECHO_WINDOW_MS, REPEAT_WINDOW_MS, type HandledRequest, type PanelHandler } from "./router"
+import {
+  createPanelRouter,
+  createPendingPanelReplies,
+  dictationHold,
+  panelReplyHold,
+  PANEL_REPLY_MAX_AGE_MS,
+  ECHO_WINDOW_MS,
+  REPEAT_WINDOW_MS,
+  type HandledRequest,
+  type PanelHandler,
+} from "./router"
+import { isQuestionOpen } from "../session/mailbox"
 import { REPLY_PREFIX } from "./protocol"
 
 const replyOf = (handled: HandledRequest | undefined) => (handled && "reply" in handled ? handled.reply : undefined)
@@ -191,7 +202,7 @@ describe("createPanelRouter", () => {
     expect(model.asked).toEqual(["state", "state"])
   })
 
-  test("opening a panel types nothing into the sessions (six prompts queued in Claude Code, 0.5.0 trial)", () => {
+  test("lint: opening a panel types nothing into the sessions", () => {
     const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
     const start = source.indexOf("const announcePanels = ")
     expect(start).toBeGreaterThan(-1)
@@ -213,5 +224,201 @@ describe("createPanelRouter", () => {
     // Every line is prefixed, so the greeting cannot be read back as requests.
     expect(lines.every((line) => line.startsWith(REPLY_PREFIX))).toBe(true)
     expect(lines.join("\n")).toContain("play")
+  })
+})
+
+/*
+ * A panel's answer used to go into the pty with its Enter, past the line queue,
+ * past the draft check and past the permission check. So an agent that printed
+ * an `@ade` line and then asked for a permission had its answer typed over the
+ * prompt and confirmed the selected choice — and where the options are numbered,
+ * a reply that begins with a digit picks one of them instead. It was there
+ * before P1 and P1 did not touch it: the hook made the state right and this road
+ * never asked the state.
+ */
+describe("a panel reply waits for the pane like any other line", () => {
+  const now = Date.now()
+  const hookSaysPermission = { state: "permission" as const, at: now }
+  const held = (over: Partial<{ alive: boolean; typing: boolean; questionOpen: boolean }> = {}) =>
+    panelReplyHold({ alive: true, typing: false, questionOpen: false, ...over })
+
+  test("a prompt only the hook knows about holds the reply", () => {
+    // The screen saw nothing, the hook said there is a question: the reply waits.
+    const questionOpen = isQuestionOpen(undefined, hookSaysPermission)
+    expect(questionOpen).toBe(true)
+    expect(held({ questionOpen })).toBe("prompt aperto")
+    // The same prompt found by reading the screen holds it too, as it always did.
+    expect(held({ questionOpen: isQuestionOpen({ what: "Bash(rm -rf)" }, undefined) })).toBe("prompt aperto")
+  })
+
+  test("a line the user began holds it, and a session that is gone ends it", () => {
+    expect(held({ typing: true })).toBe("riga iniziata")
+    // Both at once: the user's own line is the nearer reason.
+    expect(held({ typing: true, questionOpen: true })).toBe("riga iniziata")
+    // A session that went away cannot be typed into, and there is nobody to
+    // retry for: the reply is dropped rather than kept for a pane that is not there.
+    expect(panelReplyHold({ alive: false, typing: false, questionOpen: false })).toBe("sessione chiusa")
+  })
+
+  test("a free pane is given the reply, as before", () => {
+    expect(held()).toBeUndefined()
+    // A turn in progress is not a question: the reply goes in, behind the queue.
+    expect(held({ questionOpen: isQuestionOpen(undefined, { state: "busy", at: now }) })).toBeUndefined()
+  })
+})
+
+describe("dictated words are not written over a question", () => {
+  const now = Date.now()
+  const asking = () => isQuestionOpen(undefined, { state: "permission" as const, at: now })
+
+  test("a prompt only the hook knows about holds the dictation", () => {
+    expect(asking()).toBe(true)
+    expect(dictationHold({ alive: true, questionOpen: asking() })).toBe("prompt aperto")
+    // The screen's own reading holds it too, as it always did for the Enter.
+    expect(dictationHold({ alive: true, questionOpen: isQuestionOpen({ what: "Bash" }, undefined) })).toBe(
+      "prompt aperto",
+    )
+  })
+
+  test("with no question the words are written, as before", () => {
+    expect(dictationHold({ alive: true, questionOpen: false })).toBeUndefined()
+    // A turn in progress is not a question, and dictation has always been allowed
+    // into a line the user has begun: neither is what this guard is about.
+    expect(
+      dictationHold({ alive: true, questionOpen: isQuestionOpen(undefined, { state: "busy", at: now }) }),
+    ).toBeUndefined()
+    expect(dictationHold({ alive: false, questionOpen: false })).toBe("sessione chiusa")
+  })
+})
+/*
+ * M1 and M2, from the review of `ade/pannello-guardia`.
+ *
+ * M1 was a condition written backwards: the answer was deleted from the waiting
+ * and then the code asked whether it was still there, so a reply that could not
+ * be given — a prompt opened between the check and the queue — was dropped
+ * instead of retried, which is the opposite of what the comment promised. The
+ * store is a module and not a map in the component because that condition is
+ * exactly the kind of thing a test has to be able to reach.
+ */
+describe("the answers waiting for a pane", () => {
+  const now = 1_000_000
+  const first = { id: "proc-1" }
+  const restarted = { id: "proc-2" }
+
+  test("an answer that could not be given goes back to the waiting (M1)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "Va bene", now)
+    // What `handlePanelRequest` does before typing: out of the waiting, so the
+    // round cannot send it twice.
+    expect(store.take("p1", "Va bene")).toBe(true)
+    expect(store.waiting("p1")).toEqual([])
+    // And after a try that did not give it, which is what the reversed condition
+    // threw away: back it goes, or the agent waits for an answer that never comes.
+    store.restore("p1", first, "Va bene", now)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["Va bene"])
+    // Given this time: taken for the send and not restored.
+    expect(store.take("p1", "Va bene")).toBe(true)
+    expect(store.waiting("p1")).toEqual([])
+    // A try that is still in flight when the pane restarts: the answer comes
+    // back to a pane that is no longer the one that asked, and is not restored.
+    store.restore("p1", first, "In volo", now)
+    store.queue("p1", restarted, "Altra", now)
+    store.restore("p1", first, "In volo", now)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["Altra"])
+  })
+
+  test("a pane that was restarted is not the session that asked (M2)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "Va bene", now)
+    // The pane still answers to `p1`, so a lookup by id alone finds this process.
+    expect(store.sessionOf("p1")).toBe(first)
+    // The comparison the flush makes, and the pane was restarted meanwhile.
+    expect(restarted === store.sessionOf("p1")).toBe(false)
+    // So the answers go: they were for a process that is gone, and typing them
+    // here would start a turn in a session that never asked.
+    store.forget("p1")
+    expect(store.panes()).toEqual([])
+    // And a new answer from the new session is not mixed with the old ones.
+    store.queue("p1", restarted, "Diverso", now)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["Diverso"])
+    expect(store.sessionOf("p1")).toBe(restarted)
+  })
+
+  test("two answers in a row are two answers, in the order they were made", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "Prima", now)
+    store.queue("p1", first, "Poi", now + 10)
+    expect(store.claim("p1", now + 20).waits.map((wait) => wait.text)).toEqual(["Prima", "Poi"])
+    // A different session on the same pane replaces what was waiting, rather
+    // than delivering the old process its answers.
+    store.queue("p1", restarted, "Nuova sessione", now + 30)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["Nuova sessione"])
+  })
+
+  test("an answer that waited too long is given up, and the young ones stay", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "Vecchia", now)
+    store.queue("p1", first, "Giovane", now + PANEL_REPLY_MAX_AGE_MS - 1_000)
+    // A pane busy for an hour: ageing happens on the way out, so waiting does
+    // not keep an answer alive.
+    const late = store.claim("p1", now + PANEL_REPLY_MAX_AGE_MS + 60_000)
+    expect(late.stale).toBe(1)
+    expect(late.waits.map((wait) => wait.text)).toEqual(["Giovane"])
+    // A restore after a failed try keeps the age it was made at, so a reply
+    // cannot be kept alive for ever by being retried.
+    store.restore("p1", first, "Giovane", now + PANEL_REPLY_MAX_AGE_MS - 1_000)
+    expect(store.claim("p1", now + PANEL_REPLY_MAX_AGE_MS * 2).stale).toBe(1)
+    // Nothing left to wait for: the pane is out of the round entirely.
+    expect(store.panes()).toEqual([])
+  })
+})
+/*
+ * I due BASSI sull'ordine, dalla delta di `12a442315`.
+ *
+ * Entrambi vengono da una lista che esiste per non perdere risposte e che si
+ * poteva scavalcare: la strada diretta scriveva una risposta nuova davanti a
+ * quelle in attesa, e il giro provava la successiva anche quando la prima tornava
+ * indietro. Sono due casi rari — due righe `@ade` di fila e un prompt che si
+ * apre e si chiude in mezzo — e sono due risposte lette nell'ordine sbagliato,
+ * che per un agente è come ricevere risposte alle domande sbagliate.
+ */
+describe("l'ordine delle risposte di un pannello", () => {
+  const now = 1_000_000
+  const first = { id: "proc-1" }
+
+  test("una risposta nuova non sorpassa quelle in attesa (BASSO 1)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    // Nothing waiting: the answer goes straight out, as it always did.
+    expect(store.admit("p1", first, "Prima", now)).toBe(true)
+    // A is held, B arrives while A is still waiting.
+    store.queue("p1", first, "A", now + 1)
+    // B is not written now, and not lost either: it is behind A.
+    expect(store.admit("p1", first, "B", now + 2)).toBe(false)
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // The round writes them in the order they were made.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
+  })
+
+  test("una risposta trattenuta torna al suo posto, non in fondo (BASSO 2)", () => {
+    const store = createPendingPanelReplies<{ id: string }>()
+    store.queue("p1", first, "A", now)
+    store.queue("p1", first, "B", now + 1)
+    const { waits } = store.claim("p1", now + 2)
+    // The round takes the first and cannot give it: a prompt opened again.
+    store.take("p1", "A")
+    store.restore("p1", first, "A", waits[0]!.at)
+    // Back where it was made, and not at the end. Appending here looks harmless
+    // and is the same inversion the break was meant to stop: the round after this
+    // one would send B first, and the agent would read the answer to its second
+    // question before the answer to its first. The break only puts the inversion
+    // off by a round, so the order has to be restored here too.
+    expect(store.waiting("p1").map((wait) => wait.text)).toEqual(["A", "B"])
+    // And the ages are still the ages: an answer is not kept alive by trying, and
+    // a later one does not jump ahead of it by being restored.
+    expect(store.waiting("p1").map((wait) => wait.at)).toEqual([now, now + 1])
+    // The next round finds the same order, so the held one is the first tried
+    // again — and the break stops the round there, rather than sending B off
+    // while A is still unanswered.
+    expect(store.claim("p1", now + 3).waits.map((wait) => wait.text)).toEqual(["A", "B"])
   })
 })

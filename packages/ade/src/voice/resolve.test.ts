@@ -29,9 +29,9 @@ describe("resolveAgentId", () => {
    * da quello chiesto e riferire che è andato tutto bene.
    */
   test("rifiuta un agente che non esiste, elencando quelli veri", () => {
-    expect(() => resolveAgentId("copilot", AGENTS)).toThrow(/Non conosco l'agente «copilot»/)
-    expect(() => resolveAgentId("copilot", AGENTS)).toThrow(/Claude Code/)
-    expect(() => resolveAgentId("copilot", AGENTS)).toThrow(/OpenCode/)
+    expect(() => resolveAgentId("aider", AGENTS)).toThrow(/Non conosco l'agente «aider»/)
+    expect(() => resolveAgentId("aider", AGENTS)).toThrow(/Claude Code/)
+    expect(() => resolveAgentId("aider", AGENTS)).toThrow(/OpenCode/)
   })
 
   test("rifiuta una stringa vuota", () => {

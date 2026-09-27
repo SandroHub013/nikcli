@@ -1,0 +1,925 @@
+import { describe, expect, test } from "bun:test"
+import { createRoot } from "solid-js"
+import { compileSolidJsx } from "../test-support/solid-jsx"
+import { GlobalRegistrator } from "@happy-dom/global-registrator"
+import { createDesignHub, type DesignHub } from "./hub"
+import { t } from "../i18n"
+import type { DesignProposal } from "./state"
+import { createDesignRegister, type DesignRegister } from "./register"
+import type { DesignEvent } from "./log"
+import type { DesignIo } from "./store"
+
+if (typeof document === "undefined") {
+  GlobalRegistrator.register()
+}
+compileSolidJsx()
+
+const { createComponent, render } = await import("solid-js/web")
+// A sheet is a portal with a focus trap: find it in `document`, and unmount it with the dispose `render` returns (disposing createRoot's leaves it, and its trap, on the next tests).
+const { DesignSheet } = await import("./design-sheet")
+const { DesignPane, deliveryText } = await import("./design-pane")
+
+const opened = (k: string) =>
+  `${JSON.stringify({
+    type: "aperta",
+    k,
+    at: "2026-09-15T10:00:00.000Z",
+    by: "fable",
+    title: `T ${k}`,
+    spec: "S54",
+    variants: [
+      { name: "A", description: "Alpha" },
+      { name: "B", description: "Beta" },
+    ],
+  })}\n`
+
+function memory(initial: string) {
+  const files = new Map([["/p/.ade/design.jsonl", initial]])
+  const io: DesignIo = {
+    readTextFile: async (path) => ({ text: files.get(path) ?? "", truncated: false }),
+    writeTextFile: async (path, contents) => {
+      files.set(path, contents)
+      return null
+    },
+    appendTextFile: async (path, text) => {
+      files.set(path, (files.get(path) ?? "") + text)
+      return null
+    },
+  }
+  return { io, files }
+}
+
+describe("the design register and the hub", () => {
+  test("an answer is written from the draft, the draft is cleared and message queued", async () => {
+    const appended: DesignEvent[] = []
+    const queued: any[] = []
+
+    const register: DesignRegister = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async (event) => {
+        appended.push(event)
+      },
+      tick: async () => {},
+      watch: () => () => {},
+    }
+
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: (proposal, event) => queued.push({ proposal, event }),
+    })
+
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Settings layout",
+      spec: "S54",
+      variants: [
+        { name: "A · Rail", description: "Side navigation", preview: "a.html" },
+        { name: "B · Cards", description: "Grid cards", preview: "b.html" },
+      ],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+
+    hub.setDraft("DS1", { picked: 1, note: "Preferisco la variante a tessere" })
+    expect(hub.draft("DS1")).toEqual({ picked: 1, note: "Preferisco la variante a tessere" })
+
+    const success = await hub.answer(proposal)
+    expect(success).toBe(true)
+    expect(appended.length).toBe(1)
+    expect(appended[0]!.type).toBe("risposta")
+    expect((appended[0] as any).choice).toBe("B · Cards")
+    expect(queued.length).toBe(1)
+    expect(hub.draft("DS1")).toEqual({ note: "" })
+  })
+})
+
+describe("«Altro giro» in the hub", () => {
+  const setup = () => {
+    const appended: DesignEvent[] = []
+    const answered: DesignEvent[] = []
+    const register = {
+      path: () => "C:\project\.ade\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        appended.push(event)
+      },
+      tick: async () => {},
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+      sessions: () => [{ id: "p1", title: "Master", running: true }],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: (_, event) => answered.push(event),
+    })
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Tasto",
+      variants: [{ name: "A", description: "", preview: "" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    return { hub, appended, answered, proposal }
+  }
+
+  test("with an empty note it records nothing and says what to write", async () => {
+    const { hub, appended, answered, proposal } = setup()
+    expect(await hub.again(proposal)).toBe(false)
+    expect(appended).toEqual([])
+    expect(answered).toEqual([])
+    expect(hub.problem("DS1")).toBe("Scrivi nella nota cosa cambiare")
+  })
+
+  test("with a note it goes through onAnswered with again: true", async () => {
+    const { hub, answered, proposal } = setup()
+    hub.setDraft("DS1", { picked: 0, note: "meno vetro" })
+    expect(await hub.again(proposal)).toBe(true)
+    expect(answered).toHaveLength(1)
+    expect(answered[0]).toMatchObject({ type: "risposta", again: true, words: "meno vetro" })
+    expect((answered[0] as { choice?: string }).choice).toBeUndefined()
+  })
+})
+
+describe("«Altro giro» with nobody to receive it", () => {
+  const setup = () => {
+    const calls: string[] = []
+    const register = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        calls.push(`append:${(event as { again?: boolean }).again ? "again" : event.type}`)
+      },
+      tick: async () => {},
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [{ id: "p1", title: "Master", running: true }],
+      choose: (id) => calls.push(`choose:${id}`),
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Tasto",
+      variants: [{ name: "A", description: "", preview: "" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    hub.setDraft("DS1", { note: "meno vetro" })
+    return { hub, calls, proposal }
+  }
+
+  test("with the inline select empty it writes nothing, like «Scegli e invia»", async () => {
+    const { hub, calls, proposal } = setup()
+    expect(await hub.again(proposal)).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  test("with a running session picked inline it chooses it, then writes", async () => {
+    const { hub, calls, proposal } = setup()
+    hub.setInlineRecipient("p1")
+    expect(await hub.again(proposal)).toBe(true)
+    expect(calls).toEqual(["choose:p1", "append:again"])
+  })
+})
+
+describe("Enter with nobody to receive the answer, in the Design window (audit 0.7.7, MEDIO 7)", () => {
+  test("the card says to choose who receives, and the note goes once a session is picked", async () => {
+    const register: DesignRegister = {
+      path: () => "/p/.ade/design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    }
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Tasto",
+      spec: "S54",
+      variants: [
+        { name: "A", description: "", preview: "a.html" },
+        { name: "B", description: "", preview: "b.html" },
+      ],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    hub.setDraft("DS1", { picked: 0, note: "" })
+    expect(await hub.submit(proposal, "primary")).toBe(false)
+    expect(hub.problem("DS1")).toBe(t("design.sheet.needRecipient"))
+    hub.setInlineRecipient("p1")
+    expect(hub.problem("DS1")).toBeUndefined()
+  })
+})
+
+describe("card stability (R0, ALTO 1)", () => {
+  test("a tick or a new event of another proposal reuses the same DesignProposal object reference", async () => {
+    const { io, files } = memory(opened("DS1"))
+    await createRoot(async (dispose) => {
+      const register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      await register.refresh()
+      const ds1Before = register.state()!.proposals[0]
+
+      // A tick occurs
+      await register.tick()
+      const ds1AfterTick = register.state()!.proposals[0]
+      expect(ds1AfterTick).toBe(ds1Before)
+
+      // Another proposal DS2 is opened in the file
+      files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+      await register.refresh()
+
+      const ds1AfterDS2 = register.state()!.proposals.find((p) => p.k === "DS1")
+      expect(ds1AfterDS2).toBe(ds1Before)
+      dispose()
+    })
+  })
+
+  test("with a note in progress and focus inside DesignSheet, a new event for another proposal does not unmount the card", async () => {
+    const { io, files } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      unrender = render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Find the card and textarea
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const cardBefore = document.querySelector('[data-slot="design-card"]') as HTMLElement
+    const textarea = document.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
+    expect(cardBefore).not.toBeNull()
+    expect(textarea).not.toBeNull()
+
+    // Type a note and focus the textarea
+    hub.setDraft("DS1", { note: "nota a metà" })
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    // A tick occurs
+    await register.tick()
+
+    // Card must not be unmounted and focus must stay in the note
+    const cardAfterTick = document.querySelector('[data-slot="design-card"]')
+    expect(cardAfterTick).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    // Another proposal DS2 is added to the register
+    files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+    await register.refresh()
+
+    // Card must still be the exact same element and focus must still be preserved
+    const cardAfterDS2 = document.querySelector('[data-slot="design-card"]')
+    expect(cardAfterDS2).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    unrender()
+    dispose()
+    host.remove()
+  })
+
+  test("with a note in progress and focus inside DesignPane, a new event for another proposal does not unmount the card", async () => {
+    const { io, files } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const cardBefore = host.querySelector('[data-slot="design-card"]') as HTMLElement
+    const textarea = host.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
+    expect(cardBefore).not.toBeNull()
+    expect(textarea).not.toBeNull()
+
+    hub.setDraft("DS1", { note: "nota nel pannello" })
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    await register.tick()
+    expect(host.querySelector('[data-slot="design-card"]')).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+    await register.refresh()
+
+    expect(host.querySelector('[data-slot="design-card"]')).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    dispose()
+    host.remove()
+  })
+})
+
+/*
+ * D2 review, MEDIO: opening the sheet cleared every pick, the one made in
+ * the browser pane with «Scelgo questa» included, and «I pick in the pane,
+ * send from the sheet» lost the choice without a word. A pick made through
+ * `hub.pick` is a choice made in this window: the sheet keeps it.
+ */
+describe("the sheet keeps a choice made in this window", () => {
+  async function sheetAfter(prepare: (hub: ReturnType<typeof createDesignHub>) => void) {
+    const { io } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+    const disposeHub = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      return dispose
+    })
+    await register.refresh()
+    prepare(hub)
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    const disposeSheet = render(
+      () => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }),
+      host,
+    )
+    const picked = hub.draft("DS1").picked
+    disposeSheet()
+    disposeHub()
+    host.remove()
+    return { picked, chosen: hub.chosen("DS1") }
+  }
+
+  test("picked in the pane («Scelgo questa»), then the sheet opened: the choice stays", async () => {
+    const proposal = { k: "DS1" }
+    const { picked, chosen } = await sheetAfter((hub) => hub.pick(proposal, 1))
+    expect(picked).toBe(1)
+    expect(chosen).toBe(true)
+  })
+
+  test("a pick nobody made in this window is still cleared", async () => {
+    const { picked, chosen } = await sheetAfter((hub) => hub.setDraft("DS1", { note: "", picked: 1 }))
+    expect(picked).toBeUndefined()
+    expect(chosen).toBe(false)
+  })
+
+  /*
+   * notifiche-design: one press on «Scegli questa» chooses and sends. It was
+   * «Apri grande», which took the variant to the browser pane and closed the sheet.
+   */
+  test("«Scegli questa» in DesignSheet picks the variant and sends it, in one press", async () => {
+    const answered: string[] = []
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Settings",
+      variants: [
+        {
+          name: "A",
+          description: "desc",
+          preview:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        },
+      ],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    const register: DesignRegister = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => ({ proposals: [proposal], outbox: [], rejected: [] }),
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    }
+    let hub!: DesignHub
+    const disposeHub = createRoot((dispose) => {
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "C:\\project",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: (_proposal, event) => void answered.push(event.choice ?? ""),
+      })
+      return dispose
+    })
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    const disposeSheet = render(
+      () =>
+        createComponent(DesignSheet, {
+          hub,
+          onClose: () => {},
+          onOpenPanel: () => {},
+        }),
+      host,
+    )
+
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    expect(document.querySelector('[data-slot="variant-open-large"]')).toBeNull()
+    const choose = document.querySelector<HTMLButtonElement>('[data-slot="variant-choose"]')
+    expect(choose).not.toBeNull()
+    choose?.click()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(answered).toEqual(["A"])
+
+    disposeSheet()
+    disposeHub()
+    host.remove()
+  })
+})
+
+describe("delivery text in DesignPane (MEDIO 2)", () => {
+  test("a choice made outside ADE shows «scelta di X · giorno» instead of staying «in coda»", () => {
+    const proposal: DesignProposal = {
+      k: "DS10",
+      title: "Navigation",
+      spec: "S54",
+      variants: [{ name: "A", description: "Tabs", preview: "" }],
+      raisedBy: "fable",
+      openedAt: "2026-09-20T10:00:00.000Z",
+      status: "risposta",
+      history: [],
+      answer: {
+        choice: "A",
+        words: "A",
+        at: "2026-09-24T12:00:00.000Z",
+        by: "Master",
+      },
+    }
+
+    const now = new Date("2026-09-24T15:00:00.000Z")
+
+    // 1. Outside ADE: delivery state is "fuori da ADE"
+    const hubOutside = {
+      delivery: () => ({ state: "fuori da ADE" as const }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubOutside, proposal, now)).toBe("scelta di Master · oggi")
+
+    // 2. In queue: delivery state is "in coda"
+    const hubQueued = {
+      delivery: () => ({ state: "in coda" as const }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubQueued, proposal, now)).toBe("in coda: parte appena «Master» è libera")
+
+    // 3. Delivered: delivery state is "consegnata"
+    const hubDelivered = {
+      delivery: () => ({ state: "consegnata" as const, to: "Master", at: now.getTime() }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubDelivered, proposal, now)).toContain("✓ consegnata a Master")
+  })
+
+  test("DesignPane renders «scelta di X · giorno» for an answered proposal from outside ADE", async () => {
+    const proposal: DesignProposal = {
+      k: "DS10",
+      title: "Navigation",
+      spec: "S54",
+      variants: [{ name: "A", description: "Tabs", preview: "" }],
+      raisedBy: "fable",
+      openedAt: "2026-09-20T10:00:00.000Z",
+      status: "risposta",
+      history: [],
+      answer: {
+        choice: "A",
+        words: "Variante A",
+        at: "2026-09-24T12:00:00.000Z",
+        by: "Master",
+      },
+    }
+
+    const register: DesignRegister = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => ({ proposals: [proposal], rejected: [] }),
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    }
+
+    let hub!: DesignHub
+    const disposeHub = createRoot((dispose) => {
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "C:\\project",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Dario" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "fuori da ADE" }),
+        onAnswered: () => {},
+      })
+      return dispose
+    })
+
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const disposePane = createRoot((dispose) => {
+      render(() => createComponent(DesignPane, { hub, focused: true }), host)
+      return dispose
+    })
+
+    const hint = host.querySelector('[data-slot="design-hint"]')
+    expect(hint).not.toBeNull()
+    expect(hint?.textContent).toContain("scelta di Master")
+
+    disposePane()
+    disposeHub()
+    host.remove()
+  })
+})
+
+describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
+  const answeredFile = (k: string) =>
+    opened(k) +
+    `${JSON.stringify({
+      type: "risposta",
+      k,
+      at: "2026-09-15T10:05:00.000Z",
+      by: "utente",
+      choice: "A",
+      words: "A",
+    })}\n`
+
+  test("hub.reopen invokes onReopened when delivery is consegnata, but not when in coda", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    let reopenedCount = 0
+    let lastDeliveredTo: string | undefined
+    let delivered = false
+
+    await createRoot(async (dispose) => {
+      const register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      const hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => (delivered ? { state: "consegnata", to: "Master", at: 123 } : { state: "in coda" }),
+        onAnswered: () => {},
+        onReopened: (_proposal, deliveredTo) => {
+          reopenedCount++
+          lastDeliveredTo = deliveredTo
+        },
+      })
+      await register.refresh()
+      const proposal = register.state()!.proposals[0] as DesignProposal
+
+      delivered = false
+      await hub.reopen(proposal)
+      expect(reopenedCount).toBe(0)
+
+      hub.setDraft("DS1", { picked: 0, note: "" })
+      await hub.answer(proposal)
+
+      delivered = true
+      await hub.reopen(proposal)
+      expect(reopenedCount).toBe(1)
+      expect(lastDeliveredTo).toBe("Master")
+      dispose()
+    })
+  })
+
+  test("DesignPane shows inline confirmation with recipient info when delivered", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+    let reopened = false
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "consegnata", to: "Master", at: Date.now() }),
+        onAnswered: () => {},
+        onReopened: () => {
+          reopened = true
+        },
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const changeBtn = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
+    expect(changeBtn).not.toBeNull()
+    expect(changeBtn.textContent).toBe(t("design.change"))
+
+    // Click «Cambia scelta»
+    changeBtn.click()
+
+    // Inline confirmation must now appear
+    const alert = host.querySelector('[data-slot="design-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire DS1?")
+    expect(alert.textContent).toContain("Master ha già la scelta A")
+
+    const cancelBtn = alert.querySelector('button[data-slot="design-ghost"]') as HTMLButtonElement
+    const confirmBtn = alert.querySelector('button[data-slot="design-submit"]') as HTMLButtonElement
+    expect(cancelBtn.textContent).toBe(t("new.cancel"))
+    expect(confirmBtn.textContent).toBe(t("design.reopen"))
+
+    // Click cancel: reverts to normal actions without reopening
+    cancelBtn.click()
+    expect(host.querySelector('[data-slot="design-actions"][role="alert"]')).toBeNull()
+    expect(reopened).toBe(false)
+
+    // Open confirmation again and confirm
+    const changeBtnAgain = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
+    changeBtnAgain.click()
+    const confirmBtnAgain = host.querySelector(
+      '[data-slot="design-actions"][role="alert"] button[data-slot="design-submit"]',
+    ) as HTMLButtonElement
+    confirmBtnAgain.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(reopened).toBe(true)
+
+    dispose()
+    host.remove()
+  })
+
+  test("DesignPane shows simple inline confirmation when not yet delivered", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "non attiva", id: "p1", title: "Master" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const changeBtn = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
+    changeBtn.click()
+
+    const alert = host.querySelector('[data-slot="design-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire DS1?")
+    expect(alert.textContent).not.toContain("ha già la scelta")
+
+    dispose()
+    host.remove()
+  })
+})
+
+describe("DesignSheet status line on submit (MEDIO 6)", () => {
+  test("submitting an answer displays the status line in the sheet footer", async () => {
+    const { io } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+
+    // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
+    let unrender!: () => void
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      unrender = render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Pick variant A (index 0)
+    const proposal = register.state()!.proposals[0] as DesignProposal
+    hub.pick(proposal, 0)
+
+    // Submit
+    // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
+    const submitBtn = document.querySelector('[data-slot="design-submit"]') as HTMLButtonElement
+    expect(submitBtn).not.toBeNull()
+    submitBtn.click()
+
+    // Wait a tick for async submit and status update
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const statusEl = document.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
+    expect(statusEl).not.toBeNull()
+    expect(statusEl?.textContent).toBe("DS1: A, a Master")
+    expect(statusEl?.getAttribute("role")).toBe("status")
+    expect(statusEl?.getAttribute("aria-live")).toBe("polite")
+
+    unrender()
+    dispose()
+    host.remove()
+  })
+})
+
+/*
+ * ultimi (Verifiche, rifiniture-2): «Ho scelto sul foglio» on the last proposal
+ * left the sheet open and empty, and no toast. The write puts the answer in the
+ * register, which is read again before the promise resolves: the proposal has
+ * left the list, and the handler read `proposal().k` of nothing (TypeError).
+ */
+describe("«Ho scelto sul foglio» on the last proposal (ultimi)", () => {
+  test("the sheet leaves and hands on its status, though the proposal left the list first", async () => {
+    const line = `${JSON.stringify({
+      type: "aperta",
+      k: "DS1",
+      at: "2026-09-27T10:00:00.000Z",
+      by: "fable",
+      title: "T DS1",
+      url: "https://claude.ai/artifact/prova",
+      variants: [
+        { name: "A", description: "Alpha" },
+        { name: "B", description: "Beta" },
+      ],
+    })}\n`
+    const { io } = memory(line)
+    const host = document.createElement("div")
+    document.body.append(host)
+    const done: [string, string | undefined][] = []
+    let register!: DesignRegister
+    let unrender!: () => void
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      const hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      unrender = render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+            waiting: () => 0,
+            onDone: (next, said) => void done.push([next, said]),
+          }),
+        host,
+      )
+      return dispose
+    })
+    await register.refresh()
+
+    const chosen = document.querySelector<HTMLButtonElement>('[data-action="sheet-chosen"]')
+    expect(chosen).not.toBeNull()
+    chosen!.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(done).toEqual([["close", "DS1: scelta sul foglio claude.ai, a Master"]])
+    unrender()
+    dispose()
+    host.remove()
+  })
+})

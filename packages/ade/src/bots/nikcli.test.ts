@@ -17,6 +17,8 @@ import {
   readAgentFile,
   serializeAgentFile,
 } from "./nikcli"
+import { listModels } from "./store"
+import type { Host } from "../host/shell"
 
 describe("dove nikcli tiene gli agenti", () => {
   /*
@@ -422,7 +424,34 @@ describe("launchArgs", () => {
   })
 })
 
+/*
+ * Lines as `nikcli models` prints them (1.399, 2026-09-26): 406 of its 521
+ * ids have more than one slash, all of openrouter's and baseten's.
+ */
+const NIKCLI_MODELS_OUTPUT = [
+  "anthropic/claude-opus-5",
+  "baseten/deepseek-ai/DeepSeek-V4-Flash-0731",
+  "baseten/deepseek-ai/DeepSeek-V4.1-Flash",
+  "nikcli-inference/gemma-4-31b-free",
+  "nikcli-inference/nemotron-3-super",
+  "openrouter/nvidia/nemotron-3-super-120b-a12b",
+  "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+  "openrouter/nvidia/nemotron-3.5-lightning:free",
+  "openrouter/~anthropic/claude-haiku-latest",
+  "",
+].join("\n")
+
 describe("parseModelList", () => {
+  test("ids with more than one slash are models too: openrouter, baseten, the ~ aliases", () => {
+    expect(parseModelList(NIKCLI_MODELS_OUTPUT)).toEqual(NIKCLI_MODELS_OUTPUT.split("\n").filter(Boolean))
+  })
+
+  test("JSON lines around multi-slash ids are still dropped", () => {
+    const verbose =
+      'openrouter/nvidia/nemotron-3.5-lightning:free\n{\n  "id": "nvidia/nemotron-3.5-lightning:free",\n  "url": "https://x/y"\n}\nbaseten/a/b'
+    expect(parseModelList(verbose)).toEqual(["openrouter/nvidia/nemotron-3.5-lightning:free", "baseten/a/b"])
+  })
+
   test("una riga per modello, nel formato provider/modello", () => {
     expect(parseModelList("anthropic/claude-opus-5\nopenai/gpt-5\n")).toEqual([
       "anthropic/claude-opus-5",
@@ -436,5 +465,19 @@ describe("parseModelList", () => {
 
   test("non ripete un modello elencato due volte", () => {
     expect(parseModelList("a/b\na/b")).toEqual(["a/b"])
+  })
+})
+
+/* What the bot form offers is `listModels`: nikcli's list, read through the host. */
+describe("the bot form's models", () => {
+  test("an openrouter :free model is offered", async () => {
+    const calls: string[][] = []
+    const host = {
+      nikcliBot: async (args: string[]) => (calls.push(args), { code: 0, stdout: NIKCLI_MODELS_OUTPUT, stderr: "" }),
+    } as unknown as Host
+    const offered = await listModels("C:/progetto", async () => host)
+    expect(calls).toEqual([["models"]])
+    expect(offered).toContain("openrouter/nvidia/nemotron-3.5-lightning:free")
+    expect(offered).toContain("openrouter/nvidia/nemotron-3-super-120b-a12b:free")
   })
 })

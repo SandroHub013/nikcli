@@ -197,26 +197,16 @@
   font-size: var(--ade-font-lg);
   line-height: 1;
   cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="bots-new"]:hover {
-    background: var(--ade-hover);
-    color: var(--ade-text);
-  }
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="bots-new"]:active {
-  transform: scale(0.92);
+  transform: var(--ade-press);
 }
 
-[data-slot="bots-new"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
+[data-slot="bots-new"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="bots-roster-empty"],
@@ -252,10 +242,8 @@
   cursor: pointer;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="bots-pin"]:hover {
-    background: var(--ade-hover);
-  }
+[data-slot="bots-pin"]:hover {
+  background: var(--ade-hover);
 }
 [data-slot="bots-pin"][data-active="true"] {
   background: var(--ade-active);
@@ -298,10 +286,8 @@
   cursor: pointer;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="bots-row"]:hover {
-    background: var(--ade-hover);
-  }
+[data-slot="bots-row"]:hover {
+  background: var(--ade-hover);
 }
 [data-slot="bots-row"][data-active="true"] {
   background: var(--ade-active);
@@ -382,6 +368,18 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  /* The composer lays out by the thread's width, not the window's (below). */
+  container-type: inline-size;
+}
+
+/* The Chat's `chat-rules-note`: what a bot's rules on ADE's server do not cover (B8d). */
+[data-slot="bots-rules-note"] {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-8);
+  border-bottom: 1px solid var(--ade-border-subtle);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
 }
 
 [data-slot="bots-messages"] {
@@ -447,7 +445,7 @@
   margin-left: auto;
   width: fit-content;
   padding: var(--ade-space-3) var(--ade-space-5);
-  border: 1px solid color-mix(in srgb, var(--ade-accent) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ade-text-weak) 30%, transparent);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-accent-soft);
 }
@@ -532,6 +530,12 @@
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
 }
+[data-slot="bots-permission-why"] {
+  display: block;
+  margin-top: var(--ade-space-1);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
 
 [data-slot="bots-permission-actions"] {
   display: inline-flex;
@@ -571,25 +575,45 @@
   color: var(--ade-waiting);
 }
 
+/*
+ * One box, as the Chat's (chat-riquadro) and Claude's and Codex's apps: the
+ * text on top, and under it, inside, the model and effort chips, the last
+ * turn's figures and Invia (composer-chip, pezzo 4).
+ */
 [data-slot="bots-composer"] {
   display: flex;
-  align-items: flex-end;
-  gap: var(--ade-space-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-3);
   margin: 0 var(--ade-space-8) var(--ade-space-7);
-  padding: var(--ade-space-4) var(--ade-space-5);
+  padding: var(--ade-space-4) var(--ade-space-4) var(--ade-space-3) var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-surface);
 }
 
+/*
+ * The field stays black and plain: at the focus the border steps up one shade,
+ * `--ade-border-strong`, a neutral grey in both themes, and the halo that keeps
+ * it visible is grey too. No teal ring, no coloured shadow (composer-nero,
+ * DS-chat 1: "I want it simple, black base").
+ */
 [data-slot="bots-composer"]:focus-within {
   border-color: var(--ade-border-strong);
   box-shadow: var(--ade-focus-ring);
 }
 
+/*
+ * The field has a line of its own, the box's whole width: a long caption (a
+ * model id like openrouter/nvidia/…:free, the figures, the mode) beside it
+ * used to squeeze it to one column (Verifiche). The caption is in the row
+ * under it now.
+ */
 [data-slot="bots-composer-field"] {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
+  min-height: 2rem;
   max-height: 8rem;
   padding: var(--ade-space-2) 0;
   border: 0;
@@ -602,17 +626,102 @@
   field-sizing: content;
 }
 
+/* The composer draws the ring around the field: the global :focus-visible
+   drew a second one inside it (bot-sforzo, A occhio). */
 [data-slot="bots-composer-field"]:focus {
   outline: none;
+  box-shadow: none;
 }
 
-[data-slot="bots-composer-cap"] {
+/* The chips, the figures and Invia, under the text. */
+[data-slot="bots-composer-row"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  min-width: 0;
+}
+
+[data-slot="bots-composer-gap"] {
+  flex: 1 1 auto;
+}
+
+/*
+ * Invia as the Chat's (`chat-send`), not the form's primary button: neutral
+ * while there is nothing to send, the same size and shape (review of
+ * bot-riquadro, b: the bot's was a full teal where the Chat's was not).
+ * With something to send, no teal either: the strong text's colour.
+ */
+[data-slot="bots-send"] {
   flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--ade-space-7);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-lg);
+  /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
+  background: var(--ade-text);
+  color: var(--ade-surface);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="bots-send"]:active:not(:disabled) {
+  transform: var(--ade-press);
+}
+[data-slot="bots-send"]:hover:not(:disabled):not([data-stop]) {
+  background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface));
+}
+
+[data-slot="bots-send"]:disabled {
+  background: var(--ade-surface);
+  border-color: var(--ade-border);
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="bots-send"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The card's line for a model the catalog no longer has (bot-riquadro, a). */
+[data-slot="bots-card-gone"] {
+  color: var(--ade-warning);
+}
+
+/* The caption gives way to the chips and Invia: it shrinks, and wraps on its own lines. */
+[data-slot="bots-composer-cap"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
   align-self: center;
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
-  white-space: nowrap;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A narrow thread: the caption takes a line of its own under the chips and
+ * Invia, and the chips give way first, the model's name cut. Beside the
+ * chips, in a 900 px window with the card open, the caption had seven lines
+ * (Verifiche, live 3).
+ */
+@container (max-width: 640px) {
+  [data-slot="bots-composer-row"] [data-slot="chip"] {
+    max-width: 12rem;
+  }
+
+  [data-slot="bots-composer-cap"] {
+    order: 1;
+    flex-basis: 100%;
+    max-width: none;
+    text-align: left;
+  }
 }
 
 /* ── the card ────────────────────────────────────────────────────────────── */
@@ -811,7 +920,10 @@
 }
 
 [data-slot="bots-btn"] {
-  padding: var(--ade-space-2) var(--ade-space-5);
+  /* `md`, the in-panel size. It used to be padding alone, which made it about
+     26px here and something else wherever the font changed. */
+  height: 26px;
+  padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-raised);
@@ -820,10 +932,15 @@
   font-size: var(--ade-font-md);
   cursor: pointer;
   white-space: nowrap;
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="bots-btn"]:hover {
   background: var(--ade-hover);
+}
+[data-slot="bots-btn"]:active {
+  background: var(--ade-active);
+  transform: var(--ade-press);
 }
 [data-slot="bots-btn"][data-active="true"] {
   background: var(--ade-active);
@@ -865,6 +982,190 @@
 
 [data-slot="bots-link"][data-tone="danger"] {
   color: var(--ade-error);
+}
+
+/* ── the Gateway section (G6) ───────────────────────────────────────────── */
+
+/*
+ * The Memory section's blocks too: laid out inline, «0/2200 caratteri» and
+ * «Vuoto.» read as one word, «caratteriVuoto.» (Verifiche).
+ */
+[data-component="bot-gateway"] [data-slot="gateway-block"],
+[data-slot="bots-card-section"] > [data-slot="gateway-block"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  padding-top: var(--ade-space-3);
+}
+
+[data-slot="gateway-subtitle"] {
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="gateway-row"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="gateway-row"] [data-slot="bots-input"] {
+  flex: 1 1 160px;
+  width: auto;
+  font-family: var(--ade-mono);
+}
+
+[data-slot="gateway-row"] [data-slot="bots-input"]::placeholder {
+  font-family: var(--ade-sans);
+}
+
+[data-slot="gateway-row"] [data-slot="bots-link"] {
+  align-self: center;
+}
+
+[data-slot="gateway-block"] > [data-slot="bots-btn"] {
+  align-self: flex-start;
+}
+
+/* The Slack manifest is JSON to copy: shown as code, one line per line. */
+[data-component="bot-gateway"] [data-role="manifest"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+
+[data-slot="gateway-state"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-2);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text);
+}
+
+[data-slot="gateway-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ade-text-weak);
+}
+
+[data-slot="gateway-state"][data-tone="on"] [data-slot="gateway-dot"] {
+  background: var(--ade-done, var(--ade-accent));
+}
+[data-slot="gateway-state"][data-tone="wait"] [data-slot="gateway-dot"] {
+  background: var(--ade-warning, var(--ade-accent));
+}
+[data-slot="gateway-state"][data-tone="error"] [data-slot="gateway-dot"] {
+  background: var(--ade-error);
+}
+
+[data-slot="gateway-meta"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="gateway-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="gateway-list"] li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ade-space-3);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="gateway-list"] li [data-slot="bots-link"] {
+  margin-left: auto;
+}
+
+[data-slot="gateway-confirm"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4);
+  border: 1px solid var(--ade-error);
+  border-radius: var(--ade-radius-md);
+}
+
+[data-slot="gateway-list"] li[data-slot="routine-item"] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-2);
+  padding-bottom: var(--ade-space-3);
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
+[data-slot="routine-prompt"] {
+  color: var(--ade-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+[data-slot="routine-consent"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-2);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text-soft);
+  line-height: var(--ade-leading);
+}
+
+[data-slot="routine-consent"] input {
+  margin-top: 3px;
+}
+
+[data-slot="routine-item"] [data-slot="gateway-row"] [data-slot="bots-link"] {
+  margin-left: 0;
+}
+
+[data-slot="routine-source"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="gateway-list"] li[data-slot="memory-entry"] {
+  align-items: flex-start;
+}
+
+[data-slot="memory-actions"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  flex: 0 0 auto;
+}
+
+[data-slot="memory-actions"] [data-slot="bots-link"] {
+  margin-left: 0;
+}
+
+[data-slot="memory-text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ade-text);
+}
+
+[data-slot="bots-hint"][data-state="warn"] {
+  color: var(--ade-warning, var(--ade-text-soft));
 }
 
 /* ── narrow ──────────────────────────────────────────────────────────────── */
@@ -928,7 +1229,7 @@
   background: var(--ade-hover);
 }
 [data-slot="bots-picker-option"][data-on="true"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-border-strong);
   background: var(--ade-accent-soft);
 }
 
@@ -956,4 +1257,98 @@
 [data-slot="bots-form"][data-compact="true"] [data-slot="bots-picker"] {
   flex-direction: column;
   gap: var(--ade-space-4);
+}
+/* And model and effort one under the other: side by side in a column about
+   280 px wide the model read «openrouter/nvidia/n…» and the effort «predef»
+   (bot-sforzo, A occhio). */
+[data-slot="bots-form"][data-compact="true"] [data-slot="bots-row-fields"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ── rooms (B8b) ─────────────────────────────────────────────────────────── */
+
+/* Under the bots in the sidebar: a room is a row like a bot, with # for a face. */
+[data-slot="rooms-roster"] {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--ade-border);
+}
+
+[data-slot="room-glyph"] {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+}
+
+/* «ti serve»: a bot wrote @utente. */
+[data-slot="room-needs-you"] {
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-accent);
+  color: var(--ade-surface);
+  font-size: var(--ade-font-xs);
+  white-space: nowrap;
+}
+
+/* How the last run ended: news, not an error. */
+[data-slot="room-note"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="room-needs-you-line"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="room-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+[data-slot="room-name"] {
+  font-weight: var(--ade-weight-semibold);
+}
+[data-slot="room-members"],
+[data-slot="room-cap"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+[data-slot="room-head"] [data-slot="bots-link"] {
+  margin-left: auto;
+}
+
+/* No faces in a room: the speaker's name over what it said. */
+[data-room="true"] [data-slot="bots-msg"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-slot="room-speaker"] {
+  display: block;
+  margin-bottom: var(--ade-space-1);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="room-pick"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="room-pick-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
 }

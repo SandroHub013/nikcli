@@ -1,0 +1,690 @@
+/*
+ * Design: the badge in the bar, the one-at-a-time window, the panel,
+ * and the sandboxed preview with full-screen expander.
+ *
+ * Rendered using ADE theme tokens; supports light, dark, and glass themes.
+ * Kept to 24px in the top bar so the bar height never grows.
+ */
+
+/* Preview file source indicator */
+[data-slot="variant-preview-source"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -2px;
+  font-size: 11px;
+  color: var(--ade-text-weak);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+[data-slot="variant-preview-source-label"] {
+  font-weight: 500;
+  color: var(--ade-text-soft);
+  flex-shrink: 0;
+}
+
+[data-slot="variant-preview-source-path"] {
+  font-family: var(--ade-mono);
+  font-size: 10.5px;
+  color: var(--ade-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The window / sheet */
+/* The one sheet of a proposal (notifiche-design): nearly the whole window, as the page the user chose from. */
+[data-component="design-sheet"] [data-layout="surface"] {
+  outline: none;
+  max-width: 1500px;
+  width: 96vw;
+  max-height: 94vh;
+}
+
+[data-component="design-sheet"] [data-slot="sheet-body"] {
+  padding: 0 var(--ade-space-5);
+  overflow-y: auto;
+  max-height: calc(94vh - 100px);
+}
+
+/* Steps progress indicator: inactive dots styled with strong border token to be visible in dark mode */
+[data-slot="sheet-steps"] {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+[data-slot="sheet-steps"] i {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ade-border-strong);
+}
+
+[data-slot="sheet-steps"] i[data-on] {
+  background: var(--ade-accent);
+}
+
+/* Card */
+[data-slot="design-card"] {
+  padding: 14px 16px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  font-size: 12px;
+  color: var(--ade-text);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+:root[data-theme="glass"] [data-slot="design-card"] {
+  background: var(--ade-surface);
+  backdrop-filter: blur(12px);
+}
+
+[data-slot="design-head"] {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-slot="design-key"] {
+  flex: 0 0 auto;
+  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="design-title"] {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ade-text);
+  letter-spacing: -0.01em;
+}
+
+[data-slot="design-meta"] {
+  font-size: 11px;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="design-context"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  line-height: 1.45;
+}
+
+[data-slot="design-keeps"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  border: 1px solid var(--ade-border-subtle);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+[data-slot="design-keeps-label"] {
+  font-weight: 600;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="design-keeps-list"] {
+  margin: 0;
+  padding-left: var(--ade-space-4);
+  color: var(--ade-text);
+}
+
+[data-slot="design-keeps-list"] li {
+  margin-bottom: var(--ade-space-1);
+}
+
+/*
+ * Variants: each card as wide as its page, side by side while they fit and on
+ * the next row when they do not; never a horizontal scroll (A3). A page is
+ * made smaller only when it is wider than the whole row (`roomFor`).
+ */
+[data-slot="design-variants"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--ade-space-3);
+  margin: var(--ade-space-1) 0;
+}
+
+[data-slot="design-variant-item"] {
+  /* As wide as the page in it: the names and texts wrap at its width. */
+  flex: 0 0 auto;
+  width: min-content;
+  min-width: min(100%, 320px);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  padding: var(--ade-space-2) var(--ade-space-3);
+  gap: var(--ade-space-2);
+  min-width: 0;
+  transition:
+    border-color var(--ade-dur-fast, 120ms) ease,
+    box-shadow var(--ade-dur-fast, 120ms) ease;
+}
+
+[data-slot="design-variant-item"]:hover {
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="design-variant-item"][data-selected="true"] {
+  border-color: var(--ade-border-strong);
+  box-shadow: 0 0 0 1px var(--ade-border-strong);
+}
+
+[data-slot="variant-head"] {
+  display: flex;
+  align-items: center;
+}
+
+[data-slot="variant-pick-button"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+[data-slot="variant-key"] {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  color: var(--ade-text-soft);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--ade-font-mono, ui-monospace, monospace);
+}
+
+[data-slot="variant-pick-button"][data-on="true"] [data-slot="variant-key"] {
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg, #fff);
+}
+
+[data-slot="variant-name"] {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ade-text);
+}
+
+[data-slot="variant-desc"] {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ade-text-soft);
+  line-height: 1.4;
+  min-height: 30px;
+}
+
+[data-slot="variant-changes"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="variant-changes-label"] {
+  font-weight: 600;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="variant-changes-list"] {
+  margin: 0;
+  padding-left: var(--ade-space-3);
+  color: var(--ade-text);
+}
+
+[data-slot="variant-changes-list"] li {
+  margin-bottom: 2px;
+}
+
+/* The page at its own size, smaller only when the column is (`fitScale`): no fixed box, nothing cut. */
+[data-slot="variant-preview-wrap"] {
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-sm);
+  overflow: hidden;
+  position: relative;
+  background: var(--ade-sunken);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+[data-component="design-preview"] {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+[data-slot="preview-frame-wrap"] {
+  overflow: hidden;
+  display: block;
+}
+
+/* Width and height come from the page's `ade-size`, as attributes. Live: the page can be tried. */
+[data-slot="preview-frame"] {
+  border: 0;
+  background: #ffffff;
+  display: block;
+}
+
+/* An image variant at its own size, as wide as the column at most. */
+[data-slot="preview-image-wrap"] {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+[data-slot="preview-image"] {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+[data-slot="variant-open-large"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ade-space-2);
+  padding: var(--ade-space-1) var(--ade-space-2);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: var(--ade-space-1);
+  transition:
+    background var(--ade-dur-fast, 120ms) ease,
+    border-color var(--ade-dur-fast, 120ms) ease;
+}
+
+[data-slot="variant-open-large"]:hover:not(:disabled) {
+  background: var(--ade-hover);
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="variant-open-large"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-slot="preview-loading"],
+[data-slot="preview-error"] {
+  display: grid;
+  place-items: center;
+  min-width: 160px;
+  max-width: 100%;
+  min-height: 80px;
+  font-size: 11px;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="preview-error"] {
+  color: var(--ade-danger, #e05252);
+  padding: var(--ade-space-2);
+  text-align: center;
+}
+
+/* Note textarea */
+[data-slot="design-note"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  color: var(--ade-text);
+  font: inherit;
+  font-size: 11.5px;
+  resize: vertical;
+  min-height: 48px;
+}
+
+[data-slot="design-note"]:focus {
+  outline: 2px solid var(--ade-text-weak);
+  outline-offset: -1px;
+}
+
+/* Actions */
+[data-slot="design-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-slot="design-submit"] {
+  /* `lg`: it is the confirm of its panel. */
+  height: 32px;
+  padding: 0 var(--ade-space-7);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg, #fff);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="design-submit"]:hover {
+  background: var(--ade-accent-strong);
+}
+
+[data-slot="design-submit"]:active {
+  background: var(--ade-accent-strong);
+  transform: var(--ade-press);
+}
+
+/* In dark mode, opacity 0.5 on green still looks bright. Sunken ground and weak text clearly indicate disabled state. */
+[data-slot="design-submit"]:disabled {
+  background: var(--ade-sunken);
+  color: var(--ade-text-weak);
+  border: 1px solid var(--ade-border-subtle);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+[data-slot="design-ghost"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-slot="design-ghost"] {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+[data-slot="design-ghost"]:hover:not(:disabled) {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="design-hint"] {
+  flex: 1;
+  font-size: 11px;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="sheet-status"] {
+  font-weight: 500;
+  color: var(--ade-text);
+}
+
+[data-slot="design-problem"] {
+  padding: 6px 10px;
+  border-radius: var(--ade-radius-sm);
+  background: rgba(220, 38, 38, 0.1);
+  color: #ef4444;
+  font-size: 11px;
+}
+
+/*
+ * The shell (index.css) lays the tile out and draws the focus line; design
+ * keeps the one difference it was built with, the page colour as ground.
+ * It had no focus line before the shell, but by omission: the root sets
+ * `data-focused` like every other pane.
+ */
+[data-component="design-pane"] {
+  --ade-pane-ground: var(--ade-bg);
+}
+
+[data-slot="design-body"] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-slot="design-section"] {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ade-text-weak);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+}
+
+[data-slot="design-section"][data-toggle="true"] {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-slot="design-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-slot="design-row"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+[data-slot="design-row"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="design-row"][data-static="true"] {
+  cursor: default;
+}
+
+[data-slot="design-row-title"] {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="design-pill"] {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-sunken);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+[data-slot="design-pill"][data-tone="done"] {
+  background: var(--ade-accent-soft);
+  color: var(--ade-accent);
+}
+
+/* Recipient selector */
+[data-slot="design-recipient-wrap"] {
+  padding: 8px 12px;
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+  font-size: 11.5px;
+}
+
+[data-slot="design-recipient"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-slot="design-recipient"] label {
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+[data-slot="design-recipient"] select {
+  flex: 1;
+  background: var(--ade-sunken);
+  color: var(--ade-text);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  height: 24px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 11px;
+}
+
+[data-slot="design-confirm"] {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+/* The select above its sentence, as S75 asks; in the DOM the sentence comes first, as its label. */
+[data-slot="recipient-inline-wrap"] {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+[data-slot="recipient-inline-wrap"] [data-tone="warn"] {
+  color: var(--ade-warning, #b7791f);
+}
+
+[data-slot="recipient-inline"] {
+  align-self: flex-start;
+  max-width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ade-text);
+  background: var(--ade-surface, transparent);
+  border: 1px solid var(--ade-warning, #b7791f);
+  border-radius: var(--ade-radius-sm);
+  padding: 2px 6px;
+}
+
+/* «giro N» next to the key, from the second round on. */
+[data-slot="design-round"] {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-accent-soft);
+  color: var(--ade-accent);
+}
+
+/* «puoi sceglierne più d'una», under the title of a multiple question. */
+[data-slot="design-multi"] {
+  font-size: 11.5px;
+  color: var(--ade-text-soft);
+}
+
+/* Two variants on one page: the user would see it twice and never the variant. */
+[data-slot="design-shared-preview"] {
+  font-size: 11.5px;
+  color: var(--ade-warning, #b7791f);
+}
+
+/* «Scegli questa»: one press chooses (notifiche-design). Neutral, like every button of the sheet. */
+[data-slot="variant-choose"] {
+  align-self: stretch;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="variant-choose"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="variant-choose"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="variant-choose"][data-on="true"] {
+  background: var(--ade-text);
+  border-color: var(--ade-text);
+  color: var(--ade-surface);
+}
+
+[data-slot="variant-choose"]:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* A proposal published as a claude.ai page: where to choose, and the button that says it is done. */
+[data-slot="design-url"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-2) var(--ade-space-3);
+  padding: var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="design-url"] > span {
+  flex: 1 1 240px;
+}

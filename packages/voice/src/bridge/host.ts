@@ -19,6 +19,7 @@
  * string literals are a cheaper price than a dependency on a surface type.
  */
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
+export type PermissionSpeechKind = "shell" | "write" | "network" | "unknown"
 
 /**
  * ADE's top-level sections, named here for the same reason as `PaneStatus`.
@@ -237,7 +238,21 @@ export interface VoiceHost {
   /**
    * Respond to an agent's interactive permission confirmation.
    */
-  answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
+  answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean | void
+
+  /**
+   * What the agent in a pane is asking permission for, if it is asking.
+   * Optional: without it «consenti» said at rest cannot name the request.
+   */
+  pendingPermissionWhat?(paneId: string): string | undefined
+  pendingPermissionKind?(paneId: string): PermissionSpeechKind | undefined
+
+  /**
+   * Deliver or reject a `send` the voice agent wrote, after the user's
+   * spoken yes or no (rilievo 20). Optional: a host without it never asks
+   * for that confirmation.
+   */
+  confirmVoiceSend?(id: string, approved: boolean): boolean | void
 
   /**
    * Configure the number of grid columns on the workbench.

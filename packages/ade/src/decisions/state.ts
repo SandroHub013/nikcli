@@ -18,13 +18,14 @@
  */
 
 import { asOneLine } from "../session/typing"
-import type { DecisionEvent, DecisionOption, LogProblem } from "./log"
+import type { DecisionEvent, DecisionOption, LogProblem, Recommendation } from "./log"
 import { t } from "../i18n"
 
 export type DecisionStatus = "aperta" | "risposta" | "rimandata" | "chiusa"
 
 export interface DecisionAnswer {
   readonly choice?: string
+  readonly choices?: readonly string[]
   readonly note?: string
   readonly words: string
   readonly at: string
@@ -34,13 +35,27 @@ export interface DecisionAnswer {
 export interface Decision {
   readonly k: string
   readonly title: string
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   readonly context?: string
+  /** Measures and facts, short. */
+  readonly facts?: readonly string[]
+  /** The option the writer recommends, and why. */
+  readonly recommend?: Recommendation
   readonly options: readonly DecisionOption[]
+  /** More than one option may be picked. */
+  readonly multi?: true
   readonly unlocks?: string
   readonly spec?: string
   readonly order?: number
   /** Who opened it, and when. */
   readonly raisedBy: string
+  /** The pane that asked, when ADE wrote the event: the answer goes back there. */
+  readonly raisedFrom?: string
+  /** Its agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly raisedAgent?: string
   readonly openedAt: string
   readonly status: DecisionStatus
   /** The answer standing now; the previous ones are in `history`. */
@@ -67,11 +82,34 @@ export interface DecisionsState {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
+function isDecisionUnchanged(prev: Decision, next: Decision): boolean {
+  if (prev.status !== next.status) return false
+  if (prev.deferredUntil !== next.deferredUntil) return false
+  if (prev.closedAt !== next.closedAt) return false
+  if (prev.evidence !== next.evidence) return false
+  if (prev.history.length !== next.history.length) return false
+  for (let i = 0; i < prev.history.length; i++) {
+    const pe = prev.history[i]
+    const ne = next.history[i]
+    if (pe === ne) continue
+    if (pe.type !== ne.type || pe.at !== ne.at || pe.by !== ne.by) return false
+    if (JSON.stringify(pe) !== JSON.stringify(ne)) return false
+  }
+  return true
+}
+
 /**
  * Applies `events` in order. `now` decides whether a deferral has run out:
  * a decision deferred until a date that has passed reads as `aperta`.
+ * When `prev` is given, unchanged decisions keep their object identity so
+ * keyed cards and lists do not unmount.
  */
-export function foldDecisions(events: readonly DecisionEvent[], now: Date = new Date()): DecisionsState {
+export function foldDecisions(
+  events: readonly DecisionEvent[],
+  now: Date = new Date(),
+  prev?: DecisionsState | Map<string, Decision>,
+): DecisionsState {
+  const prevByKey = prev instanceof Map ? prev : prev ? new Map(prev.decisions.map((d) => [d.k, d])) : undefined
   const byKey = new Map<string, Mutable<Decision>>()
   const rejected: RejectedEvent[] = []
   const reject = (event: DecisionEvent, reason: string) => rejected.push({ event, reason })
@@ -87,12 +125,19 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
       byKey.set(event.k, {
         k: event.k,
         title: event.title,
+        ...(event.question ? { question: event.question } : {}),
+        ...(event.why ? { why: event.why } : {}),
         context: event.context,
+        ...(event.facts && event.facts.length > 0 ? { facts: event.facts } : {}),
+        ...(event.recommend ? { recommend: event.recommend } : {}),
         options: event.options ?? [],
+        ...(event.multi ? { multi: true as const } : {}),
         unlocks: event.unlocks,
         spec: event.spec,
         order: event.order,
         raisedBy: event.by,
+        raisedFrom: event.fromPane,
+        raisedAgent: event.agent,
         openedAt: event.at,
         status: "aperta",
         history: [event],
@@ -104,7 +149,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
       reject(event, t("decisions.rule.neverOpened", event.k))
       continue
     }
-    const status = effectiveStatus(current, now)
+    const status = effectiveStatus(current, new Date(event.at))
     if (status === "chiusa") {
       reject(event, t("decisions.rule.closed", event.k))
       continue
@@ -118,7 +163,27 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
           reject(event, t("decisions.rule.answered", event.k))
           continue
         }
-        current.answer = { choice: event.choice, note: event.note, words: event.words, at: event.at, by: event.by }
+        {
+          // The log does not know how the question was opened: the fold does.
+          const wrong = choiceProblem(
+            current,
+            event.choice,
+            event.choices,
+            current.options.map((option) => option.label),
+          )
+          if (wrong) {
+            reject(event, t(wrong, event.k))
+            continue
+          }
+        }
+        current.answer = {
+          choice: event.choice,
+          ...(event.choices ? { choices: event.choices } : {}),
+          note: event.note,
+          words: event.words,
+          at: event.at,
+          by: event.by,
+        }
         current.status = "risposta"
         current.deferredUntil = undefined
         break
@@ -153,14 +218,26 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
     current.history = [...current.history, event]
   }
 
-  const decisions = [...byKey.values()].map((decision) => ({ ...decision, status: effectiveStatus(decision, now) }))
+  const decisions: Decision[] = []
+  for (const decision of byKey.values()) {
+    const folded: Decision = { ...decision, status: effectiveStatus(decision, now) }
+    const prevDecision = prevByKey?.get(decision.k)
+    if (prevDecision && isDecisionUnchanged(prevDecision, folded)) {
+      decisions.push(prevDecision)
+    } else {
+      decisions.push(folded)
+    }
+  }
   return { decisions, rejected }
 }
 
 /** `rimandata` whose date has passed is `aperta` again. */
-function effectiveStatus(decision: Pick<Decision, "status" | "deferredUntil">, now: Date): DecisionStatus {
+function effectiveStatus(decision: Pick<Decision, "status" | "deferredUntil">, at: Date): DecisionStatus {
   if (decision.status !== "rimandata" || !decision.deferredUntil) return decision.status
-  return Date.parse(decision.deferredUntil) <= now.getTime() ? "aperta" : "rimandata"
+  const until = Date.parse(decision.deferredUntil)
+  const time = at.getTime()
+  if (Number.isNaN(until) || Number.isNaN(time)) return decision.status
+  return until <= time ? "aperta" : "rimandata"
 }
 
 /**
@@ -209,11 +286,31 @@ export function resolvedMessage(decision: Decision): string {
   const answer = decision.answer
   if (!answer) throw new Error(`${decision.k} non ha una risposta`)
   const parts = [`risolta [k=${decision.k}] ${decision.title}`]
-  if (answer.choice) parts.push(`scelta: ${answer.choice}`)
+  if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)
+  else if (answer.choice) parts.push(`scelta: ${answer.choice}`)
   if (answer.note) parts.push(`nota: ${answer.note}`)
   parts.push(`parole: "${answer.words}"`)
   if (decision.unlocks) parts.push(`sblocca ${decision.unlocks}`)
   return asOneLine(parts.join(" — "))
+}
+
+/**
+ * Why an answer does not fit how the question was opened, as an i18n key:
+ * a multiple question takes `choices` from its own options, never `choice`;
+ * a single one never takes `choices`.
+ */
+function choiceProblem(
+  question: { multi?: true },
+  choice: string | undefined,
+  choices: readonly string[] | undefined,
+  known: readonly string[],
+): "decisions.rule.multiChoice" | "decisions.rule.unknownChoice" | "decisions.rule.singleChoice" | undefined {
+  if (question.multi) {
+    if (choice !== undefined) return "decisions.rule.multiChoice"
+    if (choices?.some((item) => !known.includes(item))) return "decisions.rule.unknownChoice"
+    return undefined
+  }
+  return choices ? "decisions.rule.singleChoice" : undefined
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { TypedLine } from "../session/typed-line"
 import { createSignal } from "solid-js"
 import type { Buffer } from "../editor"
 import type { PermissionRequest } from "../session/permission"
@@ -79,8 +80,20 @@ export interface PaneRecords {
   /** Open file buffers. */
   buffers: PaneRecord<Buffer>
   bufferLoading: PaneRecord<boolean>
+  /** Why a file pane has no buffer: the read's own error, shown in the pane. */
+  bufferError: PaneRecord<string>
   /** The question each pane is currently stopped on, if any. */
   permissions: PaneRecord<PermissionRequest>
+  /**
+   * How much the user has typed into a pane and not yet sent.
+   *
+   * A pane with anything here is not a pane ADE may type into: the delivery
+   * would land inside the sentence and the Enter after it would send the
+   * two together. It lives with the other per-pane records so that closing a
+   * pane forgets it like everything else — a counter left behind would make
+   * that pane refuse mail for ever. See `session/typing.ts`.
+   */
+  typed: PaneRecord<TypedLine>
   /** Whether a pane is showing its transcript or its diff. */
   paneView: PaneRecord<"transcript" | "diff">
   paneDiff: PaneRecord<SessionDiff>
@@ -94,7 +107,9 @@ export function createPaneRecords(): PaneRecords {
     reports: createPaneRecord<SessionReport>(),
     buffers: createPaneRecord<Buffer>(),
     bufferLoading: createPaneRecord<boolean>(),
+    bufferError: createPaneRecord<string>(),
     permissions: createPaneRecord<PermissionRequest>(),
+    typed: createPaneRecord<TypedLine>(),
     paneView: createPaneRecord<"transcript" | "diff">(),
     paneDiff: createPaneRecord<SessionDiff>(),
     diffLoading: createPaneRecord<boolean>(),

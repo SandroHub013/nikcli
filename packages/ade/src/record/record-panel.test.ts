@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseRequest } from "../panels/protocol"
+import { parseRequest, type PanelOutcome } from "../panels/protocol"
 import { RECORD_VERBS, runRecordRequest, type RecordPanelDeps } from "./record-panel"
 import type { RecordTarget } from "./recording"
 
@@ -37,6 +37,20 @@ function deps(overrides: Partial<RecordPanelDeps> = {}) {
 }
 
 describe("record/record-panel", () => {
+  /* Review of review-alti, 1.3: every take asks, and says who asks. */
+  test("the question names the session that asks", async () => {
+    const askers: (string | undefined)[] = []
+    const { deps: d } = deps({
+      confirm: async (_target, asker) => {
+        askers.push(asker)
+        return { allowed: false, mic: false }
+      },
+    })
+    await runRecordRequest(ask("@ade record start"), d, "Sessione 2 — Claude Code")
+    await runRecordRequest(ask("@ade record start"), d)
+    expect(askers).toEqual(["Sessione 2 — Claude Code", undefined])
+  })
+
   test("an agent records the window with one line", async () => {
     const { deps: d, targets } = deps()
     expect(await runRecordRequest(ask("@ade record start"), d)).toEqual({
@@ -50,7 +64,7 @@ describe("record/record-panel", () => {
     const { deps: d, targets, asked } = deps({ confirm: async () => ({ allowed: false, mic: true }) })
     const outcome = await runRecordRequest(ask("@ade record start"), d)
     expect(outcome.ok).toBe(false)
-    expect(!outcome.ok && outcome.reason).toContain("non ha acconsentito")
+    expect(outcome).toEqual({ ok: false, reason: "negato dall'utente" })
     expect(targets).toEqual([])
     expect(asked).toEqual([])
     const { deps: again, asked: askedAgain, targets: started } = deps()
@@ -135,16 +149,34 @@ describe("record/record-panel", () => {
     })
   })
 
-  test("an unknown verb is refused, and every verb offered has an answer", async () => {
-    const { deps: d } = deps()
-    const outcome = await runRecordRequest(ask("@ade record zoom"), d)
-    expect(outcome.ok).toBe(false)
+  test("an unknown verb is refused, and every verb offered answers for itself", async () => {
+    const refused = await runRecordRequest(ask("@ade record zoom"), deps().deps)
+    expect(refused).toEqual({ ok: false, reason: "comando sconosciuto: zoom" })
+
+    /*
+     * What each offered verb answers while a take is already running, with no
+     * path on the state. Every verb gets its own exact answer. The
+     * `toBeDefined` that stood here proved nothing: `PanelOutcome` is a union of
+     * two non-nullable objects, so the assertion held for any behaviour at all,
+     * including one that refused every verb as unknown and left nothing able to
+     * record.
+     */
+    const WHILE_RUNNING: Record<string, PanelOutcome> = {
+      start: { ok: false, reason: "una registrazione è già in corso" },
+      stop: { ok: true, detail: "registrazione chiusa" },
+      state: { ok: true, detail: "registro in corso" },
+    }
+    // A verb added to RECORD_VERBS has to bring its own expected answer with it,
+    // or this test quietly stops covering the list it walks.
+    expect(Object.keys(WHILE_RUNNING).sort()).toEqual(RECORD_VERBS.map((verb) => verb.name).sort())
+
+    const answers: Record<string, PanelOutcome> = {}
     for (const verb of RECORD_VERBS) {
-      const answered = await runRecordRequest(
+      answers[verb.name] = await runRecordRequest(
         ask(`@ade record ${verb.name}`),
         deps({ state: () => ({ recording: true }) }).deps,
       )
-      expect(answered).toBeDefined()
     }
+    expect(answers).toEqual(WHILE_RUNNING)
   })
 })

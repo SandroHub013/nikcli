@@ -25,7 +25,9 @@ export interface TranscriptEvent {
 
 export type PartialTranscriptCallback = (text: string) => void
 export type FinalTranscriptCallback = (event: TranscriptEvent) => void
-export type TranscriberErrorCallback = (error: Error) => void
+export type TranscriberErrorPurpose = "probe" | "turn"
+export type TranscriberErrorContext = { readonly purpose: TranscriberErrorPurpose }
+export type TranscriberErrorCallback = (error: Error, context?: TranscriberErrorContext) => void
 
 export interface TranscriberOptions {
   onPartial?: PartialTranscriptCallback

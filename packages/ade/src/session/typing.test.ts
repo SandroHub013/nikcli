@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { PASTE_QUIET_MS, PASTE_SETTLE_MAX_MS, asOneLine, asSubmittedLine, pasteSettled } from "./typing"
+import { HOOK_TIMEOUT } from "../session-new/agent-hooks"
+import {
+  PASTE_QUIET_MS,
+  PASTE_SETTLE_MAX_MS,
+  asOneLine,
+  asSubmittedLine,
+  confirmDeadline,
+  pasteSettled,
+  submitCheck,
+} from "./typing"
 
 const CR = String.fromCharCode(13)
 const LF = String.fromCharCode(10)
@@ -31,9 +40,21 @@ describe("asOneLine", () => {
     expect(asOneLine("git status --porcelain")).toBe("git status --porcelain")
   })
 
-  test("tabs and ordinary spaces are left alone", () => {
-    // Only line endings are the hazard; a tab inside a prompt is just a tab.
-    expect(asOneLine("a\tb c")).toBe("a\tb c")
+  /*
+   * Oltre ai ritorni a capo, nella stringa possono restare controlli C0/C1
+   * che un tty non interpreta come fine riga ma che un terminale esegue:
+   * ESC apre sequenze, Ctrl-C può interrompere l'agente. L'utente non li ha
+   * detti: vengono tolti, lo spazio no.
+   */
+  test("control characters are stripped, ordinary spaces stay", () => {
+    expect(asOneLine("comando\u001b\u0003fine")).toBe("comandofine")
+    expect(asOneLine("a\u0000b c")).toBe("ab c")
+    expect(asOneLine("a\u007fb c")).toBe("ab c")
+  })
+
+  test("tabs are control characters and go; ordinary spaces stay", () => {
+    // Tab is C0 (0x09): same class as ESC, same rule.
+    expect(asOneLine("a\tb c")).toBe("ab c")
   })
 })
 
@@ -64,5 +85,48 @@ describe("the Enter after a paste", () => {
 
   test("goes anyway when the program never stops drawing", () => {
     expect(pasteSettled({ typedAt: 1000, lastOutputAt: 8990, now: 1000 + PASTE_SETTLE_MAX_MS })).toBe(true)
+  })
+})
+
+describe("submitCheck", () => {
+  const typedAt = 1000
+  const deadline = 13000
+
+  test("attività { state: 'busy', at: 1500 }, now: 2000 → 'confirmed'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "busy", at: 1500 }, now: 2000, deadline })).toBe("confirmed")
+  })
+
+  test("attività { state: 'idle', at: 1500 }, now: 2000 → 'confirmed' (un turno brevissimo già finito)", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 1500 }, now: 2000, deadline })).toBe("confirmed")
+  })
+
+  test("attività { state: 'busy', at: 500 }, now: 2000 → 'queued'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "busy", at: 500 }, now: 2000, deadline })).toBe("queued")
+  })
+
+  test("attività { state: 'idle', at: 500 }, now: 4000 → 'wait' (questo è il caso del difetto: a 3 s oggi si rimandava Invio)", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 500 }, now: 4000, deadline })).toBe("wait")
+  })
+
+  test("attività undefined, now: 12999 → 'wait'", () => {
+    expect(submitCheck({ typedAt, activity: undefined, now: 12999, deadline })).toBe("wait")
+  })
+
+  test("attività { state: 'idle', at: 500 }, now: 13000 → 'resend'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 500 }, now: 13000, deadline })).toBe("resend")
+  })
+
+  test("attività undefined, now: 13000 → 'resend'", () => {
+    expect(submitCheck({ typedAt, activity: undefined, now: 13000, deadline })).toBe("resend")
+  })
+
+  test("confirmDeadline(1000, 10) → 13000", () => {
+    expect(confirmDeadline(1000, 10)).toBe(13000)
+  })
+
+  // Il test sopra fissa la formula con un 10 scritto a mano: se HOOK_TIMEOUT
+  // tornasse a 5, quello continuerebbe a passare. Questo no.
+  test("la finestra segue HOOK_TIMEOUT, non un numero scritto a mano", () => {
+    expect(confirmDeadline(0, HOOK_TIMEOUT)).toBeGreaterThanOrEqual(12_000)
   })
 })

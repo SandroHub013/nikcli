@@ -9,17 +9,18 @@
  * - Pure functions (normalize, parse, session/transition) remain 100% pure and called directly.
  * - Dialogue timeouts use the Effect Clock / TestClock for deterministic, instant time travel in tests.
  * - Hardware, network, and host errors NEVER break the listening loop: every failure is caught,
- *   translated via `spokenMessage`, spoken to the user, and listening continues.
+ *   translated via `spokenMessage`, kept visible, and spoken unless throttled; listening continues.
  */
 
 import { markVoice } from "../timing"
 import { Clock, Duration, Effect, Fiber, Scope, Stream } from "effect"
 
-import type { VoiceHost } from "../bridge/host"
+import type { PermissionSpeechKind, VoiceHost } from "../bridge/host"
 import { dispatch, type DispatchOutcome } from "../bridge/dispatch"
 import {
   createInitialDialogState,
   transition,
+  DEFAULT_CONFIRMATION_TIMEOUT_MS,
   type DialogEffect,
   type DialogEvent,
   type DialogState,
@@ -35,6 +36,7 @@ import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
+import { answersWithoutName, takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -43,9 +45,19 @@ import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type Trans
 /** Intents whose result is information to hear, not an action to see. */
 const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "project.search"])
 
+const SEND_REFUSED = "Non sono riuscito a inviare la dettatura: il testo non è partito."
+
+/** Said with a dictation that did not reach a pane, once its text is in the clipboard. */
+export const DICTATION_IN_CLIPBOARD = "Il testo dettato è negli appunti."
+
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
+ *
+ * Rilievo 23: without a clear target the text went to the first open pane —
+ * with six sessions in a grid, the top-left one, almost never the one the
+ * person was looking at — and in auto mode Enter was pressed there. A clear
+ * target is the focused pane, or the only pane open. Anything else asks.
  */
 export function dispatchTranscription(
   text: string,
@@ -56,22 +68,27 @@ export function dispatchTranscription(
   return Effect.tryPromise({
     try: async () => {
       const panes = host.listPanes()
-      const targetPane = focusedPaneId ? (panes.find((p) => p.id === focusedPaneId)?.id ?? panes[0]?.id) : panes[0]?.id
+      const focused = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : undefined
+      const clearTarget = focused ?? (panes.length === 1 ? panes[0] : undefined)
 
       /*
        * Said, not skipped. With no pane open this used to return quietly: the
        * request was paid for, the text went to the clipboard, and nothing on
        * screen said so — dictation looked broken to someone who had simply
-       * not opened a session yet.
+       * not opened a session yet. Whether the text is in the clipboard is
+       * said by the caller, which is the one that puts it there.
        */
-      if (!targetPane) {
-        throw new Error("Nessun pannello aperto: il testo dettato è negli appunti.")
+      if (panes.length === 0) {
+        throw new Error("Nessun pannello aperto.")
+      }
+      if (!clearTarget) {
+        throw new Error("Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.")
       }
 
       if (sendMode === "auto") {
-        await host.sendPrompt(targetPane, text)
+        await host.sendPrompt(clearTarget.id, text)
       } else {
-        await host.insertText(targetPane, text)
+        await host.insertText(clearTarget.id, text)
       }
     },
     catch: (err) =>
@@ -151,10 +168,26 @@ export interface VoiceProgramOptions {
   onCue?: (kind: CueKind) => void
   /** Until when a sentence needs no name after an answer, or undefined once that is over. */
   onFollowUp?: (until: number | undefined) => void
+  /**
+   * The name gate may have changed: the assistant woke, or a window was spent
+   * or dropped. Some of those writes raise no other callback, and whoever
+   * shows `nameGate()` would otherwise go on showing the old one (D74).
+   */
+  onNameGate?: () => void
   /** Notification hook fired when an ADE action finishes dispatching. */
   onOutcome?: (outcome: DispatchOutcome) => void
   /** Notification hook fired when an error occurs. */
   onError?: (error: string) => void
+  /**
+   * Fired with what the planning provider said when its call could not be made.
+   *
+   * Separate from `onError` because that one is the sentence the user hears,
+   * and this is the thing that explains it: a "riprova fra un momento" that
+   * comes back is a rate limit, a refused key or a network, and the sentence
+   * alone does not say which. It can quote the key that was refused, so whoever
+   * shows it takes the keys out first; it is never spoken and never stored.
+   */
+  onProviderError?: (detail: string) => void
   /** Notification hook fired with each parsed utterance result. */
   onParseResult?: (result: ParseResult) => void
   /**
@@ -179,6 +212,14 @@ export interface VoiceProgramOptions {
    */
   onTranscribed?: (text: string) => void
   /**
+   * A dictated sentence that did not reach a pane (none open, none clear, or
+   * the pane refused it): the host keeps it, in the clipboard. Resolves to
+   * whether it did, so the line on screen says where the text is. Never
+   * called for a sentence the pane took: the clipboard was written on every
+   * sentence, twice, and the user's own copy lost (verdict of area 3, A4).
+   */
+  onUndelivered?: (text: string) => boolean
+  /**
    * Nothing heard is still being handled: the last sentence has been dealt
    * with, whatever the outcome, and whatever it said has been said — the
    * reply read from a session included. Where a microphone opened for one
@@ -198,6 +239,7 @@ export interface VoiceProgramOptions {
    * network, and so the key stays in the layer that owns it.
    */
   plan?: Completion
+  resolvePlan?: () => Completion | undefined
   /**
    * The sentence heard while the assistant was thinking and set aside, or
    * `null` once it is sent or dropped. The console offers it with a button
@@ -212,7 +254,20 @@ export interface VoiceProgramOptions {
 
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
-  readonly handlePermissionRequest: (paneId: string, what: string) => Effect.Effect<void>
+  readonly handlePermissionRequest: (
+    paneId: string,
+    what: string,
+    options?: { silent?: boolean; kind?: PermissionSpeechKind },
+  ) => Effect.Effect<void>
+  /** A request closed outside the voice (by hand, by a button, with its pane): its question leaves the dialogue. */
+  readonly resolvePermission: (paneId: string) => Effect.Effect<void>
+  /**
+   * Puts a voice-agent `send` in front of the user for a spoken yes (rilievo
+   * 20). The host is already holding the note; the answer comes back as a
+   * `confirm_send` effect on the VoiceHost.
+   */
+  readonly requestSendConfirmation: (id: string, to: string, text: string, lead?: string) => Effect.Effect<void>
+  readonly cancelPlanner: Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -239,6 +294,13 @@ export interface VoiceProgramHandle {
    * sends them whole. A turn at work does not count: see `waitingForName`.
    */
   readonly waitingForName: (spokenAt?: number) => boolean
+  /**
+   * Whether a sentence said now would be taken without the name, the rule
+   * that drops the others (`takesWithoutName`). `until` is set when only a
+   * window holds it open: then it closes by itself at that time, with no
+   * callback, and a reader has to look again (D74).
+   */
+  readonly nameGate: () => { open: boolean; until?: number }
 }
 
 export type ExternalCommand =
@@ -256,6 +318,7 @@ export type ExternalCommand =
 
 /** How long the name said on its own, or the button, keeps the assistant listening without it. */
 export const WAKE_WINDOW_MS = 10_000
+export const PROBE_ERROR_SPEECH_COOLDOWN_MS = 60_000
 
 /**
  * How long, after the assistant has finished speaking, the next sentence is
@@ -354,6 +417,12 @@ export function makeVoiceProgram(
         panes,
         pendingPermission: isPendingPerm,
         pendingPermissionPaneId: pendingPermPaneId,
+        ...(host.pendingPermissionWhat
+          ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) }
+          : {}),
+        ...(host.pendingPermissionKind
+          ? { permissionKind: (paneId: string) => host.pendingPermissionKind!(paneId) }
+          : {}),
         ...extra,
       }
     }
@@ -366,6 +435,26 @@ export function makeVoiceProgram(
     })
 
     yield* Scope.addFinalizer(programScope, cancelActiveTimer)
+
+    /*
+     * A message held for a spoken yes, asked or in line, is refused when the
+     * voice stops (V1-ter, reserve of ALTO 8). The dialogue that held it goes
+     * with this scope, and nothing would ever answer the waiting `ade-msg`.
+     */
+    yield* Scope.addFinalizer(
+      programScope,
+      Effect.sync(() => {
+        const held = [currentState.pendingSend?.id, currentState.queuedSend?.id].filter((id): id is string => !!id)
+        currentState = { ...currentState, pendingSend: undefined, queuedSend: undefined }
+        for (const id of held) {
+          try {
+            host.confirmVoiceSend?.(id, false)
+          } catch {
+            // The host is going away too; the refusal is best effort.
+          }
+        }
+      }),
+    )
 
     function startTimer(durationMs: number): Effect.Effect<void> {
       return Effect.gen(function* () {
@@ -562,7 +651,7 @@ export function makeVoiceProgram(
 
             case "answer_permission": {
               yield* Effect.try({
-                try: () => host.answerPermission(effect.paneId, effect.answer),
+                try: () => host.answerPermission(effect.paneId, effect.answer, effect.what),
                 catch: (err) =>
                   new HostActionFailed({
                     action: "answerPermission",
@@ -575,6 +664,27 @@ export function makeVoiceProgram(
                   }),
                 ),
               )
+              break
+            }
+
+            case "confirm_send": {
+              /* The host was holding the note; this is the spoken decision. */
+              if (host.confirmVoiceSend) {
+                yield* Effect.try({
+                  try: () => host.confirmVoiceSend!(effect.id, effect.approved),
+                  catch: (err) =>
+                    new HostActionFailed({
+                      action: "confirmVoiceSend",
+                      cause: err,
+                    }),
+                }).pipe(
+                  Effect.catchAll((err) =>
+                    Effect.sync(() => {
+                      options.onError?.(spokenMessage(err))
+                    }),
+                  ),
+                )
+              }
               break
             }
 
@@ -617,7 +727,36 @@ export function makeVoiceProgram(
                 ),
               )
 
-              if (sent) yield* watchForReply(sent)
+              if (sent) {
+                yield* watchForReply(sent)
+                if (effect.readback) yield* saySendOutcome(effect.readback)
+                break
+              }
+              yield* saySendOutcome(SEND_REFUSED)
+              break
+            }
+
+            case "execute_plan": {
+              /*
+               * Rilievo 4: the plan was held in `pendingPlan` until the user
+               * said yes. Now it runs — and the result is announced the same
+               * way an immediate plan is, then `command_success` returns the
+               * dialogue to idle (and promotes any permission queued behind
+               * this confirmation).
+               */
+              const execution = yield* Effect.promise(() => executePlan(effect.steps, host))
+              options.onPlan?.({ steps: effect.steps, execution })
+              const agents = host.listAgents?.() ?? []
+              yield* sayPlanResult(
+                {
+                  steps: effect.steps,
+                  refusals: effect.refusals,
+                  ...(effect.speech ? { speech: effect.speech } : {}),
+                },
+                execution,
+                agents,
+              )
+              yield* applyDialogEvent({ type: "command_success" })
               break
             }
           }
@@ -648,6 +787,7 @@ export function makeVoiceProgram(
 
     /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
     let agentAbort: AbortController | null = null
+    let plannerAbort: AbortController | null = null
 
     /* A free sentence heard while thinking, and whether the user asked for it to go out. */
     let held: string | null = null
@@ -687,7 +827,7 @@ export function makeVoiceProgram(
 
     function runPlan(utterance: string): Effect.Effect<Handled> {
       return Effect.gen(function* () {
-        const complete = options.plan
+        const complete = options.resolvePlan ? options.resolvePlan() : options.plan
         if (!complete) return false
 
         /*
@@ -696,8 +836,10 @@ export function makeVoiceProgram(
          * said while it ran was dropped by the "executing" dialogue.
          */
         agentAbort?.abort()
+        plannerAbort?.abort()
         const abort = new AbortController()
         agentAbort = abort
+        plannerAbort = abort
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -740,46 +882,97 @@ export function makeVoiceProgram(
          * user which is the difference between rephrasing and checking the
          * key. Handing it back as unhandled would print the wrong one.
          */
+        /*
+         * Back to idle only from this turn's own `executing`: a question that
+         * arrived meanwhile (a permission, a held message) owns the state now
+         * (V1-ter, ALTO 7).
+         */
         if (planned.failure) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (plannerAbort === abort) plannerAbort = null
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
+          // What the provider said, for whoever has to work out why the same
+          // sentence keeps being refused. The user is told the Italian one.
+          if (planned.detail) options.onProviderError?.(planned.detail)
           yield* say(planned.failure)
           return true
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (plannerAbort === abort) plannerAbort = null
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
           return false
         }
 
+        /*
+         * Rilievo 4: a plan whose steps include `send_prompt` does not run
+         * yet. The submit step presses Enter in an agent's tty — the one
+         * action a person never gets to see before it happens — so the
+         * dialogue goes to `confirming` with the plan held in `pendingPlan`
+         * and a prompt that names the text about to be sent. «sì» runs it
+         * through `execute_plan`; «no» and the timeout drop it. Plans
+         * without `send_prompt` still execute immediately below: opening
+         * sessions is not the same blast radius as pressing Enter.
+         *
+         * The question goes through the dialogue (V1-ter, ALTO 7): asked now,
+         * or in line behind one that arrived while the planner thought.
+         */
+        const needsConfirm = planned.steps.some((step) => step.action === "send_prompt")
+        if (needsConfirm) {
+          if (agentAbort === abort) agentAbort = null
+          if (plannerAbort === abort) plannerAbort = null
+          yield* applyDialogEvent({
+            type: "plan_ready",
+            steps: planned.steps,
+            refusals: planned.refusals,
+            ...(planned.speech ? { speech: planned.speech } : {}),
+          })
+          return true
+        }
+
         if (agentAbort === abort) agentAbort = null
+        if (plannerAbort === abort) plannerAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
-
-        if (planned.speech) {
-          // What the plan refused is as much news as what failed: «copilot» not
-          // started was silently dropped whenever the model also said something.
-          const problems = [...planned.refusals, ...execution.failures]
-          const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
-          yield* say(`${planned.speech}${failures}`)
-        } else {
-          const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
-          yield* say(
-            announceExecution({
-              execution,
-              refusals: planned.refusals,
-              agentLabel: (id) => labels.get(id) ?? id,
-            }),
-          )
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
         }
+
+        yield* sayPlanResult(planned, execution, context.agents)
         return true
       })
+    }
+
+    /** One sentence for what a plan did, honouring a model-provided speech. */
+    function sayPlanResult(
+      planned: { steps: PlanStep[]; refusals: string[]; speech?: string },
+      execution: PlanExecution,
+      agents: readonly { id: string; label: string; available: boolean }[],
+    ): Effect.Effect<void> {
+      if (planned.speech) {
+        // What the plan refused is as much news as what failed: «copilot» not
+        // started was silently dropped whenever the model also said something.
+        const problems = [...planned.refusals, ...execution.failures]
+        const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
+        return say(`${planned.speech}${failures}`)
+      }
+      const labels = new Map(agents.map((agent) => [agent.id, agent.label]))
+      return say(
+        announceExecution({
+          execution,
+          refusals: planned.refusals,
+          agentLabel: (id) => labels.get(id) ?? id,
+        }),
+      )
     }
 
     /**
@@ -802,6 +995,8 @@ export function makeVoiceProgram(
         if (!askAgent || engine === "off") return false
 
         agentAbort?.abort()
+        plannerAbort?.abort()
+        plannerAbort = null
         const abort = new AbortController()
         agentAbort = abort
         markVoice("agent-asked", utterance)
@@ -868,13 +1063,22 @@ export function makeVoiceProgram(
           ),
         )
         if (agentAbort === abort) agentAbort = null
+        if (plannerAbort === abort) plannerAbort = null
         clearTimeout(cue)
 
         // Cancelled while it worked: the user has moved on, so nothing is said.
         if (abort.signal.aborted) return "stopped"
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
+        /*
+         * Back to idle only from the turn's own state. A question the turn
+         * raised — the confirmation of a note it sent — is still being asked:
+         * writing idle over it left the note pending with its timer ignored,
+         * for a yes to some later question to deliver (V1-bis, ALTO 7).
+         */
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
 
         if (!answer.ok) {
           options.onError?.(answer.text)
@@ -887,7 +1091,7 @@ export function makeVoiceProgram(
            */
           // Only when no turn ran: one that started may already have opened
           // sessions before its error or timeout, and the planner would open them again.
-          if (options.plan && answer.ran === false) return false
+          if ((options.plan || options.resolvePlan) && answer.ran === false) return false
         }
         if (streamed && append) {
           const said = squash(soFar.slice(0, saidUpTo))
@@ -909,6 +1113,7 @@ export function makeVoiceProgram(
       programScope,
       Effect.sync(() => {
         agentAbort?.abort()
+        plannerAbort?.abort()
         closeFollowUp()
       }),
     )
@@ -922,6 +1127,12 @@ export function makeVoiceProgram(
           .speak(text)
           .pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
       })
+    }
+
+    function saySendOutcome(text: string): Effect.Effect<void> {
+      currentState = { ...currentState, lastSpokenText: text }
+      options.onStateChange?.(currentState)
+      return say(text)
     }
 
     let isWakeWordAwake = false
@@ -938,6 +1149,7 @@ export function makeVoiceProgram(
       inFollowUp = false
       isWakeWordAwake = true
       wakeUntil = clockMs() + WAKE_WINDOW_MS
+      options.onNameGate?.()
       options.onCue?.("listening")
     }
 
@@ -959,6 +1171,7 @@ export function makeVoiceProgram(
       isWakeWordAwake = true
       wakeUntil = until
       inFollowUp = true
+      options.onNameGate?.()
       options.onFollowUp?.(until)
       options.onCue?.("listening")
       followUpTimer = setTimeout(() => {
@@ -966,6 +1179,7 @@ export function makeVoiceProgram(
         if (wakeUntil !== until) return
         isWakeWordAwake = false
         wakeUntil = undefined
+        options.onNameGate?.()
         options.onFollowUp?.(undefined)
         options.onCue?.("closed")
       }, FOLLOW_UP_MS)
@@ -977,6 +1191,7 @@ export function makeVoiceProgram(
       followUpTimer = undefined
       isWakeWordAwake = false
       wakeUntil = undefined
+      options.onNameGate?.()
       options.onFollowUp?.(undefined)
     }
     let isPushToTalkPressed = false
@@ -1095,6 +1310,7 @@ export function makeVoiceProgram(
           clearHeld()
           agentAbort.abort()
           agentAbort = null
+          plannerAbort = null
           yield* speaker.cancel
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
@@ -1144,7 +1360,7 @@ export function makeVoiceProgram(
           }
         }
 
-        if (parsed.outcome === "unknown" && openToModels && options.plan) {
+        if (parsed.outcome === "unknown" && openToModels && (options.plan || options.resolvePlan)) {
           const handled = yield* runPlan(trimmed)
           if (handled) {
             if (handled !== "stopped") yield* afterTurn()
@@ -1163,10 +1379,15 @@ export function makeVoiceProgram(
       })
     }
 
-    function handleTranscriptionUtterance(text: string): Effect.Effect<void> {
+    /**
+     * `spokenPaneId` is the pane the sentence belonged to when it began, for a
+     * sentence that was spoken. Typed text passes none and is dispatched to the
+     * pane as it is at that moment.
+     */
+    function handleTranscriptionUtterance(text: string, spokenPaneId?: string): Effect.Effect<void> {
       return Effect.gen(function* () {
         const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
-        const focusedPaneId = options.getContext?.().focusedPaneId
+        const focusedPaneId = spokenPaneId ?? options.getContext?.().focusedPaneId
         // In transcription mode, speech is strictly silenced: cancel any active TTS immediately
         yield* speaker.cancel
         // Announced before the dispatch, not after: the point of the line is to
@@ -1178,7 +1399,10 @@ export function makeVoiceProgram(
             Effect.sync(() => {
               // `spokenMessage` turns every HostActionFailed into one generic
               // sentence; dictation is silent, so the specific one can be shown.
-              options.onError?.(err.message || spokenMessage(err))
+              const said = err.message || spokenMessage(err)
+              // Only now, and once: the text did not land, so it is kept where the user can paste it.
+              const kept = options.onUndelivered?.(text) === true
+              options.onError?.(kept ? `${said} ${DICTATION_IN_CLIPBOARD}` : said)
             }),
           ),
         )
@@ -1190,6 +1414,11 @@ export function makeVoiceProgram(
      * deliberate act: it needs no held key and no wake word, and asking for
      * either would drop every sentence typed with push-to-talk or wake-word
      * activation, since nothing is held and nobody said the word.
+     *
+     * `dictated` is the pane the sentence belonged to when it began, passed
+     * in by whoever heard it — see `dictatedPaneId` — because reading it here
+     * would read it after the fork, and the sentence after this one would have
+     * had its say by then.
      */
     function processUtterance(
       rawText: string,
@@ -1197,6 +1426,7 @@ export function makeVoiceProgram(
       typed = false,
       confidence?: number,
       spokenAt?: number,
+      dictated?: string,
     ): Effect.Effect<void> {
       return Effect.gen(function* () {
         const heard = { typed, confidence }
@@ -1242,7 +1472,8 @@ export function makeVoiceProgram(
 
         // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
         if (currentSettings.mode === "transcription") {
-          yield* handleTranscriptionUtterance(trimmed)
+          // The pane is spent with the sentence it was aimed at.
+          yield* handleTranscriptionUtterance(trimmed, dictated)
           return
         }
 
@@ -1273,7 +1504,7 @@ export function makeVoiceProgram(
            * aspettando quale dei due pannelli si intendeva, la risposta è
            * parte di quello scambio, non un comando nuovo.
            */
-          const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+          const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
 
           /*
            * A turn already running is its own conversation: «annulla» said
@@ -1284,7 +1515,18 @@ export function makeVoiceProgram(
            */
           const thinking = currentState.status === "executing" && agentAbort !== null
 
-          if (!awake && !awaitingAnswer && !thinking) {
+          // The same rule the orb shows: see `nameGate` and `dialog/name-gate.ts`.
+          if (
+            !takesWithoutName({
+              mode: currentSettings.mode,
+              activation: currentSettings.activation,
+              awake,
+              awaitingAnswer,
+              thinking,
+              // The held key, as `waitingForName` reads it: not a microphone opened by a button.
+              pressed: isPushToTalkPressed,
+            })
+          ) {
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             if (!match.matched) {
               /*
@@ -1335,6 +1577,7 @@ export function makeVoiceProgram(
              */
             isWakeWordAwake = false
             wakeUntil = undefined
+            options.onNameGate?.()
             // A conversation goes on: the answer to this one opens the next window.
             followUpDue = !typed && !thinking && !followingUp
             return
@@ -1348,8 +1591,31 @@ export function makeVoiceProgram(
 
     /* Events taken off the stream whose handling has not finished; see `isIdle`. */
     let handling = 0
+    let lastProbeErrorSpokenAt: number | undefined
     /* The heard sentence being handled, so the next one can wait its turn. */
     let utteranceFiber: Fiber.RuntimeFiber<void, never> | null = null
+
+    /*
+     * The pane a dictation was meant for, read when the user began talking.
+     *
+     * It used to be read after the sentence had been recognised, so someone
+     * who said "detta al pannello due" and reached for the mouse while talking
+     * had the text land in the pane they had just clicked, and never in the
+     * one they named. The first partial is the moment a sentence belongs to a
+     * pane; after that the sentence is spoken, not re-aimed — so it is kept
+     * with `??=`, because a second partial was a second reading of the same
+     * sentence and did the same damage the late reading used to.
+     *
+     * And it is forgotten at every final, whichever way the sentence goes, in
+     * the branch that handles the sentence and not later in the one that needs
+     * it: a pane carried over from an earlier phrase is a pane this one never
+     * chose, and a push-to-talk final with no partial would go to the pane of
+     * whatever was said before the mode changed.
+     *
+     * Typed text has no beginning, so it is not remembered: the pane under
+     * the eyes when the words were typed is the one they meant.
+     */
+    let dictatedPaneId: string | undefined
 
     // Stream consumption loop for continuous speech recognition events
     const recognitionLoop = Stream.runForEach(transcriber.events, (ev) =>
@@ -1366,12 +1632,23 @@ export function makeVoiceProgram(
             // Barge-in: user started speaking, cancel any active or queued speech synthesis immediately
             if (ev.text.trim().length > 0) {
               yield* speaker.cancel
+              // And the sentence now belongs to the pane under the eyes — the
+              // first partial says which one, and the rest of the sentence
+              // does not get a say.
+              dictatedPaneId ??= options.getContext?.().focusedPaneId
             }
             options.onPartialTranscript?.(ev.text)
             break
           }
           case "final": {
             options.onPartialTranscript?.("")
+            /* The sentence is over, and the next one starts over: the pane it
+               was aimed at is read here and forgotten here, before anything can
+               discard it. An empty final, a push-to-talk one thrown away, an
+               agent turn: all of them end the sentence, and a pane left over
+               from the last one is a pane this one never chose. */
+            const dictated = dictatedPaneId
+            dictatedPaneId = undefined
             const text = (ev.event?.text || "").trim()
             if (!text) {
               if (currentSettings.activation === "push-to-talk" && !isPtt) {
@@ -1408,7 +1685,7 @@ export function makeVoiceProgram(
             if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
             handling++
             utteranceFiber = yield* Effect.forkIn(
-              processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt).pipe(
+              processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt, dictated).pipe(
                 Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
                 Effect.ensuring(
                   Effect.gen(function* () {
@@ -1433,7 +1710,17 @@ export function makeVoiceProgram(
             }
             // In transcription mode, speech is strictly forbidden: errors are visual only.
             if (currentSettings.mode !== "transcription") {
-              yield* speaker.speak(spokenMessage(ev.error)).pipe(Effect.catchAll(() => Effect.void))
+              const purpose = ev.purpose ?? "turn"
+              let shouldSpeak = purpose === "turn"
+              if (purpose === "probe") {
+                const now = yield* getNowMs
+                shouldSpeak =
+                  lastProbeErrorSpokenAt === undefined || now - lastProbeErrorSpokenAt >= PROBE_ERROR_SPEECH_COOLDOWN_MS
+                if (shouldSpeak) lastProbeErrorSpokenAt = now
+              }
+              if (shouldSpeak) {
+                yield* speaker.speak(rawMsg).pipe(Effect.catchAll(() => Effect.void))
+              }
             }
             break
           }
@@ -1463,18 +1750,48 @@ export function makeVoiceProgram(
     return {
       submitText: (text: string) => processUtterance(text, false, true).pipe(Effect.ensuring(turnEnded)),
 
-      handlePermissionRequest: (paneId: string, what: string) =>
-        applyDialogEvent({ type: "permission_requested", paneId, what }),
+      handlePermissionRequest: (
+        paneId: string,
+        what: string,
+        options?: { silent?: boolean; kind?: PermissionSpeechKind },
+      ) =>
+        applyDialogEvent({
+          type: "permission_requested",
+          paneId,
+          what,
+          kind: options?.kind,
+          silent: options?.silent,
+        }),
+
+      resolvePermission: (paneId: string) => applyDialogEvent({ type: "permission_resolved", paneId }),
+
+      requestSendConfirmation: (id: string, to: string, text: string, lead?: string) =>
+        applyDialogEvent({ type: "send_requested", id, to, text, ...(lead ? { lead } : {}) }),
+
+      cancelPlanner: Effect.sync(() => {
+        const abort = plannerAbort
+        if (!abort) return
+        plannerAbort = null
+        if (agentAbort === abort) agentAbort = null
+        abort.abort()
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
+      }),
 
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer
         clearHeld()
         agentAbort?.abort()
+        plannerAbort?.abort()
         agentAbort = null
+        plannerAbort = null
         pendingDisambiguation = null
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         options.onPartialTranscript?.("")
         yield* speaker.cancel
         /* A press that only cut the voice is not an operation to cancel: said
@@ -1492,6 +1809,7 @@ export function makeVoiceProgram(
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         if (currentState.status === "asleep") {
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
@@ -1502,6 +1820,7 @@ export function makeVoiceProgram(
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         yield* applyDialogEvent({ type: "sleep" })
       }),
 
@@ -1509,11 +1828,13 @@ export function makeVoiceProgram(
 
       pressToTalk: Effect.gen(function* () {
         isPushToTalkPressed = true
+        options.onNameGate?.()
         yield* speaker.cancel
       }),
 
       releaseToTalk: Effect.sync(() => {
         isPushToTalkPressed = false
+        options.onNameGate?.()
       }),
 
       waitingForName: (spokenAt?: number) => {
@@ -1522,7 +1843,27 @@ export function makeVoiceProgram(
         if (awakeAt(spokenAt ?? clockMs()) || isPushToTalkPressed) return false
         // A question is answered without the name. A turn at work is not: a
         // stop is short enough to go whole, and the rest has to call it.
-        return !(currentState.status === "confirming" || pendingDisambiguation !== null)
+        return !answersWithoutName(currentState, pendingDisambiguation !== null)
+      },
+
+      nameGate: () => {
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        const at = clockMs()
+        const awake = awakeAt(at)
+        const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
+        const thinking = currentState.status === "executing" && agentAbort !== null
+        const gate = {
+          mode: settings.mode,
+          activation: settings.activation,
+          awake,
+          awaitingAnswer,
+          thinking,
+          pressed: isPushToTalkPressed,
+        }
+        const open = takesWithoutName(gate)
+        // Held only by the window: it closes at `wakeUntil` with nobody writing.
+        const windowOnly = open && awake && !takesWithoutName({ ...gate, awake: false })
+        return windowOnly && wakeUntil !== undefined ? { open, until: wakeUntil } : { open }
       },
 
       isIdle: Effect.gen(function* () {

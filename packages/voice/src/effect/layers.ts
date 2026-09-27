@@ -140,10 +140,10 @@ export function bridgeTranscriber(
       Effect.runSync(Queue.offer(eventsQueue, { _tag: "final", event }))
     })
 
-    transcriber.onError((error) => {
+    transcriber.onError((error, context) => {
       onRawError?.(error)
       const vError = mapErr(error)
-      Effect.runSync(Queue.offer(eventsQueue, { _tag: "error", error: vError }))
+      Effect.runSync(Queue.offer(eventsQueue, { _tag: "error", error: vError, purpose: context?.purpose }))
     })
 
     /*

@@ -38,6 +38,25 @@ export interface PlannerResult extends ValidatedPlan {
    * having got an answer at all, and the user is told different things.
    */
   failure?: string
+  /**
+   * The provider's own words for the failure, when it had any.
+   *
+   * Not for the user: `failure` is what they hear, and this is the thing that
+   * explains it — a "riprova fra un momento" that keeps coming back is a rate
+   * limit, a wrong key or a network, and the sentence alone says which of the
+   * three to go and look at. It can quote the key that was refused, so whoever
+   * shows it takes the keys out first: this is never said, never written to a
+   * log, and never stored.
+   */
+  detail?: string
+}
+
+/** What the provider said, as an error's name and message, however it arrived. */
+function providerError(error: unknown): { name: string; message: string } {
+  return {
+    name: error instanceof Error ? error.name : "",
+    message: error instanceof Error ? error.message : String(error ?? ""),
+  }
 }
 
 /**
@@ -170,6 +189,53 @@ function tryParse(text: string): unknown {
 }
 
 /**
+ * What to say when the planner's own call could not be made.
+ *
+ * The provider's message is not what the user hears. It arrives in English or
+ * as a code nobody can act on - "il servizio ha risposto 429" tells a person
+ * standing at the microphone nothing - and a fetch failure arrives as
+ * `TypeError: fetch failed`. What is said instead is a sentence in Italian
+ * that names the situation and, where there is one, what to do about it.
+ *
+ * A missing key keeps the message this module writes itself: it is already a
+ * sentence for the user and it points at the settings.
+ *
+ * `undefined` means there is nothing to say: the user pressed «annulla», so
+ * the one thing wrong is that something is being said at all.
+ */
+export function plannerFailure(error: unknown): string | undefined {
+  const { name, message: raw } = providerError(error)
+  // Case and punctuation vary between runtimes, and the message is the only
+  // thing a fetch failure has.
+  const text = raw.toLowerCase()
+
+  // Our own two sentences, already written for the user.
+  if (raw.startsWith("Manca la chiave") || raw.startsWith("Risposta del servizio")) return raw
+
+  // A timeout is read before a cancellation, because a timed-out fetch is
+  // aborted too and says so: only the name tells the two apart. Neither is a
+  // user cancellation, and a user cancellation is not a failure to report.
+  if (name === "TimeoutError" || (!name.includes("Abort") && /\btimed? ?out\b|timeout/.test(text))) {
+    return "Non ho raggiunto il servizio in tempo. Riprova fra un momento."
+  }
+  if (name === "AbortError" || text.includes("operation was aborted")) return undefined
+
+  if (/\b429\b|rate limit|too many requests/.test(text)) {
+    return "Il servizio ha ricevuto troppe richieste in poco tempo. Riprova fra un momento."
+  }
+  if (/\b40[13]\b|unauthorized|forbidden|api[- ]?key|invalid.*key/.test(text)) {
+    return "La chiave del servizio non è valida. Puoi correggerla nelle impostazioni della voce."
+  }
+  if (/\b5\d\d\b|internal server error|bad gateway|service unavailable|overloaded/.test(text)) {
+    return "Il servizio ha risposto con un errore. Riprova fra un momento."
+  }
+  if (/fetch failed|network|econnrefused|econnreset|enotfound|eai_again|socket|dns|certificate|unable to/.test(text)) {
+    return "Non ho raggiunto il servizio. Controlla la connessione e riprova."
+  }
+  return "Non sono riuscito a ottenere un piano. Riprova fra un momento."
+}
+
+/**
  * Plans one utterance. Never throws: every failure becomes something to say.
  */
 export async function planUtterance(
@@ -184,11 +250,12 @@ export async function planUtterance(
   try {
     answer = await complete({ ...prompt, signal: options.signal })
   } catch (error) {
-    return {
-      steps: [],
-      refusals: [],
-      failure: error instanceof Error ? error.message : "Non sono riuscito a interpretare la frase.",
-    }
+    const failure = plannerFailure(error)
+    // What the user is told, and what explains it, are two different things:
+    // the first is a sentence in Italian, the second is what the provider
+    // said. Both, because the second used to be thrown away with the error.
+    const detail = providerError(error).message
+    return failure ? { steps: [], refusals: [], failure, ...(detail ? { detail } : {}) } : { steps: [], refusals: [] }
   }
 
   const raw = extractJson(answer)
@@ -216,6 +283,7 @@ export function createOpenRouterCompletion(input: {
   model?: string
   fetchFn?: typeof fetch
   timeoutMs?: number
+  onUsage?: (usage: { cost?: number }) => void
 }): Completion {
   const fetchFn = input.fetchFn ?? fetch
   const model = input.model ?? PLANNER_MODEL
@@ -242,6 +310,7 @@ export function createOpenRouterCompletion(input: {
       },
       body: JSON.stringify({
         model,
+        usage: { include: true },
         // Zero, because two identical sentences must produce the same plan.
         // Sampling here buys nothing and costs reproducibility.
         temperature: 0,
@@ -259,7 +328,9 @@ export function createOpenRouterCompletion(input: {
 
     const body = (await response.json()) as {
       choices?: { message?: { content?: unknown } }[]
+      usage?: { cost?: number }
     }
+    if (body.usage) input.onUsage?.(body.usage)
     const content = body.choices?.[0]?.message?.content
     if (typeof content !== "string") {
       throw new Error("Risposta del servizio in un formato inatteso.")

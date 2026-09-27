@@ -85,9 +85,23 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   <p data-slot="hook-note">{t("hooks.broken")}</p>
                 </Show>
 
+                <Show when={target.kind === "tui-plugin"}>
+                  <p data-slot="hook-note">{t("hooks.plugin")}</p>
+                </Show>
+
+                <Show when={state()?.foreign}>
+                  <p data-slot="hook-note">{t("hooks.foreign")}</p>
+                </Show>
+
+                <Show when={state()?.outdated}>
+                  <p data-slot="hook-note">{t("hooks.outdated")}</p>
+                </Show>
+
                 <Show when={state() && !state()?.error}>
                   <p data-slot="hook-paths">
-                    <code>{state()?.configPath}</code>
+                    <Show when={state()?.configPath}>
+                      <code>{state()?.configPath}</code>
+                    </Show>
                     <code>{state()?.scriptPath}</code>
                   </p>
                 </Show>
@@ -96,26 +110,35 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                   <p data-slot="hook-note">{state()?.error}</p>
                 </Show>
 
-                <div data-slot="hook-actions">
-                  <button
-                    type="button"
-                    data-slot="hook-action"
-                    disabled={working() || Boolean(state()?.error)}
-                    onClick={() => void apply(target.id, true)}
-                  >
-                    {state()?.installed ? t("hooks.reinstall") : t("hooks.install")}
-                  </button>
-                  <Show when={state()?.installed || state()?.broken}>
+                {/* Somebody else's ADE wrote this one. Which ADE is older is not
+                    knowable from here, so this build does not offer to change it:
+                    on a test build that would rewrite the official ADE's hooks. */}
+                <Show when={!state()?.foreign}>
+                  <div data-slot="hook-actions">
                     <button
                       type="button"
                       data-slot="hook-action"
-                      disabled={working()}
-                      onClick={() => void apply(target.id, false)}
+                      disabled={working() || Boolean(state()?.error)}
+                      onClick={() => void apply(target.id, true)}
                     >
-                      {t("hooks.remove")}
+                      {state()?.outdated
+                        ? t("hooks.update")
+                        : state()?.installed
+                          ? t("hooks.reinstall")
+                          : t("hooks.install")}
                     </button>
-                  </Show>
-                </div>
+                    <Show when={state()?.installed || state()?.broken}>
+                      <button
+                        type="button"
+                        data-slot="hook-action"
+                        disabled={working()}
+                        onClick={() => void apply(target.id, false)}
+                      >
+                        {t("hooks.remove")}
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
               </li>
             )
           }}

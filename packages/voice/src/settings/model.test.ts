@@ -128,18 +128,77 @@ describe("settings/model - normalizeSettings", () => {
     expect(WAKE_PHRASE).toBe("nik")
   })
 
-  test("always-on listening is the default, and a profile on the wake word is told once", () => {
-    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(WAKE_WORD_ENABLED)
+  test("a 0.7.2 profile, which listened all the time, opens no microphone after the update", () => {
+    // What ADE 0.7.2 wrote for a user who had listening on: version 6, and
+    // always-on listening, which was the default then. It is the profile the
+    // user was running when the microphone spent an hour on the room.
+    const saved = {
+      version: 6,
+      mode: "agent",
+      activation: "wake-word",
+      alwaysListen: true,
+      wakeWord: "nik",
+      transcriptionSend: "manual",
+      language: "it",
+      backend: "openrouter",
+      agentChord: DEFAULT_VOICE_SETTINGS.agentChord,
+      transcriptionChord: DEFAULT_VOICE_SETTINGS.transcriptionChord,
+      parakeetBackend: DEFAULT_VOICE_SETTINGS.parakeetBackend,
+    }
+    const after = normalizeSettings(saved)
+    expect(after.alwaysListen).toBe(false)
+    expect(after.activation).toBe("wake-word")
+    expect(after.migrations).toEqual(["listening-off"])
+    // Nothing went wrong: it is a rule that changed, not a broken profile.
+    expect(after.corrections).toEqual([])
+    // Written back, it is not turned off or told again, and turning it on is kept.
+    expect(normalizeSettings(after.settings).migrations).toEqual([])
+    expect(normalizeSettings({ ...after.settings, alwaysListen: true }).alwaysListen).toBe(true)
+  })
+
+  test("listening on its own is off unless it is chosen, and a profile that had it is turned off once", () => {
+    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(false)
     const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const, alwaysListen: true })
-    expect(moved.alwaysListen).toBe(true)
-    expect(moved.migrations).toEqual(["always-listen"])
-    // Written back at version 3, it is not told again, and a choice of off is kept.
-    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).migrations).toEqual([])
-    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).alwaysListen).toBe(false)
-    // Dictation on the wake word is not told anything.
+    expect(moved.alwaysListen).toBe(false)
+    expect(moved.migrations).toEqual(["always-listen", "listening-off"])
+    // Written back, it is not told again, and turning it back on is kept.
+    expect(normalizeSettings(moved.settings).migrations).toEqual([])
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: true }).alwaysListen).toBe(true)
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: true }).migrations).toEqual([])
+    // Dictation on the wake word is not told about the name.
     expect(normalizeSettings({ version: 2, mode: "transcription", activation: "wake-word" }).migrations).toEqual([])
     // Not a boolean: the default.
-    expect(normalizeSettings({ version: 3, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
+    expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, alwaysListen: "si" }).alwaysListen).toBe(
+      DEFAULT_VOICE_SETTINGS.alwaysListen,
+    )
+  })
+
+  test("spoken alerts are off by default and can be turned on", () => {
+    expect(DEFAULT_VOICE_SETTINGS.spokenAlerts).toBe(false)
+    const enabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true })
+    expect(enabled.settings.spokenAlerts).toBe(true)
+    expect(enabled.corrections).toEqual([])
+    const invalid = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: "yes" as any })
+    expect(invalid.settings.spokenAlerts).toBe(false)
+    expect(invalid.corrections.length).toBeGreaterThan(0)
+  })
+
+  test("codex fallback on Claude limit is off by default and can be turned on", () => {
+    expect(DEFAULT_VOICE_SETTINGS.codexFallback).toBe(false)
+    const def = normalizeSettings({})
+    expect(def.settings.codexFallback).toBe(false)
+
+    const enabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: true })
+    expect(enabled.settings.codexFallback).toBe(true)
+    expect(enabled.corrections).toEqual([])
+
+    const disabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: false })
+    expect(disabled.settings.codexFallback).toBe(false)
+    expect(disabled.corrections).toEqual([])
+
+    const invalid = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: "yes" as any })
+    expect(invalid.settings.codexFallback).toBe(false)
+    expect(invalid.corrections.some((c) => c.includes("Codex"))).toBe(true)
   })
 
   test("preserves valid configuration with zero corrections", () => {
@@ -290,7 +349,8 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     expect(SHORTCUT_ACTIVATION_ENABLED).toBe(false)
     const fresh = normalizeSettings({})
     expect(fresh.activation).toBe("wake-word")
-    expect(fresh.alwaysListen).toBe(true)
+    // It listens only in a microphone the user opened: see version 7.
+    expect(fresh.alwaysListen).toBe(false)
     expect(fresh.wakeWord).toBe("nik")
   })
 
@@ -304,8 +364,9 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     }
     const moved = normalizeSettings(saved)
     expect(moved.activation).toBe("wake-word")
-    expect(moved.alwaysListen).toBe(true)
+    expect(moved.alwaysListen).toBe(false)
     expect(moved.mode).toBe("agent")
+    // Already off: moved to the name, and nothing to say about listening.
     expect(moved.migrations).toEqual(["name-only"])
     expect(moved.corrections).toEqual([])
     // Written back, it is not moved or told again, and turning always-on off is kept.

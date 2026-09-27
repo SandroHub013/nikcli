@@ -1,0 +1,123 @@
+/**
+ * The Enter ADE presses after a line it typed, and what came of the line.
+ *
+ * A permission prompt reads the next Enter as its answer and confirms the
+ * choice that is selected (audit 0.7.7, B1 and B1 bis). Every line ADE types
+ * waits between the text and its Enter — up to 2.5 s while a CLI takes a paste
+ * in — and a prompt can open in that wait. So the check is made at the
+ * moment of the Enter, not when the line was queued, and in one place: the
+ * line's own Enter and the one `confirmSubmitted` sends again both go
+ * through `pressEnter`.
+ */
+
+/**
+ * What became of a line.
+ *
+ * `typed-no-enter`: the text is in the input box and the Enter was held back
+ * by a prompt. It counts as given — typing it again would put it in the box
+ * twice — and the panes say it is waiting for an Enter.
+ */
+export type LineOutcome = "sent" | "typed-no-enter" | "not-typed"
+
+/** Whether the text reached the input box, sent or not. What a caller counts as given. */
+export function lineGiven(outcome: LineOutcome): boolean {
+  return outcome !== "not-typed"
+}
+
+/** Presses Enter unless a permission prompt is open right now; says whether it did. */
+export function pressEnter(write: (data: string) => void, permissionOpen: () => boolean): boolean {
+  if (permissionOpen()) return false
+  write("\r")
+  return true
+}
+
+/**
+ * A line as `typeLineNow` types it: the text, the wait, then the Enter.
+ *
+ * The prompt is asked about before the text too: a line waits in the pane's
+ * queue, sometimes seconds behind another, and a prompt that opened meanwhile
+ * would get the text in its answer box. Then nothing is written and the line
+ * is `not-typed` (audit 0.7.7, B1 bis, MEDIO 1). `alive` is asked after the
+ * wait: a session gone meanwhile gets no Enter.
+ *
+ * `typedDuring` too, after the wait: the user who starts writing in the 2.5 to
+ * 8 s between ADE's text and its Enter would have their half line sent with
+ * it (review area 2). The Enter is held, as for a prompt, and the text stays.
+ */
+export async function typeThenEnter(input: {
+  text: string
+  write: (data: string) => void
+  wait: () => Promise<void>
+  alive: () => boolean
+  permissionOpen: () => boolean
+  typedDuring?: () => boolean
+}): Promise<LineOutcome> {
+  if (input.permissionOpen()) return "not-typed"
+  input.write(input.text)
+  await input.wait()
+  if (!input.alive()) return "not-typed"
+  if (input.typedDuring?.()) return "typed-no-enter"
+  return pressEnter(input.write, input.permissionOpen) ? "sent" : "typed-no-enter"
+}
+
+/**
+ * What a delivery made of its line.
+ *
+ * `held`: not typed while the session is still there — a prompt was open —
+ * so the message goes back among the held ones and comes on a later round.
+ * It used to be answered as "the session closed during delivery" (MEDIO 1).
+ * A line whose text is already in the inbox counts as given: the inbox rings
+ * for it again, and typing the message again would deliver it twice.
+ */
+export type DeliveryResult = "given" | "held" | "closed"
+
+export function deliveryResult(outcome: LineOutcome, alive: boolean, stored = false): DeliveryResult {
+  if (lineGiven(outcome)) return "given"
+  if (!alive) return "closed"
+  return stored ? "given" : "held"
+}
+
+/**
+ * The Enter ADE presses again, on its own: the resend of `confirmSubmitted`
+ * and the re-ring of a request whose line sits in the box.
+ *
+ * Not while the user is writing: the Enter would send their line half done
+ * (MEDIO 2). Not over a prompt, as for every Enter (B1 bis). And in the pane's
+ * line queue, like every line, so it cannot fall between another line's text
+ * and its Enter (MEDIO 3). True when it was pressed.
+ */
+export function enterAgain(input: {
+  queue: <T>(key: string, job: () => Promise<T>) => Promise<T>
+  key: string
+  write: (data: string) => void
+  alive: () => boolean
+  typing: () => boolean
+  permissionOpen: () => boolean
+}): Promise<boolean> {
+  return input.queue(input.key, async () => {
+    if (!input.alive() || input.typing()) return false
+    return pressEnter(input.write, input.permissionOpen)
+  })
+}
+
+/**
+ * A re-ring, counted before the Enter so the next round does not ring twice
+ * while this one waits in the queue, and given back when no Enter went — a
+ * draft or a prompt stopped it — so a skipped ring does not use one up.
+ * The count goes back to what it was, which is 0 on the first ring.
+ */
+export async function ringAgain(
+  request: { rings?: number },
+  press: () => Promise<boolean>,
+  save: () => void,
+): Promise<boolean> {
+  const before = request.rings ?? 0
+  request.rings = before + 1
+  save()
+  const pressed = await press()
+  if (!pressed) {
+    request.rings = before
+    save()
+  }
+  return pressed
+}

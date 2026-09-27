@@ -48,6 +48,7 @@ describe("pane chrome", () => {
       [
         "browserPane",
         "decisionsPane",
+        "designPane",
         "filePane",
         "modelPane",
         "pluginPane",
@@ -82,9 +83,7 @@ describe("pane chrome", () => {
       expect(`${file}: ${source.includes("<PaneActions onExpand=")}`).toBe(`${file}: true`)
     }
     const actions = read("grid/pane-actions.tsx")
-    // The buttons' attributes can sit on separate lines after a formatter pass;
-    // the invariant is that every shared action has both class `act` and slot
-    // `pane-action`, and the wrapper carries the actions slot.
+    // Upstream's form (5fff57851): prettier puts each attribute on a line of its own.
     expect(actions).toMatch(/class="act"[\s\S]*?data-slot="pane-action"/)
     expect((actions.match(/data-slot="pane-action"/g) ?? []).length).toBeGreaterThanOrEqual(2)
     expect(actions).toContain('data-slot="pane-actions"')
@@ -92,8 +91,8 @@ describe("pane chrome", () => {
 
   test("every pane that uses the shared actions is revealed by the shared rule", () => {
     const css = read("grid/pane.css")
-    expect(css).toContain('[data-component$="-pane"]:hover [data-slot="pane-actions"]')
-    expect(css).toContain('[data-component$="-pane"][data-focused] [data-slot="pane-actions"]')
+    expect(css).toContain('[data-slot="grid-cell"]:hover > [data-component] [data-slot="pane-actions"]')
+    expect(css).toContain('[data-slot="grid-cell"][data-focused] > [data-component] [data-slot="pane-actions"]')
     for (const pane of panes) {
       const file = componentFile(pane.component)
       const source = read(file)
@@ -105,19 +104,16 @@ describe("pane chrome", () => {
 
   test("a pane that is a size container grows into its cell", () => {
     // A size container stops taking its width from its content: without
-    // `flex: 1` the video pane was 1.6px wide in ADE Test.
-    const collapsed: string[] = []
-    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
-      const file = entry.replace(/\\/g, "/")
-      const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
-      for (const rule of css.split("}")) {
-        const selector = rule.slice(0, rule.indexOf("{")).trim().split("\n").pop() ?? ""
-        if (!/^\[data-component="[\w-]+-pane"\]$/.test(selector)) continue
-        if (/container-type:\s*(inline-)?size/.test(rule) && !/\bflex:\s*1\b/.test(rule))
-          collapsed.push(`${file}: ${selector}`)
-      }
-    }
-    expect(collapsed).toEqual([])
+    // `flex: 1` the video pane was 1.6px wide in ADE Test. The shell on the
+    // cell's child grants it to every pane now (S67.2), so the invariant
+    // lives with the geometry it protects instead of in each container's
+    // own copy of the rule.
+    const index = read("index.css").replace(/\/\*[\s\S]*?\*\//g, "")
+    const shell = index
+      .split("}")
+      .find((rule) => rule.slice(0, rule.indexOf("{")).trim() === '[data-slot="grid-cell"] > [data-component]')
+    expect(shell).toBeDefined()
+    expect(shell).toContain("flex: 1")
   })
 
   test("no stylesheet hides the shared actions again", () => {
@@ -132,5 +128,61 @@ describe("pane chrome", () => {
       }
     }
     expect(hidden).toEqual([])
+  })
+
+  test("a header floats only where its own pane lifts it, never by its class (S67.3)", () => {
+    /*
+     * `.pill.hA` used to carry `position: absolute`, so every pane that took
+     * the pill got it floating and the video pane undid that with a rule keyed
+     * on the class — a name it does not own, which a refactor of the pill
+     * would have broken in silence. The class is the look; the lift is a
+     * decision each pane makes in its own sheet, on the header slot.
+     */
+    const css = read("grid/pane.css").replace(/\/\*[\s\S]*?\*\//g, "")
+    const pill = css.split("}").find((rule) => /^\s*\.pill\.hA\s*\{/.test(rule))
+    expect(pill).toBeDefined()
+    expect(pill).not.toMatch(/position\s*:/)
+    expect(pill).not.toMatch(/z-index\s*:/)
+    const lifted = css.split("}").filter((rule) => /position\s*:\s*absolute/.test(rule) && /pane-header/.test(rule))
+    expect(lifted.map((rule) => rule.slice(0, rule.indexOf("{")).trim())).toEqual([
+      '[data-component="session-pane"] > [data-slot="pane-header"]',
+    ])
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const file = entry.replace(/\\/g, "/")
+      if (file === "grid/pane.css") continue
+      const sheet = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+      expect(`${file}: ${/\.hA\b/.test(sheet)}`).toBe(`${file}: false`)
+    }
+  })
+
+  test("lint: the pill's clearance is granted once, to the siblings of the lifted header, and never to a named body slot", () => {
+    /*
+     * The 42px under the floating pill used to be granted to three bodies by
+     * name — terminal, transcript, plugin — so the fourth view of the pane
+     * started underneath the pill and nothing said so until the pane was open.
+     * The clearance belongs to whoever follows the lifted header: a selector
+     * that names bodies again fails here, and a body added tomorrow must not
+     * need an edit in this rule to be born covered.
+     */
+    const clearances: string[] = []
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const file = entry.replace(/\\/g, "/")
+      const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+      for (const rule of css.split("}")) {
+        if (!/padding-top:\s*42px/.test(rule)) continue
+        // One space for any run of them: a long selector is split over lines.
+        clearances.push(`${file}: ${rule.slice(0, rule.indexOf("{")).replace(/\s+/g, " ").trim()}`)
+      }
+    }
+    expect(clearances).toHaveLength(1)
+    const [clearance] = clearances
+    expect(clearance!.startsWith("grid/pane.css: ")).toBe(true)
+    expect(clearance).toContain('[data-component="session-pane"] > [data-slot="pane-header"] ~ *')
+    expect(clearance).toContain(':not([data-slot="pane-dock"])')
+    // The «Copiato» toast floats in a corner: 42 pixels of clearance made it a tall empty box.
+    expect(clearance).toContain(':not([data-slot="pane-toast"])')
+    for (const body of ["pane-terminal", "pane-transcript", "pane-plugin"]) {
+      expect(clearance).not.toContain(body)
+    }
   })
 })

@@ -1,7 +1,10 @@
 import { For, Show, createSignal } from "solid-js"
-import { deferFromInput, deferPresets, formatDay, localDay } from "./answer"
+import { deferFromInput, deferPresets, formatDay, isPicked, localDay, type Picked } from "./answer"
 import type { Decision } from "./state"
+import type { SubmitControl } from "./card"
 import { t } from "../i18n"
+import { Brief } from "../choices/brief"
+import { isRecommended } from "../choices/list"
 
 /**
  * One open decision, answerable: context, the options as numbered choices, a
@@ -14,17 +17,25 @@ import { t } from "../i18n"
  */
 export function DecisionCard(props: {
   decision: Decision
-  picked: number | undefined
+  picked: Picked
   note: string
   busy: boolean
   problem?: string
-  submitLabel: string
   /** Who the answer goes to, said under the buttons. */
   recipientHint: string
   now: Date
+  /** Who asked, told apart from a pane of the same title (`askerName`); the register's title without it. */
+  askedBy?: string
   onPick: (index: number) => void
   onNote: (note: string) => void
+  /** The answer buttons, from `submitControl`. */
+  control: SubmitControl
+  /** A session picked in the inline "who receives" select. */
+  onInline: (id: string | undefined) => void
+  /** The main button: sends, choosing the inline pick first when needed. */
   onSubmit: () => void
+  /** «Registra senza inviare»: writes the answer, leaves it queued. */
+  onRecord: () => void
   onDefer: (until: string) => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
@@ -41,12 +52,16 @@ export function DecisionCard(props: {
       <div data-slot="decision-meta">
         {[
           props.decision.spec,
-          t("decisions.from", props.decision.raisedBy),
+          t("decisions.from", props.askedBy ?? props.decision.raisedBy),
           formatDay(props.decision.openedAt, props.now),
         ]
           .filter(Boolean)
           .join(" · ")}
       </div>
+      <Brief fields={props.decision} />
+      <Show when={props.decision.multi}>
+        <div data-slot="decision-multi">{t("decisions.multi")}</div>
+      </Show>
       <Show when={props.decision.context}>
         <p data-slot="decision-context">{props.decision.context}</p>
       </Show>
@@ -55,22 +70,39 @@ export function DecisionCard(props: {
       </Show>
 
       <Show when={props.decision.options.length > 0}>
-        <div data-slot="decision-options" role="radiogroup" aria-label={t("decisions.options")}>
+        <div
+          data-slot="decision-options"
+          role={props.decision.multi ? "group" : "radiogroup"}
+          aria-label={t("decisions.options")}
+        >
           <For each={props.decision.options}>
             {(option, index) => (
               <button
                 type="button"
-                role="radio"
-                aria-checked={props.picked === index()}
+                role={props.decision.multi ? "checkbox" : "radio"}
+                aria-checked={isPicked(props.picked, index())}
                 data-slot="decision-option"
-                data-on={props.picked === index() ? "true" : undefined}
+                data-on={isPicked(props.picked, index()) ? "true" : undefined}
                 onClick={() => props.onPick(index())}
               >
                 <span data-slot="decision-option-key" aria-hidden="true">
                   {index() + 1}
                 </span>
                 <span data-slot="decision-option-text">
-                  <b>{option.label}</b>
+                  <b>
+                    {option.label}
+                    {/*
+                      The one the writer recommends, on its own option too (rifiniture 3).
+                      The badge is hidden from the name, which read «SìConsigliata va bene»:
+                      the screen reader hears «Sì, consigliata» (ultimi 1).
+                    */}
+                    <Show when={isRecommended(props.decision.recommend, option.label)}>
+                      <span data-slot="choice-recommended" aria-hidden="true">
+                        {t("choices.recommended")}
+                      </span>
+                      <span data-slot="choice-recommended-said">{t("choices.recommended.said")}</span>
+                    </Show>
+                  </b>
                   <Show when={option.detail}>
                     <small>{option.detail}</small>
                   </Show>
@@ -98,9 +130,25 @@ export function DecisionCard(props: {
       </Show>
 
       <div data-slot="decision-actions">
-        <button type="button" data-slot="decision-submit" disabled={props.busy} onClick={() => props.onSubmit()}>
-          {props.submitLabel}
+        <button
+          type="button"
+          data-slot="decision-submit"
+          disabled={props.control.disabled}
+          onClick={() => props.onSubmit()}
+        >
+          {props.control.label}
         </button>
+        <Show when={props.control.recordOnly}>
+          <button
+            type="button"
+            data-slot="decision-ghost"
+            data-action="record"
+            disabled={props.busy}
+            onClick={() => props.onRecord()}
+          >
+            {t("decisions.submit.record")}
+          </button>
+        </Show>
         <button
           type="button"
           data-slot="decision-ghost"
@@ -110,8 +158,32 @@ export function DecisionCard(props: {
         >
           {t("decisions.defer.open")}
         </button>
-        <span data-slot="decision-hint">{props.recipientHint}</span>
+        <Show when={!props.control.options}>
+          <span data-slot="decision-hint">{props.recipientHint}</span>
+        </Show>
       </div>
+
+      <Show when={props.control.options}>
+        {(options) => (
+          <label data-slot="recipient-inline-wrap">
+            <span data-slot="decision-hint" data-tone="warn">
+              {t("decisions.recipient.inline")}
+            </span>
+            <select
+              data-slot="recipient-inline"
+              onChange={(event) => props.onInline(event.currentTarget.value || undefined)}
+            >
+              <For each={options()}>
+                {(option) => (
+                  <option value={option.value} selected={option.selected}>
+                    {option.label}
+                  </option>
+                )}
+              </For>
+            </select>
+          </label>
+        )}
+      </Show>
 
       <Show when={deferring()}>
         <div data-slot="decision-defer" role="group" aria-label={t("decisions.defer.until")}>

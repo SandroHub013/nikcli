@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { CHAT_AND_BOT_ENABLED, fromWorkspaceState, restoreView } from "./state"
+import { fromWorkspaceState, restoreView } from "./state"
 import type { WorkspaceState } from "../session/persist"
 
 const saved = (projectPath: string | undefined): WorkspaceState => ({
@@ -31,10 +31,10 @@ describe("restoreView", () => {
     expect(restoreView("code")).toBe("code")
   })
 
-  test("a workbench saved in a hidden section reopens in the grid", () => {
-    // Otherwise the window opens in a section the bar does not list, with no way back to it.
-    expect(restoreView("chat")).toBe(CHAT_AND_BOT_ENABLED ? "chat" : "code")
-    expect(restoreView("bot")).toBe(CHAT_AND_BOT_ENABLED ? "bot" : "code")
+  test("a workbench saved in Chat (C9) or Bot (B7) reopens there", () => {
+    // A hidden section would reopen in the grid instead (`reachableView`): see state.test.ts.
+    expect(restoreView("chat")).toBe("chat")
+    expect(restoreView("bot")).toBe("bot")
   })
 
   test("falls back to the terminals for anything else", () => {

@@ -1,5 +1,14 @@
 import { createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
-import { parseTheme, resolveTheme, serializeTheme, type ResolvedTheme, type Theme } from "../theme"
+import {
+  clampGlassOpacity,
+  DEFAULT_GLASS_OPACITY,
+  parseGlassOpacity,
+  parseTheme,
+  resolveTheme,
+  serializeTheme,
+  type ResolvedTheme,
+  type Theme,
+} from "../theme"
 
 /**
  * The theme, as a piece of live state rather than four things scattered
@@ -20,6 +29,9 @@ import { parseTheme, resolveTheme, serializeTheme, type ResolvedTheme, type Them
 
 /** Where the choice is kept between launches. */
 export const THEME_STORAGE_KEY = "ade.theme"
+
+/** Where the glass opacity preference is kept between launches (0 to 100). */
+export const THEME_OPACITY_STORAGE_KEY = "ade.theme.glass-opacity"
 
 /** The bits of `localStorage` this needs, so a test can pass a fake. */
 export interface ThemeStorage {
@@ -46,10 +58,14 @@ export interface ThemeState {
   theme: Accessor<ResolvedTheme>
   /** The stored preference, which may be "system". */
   preference: Accessor<Theme>
-  /** Reads the preference back from storage. Safe before the DOM exists. */
+  /** Opacity percentage for glass veil (0 to 100). */
+  glassOpacity: Accessor<number>
+  /** Reads the preference and opacity back from storage. Safe before the DOM exists. */
   restore(): void
   /** Sets the theme the user named, and writes the choice down. */
-  set(next: ResolvedTheme): void
+  set(next: Theme): void
+  /** Sets the glass opacity percentage (0-100) and saves to storage. */
+  setGlassOpacity(opacity: number): void
   /** Flips dark to light and back, and writes the choice down. */
   toggle(): void
 }
@@ -73,6 +89,7 @@ export function createThemeState(options: ThemeStateOptions = {}): ThemeState {
   // The preference is what gets stored; "system" is a real answer and has to
   // survive a reload, so the resolved value is derived rather than saved.
   const [preference, setPreference] = createSignal<Theme>("system")
+  const [glassOpacity, setOpacitySignal] = createSignal<number>(DEFAULT_GLASS_OPACITY)
 
   /*
    * The OS preference is watched, not sampled.
@@ -95,23 +112,36 @@ export function createThemeState(options: ThemeStateOptions = {}): ThemeState {
   return {
     theme,
     preference,
+    glassOpacity,
     restore() {
       setPreference(parseTheme(storage?.getItem(THEME_STORAGE_KEY) ?? null))
+      setOpacitySignal(parseGlassOpacity(storage?.getItem(THEME_OPACITY_STORAGE_KEY) ?? null))
     },
-    set(next: ResolvedTheme) {
+    set(next: Theme) {
       setPreference(next)
       storage?.setItem(THEME_STORAGE_KEY, serializeTheme(next))
     },
+    setGlassOpacity(next: number) {
+      const clamped = clampGlassOpacity(next)
+      setOpacitySignal(clamped)
+      storage?.setItem(THEME_OPACITY_STORAGE_KEY, String(clamped))
+    },
     toggle() {
       /*
-       * Resolved and then flipped, rather than cycling the preference.
+       * Full theme cycle: chiaro -> scuro -> vetro -> chiaro.
        *
-       * From "system" the user is looking at one of the two concrete themes,
-       * and the button says which one it will switch to. Cycling would send
-       * "system" to "dark" for someone already looking at dark, so the first
-       * press of a button labelled "light theme" would change nothing.
+       * Based on what is currently resolved on screen, so from "system" it
+       * immediately advances to the next distinct theme rather than sticking.
        */
-      const next: Theme = theme() === "dark" ? "light" : "dark"
+      const current = theme()
+      let next: Theme = "dark"
+      if (current === "light") {
+        next = "dark"
+      } else if (current === "dark") {
+        next = "glass"
+      } else if (current === "glass") {
+        next = "light"
+      }
       setPreference(next)
       storage?.setItem(THEME_STORAGE_KEY, serializeTheme(next))
     },

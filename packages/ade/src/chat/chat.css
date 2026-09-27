@@ -30,9 +30,17 @@
   background: var(--ade-surface);
 }
 
-[data-slot="chat-model"] {
+[data-slot="chat-selectors"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  flex-wrap: wrap;
+}
+
+[data-slot="chat-model"],
+[data-slot="chat-agent"] {
   height: 26px;
-  max-width: 260px;
+  max-width: 280px;
   padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
@@ -43,7 +51,8 @@
   cursor: pointer;
 }
 
-[data-slot="chat-model"]:focus-visible {
+[data-slot="chat-model"]:focus-visible,
+[data-slot="chat-agent"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
 }
@@ -51,6 +60,8 @@
 [data-slot="chat-head-actions"] {
   display: flex;
   gap: var(--ade-space-3);
+  /* Alone in the head since the pickers went to the composer: on the right, where it was. */
+  margin-left: auto;
 }
 
 [data-slot="chat-action"] {
@@ -66,25 +77,149 @@
   transition:
     border-color var(--ade-dur-fast) var(--ade-ease),
     color var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="chat-action"]:hover {
-    border-color: var(--ade-border-strong);
-    background: var(--ade-hover);
-    color: var(--ade-text);
-  }
+    transform var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="chat-action"]:active {
-  transform: scale(0.97);
+  transform: var(--ade-press);
+}
+
+[data-slot="chat-action"]:hover {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
 }
 
 [data-slot="chat-action"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* ── sessions beside the conversation (C4) ────────────────────────────────── */
+
+[data-slot="chat-main"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-slot="chat-column"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-slot="chat-column"] > [data-slot="chat-rules-note"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-3) var(--ade-space-7);
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
+[data-slot="chat-sessions"] {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 220px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-4) var(--ade-space-3);
+  border-right: 1px solid var(--ade-border-subtle);
+  background: var(--ade-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+}
+
+[data-slot="chat-sessions-empty"] {
+  margin: 0;
+  padding: var(--ade-space-3);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-session-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="chat-session-open"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-1);
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-md);
+  background: none;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="chat-session-open"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-session-open"]:active {
+  transform: var(--ade-press);
+}
+
+[data-slot="chat-session-open"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="chat-session-open"][aria-current="true"] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-session-title"] {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="chat-session-mark"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-session-mark"][data-kind="waiting"] {
+  color: var(--ade-warning);
+}
+
+[data-slot="chat-session-input"] {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-session-input"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* A narrow window keeps the conversation, the list gives way. */
+@media (max-width: 720px) {
+  [data-slot="chat-sessions"] {
+    flex-basis: 160px;
+  }
 }
 
 /* ── notice ───────────────────────────────────────────────────────────────── */
@@ -124,25 +259,17 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--ade-space-7) var(--ade-space-7) var(--ade-space-6);
+  padding: var(--ade-space-8) var(--ade-space-7);
   scrollbar-width: thin;
   scrollbar-color: var(--ade-scrollbar-thumb) transparent;
 }
 
-/*
- * A message in the column.
- *
- * 28px between messages — the same rhythm the sidebar uses for its rows.
- * The asymmetry between the message gap and the chat-scroll padding
- * (24/28/24) is what makes the conversation feel continuous, not stacked:
- * the eye lands on the start of each message, not in the gap above it.
- */
 [data-slot="chat-message"] {
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-3);
   max-width: 720px;
-  margin: 0 auto var(--ade-space-7);
+  margin: 0 auto var(--ade-space-8);
 }
 
 [data-slot="chat-message"]:last-child {
@@ -169,14 +296,6 @@
   gap: var(--ade-space-5);
 }
 
-/*
- * The user's bubble.
- *
- * One corner is sharp (the trailing-bottom): the bubble tapers toward
- * whatever it answers, which makes the turn easier to scan when it sits
- * in a long scroll. The other three are full-radius to match the prose
- * card.
- */
 [data-slot="chat-message"][data-role="user"] [data-slot="chat-body"] {
   max-width: 85%;
   padding: var(--ade-space-5) var(--ade-space-7);
@@ -202,6 +321,38 @@
   font-size: var(--ade-font-md);
   line-height: var(--ade-leading);
   color: var(--ade-error);
+}
+
+/* What the provider said, under the sentence: its words, smaller. */
+[data-slot="chat-error-detail"] {
+  display: block;
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="chat-retry"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="chat-usage"],
+[data-slot="chat-usage-session"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+  color: var(--ade-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="chat-usage-session"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-3) var(--ade-space-7);
+  border-bottom: 1px solid var(--ade-border-subtle);
 }
 
 [data-slot="chat-caret"] {
@@ -270,18 +421,16 @@
   transition:
     color var(--ade-dur-fast) var(--ade-ease),
     background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="chat-copy"]:hover {
-    background: var(--ade-hover);
-    color: var(--ade-text);
-  }
+    transform var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="chat-copy"]:active {
-  transform: scale(0.96);
+  transform: var(--ade-press);
+}
+
+[data-slot="chat-copy"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="chat-copy"]:focus-visible {
@@ -327,68 +476,94 @@
 
 /* ── composer ─────────────────────────────────────────────────────────────── */
 
+/*
+ * The field, and under it the chips' row: `+`, agent, model, effort, Invia
+ * (composer-chip, pezzo 3). The field keeps its own box and focus
+ * (composer-nero); the chips sit under it, in the same black.
+ */
+/*
+ * One box, as in Claude's and Codex's apps: the text on top, the chips and
+ * Invia inside it, at the bottom («il tasto nella zona dove scrivo»; the row
+ * used to sit under the field, outside it). The box has the field's border,
+ * base and focus; the field inside draws none of its own.
+ */
 [data-slot="chat-composer"] {
   display: flex;
-  align-items: flex-end;
-  gap: var(--ade-space-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-3);
   flex: 0 0 auto;
-  width: min(720px, 100%);
-  margin: 0 auto;
-  padding: var(--ade-space-6) var(--ade-space-7) var(--ade-space-7);
-}
-
-[data-slot="chat-input"] {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 40px;
-  max-height: 200px;
-  padding: var(--ade-space-5) var(--ade-space-6);
+  box-sizing: border-box;
+  width: min(720px, calc(100% - 2 * var(--ade-space-7)));
+  margin: var(--ade-space-6) auto var(--ade-space-7);
+  padding: var(--ade-space-4) var(--ade-space-4) var(--ade-space-3) var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-raised);
+  transition: border-color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chat-input"] {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 200px;
+  padding: var(--ade-space-2) 0;
+  border: none;
+  background: transparent;
   color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-lg);
   line-height: var(--ade-leading);
-  resize: vertical;
-  transition: border-color var(--ade-dur-fast) var(--ade-ease);
+  resize: none;
 }
 
 [data-slot="chat-input"]::placeholder {
   color: var(--ade-text-weak);
 }
 
+/*
+ * As the bot's composer: at the focus the box's border is the neutral grey
+ * `--ade-border-strong`, not the accent, and the halo is grey as well. In the
+ * light theme the token is still a grey (composer-nero, DS-chat 1). The box
+ * draws it, for the field and for its chips alike.
+ */
+[data-slot="chat-composer"]:focus-within {
+  border-color: var(--ade-border-strong);
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The field inside the box draws no ring of its own: one ring, the box's. */
 [data-slot="chat-input"]:focus-visible {
   outline: none;
-  border-color: var(--ade-accent);
-  box-shadow: var(--ade-focus-ring);
+  box-shadow: none;
 }
 
 [data-slot="chat-send"] {
   flex: 0 0 auto;
-  height: 40px;
+  /* 32 is the `lg` of the button scale. It was 40 — the height of a text
+     field, because it had been lined up with the box beside it, which made the
+     most frequent action in the app also the largest button in it. */
+  height: 32px;
   padding: 0 var(--ade-space-7);
   border: 1px solid transparent;
   border-radius: var(--ade-radius-lg);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
+  /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
+  background: var(--ade-text);
+  color: var(--ade-surface);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="chat-send"]:hover:not(:disabled) {
-    background: var(--ade-accent-strong);
-  }
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="chat-send"]:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: var(--ade-press);
+}
+
+[data-slot="chat-send"]:hover:not(:disabled):not([data-stop]) {
+  background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface));
 }
 
 [data-slot="chat-send"]:disabled {
@@ -404,25 +579,14 @@
   color: var(--ade-text);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  [data-slot="chat-send"][data-stop]:hover {
-    background: var(--ade-hover);
-  }
+[data-slot="chat-send"][data-stop]:hover {
+  background: var(--ade-hover);
 }
 
 [data-slot="chat-send"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
 }
-
-/* ── the conversation rhythm ──────────────────────────────────────────────── */
-
-/*
- * A message sits 20px from the next one: a beat that reads as two thoughts
- * without splitting the column. The first message of the conversation has
- * the scroll's own padding above it, so 20px is what the rest of the stream
- * lands on.
- */
 
 /* ── narrow ───────────────────────────────────────────────────────────────── */
 
@@ -431,9 +595,366 @@
     padding: var(--ade-space-6) var(--ade-space-5);
   }
   [data-slot="chat-composer"] {
-    padding: var(--ade-space-5);
+    width: calc(100% - 2 * var(--ade-space-5));
+    margin: var(--ade-space-5) auto;
   }
   [data-slot="chat-message"][data-role="user"] [data-slot="chat-body"] {
     max-width: 100%;
   }
+}
+
+/* ── C5: reasoning, tools, permission requests, questions ──────────────────── */
+
+[data-slot="chat-reasoning"],
+[data-slot="chat-tool"] {
+  margin: var(--ade-space-2) 0;
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-sunken);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-reasoning"] > summary,
+[data-slot="chat-tool"] > summary {
+  display: flex;
+  gap: var(--ade-space-3);
+  align-items: baseline;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  color: var(--ade-text-soft);
+  cursor: pointer;
+  min-width: 0;
+}
+
+[data-slot="chat-reasoning-text"] {
+  margin: 0;
+  padding: 0 var(--ade-space-4) var(--ade-space-3);
+  color: var(--ade-text-weak);
+  white-space: pre-wrap;
+}
+
+[data-slot="chat-tool-name"] {
+  font-family: var(--ade-mono);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-tool-subject"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ade-mono);
+}
+
+[data-slot="chat-tool-status"] {
+  flex: 0 0 auto;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="chat-tool"][data-status="error"] [data-slot="chat-tool-status"] {
+  color: var(--ade-error);
+}
+
+[data-slot="chat-tool-output"] {
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--ade-border-subtle);
+  font-family: var(--ade-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="chat-tool-note"] {
+  margin: 0;
+  padding: 0 var(--ade-space-4) var(--ade-space-3);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="chat-permission"],
+[data-slot="chat-question"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  /* The conversation's column, as the messages are. */
+  max-width: 720px;
+  margin: var(--ade-space-3) auto;
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-warning);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+}
+
+[data-slot="chat-rules-note"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-permission-title"],
+[data-slot="chat-question-text"] {
+  margin: 0;
+  color: var(--ade-text);
+}
+
+[data-slot="chat-permission-pattern"] {
+  display: block;
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* The whole command, never cut: a long one scrolls inside its box. */
+  max-height: 320px;
+  overflow: auto;
+}
+
+[data-slot="chat-permission-call"] {
+  display: grid;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="chat-permission-call-head"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+/* The change an edit would make: every line, scrolling inside its box. */
+[data-slot="chat-permission-diff"] {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--ade-space-2) 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-diff-line"] {
+  display: block;
+  padding: 0 var(--ade-space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="chat-diff-line"][data-kind="add"] {
+  background: var(--ade-done-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="del"] {
+  background: var(--ade-error-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="hunk"],
+[data-slot="chat-diff-line"][data-kind="file"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="chat-permission-actions"],
+[data-slot="chat-question-options"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="chat-question-item"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-slot="chat-question-head"] {
+  padding: 0;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="chat-option"] {
+  height: 26px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chat-option"]:hover {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-option"][aria-pressed="true"] {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-option"]:focus-visible,
+[data-slot="chat-question-typed"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="chat-question-typed"] {
+  height: 28px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-action"][data-tone="danger"]:hover {
+  border-color: var(--ade-error);
+}
+
+[data-slot="chat-action"]:disabled,
+[data-slot="chat-option"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+[data-slot="chat-composer-row"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  min-width: 0;
+}
+
+[data-slot="chat-composer-gap"] {
+  flex: 1 1 auto;
+}
+
+/* Narrow: the chips give way first, the model's name is cut, never the row. */
+@media (max-width: 900px) {
+  [data-slot="chat-composer-row"] [data-slot="chip"] {
+    max-width: 12rem;
+  }
+}
+
+/* C6: the composer's files, the `@` list and what a screen reader hears. `+` is a chip of its own. */
+[data-slot="chat-attach"] {
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-slot="chat-attach"]:hover:not(:disabled) {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-attach"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="chat-attachments"],
+[data-slot="chat-mentions"] {
+  flex: 0 0 auto;
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0 var(--ade-space-7);
+  list-style: none;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-attachments"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  padding-top: var(--ade-space-4);
+}
+
+[data-slot="chat-attachment"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  max-width: 100%;
+  padding: var(--ade-space-1) var(--ade-space-2) var(--ade-space-1) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-attachment-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="chat-attachment-remove"] {
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-slot="chat-attachment-remove"]:hover {
+  color: var(--ade-text);
+}
+
+[data-slot="chat-mentions"] {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-top: var(--ade-space-3);
+}
+
+[data-slot="chat-mention"],
+[data-slot="chat-mention-none"] {
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-md);
+  color: var(--ade-text-soft);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="chat-mention"] {
+  cursor: pointer;
+}
+
+[data-slot="chat-mention"][aria-selected="true"],
+[data-slot="chat-mention"]:hover {
+  background: var(--ade-surface);
+  color: var(--ade-text);
+}
+
+/* Heard, not seen: the answers are already on screen. */
+[data-slot="chat-live"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

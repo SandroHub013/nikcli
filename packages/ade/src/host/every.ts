@@ -83,3 +83,14 @@ export function every(ms: number, tick: () => unknown, options: EveryOptions = {
     unlisten()
   }
 }
+
+/**
+ * How often, while the page is hidden, ADE keeps watch on what only feeds the
+ * screen and the reminders: agent activity, open requests, the inbox (P1-C1).
+ */
+export const HIDDEN_WATCH_MS = 5_000
+
+/** Whether a watch pass is due: always while visible, once every `everyMs` while hidden. */
+export function watchDue(hidden: boolean, now: number, lastAt: number, everyMs = HIDDEN_WATCH_MS): boolean {
+  return !hidden || now - lastAt >= everyMs
+}

@@ -1,0 +1,336 @@
+import { t } from "../i18n"
+
+/**
+ * The design proposals register, as it is written to disk in `.ade/design.jsonl`.
+ *
+ * One JSON object per line, appended and never rewritten: an event says what
+ * happened to a design proposal — aperta, risposta, riaperta, chiusa — and the current
+ * state is computed from all of them by `state.ts`.
+ *
+ * A proposal carries a key, title, author, reference spec, short text/context,
+ * and one or more variants, each with a name, a two-line description, and a
+ * preview (an image path/URL or a standalone HTML page).
+ *
+ * The team's format for a variant's page (S75 point 3):
+ * - one self-contained `.html` file per variant: CSS in `<style>`, JS in
+ *   `<script>`, images and fonts as `data:` or inline SVG, nothing beside it;
+ * - in the project, relative in the register: `.ade/design/<k>/<n>.html`,
+ *   `n` the variant's number from 1. `ade-media` serves only files inside the
+ *   open projects, and the frame loads it from there;
+ * - its size at the top: `<meta name="ade-size" content="360x240">`, width by
+ *   height in CSS px, 120 to 1600; without it, 360×240. The card shows it at
+ *   exactly that size;
+ * - a comparison page with every variant may exist, but it does not go in a
+ *   `preview`: every variant would show the same page. `ade-msg registro`
+ *   refuses two variants with the same preview.
+ */
+
+export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "riaperta", "chiusa"] as const
+
+export type DesignEventType = (typeof DESIGN_EVENT_TYPES)[number]
+
+export interface DesignVariant {
+  /** Variant name or label, e.g. "A · Rail a gruppi" */
+  readonly name: string
+  /** Two-line description of the direction */
+  readonly description: string
+  /** Disk path or URL to an image or standalone HTML page */
+  readonly preview: string
+  /** What it changes compared with today, short (polish-aaa point 3). */
+  readonly changes?: readonly string[]
+}
+
+/** The variant the writer recommends, and why. */
+export interface DesignRecommendation {
+  /** A variant's name. */
+  readonly option: string
+  readonly because?: string
+}
+
+interface EventBase {
+  /** The proposal's key, stable for its whole life: `DS1`, `S54-settings`. */
+  readonly k: string
+  /** ISO timestamp of when it happened. */
+  readonly at: string
+  /** Who wrote it: a session title, "fable", "utente", "Master". */
+  readonly by: string
+  /** The pane that wrote it, when ADE wrote it: the answer goes back there. */
+  readonly fromPane?: string
+  /** That pane's agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly agent?: string
+}
+
+export interface OpenedDesignEvent extends EventBase {
+  readonly type: "aperta"
+  readonly title: string
+  /*
+   * The format of the polish-aaa plan (point 3), every field optional. A build
+   * that does not know them shows `context` alone, which is why a line that
+   * uses them must still carry one.
+   */
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
+  /** What the user needs to know, in plain words. */
+  readonly context?: string
+  readonly recommend?: DesignRecommendation
+  /** What stays as it is, whichever variant is picked. */
+  readonly keeps?: readonly string[]
+  /** Reference spec, e.g. "S54" or "S57". */
+  readonly spec?: string
+  /** One or more design variants to pick from. */
+  readonly variants: readonly DesignVariant[]
+  /** Lower comes first. Absent: after ordered ones, by time. */
+  readonly order?: number
+  /** More than one variant may be picked; needs at least two variants. */
+  readonly multi?: true
+  /**
+   * The one sheet as a claude.ai artifact page, published by a Claude Code
+   * session: ADE opens it in the system browser, and «Ho scelto sul foglio»
+   * tells the session to read the choice from the page (notifiche-design).
+   */
+  readonly url?: string
+}
+
+/** A claude.ai page: the only link a proposal's sheet can be. */
+export function isArtifactUrl(url: string): boolean {
+  return /^https:\/\/claude\.ai\/[^\s]+$/i.test(url)
+}
+
+export interface AnsweredDesignEvent extends EventBase {
+  readonly type: "risposta"
+  /** The variant name chosen, when one was. */
+  readonly choice?: string
+  /** The variants chosen, in a proposal opened with `multi`. Never with `choice`. */
+  readonly choices?: readonly string[]
+  /** A note added to the choice. */
+  readonly note?: string
+  /** What the user decided, verbatim. Required: it is what gets executed. */
+  readonly words: string
+  /**
+   * Not a choice: the user asks for another round, and `words` says what to
+   * change. The author answers with a `riaperta` carrying the new variants.
+   */
+  readonly again?: true
+}
+
+/** A new round on the same key: back in front of the user, with new variants when it brings them. */
+export interface ReopenedDesignEvent extends EventBase {
+  readonly type: "riaperta"
+  readonly reason?: string
+  readonly variants?: readonly DesignVariant[]
+}
+
+export interface ClosedDesignEvent extends EventBase {
+  readonly type: "chiusa"
+  /** Evidence of completion: commit, screenshot, branch, etc. */
+  readonly evidence?: string
+}
+
+export type DesignEvent = OpenedDesignEvent | AnsweredDesignEvent | ReopenedDesignEvent | ClosedDesignEvent
+
+export interface LogProblem {
+  readonly line: number
+  readonly reason: string
+}
+
+export interface ParsedLog {
+  readonly events: readonly DesignEvent[]
+  readonly problems: readonly LogProblem[]
+}
+
+const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
+
+export function isDesignKey(text: string): boolean {
+  return KEY.test(text)
+}
+
+export function parseDesignLog(text: string): ParsedLog {
+  const events: DesignEvent[] = []
+  const problems: LogProblem[] = []
+  const lines = text.split(/\r?\n/)
+  lines.forEach((raw, index) => {
+    const line = raw.trim()
+    if (line.length === 0) return
+    let value: unknown
+    try {
+      value = JSON.parse(line)
+    } catch {
+      problems.push({ line: index + 1, reason: t("design.log.json") })
+      return
+    }
+    const checked = toEvent(value)
+    if (typeof checked === "string") problems.push({ line: index + 1, reason: checked })
+    else events.push(checked)
+  })
+  return { events, problems }
+}
+
+export function serializeDesignEvent(event: DesignEvent): string {
+  const checked = toEvent(event)
+  if (typeof checked === "string") throw new Error(t("design.log.invalid", checked))
+  return `${JSON.stringify(checked)}\n`
+}
+
+export function toEvent(value: unknown): DesignEvent | string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return t("design.log.notObject")
+  const record = value as Record<string, unknown>
+  const type = record.type
+  if (typeof type !== "string" || !DESIGN_EVENT_TYPES.includes(type as DesignEventType)) return t("design.log.type")
+  const k = text(record.k)
+  if (!k || !isDesignKey(k)) return t("design.log.key")
+  const at = text(record.at)
+  if (!at || Number.isNaN(Date.parse(at))) return t("design.log.date")
+  const by = text(record.by)
+  if (!by) return t("design.log.author")
+  const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
+
+  switch (type as DesignEventType) {
+    case "aperta": {
+      const title = text(record.title)
+      if (!title) return t("design.log.title")
+      const variants = variantsOf(record.variants)
+      if (typeof variants === "string") return variants
+      if (variants.length === 0) return t("design.log.variants")
+      const order = record.order
+      if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("design.log.order")
+      const multi = record.multi === true
+      if (multi && variants.length < 2) return t("design.log.multi")
+      const keeps = textsOf(record.keeps)
+      if (keeps && "error" in keeps) return t("design.log.keeps")
+      const recommend = recommendationOf(record.recommend)
+      if (recommend && "error" in recommend) return t("design.log.recommend")
+      if (recommend && !variants.some((variant) => variant.name === recommend.option))
+        return t("design.log.recommendOption", recommend.option)
+      const question = text(record.question)
+      const why = text(record.why)
+      const context = text(record.context)
+      const newFormat = Boolean(question || why || keeps || recommend || variants.some((variant) => variant.changes))
+      // A build that knows none of them shows the context alone: without one it would show an empty card.
+      if (newFormat && !context) return t("design.log.contextNeeded")
+      const url = text(record.url)
+      if (url && !isArtifactUrl(url)) return t("design.log.url")
+      return compact({
+        type: "aperta",
+        ...base,
+        title,
+        question,
+        why,
+        context,
+        recommend,
+        keeps,
+        spec: text(record.spec),
+        variants,
+        order: order as number | undefined,
+        multi: multi ? true : undefined,
+        url,
+      }) as OpenedDesignEvent
+    }
+    case "risposta": {
+      const again = record.again === true
+      if (again && (record.choice !== undefined || record.choices !== undefined)) return t("design.log.again")
+      const words = text(record.words)
+      if (!words) return again ? t("design.log.again") : t("design.log.words")
+      const choices = choicesOf(record.choices, t("design.log.choices"))
+      if (choices && "error" in choices) return choices.error
+      if (choices && record.choice !== undefined) return t("design.log.choiceAndChoices")
+      return compact({
+        type: "risposta",
+        ...base,
+        words,
+        choice: text(record.choice),
+        choices,
+        note: text(record.note),
+        again: again ? true : undefined,
+      }) as AnsweredDesignEvent
+    }
+    case "riaperta": {
+      let variants: DesignVariant[] | undefined
+      if (record.variants !== undefined) {
+        const checked = variantsOf(record.variants)
+        if (typeof checked === "string") return checked
+        if (checked.length === 0) return t("design.log.variants")
+        variants = checked
+      }
+      return compact({
+        type: "riaperta",
+        ...base,
+        reason: text(record.reason),
+        variants,
+      }) as ReopenedDesignEvent
+    }
+    case "chiusa":
+      return compact({
+        type: "chiusa",
+        ...base,
+        evidence: text(record.evidence),
+      }) as ClosedDesignEvent
+  }
+}
+
+function text(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * The options picked in a multiple answer: a non-empty list of distinct,
+ * non-empty texts. `undefined` when the field is absent.
+ */
+function choicesOf(value: unknown, bad: string): string[] | undefined | { error: string } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length === 0) return { error: bad }
+  const seen = new Set<string>()
+  for (const item of value) {
+    const label = text(item)
+    if (!label || seen.has(label)) return { error: bad }
+    seen.add(label)
+  }
+  return [...seen]
+}
+
+function variantsOf(value: unknown): DesignVariant[] | string {
+  if (!Array.isArray(value)) return t("design.log.variants")
+  const variants: DesignVariant[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") return t("design.log.variants")
+    const rec = item as Record<string, unknown>
+    const name = text(rec.name)
+    if (!name) return t("design.log.variantName")
+    const description = text(rec.description) ?? ""
+    const preview = text(rec.preview) ?? ""
+    const changes = textsOf(rec.changes)
+    if (changes && "error" in changes) return t("design.log.changes")
+    variants.push(changes ? { name, description, preview, changes } : { name, description, preview })
+  }
+  return variants
+}
+
+/** Short texts; `undefined` when absent or empty, an error when not a list of texts. */
+function textsOf(value: unknown): string[] | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return { error: true }
+  const texts: string[] = []
+  for (const item of value) {
+    const entry = text(item)
+    if (!entry) return { error: true }
+    texts.push(entry)
+  }
+  return texts.length > 0 ? texts : undefined
+}
+
+/** `{ option, because? }`; an error when it is something else or names no variant. */
+function recommendationOf(value: unknown): DesignRecommendation | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { error: true }
+  const record = value as Record<string, unknown>
+  const option = text(record.option)
+  if (!option) return { error: true }
+  return compact({ option, because: text(record.because) }) as DesignRecommendation
+}
+
+function compact<T extends Record<string, unknown>>(record: T): T {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T
+}

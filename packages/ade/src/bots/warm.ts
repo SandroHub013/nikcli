@@ -24,6 +24,7 @@
  * ```
  */
 
+import { t } from "../i18n"
 import { getHost, type SpawnedSession } from "../host/shell"
 import { registerSender, unregisterSender } from "../session/senders"
 import type { AgentFile } from "./nikcli"
@@ -68,6 +69,8 @@ function configKey(request: TurnRequest): string {
     request.mailbox?.id ?? "",
     request.lean === true,
     request.partial === true,
+    request.account?.mode ?? "plan",
+    request.account?.mode === "key" ? request.account.key : "",
   ])
 }
 
@@ -112,7 +115,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     target.cancel?.()
     if (target.mailbox && target.token) unregisterSender(target.mailbox, target.token)
     target.session?.kill({ tree: true })
-    void target.starting.then((session) => session?.kill({ tree: true }))
+    void target.starting.then((session) => void session?.kill({ tree: true }))
     for (const [cwd, other] of lives) if (other === target) lives.delete(cwd)
   }
 
@@ -143,7 +146,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
       const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
       const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
       const resumeId = resumes.get(cwdOf(request))
-      const { command, args } = turnCommand(runner, {
+      const { command, args, flags, secrets } = turnCommand(runner, {
         bot,
         message: "",
         stdin: true,
@@ -151,6 +154,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         ...(request.lean ? { lean: true } : {}),
         ...(request.partial ? { partial: true } : {}),
         ...(outbox ? { outbox } : {}),
+        ...(request.account ? { account: request.account } : {}),
       })
       if (request.mailbox) {
         target.token = crypto.randomUUID()
@@ -165,6 +169,8 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         rows: 50,
         pipe: true,
         ...(request.mailbox && target.token ? { pane: request.mailbox.id, paneToken: target.token } : {}),
+        ...(flags ? { flags } : {}),
+        ...(secrets && secrets.length > 0 ? { secrets: [...secrets] } : {}),
         onLine: (line) => target.line?.(line),
         onExit: (code) => {
           const wasLive = !target.exited
@@ -303,7 +309,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
               return finish("error", problem)
             }
             case "nohost": {
-              const problem = "Nessun host: un turno si esegue solo nell'app desktop."
+              const problem = t("bots.turn.noHost")
               update(applyProblem(talk, problem, Date.now()))
               return finish("error", problem)
             }

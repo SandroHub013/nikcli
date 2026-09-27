@@ -1,10 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import {
   VOICE_API_KEY_STORAGE_KEY,
+  VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
+  clearOpenRouterKeyRemoved,
   clearVoiceSettings,
   exportVoiceSettings,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
+  markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./storage"
@@ -183,16 +187,28 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
     expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBe("sk-or-vecchia")
   })
 
-  test("togliere la chiave la rimuove davvero dal disco", () => {
+  test("togliere la chiave la rimuove davvero e impedisce il reimport", () => {
     const storage = new MemoryStorage()
     saveVoiceSettings({ openRouterApiKey: "sk-or-segreta" }, storage)
     saveVoiceSettings({ openRouterApiKey: "" }, storage)
 
     expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBeNull()
     expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
+    expect(storage.getItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)).toBe("1")
+    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
   })
 
-  test("«reset» non lascia dietro una chiave API", () => {
+  test("una chiave inserita di nuovo pulisce il segno di rimozione", () => {
+    const storage = new MemoryStorage()
+    markOpenRouterKeyRemoved(storage)
+
+    saveVoiceSettings({ openRouterApiKey: "sk-or-nuova" }, storage)
+
+    expect(isOpenRouterKeyRemoved(storage)).toBe(false)
+    expect(storage.getItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)).toBeNull()
+  })
+
+  test("«reset» non lascia dietro una chiave API e segnala la rimozione", () => {
     const storage = new MemoryStorage()
     saveVoiceSettings({ openRouterApiKey: "sk-or-segreta" }, storage)
 
@@ -200,6 +216,18 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
 
     expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBeNull()
     expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
+    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
+  })
+
+  test("il segno di rimozione sopravvive a una modifica che non tocca la chiave", () => {
+    const storage = new MemoryStorage()
+    markOpenRouterKeyRemoved(storage)
+
+    saveVoiceSettings({ language: "en" }, storage)
+
+    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
+    clearOpenRouterKeyRemoved(storage)
+    expect(isOpenRouterKeyRemoved(storage)).toBe(false)
   })
 
   test("l'export non può portarla fuori per distrazione", () => {
@@ -274,7 +302,7 @@ describe("after 0.7.0: a profile saved on the shortcut", () => {
     )
     const first = loadVoiceSettings(store)
     expect(first.settings.activation).toBe("wake-word")
-    expect(first.settings.alwaysListen).toBe(true)
+    expect(first.settings.alwaysListen).toBe(false)
     expect(first.migrations).toEqual(["name-only"])
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("wake-word")
     expect(loadVoiceSettings(store).migrations).toEqual([])

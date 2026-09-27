@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test"
 import {
   WATCH_MAX_GAP_MS,
   acceptsReport,
+  countingLines,
   followReports,
+  followedFolder,
+  lastReportedId,
   newNonce,
+  otherFolder,
   parseReport,
   reportFile,
   watchForReport,
@@ -53,6 +57,18 @@ describe("parseReport", () => {
   test("drops a timestamp that is not a number, keeping the report", () => {
     const odd = JSON.stringify({ pane: "p", nonce: "n", agent: "a", sessionId: "s", at: "ieri" })
     expect(parseReport(odd)).toEqual({ pane: "p", nonce: "n", agent: "a", sessionId: "s" })
+  })
+})
+
+describe("the conversation's folder", () => {
+  test("read when the CLI says it, left out when it does not or is not a path", () => {
+    const withDir = JSON.stringify({ ...JSON.parse(good), source: "switch", sessionDir: "C:\\Users\\me\\altro" })
+    expect(parseReport(withDir)?.sessionDir).toBe("C:\\Users\\me\\altro")
+    expect(parseReport(good)?.sessionDir).toBeUndefined()
+    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: 7 }))?.sessionDir).toBeUndefined()
+    expect(
+      parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: "x".repeat(5000) }))?.sessionDir,
+    ).toBeUndefined()
   })
 })
 
@@ -235,5 +251,140 @@ describe("followReports", () => {
 
   test("the same id reported again is not a move", async () => {
     expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
+  })
+
+  test("nikcli's switch of tab, /new or /sessions moves the pane", async () => {
+    expect(
+      await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")]),
+    ).toEqual(["ses_first", "ses_new", "ses_tab"])
+  })
+
+  test("a switch written under another spawn's nonce does not", async () => {
+    const foreign = JSON.stringify({ ...JSON.parse(report("ses_other", "switch")), nonce: "ffffff" })
+    expect(await run([report("ses_first", "switch"), foreign])).toEqual(["ses_first"])
+  })
+})
+describe("followReports slows down when nothing comes (P1-C2b)", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const first = JSON.stringify({ ...JSON.parse(good), source: "startup" })
+
+  /** Runs until `until` ms; returns the times the drop file was read after the first report. */
+  async function reads(until: number, lineAt: number[] = []) {
+    let at = 0
+    const readAt: number[] = []
+    await followReports({
+      ...expected,
+      read: async () => {
+        if (at > 0) readAt.push(at)
+        return at === 0 ? first : null
+      },
+      clear: async () => {},
+      cancelled: () => at >= until,
+      onReport: () => {},
+      linesSent: () => lineAt.filter((line) => line <= at).length,
+      now: () => at,
+      sleep: async (ms) => void (at += ms),
+    })
+    return readAt
+  }
+
+  test("2, 4, 8, then every 15 seconds", async () => {
+    expect(await reads(60_000)).toEqual([2_000, 6_000, 14_000, 29_000, 44_000, 59_000])
+  })
+
+  test("a line sent into the pane brings it back to 2 seconds, within 2 seconds", async () => {
+    // The user types /resume at 30 s, in the middle of a 15 s gap.
+    expect(await reads(40_000, [30_000])).toEqual([2_000, 6_000, 14_000, 29_000, 31_000, 35_000])
+  })
+
+  test("countingLines counts the lines a session submits, and keeps the session itself", () => {
+    const written: string[] = []
+    let lines = 0
+    const session = { write: (data: string) => void written.push(data) }
+    const counted = countingLines(session, () => lines++)
+    expect(counted).toBe(session)
+    counted.write("/res")
+    counted.write("ume\r")
+    expect(lines).toBe(1)
+    expect(written).toEqual(["/res", "ume\r"])
+  })
+})
+
+/* At a restore: the report the previous spawn left wins over the saved id. */
+describe("lastReportedId", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const left = (sessionId: string, source: string, nonce = "a1b2c3") =>
+    JSON.stringify({ pane: "pane-7", nonce, agent: "nikcli", sessionId, source })
+
+  test("a switch the pane never read beats the id saved with it", () => {
+    expect(lastReportedId(left("ses_tab", "switch"), expected, "ses_saved")).toBe("ses_tab")
+    // No saved id: the report is the id.
+    expect(lastReportedId(left("ses_tab", "switch"), expected, undefined)).toBe("ses_tab")
+  })
+
+  test("nothing left, another spawn's, the same id, or a nested startup: the saved id stays", () => {
+    expect(lastReportedId(null, expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId("", expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_tab", "switch", "ffffff"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_saved", "switch"), expected, "ses_saved")).toBeUndefined()
+    expect(lastReportedId(left("ses_child", "startup"), expected, "ses_saved")).toBeUndefined()
+  })
+})
+
+/* nikcli's tabs are shared by every project: a pane can be moved to another folder's conversation. */
+describe("otherFolder", () => {
+  const report = (sessionDir?: string) =>
+    parseReport(
+      JSON.stringify({
+        pane: "p",
+        nonce: "n",
+        agent: "nikcli",
+        sessionId: "ses_x",
+        source: "switch",
+        ...(sessionDir ? { sessionDir } : {}),
+      }),
+    )!
+
+  test("another folder is named", () => {
+    expect(otherFolder(report("C:\\Users\\me\\altro"), "C:\\Users\\me\\progetto")).toBe("C:\\Users\\me\\altro")
+  })
+
+  test("the pane's own folder, however it is spelled, or no folder said: nothing", () => {
+    expect(otherFolder(report("C:\\Users\\me\\progetto"), "c:/users/me/progetto/")).toBeUndefined()
+    expect(otherFolder(report(), "C:\\Users\\me\\progetto")).toBeUndefined()
+  })
+})
+
+/*
+ * Lettura di Mimo, F4, scenario B: nikcli's plugin leaves the folder out of a
+ * report when its `session.get` fails, and that report used to write "the
+ * pane's own folder" over what was known.
+ */
+describe("followedFolder", () => {
+  const report = (sessionId: string, sessionDir?: string) =>
+    parseReport(
+      JSON.stringify({
+        pane: "p",
+        nonce: "n",
+        agent: "nikcli",
+        sessionId,
+        source: "switch",
+        ...(sessionDir ? { sessionDir } : {}),
+      }),
+    )!
+  const here = "C:\\Users\\me\\progetto"
+  const known = { resumeId: "ses_uno", otherDir: "C:\\Users\\me\\altro" }
+
+  test("a report without its folder keeps what was known of the same conversation", () => {
+    expect(followedFolder(report("ses_uno"), here, known)).toBe(known.otherDir)
+  })
+
+  test("and knows nothing of another conversation", () => {
+    expect(followedFolder(report("ses_due"), here, known)).toBeUndefined()
+  })
+
+  test("a report that says its folder is believed, either way", () => {
+    expect(followedFolder(report("ses_uno", here), here, known)).toBeUndefined()
+    expect(followedFolder(report("ses_due", "D:\\terza"), here, known)).toBe("D:\\terza")
   })
 })

@@ -4,23 +4,10 @@
  * body is a different thing.
  */
 
-/* Frameless, like the session pane it sits beside: the grid's one-pixel gap
-   is the only line between two tiles, and a border here would double it. */
-[data-component="file-pane"] {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  background: var(--ade-surface);
-  overflow: hidden;
-}
-
-[data-component="file-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
-}
+/*
+ * Geometry, ground and focus line come from the shell on the cell's child
+ * (index.css): this pane copies none of them.
+ */
 
 /* Same 22px row as the session pane's: the two sit side by side in the grid,
    and a header that is taller on one tile reads as the tile being misaligned. */
@@ -80,4 +67,89 @@
   [data-component="file-pane"] {
     transition: none;
   }
+}
+
+/* «Anteprima / Testo», for SVG and markdown. */
+[data-component="file-pane"] [data-slot="pane-view-toggle"] {
+  flex: 0 0 auto;
+  padding: 0 var(--ade-space-2);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+[data-component="file-pane"] [data-slot="pane-view-toggle"]:hover {
+  color: var(--ade-text);
+  background: var(--ade-active);
+}
+
+/* The viewers: the file centred, fitted to the pane, never cropped. */
+[data-component="file-pane"] [data-slot="file-view"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: safe center;
+  justify-content: safe center;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4);
+  overflow: auto;
+}
+
+[data-component="file-pane"] [data-slot="file-image"] {
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+
+[data-component="file-pane"] [data-slot="file-caption"],
+[data-component="file-pane"] [data-slot="file-message"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="file-message"] {
+  padding: var(--ade-space-4);
+}
+
+[data-component="file-pane"] [data-slot="file-markdown"] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ade-space-4) var(--ade-space-5);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  line-height: 1.55;
+}
+
+[data-component="file-pane"] [data-slot="file-markdown"] img {
+  max-width: 100%;
+}
+
+[data-component="file-pane"] [data-slot="file-markdown"] pre {
+  overflow: auto;
+  padding: var(--ade-space-3);
+  background: var(--ade-sunken);
+  border-radius: var(--ade-radius-sm);
+}
+
+[data-component="file-pane"] [data-slot="file-font"] {
+  align-self: stretch;
+  overflow: auto;
+  color: var(--ade-text);
+}
+
+[data-component="file-pane"] [data-slot="file-font"] p {
+  margin: 0 0 var(--ade-space-3);
+}
+
+[data-component="file-pane"] [data-slot="file-audio"] {
+  width: min(100%, 420px);
 }

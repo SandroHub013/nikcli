@@ -128,6 +128,11 @@ describe("app URLs", () => {
     expect(isLoadableAppUrl("http://localhost:5173/", "http://localhost:5177")).toBe(true)
     expect(isLoadableAppUrl("data:text/html,hi", "http://tauri.localhost")).toBe(false)
   })
+
+  test("a page cannot sneak onto ADE by navigating to tauri.localhost from elsewhere", () => {
+    expect(isLoadableAppUrl("http://tauri.localhost/", "http://localhost:5177")).toBe(false)
+    expect(isLoadableAppUrl("https://tauri.localhost/index.html", "http://localhost:5270")).toBe(false)
+  })
 })
 
 describe("runSimulatorCommand", () => {
@@ -162,13 +167,16 @@ describe("runSimulatorCommand", () => {
     return controller
   }
   const request = (line: string) => parseRequest(line)!
+  const neverAsked = async (url: string): Promise<boolean> => {
+    throw new Error(`asked for ${url}`)
+  }
 
   test("open reports what is shown, and fails when no server answers", async () => {
-    expect(await runSimulatorCommand(fake(), request("@ade app open 5173"))).toEqual({
+    expect(await runSimulatorCommand(fake(), request("@ade app open 5173"), neverAsked)).toEqual({
       ok: true,
       detail: "http://localhost:5173/ su iPhone 15 (393×798, verticale)",
     })
-    const down = await runSimulatorCommand(fake(false), request("@ade app open 5173"))
+    const down = await runSimulatorCommand(fake(false), request("@ade app open 5173"), neverAsked)
     expect(down).toEqual({
       ok: false,
       reason: "http://localhost:5173/ su iPhone 15 (393×798, verticale) — server non raggiungibile",
@@ -177,19 +185,54 @@ describe("runSimulatorCommand", () => {
 
   test("size is for windows only, rotate for devices only", async () => {
     const controller = fake()
-    expect((await runSimulatorCommand(controller, request("@ade app size 800x600"))).ok).toBe(false)
-    await runSimulatorCommand(controller, request("@ade app device window"))
-    expect((await runSimulatorCommand(controller, request("@ade app rotate"))).ok).toBe(false)
-    expect(await runSimulatorCommand(controller, request("@ade app size 800x600"))).toEqual({
+    expect((await runSimulatorCommand(controller, request("@ade app size 800x600"), neverAsked)).ok).toBe(false)
+    await runSimulatorCommand(controller, request("@ade app device window"), neverAsked)
+    expect((await runSimulatorCommand(controller, request("@ade app rotate"), neverAsked)).ok).toBe(false)
+    expect(await runSimulatorCommand(controller, request("@ade app size 800x600"), neverAsked)).toEqual({
       ok: true,
       detail: "nessuna app aperta su Finestra desktop (800×600)",
     })
   })
 
   test("an unknown device lists the known ones", async () => {
-    const outcome = await runSimulatorCommand(fake(), request("@ade app device nokia"))
+    const outcome = await runSimulatorCommand(fake(), request("@ade app device nokia"), neverAsked)
     expect(outcome.ok).toBe(false)
     if (!outcome.ok) expect(outcome.reason).toContain("iphone-15")
+  })
+
+  /* Review of review-alti, 1.3: an app that is not this machine's opens only on the user's yes. */
+  test("open of an address that is not local asks, once, and a no opens nothing and says so", async () => {
+    const asked: string[] = []
+    const controller = fake()
+    const no = await runSimulatorCommand(controller, request("@ade app open https://evil.example/app"), async (url) => {
+      asked.push(url)
+      return false
+    })
+    expect(no).toEqual({ ok: false, reason: "negato dall'utente" })
+    expect(asked).toEqual(["https://evil.example/app"])
+    expect(controller.state().url).toBeUndefined()
+    const yes = await runSimulatorCommand(
+      controller,
+      request("@ade app open https://evil.example/app"),
+      async (url) => {
+        asked.push(url)
+        return true
+      },
+    )
+    expect(yes.ok).toBe(true)
+    expect(controller.state().url).toBe("https://evil.example/app")
+    expect(asked).toEqual(["https://evil.example/app", "https://evil.example/app"])
+  })
+
+  test("a dev server on this machine opens without asking", async () => {
+    for (const line of [
+      "@ade app open 5173",
+      "@ade app open localhost:8081",
+      "@ade app open http://127.0.0.1:3000",
+      "@ade app open http://[::1]:4000",
+    ]) {
+      expect((await runSimulatorCommand(fake(), request(line), neverAsked)).ok).toBe(true)
+    }
   })
 
   test("describes landscape", () => {

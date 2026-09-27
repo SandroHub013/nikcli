@@ -20,6 +20,8 @@ import {
 import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
+import { locale, t } from "../i18n"
+import { dictatedFile, isRecentRoot } from "./paths"
 
 /**
  * External dependencies provided by Workbench to avoid direct global state coupling.
@@ -35,8 +37,15 @@ export interface AdeVoiceHostDeps {
   ) => SpawnedSession | { write: (text: string) => void; kill?: () => void } | undefined
   openFile: (path: string) => Promise<void>
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
+  /** A note the user has to read, over the terminal as well as in the transcript. */
+  tellPane: (paneId: string, text: string) => void
   permissions: () => Record<string, PermissionRequest>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
+  /**
+   * The spoken decision on a `send` the voice agent wrote: deliver it, or
+   * refuse it with a receipt the waiting `ade-msg send` can print (rilievo 20).
+   */
+  confirmVoiceSend?: (id: string, approved: boolean) => void
   getHost?: () => Promise<Host | undefined>
   scrollTranscript?: (paneId: string, delta: number) => void
   /** The MRU project list, so a plan can name a project ADE is not in. */
@@ -48,8 +57,16 @@ export interface AdeVoiceHostDeps {
    * absent, see `listAgents`.
    */
   agentAvailability?: () => AgentStatus[] | undefined
+  /** Whether to retry on Codex when Claude hits its plan rate limit. */
+  codexFallback?: () => boolean
   /** Opens a project already on disk, keeping the panes of the one being left. */
   switchProject?: (root: string) => Promise<void>
+  /**
+   * A yes or no from the user, for a dictated path outside what voice opens on
+   * its own: a file outside the project, a folder that is not a recent project
+   * (M11). Absent, the answer is no.
+   */
+  confirm?: (question: string) => Promise<boolean>
   /**
    * Creates one pane and starts one agent in it, returning the pane it made.
    *
@@ -58,6 +75,10 @@ export interface AdeVoiceHostDeps {
    * implementation of it grow here.
    */
   openAgentSession?: (input: { agentId: string; task: string }) => { paneId: string; title: string }
+  /** Builds the voice agent; tests and embedders can provide their own. */
+  voiceAgentFactory?: () => Promise<VoiceAgent>
+  /** Explicit app locale resolver, defaults to global locale() */
+  locale?: () => "it" | "en"
 }
 
 const ITALIAN_NUMBERS: Record<number, string> = {
@@ -72,6 +93,20 @@ const ITALIAN_NUMBERS: Record<number, string> = {
   8: "otto",
   9: "nove",
   10: "dieci",
+}
+
+const ENGLISH_NUMBERS: Record<number, string> = {
+  0: "zero",
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+  10: "ten",
 }
 
 /**
@@ -98,6 +133,22 @@ const PREPARE_WAIT_MS = 30_000
 
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
+   * No voice text into a terminal whose agent is asking a permission
+   * (V1-bis, ALTO 6). The question is a menu: the text lands in it, and the
+   * Enter of «invia» picks the highlighted option — a grant nobody said. The
+   * question is answered first, by voice or by hand.
+   */
+  const refuseWhileAsking = (paneId: string) => {
+    if (!deps.permissions()[paneId]) return
+    const currentLocale = deps.locale ? deps.locale() : locale()
+    throw new Error(
+      currentLocale === "en"
+        ? "That panel is asking a permission: answer it first. The text was not sent."
+        : "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
+    )
+  }
+
+  /*
    * The agent that answers what the grammar cannot, built on first use.
    *
    * Imported lazily: `bots/turn` reaches the native host, and the voice host
@@ -105,21 +156,24 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * gets that far.
    */
   let agent: Promise<VoiceAgent> | undefined
+  let prepareGeneration = 0
   /* Closed with the window: a process left waiting would outlive the app until its idle timer. */
   const warmClaude = <T extends { close: () => void }>(warm: T): T => {
     if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
     return warm
   }
   const voiceAgent = () =>
-    (agent ??= Promise.all([import("../bots/turn"), import("../bots/warm")]).then(
-      ([{ runTurn }, { createWarmClaude }]) =>
-        createVoiceAgent({
-          runTurn,
-          warm: warmClaude(createWarmClaude()),
-          statuses: () => deps.agentAvailability?.(),
-          cwd: () => deps.project()?.root,
-        }),
-    ))
+    (agent ??= deps.voiceAgentFactory
+      ? deps.voiceAgentFactory()
+      : Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
+          createVoiceAgent({
+            runTurn,
+            warm: warmClaude(createWarmClaude()),
+            statuses: () => deps.agentAvailability?.(),
+            cwd: () => deps.project()?.root,
+            codexFallback: () => deps.codexFallback?.() ?? false,
+          }),
+        ))
 
   return {
     async askAgent(request) {
@@ -132,15 +186,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * without it would be replaced at the first sentence. Waited for, up to
        * half a minute, then started where the turn will run.
        */
+      const generation = prepareGeneration
       void (async () => {
         for (let waited = 0; !deps.project()?.root && waited < PREPARE_WAIT_MS; waited += 500) {
           await new Promise((resolve) => setTimeout(resolve, 500))
         }
-        ;(await voiceAgent()).prepare(request)
+        if (generation !== prepareGeneration) return
+        const ready = await voiceAgent()
+        if (generation !== prepareGeneration) return
+        ready.prepare(request)
       })()
     },
 
     releaseAgent() {
+      prepareGeneration++
       void agent?.then((ready) => ready.release())
     },
 
@@ -151,6 +210,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * «apri il browser» answered «aperto» and the user saw nothing change.
        */
       if (OPENS_IN_GRID.has(id) && deps.wb().view !== "code") deps.setWb((w) => ({ ...w, view: "code" }))
+      // M11: a dictated folder opens as a project only among the recent ones; any other is asked.
+      if (id.startsWith("project.recent.")) {
+        const root = id.slice("project.recent.".length)
+        if (!isRecentRoot(root, deps.recents?.() ?? []) && !(await deps.confirm?.(t("voice.path.askProject", root)))) {
+          throw new Error(t("voice.path.refused"))
+        }
+      }
       await deps.runCommand(id)
     },
 
@@ -261,6 +327,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * `replace(/\n/g, " ")` left carriage returns alone, which a tty reads
        * as Enter — one dictated sentence could arrive as two submissions.
        */
+      refuseWhileAsking(paneId)
       const singleLine = asOneLine(text)
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
@@ -289,7 +356,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     async openFile(path: string): Promise<void> {
-      await deps.openFile(path)
+      // M11: a dictated file opens on its own only inside the project; any other is asked.
+      const file = dictatedFile(path, deps.project()?.root)
+      if (!file.inside && !(await deps.confirm?.(t("voice.path.askFile", file.path)))) {
+        throw new Error(t("voice.path.refused"))
+      }
+      await deps.openFile(file.path)
     },
 
     async searchProject(query: string): Promise<{ path: string; line?: number }[]> {
@@ -328,9 +400,25 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       return true
     },
 
-    answerPermission(paneId: string, answer: "allow" | "deny"): boolean {
+    pendingPermissionWhat(paneId: string): string | undefined {
+      return deps.permissions()[paneId]?.what
+    },
+
+    pendingPermissionKind(paneId: string) {
+      return deps.permissions()[paneId]?.kind
+    },
+
+    answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {
+        return false
+      }
+      /*
+       * The request whose question was read, and no other (V1-bis, ALTO 3):
+       * the first one answered by hand and a new one asked, a yes to «cat
+       * README» would otherwise grant the «rm -rf ~» on screen now.
+       */
+      if (what !== undefined && pending.what !== what) {
         return false
       }
 
@@ -367,14 +455,18 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         return true
       }
 
-      if (answer === "deny") {
-        deps.appendLine(
-          paneId,
-          "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
-          "note",
-        )
-      }
+      /*
+       * Over the terminal: the spoken «nega» command says so aloud, but a
+       * «no» to the question ADE read out (`effect/program.ts`) says nothing.
+       */
+      if (answer === "deny") deps.tellPane(paneId, t("voice.permission.notRefusal"))
       return false
+    },
+
+    confirmVoiceSend(id: string, approved: boolean): boolean {
+      if (!deps.confirmVoiceSend) return false
+      deps.confirmVoiceSend(id, approved)
+      return true
     },
 
     setColumns(columns?: number): void {
@@ -433,14 +525,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         return
       }
 
+      const currentLocale = deps.locale ? deps.locale() : locale()
       const session = deps.getRunningSession(paneId)
       if (!session) {
         throw new Error(
-          field
-            ? "Il pannello selezionato non ha un processo in ascolto."
-            : "Il pannello selezionato non ha dove ricevere il testo.",
+          currentLocale === "en"
+            ? field
+              ? "The selected panel has no listening process."
+              : "The selected panel cannot receive text."
+            : field
+              ? "Il pannello selezionato non ha un processo in ascolto."
+              : "Il pannello selezionato non ha dove ricevere il testo.",
         )
       }
+      refuseWhileAsking(paneId)
       // A trailing space, not a carriage return: the next dictated phrase must
       // not run into this one, and nothing is submitted until the user says so.
       session.write(`${trimmed} `)
@@ -473,43 +571,71 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       const currentView = deps.wb().view
 
       let spokenSummary: string
-      if (totalSessions === 0) {
-        spokenSummary = "Al momento non c'è nessuna sessione aperta."
-      } else if (totalSessions === 1) {
-        const detail =
-          workingSessions > 0
-            ? " in esecuzione"
-            : waitingSessions > 0
-              ? " in attesa"
-              : doneSessions > 0
-                ? " completata"
-                : errorSessions > 0
-                  ? " in errore"
-                  : ""
-        spokenSummary = `C'è una sessione${detail}.`
+      const currentLocale = deps.locale ? deps.locale() : locale()
+      if (currentLocale === "en") {
+        if (totalSessions === 0) {
+          spokenSummary = "There are currently no open sessions."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " running"
+              : waitingSessions > 0
+                ? " waiting"
+                : doneSessions > 0
+                  ? " completed"
+                  : errorSessions > 0
+                    ? " in error"
+                    : ""
+          spokenSummary = `There is one session${detail}.`
+        } else {
+          const countWord = ENGLISH_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) details.push(`${workingSessions} running`)
+          if (waitingSessions > 0) details.push(`${waitingSessions} waiting`)
+          if (doneSessions > 0) details.push(`${doneSessions} completed`)
+          if (errorSessions > 0) details.push(`${errorSessions} in error`)
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `There are ${countWord} open sessions${detailsStr}`
+        }
       } else {
-        const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
-        const details: string[] = []
-        if (workingSessions > 0) {
-          details.push(
-            `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
-          )
+        if (totalSessions === 0) {
+          spokenSummary = "Al momento non c'è nessuna sessione aperta."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " in esecuzione"
+              : waitingSessions > 0
+                ? " in attesa"
+                : doneSessions > 0
+                  ? " completata"
+                  : errorSessions > 0
+                    ? " in errore"
+                    : ""
+          spokenSummary = `C'è una sessione${detail}.`
+        } else {
+          const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) {
+            details.push(
+              `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
+            )
+          }
+          if (waitingSessions > 0) {
+            details.push(
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+            )
+          }
+          if (doneSessions > 0) {
+            const w =
+              doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
+            details.push(w)
+          }
+          if (errorSessions > 0) {
+            details.push(`${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`)
+          }
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
         }
-        if (waitingSessions > 0) {
-          details.push(
-            `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
-          )
-        }
-        if (doneSessions > 0) {
-          const w =
-            doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
-          details.push(w)
-        }
-        if (errorSessions > 0) {
-          details.push(`${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`)
-        }
-        const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
-        spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
       }
 
       return {

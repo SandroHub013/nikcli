@@ -15,7 +15,17 @@
  * - Strictly typed without type assertions or compiler suppression annotations.
  */
 
-import { REPLY_VOICE_CHOICES } from "../settings/reply-voices"
+import {
+  activeReplyVoice,
+  backendOf,
+  REPLY_BACKEND_CHOICES,
+  replyVoiceChoicesFor,
+  voiceOnBackend,
+  rememberReplyVoice,
+} from "../settings/reply-voices"
+import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
+import { InstallBar, VoicePackBox } from "./voice-pack-box"
+import { panelEscape, panelFrame, panelListensEarly, panelTrapsTab } from "./panel-keys"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import type { VoiceEngine } from "../engine"
 import type { DialogStatus } from "../dialog/session"
@@ -35,13 +45,7 @@ import {
 import { availableLanguages, isLanguageSupported, type LanguageOption } from "../settings/languages"
 import { describeShortcut, VOICE_COMMAND_AGENT, VOICE_COMMAND_TRANSCRIPTION } from "../settings/shortcuts"
 import { describeBackends, type TranscriberBackend } from "../asr/select"
-import {
-  disposeParakeetModel,
-  isWasmAvailable,
-  isWebGpuAvailable,
-  warmupParakeetModel,
-  type ParakeetProgress,
-} from "../asr/parakeet-local"
+import { disposeParakeetModel, isWasmAvailable, isWebGpuAvailable, type ParakeetProgress } from "../asr/parakeet-local"
 import {
   clearModelCache,
   downloadParakeetModel,
@@ -61,8 +65,10 @@ import {
   suggestClosestLanguage,
 } from "./shortcut-capture"
 import { NikMic } from "./nik-mic"
+import { submitVoiceTrial } from "./voice-trial"
 import "./voice-settings.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { locale, t } from "@nikcli-ai/ade/i18n"
+import { formatSpendCost } from "../settings/spend"
 
 /**
  * A settings screen the host owns.
@@ -104,6 +110,19 @@ export interface VoiceSettingsPanelProps {
   existingBindings?: readonly Binding[]
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
   onOpenVoiceSource?: (voice: ReplyVoice) => void
+  naturalVoiceError?: string
+  naturalVoiceDownloading?: boolean
+  onDownloadNaturalVoice?: () => void
+  /** How the Piper download is going, while it goes (K3's `tts_install_status`). */
+  naturalVoiceProgress?: InstallProgress
+  /** Stops the install under way for a provider (K3's `tts_install_cancel`). Absent: no cancel is shown. */
+  onCancelInstall?: (provider: LocalProvider) => void
+  /** The Kokoro pack as the host reports it (K6). Its `status` is absent where the host cannot run Kokoro. */
+  kokoroPack?: PackState
+  onInstallKokoro?: () => void
+  onDeleteKokoro?: () => void
+  /** Speaks a short sample in the voice chosen. Absent: no button. */
+  onTestVoice?: () => void
   /** Optional Parakeet neural model download progress. */
   parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
@@ -136,8 +155,16 @@ export interface VoiceSettingsPanelProps {
   subtitle?: string
   /** Whether the panel is rendered as a standalone inline component rather than an overlay dialog. */
   inline?: boolean
+  /**
+   * The host draws the dialog around the panel (ADE's Sheet): its overlay,
+   * focus trap, Escape and press outside are the host's, and the panel draws
+   * none of its own. See `panel-keys.ts`.
+   */
+  framed?: boolean
   /** Optional additional CSS class names. */
   class?: string
+  /** Optional initial section ID to activate when opening the panel. */
+  initialSection?: string
 }
 
 /**
@@ -400,6 +427,7 @@ function radioGroupKeys(apply: (value: string) => void) {
 }
 
 export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
+  const frame = () => panelFrame(props)
   const platform = getPlatform()
   let panelRef: HTMLDivElement | undefined
   let bodyRef: HTMLDivElement | undefined
@@ -432,9 +460,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [commandFilter, setCommandFilter] = createSignal("")
   const [trialText, setTrialText] = createSignal("")
   const [trialBusy, setTrialBusy] = createSignal(false)
-  const [trialNote, setTrialNote] = createSignal<string | undefined>(undefined)
   const [resetArmed, setResetArmed] = createSignal(false)
-  const [activeSection, setActiveSection] = createSignal(SECTIONS[0].id)
+  const [activeSection, setActiveSection] = createSignal(props.initialSection ?? SECTIONS[0].id)
+  createEffect(() => {
+    if (props.initialSection) {
+      setActiveSection(props.initialSection)
+    }
+  })
 
   /*
    * The machine's audio hardware, and what is cached of the local model.
@@ -459,20 +491,35 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [downloadProgress, setDownloadProgress] = createSignal<DownloadParakeetProgress | null>(null)
   const [downloadError, setDownloadError] = createSignal<string | null>(null)
   const [downloadSuccess, setDownloadSuccess] = createSignal(false)
+  let cacheGeneration = 0
+  let cacheBackend = props.settings.parakeetBackend
+  createEffect(() => {
+    cacheBackend = props.settings.parakeetBackend
+  })
 
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
   }
-  const refreshCache = () => {
-    void inspectModelCache().then((found) => {
+  const parakeetFiles = (backend: ParakeetExecutionBackend): string[] => {
+    const usesWebGpu = backend === "webgpu" || (backend === "auto" && isWebGpuAvailable())
+    return [`encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`, "decoder_joint-model.int8.onnx", "vocab.txt"]
+  }
+  const parakeetTotal = (backend: ParakeetExecutionBackend): number =>
+    parakeetFiles(backend)[0]?.includes("fp16") ? 1_200_000_000 : 670_488_135
+  const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
+    if (backend !== cacheBackend) return EMPTY_CACHE
+    const generation = ++cacheGeneration
+    const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
+    if (generation === cacheGeneration && backend === cacheBackend) {
       setCached(found)
       setInspected(true)
-    })
+    }
+    return found
   }
 
   onMount(() => {
     refreshDevices()
-    refreshCache()
+    void refreshCache()
     const stop = onDeviceChange(refreshDevices)
     onCleanup(stop)
   })
@@ -600,23 +647,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setDownloadSuccess(false)
     setDownloadProgress({
       loaded: 0,
-      total: 670_488_135,
+      total: parakeetTotal(props.settings.parakeetBackend),
       percent: 0,
       message: t("vui.download.starting"),
     })
     try {
-      const result = await downloadParakeetModel({
+      const backend = props.settings.parakeetBackend
+      const files = parakeetFiles(backend)
+      await downloadParakeetModel({
+        quant: files[0]?.includes("fp16") ? "fp16" : "int8",
         onProgress: (p) => {
           setDownloadProgress(p)
         },
       })
-      setCached(result)
-      setInspected(true)
+      if (backend === cacheBackend) await refreshCache(backend)
       updateSettings({ backend: "parakeet" })
-      void warmupParakeetModel({
-        executionBackend: props.settings.parakeetBackend,
-        language: props.settings.language,
-      }).catch(() => {})
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 6000)
     } catch (err: any) {
@@ -635,7 +680,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     if (props.settings.mode === "transcription" && props.settings.activation === "wake-word") {
       updateSettings({ activation: DEFAULT_VOICE_SETTINGS.activation })
     }
-    if (!props.inline && panelRef) {
+    // Framed, the host's dialog takes the focus.
+    if (frame() === "standalone" && panelRef) {
       panelRef.focus()
     }
   })
@@ -672,27 +718,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     void props.engine.toggle()
   }
 
-  /**
-   * Runs a typed command through the same path a spoken one takes.
-   *
-   * The engine only accepts text once its program is up, so an idle engine is
-   * started first. A start that fails leaves `lastError` set, and the live line
-   * is already showing it — no second error channel is needed here.
-   */
   const runTrial = async () => {
     const text = trialText().trim()
     if (text.length === 0 || trialBusy()) return
     setTrialBusy(true)
-    setTrialNote(undefined)
     try {
-      if (!props.engine.isRunning()) {
-        await props.engine.start()
-      }
-      if (!props.engine.isRunning()) {
-        setTrialNote(t("vui.trial.noEngine"))
-        return
-      }
-      await props.engine.submitText(text)
+      await submitVoiceTrial(props.engine, text)
       setTrialText("")
     } finally {
       setTrialBusy(false)
@@ -708,13 +739,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setApiKeyInput("")
     setApiKeyVisible(false)
     setLanguageFilter("")
+    cacheBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
+    void refreshCache(DEFAULT_VOICE_SETTINGS.parakeetBackend)
   }
 
   // Global keyboard listener for modal Escape and shortcut recording cancellation
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
-      if (recordingField() !== null) {
+      const action = panelEscape({
+        frame: frame(),
+        recording: recordingField() !== null,
+        resetArmed: resetArmed(),
+        closable: Boolean(props.onClose),
+      })
+      if (action === "stop-recording") {
         e.preventDefault()
         e.stopPropagation()
         setRecordingField(null)
@@ -724,20 +763,20 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         return
       }
 
-      if (resetArmed()) {
+      if (action === "disarm") {
         e.preventDefault()
         setResetArmed(false)
         return
       }
 
-      if (!props.inline && props.onClose) {
+      if (action === "close") {
         e.preventDefault()
-        props.onClose()
+        props.onClose?.()
       }
     }
 
     // Modal focus trap when rendered as overlay
-    if (!props.inline && e.key === "Tab" && panelRef) {
+    if (panelTrapsTab(frame()) && e.key === "Tab" && panelRef) {
       const focusable = Array.from(
         panelRef.querySelectorAll<HTMLElement>(
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -758,10 +797,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   }
 
   createEffect(() => {
-    if (typeof window !== "undefined") {
-      window.addEventListener("keydown", handleGlobalKeyDown)
-      onCleanup(() => window.removeEventListener("keydown", handleGlobalKeyDown))
+    if (typeof window === "undefined") return
+    // Framed: before the host's dialog, which would close under the recorder.
+    if (panelListensEarly(frame())) {
+      document.addEventListener("keydown", handleGlobalKeyDown, true)
+      onCleanup(() => document.removeEventListener("keydown", handleGlobalKeyDown, true))
+      return
     }
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    onCleanup(() => window.removeEventListener("keydown", handleGlobalKeyDown))
   })
 
   /**
@@ -916,9 +960,48 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const sendKeys = radioGroupKeys((value) => updateSettings({ transcriptionSend: value as TranscriptionSendMode }))
   const listenKeys = radioGroupKeys((value) => updateSettings({ alwaysListen: value === "always" }))
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
-  const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
+  const alertsKeys = radioGroupKeys((value) => updateSettings({ spokenAlerts: value === "on" }))
+  /*
+   * The voice and its backend are written together: `normalizeSettings`
+   * repairs a pair that disagrees, and says so, which a click must not cause.
+   */
+  const pickReplyVoice = (voice: ReplyVoice) => {
+    // The voice left and the one picked are both remembered, each on its backend: coming back finds it.
+    const memory = rememberReplyVoice(
+      rememberReplyVoice(props.settings.replyVoiceByBackend, props.settings.replyVoice),
+      voice,
+    )
+    updateSettings({
+      replyVoice: voice,
+      replyBackend: backendOf(voice),
+      ...(memory ? { replyVoiceByBackend: memory } : {}),
+    })
+  }
+  const replyVoiceKeys = radioGroupKeys((value) => {
+    const choice = replyVoiceChoicesFor(replyBackendNow(), locale()).find((candidate) => candidate.value === value)
+    if (choice) pickReplyVoice(choice.value)
+  })
+  const replyBackendKeys = radioGroupKeys((value) => {
+    const backend = REPLY_BACKEND_CHOICES.find((choice) => choice.value === value)?.value
+    if (backend)
+      pickReplyVoice(voiceOnBackend(backend, props.settings.replyVoice, locale(), props.settings.replyVoiceByBackend))
+  })
+  /** The backend the chosen voice belongs to: the one whose voices are listed. */
+  const replyBackendNow = () => backendOf(props.settings.replyVoice)
+  /** The voice marked in the list: a Piper one follows the interface language, as it speaks. */
+  const shownReplyVoice = () =>
+    replyBackendNow() === "piper" ? activeReplyVoice(props.settings.replyVoice, locale()) : props.settings.replyVoice
+  const kokoroView = createMemo(() => packView(props.kokoroPack ?? {}))
+  const piperDownload = createMemo(() =>
+    props.naturalVoiceProgress
+      ? packView({ status: { installed: false }, progress: props.naturalVoiceProgress })
+      : undefined,
+  )
+  /** A Kokoro voice speaks once its pack is in; a Piper one installs itself on first use. */
+  const canTestVoice = () => replyBackendNow() !== "kokoro" || kokoroView().canTest
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
+  const fallbackKeys = radioGroupKeys((value) => updateSettings({ codexFallback: value === "on" }))
   const activationKeys = radioGroupKeys((value) => selectActivation(value as VoiceActivation))
   const backendKeys = radioGroupKeys((value) => {
     if (value === "parakeet" && !backendStatuses().parakeet.usable) return
@@ -935,7 +1018,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       title={hint}
       data-slot="pill-btn"
       onClick={() => {
-        if (enabled) updateSettings({ parakeetBackend: value })
+        if (!enabled) return
+        cacheBackend = value
+        updateSettings({ parakeetBackend: value })
+        void refreshCache(value)
       }}
     >
       {label}
@@ -950,10 +1036,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       data-inline={props.inline ? "true" : undefined}
       data-status={engineStatus().tone}
       class={props.class}
-      role={props.inline ? "region" : "dialog"}
-      aria-modal={props.inline ? undefined : "true"}
-      aria-labelledby="voice-panel-title"
-      tabIndex={props.inline ? undefined : -1}
+      // Framed, the host's dialog is the dialog, named by this panel's title.
+      role={frame() === "standalone" ? "dialog" : frame() === "inline" ? "region" : undefined}
+      aria-modal={frame() === "standalone" ? "true" : undefined}
+      aria-labelledby={frame() === "framed" ? undefined : "voice-panel-title"}
+      tabIndex={frame() === "standalone" ? -1 : undefined}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
@@ -986,6 +1073,28 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           <span data-slot="status-dot" aria-hidden="true" />
           {engineStatus().label}
         </div>
+
+        {/*
+         * The voice's own header, not the rail. In the rail this read as one
+         * more section of ADE's settings — and it is not one: it resets
+         * DEFAULT_VOICE_SETTINGS and nothing else, the transcription engine
+         * included, which comes back on `openrouter`. Beside the title it
+         * says what it resets, and a panel the host has retitled still
+         * carries a label that names the voice. Only on the voice's own
+         * sections: on one the host added (Tema, Lingua…) it offered to reset
+         * something that page does not show.
+         */}
+        <Show when={SECTIONS.some((section) => section.id === activeSection())}>
+          <button
+            type="button"
+            data-slot="ghost-btn"
+            data-armed={resetArmed() ? "true" : undefined}
+            onClick={restoreDefaults}
+            onBlur={() => setResetArmed(false)}
+          >
+            {resetArmed() ? t("vui.panel.resetVoiceConfirm") : t("vui.panel.resetVoice")}
+          </button>
+        </Show>
 
         <Show when={!props.inline && props.onClose}>
           <button type="button" data-slot="close-btn" aria-label={t("vui.panel.close")} onClick={props.onClose}>
@@ -1066,24 +1175,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               </button>
             )}
           </For>
-
-          <span data-slot="rail-sep" aria-hidden="true" />
-
-          {/* Down here rather than beside "Fatto": a button that throws every
-              setting away must not sit a few pixels from the one that keeps them. */}
-          <button
-            type="button"
-            data-slot="rail-row"
-            data-tone="quiet"
-            data-armed={resetArmed() ? "true" : undefined}
-            onClick={restoreDefaults}
-            onBlur={() => setResetArmed(false)}
-          >
-            <span data-slot="rail-glyph" aria-hidden="true">
-              ↺
-            </span>
-            <span data-slot="rail-label">{resetArmed() ? "Confermi?" : "Ripristina"}</span>
-          </button>
         </nav>
 
         {/* Body */}
@@ -1239,6 +1330,33 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
               <Show when={props.settings.speakReplies !== false}>
                 <div data-slot="sub-choice-box">
+                  <span id="reply-backend-label" data-slot="sub-choice-label">
+                    {t("vui.replies.backend")}
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="reply-backend-label"
+                    data-slot="sub-choice-row"
+                    onKeyDown={replyBackendKeys}
+                  >
+                    <For each={REPLY_BACKEND_CHOICES}>
+                      {(choice) => (
+                        <div
+                          role="radio"
+                          data-value={choice.value}
+                          aria-checked={replyBackendNow() === choice.value}
+                          tabIndex={replyBackendNow() === choice.value ? 0 : -1}
+                          data-slot="sub-choice-item"
+                          onClick={() =>
+                            pickReplyVoice(voiceOnBackend(choice.value, props.settings.replyVoice, locale()))
+                          }
+                        >
+                          <span data-slot="sub-item-title">{choice.title}</span>
+                          <span data-slot="sub-item-desc">{choice.desc}</span>
+                        </div>
+                      )}
+                    </For>
+                  </div>
                   <span id="reply-voice-label" data-slot="sub-choice-label">
                     {t("vui.replies.voice")}
                   </span>
@@ -1248,22 +1366,23 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     data-slot="sub-choice-row"
                     onKeyDown={replyVoiceKeys}
                   >
-                    <For each={REPLY_VOICE_CHOICES}>
+                    <For each={replyVoiceChoicesFor(replyBackendNow(), locale())}>
                       {(choice) => (
                         <div
                           role="radio"
                           data-value={choice.value}
-                          aria-checked={props.settings.replyVoice === choice.value}
-                          tabIndex={props.settings.replyVoice === choice.value ? 0 : -1}
+                          aria-checked={shownReplyVoice() === choice.value}
+                          tabIndex={shownReplyVoice() === choice.value ? 0 : -1}
                           data-slot="sub-choice-item"
-                          onClick={() => updateSettings({ replyVoice: choice.value })}
+                          onClick={() => pickReplyVoice(choice.value)}
                         >
                           <span data-slot="sub-item-title">{choice.title}</span>
                           <span data-slot="sub-item-desc">{choice.desc}</span>
                           <Show when={choice.licence}>
                             <span data-slot="sub-item-licence">
                               {choice.licence}{" "}
-                              <Show when={props.onOpenVoiceSource}>
+                              {/* The host opens the page of a Piper voice only; Kokoro's source is in its pack's note. */}
+                              <Show when={props.onOpenVoiceSource && replyBackendNow() !== "kokoro"}>
                                 <button
                                   type="button"
                                   data-slot="link-button"
@@ -1282,9 +1401,93 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       )}
                     </For>
                   </div>
-                  <p data-slot="sub-choice-note">{t("vui.replies.note")}</p>
+                  <Show when={replyBackendNow() === "piper"}>
+                    <p data-slot="sub-choice-note">{t("vui.replies.note")}</p>
+                    <Show when={props.naturalVoiceDownloading && piperDownload()}>
+                      {(view) => (
+                        <InstallBar
+                          view={view()}
+                          {...(props.onCancelInstall ? { onCancel: () => props.onCancelInstall?.("piper") } : {})}
+                        />
+                      )}
+                    </Show>
+                  </Show>
+                  <Show when={replyBackendNow() === "kokoro"}>
+                    <p data-slot="sub-choice-note">{t("vui.replies.kokoroItalian")}</p>
+                    <VoicePackBox
+                      view={kokoroView()}
+                      {...(props.onInstallKokoro ? { onInstall: props.onInstallKokoro } : {})}
+                      {...(props.onCancelInstall ? { onCancel: () => props.onCancelInstall?.("kokoro") } : {})}
+                      {...(props.onDeleteKokoro ? { onDelete: props.onDeleteKokoro } : {})}
+                    />
+                  </Show>
+                  <Show when={props.onTestVoice}>
+                    <button
+                      type="button"
+                      data-slot="ghost-btn"
+                      disabled={!canTestVoice()}
+                      onClick={() => props.onTestVoice?.()}
+                    >
+                      {t("vui.replies.test")}
+                    </button>
+                  </Show>
+                  <Show when={props.naturalVoiceError}>
+                    <div data-slot="reply-voice-error" role="alert">
+                      <span>{props.naturalVoiceError}</span>
+                      <Show when={props.onDownloadNaturalVoice}>
+                        <button
+                          type="button"
+                          data-slot="link-button"
+                          disabled={props.naturalVoiceDownloading}
+                          onClick={() => props.onDownloadNaturalVoice?.()}
+                        >
+                          {props.naturalVoiceDownloading ? t("vui.replies.downloading") : t("vui.replies.retry")}
+                        </button>
+                      </Show>
+                    </div>
+                  </Show>
                 </div>
               </Show>
+
+              {/*
+              Proactive alerts: nik speaks on its own for permissions, completions, or decisions.
+              Off by default to avoid unexpected speech or consumption (S48).
+            */}
+              <div data-slot="sub-choice-box">
+                <span id="agent-alerts-label" data-slot="sub-choice-label">
+                  {t("vui.alerts.title")}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="agent-alerts-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={alertsKeys}
+                >
+                  <div
+                    role="radio"
+                    data-value="on"
+                    aria-checked={props.settings.spokenAlerts === true}
+                    tabIndex={props.settings.spokenAlerts === true ? 0 : -1}
+                    data-slot="sub-choice-item"
+                    onClick={() => updateSettings({ spokenAlerts: true })}
+                  >
+                    <span data-slot="sub-item-title">{t("vui.alerts.on")}</span>
+                    <span data-slot="sub-item-desc">{t("vui.alerts.on.desc")}</span>
+                  </div>
+
+                  <div
+                    role="radio"
+                    data-value="off"
+                    aria-checked={props.settings.spokenAlerts !== true}
+                    tabIndex={props.settings.spokenAlerts !== true ? 0 : -1}
+                    data-slot="sub-choice-item"
+                    onClick={() => updateSettings({ spokenAlerts: false })}
+                  >
+                    <span data-slot="sub-item-title">{t("vui.alerts.off")}</span>
+                    <span data-slot="sub-item-desc">{t("vui.alerts.off.desc")}</span>
+                  </div>
+                </div>
+              </div>
 
               {/*
               What answers what the grammar does not know. A CLI the user is
@@ -1351,6 +1554,45 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         </div>
                       )}
                     </For>
+                  </div>
+                </div>
+              </Show>
+
+              {/* Ricaduta su Codex al limite di Claude: facoltativa, di default disattivata. */}
+              <Show when={props.settings.agentEngine !== "off"}>
+                <div data-slot="sub-choice-box">
+                  <span id="agent-codex-fallback-label" data-slot="sub-choice-label">
+                    {t("vui.codexFallback.title")}
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="agent-codex-fallback-label"
+                    data-slot="sub-choice-row"
+                    onKeyDown={fallbackKeys}
+                  >
+                    <div
+                      role="radio"
+                      data-value="on"
+                      aria-checked={props.settings.codexFallback === true}
+                      tabIndex={props.settings.codexFallback === true ? 0 : -1}
+                      data-slot="sub-choice-item"
+                      onClick={() => updateSettings({ codexFallback: true })}
+                    >
+                      <span data-slot="sub-item-title">{t("vui.codexFallback.on")}</span>
+                      <span data-slot="sub-item-desc">{t("vui.codexFallback.on.desc")}</span>
+                    </div>
+
+                    <div
+                      role="radio"
+                      data-value="off"
+                      aria-checked={props.settings.codexFallback !== true}
+                      tabIndex={props.settings.codexFallback !== true ? 0 : -1}
+                      data-slot="sub-choice-item"
+                      onClick={() => updateSettings({ codexFallback: false })}
+                    >
+                      <span data-slot="sub-item-title">{t("vui.codexFallback.off")}</span>
+                      <span data-slot="sub-item-desc">{t("vui.codexFallback.off.desc")}</span>
+                    </div>
                   </div>
                 </div>
               </Show>
@@ -1541,6 +1783,14 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       </div>
                       <p id="wake-word-hint" data-slot="hint">
                         {t("vui.wake.hint", props.settings.wakeWord)}
+                      </p>
+                      {/* What listening has spent today, where the switch that spends it is. */}
+                      <p data-slot="hint" data-testid="listen-spend">
+                        {t(
+                          "vui.listen.spend",
+                          props.engine.listenSpend().calls,
+                          formatSpendCost(props.engine.listenSpend().cost),
+                        )}
                       </p>
                     </div>
                   </Show>
@@ -1920,7 +2170,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       .then(() => disposeParakeetModel())
                       .finally(() => {
                         setClearingCache(false)
-                        refreshCache()
+                        void refreshCache()
                       })
                   }}
                 >
@@ -2286,11 +2536,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 {trialBusy() ? t("vui.commands.sending") : t("vui.commands.run")}
               </button>
             </div>
-            <Show when={trialNote()}>
-              <div role="alert" data-slot="reason-box">
-                {trialNote()}
-              </div>
-            </Show>
 
             <input
               id="voice-command-filter"
@@ -2422,7 +2667,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   )
 
   return (
-    <Show when={!props.inline} fallback={renderPanel()}>
+    <Show when={frame() === "standalone"} fallback={renderPanel()}>
       <div data-component="voice-settings-overlay" onClick={handleBackdropClick}>
         {renderPanel()}
       </div>

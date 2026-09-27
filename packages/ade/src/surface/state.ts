@@ -50,25 +50,48 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
 }
 
 /**
- * Whether Chat and Bot can be reached. The one switch for both (S40).
+ * Whether Chat and Bot can be reached (S40): one switch each.
  *
- * They are hidden for now, not removed: the code, the tests and the stored
- * conversations all stay, and turning this back on brings back every way in —
+ * S40 hid both behind one switch. The Bots came back first (B7), once their
+ * turns were safe to run (B1-B3b); the Chat came back with C9, once its own
+ * pieces were in (C1-C8) and opening it called nothing. Hidden is not removed: the code, the tests and the stored
+ * conversations all stay, and turning a switch on brings back every way in —
  * the section bar, the palette, the section shortcut, the voice command and a
- * workbench restored into one of them. Nothing else in the app needs to change,
+ * workbench restored into it. Nothing else in the app needs to change,
  * because everything that lists or opens a section asks `VISIBLE_VIEWS` or
  * `reachableView` rather than `ADE_VIEWS`.
  */
-export const CHAT_AND_BOT_ENABLED = false
+export const CHAT_ENABLED = true
+export const BOT_ENABLED = true
+
+/**
+ * The Gateway section of a bot's card (G6). Off in a release until the live
+ * test with a real Telegram bot (G8); on in development and ADE Test, where
+ * that test is made.
+ */
+export const GATEWAY_ENABLED = false
+
+export function gatewayVisible(
+  enabled: boolean = GATEWAY_ENABLED,
+  development: boolean = import.meta.env.DEV === true,
+): boolean {
+  return enabled || development
+}
+
+/** Which of the two switchable sections are on. */
+export interface SectionSwitches {
+  readonly chat: boolean
+  readonly bot: boolean
+}
 
 /**
  * The sections a person can get to: what the bar shows and the palette offers.
  *
- * Takes the switch as a parameter so the tests can check the "on" branch
- * too; the app only ever calls it with the constant, through `VISIBLE_VIEWS`.
+ * Takes the switches as a parameter so the tests can check every branch; the
+ * app only ever calls it with the constants, through `VISIBLE_VIEWS`.
  */
-export function visibleViews(enabled: boolean = CHAT_AND_BOT_ENABLED): readonly AdeView[] {
-  return ADE_VIEWS.filter((view) => enabled || (view !== "chat" && view !== "bot"))
+export function visibleViews(enabled: SectionSwitches = { chat: CHAT_ENABLED, bot: BOT_ENABLED }): readonly AdeView[] {
+  return ADE_VIEWS.filter((view) => (view !== "chat" || enabled.chat) && (view !== "bot" || enabled.bot))
 }
 
 export const VISIBLE_VIEWS: readonly AdeView[] = visibleViews()
@@ -128,6 +151,11 @@ export interface Pane {
   mode: string
   agent?: string
   lines: TranscriptLine[]
+  /**
+   * ADE's notes the user must read even where the transcript is hidden: over
+   * a live terminal, until dismissed (`withPaneNotice`). Not saved.
+   */
+  notices?: readonly string[]
   browserUrl?: string
   /**
    * The browser pane's back/forward list; its current entry is `browserUrl`.
@@ -163,8 +191,19 @@ export interface Pane {
   cwd?: string
   tree?: PaneTree
   workspaceId: string
+  /**
+   * The folder of the project the pane belongs to. `workspaceId` is only its
+   * name, and two projects in different folders can share one. Absent on panes
+   * saved before it was kept: those are found by name.
+   */
+  projectRoot?: string
   /** Set when the pane holds a file being edited rather than a session. */
   filePath?: string
+  /**
+   * Where the editor puts the cursor: a link clicked in a session. `at` makes
+   * a second click on the same line move it again.
+   */
+  fileGoTo?: { line: number; at: number }
   /**
    * Set when the tile is drawn by a plugin.
    *
@@ -188,12 +227,29 @@ export interface Pane {
    * starts again wearing the old name. See `session-new/resume.ts`.
    */
   resumeId?: string
+  /** The nonce of the running spawn when its CLI reports back; see `PaneState.linkNonce`. */
+  linkNonce?: string
+  /** The folder of the followed conversation when it is not the pane's; see `PaneState.otherDir`. */
+  otherDir?: string
   /** The git worktree this session works in, when `spawn --worktree` gave it one; its cwd on every start. */
   worktree?: string
+  /** The folder this session should start in and that is gone: it is not started, and offers to close. Not saved. */
+  gone?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
+  /**
+   * A runner's sign-in (`claude auth login`): the arguments it runs. Its
+   * restart runs them again, never the bare agent. Not saved: ADE opening
+   * does not start a sign-in nobody asked for.
+   */
+  signIn?: string[]
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
   span?: Span
+  /**
+   * Suspended by the user (P1-C6): its processes closed, its conversation kept
+   * for "Riprendi". Nothing wakes it by itself: not a message, not a restart.
+   */
+  suspended?: true
 }
 
 /**
@@ -217,7 +273,8 @@ export function isPanelPane(
     pane.mode === "video" ||
     pane.mode === "model" ||
     pane.mode === "app" ||
-    pane.mode === "decisions",
+    pane.mode === "decisions" ||
+    pane.mode === "design",
   )
 }
 
@@ -262,6 +319,30 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId,
   }
+}
+
+/** How many notes stay over a terminal at once: the latest ones. */
+export const MAX_NOTICES = 3
+
+/**
+ * The notes over a pane's terminal after `text` is told.
+ *
+ * In a pane with a live terminal the transcript is hidden, so a note written
+ * only there reached nobody: that a conversation stayed with another pane,
+ * belonged to another folder, or could not be found (prove dal vivo 2,
+ * difetto A). The same note twice is one; the oldest go first.
+ */
+/**
+ * How long a note over the terminal may be. ADE's own sentences are short
+ * (none is over 160 characters, a test holds it); what fills the rest is a
+ * field — a web page's title, an error of the host — and a long one would
+ * cover the terminal. The strip shows it cut; the transcript keeps it whole.
+ */
+export const NOTICE_MAX_CHARS = 280
+
+export function withPaneNotice(notices: readonly string[] | undefined, text: string): string[] {
+  const shown = text.length > NOTICE_MAX_CHARS ? `${text.slice(0, NOTICE_MAX_CHARS - 1).trimEnd()}…` : text
+  return [...(notices ?? []).filter((notice) => notice !== shown), shown].slice(-MAX_NOTICES)
 }
 
 export function updatePane(workbench: Workbench, paneId: string, updates: Partial<Pane>): Workbench {
@@ -327,10 +408,20 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("claude")) return "claude-code"
   if (t.includes("codex") || t.includes("openai")) return "codex"
   if (t.includes("opencode")) return "opencode"
+  if (t.includes("grok") || t.includes("xai")) return "grok"
   if (t.includes("agy") || t.includes("antigravity")) return "agy"
   if (t.includes("hermes") || t.includes("nous")) return "hermes"
   if (t.includes("kimi") || t.includes("moonshot")) return "kimi"
   if (t.includes("prime")) return "prime"
+  // Before "pi": «copilot» holds it.
+  if (t.includes("copilot")) return "copilot"
+  if (t.includes("freebuff") || t.includes("codebuff")) return "freebuff"
+  if (t.includes("cline")) return "cline"
+  if (t.includes("crush")) return "crush"
+  if (t.includes("kilo")) return "kilo"
+  if (t.includes("goose")) return "goose"
+  if (t.includes("cursor")) return "cursor"
+  if (/\bt3\b/.test(t)) return "t3"
   if (t.includes("ohmypi")) return "ohmypi"
   if (t.includes("pi")) return "pi"
   if (t.includes("shell") || t.includes("term") || t.includes("bash") || t.includes("zsh") || t.includes("powershell"))
@@ -340,7 +431,7 @@ function inferAgent(model: string, title: string): string {
 
 export function deriveWorkspaces(
   panes: Pane[],
-  known: ReadonlyArray<{ root: string; name: string; branch?: string }> = [],
+  known: ReadonlyArray<{ root: string; name: string; branch?: string; missing?: boolean }> = [],
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
 
@@ -350,6 +441,7 @@ export function deriveWorkspaces(
       name: project.name,
       path: project.root,
       branch: project.branch,
+      ...(project.missing ? { missing: true as const } : {}),
       sessions: [],
     }
   }
@@ -377,6 +469,7 @@ export function deriveWorkspaces(
       status: pane.status,
       workspaceId: pane.workspaceId,
       activity: pane.activity,
+      ...(pane.suspended ? { suspended: true as const } : {}),
       agent: pane.agent ?? (pane.model ? inferAgent(pane.model, pane.title) : undefined),
       branch,
       cwd: pane.cwd || ws?.path,
@@ -420,9 +513,12 @@ export function isResumable(
     | "modelPath"
     | "appUrl"
     | "plugin"
+    | "suspended"
   >,
 ): boolean {
   if (isPanelPane(pane)) return false
+  // Suspended: it comes back when the user resumes it, never by itself (P1-C6).
+  if (pane.suspended) return false
   const hasTask = (pane.task ?? "").trim().length > 0
   const hasConversation = (pane.resumeId ?? "").trim().length > 0
   if (!hasTask && !hasConversation) return false
@@ -438,7 +534,8 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * answer than no pane. The plugin opens its own tiles when it loads.
    */
   const saved = workbench.panes
-    .filter((p) => !isPanelPane(p))
+    // A sign-in is not a session to bring back (`Pane.signIn`).
+    .filter((p) => !isPanelPane(p) && !p.signIn)
     .map((p) => ({
       id: p.id,
       title: p.title,
@@ -449,11 +546,15 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.task ? { task: p.task } : {}),
       ...(p.model ? { model: p.model } : {}),
       ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+      ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
+      ...(p.otherDir ? { otherDir: p.otherDir } : {}),
       // The project each pane belongs to: the workbench holds every project's sessions, not only the open one's.
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
       ...(p.worktree ? { worktree: p.worktree } : {}),
       ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
+      ...(p.suspended ? { suspended: true as const } : {}),
       /*
        * Recorded at save time, not derived at restore time.
        *
@@ -471,6 +572,12 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * Browser panes are saved as the page they show, so a restart reopens the
    * same page rather than dropping the pane. A plugin tile is never one.
    */
+  /*
+   * A pane in Design mode is not saved (D1). It is a view of one variant of
+   * a register entry, and the card opens it again in one click; restored, it
+   * would load at startup a page the next round may have rewritten or taken
+   * away, with nobody having asked to see it.
+   */
   const browsers = workbench.panes
     .filter((p) => p.browserUrl && !p.plugin)
     .map((p) => ({
@@ -481,6 +588,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
       ...(p.browserOwner ? { owner: { id: p.browserOwner.id, title: p.browserOwner.title } } : {}),
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
 
@@ -580,32 +688,49 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         return {
           id: p.id,
           title: p.title,
-          status: restoredStatus(p.status),
-          activity: p.wasRunning ? "toResume" : "restored",
+          // Suspended: as it was left, neither "to resume" nor finished (P1-C6).
+          status: p.suspended ? "idle" : restoredStatus(p.status),
+          activity: p.suspended ? "suspended" : p.wasRunning ? "toResume" : "restored",
+          ...(p.suspended ? { suspended: true as const } : {}),
           model: p.model ?? p.agent,
           mode: "auto",
           agent: p.agent,
           cwd: p.cwd,
           task: p.task,
-          lines: [
-            ...history,
-            {
-              kind: "note",
-              /*
-               * Three sentences, because three things can have happened and
-               * telling them apart is the whole point. Reopening the agent's
-               * own conversation is not the same as running the task again,
-               * and a line that said "riprendo il compito" for both left the
-               * user unable to tell which one they got.
-               */
-              text: !p.agent
-                ? `${t("restore.note")} ${t("restore.note.gone")}`
-                : p.resumeId
-                  ? `${t("restore.note")} ${t("restore.note.reopen")}`
-                  : `${t("restore.note")} ${t("restore.note.rerun")}`,
-            },
-          ],
+          /*
+           * The conversation the pane was in, carried across the restart.
+           *
+           * Forgotten here, the pane came back looking right and then opened a
+           * new conversation at the *next* start: the id lived only in the
+           * saved state, so the first restore used it and the save after that
+           * had none. That is the second half of the bug the user reported.
+           */
+          ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+          ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
+          ...(p.otherDir ? { otherDir: p.otherDir } : {}),
+          /* A suspended session's transcript already ends with the note that says so: nothing is restarted to report. */
+          lines: p.suspended
+            ? history
+            : [
+                ...history,
+                {
+                  kind: "note",
+                  /*
+                   * Three sentences, because three things can have happened and
+                   * telling them apart is the whole point. Reopening the agent's
+                   * own conversation is not the same as running the task again,
+                   * and a line that said "riprendo il compito" for both left the
+                   * user unable to tell which one they got.
+                   */
+                  text: !p.agent
+                    ? `${t("restore.note")} ${t("restore.note.gone")}`
+                    : p.resumeId
+                      ? `${t("restore.note")} ${t("restore.note.reopen")}`
+                      : `${t("restore.note")} ${t("restore.note.rerun")}`,
+                },
+              ],
           workspaceId: p.project || owner,
+          ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
           ...(p.worktree ? { worktree: p.worktree } : {}),
           ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
           ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
@@ -640,6 +765,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
             ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
             ...(b.owner ? { browserOwner: { id: b.owner.id, title: b.owner.title } } : {}),
             workspaceId: b.project || owner,
+            ...(b.projectRoot ? { projectRoot: b.projectRoot } : {}),
             ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
             lines: [],
           }),
@@ -665,8 +791,21 @@ export function sessionsToResume(state: WorkspaceState): PaneState[] {
   return state.panes.filter(
     (pane) =>
       pane.wasRunning === true &&
+      // A suspended session is resumed by the user, not by a restart (P1-C6).
+      pane.suspended !== true &&
       // Either half is enough: the conversation id reopens the session with
       // everything in it, and the task is what is typed when there is none.
       ((pane.task ?? "").trim().length > 0 || (pane.resumeId ?? "").trim().length > 0),
+  )
+}
+
+/**
+ * The second half of a restore: the sessions whose agent had already exited,
+ * reopened too — every session pane `planned` (`sessionsToResume`) did not
+ * take. Not a suspended one: it waits for "Riprendi", restart or not (P1-C6).
+ */
+export function exitedToReopen(panes: readonly Pane[], planned: ReadonlySet<string>): Pane[] {
+  return panes.filter(
+    (pane) => !planned.has(pane.id) && !isPanelPane(pane) && !pane.suspended && Boolean(pane.agent ?? pane.model),
   )
 }

@@ -112,6 +112,17 @@ export function recipientOptions(
 }
 
 /**
+ * Whether the answer button can send, or has to ask who receives first.
+ *
+ * With nobody chosen, or a chosen session that is not running, an answer
+ * recorded as it is would wait in the outbox with nobody to read it. So the
+ * card asks for a recipient right there instead of recording in silence.
+ */
+export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
+  return recipient.state === "pronta" ? "invia" : "scegli"
+}
+
+/**
  * What a change in the "Risposte a" selector does. Arrow keys on a closed
  * select change it one entry at a time, so a change that would send queued
  * answers somewhere waits for a confirmation; choosing nobody, or a change
@@ -144,9 +155,40 @@ export function resolveRecipient(
   return { state: "non attiva", id: choice.id, title: pane?.title ?? choice.title }
 }
 
+/**
+ * Where an item is sent: if the item explicitly carries a recipient (e.g. a
+ * reopened notice returning to whoever had the answer), it goes there if that
+ * session is running. If it is closed, or the item has no designated recipient,
+ * it goes to the currently chosen recipient.
+ */
+export function resolveDeliveryTarget(
+  item: OutboxItem,
+  candidates: readonly DeliveryCandidate[],
+  current: RecipientStatus,
+): { readonly id: string; readonly title: string } | undefined {
+  if (item.toId) {
+    const byId = candidates.find((c) => c.running && c.id === item.toId)
+    if (byId) return { id: byId.id, title: byId.title }
+  }
+  // An entry saved before the id: `to` is the title, and the first match is all it can be.
+  if (item.to) {
+    const candidate = candidates.find((c) => c.running && (c.id === item.to || c.title === item.to))
+    if (candidate) return { id: candidate.id, title: candidate.title }
+  }
+  if (current.state === "pronta") {
+    return { id: current.id, title: current.title }
+  }
+  return undefined
+}
+
 /** The line typed into the recipient's terminal. */
 export function deliveryLine(decision: Decision): string {
   return `[Decisione da utente] ${resolvedMessage(decision)}`
+}
+
+/** The notice typed into the recipient's terminal when a previously delivered decision is reopened. */
+export function reopenLine(k: string): string {
+  return `[Decisione da utente] riaperta [k=${k}]: la risposta di prima non vale più, aspetta la nuova`
 }
 
 export interface OutboxItem {
@@ -156,8 +198,17 @@ export interface OutboxItem {
   /** The answer's own timestamp: a changed answer is a different item. */
   readonly answeredAt: string
   readonly queuedAt: number
+  /** The title, for what the sheet shows. An old entry has only this. */
   readonly deliveredTo?: string
+  /** The session the answer was typed into. Delivery prefers this over the title. */
+  readonly deliveredToId?: string
   readonly deliveredAt?: number
+  readonly kind?: "risposta" | "riaperta"
+  readonly text?: string
+  /** The title of the session the notice is for. */
+  readonly to?: string
+  /** The id of that session. Absent on an entry saved before ids were kept. */
+  readonly toId?: string
 }
 
 export const OUTBOX_KEY = "ade.decisions.outbox"
@@ -188,8 +239,17 @@ export function enqueue(
   return [...outbox.filter((entry) => !(entry.path === item.path && entry.k === item.k)), { ...item }]
 }
 
-export function markDelivered(outbox: readonly OutboxItem[], item: OutboxItem, to: string, at: number): OutboxItem[] {
-  return outbox.map((entry) => (entry === item ? { ...entry, deliveredTo: to, deliveredAt: at } : entry))
+export function markDelivered(
+  outbox: readonly OutboxItem[],
+  item: OutboxItem,
+  to: string | { readonly id: string; readonly title: string },
+  at: number,
+): OutboxItem[] {
+  const title = typeof to === "string" ? to : to.title
+  const id = typeof to === "string" ? undefined : to.id
+  return outbox.map((entry) =>
+    entry === item ? { ...entry, deliveredTo: title, ...(id ? { deliveredToId: id } : {}), deliveredAt: at } : entry,
+  )
 }
 
 /**
@@ -202,7 +262,11 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, decisio
   return outbox.filter((item) => {
     if (item.path !== path) return true
     const decision = byKey.get(item.k)
-    return decision?.status === "risposta" && decision.answer?.at === item.answeredAt
+    if (!decision) return false
+    if (item.kind === "riaperta") {
+      return decision.status === "aperta" && item.deliveredAt === undefined
+    }
+    return decision.status === "risposta" && decision.answer?.at === item.answeredAt
   })
 }
 
@@ -214,7 +278,7 @@ export function pendingFor(outbox: readonly OutboxItem[], path: string): OutboxI
 }
 
 export type DeliveryState =
-  | { readonly state: "consegnata"; readonly to: string; readonly at: number }
+  | { readonly state: "consegnata"; readonly to: string; readonly toId?: string; readonly at: number }
   | { readonly state: "in coda" }
   | { readonly state: "fuori da ADE" }
 
@@ -224,7 +288,54 @@ export function deliveryState(outbox: readonly OutboxItem[], path: string, decis
     (entry) => entry.path === path && entry.k === decision.k && entry.answeredAt === decision.answer?.at,
   )
   if (!item) return { state: "fuori da ADE" }
-  if (item.deliveredAt !== undefined && item.deliveredTo)
-    return { state: "consegnata", to: item.deliveredTo, at: item.deliveredAt }
+  if (item.deliveredAt !== undefined && item.deliveredTo) {
+    return {
+      state: "consegnata",
+      to: item.deliveredTo,
+      ...(item.deliveredToId ? { toId: item.deliveredToId } : {}),
+      at: item.deliveredAt,
+    }
+  }
   return { state: "in coda" }
+}
+
+/**
+ * Who receives the answer to a question: the pane that asked, while it runs.
+ *
+ * The answer used to go to whoever was chosen in «Risposte a», whoever had
+ * asked. ADE now keeps the asking pane in the event (`fromPane`), so the
+ * answer goes back to it; a question written before that, or one whose pane
+ * is closed, still goes to the chosen session (notifiche-design).
+ */
+export function recipientFor(
+  asker: string | undefined,
+  candidates: readonly DeliveryCandidate[],
+  chosen: RecipientStatus,
+): RecipientStatus {
+  const pane = asker ? candidates.find((candidate) => candidate.id === asker && candidate.running) : undefined
+  return pane ? { state: "pronta", id: pane.id, title: pane.title } : chosen
+}
+
+/** The outbox entry for an answer: addressed to the pane that asked, when ADE knows it. */
+export function answerItem(
+  path: string,
+  asked: { readonly k: string; readonly raisedFrom?: string },
+  answeredAt: string,
+  queuedAt: number,
+): OutboxItem {
+  const item = { path, k: asked.k, answeredAt, queuedAt }
+  // Only the id: a title can be another pane's too, and a closed asker falls back to the chosen session.
+  return asked.raisedFrom ? { ...item, toId: asked.raisedFrom } : item
+}
+
+/**
+ * What the sheet says once an answer is written, about the session it goes
+ * to: `recipient` is the answer's own (`recipientFor`), not «Risposte a».
+ * It said «in coda (nessuna sessione scelta)» for an answer already on its
+ * way to the pane that asked (Verifiche, da-scegliere, problem 2).
+ */
+export function answeredStatus(k: string, label: string, recipient: RecipientStatus): string {
+  if (recipient.state === "pronta") return t("decisions.sheet.status.sent", k, label, recipient.title)
+  if (recipient.state === "non attiva") return t("decisions.sheet.status.idle", k, label, recipient.title)
+  return t("decisions.sheet.status.none", k, label)
 }

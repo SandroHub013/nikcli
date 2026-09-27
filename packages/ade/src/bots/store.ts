@@ -13,8 +13,12 @@
  * they are looking at.
  */
 
-import { getHost, type Host } from "../host/shell"
+import { t } from "../i18n"
+import { getHost, type Host, type RunResult } from "../host/shell"
+import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
+import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
+import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
   agentDir,
   agentHome,
@@ -192,16 +196,13 @@ export type CreateBotResult =
  */
 export async function createBot(input: CreateBotInput, roots: BotRoots): Promise<CreateBotResult> {
   const host = await getHost()
-  if (!host) return { ok: false, problem: "Nessun host: i bot si creano solo nell'app desktop." }
+  if (!host) return { ok: false, problem: t("bots.store.noHost") }
 
   const base = input.scope === "project" ? roots.project : roots.global
   if (!base) {
     return {
       ok: false,
-      problem:
-        input.scope === "project"
-          ? "Nessun progetto aperto: scegli «globale» o apri un progetto."
-          : "Cartella di configurazione di nikcli non trovata.",
+      problem: input.scope === "project" ? t("bots.store.noProject") : t("bots.store.noGlobal"),
     }
   }
 
@@ -212,13 +213,15 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     return writeBot({ ...input, mode, home, base }, host)
   }
 
-  if (!host.nikcliBot) return { ok: false, problem: "Questo host non può eseguire nikcli." }
+  if (!host.nikcliBot) return { ok: false, problem: t("bots.store.noNikcli") }
   const result = await host.nikcliBot(
     createArgs({
       home,
       description: input.description,
       mode,
       ...(input.tools ? { tools: input.tools } : {}),
+      // The model that writes the file, so the cost named in the form is the one that runs.
+      ...(input.model ? { model: input.model } : {}),
     }),
     base,
   )
@@ -232,7 +235,10 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
      * user can act on, while "creazione non riuscita" is not.
      */
     const said = [result.stderr.trim(), result.stdout.trim()].filter((part) => part.length > 0).join("\n")
-    return { ok: false, problem: said || `nikcli è uscito con codice ${result.code ?? "sconosciuto"}.` }
+    return {
+      ok: false,
+      problem: said || t("bots.store.nikcliExited", String(result.code ?? t("bots.store.unknownCode"))),
+    }
   }
 
   /*
@@ -274,7 +280,7 @@ async function writeBot(
   host: Host,
 ): Promise<CreateBotResult> {
   if (!host.writeTextFile) {
-    return { ok: false, problem: "Questo host non può scrivere file." }
+    return { ok: false, problem: t("bots.store.noWrite") }
   }
 
   const existing = await listBots(input.scope === "project" ? { project: input.base } : { global: input.base })
@@ -341,7 +347,7 @@ export interface BotChanges {
  */
 export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<string | undefined> {
   const host = await getHost()
-  if (!host?.readTextFile || !host.writeTextFile) return "Questo host non può scrivere file."
+  if (!host?.readTextFile || !host.writeTextFile) return t("bots.store.noWrite")
 
   try {
     const read = await host.readTextFile(bot.path)
@@ -351,10 +357,62 @@ export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<st
   }
 }
 
-/** Removes a bot's file. The roster is the directory, so this is the deletion. */
-export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
+/** A bot's file as it is on disk now: what the trust in `trust.ts` is given to. */
+export async function readBotText(path: string): Promise<string> {
   const host = await getHost()
-  if (!host?.deleteBotFile) return "Nessun host."
+  if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
+  return (await host.readTextFile(path)).text
+}
+
+/**
+ * The project's files, as `project-trust.ts` reads them. A host that cannot
+ * list or read files throws, and such a host cannot start a turn either.
+ */
+export const projectFs: ProjectFs = {
+  async readDir(path) {
+    const host = await getHost()
+    if (!host?.readDir) throw new Error(t("bots.store.noDir"))
+    return host.readDir(path)
+  },
+  async readText(path) {
+    const host = await getHost()
+    if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
+    return host.readTextFile(path)
+  },
+}
+
+/**
+ * Stops every gateway of a bot, takes its tokens out of the keychain and its
+ * links out of the gateway's state, with who was authorized (`forget_bot`).
+ */
+export type ForgetGateways = (bot: string) => Promise<void>
+
+const forgetGateways: ForgetGateways = async (bot) => {
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("gateway_forget_bot", { bot })
+}
+
+/**
+ * Removes a bot's file. The roster is the directory, so this is the deletion.
+ *
+ * Its gateways go first: they stop, the tokens leave the keychain, and the
+ * links go with who was authorized. Before, a bot deleted here went on
+ * answering its chats until ADE closed, its tokens stayed in the keychain,
+ * and a new bot at the same path inherited the senders. When they cannot be
+ * cleared the file stays, and the card says why.
+ */
+export async function deleteBot(
+  bot: AgentFile,
+  forget: ForgetGateways = forgetGateways,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<string | undefined> {
+  const host = await hostOf()
+  if (!host?.deleteBotFile) return t("bots.store.hostMissing")
+  try {
+    await forget(bot.path)
+  } catch (error) {
+    return t("bots.store.gatewayKept", error instanceof Error ? error.message : String(error))
+  }
   /*
    * A command of its own, which deletes only a bot's file. This used to go
    * through `host.run("cmd", ["/c", "del", …])`, which `run` refuses — it runs
@@ -371,8 +429,8 @@ export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
  * has a provider configured for. Offering the wrong list would offer choices
  * that fail at launch with a message from another program.
  */
-export async function listModels(cwd?: string): Promise<string[]> {
-  const host = await getHost()
+export async function listModels(cwd?: string, hostOf: () => Promise<Host | undefined> = getHost): Promise<string[]> {
+  const host = await hostOf()
   if (!host) return []
   try {
     if (!host.nikcliBot) return []
@@ -381,6 +439,43 @@ export async function listModels(cwd?: string): Promise<string[]> {
   } catch {
     return []
   }
+}
+
+/**
+ * One provider's catalog, with its prices (`nikcli models <provider>
+ * --verbose`), for `catalog.ts`; every provider's without one (`nikcli
+ * models --verbose`, the bot form's models). Empty when it cannot be read.
+ */
+export async function modelCatalogText(provider: string | undefined, cwd?: string): Promise<string> {
+  const read = await readModelCatalog(provider, cwd)
+  return read.ok ? read.text : ""
+}
+
+/**
+ * The same read, with why it failed: the bot form said «serve nikcli nel
+ * PATH» for a nikcli that was there and exited with an error, and for a host
+ * that cannot run it (review 4, MEDIO 2). The reason is nikcli's first line
+ * of error, cut short, never its whole output.
+ */
+export async function readModelCatalog(
+  provider: string | undefined,
+  cwd?: string,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string }> {
+  const host = await hostOf().catch(() => undefined)
+  if (!host?.nikcliBot) return { ok: false, reason: t("bots.models.noHost") }
+  let result: RunResult
+  try {
+    result = await host.nikcliBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
+  } catch {
+    return { ok: false, reason: t("bots.models.notFound") }
+  }
+  if (result.code !== 0) {
+    const detail = (result.stderr.split(/\r?\n/).find((line) => line.trim()) ?? "").trim().slice(0, 160)
+    return { ok: false, reason: t("bots.models.exit", String(result.code ?? "?"), detail) }
+  }
+  if (!result.stdout.trim()) return { ok: false, reason: t("bots.models.empty") }
+  return { ok: true, text: result.stdout }
 }
 
 /** What to run to open a session as this bot. */
@@ -406,5 +501,178 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
     }
     default:
       return { agentId: "nikcli", command: NIKCLI_COMMAND, args: launchArgs(bot.identifier, bot.model) }
+  }
+}
+
+/**
+ * The thread archive (B4).
+ *
+ * One entry per bot and project, written when a burst of lines stops or the
+ * turn ends — not on every line, which rewrote the whole thread for each
+ * token of tool output. The bytes are whatever disk the caller has; the panel
+ * uses the WebView's localStorage, which is that disk.
+ */
+/** The gateway chats' threads, in the renderer's storage, one key per bot, platform and chat. */
+export function localGatewayThreads(): GatewayThreads {
+  return createGatewayThreads({
+    getItem: (key) => {
+      try {
+        return localStorage.getItem(key)
+      } catch {
+        return null
+      }
+    },
+    setItem: (key, value) => localStorage.setItem(key, value),
+    removeItem: (key) => localStorage.removeItem(key),
+  })
+}
+
+export interface TalkDisk {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+  removeItem?(key: string): void
+  keys?(): readonly string[]
+}
+
+function quotaExceeded(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = "name" in error ? String(error.name) : ""
+  const code = "code" in error ? Number(error.code) : 0
+  return name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED" || code === 22 || code === 1014
+}
+
+function updatedAtOf(raw: string | null): number {
+  if (!raw) return 0
+  try {
+    const parsed = JSON.parse(raw) as { updatedAt?: unknown }
+    return typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0
+  } catch {
+    return 0
+  }
+}
+
+/** Drops the least recently updated thread keys, not `except`. One generation, so a retry has room. */
+function dropOldestTalks(disk: TalkDisk, except: string): boolean {
+  if (!disk.keys || !disk.removeItem) return false
+  const ranked = disk
+    .keys()
+    .filter((key) => key.startsWith(TALK_KEY_PREFIX) && key !== except)
+    .map((key) => ({ key, at: updatedAtOf(disk.getItem(key)) }))
+    .sort((a, b) => a.at - b.at || a.key.localeCompare(b.key))
+  const oldest = ranked[0]
+  if (!oldest) return false
+  for (const item of ranked) {
+    if (item.at !== oldest.at) break
+    disk.removeItem(item.key)
+  }
+  return true
+}
+
+/**
+ * The project a bot file belongs to, from the path alone.
+ *
+ * nikcli keeps a project's agents in `<root>/.nikcli/agent/` and also
+ * `<root>/.nikcli/agents/` (`agentDirs`). The root is the part before that
+ * segment. A path without it is a global bot: its folder is not a project.
+ */
+export function projectOfBotPath(path: string): string | undefined {
+  const folded = path.replace(/\\/g, "/").toLowerCase()
+  let at = -1
+  for (const mark of ["/.nikcli/agents/", "/.nikcli/agent/"]) {
+    const found = folded.lastIndexOf(mark)
+    if (found > at) at = found
+  }
+  if (at <= 0) return undefined
+  const root = path.slice(0, at).replace(/[\\/]+$/, "")
+  return root.length > 0 ? root : undefined
+}
+
+/**
+ * Once, even when no project is open.
+ *
+ * Threads saved as `ade.bots.talk:<path>` filled the quota and are never read
+ * again. A project bot's root comes from its path, so a thread from another
+ * project is not filed under the one open now. A global bot, a path without
+ * that segment, moves under the open project (or "" when none is open),
+ * without its session id. The old key is removed before the new one is
+ * written: at a full quota the delete is what makes the write fit.
+ */
+export function migrateTalkKeys(disk: TalkDisk, openProject: string): void {
+  if (!disk.keys || !disk.removeItem) return
+  const legacy = disk.keys().filter(isLegacyTalkKey)
+  for (const key of legacy) {
+    const path = key.slice(TALK_KEY_PREFIX.length)
+    let raw: string | null = null
+    try {
+      raw = disk.getItem(key)
+    } catch {
+      raw = null
+    }
+    try {
+      disk.removeItem(key)
+    } catch {
+      // Still try to write what was read. The old key staying is the worse miss.
+    }
+    try {
+      const talk = parseTalk(raw)
+      const root = projectOfBotPath(path)
+      if (root) {
+        disk.setItem(talkKey(path, root), serializeTalk(talk))
+      } else {
+        const { sessionId: _gone, ...rest } = talk
+        disk.setItem(talkKey(path, openProject), serializeTalk(rest))
+      }
+    } catch {
+      // The old key is already gone. A write that does not fit loses this thread.
+    }
+  }
+}
+
+export function createTalkArchive(
+  disk: TalkDisk,
+  waitMs = 400,
+  later: (run: () => void, ms: number) => () => void = (run, ms) => {
+    const id = setTimeout(run, ms)
+    return () => clearTimeout(id)
+  },
+) {
+  const pending = new Map<string, () => void>()
+  const write = (key: string, value: string) => {
+    try {
+      disk.setItem(key, value)
+    } catch (error) {
+      // One retry after the oldest threads are dropped. A second failure stays lost for this session.
+      if (!quotaExceeded(error) || !dropOldestTalks(disk, key)) return
+      try {
+        disk.setItem(key, value)
+      } catch {
+        // Still over the quota. The thread on screen is unchanged.
+      }
+    }
+  }
+  return {
+    read(key: string): Talk {
+      try {
+        return parseTalk(disk.getItem(key))
+      } catch {
+        return parseTalk(null)
+      }
+    },
+    /** Remembers the latest thread and writes it once the lines stop arriving. */
+    save(key: string, talk: Talk): void {
+      const value = serializeTalk(talk)
+      pending.get(key)?.()
+      const cancel = later(() => {
+        pending.delete(key)
+        write(key, value)
+      }, waitMs)
+      pending.set(key, cancel)
+    },
+    /** Writes now. A turn that ended, or a conversation that was forgotten. */
+    flush(key: string, talk: Talk): void {
+      pending.get(key)?.()
+      pending.delete(key)
+      write(key, serializeTalk(talk))
+    },
   }
 }

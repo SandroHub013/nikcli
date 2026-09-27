@@ -1,0 +1,770 @@
+/**
+ * A nikcli bot's turn on ADE's nikcli server (B8d).
+ *
+ * `nikcli run` in a terminal, one process per turn, becomes a prompt to a
+ * session of the server the Chat uses (`chat/connection.ts`), with the bot as
+ * its agent. What the process printed as JSON lines arrives here as the
+ * server's events, and a question arrives as `permission.asked` with its own
+ * id: it is answered by that id, so nothing the model writes can pass for
+ * one, and no menu is read off the screen.
+ *
+ * The session is made with the rules of the turn's profile (`serve-rules.ts`),
+ * which come after the bot's own file and win over it. A session whose rules
+ * are not the profile's — one of `nikcli run`, or of another profile — is not
+ * continued: a new one starts, and the thread says so once. The prompt never
+ * carries `tools`, which would replace the session's rules.
+ *
+ * The project is admitted before anything is sent (`admitProject`), as for
+ * the Chat: with its dialog when someone is in front of the screen, refused
+ * otherwise. A project agent with the bot's name would take its place on the
+ * server, with its own prompt and rules: the turn is refused instead. So is a
+ * turn whose model the server's catalog does not have: nikcli would end it
+ * without a word (`catalogHasModel`).
+ *
+ * Stop, the time limit and the spend cap abort the session's turn on the
+ * server; nothing of it keeps running.
+ */
+
+import type { Agent, ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
+import { t } from "../i18n"
+import {
+  appChatConnectionDeps,
+  CATALOG_TIMEOUT_MS,
+  openChat,
+  within,
+  type ChatConnectionDeps,
+} from "../chat/connection"
+import type { ChatEvent } from "../chat/events"
+import { catalogHasModel, parseModelRef, serializeModelRef } from "../chat/model"
+import { readEvents } from "../chat/stream"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
+import { projectFs } from "./store"
+import { localTrustStore } from "./trust"
+import { agentDirs, type AgentFile } from "./nikcli"
+import { joinPath } from "../host/path"
+import { finalText, spendKind } from "./runners"
+import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
+import {
+  appendMessage,
+  emptyTalk,
+  errorText,
+  noteReportedModel,
+  noteTurnUsage,
+  sendMessage,
+  sumTokens,
+  upsertMessage,
+  type PendingPermission,
+  type Talk,
+} from "./talk"
+import { acquireTurn } from "./terms"
+import { effortToSend, modelVariants } from "./effort"
+import {
+  runTurn,
+  timeoutProblem,
+  TURN_TIMEOUT_MS,
+  type Turn,
+  type TurnDeps,
+  type TurnRequest,
+  type TurnResult,
+} from "./turn"
+import type { PermissionRule } from "../chat/rules"
+
+/** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
+export interface ServeClient {
+  readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt" | "model">[]>
+  /**
+   * The server's models and its configured one; `providerList` absent when
+   * it could not be read. It may be one read a little earlier; `fresh` reads
+   * it now.
+   */
+  readonly catalog: (fresh?: boolean) => Promise<ServeCatalog>
+  /**
+   * Has the server read its configuration again (`POST /config/reload`):
+   * agents, commands and rules from the files, with the live sessions left
+   * as they are. Absent where the server cannot.
+   */
+  readonly reload?: () => Promise<void>
+  /** The session, or undefined when the server has none by that id. */
+  readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
+  readonly create: (input: {
+    readonly title: string
+    readonly permission: readonly PermissionRule[]
+  }) => Promise<string>
+  readonly prompt: (input: {
+    readonly sessionID: string
+    readonly text: string
+    readonly agent?: string
+    readonly model?: { readonly providerID: string; readonly modelID: string }
+    readonly variant?: string
+  }) => Promise<void>
+  readonly abort: (sessionID: string) => Promise<void>
+  readonly reply: (requestID: string, reply: "once" | "reject") => Promise<void>
+  readonly rejectQuestion: (requestID: string) => Promise<void>
+}
+
+export interface ServeCatalog {
+  readonly providerList?: ProviderList
+  readonly configModel?: string
+  /** `GET /config/providers`: the models with their variants after the configuration's overrides. */
+  readonly configProviders?: ConfigProviders
+}
+
+/** How long a bot's catalog is kept for the next turns in the same folder. */
+export const CATALOG_FRESH_MS = 60_000
+
+/**
+ * The catalog per folder, kept for `CATALOG_FRESH_MS` (modello assente
+ * review, B3): a room's round or a routine's runs do not read it again for
+ * every turn. `fresh` reads it now, as a turn does before refusing a model;
+ * one that could not be read is not kept.
+ */
+export function catalogCache(ttlMs = CATALOG_FRESH_MS, now: () => number = Date.now) {
+  const kept = new Map<string, { at: number; value: Promise<ServeCatalog> }>()
+  return (directory: string, read: () => Promise<ServeCatalog>, fresh = false): Promise<ServeCatalog> => {
+    const entry = kept.get(directory)
+    if (!fresh && entry && now() - entry.at < ttlMs) return entry.value
+    const value = read()
+    kept.set(directory, { at: now(), value })
+    void value.then(
+      (catalog) => {
+        if (!catalog.providerList && kept.get(directory)?.value === value) kept.delete(directory)
+      },
+      () => kept.delete(directory),
+    )
+    return value
+  }
+}
+
+export type ServeConnection =
+  | {
+      readonly ok: true
+      readonly client: ServeClient
+      readonly events: (signal: AbortSignal) => AsyncIterable<ChatEvent>
+    }
+  | { readonly ok: false; readonly problem?: string }
+
+export interface ServeTurnDeps {
+  /** The server for `directory`, once its project is admitted: asked about when `interactive`, refused otherwise. */
+  readonly connect: (directory: string, interactive: boolean) => Promise<ServeConnection>
+  /** Whether the project at `directory` has an agent file named `identifier` (`.nikcli/agent/<name>.md`). */
+  readonly projectHasAgent?: (directory: string, identifier: string) => Promise<boolean>
+  readonly now?: () => number
+  /** How long the server's reload is waited for: the catalog's `CATALOG_TIMEOUT_MS` when absent. */
+  readonly reloadTimeoutMs?: number
+  /** A diagnostic line, never a message's text: `console.warn` when absent. */
+  readonly warn?: (line: string) => void
+}
+
+/** An error as one short line: the reason, not a body to dump. */
+function brief(error: unknown): string {
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : (JSON.stringify(error) ?? String(error))
+  return text.replace(/\s+/g, " ").slice(0, 200)
+}
+
+/** `provider/model` as the server wants it; the model's own id may hold more slashes. */
+export function modelRef(model: string | undefined): { providerID: string; modelID: string } | undefined {
+  const at = model?.indexOf("/") ?? -1
+  if (!model || at <= 0 || at === model.length - 1) return undefined
+  return { providerID: model.slice(0, at), modelID: model.slice(at + 1) }
+}
+
+const samePrompt = (a: string | undefined, b: string) =>
+  (a ?? "").replace(/\r\n/g, "\n").trim() === b.replace(/\r\n/g, "\n").trim()
+
+/**
+ * Why the server's agent by the bot's name is not the bot, if it is not: the
+ * server knows no such agent, or one of the project's (or nikcli's own) has
+ * the name with another prompt, and would answer in the bot's place.
+ */
+export function agentProblem(agents: readonly Pick<Agent, "name" | "prompt">[], bot: AgentFile): string | undefined {
+  const found = agents.find((agent) => agent.name === bot.identifier)
+  if (!found) return t("bots.serve.noAgent", bot.identifier)
+  if (!samePrompt(found.prompt, bot.prompt)) return t("bots.serve.agentTaken", bot.identifier)
+  return undefined
+}
+
+interface ServePart {
+  readonly id: string
+  readonly messageID: string
+  readonly sessionID: string
+  readonly type: string
+  readonly text?: string
+  readonly tool?: string
+  readonly state?: {
+    readonly status?: string
+    readonly title?: string
+    readonly input?: unknown
+    readonly output?: unknown
+    readonly error?: unknown
+  }
+}
+
+/** A part on the thread: a text as the bot's words, a tool as what it did. Nothing for the rest. */
+function partChange(part: ServePart, at: number): ((talk: Talk) => Talk) | undefined {
+  const id = `srv-${part.id}`
+  if (part.type === "text") {
+    const text = part.text ?? ""
+    if (text.trim().length === 0) return undefined
+    return (talk) => upsertMessage(talk, { id, role: "bot", text }, at)
+  }
+  if (part.type === "tool") {
+    const state = part.state
+    if (!state || state.status === "pending") return undefined
+    const tool = part.tool ?? "tool"
+    const input = state.input
+    const title =
+      state.title ||
+      (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : tool)
+    const said = state.status === "completed" ? state.output : state.status === "error" ? state.error : undefined
+    const output = typeof said === "string" && said.trim().length > 0 ? said : undefined
+    return (talk) => upsertMessage(talk, { id, role: "tool", tool, text: title, ...(output ? { output } : {}) }, at)
+  }
+  return undefined
+}
+
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+
+/** The session an event is about, wherever the event keeps it. */
+function sessionOf(event: ChatEvent): string | undefined {
+  const props = record(event.properties)
+  const id = props["sessionID"] ?? record(props["info"])["sessionID"] ?? record(props["part"])["sessionID"]
+  return typeof id === "string" ? id : undefined
+}
+
+type End =
+  | { readonly kind: "done" | "stopped" | "timeout" | "budget" }
+  | { readonly kind: "lost"; readonly why: string }
+
+export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
+  const now = deps.now ?? Date.now
+  let stopped = false
+  /* How the turn ended, the first time anything ended it. */
+  let over: End | undefined
+  let resolveEnd: (how: End) => void = () => {}
+  const ended = new Promise<End>((resolve) => (resolveEnd = resolve))
+  const end = (how: End) => {
+    if (over) return
+    over = how
+    resolveEnd(how)
+  }
+  let answer: ((requestID: string, reply: "once" | "reject") => void) | undefined
+  /*
+   * A call to the server that a stop, the time limit or the spend cap does not
+   * wait for (review area 2): a server that did not answer kept the turn, and
+   * its slot, until it did, while `/ferma` had already said «fermato». The
+   * end wins the race, the turn settles, and the call's late answer is dropped.
+   */
+  const orEnd = <T>(call: Promise<T>): Promise<{ readonly value: T } | End> =>
+    Promise.race([call.then((value) => ({ value })), ended])
+
+  const result = (async (): Promise<TurnResult> => {
+    let talk = sendMessage(emptyTalk(), request.message, now())
+    const bot: AgentFile = request.bot ?? {
+      identifier: request.agent ?? "",
+      path: "",
+      scope: "global",
+      description: "",
+      mode: "primary",
+      prompt: request.instructions ?? "",
+      disabledTools: request.disabledTools ?? [],
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.effort ? { effort: request.effort } : {}),
+      runner: "nikcli",
+    }
+    talk = { ...talk, turnMode: spendKind("nikcli", bot.model, request.account) }
+    /* A change to the turn: to its own thread, and to the caller's. */
+    const change = (next: (talk: Talk) => Talk) => {
+      talk = next(talk)
+      request.onChange?.(next)
+      request.onUpdate?.(talk)
+    }
+    let sessionId: string | undefined
+    const finish = (status: TurnResult["status"], problem?: string, exitCode?: number): TurnResult => ({
+      status,
+      text: finalText(talk),
+      ...(sessionId ? { sessionId } : {}),
+      tokens: talk.tokens,
+      costUsd: talk.costUsd,
+      ...(problem ? { problem } : {}),
+      ...(exitCode !== undefined ? { exitCode } : {}),
+      talk,
+    })
+
+    // The server answers for a folder: a turn without one has nowhere to run.
+    const cwd = request.cwd
+    if (!cwd) return finish("error", t("bots.serve.noFolder"))
+    const slot = acquireTurn("nikcli", "nikcli")
+    if ("problem" in slot) return finish("error", slot.problem)
+    const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
+    const timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs)
+    const stream = new AbortController()
+    let client: ServeClient | undefined
+    /* The prompt went, or is going: from here the server has a turn to stop. */
+    let sent = false
+    let prompted = false
+    try {
+      const connection = await Promise.race([deps.connect(cwd, request.interactive === true), ended])
+      if ("kind" in connection) return settled(connection)
+      if (!connection.ok) return finish("error", connection.problem ?? t("bots.serve.notAdmitted", cwd))
+      client = connection.client
+      const server = client
+
+      let agentModel: { providerID: string; modelID: string } | undefined
+      if (bot.identifier) {
+        const listed = await orEnd(server.agents())
+        if ("kind" in listed) return settled(listed)
+        let agents = listed.value
+        let problem = agentProblem(agents, bot)
+        /*
+         * The server reads the agent files once per folder: a bot made, or
+         * its words changed, while it runs is not there yet, or not as the
+         * file says (Verifiche, bots.serve.noAgent). It reads them again,
+         * without touching its sessions, and is asked once more. Waited for
+         * as the catalog is: late or failed, the refusal stays as it was,
+         * and the log says why. A reload the proxy refused used to vanish
+         * here, and the bot stayed unknown with nothing to say what failed.
+         */
+        const reload = server.reload
+        if (problem && reload) {
+          const limit = deps.reloadTimeoutMs ?? CATALOG_TIMEOUT_MS
+          const warn = deps.warn ?? ((line: string) => console.warn(line))
+          const reloaded = await within(
+            reload().then(
+              () => true,
+              (error: unknown) => {
+                warn(`ADE: il server di nikcli non ha riletto i bot: ${brief(error)}`)
+                return false
+              },
+            ),
+            limit,
+          )
+          if (reloaded === undefined)
+            warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
+          if (reloaded) {
+            const again = await orEnd(server.agents())
+            if ("kind" in again) return settled(again)
+            agents = again.value
+            problem = agentProblem(agents, bot)
+          }
+        }
+        if (problem) return finish("error", problem)
+        agentModel = agents.find((agent) => agent.name === bot.identifier)?.model
+        /*
+         * A user's bot and a project's agent of its name, with the same words:
+         * the server runs the project's file, whose rules and model are its
+         * own. Refused as well; a project's bot is that file.
+         */
+        if (bot.scope === "global" && (await deps.projectHasAgent?.(cwd, bot.identifier)))
+          return finish("error", t("bots.serve.agentTaken", bot.identifier))
+      }
+
+      /*
+       * The model the server would use, as it picks it: the bot's, else its
+       * agent's, else the configured one. One the catalog does not have is
+       * refused here, before any session: nikcli would end the turn without
+       * a word. A catalog that cannot be read lets the server decide.
+       */
+      const model = modelRef(bot.model)
+      const catalog = await server.catalog()
+      const wanted = model ?? agentModel ?? parseModelRef(catalog.configModel)
+      // The catalog may be one read a little earlier: read now before refusing.
+      if (wanted && catalogHasModel(catalog.providerList, wanted) === false) {
+        if (catalogHasModel((await server.catalog(true)).providerList, wanted) === false)
+          return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
+      }
+      /*
+       * The effort, only when that model has it: nikcli drops a variant it
+       * does not know without a word, and the turn ran at the default as if
+       * the bot's effort had been used (chat-bot-facili, pezzo 0).
+       */
+      const variants = wanted ? modelVariants(catalog.configProviders, wanted) : NO_MODEL_KNOWN
+      const effort = effortToSend(bot.effort, variants)
+
+      const profile = profileFor({
+        ...(request.remote ? { remote: { commands: request.remote.commands } } : {}),
+        ...(request.unattended ? { unattended: true } : {}),
+        ...(request.approvals ? { approvals: true } : {}),
+        shell: !bot.disabledTools.includes("bash"),
+      })
+      const found = request.sessionId ? await orEnd(server.session(request.sessionId)) : { value: undefined }
+      if ("kind" in found) return settled(found)
+      const previous = found.value
+      if (request.sessionId && hasBotRules(previous, profile)) sessionId = request.sessionId
+      else {
+        // The mark first: `hasBotRules` reads the tail, and «here» in a pane reads the mark.
+        const created = await orEnd(
+          server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] }),
+        )
+        if ("kind" in created) return settled(created)
+        sessionId = created.value
+        /*
+         * A routine's session is its own each run (B11): made read-only, it
+         * cannot be the one the panel goes on with, so the thread keeps its own.
+         */
+        if (!request.unattended) {
+          const id = sessionId
+          const restarted = request.sessionId !== undefined
+          const at = now()
+          change((thread) => {
+            const next = { ...thread, sessionId: id }
+            return restarted
+              ? appendMessage(next, { role: "tool", tool: "ade", text: t("bots.serve.newSession") }, at)
+              : next
+          })
+        }
+      }
+      if (stopped) return finish("stopped")
+      const session = sessionId
+
+      /* ── the events of the session ───────────────────────────────────── */
+      const roles = new Map<string, string>()
+      /** Parts of a message whose role is not known yet: the user's own words are not the bot's. */
+      const waiting = new Map<string, ServePart[]>()
+      const spent = new Map<string, { tokens: number; cost: number }>()
+      let busy = false
+      let failed: string | undefined
+      const questions: PendingPermission[] = []
+      let shown: string | undefined
+
+      const showNext = () => {
+        if (shown !== undefined) return
+        const next = questions.shift()
+        if (!next) return
+        shown = next.requestID
+        request.onPermission?.(next)
+      }
+      /*
+       * Only the question on screen, by its id (B8d review, M1): one the
+       * server settled meanwhile, and the next one shown in its place, must
+       * not take an answer given to the first.
+       */
+      answer = (requestID, reply) => {
+        const id = shown
+        if (id === undefined || id !== requestID) return
+        shown = undefined
+        void server.reply(id, reply).catch(() => {})
+        showNext()
+      }
+      const applyPart = (part: ServePart) => {
+        const next = partChange(part, now())
+        if (next) change(next)
+      }
+
+      const handle = (event: ChatEvent) => {
+        if (sessionOf(event) !== session) return
+        const props = record(event.properties)
+        switch (event.type) {
+          case "session.status": {
+            const kind = record(props["status"])["type"]
+            if (kind === "busy" || kind === "retry") busy = true
+            else if (kind === "idle" && busy && prompted) end({ kind: "done" })
+            return
+          }
+          case "session.idle":
+            if (busy && prompted) end({ kind: "done" })
+            return
+          case "message.updated": {
+            const info = record(props["info"])
+            const id = info["id"]
+            if (typeof id !== "string") return
+            roles.set(id, String(info["role"]))
+            if (info["role"] === "assistant") {
+              change((thread) => noteReportedModel(thread, info))
+              const raw = record(info["tokens"])
+              const tokens = typeof raw["total"] === "number" ? raw["total"] : sumTokens(raw)
+              const cost = typeof info["cost"] === "number" ? info["cost"] : 0
+              const before = spent.get(id) ?? { tokens: 0, cost: 0 }
+              spent.set(id, { tokens, cost })
+              const more = tokens - before.tokens
+              const extra = cost - before.cost
+              if (more !== 0 || extra !== 0) {
+                change((thread) =>
+                  noteTurnUsage(
+                    { ...thread, tokens: thread.tokens + more, costUsd: thread.costUsd + extra },
+                    more,
+                    extra,
+                    false,
+                  ),
+                )
+              }
+              if (request.maxCostUsd !== undefined && talk.costUsd > request.maxCostUsd) end({ kind: "budget" })
+              for (const part of waiting.get(id) ?? []) applyPart(part)
+            }
+            waiting.delete(id)
+            return
+          }
+          case "message.part.updated": {
+            const part = record(props["part"]) as unknown as ServePart
+            const role = roles.get(part.messageID)
+            if (role === "assistant") applyPart(part)
+            else if (role === undefined) {
+              const list = (waiting.get(part.messageID) ?? []).filter((kept) => kept.id !== part.id)
+              waiting.set(part.messageID, [...list, part])
+            }
+            return
+          }
+          case "session.error": {
+            const error = props["error"]
+            if (stopped && record(error)["name"] === "MessageAbortedError") return
+            const text = errorText(error)
+            failed = text
+            const at = now()
+            change((thread) => ({ ...appendMessage(thread, { role: "error", text }, at), status: "error" }))
+            return
+          }
+          case "permission.asked": {
+            const id = props["id"]
+            if (typeof id !== "string") return
+            const permission = String(props["permission"] ?? "")
+            const patterns = Array.isArray(props["patterns"]) ? props["patterns"].map(String).join(", ") : ""
+            if (!request.onPermission) {
+              // Nobody to answer: refused as it comes, and said.
+              void server.reply(id, "reject").catch(() => {})
+              const at = now()
+              change((thread) =>
+                appendMessage(thread, { role: "error", text: t("bots.serve.refused", permission, patterns) }, at),
+              )
+              return
+            }
+            questions.push({ requestID: id, permission, patterns, askedAt: now() })
+            showNext()
+            return
+          }
+          case "permission.replied": {
+            const id = props["requestID"]
+            const index = questions.findIndex((asked) => asked.requestID === id)
+            if (index >= 0) questions.splice(index, 1)
+            if (shown === id) {
+              shown = undefined
+              showNext()
+            }
+            return
+          }
+          case "question.asked": {
+            // A bot's thread has nowhere to answer one; its rules deny the tool, this is in case.
+            const id = props["id"]
+            if (typeof id === "string") void server.rejectQuestion(id).catch(() => {})
+            return
+          }
+        }
+      }
+
+      /* The stream is open before the prompt goes, so nothing of the turn is missed. */
+      const events = connection.events(stream.signal)[Symbol.asyncIterator]()
+      const first = await Promise.race([events.next(), ended])
+      if ("kind" in first) return settled(first)
+      if (!first.done) handle(first.value)
+      void (async () => {
+        try {
+          for (;;) {
+            const next = await events.next()
+            if (next.done) break
+            handle(next.value)
+          }
+          end({ kind: "lost", why: t("bots.serve.lost") })
+        } catch (error) {
+          end({ kind: "lost", why: error instanceof Error ? error.message : String(error) })
+        }
+      })()
+
+      // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
+      const text =
+        !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
+      if (stopped) return settled({ kind: "stopped" })
+      if (effort.dropped) {
+        const note = wanted
+          ? t("bots.serve.effortDropped", effort.dropped, serializeModelRef(wanted), (variants ?? []).join(", "))
+          : t("bots.serve.effortNoModel", effort.dropped)
+        const at = now()
+        change((thread) => appendMessage(thread, { role: "tool", tool: "ade", text: note }, at))
+      }
+      sent = true
+      const prompt = await orEnd(
+        server.prompt({
+          sessionID: session,
+          text,
+          ...(bot.identifier ? { agent: bot.identifier } : {}),
+          ...(model ? { model } : {}),
+          ...(effort.variant ? { variant: effort.variant } : {}),
+        }),
+      )
+      if ("kind" in prompt) return settled(prompt)
+      prompted = true
+      const how = await ended
+      if (how.kind === "done") return failed !== undefined ? finish("error", failed, 1) : finish("done", undefined, 0)
+      return settled(how)
+    } catch (error) {
+      return finish(
+        "error",
+        t("bots.turn.didNotStart", "nikcli", error instanceof Error ? error.message : String(error)),
+      )
+    } finally {
+      clearTimeout(timer)
+      stream.abort()
+      answer = undefined
+      slot.release()
+      // Whatever ended the turn early, the server stops it too.
+      if (client && sessionId && sent && over?.kind !== "done") void client.abort(sessionId).catch(() => {})
+    }
+
+    function settled(how: End): TurnResult {
+      switch (how.kind) {
+        case "stopped":
+          return finish("stopped")
+        case "timeout":
+          return finish("error", timeoutProblem("nikcli", timeoutMs))
+        case "budget": {
+          const usd = (value: number) => `${value.toFixed(2)} $`
+          return finish("error", t("bots.turn.overBudget", "nikcli", usd(talk.costUsd), usd(request.maxCostUsd ?? 0)))
+        }
+        case "lost":
+          return finish("error", how.why)
+        case "done":
+          return finish("done", undefined, 0)
+      }
+    }
+  })()
+
+  return {
+    result,
+    stop: () => {
+      stopped = true
+      end({ kind: "stopped" })
+    },
+    answer: (requestID, reply) => answer?.(requestID, reply),
+  }
+}
+
+/** Where a project's yes is kept and what it covers: the Bots' own (`project-trust.ts`), as the Chat has it. */
+export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "confirm"> {
+  return { store: localTrustStore(PROJECT_TRUST_KEY), surface: () => projectSurface(directory, projectFs) }
+}
+
+/**
+ * A bot's turn, on the runner it names: nikcli's on ADE's server, where a
+ * question has an id (B8d) — the panel's, a room's, a routine's and a chat's;
+ * the others as `runTurn` runs them.
+ */
+export function runBotTurn(
+  request: TurnRequest,
+  serve: () => ServeTurnDeps = appServeTurnDeps,
+  deps: TurnDeps = {},
+): Turn {
+  if (request.runner === "nikcli") return runServeTurn(request, serve())
+  return runTurn(request, deps)
+}
+
+/** The calls of `ServeClient` on the SDK's client; the catalog within `catalogTimeoutMs`. */
+/*
+ * No model named by the bot, its agent or the configuration: the server picks
+ * one of its own, whose levels ADE cannot know, and an effort it lacks would
+ * be dropped without a word. None is sent, and the turn says why (review of
+ * bot-sforzo, BASSO 1).
+ */
+const NO_MODEL_KNOWN: readonly string[] = []
+
+export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
+  return {
+    agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
+    catalog: async () => {
+      // Unread within the time, it is unknown and the server decides (modello assente review, M4).
+      const [providers, config, configured] = await Promise.all([
+        within(client.provider.list(), catalogTimeoutMs),
+        within(client.config.get(), catalogTimeoutMs),
+        within(client.config.providers(), catalogTimeoutMs),
+      ])
+      return {
+        ...(providers?.data ? { providerList: providers.data } : {}),
+        ...(config?.data?.model ? { configModel: config.data.model } : {}),
+        ...(configured?.data ? { configProviders: configured.data } : {}),
+      }
+    },
+    reload: async () => {
+      await client.config.reload()
+    },
+    session: async (sessionID) => {
+      try {
+        return (await client.session.get({ sessionID })).data as { permission?: unknown } | undefined
+      } catch (error) {
+        // Gone, or never on this server: a session of `nikcli run` from another folder, say.
+        if (
+          /\b404\b|not ?found/i.test(
+            error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error),
+          )
+        )
+          return undefined
+        throw error
+      }
+    },
+    create: async ({ title, permission }) =>
+      ((await client.session.create({ title, permission: [...permission] })).data as unknown as { id: string }).id,
+    prompt: async ({ sessionID, text, agent, model, variant }) => {
+      // Never `tools`: it would replace the session's rules (`prompt.ts`).
+      await client.session.promptAsync({
+        sessionID,
+        parts: [{ type: "text", text }],
+        ...(agent ? { agent } : {}),
+        ...(model ? { model } : {}),
+        ...(variant ? { variant } : {}),
+      })
+    },
+    abort: async (sessionID) => {
+      await client.session.abort({ sessionID })
+    },
+    reply: async (requestID, reply) => {
+      await client.permission.reply({ requestID, reply })
+    },
+    rejectQuestion: async (requestID) => {
+      await client.question.reject({ requestID })
+    },
+  }
+}
+
+/**
+ * In the app: the Chat's server and its admitted connection, per folder, on
+ * every turn. The yes is the one the Chat and the panel keep, per project and
+ * for its files as they are: asked once, and again only when they change.
+ * With nobody in front of the screen, a project not admitted is refused.
+ */
+/** The bots' catalogs, one per folder, for the whole window. */
+const botCatalogs = catalogCache()
+
+export function appServeTurnDeps(
+  connection: () => ChatConnectionDeps = appChatConnectionDeps,
+  trust: (directory: string) => Omit<AdmitProjectDeps, "confirm"> = appProjectTrust,
+): ServeTurnDeps {
+  const unattended = (directory: string) =>
+    admitProject(directory, { ...trust(directory), confirm: () => false }).then((admitted) =>
+      admitted.ok ? admitted : { ok: false as const, problem: t("bots.serve.notAdmitted", directory) },
+    )
+  return {
+    projectHasAgent: async (directory, identifier) => {
+      for (const folder of agentDirs(directory, "project")) {
+        try {
+          await projectFs.readText(joinPath(folder, `${identifier}.md`))
+          return true
+        } catch {
+          // Not there: the next spelling of the folder.
+        }
+      }
+      return false
+    },
+    connect: async (directory, interactive) => {
+      const base = connection()
+      const opened = await openChat(directory, interactive ? base : { ...base, admit: unattended })
+      if (!opened.ok) return opened
+      const client = serveClientOf(opened.client)
+      return {
+        ok: true,
+        client: { ...client, catalog: (fresh) => botCatalogs(directory, () => client.catalog(), fresh) },
+        events: (signal) => readEvents(opened.fetch, directory, signal),
+      }
+    },
+  }
+}

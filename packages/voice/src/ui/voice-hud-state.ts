@@ -69,6 +69,7 @@ export interface HudInput {
   spoken: string
   /** The readback of a matched intent, when the parse produced one. */
   readback?: string
+  confirmationPrompt?: string
   /** The phrase that wakes the agent, quoted back while it sleeps. */
   wakeWord: string
   /** The user's latest sentence, heard in full (see `latestExchange`). */
@@ -106,14 +107,19 @@ export function latestExchange(history: readonly AgentEntry[]): { utterance?: st
  * total confidence.
  */
 export function agentHudState(input: HudInput): HudState {
-  const { status, partial, spoken, readback, wakeWord, utterance, answer } = input
+  const { status, partial, spoken, readback, confirmationPrompt, wakeWord, utterance, answer } = input
 
   switch (status) {
     case "asleep":
       return { tone: "armed", label: t("vui.hud.waiting"), line: t("vui.hud.say", wakeWord), quoted: false }
 
     case "confirming":
-      return { tone: "asking", label: t("vui.hud.confirm"), line: readback ?? spoken, quoted: false }
+      return {
+        tone: "asking",
+        label: t("vui.hud.confirm"),
+        line: confirmationPrompt ?? readback ?? spoken,
+        quoted: false,
+      }
 
     case "executing":
       /*

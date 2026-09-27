@@ -123,6 +123,66 @@ describe("parseUtterance", () => {
       expect(res.slots.paneIndex).toBe(1)
     })
 
+    /*
+     * Rilievo 21: lo step 5 di extractSlots confrontava i titoli in ordine
+     * di elenco e vinceva la prima sottosequenza sopra soglia. «chiudi api
+     * tests» con «api» elencato prima di «api tests» chiudeva «api». Ora
+     * vince il titolo esatto, e senza esatto la migliore somiglianza.
+     */
+    describe("titoli dei pannelli: esatto prima, poi il migliore", () => {
+      const api: PaneSummary = {
+        id: "pane-api",
+        title: "API",
+        status: "idle" as any,
+        index: 1,
+        hasLiveProcess: false,
+        isBrowser: false,
+        isFile: false,
+      }
+      const apiTests: PaneSummary = {
+        id: "pane-api-tests",
+        title: "API Tests",
+        status: "idle" as any,
+        index: 2,
+        hasLiveProcess: false,
+        isBrowser: false,
+        isFile: false,
+      }
+
+      test("«chiudi api tests» prende «API Tests», non «API» elencato prima", () => {
+        const res = parseUtterance("chiudi api tests", { panes: [api, apiTests] })
+        expect(res.slots.paneTitle).toBe("API Tests")
+        expect(res.slots.paneIndex).toBe(2)
+      })
+
+      test("senza titolo esatto vince la somiglianza migliore, non la prima sopra soglia", () => {
+        // «test» è sottosequenza di entrambi, ma «test runner» copre di più
+        // di «test» e non deve perdere contro l'ordine di elenco.
+        const runnerShort: PaneSummary = {
+          id: "pane-t",
+          title: "Tes",
+          status: "idle" as any,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        }
+        const runnerFull: PaneSummary = {
+          id: "pane-tr",
+          title: "Test Runner",
+          status: "idle" as any,
+          index: 2,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        }
+        const res = parseUtterance("chiudi test runner", { panes: [runnerShort, runnerFull] })
+        // «test runner» è esatto nella frase: deve vincere su «Tes».
+        expect(res.slots.paneTitle).toBe("Test Runner")
+        expect(res.slots.paneIndex).toBe(2)
+      })
+    })
+
     test("extracts columns slot", () => {
       const res = parseUtterance("imposta 3 colonne")
       expect(res.outcome).toBe("matched")
@@ -152,6 +212,28 @@ describe("parseUtterance", () => {
     })
   })
 
+  /*
+   * Rilievo 2: permission.allow era destructive:false, quindi «consenti» o
+   * «autorizza» detti in idle partivano subito, senza domanda, sul pannello
+   * indovinato. Ora è distruttivo: la macchina a stati chiede conferma.
+   */
+  describe("permission.allow è distruttivo", () => {
+    test("il vocabolario marca permission.allow come destructive", () => {
+      const res = parseUtterance("consenti")
+      expect(res.outcome).toBe("matched")
+      expect(res.intent?.intent).toBe("permission.allow")
+      expect(res.intent?.destructive).toBe(true)
+    })
+
+    test("«autorizza» è destructive anche con uno slot di pannello", () => {
+      const res = parseUtterance("autorizza pannello 2")
+      expect(res.outcome).toBe("matched")
+      expect(res.intent?.intent).toBe("permission.allow")
+      expect(res.intent?.destructive).toBe(true)
+      expect(res.slots.paneIndex).toBe(2)
+    })
+  })
+
   describe("contextual permissions", () => {
     test("resolves 'conferma' to permission.allow when pendingPermission is true", () => {
       const res = parseUtterance("conferma", { pendingPermission: true, pendingPermissionPaneId: "p-42" })
@@ -171,6 +253,33 @@ describe("parseUtterance", () => {
       const res = parseUtterance("conferma", { pendingPermission: false })
       expect(res.outcome).toBe("matched")
       expect(res.intent?.intent).toBe("dialog.confirm")
+    })
+  })
+
+  /*
+   * Rilievo 1: con un permesso in sospeso, «non consentire» e «non
+   * autorizzare» producevano permission.allow perché il confronto esatto
+   * riconosceva solo «no» o «annulla» nudi.
+   */
+  describe("negazioni con permesso in sospeso", () => {
+    test("«non consentire» non diventa permission.allow", () => {
+      const res = parseUtterance("non consentire", { pendingPermission: true, pendingPermissionPaneId: "p-42" })
+      expect(res.intent?.intent).not.toBe("permission.allow")
+    })
+
+    test("«non autorizzare» non diventa permission.allow", () => {
+      const res = parseUtterance("non autorizzare", { pendingPermission: true, pendingPermissionPaneId: "p-42" })
+      expect(res.intent?.intent).not.toBe("permission.allow")
+    })
+
+    test("«non confermo» non diventa dialog.confirm", () => {
+      const res = parseUtterance("non confermo")
+      expect(res.intent?.intent).not.toBe("dialog.confirm")
+    })
+
+    test("«no, non va bene» non diventa dialog.confirm", () => {
+      const res = parseUtterance("no, non va bene")
+      expect(res.intent?.intent).not.toBe("dialog.confirm")
     })
   })
 

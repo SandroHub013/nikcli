@@ -24,6 +24,7 @@ export const voiceEn: VoiceMessages = {
   "vui.orb.confirming": "The assistant is waiting for confirmation (press to close)",
   "vui.orb.executing": "The assistant is running a command",
   "vui.orb.listening": "The assistant is listening (press to close)",
+  "vui.orb.title": (chord) => `Microphone · ${chord}`,
   "vui.agentOrb.speaking": "The assistant is speaking: press to interrupt",
   "vui.agentOrb.working": "The assistant is working: press to cancel",
   "vui.listening.text": (wakeWord) => `Listening · “${wakeWord}”`,
@@ -49,6 +50,8 @@ export const voiceEn: VoiceMessages = {
   "vui.hud.modelPercent": (percent) => `speech model · ${percent}%`,
   "vui.hud.failed": "won't start",
   "vui.hud.failed.label": "Voice control didn't start",
+  "vui.hud.voiceFailed": "natural voice unavailable",
+  "vui.hud.voiceFailed.label": "Natural voice download failed",
   "vui.hud.settings": "settings",
   "vui.hud.settings.label": "Open voice settings",
   "vui.hud.close": "Close (Esc)",
@@ -103,6 +106,11 @@ export const voiceEn: VoiceMessages = {
   "vui.speed.fast.desc": "Claude Sonnet 5 with little reasoning; Codex with little reasoning",
   "vui.speed.cli": "As the CLI",
   "vui.speed.cli.desc": "The model and reasoning set in the CLI: slower, sometimes more accurate",
+  "vui.codexFallback.title": "Fallback to Codex on Claude limit",
+  "vui.codexFallback.on": "On",
+  "vui.codexFallback.on.desc": "If Claude Code hits the plan limit, retries the request on Codex",
+  "vui.codexFallback.off": "Off",
+  "vui.codexFallback.off.desc": "Reports the limit without switching to Codex (default)",
   "vui.engine.note":
     "The agent uses your CLI account, for personal use: ADE doesn't read your credentials, keeps only a few turns together and doesn't retry when you hit the limit. It doesn't edit files or run commands in the project: it hands the work to the sessions. For heavy use, sign in to the CLI with an API key.",
   "vui.download.starting": "Starting the Parakeet model download (~640 MB)...",
@@ -114,6 +122,8 @@ export const voiceEn: VoiceMessages = {
   "vui.panel.title": "Voice control panel",
   "vui.panel.subtitle": "Mode, activation, shortcuts and speech engines",
   "vui.panel.close": "Close settings (Esc)",
+  "vui.panel.resetVoice": "Reset the voice",
+  "vui.panel.resetVoiceConfirm": "Confirm?",
   "vui.panel.sections": "Settings sections",
   "vui.mode.title": "Default mode",
   "vui.mode.desc":
@@ -128,10 +138,17 @@ export const voiceEn: VoiceMessages = {
   "vui.replies.speak.desc": "Reads you what the session answered",
   "vui.replies.silent": "Stay silent",
   "vui.replies.silent.desc": "You read the answer in the panel",
+  "vui.alerts.title": "Proactive voice alerts",
+  "vui.alerts.on": "On",
+  "vui.alerts.on.desc": "Announces permissions, completions, and decisions",
+  "vui.alerts.off": "Off",
+  "vui.alerts.off.desc": "No proactive voice alerts (default)",
   "vui.replies.voice": "Reply voice",
   "vui.replies.source": "Source",
   "vui.replies.note":
     "Natural voices are downloaded the first time they're needed (about 85 MB, Windows only) and then work offline. Until the download finishes, the system voice answers.",
+  "vui.replies.retry": "Try again",
+  "vui.replies.downloading": "Downloading…",
   "vui.reply.male": "Male",
   "vui.reply.ugo": "Ugo (Piper), natural and offline",
   "vui.reply.ugo.licence":
@@ -140,8 +157,51 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.paola": "Paola (Piper), natural and offline",
   "vui.reply.paola.licence":
     "CC0 dataset, model derived from the lessac voice, whose dataset is licensed for research only.",
+  "vui.reply.lessac.title": "Lessac (English)",
+  "vui.reply.lessac.desc": "Lessac (Piper), natural and offline",
+  "vui.reply.lessac.licence": "Model dataset licensed for research only.",
   "vui.reply.system": "System voice",
   "vui.reply.system.desc": "The Windows one, nothing to download",
+  "vui.reply.fallbackNotice": "Natural voice is unavailable: using system voice.",
+  "vui.replies.backend": "Engine",
+  "vui.backend.piper": "Piper",
+  "vui.backend.piper.desc": "Local voices, Italian and one English",
+  "vui.backend.kokoro": "Kokoro",
+  "vui.backend.kokoro.desc": "Four local English voices, more natural, with a download of their own",
+  "vui.backend.system": "System",
+  "vui.backend.system.desc": "The system's voice, nothing to download",
+  "vui.reply.kokoro.af_heart": "Heart",
+  "vui.reply.kokoro.af_heart.desc": "Female, American English",
+  "vui.reply.kokoro.am_fenrir": "Fenrir",
+  "vui.reply.kokoro.am_fenrir.desc": "Male, American English",
+  "vui.reply.kokoro.bf_emma": "Emma",
+  "vui.reply.kokoro.bf_emma.desc": "Female, British English",
+  "vui.reply.kokoro.bm_george": "George",
+  "vui.reply.kokoro.bm_george.desc": "Male, British English",
+  "vui.reply.kokoro.licence": "Kokoro-82M model, Apache-2.0.",
+  "vui.replies.kokoroItalian":
+    "The Kokoro voices are English: a reply in Italian is read by Ugo or Paola, of the same gender.",
+  "vui.replies.test": "Try the voice",
+  "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
+  "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
+  "vui.pack.installing": "Installing",
+  "vui.pack.bytesOf": (done, total, percent) => `${done} of ${total} (${percent}%)`,
+  "vui.pack.filesOf": (done, file, files) => `${done}, file ${file} of ${files}`,
+  "vui.pack.cancel": "Cancel",
+  "vui.pack.cancelling": "Cancelling…",
+  "vui.pack.install": "Install",
+  "vui.pack.installSize": (size) => `Install (${size})`,
+  "vui.pack.delete": "Delete",
+  "vui.pack.deleting": "Deleting…",
+  "vui.pack.kokoro.unavailable":
+    "Kokoro is not available in this version of ADE yet: until it is, Piper reads the replies.",
+  "vui.pack.kokoro.absent":
+    "The Kokoro voices are not installed: until they are, Piper reads the replies. They are downloaded only when you press Install.",
+  "vui.pack.kokoro.installed": "Kokoro voices installed: they work offline.",
+  "vui.pack.kokoro.model":
+    "Model: Kokoro-82M by hexgrad (huggingface.co/hexgrad/Kokoro-82M), Apache-2.0 licence, in the files prepared by kokoro-onnx (MIT).",
+  "vui.pack.kokoro.host":
+    "Read by kokoro-host, a program separate from ADE, with the sherpa-onnx runtime (Apache-2.0) and ONNX Runtime (MIT); espeak-ng (GPL-3.0-or-later) is in the sherpa-onnx DLL downloaded with the runtime, not in the host.",
   "vui.send.title": "After dictation",
   "vui.send.manual": "Just transcribe",
   "vui.send.manual.desc": "The text stays there, you send it",
@@ -160,9 +220,13 @@ export const voiceEn: VoiceMessages = {
     "Off: the wake word isn't supported in dictation mode; it only works for agent commands.",
   "vui.listen.title": "Listening",
   "vui.listen.always": "Always on",
-  "vui.listen.always.desc": (wakeWord) => `The microphone opens with ADE and waits for “${wakeWord}”`,
+  "vui.listen.always.desc": (wakeWord) =>
+    `The microphone opens with ADE and waits for “${wakeWord}”. It spends credits: every voice in the room is sent to the transcription service, about $0.02 an hour with a television on, nothing while the room is quiet. It stops by itself after 30 minutes without being called, or past 120 sentences in an hour.`,
+  "vui.listen.spend": (calls, cost) =>
+    `The voice sent ${calls} ${calls === 1 ? "request" : "requests"} to OpenRouter today, for ${cost}.`,
   "vui.listen.manual": "Only when you open it",
-  "vui.listen.manual.desc": "With the button at the top or the shortcut",
+  "vui.listen.manual.desc":
+    "With the button at the top or the shortcut; without an accepted phrase it closes after 30 seconds.",
   "vui.shortcuts.title": "Keyboard shortcuts",
   "vui.shortcuts.desc":
     "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
@@ -273,7 +337,7 @@ export const voiceEn: VoiceMessages = {
 
   // Voice wake word hint
   "vui.wake.hint": (wakeWord) =>
-    `Start the sentence with "${wakeWord}" ("ehi nik" or "hey nick" work too), for example "${wakeWord}, apri il browser". Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. If there are more than 120 requests in an hour it tells you. It pauses only when the PC is locked or asleep, and resumes by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
+    `Just say "${wakeWord}" to call it. Say "ei nik" as separate words, with a pause after the name. Start the sentence with "${wakeWord}" ("ehi nik" or "hey nick" work too), for example "${wakeWord}, open the browser". Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. Listening by itself is off unless you turn it on, because every sentence it hears is paid for: the switch is in the voice settings, where what it costs and what it has spent today are written. On, it stops by itself past 120 sentences in an hour or after half an hour with nobody calling it, and stays stopped until you turn it back on. When the PC is locked or asleep it pauses and comes back by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
 
   // Voice microphone errors, settings repairs, shortcut warnings
   "vui.error.unknown": "unknown error",
@@ -309,9 +373,14 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.wordsDropped": (dropped) => `Ignored custom words that aren't text: ${dropped}.`,
   "vui.fix.wordsInvalid": "Invalid custom word list: cleared.",
   "vui.fix.speakReplies": "Invalid reply reading setting: turned back on.",
+  "vui.fix.spokenAlerts": "Invalid proactive alerts setting: turned back off.",
   "vui.fix.replyVoice": (value) => `Unknown reply voice '${value}': restored Ugo.`,
+  "vui.fix.replyBackend": (value, fallback) =>
+    `Kokoro voices read in English: replies now use the '${fallback}' backend instead of '${value}'.`,
+  "vui.fix.ttsLocale": (value) => `Unknown reply language '${value}': restored Italian.`,
   "vui.fix.agentSpeed": (value) => `Unknown agent speed '${value}': restored fast.`,
   "vui.fix.agentEngine": (value) => `Unknown agent engine '${value}': restored automatic.`,
+  "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
   "vui.command.palette": "Command palette",
   "vui.command.sessionNew": "New session",
   "vui.command.paneClose": "Close panel",
@@ -319,6 +388,7 @@ export const voiceEn: VoiceMessages = {
   "vui.command.paneRename": "Rename panel",
   "vui.command.viewToggle": "Switch view",
   "vui.command.themeToggle": "Switch theme",
+  "vui.command.sidebarToggle": "Show or hide the sidebar",
   "vui.command.agent": "Agent mode",
   "vui.command.transcription": "Dictation mode",
   "vui.clash.taken": (label, chord, winner) =>

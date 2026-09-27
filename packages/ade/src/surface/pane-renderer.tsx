@@ -3,13 +3,16 @@ import { BrowserPane } from "../browser"
 import { FilePane, editBuffer, revertBuffer } from "../editor"
 import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
+import type { LinkRequest } from "../terminal/links"
 import type { SpawnedSession } from "../host/shell"
-import type { Project } from "../host/project"
+import { grantedRoots, type Project } from "../host/project"
 import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
+import { typedAfter } from "../session/typed-line"
+import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -24,8 +27,12 @@ import { SimulatorPane } from "../simulator/simulator-pane"
 import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
+import { DesignPane } from "../design/design-pane"
+import type { DesignHub } from "../design/hub"
+import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
+import { belongsTo, sameProject } from "./pane-project"
 import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
 import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
 import type { BrowserRequest, Rect } from "../browser/request"
@@ -59,12 +66,19 @@ export interface PaneRendererDeps {
   /** The live process behind a pane, if there is one. */
   sessionFor: (id: string) => SpawnedSession | undefined
   appendLine: (id: string, text: string, kind?: "step" | "shell" | "note") => void
+  /** A note the user has to read, over the terminal as well as in the transcript. */
+  tellPane: (id: string, text: string) => void
   close: (id: string) => void
   saveFile: (id: string) => void
   answerPermission: (id: string, answer: PermissionAnswer) => void
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
   restart: (pane: Pane, line?: string) => void
+  /** Whether "Sospendi" can run on the pane now; undefined where it is not offered (P1-C6). */
+  suspendCheck: (id: string) => SuspendCheck | undefined
+  suspend: (id: string) => void
+  /** "Riprendi" on a suspended session. */
+  resume: (id: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
   /** The native file picker, narrowed to the formats the 3D panel reads. */
@@ -77,12 +91,29 @@ export interface PaneRendererDeps {
   guessServers: () => Promise<DevServerGuess[]>
   /** The project's decisions register, shared with the bar's badge and window. */
   decisions: DecisionsHub
+  /** The project's design proposals register, shared with the bar's badge and window. */
+  design: DesignHub
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
   panels: PanelRouter
+  /** How many messages ADE is holding for each pane, for the header badge. */
+  mailWaiting: () => Record<string, number>
+  /** Shows a pane what is waiting for it, without typing anything. */
+  showMail: (id: string) => void
+  /** Takes away the notes shown over a pane's terminal. */
+  dismissNotices: (id: string) => void
+  /** A link clicked in a file pane's markdown preview: a web page in ADE's browser, or a file. */
+  /** A link clicked in a file pane; a refused file link answers with the note to show there. */
+  openFileLink: (id: string, link: { kind: "url"; url: string } | { kind: "file"; path: string }) => string | void
+  /** Opens what was clicked in a session's terminal: a URL, or a file at a line. */
+  openLink: (id: string, request: LinkRequest) => void
+  /** Writes into a session's input line on the user's behalf, and counts it as typed. */
+  typeAsUser: (id: string, text: string) => void
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
+  /** The user's yes to a panel opening a page that is not this machine's, for session `from`. */
+  confirmOpen: (panel: "browser" | "app", url: string, from: string | undefined) => Promise<boolean>
   pluginRuntime: AdePluginRuntime
   /** Each mounted browser pane's controls, for `@ade browser …`. */
   browserControllers: Map<string, BrowserController>
@@ -96,7 +127,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, reports, permissions } = records
+  const { buffers, bufferLoading, bufferError, reports, permissions } = records
   /* Panes of one kind share a panel name; see `panels/stack.ts`. */
   const stacks = {
     video: createPanelStack(panels, "video"),
@@ -129,8 +160,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
      * in keep running and keep their scrollback; the sidebar still counts
      * them, and switching project brings them straight back.
      */
-    const owner = project()?.name
-    const mine = owner ? state.panes.filter((p) => p.workspaceId === owner) : state.panes
+    const open = project()
+    const mine = open ? state.panes.filter((p) => belongsTo(p, open)) : state.panes
     const currentPanes = state.expandedId ? mine.filter((p) => p.id === state.expandedId) : mine
 
     return currentPanes.map((p) => {
@@ -163,16 +194,19 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     /** The agent sessions of this pane's project, running or not. */
     const projectSessions = () =>
       wb()
-        .panes.filter(
-          (pane) => pane.workspaceId === current().workspaceId && !isPanelPane(pane) && (pane.agent ?? pane.model),
-        )
+        .panes.filter((pane) => sameProject(pane, current()) && !isPanelPane(pane) && (pane.agent ?? pane.model))
         .map((pane) => ({ id: pane.id, title: pane.title, running: deps.isRunning(pane.id) }))
 
     const filePane = () => (
       <FilePane
         path={current().filePath!}
+        goTo={current().fileGoTo}
         buffer={buffers()[current().id]}
         loading={bufferLoading()[current().id]}
+        error={bufferError()[current().id]}
+        readBytes={deps.readBytes}
+        openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
+        openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}
         onFocus={focus}
         onChange={(draft) => buffers.update(current().id, (buffer) => (buffer ? editBuffer(buffer, draft) : buffer))}
@@ -297,6 +331,16 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    const designPane = () => (
+      <DesignPane
+        hub={deps.design}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -312,7 +356,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           if (controller) {
             stacks.app.push(current().id, {
               verbs: SIMULATOR_VERBS,
-              run: (request) => runSimulatorCommand(controller, request),
+              run: (request, from) =>
+                runSimulatorCommand(controller, request, (url) => deps.confirmOpen("app", url, from)),
             })
             deps.announceToAll("app")
           } else {
@@ -327,6 +372,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
     /* A session whose process is gone — exited, failed, or restored from disk. */
     const restartable = () =>
+      !current().suspended &&
+      !current().gone &&
       !deps.isRunning(current().id) &&
       Boolean(current().agent ?? current().model) &&
       (current().status === "done" || current().status === "error")
@@ -336,8 +383,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         status={current().status}
-        /* What the agent says it is doing beats the label ADE guessed. */
-        activity={reports()[current().id]?.activity ?? current().activity}
+        exited={!deps.isRunning(current().id)}
+        /* What the agent says it is doing beats the label ADE guessed; a suspended session is doing nothing. */
+        activity={current().suspended ? "suspended" : (reports()[current().id]?.activity ?? current().activity)}
         elapsed={current().elapsed}
         tokens={(() => {
           const count = reports()[current().id]?.tokens
@@ -352,10 +400,31 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         agent={current().agent}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
+        suspend={(() => {
+          const check = deps.suspendCheck(current().id)
+          if (!showsSuspendButton(check)) return undefined
+          return {
+            enabled: check.ok,
+            ...(check.ok ? {} : { reason: t(SUSPEND_REASON[check.reason]) }),
+            onClick: () => deps.suspend(current().id),
+          }
+        })()}
+        mail={deps.mailWaiting()[current().id]}
+        notices={current().notices}
+        onDismissNotices={() => deps.dismissNotices(current().id)}
+        onMail={() => deps.showMail(current().id)}
+        onLink={(request) => deps.openLink(current().id, request)}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
         onInput={(data) => {
           const session = deps.sessionFor(current().id)
           if (!session) return
+          /*
+           * What the user has begun and not sent, counted here because here
+           * is where every keystroke passes on its way to the PTY. It holds
+           * for every agent in the catalogue and for a plain shell, since it
+           * never asks what is running: see `session/typing.ts`.
+           */
+          deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now()))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
@@ -385,12 +454,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
           focus()
 
-          const session = deps.sessionFor(current().id)
-          if (session) {
-            session.write(`${text} `)
+          if (deps.sessionFor(current().id)) {
+            // Into the line, not submitted: the user adds the instruction. So
+            // it is typing, and counts as such (`session/typed-line.ts`).
+            deps.typeAsUser(current().id, `${text} `)
             return
           }
-          deps.appendLine(current().id, t("pane.notDelivered", text), "note")
+          deps.tellPane(current().id, t("pane.notDelivered", text))
         }}
         onResize={(cols, rows) => deps.sessionFor(current().id)?.resize(cols, rows)}
         onSubmit={
@@ -420,16 +490,21 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))
-            : restartable()
-              ? [
-                  {
-                    label: current().status === "error" ? "Riprova" : "Riprendi",
-                    tone: "primary" as const,
-                    onClick: () => deps.restart(current()),
-                  },
-                ]
-              : undefined
+            : current().gone && !deps.isRunning(current().id)
+              ? [{ label: t("pane.closeGone"), tone: "primary" as const, onClick: () => deps.close(current().id) }]
+              : current().suspended && !deps.isRunning(current().id)
+                ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
+                : restartable()
+                  ? [
+                      {
+                        label: current().status === "error" ? "Riprova" : "Riprendi",
+                        tone: "primary" as const,
+                        onClick: () => deps.restart(current()),
+                      },
+                    ]
+                  : undefined
         }
+        inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}
         focused={isFocused()}
         onFocus={focus}
@@ -492,7 +567,14 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                           <Show
                             when={current().mode === "app"}
                             fallback={
-                              <Show when={current().mode === "decisions"} fallback={sessionPane()}>
+                              <Show
+                                when={current().mode === "decisions"}
+                                fallback={
+                                  <Show when={current().mode === "design"} fallback={sessionPane()}>
+                                    {designPane()}
+                                  </Show>
+                                }
+                              >
                                 {decisionsPane()}
                               </Show>
                             }

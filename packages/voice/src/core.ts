@@ -15,7 +15,14 @@
  */
 
 // Bridge and host contract
-export type { AdeView, PaneStatus, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
+export type {
+  AdeView,
+  PaneStatus,
+  PaneSummary,
+  PermissionSpeechKind,
+  VoiceHost,
+  VoiceStateSnapshot,
+} from "./bridge/host"
 
 // The agent console's record of the session
 export { appendEntry, groupIntoTurns, MAX_AGENT_ENTRIES, type AgentEntry, type AgentTurn } from "./agent/log"
@@ -57,6 +64,8 @@ export {
   type PartialTranscriptCallback,
   type Transcriber,
   type TranscriberErrorCallback,
+  type TranscriberErrorContext,
+  type TranscriberErrorPurpose,
   type TranscriberOptions,
   type TranscriptEvent,
 } from "./asr/transcriber"
@@ -93,6 +102,7 @@ export {
   type NaturalSpeaker,
   type NaturalSpeakerDeps,
 } from "./tts/natural-speaker"
+export { cleanForSpeech } from "./tts/clean"
 export {
   createPlaybackMeter,
   levelAt,
@@ -278,10 +288,18 @@ export {
   type VoiceSettings,
 } from "./settings/model"
 
+export { REPLY_VOICE_CHOICES, activeReplyVoice, replyVoiceChoicesForLocale } from "./settings/reply-voices"
+
 export {
+  VOICE_API_KEY_STORAGE_KEY,
+  VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
+  clearOpenRouterKeyRemoved,
   clearVoiceSettings,
+  exportVoiceSettings,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
+  markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./settings/storage"

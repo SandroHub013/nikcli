@@ -16,6 +16,7 @@
 
 import type { PanelOutcome, PanelRequest, PanelVerb } from "../panels/protocol"
 import { normalizeUrl } from "./url"
+import { DENIED, isLocalAddress } from "../panels/consent"
 
 export interface BrowserOwner {
   readonly id: string
@@ -88,6 +89,11 @@ export interface BrowserCommandHost {
   navigate(paneId: string, url: string): void
   /** The pane's controls, when it is on screen. */
   controller(paneId: string): BrowserController | undefined
+  /**
+   * The user's yes to a page that is not this machine's, asked once per
+   * request (`panels/consent.ts`); false for a no or a question not put.
+   */
+  confirmOpen(url: string, owner: BrowserOwner): Promise<boolean>
 }
 
 const fail = (reason: string): PanelOutcome => ({ ok: false, reason })
@@ -105,6 +111,8 @@ export async function runBrowserCommand(
   if (request.verb === "open") {
     const url = normalizeUrl(request.args[0] ?? "")
     if (!url) return fail("indirizzo mancante o non valido; es. open http://localhost:5173")
+    // A dev server opens at once; any other page only on the user's yes, this time.
+    if (!isLocalAddress(url) && !(await host.confirmOpen(url, owner))) return fail(DENIED)
     if (pane) {
       host.navigate(pane.id, url)
       return done(`«${pane.title}» ora mostra ${url}`)

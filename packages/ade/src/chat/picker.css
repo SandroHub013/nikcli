@@ -1,0 +1,235 @@
+/*
+ * The composer's chips and their menus (composer-chip, pezzo 2).
+ *
+ * In the field's own black, with a neutral border: no accent, no coloured
+ * ring, in both themes («semplice base nero», DS-chat). The keyboard focus
+ * stays visible, as a lighter grey border.
+ */
+
+[data-slot="chip-menu"] {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+[data-slot="chip"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  min-width: 0;
+  max-width: 22rem;
+  height: 1.75rem;
+  padding: 0 var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chip"]:hover:not(:disabled),
+[data-slot="chip"][aria-expanded="true"] {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+/* The keyboard focus in grey, the composer's own halo (composer-nero): never the teal ring. */
+[data-slot="chip"]:focus-visible {
+  outline: none;
+  border-color: var(--ade-border-strong);
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="chip"]:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+[data-slot="chip-text"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="chip-caret"] {
+  flex: none;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="chip"][aria-expanded="true"] [data-slot="chip-caret"] {
+  transform: rotate(180deg);
+}
+
+[data-slot="chip-popover"] {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  bottom: calc(100% + var(--ade-space-2));
+  display: flex;
+  flex-direction: column;
+  width: min(24rem, 90vw);
+  max-height: min(24rem, 60vh);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  box-shadow: var(--ade-shadow-md);
+  overflow: hidden;
+}
+
+/*
+ * In a form (the bot's): the chip fills its field like the other inputs, and
+ * the menu opens under it at the field's width. At 24rem it was wider than
+ * the bot's column and scrolled it sideways, cutting the labels on the left.
+ */
+[data-slot="chip-menu"][data-below] {
+  display: flex;
+  width: 100%;
+}
+
+[data-slot="chip-menu"][data-below] [data-slot="chip"] {
+  flex: 1 1 auto;
+  justify-content: space-between;
+  max-width: none;
+  height: auto;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chip-menu"][data-below] [data-slot="chip-popover"] {
+  top: calc(100% + var(--ade-space-2));
+  right: 0;
+  bottom: auto;
+  width: auto;
+  min-width: 14rem;
+}
+
+/* A menu without a search, the effort's: as wide as its words, not a model list's 24rem. */
+[data-slot="chip-menu"]:not([data-below])[data-kind="effort"] [data-slot="chip-popover"],
+[data-slot="chip-menu"]:not([data-below])[data-kind="agent"] [data-slot="chip-popover"] {
+  width: max-content;
+  min-width: 10rem;
+  max-width: min(20rem, 90vw);
+}
+
+[data-slot="chip-search"] {
+  margin: var(--ade-space-3);
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chip-search"]:focus {
+  outline: none;
+  border-color: var(--ade-border-strong);
+  box-shadow: none;
+}
+
+[data-slot="chip-list"] {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0 0 var(--ade-space-2);
+  list-style: none;
+  overflow-y: auto;
+}
+
+[data-slot="chip-list"]:focus {
+  outline: none;
+}
+
+[data-slot="chip-group"] {
+  padding: var(--ade-space-3) var(--ade-space-4) var(--ade-space-1);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+[data-slot="chip-option"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-2) var(--ade-space-4);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+[data-slot="chip-option-label"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The provider, on the right of every row: quieter than the name. */
+[data-slot="chip-option-detail"] {
+  flex: none;
+  margin-left: auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="chip-option"][data-active] {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="chip-option"][aria-selected="true"] {
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="chip-empty"],
+[data-slot="chip-status"],
+[data-slot="chip-footer"] {
+  padding: var(--ade-space-2) var(--ade-space-4);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="chip-footer"] {
+  border-top: 1px solid var(--ade-border-subtle);
+}
+
+[data-slot="chip-note"][data-state="error"] {
+  color: var(--ade-error);
+}
+[data-slot="chip-note"][data-state="warn"] {
+  color: var(--ade-warning);
+}
+
+/* A model the catalog no longer has: the chip says it in the warning's colour, the id is in its tooltip. */
+[data-slot="chip-menu"][data-tone="warn"] > [data-slot="chip"] {
+  border-color: color-mix(in srgb, var(--ade-warning) 60%, var(--ade-border));
+  color: var(--ade-warning);
+}
+
+[data-slot="chip-retry"] {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ade-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+[data-slot="chip-retry"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}

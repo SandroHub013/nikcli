@@ -225,6 +225,25 @@
   --ade-surface-max: 880px;
 }
 
+/*
+ * A sheet around a panel that draws its own box (Sheet with surface={false}):
+ * no background, border or shadow of its own, only the width the panel may
+ * take, so a press beside the panel is still a press outside the dialog.
+ */
+:where([data-layout="frame"]) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--ade-surface-max, 560px);
+  outline: none;
+  /*
+   * The panel inside is rounded, and the focus ring drawn on this frame when
+   * the sheet opens followed a square corner around it (Verifiche,
+   * kobalte-overlay-scatti). The same radius as a surface's.
+   */
+  border-radius: var(--ade-radius-xl);
+}
+
 @keyframes ade-surface-in {
   from {
     opacity: 0;

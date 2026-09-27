@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
+import { buildCommands, keepsPaletteOpen, waitsForSheet, type CommandContext } from "./commands"
 import { resetLocaleForTests } from "../i18n"
-import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
+import { filterCommands } from "../command/registry"
+import { createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
   return {
@@ -37,21 +38,28 @@ describe("section commands", () => {
   })
 
   /*
-   * S40: Chat and Bot are hidden behind one switch. Hidden means no way in
-   * from here either — a palette entry for a section the bar does not show is
-   * a door into a room with no door out.
+   * S40: Chat and Bot each have a switch. Hidden means no way in from here
+   * either — a palette entry for a section the bar does not show is a door
+   * into a room with no door out.
    */
-  test("a hidden section has no palette entry, and the switch brings both back", () => {
-    for (const enabled of [false, true]) {
-      const views = visibleViews(enabled)
-      const cmds = buildCommands(context({ workbench: { ...createWorkbench(), view: "code" }, views }))
-      const ids = cmds.map((c) => c.id)
-      for (const view of ["chat", "bot"] as const) expect(ids.includes(`view.${view}`)).toBe(enabled)
-      // From Code the cycle goes on to Chat only when Chat can be reached.
-      expect(cmds.find((c) => c.id === "view.toggle")?.title).toContain(enabled ? "Chat" : "Agent")
+  test("a hidden section has no palette entry, and each switch brings its own back", () => {
+    for (const chat of [false, true]) {
+      for (const bot of [false, true]) {
+        const views = visibleViews({ chat, bot })
+        const cmds = buildCommands(context({ workbench: { ...createWorkbench(), view: "code" }, views }))
+        const ids = cmds.map((c) => c.id)
+        expect(ids.includes("view.chat")).toBe(chat)
+        expect(ids.includes("view.bot")).toBe(bot)
+        // From Code the cycle goes on to the next section that can be reached.
+        expect(cmds.find((c) => c.id === "view.toggle")?.title).toContain(chat ? "Chat" : bot ? "Bot" : "Agent")
+      }
     }
+  })
+
+  test("in the app the palette offers Bot (B7) and Chat (C9)", () => {
     const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
-    expect(ids.includes("view.chat")).toBe(CHAT_AND_BOT_ENABLED)
+    expect(ids).toContain("view.bot")
+    expect(ids).toContain("view.chat")
   })
 
   test("the section you are already in is offered as disabled, not hidden", () => {
@@ -69,14 +77,11 @@ describe("section commands", () => {
       buildCommands(context({ workbench: { ...createWorkbench(), view } })).find((c) => c.id === "view.toggle")?.title
 
     expect(at("agent")).toBe("Sezione successiva (Code)")
-    if (CHAT_AND_BOT_ENABLED) {
-      expect(at("chat")).toBe("Sezione successiva (Bot)")
-      // The wrap is the point of the test, and `bot` is the last section.
-      expect(at("bot")).toBe("Sezione successiva (Agent)")
-    } else {
-      // With Chat and Bot hidden the cycle is two long, and never stops on either.
-      expect(at("code")).toBe("Sezione successiva (Agent)")
-    }
+    // With Chat on (C9) the cycle goes through it: Code, Chat, Bot.
+    expect(at("code")).toBe("Sezione successiva (Chat)")
+    expect(at("chat")).toBe("Sezione successiva (Bot)")
+    // The wrap is the point of the test, and `bot` is the last section.
+    expect(at("bot")).toBe("Sezione successiva (Agent)")
   })
 })
 
@@ -308,5 +313,56 @@ describe("the palette in English (S41)", () => {
     } finally {
       resetLocaleForTests("it")
     }
+  })
+})
+
+describe("the palette during a take (D78 live test)", () => {
+  test("«Ferma» finds «Ferma la registrazione»", () => {
+    const commands = buildCommands(context({ workbench: createWorkbench(), recording: true }))
+    const found = filterCommands(commands, "Ferma").map((hit) => hit.command.id)
+    expect(found).toContain("record.toggle")
+    expect(filterCommands(commands, "Ferma la registrazione")[0]?.command.id).toBe("record.toggle")
+  })
+})
+
+describe("Sospendi la sessione (P1-C6)", () => {
+  test("offered for the focused pane, off with the reason canSuspend gives", () => {
+    resetLocaleForTests("it")
+    const wb = createWorkbench()
+    wb.panes.push(pane({ agent: "claude-code", status: "idle" }))
+    wb.focusedId = "p1"
+
+    const ready = buildCommands(context({ workbench: wb, suspendCheck: { ok: true } })).find(
+      (c) => c.id === "session.suspend",
+    )
+    expect(ready?.title).toBe("Sospendi la sessione")
+    expect(ready?.enabled).toBe(true)
+
+    const busy = buildCommands(context({ workbench: wb, suspendCheck: { ok: false, reason: "working" } })).find(
+      (c) => c.id === "session.suspend",
+    )
+    expect(busy?.enabled).toBe(false)
+    expect(busy?.disabledReason).toBe("sta lavorando")
+
+    // Not a Claude session: the workbench passes no check, and the row says why.
+    const other = buildCommands(context({ workbench: wb })).find((c) => c.id === "session.suspend")
+    expect(other?.enabled).toBe(false)
+    expect(other?.disabledReason).toBe("solo le sessioni Claude si sospendono")
+  })
+})
+
+describe("waitsForSheet (kobalte-overlay, M1)", () => {
+  /*
+   * With a sheet open, Ctrl+Shift+P opened the palette under the sheet's
+   * focus trap: the palette showed, and what was typed went to the sheet —
+   * in Decisioni a digit picked an option and Enter sent the answer.
+   */
+  test("the palette, the launch screen and a pane's title wait for the sheet to close", () => {
+    for (const id of ["palette.open", "session.new", "pane.rename"]) expect([id, waitsForSheet(id)]).toEqual([id, true])
+  })
+
+  test("what does not open something to type into still runs behind it", () => {
+    for (const id of ["view.toggle", "theme.toggle", "voice.toggle", "voice.settings", "pane.expand"])
+      expect([id, waitsForSheet(id)]).toEqual([id, false])
   })
 })

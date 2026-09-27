@@ -160,21 +160,33 @@ export interface SidebarProps {
   storage?: Storage
 }
 
-function WorkspaceHeaderRow(props: {
+export function WorkspaceHeaderRow(props: {
   row: FlatWorkspaceHeaderRow
   isActive?: boolean
   onToggle: (id: string) => void
+  onSelectProject?: (id: string) => void
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="treeitem"
+      tabindex={0}
       aria-level={1}
       data-slot="workspace-header"
+      data-selectable="true"
       data-expanded={props.row.isExpanded ? "true" : undefined}
       data-active={props.isActive ? "true" : undefined}
+      data-selected={props.isActive ? "true" : undefined}
+      // The open project is told by the row's ground alone; a screen reader hears it here.
+      aria-current={props.isActive ? "true" : undefined}
+      data-missing={props.row.workspace.missing ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          props.onToggle(props.row.id)
+        }
+      }}
     >
       <svg data-slot="workspace-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
         <path
@@ -189,20 +201,52 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-name" title={props.row.workspace.name}>
         {props.row.workspace.name}
       </span>
+      <Show when={props.onSelectProject}>
+        <button
+          type="button"
+          data-slot="workspace-open-project"
+          title={t("sidebar.openProjectSessions")}
+          aria-label={t("sidebar.openProjectSessions")}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onSelectProject?.(props.row.id)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation()
+            }
+          }}
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <path
+              d="M2.5 6h7M6.5 3l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </Show>
+      <Show when={props.row.workspace.missing}>
+        <Badge
+          tone="error"
+          data-slot="space-badge"
+          title={t("project.missing.tip", props.row.workspace.path ?? props.row.workspace.name)}
+        >
+          {t("project.missing.badge")}
+        </Badge>
+      </Show>
       <Show when={props.row.workspace.path?.startsWith("ssh://")}>
         <Badge tone="accent" data-slot="space-badge" title={props.row.workspace.path}>
           ssh
         </Badge>
       </Show>
-      <Show when={props.isActive}>
-        <Badge tone="waiting" data-slot="space-badge">
-          {t("sidebar.active")}
-        </Badge>
-      </Show>
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>
         {props.row.sessionCount}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -235,7 +279,7 @@ function rangesWithin(ranges: [number, number][], start: number, end: number): [
 }
 
 function SessionChildRow(props: { row: FlatSessionChildRow; now: number; onSelect?: (id: string) => void }) {
-  const displayStatus = () => mapAgentStatus(props.row.session.status)
+  const displayStatus = () => mapAgentStatus(props.row.session.status, props.row.session.suspended)
   const folder = () => {
     if (props.row.session.cwd) {
       const base = basename(props.row.session.cwd)
@@ -251,6 +295,7 @@ function SessionChildRow(props: { row: FlatSessionChildRow; now: number; onSelec
       role="treeitem"
       aria-level={2}
       data-slot="session-row"
+      data-selectable="true"
       data-status={props.row.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.row.isSelected ? "true" : undefined}
@@ -272,8 +317,8 @@ function SessionChildRow(props: { row: FlatSessionChildRow; now: number; onSelec
             data-slot="agent-status-dot"
             data-status={props.row.session.status}
             data-agent-status={displayStatus()}
-            title={`Stato: ${displayStatus()}`}
-            aria-label={`Stato: ${displayStatus()}`}
+            title={t("sidebar.agentStatus", displayStatus())}
+            aria-label={t("sidebar.agentStatus", displayStatus())}
           />
         </div>
         <div data-slot="session-meta">
@@ -325,7 +370,7 @@ function ActiveAgentRow(props: {
   now: number
   onSelect?: (id: string) => void
 }) {
-  const displayStatus = () => mapAgentStatus(props.session.status)
+  const displayStatus = () => mapAgentStatus(props.session.status, props.session.suspended)
   const folder = () => {
     if (props.session.cwd) {
       const base = basename(props.session.cwd)
@@ -340,6 +385,7 @@ function ActiveAgentRow(props: {
       type="button"
       role="listitem"
       data-slot="active-agent-card"
+      data-selectable="true"
       data-status={props.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.isSelected ? "true" : undefined}
@@ -361,8 +407,8 @@ function ActiveAgentRow(props: {
             data-slot="agent-status-dot"
             data-status={props.session.status}
             data-agent-status={displayStatus()}
-            title={`Stato: ${displayStatus()}`}
-            aria-label={`Stato: ${displayStatus()}`}
+            title={t("sidebar.agentStatus", displayStatus())}
+            aria-label={t("sidebar.agentStatus", displayStatus())}
           />
         </div>
         <div data-slot="active-agent-meta">
@@ -407,15 +453,23 @@ function ActiveAgentRow(props: {
   )
 }
 
-function WorkspaceTreeRow(props: {
+export function WorkspaceTreeRow(props: {
   row: FlatWorkspaceRow
   now: number
   isActiveSpace?: boolean
   onToggleWorkspace: (id: string) => void
+  onSelectProject?: (id: string) => void
   onSelectSession?: (id: string) => void
 }) {
   if (props.row.type === "workspace") {
-    return <WorkspaceHeaderRow row={props.row} isActive={props.isActiveSpace} onToggle={props.onToggleWorkspace} />
+    return (
+      <WorkspaceHeaderRow
+        row={props.row}
+        isActive={props.isActiveSpace}
+        onToggle={props.onToggleWorkspace}
+        onSelectProject={props.onSelectProject}
+      />
+    )
   }
   return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} />
 }
@@ -452,6 +506,7 @@ function FileTreeRow(props: {
       tabindex={0}
       aria-level={props.item.depth + 1}
       data-slot="tree-row"
+      data-selectable="true"
       data-kind={props.item.kind}
       data-expanded={props.item.isExpanded ? "true" : undefined}
       data-selected={props.item.isSelected ? "true" : undefined}
@@ -1121,14 +1176,12 @@ export function Sidebar(props: SidebarProps) {
                         row={entry.data()}
                         now={now()}
                         isActiveSpace={isActive()}
-                        /* Pressing a project both opens its row and makes it the
-                           one being worked in: the two are the same intent, and
-                           asking for a separate click to switch would be asking
-                           the user to say it twice. */
+                        /* Pressing a project opens or closes its session list.
+                           Selecting its project view is done via the open project button. */
                         onToggleWorkspace={(id) => {
-                          props.onSelectProject?.(id)
                           toggleWorkspace(id)
                         }}
+                        onSelectProject={props.onSelectProject}
                         onSelectSession={props.onSelectSession}
                       />
                     )
@@ -1346,6 +1399,7 @@ export function Sidebar(props: SidebarProps) {
                           role="option"
                           tabindex={-1}
                           data-slot="file-result"
+                          data-selectable="true"
                           data-kind={hit.kind}
                           data-index={index()}
                           data-active={activeHit() === index() ? "true" : undefined}
@@ -1506,6 +1560,7 @@ export function Sidebar(props: SidebarProps) {
                       aria-label for whoever does not read the marks. */}
                   <span
                     data-slot="sidebar-stat"
+                    data-kind="cpu"
                     data-load={view().cpu.load}
                     title={view().cpu.title}
                     aria-label={view().cpu.title}
@@ -1530,6 +1585,7 @@ export function Sidebar(props: SidebarProps) {
                   </span>
                   <span
                     data-slot="sidebar-stat"
+                    data-kind="ram"
                     data-load={view().ram.load}
                     title={view().ram.title}
                     aria-label={view().ram.title}
@@ -1553,6 +1609,7 @@ export function Sidebar(props: SidebarProps) {
                   </span>
                   <span
                     data-slot="sidebar-stat"
+                    data-kind="mem"
                     data-load={view().mem.load}
                     title={view().mem.title}
                     aria-label={view().mem.title}

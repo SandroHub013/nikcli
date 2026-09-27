@@ -56,7 +56,7 @@
 [data-component="voice-button"][data-status="listening"] {
   background: var(--ade-raised);
   color: var(--ade-accent);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
 }
 
 [data-component="voice-button"][data-status="confirming"] {

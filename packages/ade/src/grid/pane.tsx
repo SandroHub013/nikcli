@@ -4,6 +4,7 @@ import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
+import type { LinkRequest } from "../terminal/links"
 import { isQuotaUnavailable, quotaForAgent, type SessionQuota } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 
@@ -128,6 +129,8 @@ export interface SessionPaneProps {
   status: PaneStatus
   /** Specific 6-state status for S8 dense header. When omitted, derived from status and activity. */
   state?: PaneState
+  /** The process behind the pane has ended: a pane "done" is then closed, not asking. */
+  exited?: boolean
   /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
   stateDetail?: string
   /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
@@ -170,6 +173,16 @@ export interface SessionPaneProps {
   tree?: PaneTree
   /** Replaces the prompt when the session needs an answer rather than an instruction. */
   actions?: PaneAction[]
+  /**
+   * "Sospendi" in the header (P1-C6), on Claude sessions only. Off, it stays
+   * where it is and its tooltip says why.
+   */
+  suspend?: { enabled: boolean; reason?: string; onClick: () => void }
+  /**
+   * An input that stays in view, off, above the buttons, saying how to write
+   * again: a suspended session's "Riprendi per scrivere" (P1-C6).
+   */
+  inputHint?: string
   focused?: boolean
   /** Sends a line to whatever the pane is running. Absent when nothing runs. */
   onSubmit?: (line: string) => void
@@ -192,6 +205,23 @@ export interface SessionPaneProps {
   /** Keystrokes from the terminal, on their way to the process. */
   onInput?: (data: string) => void
   /**
+   * How many messages ADE is holding for this session.
+   *
+   * Held, not lost: mail is never typed onto a line the user has begun. The
+   * badge is how that shows, and it is a property of the pane rather than of
+   * the agent inside it, so a CLI added to the catalogue tomorrow gets it
+   * without anyone remembering to ask for it.
+   */
+  mail?: number
+  /** Shows what is waiting, in the transcript. Looking is not reading. */
+  onMail?: () => void
+  /**
+   * ADE's notes to read over a live terminal, whose transcript is hidden: a
+   * conversation that stayed with another pane, one of another folder.
+   */
+  notices?: readonly string[]
+  onDismissNotices?: () => void
+  /**
    * Files were dropped on this session: from the project tree, from the
    * screenshot tray, or from the system's own file manager.
    *
@@ -206,6 +236,8 @@ export interface SessionPaneProps {
   onDropPath?: (paths: string[]) => void
   /** The terminal's size in cells, whenever the pane changes shape. */
   onResize?: (cols: number, rows: number) => void
+  /** A URL or a file path in the terminal was clicked. */
+  onLink?: (request: LinkRequest) => void
 }
 
 /*
@@ -271,6 +303,12 @@ export function StateIcon(props: { state: PaneState }) {
           <path d="M3.5 4.8 6.7 8l-3.2 3.2" />
           <path d="M8.8 11.4h4" />
         </Match>
+        <Match when={props.state === "off"}>
+          <path d="M6 4.5v7M10 4.5v7" />
+        </Match>
+        <Match when={props.state === "closed"}>
+          <rect x="4.5" y="4.5" width="7" height="7" rx="1" />
+        </Match>
       </Switch>
     </svg>
   )
@@ -286,6 +324,24 @@ export function SessionPane(props: SessionPaneProps) {
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
   let root: HTMLElement | undefined
+
+  /*
+   * The terminal's mouse, said out loud. A selection copies itself on release
+   * and the pane says so for a moment; while the program has the mouse, the
+   * header says how to give it a click. See `configureTerminalSelection`.
+   */
+  /** What the toast says: «Copiato», or that a take refused the copy (D68). */
+  const [copied, setCopied] = createSignal<string | false>(false)
+  const [mouseReporting, setMouseReporting] = createSignal(false)
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  const flashCopied = (text: string) => {
+    setCopied(text)
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => setCopied(false), 1500)
+  }
+  onCleanup(() => {
+    if (copiedTimer) clearTimeout(copiedTimer)
+  })
 
   /*
    * Following means: new output pulls the view down. It stops the moment the
@@ -437,11 +493,14 @@ export function SessionPane(props: SessionPaneProps) {
       activity: props.activity,
       quota: quota(),
       hasActions: Boolean(props.actions && props.actions.length > 0),
+      exited: props.exited,
     }),
   )
 
   const stateHead = createMemo(() => {
     if (props.stateDetail) return props.stateDetail
+    // "Sospesa" is the label already: said twice it would read "Sospesa · Sospesa".
+    if (state() === "off") return ""
     if (props.activity) return activityLabel(props.activity)
     const st = state()
     if (st === "limit")
@@ -559,6 +618,21 @@ export function SessionPane(props: SessionPaneProps) {
             </span>
           )}
         </span>
+        <Show when={(props.mail ?? 0) > 0 && props.onMail}>
+          <button
+            type="button"
+            class="mail"
+            data-slot="pane-mail"
+            title={t("pane.mail", props.mail ?? 0)}
+            aria-label={t("pane.mail", props.mail ?? 0)}
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onMail?.()
+            }}
+          >
+            {props.mail}
+          </button>
+        </Show>
         <Show
           when={editing()}
           fallback={
@@ -714,7 +788,34 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
-        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
+        <Show when={props.terminalId && mouseReporting()}>
+          <span class="tok" data-slot="pane-mouse-hint" title={t("pane.mouseHint.tip")}>
+            {t("pane.mouseHint")}
+          </span>
+        </Show>
+
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
+          <Show when={props.suspend}>
+            {(suspend) => (
+              <button
+                type="button"
+                class="act"
+                data-slot="pane-suspend"
+                aria-label={t("pane.suspend")}
+                aria-disabled={suspend().enabled ? undefined : "true"}
+                title={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}
+                data-tip={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}
+                onClick={() => {
+                  if (suspend().enabled) suspend().onClick()
+                }}
+              >
+                <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M6 4v8M10 4v8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </button>
+            )}
+          </Show>
+        </PaneActions>
         <button
           type="button"
           class="act more"
@@ -744,6 +845,29 @@ export function SessionPane(props: SessionPaneProps) {
         instead of the program. The emulator lives in the registry, not here, so
         scrollback survives collapsing, expanding and re-tiling the pane.
       */}
+      {/* Over the terminal, because the transcript the notes are written to is hidden while it is there. */}
+      <Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>
+        {(notices) => (
+          <div data-slot="pane-notice" role="status">
+            <div data-slot="pane-notice-lines">
+              <For each={notices()}>{(text) => <p>{text}</p>}</For>
+            </div>
+            <button
+              type="button"
+              data-slot="pane-notice-close"
+              aria-label={t("pane.noticeDismiss")}
+              title={t("pane.noticeDismiss")}
+              onClick={(event) => {
+                event.stopPropagation()
+                props.onDismissNotices?.()
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </Show>
+
       <Show when={props.terminalId}>
         <div
           data-slot="pane-terminal"
@@ -753,10 +877,19 @@ export function SessionPane(props: SessionPaneProps) {
             const detach = attachTerminal(id, element, {
               onInput: (data) => props.onInput?.(data),
               onResize: (cols, rows) => props.onResize?.(cols, rows),
+              onCopied: () => flashCopied(t("pane.copied")),
+              onCopyBlocked: () => flashCopied(t("pane.copyBlocked")),
+              onMouseMode: setMouseReporting,
+              onLink: (request) => props.onLink?.(request),
             })
             onCleanup(detach)
           }}
         />
+        <Show when={copied()}>
+          <div data-slot="pane-toast" role="status">
+            {copied()}
+          </div>
+        </Show>
       </Show>
 
       <div
@@ -843,6 +976,16 @@ export function SessionPane(props: SessionPaneProps) {
               </div>
             }
           >
+            <Show when={props.inputHint}>
+              {(hint) => (
+                <div data-slot="pane-prompt" data-disabled="true">
+                  <span data-slot="pane-caret" aria-hidden="true">
+                    ›
+                  </span>
+                  <textarea rows={1} data-slot="pane-input" placeholder={hint()} disabled spellcheck={false} />
+                </div>
+              )}
+            </Show>
             <div data-slot="pane-answers">
               <For each={props.actions}>
                 {(action) => (

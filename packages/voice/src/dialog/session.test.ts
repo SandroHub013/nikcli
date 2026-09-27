@@ -103,6 +103,69 @@ describe("dialog state machine", () => {
     })
   })
 
+  /*
+   * Rilievo 1 della review: «non confermo» e «no, non va bene» superavano la
+   * soglia come dialog.confirm, perché «non» è solo un'eccedenza che toglie
+   * 0,15. Una negazione deve annullare la conferma, non eseguirla.
+   */
+  describe("una negazione non conferma mai", () => {
+    test("«non confermo» non esegue l'azione in conferma", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non confermo" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingAction).toBeUndefined()
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(effects.some((e) => e.type === "cancel_timer")).toBe(true)
+    })
+
+    test("«no, non va bene» annulla invece di confermare", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "uccidi processo" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "no, non va bene" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("lascio stare"))).toBe(true)
+    })
+
+    test("«non consentire» nega il permesso invece di concederlo", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        5000,
+      )
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non consentire" }, 6000)
+
+      expect(s2.status).toBe("idle")
+      const ans = effects.find((e) => e.type === "answer_permission")
+      expect(ans).toBeDefined()
+      if (ans && ans.type === "answer_permission") {
+        expect(ans.answer).toBe("deny")
+      }
+      expect(effects.some((e) => e.type === "answer_permission" && e.answer === "allow")).toBe(false)
+    })
+
+    test("«non chiudere» non chiude il pannello in conferma", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non chiudere" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+    })
+  })
+
   describe("dictation mode", () => {
     test("accumulates text without interpreting as commands until finish phrase", () => {
       const s0 = createInitialDialogState("idle")
@@ -139,22 +202,235 @@ describe("dialog state machine", () => {
     })
   })
 
+  /*
+   * Rilievo 2: permission.allow era non distruttivo, quindi «autorizza» o
+   * «consenti» detti in idle eseguivano subito answerPermission. Ora la
+   * conferma deve chiedere prima, nominando pannello e strumento.
+   */
+  describe("permission.allow free-standing requires confirmation", () => {
+    test("«autorizza» in idle enters confirming and does not answer the permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "autorizza" }, 10_000)
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("permission.allow")
+      expect(effects.some((e) => e.type === "answer_permission")).toBe(false)
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(effects.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("«consenti» confirmed with «sì» then answers the permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "consenti pannello 1" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 12_000)
+      expect(s2.status).toBe("executing")
+      const exec = effects.find((e) => e.type === "execute_intent")
+      expect(exec).toBeDefined()
+      if (exec && exec.type === "execute_intent") {
+        expect(exec.intent.intent).toBe("permission.allow")
+        expect(exec.slots.paneIndex).toBe(1)
+      }
+    })
+  })
+
+  describe("permission confirmation names panel and safe type", () => {
+    test("permission request speaks the safe type and grants the exact raw request", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "agent-1",
+          title: "API Tests",
+          status: "waiting" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const raw = "export API_KEY=secret-value && curl https://example.test/export"
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: raw, kind: "shell" },
+        5000,
+        { panes },
+      )
+
+      expect(s1.status).toBe("confirming")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("API Tests")
+        expect(speak.text).toContain("un comando")
+        expect(speak.text).not.toContain(raw)
+        expect(speak.text).not.toContain("API_KEY")
+        expect(speak.text).not.toContain("secret-value")
+        expect(speak.text).not.toContain("export")
+      }
+      expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
+      expect(s1.pendingAction?.confirmPrompt).toContain("un comando")
+
+      const granted = transition(s1, { type: "utterance", text: "sì" }, 30_000, { panes })
+      expect(granted.effects).toContainEqual({
+        type: "answer_permission",
+        paneId: "agent-1",
+        answer: "allow",
+        what: raw,
+      })
+    })
+
+    test("free-standing permission.allow confirmation names the panel when known", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-2",
+          title: "Bastelli Worker",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "autorizza pannello 2" }, 10_000, {
+        panes,
+      })
+
+      expect(s1.status).toBe("confirming")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("Bastelli Worker")
+        expect(speak.text).toContain("?")
+      }
+    })
+
+    /*
+     * Rilievo 21: la conferma di una chiusura diceva solo «il pannello»,
+     * senza il nome, così l'utente sì sul bersaglio sbagliato non aveva
+     * come accorgersene. Il titolo c'è già negli slot o nei pannelli aperti.
+     */
+    test("pane.close confirmation names the panel title", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "idle" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+        {
+          id: "pane-2",
+          title: "API Tests",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000, { panes })
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("API Tests")
+      }
+    })
+
+    test("process.kill confirmation names the panel title when the index is known", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "working" as const,
+          index: 1,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1 } = transition(s0, { type: "utterance", text: "uccidi processo 1" }, 10_000, { panes })
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.confirmPrompt).toContain("Bastelli")
+    })
+
+    /*
+     * Rilievo 22: il bersaglio senza numero o titolo veniva letto dal fuoco
+     * al «sì», non al momento della domanda. Un clic nel frattempo spostava
+     * la chiusura su un altro pannello. Ora lo slot porta l'ID del fuoco
+     * congelato quando la conferma parte.
+     */
+    test("without a named panel the target is frozen when the question is asked", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "idle" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+        {
+          id: "pane-2",
+          title: "API Tests",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello" }, 10_000, {
+        panes,
+        focusedPaneId: "pane-1",
+      })
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.slots.paneId).toBe("pane-1")
+
+      // A click moves focus before the answer: the slots must not follow.
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 12_000, {
+        panes,
+        focusedPaneId: "pane-2",
+      })
+      expect(s2.status).toBe("executing")
+      const exec = effects.find((e) => e.type === "execute_intent")
+      expect(exec).toBeDefined()
+      if (exec && exec.type === "execute_intent") {
+        expect(exec.slots.paneId).toBe("pane-1")
+      }
+    })
+  })
+
   describe("pending permission precedence", () => {
     test("permission request immediately forces confirming state", () => {
       const s0 = createInitialDialogState("idle")
       const { state: s1, effects: e1 } = transition(
         s0,
-        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
         5000,
       )
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.isPermission).toBe(true)
       expect(s1.pendingAction?.paneId).toBe("agent-1")
-      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(false)
 
       // User says 'consenti'
-      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "consenti" }, 6000)
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "consenti" }, 20_000)
 
       expect(s2.status).toBe("idle")
       const ansEffect = e2.find((e) => e.type === "answer_permission")
@@ -163,6 +439,19 @@ describe("dialog state machine", () => {
         expect(ansEffect.paneId).toBe("agent-1")
         expect(ansEffect.answer).toBe("allow")
       }
+    })
+
+    test("permission request with silent: true enters confirming without speak effect", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects: e1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "bun test", silent: true },
+        5000,
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.isPermission).toBe(true)
+      expect(e1.some((e) => e.type === "speak")).toBe(false)
     })
 
     test("denying permission sends deny answer", () => {
@@ -182,6 +471,249 @@ describe("dialog state machine", () => {
         expect(ansEffect.paneId).toBe("agent-1")
         expect(ansEffect.answer).toBe("deny")
       }
+    })
+  })
+
+  describe("voice send confirmation (rilievo 20)", () => {
+    test("a voice send enters confirming and names the note and the target", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "rispondi sì al permesso" },
+        10_000,
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingSend).toEqual({ id: "m-1", to: "Bastelli Worker", text: "rispondi sì al permesso" })
+      expect(s1.timeoutAt).toBe(10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS)
+      expect(effects.some((e) => e.type === "start_timer")).toBe(true)
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("rispondi sì al permesso")
+        expect(speak.text).toContain("Bastelli Worker")
+        expect(speak.text).toContain("?")
+      }
+      // The question is not executed: no delivery effect fires on arrival.
+      expect(effects.some((e) => e.type === "confirm_send")).toBe(false)
+    })
+
+    test("«sì» confirms the send and hands the message id to the host", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "nota" },
+        10_000,
+      )
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 11_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-1")
+        expect(effect.approved).toBe(true)
+      }
+    })
+
+    test("a negation vetoes the send without reaching the parser", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "send_requested", id: "m-2", to: "Browser", text: "comando pericoloso" },
+        10_000,
+      )
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non confermo" }, 11_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-2")
+        expect(effect.approved).toBe(false)
+      }
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+    })
+
+    test("the send times out unapproved, like any other confirmation", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "send_requested", id: "m-3", to: "Codex", text: "nota" }, 10_000)
+      const { state: s2, effects } = transition(s1, { type: "timeout" }, 10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-3")
+        expect(effect.approved).toBe(false)
+      }
+    })
+  })
+
+  describe("permission request while the dialog is busy (rilievo 3)", () => {
+    test("during confirming: queues without replacing the pending action, then promotes after the answer", () => {
+      // User asked to close pane 2; confirmation is in flight.
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      expect(confirming.status).toBe("confirming")
+      expect(confirming.pendingAction?.intent.intent).toBe("pane.close")
+
+      // A permission arrives mid-confirmation: must queue, not replace.
+      const { state: s1, effects: e1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "rm -rf build", kind: "shell" },
+        11_000,
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("pane.close")
+      expect(s1.queuedPermission).toEqual({
+        paneId: "agent-3",
+        what: "rm -rf build",
+        kind: "shell",
+        silent: undefined,
+      })
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(false)
+      expect(e1.some((e) => e.type === "answer_permission")).toBe(false)
+
+      // User confirms the close: executes, does NOT answer the permission yet.
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "sì" }, 12_000)
+      expect(s2.status).toBe("executing")
+      expect(e2.some((e) => e.type === "execute_intent" && e.intent.intent === "pane.close")).toBe(true)
+      expect(e2.some((e) => e.type === "answer_permission")).toBe(false)
+      expect(s2.queuedPermission?.paneId).toBe("agent-3")
+
+      // Execution finishes: the queued permission is promoted to confirming.
+      const { state: s3, effects: e3 } = transition(s2, { type: "command_success" }, 13_000)
+      expect(s3.status).toBe("confirming")
+      expect(s3.pendingAction?.isPermission).toBe(true)
+      expect(s3.pendingAction?.paneId).toBe("agent-3")
+      expect(s3.queuedPermission).toBeUndefined()
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(false)
+      expect(e3.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("during confirming: a denied confirmation still promotes the queued permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      const { state: s1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "curl evil.test", kind: "network" },
+        11_000,
+      )
+      expect(s1.queuedPermission).toBeDefined()
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "no" }, 12_000)
+      expect(s2.status).toBe("confirming")
+      expect(s2.pendingAction?.isPermission).toBe(true)
+      expect(s2.pendingAction?.paneId).toBe("agent-3")
+      expect(s2.queuedPermission).toBeUndefined()
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("una richiesta di rete"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("curl evil.test"))).toBe(false)
+    })
+
+    test("during dictating: queues, keeps the buffer, promotes when dictation finishes", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: dictating } = transition(s0, { type: "utterance", text: "inizia dettatura pannello 1" }, 1000)
+      const { state: s1 } = transition(dictating, { type: "utterance", text: "crea un test" }, 2000)
+
+      const { state: s2, effects: e2 } = transition(
+        s1,
+        { type: "permission_requested", paneId: "agent-9", what: "npm publish", kind: "shell" },
+        3000,
+      )
+      expect(s2.status).toBe("dictating")
+      expect(s2.dictation?.chunks).toEqual(["crea un test"])
+      expect(s2.queuedPermission?.paneId).toBe("agent-9")
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(false)
+      // The dictation must not be sent or dropped by the permission.
+      expect(e2.some((e) => e.type === "send_prompt")).toBe(false)
+
+      const { state: s3, effects: e3 } = transition(s2, { type: "utterance", text: "fine dettatura" }, 4000)
+      expect(e3.some((e) => e.type === "send_prompt" && e.text === "crea un test")).toBe(true)
+      expect(s3.status).toBe("confirming")
+      expect(s3.dictation).toBeUndefined()
+      expect(s3.pendingAction?.isPermission).toBe(true)
+      expect(s3.pendingAction?.paneId).toBe("agent-9")
+      expect(s3.queuedPermission).toBeUndefined()
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(false)
+    })
+
+    test("during asleep: announces, stays asleep, promotes on wake", () => {
+      const s0 = createInitialDialogState("asleep")
+      const { state: s1, effects: e1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "sudo apt install", kind: "shell" },
+        5000,
+      )
+
+      // Stays asleep: room noise must not open a 30 s granting window.
+      expect(s1.status).toBe("asleep")
+      expect(s1.pendingAction).toBeUndefined()
+      expect(s1.queuedPermission?.paneId).toBe("agent-1")
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(false)
+
+      const { state: s2, effects: e2 } = transition(s1, { type: "wake" }, 6000)
+      expect(s2.status).toBe("confirming")
+      expect(s2.pendingAction?.isPermission).toBe(true)
+      expect(s2.pendingAction?.paneId).toBe("agent-1")
+      expect(s2.queuedPermission).toBeUndefined()
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(false)
+      expect(e2.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("silent permission during confirming queues without speaking", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      const { state: s1, effects: e1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "git push --force", silent: true },
+        11_000,
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("pane.close")
+      expect(s1.queuedPermission?.paneId).toBe("agent-3")
+      expect(s1.queuedPermission?.silent).toBe(true)
+      expect(e1.some((e) => e.type === "speak")).toBe(false)
+    })
+
+    test("a second permission while one is already queued keeps the first", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      const { state: s1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-a", what: "first tool" },
+        11_000,
+      )
+      const { state: s2 } = transition(
+        s1,
+        { type: "permission_requested", paneId: "agent-b", what: "second tool" },
+        11_500,
+      )
+      expect(s2.queuedPermission?.paneId).toBe("agent-a")
+      expect(s2.pendingAction?.intent.intent).toBe("pane.close")
+    })
+
+    test("idle permission still takes the floor immediately (not queued)", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
+        5000,
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.isPermission).toBe(true)
+      expect(s1.queuedPermission).toBeUndefined()
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(false)
     })
   })
 

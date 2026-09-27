@@ -134,6 +134,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
+      getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
       now: () => Date.now(),
       settings: { activation: "toggle", mode: "transcription", transcriptionSend: "manual" },
     })
@@ -164,6 +165,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
+      getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
       now: () => Date.now(),
       settings: { activation: "toggle", mode: "transcription", transcriptionSend: "auto" },
     })
@@ -205,6 +207,7 @@ describe("Voice Modes & Settings Interaction", () => {
       settings: {
         mode: "agent",
         activation: "wake-word",
+        alwaysListen: true,
         wakeWord: "hei nik",
       },
     })
@@ -371,6 +374,7 @@ describe("Voice Modes & Settings Interaction", () => {
         host,
         speaker: createFakeSpeaker(),
         transcriber,
+        getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
         now: () => Date.now(),
         settings: { activation: "toggle", mode, transcriptionSend: "manual" },
       })

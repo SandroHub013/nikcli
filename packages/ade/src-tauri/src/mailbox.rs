@@ -223,9 +223,9 @@ pub async fn mailbox_result(app: tauri::AppHandle, id: String, text: String) -> 
 
 /// Takes back an answer nobody claimed, and returns it to be typed instead.
 ///
-/// A rename, like the waiter's claim, so exactly one of the two wins. The
-/// file is removed once read: the answer is now in the caller's terminal, and
-/// a later `ade-msg wait` printing it a second time only doubled its cost.
+/// A rename, like the waiter's claim, so exactly one of the two wins. What is
+/// kept is a `.closed` copy, not the `.txt` a waiter takes: a later `ade-msg
+/// wait` says the request is closed, at once, rather than answering it anew.
 #[tauri::command]
 ///
 /// `kind: "update"` does the same for an `ade-msg update` no waiter woke on;
@@ -244,13 +244,25 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String, kind: Opt
         let _ = fs::remove_file(&taken);
         return Ok(text);
     }
+    Ok(reclaim_result(&dir, &id))
+}
+
+/// The answer in `dir/<id>.txt`, taken back from the waiter it was left for.
+///
+/// Kept as `<id>.closed`, as a waiter keeps what it took: a later `ade-msg
+/// wait` on the id says at once that the request is closed, with its answer,
+/// instead of waiting its whole timeout for a file already gone and then
+/// saying «in corso» (ROADMAP, BASSO). Removed with the other leftovers.
+fn reclaim_result(dir: &std::path::Path, id: &str) -> Option<String> {
     let typed = dir.join(format!("{id}.typed"));
     if fs::rename(dir.join(format!("{id}.txt")), &typed).is_err() {
-        return Ok(None);
+        return None;
     }
     let text = fs::read_to_string(&typed).ok();
-    let _ = fs::remove_file(&typed);
-    Ok(text)
+    if fs::rename(&typed, dir.join(format!("{id}.closed"))).is_err() {
+        let _ = fs::remove_file(&typed);
+    }
+    text
 }
 
 /// What request `id` is waiting on, for the `ade-msg wait` blocked on it to
@@ -290,14 +302,36 @@ pub async fn mailbox_inbox_put(app: tauri::AppHandle, pane: String, name: String
     write_whole(dir, &format!("{name}.msg"), &text)
 }
 
-/// Whether the message was read: `ade-msg inbox` moves what it prints to `handled/`.
+/// Where the message is: `unread` still in the inbox, `read` in `handled/`
+/// (where `ade-msg inbox` moves what it prints), `lost` in neither.
+///
+/// The first version answered "read" for anything no longer in the inbox, so
+/// a file deleted by hand passed for read and nobody was told: the same
+/// silent loss S70's review found in the native handoff. Whoever waits must
+/// never believe a thing arrived when it did not.
 #[tauri::command]
-pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: String) -> Result<bool, String> {
+pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: String) -> Result<String, String> {
     if !valid_id(&pane) || !valid_id(&name) {
         return Err("id non valido".into());
     }
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
-    Ok(!dir.join(format!("{name}.msg")).exists())
+    let file = format!("{name}.msg");
+    /*
+     * `try_exists`, not `exists`: `exists` swallows every I/O error into
+     * "no", so a permission denied on either folder would have come back as
+     * "lost" — the one thing this command must never say by mistake, because
+     * "lost" is what makes the sender resend. An error is an error; the
+     * caller keeps waiting and asks again.
+     */
+    let present = |path: std::path::PathBuf| path.try_exists().map_err(|e| format!("casella non leggibile ({}): {e}", path.display()));
+    Ok(if present(dir.join(&file))? {
+        "unread"
+    } else if present(dir.join("handled").join(&file))? {
+        "read"
+    } else {
+        "lost"
+    }
+    .to_string())
 }
 
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
@@ -347,6 +381,7 @@ $worktree = $false
 $force = $false
 $fresh = $false
 $fork = $false
+$fromStdin = $false
 $ttl = 0
 $name = $null
 $model = $null
@@ -355,8 +390,11 @@ $note = $null
 $effort = $null
 $profile = $null
 $file = $null
-# update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
-$lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
+$via = $null
+$budget = $null
+# update takes an id and a state before its text, kv an operation and a key, memory an operation and a type,
+# registro a register and an operation; everything else one word.
+$lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory' -or $cmd -eq 'registro') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
@@ -371,6 +409,8 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--note' -and $hasNext) { $note = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--effort' -and $hasNext) { $effort = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--profile' -and $hasNext) { $profile = $all[$i + 1]; $i++; continue }
+    # D73: seconds, a whole number from 60 to 14400; anything else is a usage error.
+    elseif ($a -eq '--budget' -and $hasNext) { $b = 0; if ($all[$i + 1] -notmatch '^[1-9][0-9]*$' -or -not [int]::TryParse($all[$i + 1], [ref]$b) -or $b -lt 60 -or $b -gt 14400) { Usage }; $budget = $b; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -378,6 +418,8 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--force') { $force = $true; continue }
     elseif ($a -eq '--fresh') { $fresh = $true; continue }
     elseif ($a -eq '--fork') { $fork = $true; continue }
+    elseif ($a -eq '--stdin') { $fromStdin = $true; continue }
+    elseif ($a -eq '--digita') { $via = 'typed'; continue }
     elseif ($a -eq '--ttl' -and $hasNext) { try { $ttl = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
   }
   $pos.Add($a)
@@ -395,6 +437,15 @@ if ($file) {
     $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, 1500)
   }
   $text = if ($text) { "$text`n`n$content" } else { $content }
+}
+
+# registro --stdin: the JSON from stdin, as UTF-8, where no quoting can reach it. Through ade-msg.cmd
+# and -File, PowerShell 5.1 drops the inner quotes of a '<json>' argument. A lone '-' cannot say it:
+# PowerShell takes it for a parameter with no name.
+if ($cmd -eq 'registro' -and $fromStdin) {
+  $ms = New-Object IO.MemoryStream
+  [Console]::OpenStandardInput().CopyTo($ms)
+  $text = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
 }
 
 function Post($fields) {
@@ -456,19 +507,24 @@ function TakeResult($id) {
   $ready = Join-Path $dir "$id.txt"
   $taken = Join-Path $dir "$id.taken"
   $typed = Join-Path $dir "$id.typed"
+  $closed = Join-Path $dir "$id.closed"
   if (Has $ready) {
     $claimed = $true
     try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
     if ($claimed) {
       $r = [IO.File]::ReadAllText($taken, $utf8)
-      Remove-Item -LiteralPath $taken -ErrorAction SilentlyContinue
+      Move-Item -LiteralPath $taken -Destination $closed -Force -ErrorAction SilentlyContinue
       return $r
     }
   }
   if (Has $typed) {
     $r = [IO.File]::ReadAllText($typed, $utf8)
-    Remove-Item -LiteralPath $typed -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $typed -Destination $closed -Force -ErrorAction SilentlyContinue
     return $r
+  }
+  # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
+  if (Has $closed) {
+    return "ade-msg: la richiesta $id e' gia' chiusa. La sua risposta, gia' consegnata:`n" + [IO.File]::ReadAllText($closed, $utf8)
   }
   return $null
 }
@@ -560,6 +616,11 @@ switch ($cmd) {
       default { Usage }
     }
   }
+  'registro' {
+    # The JSON is the event's fields; ADE adds type, at and by, checks and writes it.
+    if (-not $head -or -not $second -or -not $text) { Usage }
+    PostAndPrint ([ordered]@{ kind = 'registro'; register = $head; op = $second; text = $text })
+  }
   'memory' {
     switch ($head) {
       'add' { if (-not $second -or -not $text) { Usage }; PostAndPrint ([ordered]@{ kind = 'memory'; op = 'add'; type = $second; text = $text }) }
@@ -569,7 +630,9 @@ switch ($cmd) {
   }
   'send' {
     if (-not $head -or -not $text) { Usage }
-    PostAndConfirm ([ordered]@{ kind = 'send'; to = $head; text = $text })
+    $fields = [ordered]@{ kind = 'send'; to = $head; text = $text }
+    if ($via) { $fields['via'] = $via }
+    PostAndConfirm $fields
   }
   'reply' {
     if (-not $head -or -not $text) { Usage }
@@ -578,6 +641,13 @@ switch ($cmd) {
   'cancel' {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
     PostAndConfirm ([ordered]@{ kind = 'cancel'; ref = $head })
+  }
+  'delivered' {
+    if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
+    # `delivered <id>` means sent; `delivered <id> no [motivo]` means ADE has to type it.
+    $ok = -not ($second -eq 'no')
+    $why = if ($ok) { '' } elseif ($pos.Count -gt 2) { ($pos.GetRange(2, $pos.Count - 2)) -join ' ' } else { '' }
+    PostAndConfirm ([ordered]@{ kind = 'delivered'; ref = $head; ok = $ok; text = $why })
   }
   'update' {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$' -or ($second -ne 'bloccata' -and $second -ne 'decisione') -or -not $text) { Usage }
@@ -603,6 +673,8 @@ switch ($cmd) {
     if ($cmd -eq 'ask') {
       $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
       if ($effort) { $fields['effort'] = $effort }
+      if ($via) { $fields['via'] = $via }
+      if ($budget) { $fields['budget'] = $budget }
     } else {
       $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
@@ -610,12 +682,15 @@ switch ($cmd) {
       if ($base) { $fields['base'] = $base }
       if ($effort) { $fields['effort'] = $effort }
       if ($profile) { $fields['profile'] = $profile }
+      if ($budget) { $fields['budget'] = $budget }
       $fields['text'] = $text
     }
     $id = Post $fields
     $r = Receipt $id
     if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
     $said = if ($null -eq $r) { 'in coda, ADE non l''ha ancora consegnata' } else { $r }
+    # The delivery is the caller's own SendMessage: waiting here first would wait for a reply to a request nobody has received yet.
+    if ($null -ne $r -and $r.StartsWith('ok: consegna tu')) { Write-Output "id: $id - $r`nDopo averla mandata attendi con: ade-msg wait $id"; exit 0 }
     if ($noWait) { Write-Output "id: $id - $said - attendi con: ade-msg wait $id"; exit 0 }
     [Console]::Error.WriteLine("ade-msg: $said (richiesta $id), in attesa della risposta...")
     AwaitIds @($id)
@@ -648,8 +723,8 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""
-lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""
+lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
@@ -664,6 +739,7 @@ while [ $# -gt 0 ]; do
       --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
       --effort) [ $# -ge 2 ] && { effort="$2"; shift 2; continue; } ;;
       --profile) [ $# -ge 2 ] && { profile="$2"; shift 2; continue; } ;;
+      --budget) [ $# -ge 2 ] && { budget="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -671,6 +747,8 @@ while [ $# -gt 0 ]; do
       --force) force=true; shift; continue ;;
       --fresh) fresh=true; shift; continue ;;
       --fork) fork=true; shift; continue ;;
+      --stdin) stdin=1; shift; continue ;;
+      --digita) via=typed; shift; continue ;;
       --ttl) [ $# -ge 2 ] && { ttl="$2"; shift 2; continue; } ;;
     esac
   fi
@@ -693,6 +771,9 @@ $(head -c 1500 "$file")"
 
 $content"; else text="$content"; fi
 fi
+
+# registro --stdin: the JSON from stdin, where no quoting can reach it.
+if [ "$cmd" = "registro" ] && [ "$stdin" = 1 ]; then text="$(cat)"; fi
 
 post() {
   id="$(date +%s)000-$$"
@@ -730,9 +811,12 @@ show() {
 take() {
   got=""
   if [ -f "$box/results/$1.txt" ] && mv "$box/results/$1.txt" "$box/results/$1.taken" 2>/dev/null; then
-    got="$(cat "$box/results/$1.taken")"; rm -f "$box/results/$1.taken"; return 0
+    got="$(cat "$box/results/$1.taken")"; mv -f "$box/results/$1.taken" "$box/results/$1.closed" 2>/dev/null; return 0
   fi
-  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; rm -f "$box/results/$1.typed"; return 0; fi
+  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; mv -f "$box/results/$1.typed" "$box/results/$1.closed" 2>/dev/null; return 0; fi
+  # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
+  if [ -f "$box/results/$1.closed" ]; then got="ade-msg: la richiesta $1 e' gia' chiusa. La sua risposta, gia' consegnata:
+$(cat "$box/results/$1.closed")"; return 0; fi
   return 1
 }
 await() {
@@ -800,15 +884,26 @@ case "$cmd" in
       unlock) [ -n "$second" ] || usage; show "\"kind\":\"kv\",\"op\":\"unlock\",$key,\"force\":$force" ;;
       *) usage ;;
     esac ;;
+  registro)
+    [ -n "$head" ] && [ -n "$second" ] && [ -n "$text" ] || usage
+    show "\"kind\":\"registro\",\"register\":\"$(esc "$head")\",\"op\":\"$(esc "$second")\"" ;;
   memory)
     case "$head" in
       add) [ -n "$second" ] && [ -n "$text" ] || usage; show "\"kind\":\"memory\",\"op\":\"add\",\"type\":\"$(esc "$second")\"" ;;
       show) show "\"kind\":\"memory\",\"op\":\"show\"" ;;
       *) usage ;;
     esac ;;
-  send) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"" ;;
+  send)
+    [ -n "$head" ] && [ -n "$text" ] || usage
+    extra=""; [ -n "$via" ] && extra=",\"via\":\"$via\""
+    confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"$extra" ;;
   reply) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\"" ;;
   cancel) valid_id "$head" || usage; confirm "\"kind\":\"cancel\",\"ref\":\"$head\"" ;;
+  delivered)
+    valid_id "$head" || usage
+    # `delivered <id>` means sent; `delivered <id> no [motivo]` means ADE has to type it.
+    if [ "$second" = no ]; then ok=false; text="$(printf '%s' "$text" | sed 's/^no *//')"; else ok=true; text=""; fi
+    confirm "\"kind\":\"delivered\",\"ref\":\"$head\",\"ok\":$ok" ;;
   update)
     valid_id "$head" || usage
     case "$second" in bloccata|decisione) ;; *) usage ;; esac
@@ -824,8 +919,17 @@ case "$cmd" in
     confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh,\"note\":\"$(esc "$note")\"$extra" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
+    # D73: seconds, a whole number from 60 to 14400, no leading zero; anything else is a usage error.
+    bextra=""
+    if [ -n "$budget" ]; then
+      case "$budget" in *[!0-9]*|0*) usage ;; esac
+      { [ ${#budget} -le 5 ] && [ "$budget" -ge 60 ] && [ "$budget" -le 14400 ]; } || usage
+      bextra=",\"budget\":$budget"
+    fi
     if [ "$cmd" = ask ]; then
       extra=""; [ -n "$effort" ] && extra=",\"effort\":\"$(esc "$effort")\""
+      extra="$extra$bextra"
+      [ -n "$via" ] && extra="$extra,\"via\":\"$via\""
       post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\"$extra"
     else
       extra=""
@@ -834,6 +938,7 @@ case "$cmd" in
       [ -n "$base" ] && extra="$extra,\"base\":\"$(esc "$base")\""
       [ -n "$effort" ] && extra="$extra,\"effort\":\"$(esc "$effort")\""
       [ -n "$profile" ] && extra="$extra,\"profile\":\"$(esc "$profile")\""
+      extra="$extra$bextra"
       post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree,\"fork\":$fork$extra"
     fi
     if receipt; then
@@ -841,6 +946,8 @@ case "$cmd" in
     else
       said="in coda, ADE non l'ha ancora consegnata"
     fi
+    # The delivery is the caller's own SendMessage: waiting here first would wait for a reply to a request nobody has received yet.
+    case "$said" in "ok: consegna tu"*) printf '%s\n' "id: $id - $said" "Dopo averla mandata attendi con: ade-msg wait $id"; exit 0 ;; esac
     if [ $nowait = 1 ]; then echo "id: $id - $said - attendi con: ade-msg wait $id"; exit 0; fi
     echo "ade-msg: $said (richiesta $id), in attesa della risposta..." >&2
     await "$id" ;;
@@ -959,6 +1066,16 @@ mod tests {
     }
 
     #[test]
+    fn both_scripts_take_a_budget_for_ask_and_spawn_and_check_its_range() {
+        // D73: parsed in both, written on ask and on spawn, and held to 60..14400 before anything is posted.
+        assert!(PS1.contains("$a -eq '--budget'") && PS1.contains("$b -lt 60 -or $b -gt 14400) { Usage }"));
+        assert_eq!(PS1.matches("if ($budget) { $fields['budget'] = $budget }").count(), 2);
+        assert!(SH.contains("--budget) [ $# -ge 2 ]") && SH.contains("[ \"$budget\" -ge 60 ] && [ \"$budget\" -le 14400 ]"));
+        assert!(SH.contains("bextra=\",\\\"budget\\\":$budget\""));
+        assert_eq!(SH.matches("extra=\"$extra$bextra\"").count(), 2);
+    }
+
+    #[test]
     fn both_scripts_read_the_inbox_and_move_what_they_print() {
         assert!(PS1.contains("'inbox' {") && PS1.contains("Join-Path $dir 'handled'"));
         assert!(SH.contains("  inbox)") && SH.contains("mv -f \"$f\" \"$dir/handled/\""));
@@ -966,6 +1083,147 @@ mod tests {
         assert!(PS1.contains("kind = 'interrupt'") && SH.contains("interrupt) [ -n"));
         assert!(PS1.contains("$fields['effort'] = $effort") && SH.contains("--effort)") && SH.contains("--profile)"));
         assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
+    }
+
+    /// A folder under the test TEMP, removed when dropped: on a failed assertion too.
+    #[cfg(windows)]
+    struct Scratch(PathBuf);
+
+    #[cfg(windows)]
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!("ade-msg-{tag}-{}-{nanos}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Runs the real `ade-msg.ps1` on `args`, answers its receipt with "ok", and returns the JSON it posted.
+    #[cfg(windows)]
+    fn posted_by_ps1(tag: &str, args: &[&str], stdin: Option<&[u8]>) -> serde_json::Value {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let scratch = Scratch::new(tag);
+        let base = scratch.0.clone();
+        for dir in ["outbox", "receipts", "results", "bin"] {
+            fs::create_dir_all(base.join(dir)).unwrap();
+        }
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::write(&script, PS1).unwrap();
+        let mut child = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(&base)
+            .env("ADE_MAILBOX", &base)
+            .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        if let Some(bytes) = stdin {
+            let mut pipe = child.stdin.take().unwrap();
+            pipe.write_all(bytes).unwrap();
+        }
+        // ADE's part: take the posted message and answer it, so the script does not wait out its receipt.
+        let started = std::time::Instant::now();
+        let posted = loop {
+            let found = fs::read_dir(base.join("outbox")).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "json"));
+            if let Some(path) = found {
+                let id = path.file_stem().unwrap().to_string_lossy().into_owned();
+                let body = fs::read_to_string(&path).unwrap();
+                fs::write(base.join("receipts").join(format!("{id}.txt")), "ok").unwrap();
+                break body;
+            }
+            assert!(started.elapsed().as_secs() < 30, "ade-msg.ps1 posted nothing");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        let _ = child.wait();
+        serde_json::from_str(posted.trim_start_matches('\u{feff}')).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn registro_takes_its_json_from_a_file_or_stdin_with_the_quotes_intact() {
+        // Audit 0.7.7, MEDIO 8: as an argument, PowerShell 5.1 drops these quotes on the way to the script.
+        let json = r#"{"k":"D1","words":"ha detto \"sì, ma dopo\""}"#;
+        let dir = Scratch::new("json");
+        let file = dir.0.join("evento.json");
+        fs::write(&file, json).unwrap();
+        let from_file = posted_by_ps1("file", &["registro", "decisioni", "risposta", "--file", file.to_str().unwrap()], None);
+        assert_eq!(from_file["kind"], "registro");
+        assert_eq!(from_file["text"], json);
+        let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
+        assert_eq!(from_stdin["text"], json);
+        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
+    }
+
+    /// Runs the real `ade-msg.ps1` in `base` on `args`; what it printed, and how long it took.
+    #[cfg(windows)]
+    fn run_ps1(base: &std::path::Path, args: &[&str]) -> (String, Duration) {
+        use std::process::{Command, Stdio};
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::create_dir_all(base.join("bin")).unwrap();
+        fs::write(&script, PS1).unwrap();
+        let started = std::time::Instant::now();
+        let out = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(base)
+            .env("ADE_MAILBOX", base)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        (String::from_utf8_lossy(&out.stdout).into_owned(), started.elapsed())
+    }
+
+    /*
+     * ROADMAP, BASSO: `ade-msg wait` on a request already answered sat out its
+     * whole timeout and then said «in corso». The answer had gone to the
+     * caller's terminal (nobody was waiting), or to an earlier wait, and with
+     * it the only file that said the request was over.
+     */
+    #[cfg(windows)]
+    #[test]
+    fn wait_on_a_request_already_answered_says_so_at_once() {
+        let scratch = Scratch::new("wait-closed");
+        let results = scratch.0.join("results");
+        fs::create_dir_all(&results).unwrap();
+
+        // Typed into the caller: nobody was waiting when the answer came.
+        fs::write(results.join("1790000000000-aaaa.txt"), "risposta A").unwrap();
+        assert_eq!(reclaim_result(&results, "1790000000000-aaaa").as_deref(), Some("risposta A"));
+        let (out, took) = run_ps1(&scratch.0, &["wait", "1790000000000-aaaa", "--timeout", "8"]);
+        assert!(took < Duration::from_secs(6), "wait sat out its timeout: {took:?}, {out}");
+        assert!(out.contains("gia' chiusa") && out.contains("risposta A"), "{out}");
+        assert!(!out.contains("in corso"), "{out}");
+
+        // Taken by a first wait: a second one says the same, at once.
+        fs::write(results.join("1790000000000-bbbb.txt"), "risposta B").unwrap();
+        let (first, _) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
+        assert!(first.contains("risposta B") && !first.contains("gia' chiusa"), "{first}");
+        let (again, took) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
+        assert!(took < Duration::from_secs(6), "the second wait sat out its timeout: {took:?}, {again}");
+        assert!(again.contains("gia' chiusa") && again.contains("risposta B"), "{again}");
+    }
+
+    #[test]
+    fn both_scripts_keep_what_they_took_and_say_closed_from_it() {
+        // The ps1 is run above; the sh, where no shell can be assumed, is read.
+        assert!(SH.contains("mv -f \"$box/results/$1.taken\" \"$box/results/$1.closed\""));
+        assert!(SH.contains("mv -f \"$box/results/$1.typed\" \"$box/results/$1.closed\""));
+        assert!(SH.contains("if [ -f \"$box/results/$1.closed\" ]; then got=\"ade-msg: la richiesta $1 e' gia' chiusa."));
+        assert!(PS1.contains("Move-Item -LiteralPath $taken -Destination $closed"));
+        assert!(!SH.contains("rm -f \"$box/results/$1.taken\""));
     }
 
     #[test]

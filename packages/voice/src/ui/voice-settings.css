@@ -125,7 +125,12 @@
 
 [data-component="voice-settings-panel"] [data-slot="header"] {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* Mark and title, then a column per control on the same row: the reset shows
+     on the voice's sections only, and a fixed count of tracks sent the X under
+     the title whenever it did. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   align-items: center;
   gap: var(--ade-space-6);
   padding: var(--ade-space-6) var(--ade-space-7);
@@ -148,7 +153,7 @@
 
 [data-component="voice-settings-panel"][data-status="live"] [data-slot="header-mark"],
 [data-component="voice-settings-panel"][data-status="ready"] [data-slot="header-mark"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   color: var(--ade-accent);
 }
 
@@ -679,7 +684,11 @@
   font-weight: var(--ade-weight-bold);
   color: var(--ade-text);
   letter-spacing: -0.005em;
-  margin: 0;
+  /* The heading takes focus when a section opens, and its ring hugged the
+     text. The padding gives the ring air; the equal negative margin keeps
+     the text where it was. */
+  padding: var(--ade-space-1) var(--ade-space-2);
+  margin: calc(-1 * var(--ade-space-1)) calc(-1 * var(--ade-space-2));
 }
 
 [data-component="voice-settings-panel"] [data-slot="section-title"]:focus {
@@ -720,6 +729,42 @@
   font-size: var(--ade-font-sm);
   color: var(--ade-text-soft);
   margin: var(--ade-space-2) 0 0;
+}
+
+/* The Kokoro pack (K6): its note, bar, buttons and licences spaced like the box around it. */
+[data-component="voice-settings-panel"] [data-slot="voice-pack"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ade-space-4);
+}
+
+[data-component="voice-settings-panel"] [data-slot="voice-pack"] [data-slot="sub-choice-note"] {
+  margin: 0;
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-4);
+  color: var(--ade-error);
+  font-size: var(--ade-font-sm);
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] [data-slot="link-button"] {
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+[data-component="voice-settings-panel"] [data-slot="reply-voice-error"] button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 [data-component="voice-settings-panel"] [data-slot="stack"] {
@@ -783,23 +828,21 @@
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow:
     inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent),
-    0 0 0 5px var(--ade-accent-glow);
+    0 0 0 1px var(--ade-text-weak),
+    0 0 0 5px color-mix(in srgb, var(--ade-text-weak) 25%, transparent);
 }
 
 /* The checked card keeps its scale on press but never compounds the glow
    (it already has a ring); reset the box-shadow so focus takes over cleanly. */
 [data-component="voice-settings-panel"] [data-slot="mode-card"][aria-checked="true"]:focus-visible {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow:
-    inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent),
-    0 0 0 5px var(--ade-accent-glow),
-    var(--ade-focus-ring);
+    var(--ade-focus-ring),
+    inset 0 1px 0 0 var(--ade-highlight);
 }
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"]:focus-visible {
@@ -919,17 +962,15 @@
 
 [data-component="voice-settings-panel"] [data-slot="sub-choice-item"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent);
+  border-color: var(--ade-text-weak);
+  box-shadow: 0 0 0 1px var(--ade-text-weak);
 }
 
 /* The checked item keeps its ring; focus must layer on top, not replace it. */
 [data-component="voice-settings-panel"] [data-slot="sub-choice-item"][aria-checked="true"]:focus-visible {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow:
-    0 0 0 1px var(--ade-accent),
-    var(--ade-focus-ring);
+  border-color: var(--ade-text-weak);
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-component="voice-settings-panel"] [data-slot="sub-choice-item"]:focus-visible {
@@ -993,17 +1034,15 @@
 
 [data-component="voice-settings-panel"] [data-slot="activation-item"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent);
+  border-color: var(--ade-text-weak);
+  box-shadow: 0 0 0 1px var(--ade-text-weak);
 }
 
 /* Focus on the already-checked item keeps its ring visible. */
 [data-component="voice-settings-panel"] [data-slot="activation-item"][aria-checked="true"]:focus-visible {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow:
-    0 0 0 1px var(--ade-accent),
-    var(--ade-focus-ring);
+  border-color: var(--ade-text-weak);
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-component="voice-settings-panel"] [data-slot="activation-item"]:focus-visible {
@@ -1127,7 +1166,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="input"]:focus,
 [data-component="voice-settings-panel"] [data-slot="select"]:focus {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow: var(--ade-focus-ring);
 }
 
@@ -1202,7 +1241,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="shortcut-recorder-btn"]:hover {
   background: var(--ade-hover);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="shortcut-recorder-btn"]:active {
@@ -1310,18 +1349,17 @@
 
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow:
     inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent);
+    0 0 0 1px var(--ade-text-weak);
 }
 
 /* The selected card keeps its ring; focus must layer on top, not replace. */
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-checked="true"]:focus-within {
   box-shadow:
-    inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent),
-    var(--ade-focus-ring);
+    var(--ade-focus-ring),
+    inset 0 1px 0 0 var(--ade-highlight);
 }
 
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-unusable="true"]:not([data-checked="true"]) {
@@ -1680,8 +1718,16 @@
 
   [data-component="voice-settings-panel"] [data-slot="header"] {
     grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-auto-flow: row;
     row-gap: var(--ade-space-4);
     padding: var(--ade-space-5) var(--ade-space-6);
+  }
+
+  /* Narrow, the pill and the reset take rows of their own; the X stays on the
+     title's row, at its end. */
+  [data-component="voice-settings-panel"] [data-slot="close-btn"] {
+    grid-row: 1;
+    grid-column: 3;
   }
 
   [data-component="voice-settings-panel"] [data-slot="status-pill"] {

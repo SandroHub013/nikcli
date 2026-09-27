@@ -15,9 +15,13 @@ import { ACTIVITY_CODES } from "../grid/activity"
  * above its baseline has gained an untranslated text, and a file below it has
  * lost some and should say so, so the next regression is caught at the new
  * level. `ADE_I18N_BASELINE=write bun run test:unit` rewrites the baseline.
+ *
+ * The voice package is counted too, under `voice/`: its panel reads the same
+ * catalog with the same `t()`, and it is where the Kokoro pack's texts are (K6).
  */
 
 const SRC = join(import.meta.dir, "..")
+const VOICE = join(import.meta.dir, "..", "..", "..", "voice", "src")
 const BASELINE = join(import.meta.dir, "hardcoded-baseline.json")
 
 const UI_ATTRIBUTES = new Set([
@@ -34,6 +38,7 @@ const UI_ATTRIBUTES = new Set([
 /** Calls whose text arguments end up on screen. */
 const SINKS = new Set([
   "appendLine",
+  "tellPane",
   "noteInTerminal",
   "report",
   "addNotice",
@@ -106,13 +111,14 @@ function count(path: string): number {
     if (ts.isJsxText(node)) {
       if (isText(node.getText().replace(/\s+/g, " ").trim())) found++
     } else if (ts.isJsxAttribute(node) && node.initializer && UI_ATTRIBUTES.has(node.name.getText())) {
+      // A literal, a template's fixed words, either side of a ternary: only
+      // the literal was seen, so `title={`Stato: ${x}`}` had a baseline of 0
+      // (review area 2, MEDIO).
       const init = node.initializer
-      const literal = ts.isStringLiteral(init)
-        ? init.text
-        : ts.isJsxExpression(init) && init.expression && ts.isStringLiteral(init.expression)
-          ? init.expression.text
-          : undefined
-      if (literal !== undefined && isText(literal.trim())) found++
+      const texts: string[] = []
+      if (ts.isStringLiteral(init)) texts.push(init.text)
+      else if (ts.isJsxExpression(init) && init.expression) sinkTexts(init.expression, texts)
+      found += texts.filter((text) => isText(text.trim())).length
     } else if (ts.isCallExpression(node) && SINKS.has(calleeName(node) ?? "")) {
       const texts: string[] = []
       for (const argument of node.arguments) sinkTexts(argument, texts)
@@ -133,16 +139,47 @@ function count(path: string): number {
 
 function measure(): Record<string, number> {
   const counts: Record<string, number> = {}
-  for (const path of sources(SRC).sort()) {
-    const n = count(path)
-    if (n > 0) counts[relative(SRC, path).replace(/\\/g, "/")] = n
+  for (const [root, prefix] of [
+    [SRC, ""],
+    [VOICE, "voice/"],
+  ] as const) {
+    for (const path of sources(root).sort()) {
+      const n = count(path)
+      if (n > 0) counts[prefix + relative(root, path).replace(/\\/g, "/")] = n
+    }
   }
   return counts
 }
 
 describe("fixed text in JSX", () => {
+  /*
+   * Measured here, while the file loads, not in the test. It reads and parses
+   * some 330 sources, and had a timeout of 30 s that was still not enough
+   * right after a checkout: on Windows the first open of a file just written
+   * waits for the antivirus. Loading is not timed per test.
+   */
+  const now = measure()
+
+  test("an attribute's template and ternary count, not only its literal", () => {
+    const dir = join(require("node:os").tmpdir(), `ade-hardcoded-${process.pid}`)
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    const fixture = join(dir, "fixture.tsx")
+    writeFileSync(
+      fixture,
+      [
+        "export const A = (x: string) => <span title={`Stato: ${x}`} />",
+        'export const B = (x: boolean) => <b aria-label={x ? "Apri" : "Chiudi"} />',
+        "export const C = (x: string) => <i title={`${x} · ${x}`} aria-label={t(x)} />",
+      ].join("\n"),
+    )
+    try {
+      expect(count(fixture)).toBe(3)
+    } finally {
+      require("node:fs").rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("does not grow, and the baseline follows it down", () => {
-    const now = measure()
     if (process.env.ADE_I18N_BASELINE === "write") {
       writeFileSync(BASELINE, JSON.stringify(now, null, 2) + "\n")
       return

@@ -1,15 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import {
-  FRAME_ENVELOPE,
-  FRAME_GUARD_BODY,
-  FrameGate,
-  frameGuard,
-  frameScript,
-  newFrameSecret,
-  openEnvelope,
-} from "./frame-script"
+import { FRAME_ENVELOPE, FrameGate, frameGuard, frameScript, newFrameSecret, openEnvelope } from "./frame-script"
 
 const KEY = "invoke-key-that-must-not-leak"
 
@@ -120,19 +112,13 @@ function makeWindow(input: { name?: string; nested?: boolean; top?: boolean; hre
     chrome: { webview },
     location: new URL(input.href ?? "http://localhost:5173/"),
   })
+  win.location.replace = (href: string) => {
+    win.location = new URL(href, "http://localhost/")
+  }
   const fromParent = (data: unknown) =>
     win.dispatchEvent(new BrowserMessageEvent("message", { data, source: win.parent }))
   const fromPage = (data: unknown) => win.dispatchEvent(new BrowserMessageEvent("message", { data, source: win }))
-  return {
-    win,
-    topPosted,
-    transfers,
-    seen,
-    webview,
-    fromParent,
-    fromPage,
-    wipeListeners: () => win.wipe(),
-  }
+  return { win, topPosted, transfers, seen, webview, fromParent, fromPage, wipeListeners: () => win.wipe() }
 }
 
 /** What Tauri's client does before it sends an invoke. */
@@ -155,15 +141,6 @@ describe("the generated script", () => {
   test("parses, and can be put inside a <script> of the mirror", () => {
     expect(() => new Function("window", file)).not.toThrow()
     expect(file.toLowerCase()).not.toContain("</script")
-  })
-
-  test("the shipped source matches the body the runtime guard compiles from", () => {
-    // The body lives as a single hand-written JS string in `frame-script.ts`,
-    // because `frameGuard.toString()` is bun-build-dependent and would
-    // produce different artifact text on different machines. Pinning the file
-    // to that string (instead of to `frameGuard.toString()`) keeps CI green
-    // everywhere; this test guards the runtime/serialised equivalence.
-    expect(frameScript()).toContain(FRAME_GUARD_BODY)
   })
 })
 
@@ -229,6 +206,16 @@ describe("frameGuard: any frame", () => {
     expect(win.Headers).toBe(guarded)
   })
 
+  test("a frame that has become ADE is blanked and gets no bridge", () => {
+    const { win, topPosted } = makeWindow({ name: "ade-browser", href: "http://tauri.localhost/" })
+    let started = false
+    frameGuard(win, () => (started = true))
+    expect(String(win.location.href)).toBe("about:blank")
+    expect(topPosted).toEqual([])
+    expect(started).toBe(false)
+    expect(() => tauriRequest(win)).not.toThrow()
+  })
+
   test("a frame that is not a pane gets no bridge", () => {
     for (const input of [
       { name: "" },
@@ -264,14 +251,7 @@ describe("frameGuard: a browser pane's frame", () => {
     const port: FakePort | undefined = frame.transfers[0]?.[0]
     const heard: unknown[] = []
     if (port) port.onmessage = (event: any) => heard.push(event.data)
-    return {
-      ...frame,
-      ask,
-      port,
-      heard,
-      shim: () => shim,
-      starts: () => starts,
-    }
+    return { ...frame, ask, port, heard, shim: () => shim, starts: () => starts }
   }
 
   test("pages, blobs and the mirror ask, with a port, and get the bridge from it", () => {
@@ -304,19 +284,9 @@ describe("frameGuard: a browser pane's frame", () => {
     const heard: unknown[] = []
     port.onmessage = (event: any) => heard.push(event.data)
     port.postMessage({ type: "ade-browser:hello", secret })
-    expect(heard).toEqual([
-      {
-        type: FRAME_ENVELOPE,
-        secret,
-        message: { type: "visual-editor:ready" },
-      },
-    ])
+    expect(heard).toEqual([{ type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:ready" } }])
     shim.parent.postMessage({ type: "visual-editor:dom-changed" })
-    expect(heard.at(-1)).toEqual({
-      type: FRAME_ENVELOPE,
-      secret,
-      message: { type: "visual-editor:dom-changed" },
-    })
+    expect(heard.at(-1)).toEqual({ type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:dom-changed" } })
     // Nothing of it on the window.
     expect(frame.topPosted).toEqual([{ type: "ade-browser:ask" }])
     expect(shim.__NIKCLI_INSPECTOR_ACTIVE__).toBe(false)
@@ -327,10 +297,7 @@ describe("frameGuard: a browser pane's frame", () => {
   test("the first secret stays", () => {
     const frame = paneFrame()
     frame.port!.postMessage({ type: "ade-browser:hello", secret })
-    frame.port!.postMessage({
-      type: "ade-browser:hello",
-      secret: "another-secret-00000000",
-    })
+    frame.port!.postMessage({ type: "ade-browser:hello", secret: "another-secret-00000000" })
     expect(frame.starts()).toBe(1)
     frame.shim().parent.postMessage({ type: "visual-editor:dom-changed" })
     expect(frame.heard.at(-1)).toMatchObject({ secret })
@@ -385,12 +352,7 @@ describe("FrameGate", () => {
 
   function gate() {
     const heard: unknown[] = []
-    const g = new FrameGate({
-      onMessage: (message) => heard.push(message),
-      newSecret: secrets(),
-      grace: 5,
-      wait: 30,
-    })
+    const g = new FrameGate({ onMessage: (message) => heard.push(message), newSecret: secrets(), grace: 5, wait: 30 })
     return { g, heard }
   }
   const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -405,11 +367,7 @@ describe("FrameGate", () => {
       secret: script.state.hello,
       message: { type: "visual-editor:ready" },
     })
-    script.frame.postMessage({
-      type: FRAME_ENVELOPE,
-      secret: "forged-secret-000000",
-      message: { type: "x" },
-    })
+    script.frame.postMessage({ type: FRAME_ENVELOPE, secret: "forged-secret-000000", message: { type: "x" } })
     expect(heard).toEqual([{ type: "visual-editor:ready" }])
   })
 
@@ -436,11 +394,7 @@ describe("FrameGate", () => {
     await tick()
     expect(next.state.hello).toBe("secret-2".padEnd(20, "0"))
     expect(old.pane.closed).toBe(true)
-    old.frame.postMessage({
-      type: FRAME_ENVELOPE,
-      secret: "secret-1".padEnd(20, "0"),
-      message: { type: "late" },
-    })
+    old.frame.postMessage({ type: FRAME_ENVELOPE, secret: "secret-1".padEnd(20, "0"), message: { type: "late" } })
     expect(heard).toEqual([])
   })
 

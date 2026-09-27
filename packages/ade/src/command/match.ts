@@ -34,6 +34,48 @@ function isWordStart(text: string, i: number): boolean {
 }
 
 /**
+ * The text positions `query` matches, left to right, or undefined.
+ *
+ * With `preferWords`, each character looks a little ahead for a word start.
+ * That jump can strand the rest of the query: "ferma" against "Ferma la
+ * registrazione" took the r of "registrazione", found no m after it, and the
+ * palette answered «Nessun comando trovato» to the start of the title itself.
+ * The caller tries again without the jump.
+ */
+function matchIndices(lowerQuery: string, lowerText: string, text: string, preferWords: boolean): number[] | undefined {
+  const indices: number[] = []
+  let textPos = 0
+
+  for (let qi = 0; qi < lowerQuery.length; qi++) {
+    const qc = lowerQuery[qi]
+    // Find the first available match
+    let firstMatch = -1
+    let wordMatch = -1
+
+    for (let ti = textPos; ti < lowerText.length; ti++) {
+      if (lowerText[ti] === qc) {
+        if (firstMatch === -1) firstMatch = ti
+        if (!preferWords) break
+        if (isWordStart(text, ti)) {
+          wordMatch = ti
+          break
+        }
+        // Don't look too far ahead — a distant word hit is worse than a close
+        // non-word hit because the gap penalty would eat the bonus.
+        if (ti - firstMatch > 8) break
+      }
+    }
+
+    const chosen = wordMatch !== -1 ? wordMatch : firstMatch
+    if (chosen === -1) return undefined
+
+    indices.push(chosen)
+    textPos = chosen + 1
+  }
+  return indices
+}
+
+/**
  * Try to match `query` as a subsequence of `text`, case-insensitively.
  *
  * Returns `undefined` when the subsequence is not found. An empty query
@@ -51,36 +93,10 @@ export function fuzzyMatch(query: string, text: string): FuzzyResult | undefined
   const lowerText = text.toLowerCase()
 
   // --- First pass: find the matched character indices ---
-  // Greedy with word-boundary preference: at each query character, scan ahead
-  // for a word-start hit before settling for the first available position.
-  const indices: number[] = []
-  let textPos = 0
-
-  for (let qi = 0; qi < lowerQuery.length; qi++) {
-    const qc = lowerQuery[qi]
-    // Find the first available match
-    let firstMatch = -1
-    let wordMatch = -1
-
-    for (let ti = textPos; ti < lowerText.length; ti++) {
-      if (lowerText[ti] === qc) {
-        if (firstMatch === -1) firstMatch = ti
-        if (isWordStart(text, ti)) {
-          wordMatch = ti
-          break
-        }
-        // Don't look too far ahead — a distant word hit is worse than a close
-        // non-word hit because the gap penalty would eat the bonus.
-        if (ti - firstMatch > 8) break
-      }
-    }
-
-    const chosen = wordMatch !== -1 ? wordMatch : firstMatch
-    if (chosen === -1) return undefined
-
-    indices.push(chosen)
-    textPos = chosen + 1
-  }
+  // Word starts first; when that path runs out, the plain leftmost subsequence,
+  // which exists whenever any does.
+  const indices = matchIndices(lowerQuery, lowerText, text, true) ?? matchIndices(lowerQuery, lowerText, text, false)
+  if (!indices) return undefined
 
   // --- Scoring ---
   let score = 0

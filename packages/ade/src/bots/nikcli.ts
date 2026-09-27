@@ -660,7 +660,9 @@ export function launchArgs(identifier: string, model?: string): string[] {
 /**
  * The models nikcli can use, from `nikcli models`.
  *
- * One `provider/model` per line. Taken from nikcli rather than from ADE's own
+ * One `provider/model` per line, where the model may have slashes of its own
+ * (`openrouter/nvidia/…:free`, `baseten/deepseek-ai/…`) and a `~`
+ * (`openrouter/~anthropic/…-latest`). Taken from nikcli rather than from ADE's own
  * chat list because they are not the same set: the chat section talks to
  * OpenRouter directly, while a bot runs inside nikcli and can only be pinned
  * to something nikcli has a provider for. Offering the OpenRouter list here
@@ -671,8 +673,8 @@ export function parseModelList(stdout: string): string[] {
   const out: string[] = []
   for (const line of stdout.split("\n")) {
     const value = line.trim()
-    // `--verbose` interleaves JSON; a model id is one token with one slash.
-    if (!/^[\w.-]+\/[\w.:@-]+$/.test(value)) continue
+    // `--verbose` interleaves JSON; a model id is one token, a provider and slash-separated parts.
+    if (!/^[\w.-]+(?:\/[\w.:@~-]+)+$/.test(value)) continue
     if (seen.has(value)) continue
     seen.add(value)
     out.push(value)

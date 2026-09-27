@@ -1,0 +1,286 @@
+import type { DesignProposal } from "./state"
+import { resolvedMessage } from "./state"
+import { t } from "../i18n"
+
+export interface DeliveryCandidate {
+  readonly id: string
+  readonly title: string
+  readonly project?: string
+  readonly running: boolean
+}
+
+export interface RecipientChoice {
+  readonly id: string
+  readonly title: string
+}
+
+export const RECIPIENT_KEY = "ade.design.recipient"
+
+export function parseRecipients(raw: string | null): Record<string, RecipientChoice> {
+  if (!raw) return {}
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+    const kept: Record<string, RecipientChoice> = {}
+    for (const [path, choice] of Object.entries(value as Record<string, unknown>)) {
+      const item = choice as Partial<RecipientChoice> | null
+      if (item && typeof item.id === "string" && typeof item.title === "string") {
+        kept[path] = { id: item.id, title: item.title }
+      }
+    }
+    return kept
+  } catch {
+    return {}
+  }
+}
+
+export function chooseRecipient(
+  all: Readonly<Record<string, RecipientChoice>>,
+  path: string,
+  choice: RecipientChoice | undefined,
+): Record<string, RecipientChoice> {
+  const next = { ...all }
+  if (choice) next[path] = { id: choice.id, title: choice.title }
+  else delete next[path]
+  return next
+}
+
+export type RecipientStatus =
+  | { readonly state: "pronta"; readonly id: string; readonly title: string }
+  | { readonly state: "non scelta" }
+  | { readonly state: "non attiva"; readonly id: string; readonly title: string }
+
+export interface RecipientOption {
+  readonly value: string
+  readonly label: string
+  readonly selected: boolean
+}
+
+export function recipientOptions(
+  sessions: readonly DeliveryCandidate[],
+  recipient: RecipientStatus,
+  pending?: string,
+): RecipientOption[] {
+  const shown = pending ?? (recipient.state === "non scelta" ? "" : recipient.id)
+  const options: RecipientOption[] = [{ value: "", label: t("design.recipient.nobody"), selected: shown === "" }]
+  for (const pane of sessions) {
+    const label = `${pane.title}${pane.project ? ` · ${pane.project}` : ""}${pane.running ? "" : ` ${t("design.recipient.stopped")}`}`
+    options.push({ value: pane.id, label, selected: pane.id === shown })
+  }
+  if (recipient.state !== "non scelta" && !sessions.some((pane) => pane.id === recipient.id)) {
+    options.push({
+      value: recipient.id,
+      label: `${recipient.title} ${t("design.recipient.closed")}`,
+      selected: recipient.id === shown,
+    })
+  }
+  return options
+}
+
+/**
+ * Whether the answer button can send, or has to ask who receives first.
+ *
+ * With nobody chosen, or a chosen session that is not running, an answer
+ * recorded as it is would wait in the outbox with nobody to read it. So the
+ * card asks for a recipient right there instead of recording in silence.
+ */
+export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
+  return recipient.state === "pronta" ? "invia" : "scegli"
+}
+
+export function recipientChange(
+  currentId: string | undefined,
+  nextId: string | undefined,
+  queued: number,
+): "nessuna" | "applica" | "conferma" {
+  if ((currentId ?? "") === (nextId ?? "")) return "nessuna"
+  if (!nextId || queued === 0) return "applica"
+  return "conferma"
+}
+
+export function resolveRecipient(
+  candidates: readonly DeliveryCandidate[],
+  choice: RecipientChoice | undefined,
+): RecipientStatus {
+  if (!choice) return { state: "non scelta" }
+  const pane = candidates.find((candidate) => candidate.id === choice.id)
+  if (pane?.running) return { state: "pronta", id: pane.id, title: pane.title }
+  return { state: "non attiva", id: choice.id, title: pane?.title ?? choice.title }
+}
+
+/**
+ * Where an item is sent: if the item explicitly carries a recipient (e.g. a
+ * reopened notice returning to whoever had the choice), it goes there if that
+ * session is running. If it is closed, or the item has no designated recipient,
+ * it goes to the currently chosen recipient.
+ */
+export function resolveDeliveryTarget(
+  item: OutboxItem,
+  candidates: readonly DeliveryCandidate[],
+  current: RecipientStatus,
+): { readonly id: string; readonly title: string } | undefined {
+  if (item.toId) {
+    const byId = candidates.find((c) => c.running && c.id === item.toId)
+    if (byId) return { id: byId.id, title: byId.title }
+  }
+  // An entry saved before the id: `to` is the title, and the first match is all it can be.
+  if (item.to) {
+    const candidate = candidates.find((c) => c.running && (c.id === item.to || c.title === item.to))
+    if (candidate) return { id: candidate.id, title: candidate.title }
+  }
+  if (current.state === "pronta") {
+    return { id: current.id, title: current.title }
+  }
+  return undefined
+}
+
+export function deliveryLine(proposal: DesignProposal): string {
+  return `[Design da utente] ${resolvedMessage(proposal)}`
+}
+
+/** The notice typed into the recipient's terminal when a previously delivered design proposal is reopened. */
+export function reopenLine(k: string): string {
+  return `[Design da utente] riaperta [k=${k}]: la scelta di prima non vale più, aspetta la nuova`
+}
+
+export interface OutboxItem {
+  readonly path: string
+  readonly k: string
+  readonly answeredAt: string
+  readonly queuedAt: number
+  /** The title, for what the sheet shows. An old entry has only this. */
+  readonly deliveredTo?: string
+  /** The session the answer was typed into. Delivery prefers this over the title. */
+  readonly deliveredToId?: string
+  readonly deliveredAt?: number
+  readonly kind?: "risposta" | "riaperta"
+  readonly text?: string
+  /** The title of the session the notice is for. */
+  readonly to?: string
+  /** The id of that session. Absent on an entry saved before ids were kept. */
+  readonly toId?: string
+}
+
+export const OUTBOX_KEY = "ade.design.outbox"
+
+export function parseOutbox(raw: string | null): OutboxItem[] {
+  if (!raw) return []
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (!Array.isArray(value)) return []
+    return value.filter(
+      (item): item is OutboxItem =>
+        Boolean(item) &&
+        typeof item.path === "string" &&
+        typeof item.k === "string" &&
+        typeof item.answeredAt === "string" &&
+        typeof item.queuedAt === "number",
+    )
+  } catch {
+    return []
+  }
+}
+
+export function enqueue(
+  outbox: readonly OutboxItem[],
+  item: Omit<OutboxItem, "deliveredTo" | "deliveredAt">,
+): OutboxItem[] {
+  return [...outbox.filter((entry) => !(entry.path === item.path && entry.k === item.k)), { ...item }]
+}
+
+export function markDelivered(
+  outbox: readonly OutboxItem[],
+  item: OutboxItem,
+  to: string | { readonly id: string; readonly title: string },
+  at: number,
+): OutboxItem[] {
+  const title = typeof to === "string" ? to : to.title
+  const id = typeof to === "string" ? undefined : to.id
+  return outbox.map((entry) =>
+    entry === item ? { ...entry, deliveredTo: title, ...(id ? { deliveredToId: id } : {}), deliveredAt: at } : entry,
+  )
+}
+
+export function pruneOutbox(
+  outbox: readonly OutboxItem[],
+  path: string,
+  proposals: readonly DesignProposal[],
+): OutboxItem[] {
+  const byKey = new Map(proposals.map((proposal) => [proposal.k, proposal]))
+  return outbox.filter((item) => {
+    if (item.path !== path) return true
+    const proposal = byKey.get(item.k)
+    if (!proposal) return false
+    if (item.kind === "riaperta") {
+      return proposal.status === "aperta" && item.deliveredAt === undefined
+    }
+    return (proposal.status === "risposta" || proposal.status === "giro") && proposal.answer?.at === item.answeredAt
+  })
+}
+
+export function pendingFor(outbox: readonly OutboxItem[], path: string): OutboxItem[] {
+  return outbox
+    .filter((item) => item.path === path && item.deliveredAt === undefined)
+    .sort((a, b) => a.queuedAt - b.queuedAt)
+}
+
+export type DeliveryState =
+  | { readonly state: "consegnata"; readonly to: string; readonly toId?: string; readonly at: number }
+  | { readonly state: "in coda" }
+  | { readonly state: "fuori da ADE" }
+
+export function deliveryState(outbox: readonly OutboxItem[], path: string, proposal: DesignProposal): DeliveryState {
+  const item = outbox.find(
+    (entry) => entry.path === path && entry.k === proposal.k && entry.answeredAt === proposal.answer?.at,
+  )
+  if (!item) return { state: "fuori da ADE" }
+  if (item.deliveredAt !== undefined && item.deliveredTo) {
+    return {
+      state: "consegnata",
+      to: item.deliveredTo,
+      ...(item.deliveredToId ? { toId: item.deliveredToId } : {}),
+      at: item.deliveredAt,
+    }
+  }
+  return { state: "in coda" }
+}
+
+/**
+ * Who receives the answer to a question: the pane that asked, while it runs.
+ *
+ * The answer used to go to whoever was chosen in «Risposte a», whoever had
+ * asked. ADE now keeps the asking pane in the event (`fromPane`), so the
+ * answer goes back to it; a question written before that, or one whose pane
+ * is closed, still goes to the chosen session (notifiche-design).
+ */
+export function recipientFor(
+  asker: string | undefined,
+  candidates: readonly DeliveryCandidate[],
+  chosen: RecipientStatus,
+): RecipientStatus {
+  const pane = asker ? candidates.find((candidate) => candidate.id === asker && candidate.running) : undefined
+  return pane ? { state: "pronta", id: pane.id, title: pane.title } : chosen
+}
+
+/** The outbox entry for an answer: addressed to the pane that asked, when ADE knows it. */
+export function answerItem(
+  path: string,
+  asked: { readonly k: string; readonly raisedFrom?: string },
+  answeredAt: string,
+  queuedAt: number,
+): OutboxItem {
+  const item = { path, k: asked.k, answeredAt, queuedAt }
+  // Only the id: a title can be another pane's too, and a closed asker falls back to the chosen session.
+  return asked.raisedFrom ? { ...item, toId: asked.raisedFrom } : item
+}
+
+/**
+ * What the sheet says once a choice is written, about the session it goes
+ * to: `recipient` is the answer's own (`recipientFor`), not «Risposte a»
+ * (Verifiche, da-scegliere, problem 2).
+ */
+export function answeredStatus(k: string, label: string, recipient: RecipientStatus): string {
+  if (recipient.state === "pronta") return t("design.sheet.status.sent", k, label, recipient.title)
+  if (recipient.state === "non attiva") return t("design.sheet.status.idle", k, label, recipient.title)
+  return t("design.sheet.status.none", k, label)
+}

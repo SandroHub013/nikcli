@@ -4,30 +4,20 @@
  * Talking to a bot used to mean opening its TUI in a pane. That is still
  * there — "Terminale" — but a conversation wants to be read as one: what you
  * said, what it said, what it did in between, and whether it is waiting on
- * you. nikcli has a mode that gives exactly that: `nikcli run --agent <name>
- * --format json "message"` runs one turn against the agent's file and prints
- * one JSON object per event — text, tool use, step, error — every one carrying
- * the session id, so the next turn is `--session <id>` and the model keeps its
- * context. This module is the translation between those lines and a thread.
+ * you. This module is the thread: its messages, its question, what it cost.
  *
- * One process per turn, not one long-running one. A process that exits is a
- * turn that is over: there is nothing to detect and no spinner to time out.
- * The price is a few hundred milliseconds of startup per message, which a
- * conversation does not notice.
+ * A bot's nikcli turn runs on ADE's nikcli server (B8d, `serve-turn.ts`),
+ * where a question is an event with an id, answered by that id. Claude Code
+ * and Codex print one JSON object per event, one process per turn; their
+ * lines are folded in by `applyJsonLine` with each runner's own reading
+ * (`runners.ts`).
  *
- * The one thing `run` still asks through the terminal is permission. It draws
- * a menu — "Permission required: bash (…)", allow once / always / reject — and
- * waits on stdin. So the raw pty output is watched for that line, the thread
- * shows it as a question with three buttons, and the answer is keystrokes:
- * Enter for the first option, arrow-down before it for the others. See
- * `answerKeys`.
- *
- * Pure, in a `.ts`: a JSON line misread is a message lost, and a permission
- * prompt unnoticed is a turn that waits forever with nothing on screen.
+ * Pure, in a `.ts`: a JSON line misread is a message lost.
  */
 
+import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
-import { limitNotice, limitReached } from "./terms"
+import { limitNotice, limitReached, scrubSecrets } from "./terms"
 
 export type TalkStatus = "idle" | "working" | "waiting" | "error"
 
@@ -42,13 +32,23 @@ export interface TalkMessage {
   readonly tool?: string
   /** What the tool printed, when nikcli included it (bash does). */
   readonly output?: string
+  /** A memory write this line reports, still undoable from here (`MemoryUndo`, B8a). */
+  readonly memoryUndo?: string
   readonly at: number
 }
 
 export interface PendingPermission {
+  /** nikcli's id for the question, on ADE's server (B8d): the answer goes to it, not to a menu. */
+  readonly requestID?: string
   readonly permission: string
   readonly patterns: string
   readonly askedAt: number
+  /** Why ADE asks (B8c): the kind of danger, in words. */
+  readonly reason?: string
+  /** What «Sempre» keeps for the bot: every kind of danger in the command, or the folder (`approval.ts`). */
+  readonly always?: readonly string[]
+  /** When the question becomes a Nega. */
+  readonly expiresAt?: number
 }
 
 export interface Talk {
@@ -56,13 +56,45 @@ export interface Talk {
   readonly sessionId?: string
   readonly messages: readonly TalkMessage[]
   readonly status: TalkStatus
-  /** Summed over every step nikcli reported, for the card. */
+  /** Summed over every step of the whole thread, for the card. */
   readonly tokens: number
   readonly costUsd: number
+  /**
+   * The turn that just finished: the model the CLI named, and only that
+   * turn's tokens and cost. The thread totals above keep growing.
+   */
+  readonly lastTurn?: LastTurn
+  /**
+   * How the turn under way is paid for. Set when it starts, not stored:
+   * a reload ends the turn. Usage lands in `byMode` under this name.
+   */
+  readonly turnMode?: TalkSpend | undefined
+  /**
+   * The turn started `metered` and a :free model made it free: a cost above
+   * zero that arrives later puts it back. Not stored, like `turnMode`.
+   */
+  readonly turnFreedFrom?: TalkSpend | undefined
+  /** Tokens and cost of the thread, split by how each turn was paid for. */
+  readonly byMode?: Readonly<Partial<Record<TalkSpend, ModeTotal>>>
+  /** Usage of the turn under way, until its result. Not stored. */
+  readonly pendingTurn?: LastTurn
   /** When anything last happened, for the roster's clock. */
   readonly updatedAt?: number
-  /** A question nikcli is waiting on. The thread shows it; `answerKeys` answers it. */
+  /** A question nikcli is waiting on. The thread shows it; `controller.ts` answers it, by its id (B8d). */
   readonly permission?: PendingPermission
+  /**
+   * A dangerous command Claude Code was refused (B8c): it cannot ask mid-turn,
+   * so the thread offers «Sempre per questo bot», for the next turn.
+   */
+  readonly offer?: { readonly always: readonly string[]; readonly reason: string; readonly command: string }
+  /**
+   * The turn ended because the plan's limit was reached.
+   *
+   * The voice reads this, not the sentence: the sentence follows the
+   * interface language, and a comparison with the Italian wording missed
+   * an English one.
+   */
+  readonly limited?: boolean
   /** What went wrong starting or running the last turn, if anything. */
   readonly problem?: string
   /**
@@ -87,34 +119,146 @@ export interface Talk {
   readonly streaming?: string
 }
 
+/** How that turn was paid for. A thread keeps one total per mode, so they are not added together. */
+export type TalkSpend = "plan" | "api" | "free" | "metered"
+
+export interface ModeTotal {
+  readonly tokens: number
+  readonly costUsd: number
+}
+
+export interface LastTurn {
+  readonly model?: string
+  readonly tokens: number
+  readonly costUsd: number
+  readonly mode?: TalkSpend
+}
+
 export function emptyTalk(): Talk {
   return { messages: [], status: "idle", tokens: 0, costUsd: 0 }
 }
 
 /**
- * The arguments for one turn.
+ * A model id an event actually carried.
  *
- * `--format json` before the message, and the message last: yargs takes
- * `run [message..]` as a variadic, and a message beginning with `-` would be
- * read as a flag anywhere else. `--session` only when there is one; `-c`
- * (continue the last session) is not used because "last" is whichever
- * session any process on this machine touched most recently, which is not
- * necessarily this bot's.
+ * A string `model`, `providerID` plus `modelID`, the same pair on `part`,
+ * or the single key of Claude Code's `modelUsage`. Nothing here is the
+ * model written in the bot's file.
  */
-export function runArgs(input: {
-  readonly identifier: string
-  readonly message: string
-  readonly sessionId?: string
-  readonly model?: string
-  readonly effort?: string
-}): string[] {
-  // No identifier: nikcli's own default agent, for a turn that is not a bot's.
-  const args = input.identifier ? ["run", "--agent", input.identifier, "--format", "json"] : ["run", "--format", "json"]
-  if (input.model) args.push("--model", input.model)
-  if (input.effort) args.push("--variant", input.effort)
-  if (input.sessionId) args.push("--session", input.sessionId)
-  args.push("--", input.message)
-  return args
+export function reportedModel(event: Record<string, unknown>): string | undefined {
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined)
+  const record = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+  const pair = (source: Record<string, unknown> | undefined) => {
+    if (!source) return undefined
+    const provider = text(source["providerID"])
+    const id = text(source["modelID"])
+    if (provider && id) return `${provider}/${id}`
+    return id
+  }
+  const direct = text(event["model"]) ?? pair(event)
+  if (direct) return direct
+  const part = record(event["part"])
+  const fromPart = text(part?.["model"]) ?? pair(record(part?.["model"])) ?? pair(part)
+  if (fromPart) return fromPart
+  const message = record(event["message"])
+  const fromMessage = text(message?.["model"])
+  if (fromMessage) return fromMessage
+  const usage = record(event["modelUsage"])
+  const names = usage ? Object.keys(usage).filter((name) => name.trim().length > 0) : []
+  return names.length === 1 ? names[0] : undefined
+}
+
+function rememberModel(talk: Talk, model: string | undefined): Talk {
+  const named = model?.trim()
+  if (!named) return talk
+  const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
+  const remembered = { ...talk, pendingTurn: { ...pending, model: named } }
+  /*
+   * A bot on nikcli's default model starts its turn `metered`: the default
+   * can be paid. Once the turn names a free model, it was free, and what it
+   * already counted goes with it (Verifiche, live 3: «Predefinito» turns on
+   * a :free model summed as «a consumo»). The test is `isFreeModel`'s, in
+   * runners.ts, which imports this file.
+   */
+  // Only while nothing was paid: a cost above zero is a router's fallback on a paid model, and stays «a consumo».
+  if (talk.turnMode === "metered" && pending.costUsd === 0 && /:free$/i.test(named)) {
+    return { ...spentAs(remembered, "free"), turnFreedFrom: "metered" }
+  }
+  return remembered
+}
+
+/** The turn under way paid for as `mode`, with what it already counted moved over. */
+function spentAs(talk: Talk, mode: TalkSpend): Talk {
+  const from = talk.turnMode
+  const pending = talk.pendingTurn
+  let byMode = talk.byMode
+  const counted = from && pending && byMode?.[from] && (pending.tokens !== 0 || pending.costUsd !== 0)
+  if (from && pending && counted) {
+    const left = { tokens: byMode![from]!.tokens - pending.tokens, costUsd: byMode![from]!.costUsd - pending.costUsd }
+    const rest = { ...byMode }
+    delete rest[from]
+    byMode = addMode(
+      left.tokens > 0 || left.costUsd > 0 ? { ...rest, [from]: left } : rest,
+      mode,
+      pending.tokens,
+      pending.costUsd,
+    )
+  }
+  return { ...talk, turnMode: mode, ...(byMode ? { byMode } : {}) }
+}
+
+/** Keeps the model an event named, for the turn under way. */
+export function noteReportedModel(talk: Talk, event: Record<string, unknown>): Talk {
+  return rememberModel(talk, reportedModel(event))
+}
+
+const TALK_SPENDS: readonly TalkSpend[] = ["plan", "api", "free", "metered"]
+
+function isTalkSpend(value: unknown): value is TalkSpend {
+  return typeof value === "string" && (TALK_SPENDS as readonly string[]).includes(value)
+}
+
+function addMode(
+  byMode: Talk["byMode"],
+  mode: TalkSpend,
+  tokens: number,
+  costUsd: number,
+): NonNullable<Talk["byMode"]> {
+  const prev = byMode?.[mode] ?? { tokens: 0, costUsd: 0 }
+  return { ...byMode, [mode]: { tokens: prev.tokens + tokens, costUsd: prev.costUsd + costUsd } }
+}
+
+/** Adds this event's usage to the turn under way, and keeps it when the turn ends. */
+export function noteTurnUsage(talk: Talk, tokens: number, costUsd: number, close: boolean): Talk {
+  // Made free by its model's name, and then it cost something: it was paid after all.
+  if (costUsd > 0 && talk.turnMode === "free" && talk.turnFreedFrom) {
+    talk = { ...spentAs(talk, talk.turnFreedFrom), turnFreedFrom: undefined }
+  }
+  const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
+  const next = { ...pending, tokens: pending.tokens + tokens, costUsd: pending.costUsd + costUsd }
+  const byMode = talk.turnMode ? addMode(talk.byMode, talk.turnMode, tokens, costUsd) : talk.byMode
+  if (!close) return { ...talk, pendingTurn: next, ...(byMode ? { byMode } : {}) }
+  return {
+    ...talk,
+    pendingTurn: undefined,
+    ...(byMode ? { byMode } : {}),
+    lastTurn: {
+      ...(next.model ? { model: next.model } : {}),
+      tokens: next.tokens,
+      costUsd: next.costUsd,
+      ...(talk.turnMode ? { mode: talk.turnMode } : {}),
+    },
+  }
+}
+
+/** A turn that ended without a result still keeps whatever usage it had gathered. */
+export function sealTurn(talk: Talk): Talk {
+  const pending = talk.pendingTurn
+  if (!pending || (pending.tokens === 0 && pending.costUsd === 0 && !pending.model)) {
+    return pending ? { ...talk, pendingTurn: undefined } : talk
+  }
+  return noteTurnUsage(talk, 0, 0, true)
 }
 
 let sequence = 0
@@ -132,30 +276,15 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     problem: undefined,
     permission: undefined,
     ended: undefined,
+    // One limit must not mark every later turn, including one reloaded from disk.
+    limited: undefined,
+    turnMode: undefined,
+    turnFreedFrom: undefined,
+    pendingTurn: { tokens: 0, costUsd: 0 },
   }
 }
 
 /* ── the JSON events ────────────────────────────────────────────────────── */
-
-interface RunEvent {
-  readonly type: string
-  readonly timestamp?: number
-  readonly sessionID?: string
-  readonly part?: {
-    readonly type?: string
-    readonly text?: string
-    readonly tool?: string
-    readonly state?: {
-      readonly title?: string
-      readonly output?: string
-      readonly input?: unknown
-      readonly status?: string
-    }
-    readonly tokens?: unknown
-    readonly cost?: unknown
-  }
-  readonly error?: unknown
-}
 
 /** How much of a broken event is kept before giving up on it. */
 const MAX_PARTIAL = 256 * 1024
@@ -183,36 +312,10 @@ function errorText(error: unknown): string {
 }
 
 /**
- * Matches the menu `run` draws for a permission, once its colours are gone.
- * The patterns are whatever the tool asked for — a command, a path.
- */
-const PERMISSION_RE = /Permission required:\s*([^\s(]+)\s*\(([^)]*)\)/
-
-/**
- * One line of the process's output, folded into the conversation.
- *
- * A JSON line is an event; any other line is looked at only for the
- * permission menu, and otherwise ignored — nikcli's own logging, a stray
- * warning, the frame of the menu after the question.
- */
-export function applyLine(talk: Talk, line: string, at: number): Talk {
-  return applyJsonLine(
-    talk,
-    line,
-    at,
-    (current, parsed, when) => {
-      if (typeof (parsed as unknown as RunEvent).type !== "string") return current
-      return applyEvent(current, parsed as unknown as RunEvent, when)
-    },
-    noticePermission,
-  )
-}
-
-/**
  * One line of a process that prints one JSON object per line, folded in by
  * `onEvent`. Shared by every runner: the reassembly of an event ConPTY cut
  * into rows is the same whoever wrote it. `onOther` sees the lines that are
- * not JSON (nikcli uses it for its permission menu).
+ * not JSON.
  */
 export function applyJsonLine(
   talk: Talk,
@@ -260,6 +363,38 @@ function parseObject(line: string): Record<string, unknown> | undefined {
   }
 }
 
+/**
+ * How much of a tool's printout is kept.
+ *
+ * The rest is what filled localStorage until a reload lost the thread (review
+ * M3). A key in the kept part is replaced; a key past the cut is dropped.
+ */
+export const TOOL_OUTPUT_MAX = 16 * 1024
+
+const truncatedMark = () => `\n${t("bots.talk.truncated")}`
+
+/** A tool printout safe to show and to store: keys out, then the size cap. */
+export function limitToolOutput(text: string): string {
+  const clean = scrubSecrets(text)
+  const mark = truncatedMark()
+  if (clean.length <= TOOL_OUTPUT_MAX) return clean
+  return clean.slice(0, TOOL_OUTPUT_MAX - mark.length) + mark
+}
+
+function forStorage<T extends { readonly role: TalkRole; readonly text: string; readonly output?: string }>(
+  message: T,
+): T {
+  if (message.role === "tool") {
+    return {
+      ...message,
+      text: scrubSecrets(message.text),
+      ...(message.output !== undefined ? { output: limitToolOutput(message.output) } : {}),
+    }
+  }
+  if (message.role === "error" || message.role === "bot") return { ...message, text: scrubSecrets(message.text) }
+  return message
+}
+
 /** A message put on the thread, with an id of its kind. Used by the runners' adapters. */
 export function appendMessage(
   talk: Talk,
@@ -269,16 +404,41 @@ export function appendMessage(
     readonly tool?: string
     readonly output?: string
     readonly id?: string
+    readonly memoryUndo?: string
   },
   at: number,
 ): Talk {
   const prefix = message.role === "user" ? "u" : message.role === "bot" ? "b" : message.role === "tool" ? "t" : "e"
-  const { id, ...rest } = message
+  const { id, ...rest } = forStorage(message)
   return {
     ...talk,
     messages: [...talk.messages, { ...rest, id: id ?? nextId(prefix, at), at }],
     updatedAt: at,
   }
+}
+
+/**
+ * A message put on the thread, or put in place of the one with its id: nikcli's
+ * server sends a part whole each time it changes (B8d), a text as it grows and
+ * a tool from running to done. Stored as `appendMessage` stores it; the first
+ * time it came stays its time.
+ */
+export function upsertMessage(
+  talk: Talk,
+  message: {
+    readonly id: string
+    readonly role: TalkRole
+    readonly text: string
+    readonly tool?: string
+    readonly output?: string
+  },
+  at: number,
+): Talk {
+  const index = talk.messages.findIndex((existing) => existing.id === message.id)
+  if (index < 0) return appendMessage(talk, message, at)
+  const messages = talk.messages.slice()
+  messages[index] = { ...forStorage(message), at: messages[index]!.at }
+  return { ...talk, messages, updatedAt: at }
 }
 
 /** Adds what a tool printed to the tool message with that id, when it is on the thread. */
@@ -287,96 +447,15 @@ export function attachOutput(talk: Talk, id: string, output: string): Talk {
   const index = talk.messages.findIndex((message) => message.id === id)
   if (index < 0) return talk
   const messages = talk.messages.slice()
-  messages[index] = { ...messages[index]!, output }
+  messages[index] = { ...messages[index]!, output: limitToolOutput(output) }
   return { ...talk, messages }
 }
 
 export { sumTokens, errorText }
 
-function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
-  const when = typeof event.timestamp === "number" ? event.timestamp : at
-  const withSession = event.sessionID && !talk.sessionId ? { ...talk, sessionId: event.sessionID } : talk
-
-  switch (event.type) {
-    case "text": {
-      const text = event.part?.text ?? ""
-      if (text.trim().length === 0) return withSession
-      return {
-        ...withSession,
-        messages: [...withSession.messages, { id: nextId("b", when), role: "bot", text, at: when }],
-        updatedAt: when,
-      }
-    }
-    case "tool_use": {
-      const tool = event.part?.tool ?? "tool"
-      const state = event.part?.state
-      const title =
-        state?.title ||
-        (state?.input && typeof state.input === "object" && Object.keys(state.input as object).length > 0
-          ? JSON.stringify(state.input)
-          : tool)
-      const output = typeof state?.output === "string" && state.output.trim().length > 0 ? state.output : undefined
-      return {
-        ...withSession,
-        messages: [
-          ...withSession.messages,
-          { id: nextId("t", when), role: "tool", tool, text: title, ...(output ? { output } : {}), at: when },
-        ],
-        updatedAt: when,
-      }
-    }
-    case "step_finish": {
-      const tokens = sumTokens(event.part?.tokens)
-      const cost = typeof event.part?.cost === "number" ? event.part.cost : 0
-      return { ...withSession, tokens: withSession.tokens + tokens, costUsd: withSession.costUsd + cost }
-    }
-    case "error": {
-      const text = errorText(event.error)
-      return {
-        ...withSession,
-        status: "error",
-        messages: [...withSession.messages, { id: nextId("e", when), role: "error", text, at: when }],
-        updatedAt: when,
-      }
-    }
-    default:
-      return withSession
-  }
-}
-
-/**
- * The permission menu, seen in the raw output.
- *
- * Called on whole lines and on raw chunks alike: the menu is drawn by a
- * prompt library that repaints in place and may never end its line.
- */
-export function noticePermission(talk: Talk, raw: string, at: number): Talk {
-  if (talk.permission) return talk
-  const match = PERMISSION_RE.exec(stripAnsi(raw))
-  if (!match) return talk
-  return {
-    ...talk,
-    status: "waiting",
-    permission: { permission: match[1] ?? "", patterns: match[2] ?? "", askedAt: at },
-    updatedAt: at,
-  }
-}
-
 export type PermissionAnswer = "once" | "always" | "reject"
 
-/**
- * The keystrokes that pick an answer in the menu.
- *
- * The menu starts on "Allow once"; "Always" is one arrow-down below it and
- * "Reject" two. Arrow-down is the CSI sequence a terminal sends for the key.
- */
-export function answerKeys(answer: PermissionAnswer): string {
-  const down = "[B"
-  const steps = answer === "once" ? 0 : answer === "always" ? 1 : 2
-  return down.repeat(steps) + "\r"
-}
-
-/** After the keystrokes are sent: the question is gone, the turn goes on. */
+/** After the answer is sent: the question is gone, the turn goes on. */
 export function permissionAnswered(talk: Talk, at: number): Talk {
   return { ...talk, permission: undefined, status: "working", updatedAt: at }
 }
@@ -385,7 +464,8 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * The process is gone. A clean exit ends the turn; anything else, with no
  * error already on the thread, is said once so the silence has a reason.
  */
-export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli"): Talk {
+export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli", lastWords?: string): Talk {
+  talk = sealTurn(talk)
   const limited = withLimitNotice(talk, code, at, program)
   if (limited) return limited
   if (code === 0 || code === null) {
@@ -399,7 +479,18 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
     updatedAt: at,
     messages: alreadySaid
       ? talk.messages
-      : [...talk.messages, { id: nextId("e", at), role: "error", text: `${program} è uscito con codice ${code}.`, at }],
+      : [
+          ...talk.messages,
+          {
+            id: nextId("e", at),
+            role: "error",
+            // The CLI's last plain line — its error on stderr, which shares the stream — says why.
+            text: lastWords
+              ? t("bots.talk.exitedBecause", program, code ?? 0, scrubSecrets(lastWords))
+              : t("bots.talk.exited", program, code ?? 0),
+            at,
+          },
+        ],
   }
 }
 
@@ -417,6 +508,7 @@ function withLimitNotice(talk: Talk, code: number | null, at: number, program: s
   const notice = limitNotice(program)
   return {
     ...talk,
+    limited: true,
     status: "error",
     permission: undefined,
     updatedAt: at,
@@ -442,13 +534,13 @@ export function applyProblem(talk: Talk, problem: string, at: number): Talk {
  * bot's own description, which is what a contact with no history has.
  */
 export function lastLine(talk: Talk, fallback: string): string {
-  if (talk.status === "waiting" && talk.permission) return `Chiede il permesso: ${talk.permission.permission}`
+  if (talk.status === "waiting" && talk.permission) return t("bots.lastLine.permission", talk.permission.permission)
   const last = talk.messages.at(-1)
   if (!last) return fallback
   const oneLine = (text: string) => text.replace(/\s+/g, " ").trim()
   switch (last.role) {
     case "user":
-      return `Tu: ${oneLine(last.text)}`
+      return t("bots.lastLine.you", oneLine(last.text))
     case "tool":
       return `${last.tool}: ${oneLine(last.text)}`
     case "error":
@@ -466,16 +558,15 @@ export function lastLine(talk: Talk, fallback: string): string {
 export function formatWhen(at: number | undefined, now: number): string {
   if (at === undefined) return ""
   const diff = now - at
-  if (diff < 60_000 && diff > -60_000) return "ora"
+  if (diff < 60_000 && diff > -60_000) return t("bots.when.now")
   const date = new Date(at)
   const today = new Date(now)
   const sameDay = date.toDateString() === today.toDateString()
   if (sameDay) return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
   const yesterday = new Date(now - 86_400_000)
-  if (date.toDateString() === yesterday.toDateString()) return "ieri"
-  if (diff < 6 * 86_400_000 && diff > 0) return ["dom", "lun", "mar", "mer", "gio", "ven", "sab"][date.getDay()] ?? ""
-  const months = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
-  return `${date.getDate()} ${months[date.getMonth()] ?? ""}`
+  if (date.toDateString() === yesterday.toDateString()) return t("bots.when.yesterday")
+  if (diff < 6 * 86_400_000 && diff > 0) return t("bots.when.weekday", date.getDay())
+  return `${date.getDate()} ${t("bots.when.month", date.getMonth())}`
 }
 
 /**
@@ -502,15 +593,58 @@ export function mentionIn(
 
 const SAVED_MESSAGES = 200
 
+/**
+ * The whole archive, in characters of JSON.
+ *
+ * One key, not the whole of localStorage, and still small enough that the
+ * write fits the WebView quota. Older messages go first when it does not.
+ */
+export const TALK_ARCHIVE_MAX = 256 * 1024
+
 /** The thread as text for storage. Trimmed, and never mid-turn: a reload ends whatever was running. */
 export function serializeTalk(talk: Talk): string {
-  return JSON.stringify({
-    sessionId: talk.sessionId,
-    messages: talk.messages.slice(-SAVED_MESSAGES),
-    tokens: talk.tokens,
-    costUsd: talk.costUsd,
-    updatedAt: talk.updatedAt,
-  })
+  let messages = talk.messages.slice(-SAVED_MESSAGES).map((message) => forStorage(message))
+  const pack = (list: readonly TalkMessage[]) =>
+    JSON.stringify({
+      sessionId: talk.sessionId,
+      messages: list,
+      tokens: talk.tokens,
+      costUsd: talk.costUsd,
+      ...(talk.lastTurn ? { lastTurn: talk.lastTurn } : {}),
+      ...(talk.byMode ? { byMode: talk.byMode } : {}),
+      updatedAt: talk.updatedAt,
+    })
+  let encoded = pack(messages)
+  while (encoded.length > TALK_ARCHIVE_MAX && messages.length > 1) {
+    messages = messages.slice(1)
+    encoded = pack(messages)
+  }
+  return encoded
+}
+
+function parseLastTurn(value: unknown): LastTurn | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as { model?: unknown; tokens?: unknown; costUsd?: unknown }
+  const tokens = typeof record.tokens === "number" ? record.tokens : 0
+  const costUsd = typeof record.costUsd === "number" ? record.costUsd : 0
+  const model = typeof record.model === "string" && record.model.trim() ? record.model : undefined
+  const mode = isTalkSpend((record as { mode?: unknown }).mode) ? (record as { mode: TalkSpend }).mode : undefined
+  if (!model && tokens === 0 && costUsd === 0 && !mode) return undefined
+  return { ...(model ? { model } : {}), tokens, costUsd, ...(mode ? { mode } : {}) }
+}
+
+function parseByMode(value: unknown): Talk["byMode"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const out: Partial<Record<TalkSpend, ModeTotal>> = {}
+  for (const mode of TALK_SPENDS) {
+    const row = (value as Record<string, unknown>)[mode]
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue
+    const tokens = (row as { tokens?: unknown }).tokens
+    const costUsd = (row as { costUsd?: unknown }).costUsd
+    if (typeof tokens !== "number" || typeof costUsd !== "number") continue
+    out[mode] = { tokens, costUsd }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /** The stored thread, tolerating anything: an unreadable one is an empty one. */
@@ -535,6 +669,14 @@ export function parseTalk(raw: string | null | undefined): Talk {
       messages,
       tokens: typeof parsed.tokens === "number" ? parsed.tokens : 0,
       costUsd: typeof parsed.costUsd === "number" ? parsed.costUsd : 0,
+      ...(() => {
+        const last = parseLastTurn(parsed.lastTurn)
+        return last ? { lastTurn: last } : {}
+      })(),
+      ...(() => {
+        const byMode = parseByMode((parsed as { byMode?: unknown }).byMode)
+        return byMode ? { byMode } : {}
+      })(),
       ...(typeof parsed.updatedAt === "number" ? { updatedAt: parsed.updatedAt } : {}),
     }
   } catch {
@@ -542,7 +684,31 @@ export function parseTalk(raw: string | null | undefined): Talk {
   }
 }
 
-/** Where a bot's thread is kept. The path, because the identifier repeats across scopes. */
-export function talkKey(path: string): string {
-  return `ade.bots.talk:${path}`
+/** Prefix of every stored thread. A newline after it means the project is part of the key. */
+export const TALK_KEY_PREFIX = "ade.bots.talk:"
+
+/**
+ * Where a bot's thread is kept.
+ *
+ * The path, because the identifier repeats across scopes, and the open
+ * project: a global bot's file is the same path in every project, and its
+ * session id must not follow it into the next one.
+ */
+export function talkKey(path: string, project = ""): string {
+  return `${TALK_KEY_PREFIX}${project}\n${path}`
+}
+
+/** A thread saved before the project was part of the key: `ade.bots.talk:<path>`, with no newline. */
+export function isLegacyTalkKey(key: string): boolean {
+  return key.startsWith(TALK_KEY_PREFIX) && !key.slice(TALK_KEY_PREFIX.length).includes("\n")
+}
+
+/**
+ * Whether the thread has anything to total. Before a turn it has not, and
+ * «in questa conversazione:» stood by the composer followed by nothing
+ * (bot-sforzo, A occhio).
+ */
+export function hasThreadTotals(talk: Pick<Talk, "tokens" | "costUsd" | "byMode">): boolean {
+  if (talk.tokens > 0 || talk.costUsd > 0) return true
+  return Object.values(talk.byMode ?? {}).some((row) => row !== undefined)
 }

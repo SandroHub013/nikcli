@@ -72,7 +72,35 @@ export async function discoverProject(host: Host, startDir: string): Promise<Pro
  * browser harness has no such method and needs none.
  */
 async function allowWrites(host: Host, root: string): Promise<void> {
-  await host.allowWriteRoot?.(root)
+  // A root the host refused (a home folder, a drive) is no root for a link either.
+  const allowed = host.allowWriteRoot ? await host.allowWriteRoot(root) : true
+  if (allowed) granted.add(root)
+}
+
+/* The roots granted this session, in the order they were: the same set `WriteRoots` holds on the Rust side. */
+const granted = new Set<string>()
+
+/**
+ * The roots this window has been granted: every project opened, reopened or
+ * restored since it started, and nothing else — not the recents list, which
+ * remembers projects that were open once. The same roots the host writes to
+ * and `ade-media` serves (audit 0.7.7, D1-2), so a link opens inside exactly
+ * what the rest of ADE may touch.
+ */
+export function grantedRoots(): string[] {
+  return [...granted]
+}
+
+/**
+ * Whether a saved root — a recent project, a Space, the one restored at start
+ * — no longer exists on disk. Asked before opening it: `git` run in a folder
+ * that is gone fails, and the project would open on nothing, with its
+ * sessions failing to start in it. A remote Space is never missing here, and
+ * without a way to ask, or when asking fails, the folder is taken as there.
+ */
+export async function rootMissing(host: Pick<Host, "exists">, root: string): Promise<boolean> {
+  if (!root || isRemoteRoot(root) || !host.exists) return false
+  return !(await host.exists(root).catch(() => true))
 }
 
 /**

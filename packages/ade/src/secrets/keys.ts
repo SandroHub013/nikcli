@@ -173,6 +173,55 @@ export async function runKeysCommand(controller: KeysController, request: PanelR
   return { ok: false, reason: `verbo sconosciuto: ${request.verb}` }
 }
 
+/** The session that wrote `@ade keys ask`: its pane's name and its agent. */
+export interface KeyAsker {
+  readonly title: string
+  readonly agentId: string
+}
+
+/** How long an agent's reason is shown: a paragraph, not a page. */
+export const KEY_REASON_MAX = 300
+
+/**
+ * What the key request says (review of review-alti, 1.3). The dialog was
+ * already the question, since nothing is saved without a value the user
+ * types; it did not say who asked, and showed the agent's reason as if ADE
+ * said it. Now it names the pane and the agent, gives the reason as the
+ * agent's words, and says the key goes to that agent at its next start.
+ */
+export function keyRequestText(input: {
+  readonly env: string
+  readonly reason: string
+  readonly asker?: KeyAsker
+  readonly agentLabel: (id: string) => string
+}): {
+  readonly title: string
+  /** The agent's reason, cut short, without control characters; undefined when it gave none. */
+  readonly says?: string
+  readonly goes: string
+} {
+  const reason = input.reason.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim()
+  const says = reason.length > KEY_REASON_MAX ? `${reason.slice(0, KEY_REASON_MAX - 1)}…` : reason
+  const agent = input.asker ? input.agentLabel(input.asker.agentId) : undefined
+  return {
+    title: input.asker
+      ? t("keys.request.from", input.asker.title, agent!, input.env)
+      : t("keys.request.title", input.env),
+    ...(says ? { says } : {}),
+    goes: agent ? t("keys.request.goes", agent) : t("keys.request.hint"),
+  }
+}
+
+/** The agents a requested key is given to: the ones it has, and the asking agent. */
+export function keyRequestAgents(
+  existing: readonly string[] | undefined,
+  asker: KeyAsker | undefined,
+): readonly string[] {
+  const agents = [...(existing ?? [])]
+  if (asker && !agents.includes(asker.agentId)) agents.push(asker.agentId)
+  return agents
+}
+
 /** "3 giorni fa", "oggi": when a key was added. */
 export function addedLabel(createdMs: number, now: number): string {
   if (!createdMs) return ""

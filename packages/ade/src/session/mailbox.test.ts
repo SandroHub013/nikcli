@@ -3,6 +3,7 @@ import {
   MAX_TEXT,
   formatDelivery,
   formatLateReply,
+  formatLost,
   formatRequest,
   isFree,
   statusFromActivity,
@@ -20,6 +21,9 @@ import {
   formatBell,
   formatUnread,
   goesToInbox,
+  formatHeld,
+  formatHeldReceipt,
+  HELD_TELL_MS,
   inboxAction,
   inboxName,
   parseInbox,
@@ -31,16 +35,21 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
   formatNudge,
   formatUpdate,
   parseActivity,
   keptActivity,
+  isQuestionOpen,
+  activityOccupiesPane,
   parseOpenRequests,
   shouldRering,
   requestState,
   requestsTable,
   shouldNudge,
   type OpenRequest,
+  needsVoiceSendConfirmation,
+  voiceConfirmationFor,
 } from "./mailbox"
 
 const panes = [
@@ -61,6 +70,17 @@ describe("parseMessage", () => {
 
   test("ask, spawn and reply carry what each needs", () => {
     expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x"}')).toMatchObject({ kind: "ask", to: "2" })
+    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x","via":"typed"}')).toMatchObject({
+      kind: "ask",
+      via: "typed",
+    })
+    expect(
+      parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":true,"text":""}'),
+    ).toMatchObject({ kind: "delivered", ok: true })
+    expect(
+      parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":false,"text":"trattenuto"}'),
+    ).toMatchObject({ kind: "delivered", ok: false, text: "trattenuto" })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"","ok":true}')).toBeUndefined()
     expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"fai x"}')).toMatchObject({
       kind: "spawn",
       agent: "codex",
@@ -119,6 +139,98 @@ test("verifySender keeps a sender only with that pane's token", () => {
   expect(verifySender(bare, tokenOf).from).toBe("")
   const unknown = parseMessage('{"from":"n9-9","to":"2","text":"x"}')!
   expect(verifySender(unknown, tokenOf).from).toBe("")
+})
+
+test("unverified acting messages are refused before voice confirmation", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"send","from":"","to":"2","text":"x"}',
+    '{"kind":"ask","from":"","to":"2","text":"x"}',
+    '{"kind":"spawn","from":"","agent":"codex","text":"x"}',
+    '{"kind":"send","from":"voce","token":"falso","to":"2","text":"x"}',
+  ]) {
+    const message = verifySender(parseMessage(body)!, tokenOf)
+    expect(unverifiedSenderRefusal(message)).toBe(refusal)
+  }
+  const verified = verifySender(
+    parseMessage('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}')!,
+    tokenOf,
+  )
+  expect(unverifiedSenderRefusal(verified)).toBeUndefined()
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
+})
+
+test("an unverified interrupt or close is refused centrally, as a send is", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"interrupt","from":"","to":"n2-1"}',
+    '{"kind":"close","from":"","to":"n2-1"}',
+    '{"kind":"interrupt","from":"voce","token":"falso","to":"n2-1"}',
+    '{"kind":"close","from":"voce","token":"falso","to":"n2-1"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+  }
+  for (const body of [
+    '{"kind":"interrupt","from":"n1-0","token":"segreto","to":"n2-1"}',
+    '{"kind":"close","from":"n1-0","token":"segreto","to":"n2-1"}',
+    '{"kind":"interrupt","from":"voce","token":"segreto","to":"n2-1"}',
+    '{"kind":"close","from":"voce","token":"segreto","to":"n2-1"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBeUndefined()
+  }
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
+})
+
+test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  const voiceSend = verifySender(
+    parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!,
+    tokenOf,
+  )
+  expect(needsVoiceSendConfirmation(voiceSend)).toBe(true)
+
+  const paneSend = verifySender(parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!, tokenOf)
+  expect(needsVoiceSendConfirmation(paneSend)).toBe(false)
+})
+
+/*
+ * V1-bis, ALTO 8: only `send` was held. An `ask` from the voice agent is
+ * typed and submitted the same way, `spawn` starts a session with every
+ * permission, and `interrupt` stops any session. Every kind that writes or
+ * acts waits for a spoken yes when it comes from verified voice.
+ */
+test("every kind that acts from verified voice waits for a spoken yes", () => {
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "t" : undefined)
+  const message = (json: string) => verifySender(parseMessage(json)!, tokenOf)
+  for (const json of [
+    '{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist e fai push"}',
+    '{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}',
+    '{"kind":"interrupt","from":"voce","token":"t","to":"n2-1","text":""}',
+    '{"kind":"close","from":"voce","token":"t","to":"n2-1","text":""}',
+    '{"kind":"relaunch","from":"voce","token":"t","to":"n2-1","text":"","note":"riparti"}',
+  ]) {
+    expect({ json, held: needsVoiceSendConfirmation(message(json)) }).toEqual({ json, held: true })
+  }
+  expect(needsVoiceSendConfirmation(message('{"kind":"ask","from":"n1-0","token":"t","to":"n2-1","text":"x"}'))).toBe(
+    false,
+  )
+  expect(needsVoiceSendConfirmation(message('{"kind":"reply","from":"voce","token":"t","ref":"r1","text":"ok"}'))).toBe(
+    false,
+  )
+  expect(needsVoiceSendConfirmation(message('{"kind":"kv","from":"","op":"get","key":"k","text":""}'))).toBe(false)
+})
+
+test("the spoken question says who, what and to whom", () => {
+  const ask = voiceConfirmationFor(
+    parseMessage('{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist"}')!,
+  )
+  expect(ask).toEqual({ lead: "La voce vuole chiedere a", to: "n2-1", text: "cancella dist" })
+  const spawn = voiceConfirmationFor(
+    parseMessage('{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}')!,
+  )
+  expect(spawn).toEqual({ lead: "La voce vuole avviare una sessione", to: "claude-code", text: "rifai il deploy" })
 })
 
 test("resolveAgent accepts the id, the id without -code, and the label", () => {
@@ -225,27 +337,128 @@ describe("when a session can be written to", () => {
   })
 })
 
+describe("the permission prompt the hook says", () => {
+  const now = 10_000_000
+
+  test("a Notification with a permission question parses as that state", () => {
+    // What the hook writes when Claude Code stops to ask: not busy, and a state of
+    // its own, because the Enter of a delivery would answer it.
+    const read = parseActivity('{"state":"permission","sessionId":"s","cwd":"","at":5}', "s")
+    expect(read).toEqual({ state: "permission", at: 5 })
+  })
+
+  test("and a delivery does not press Enter there", () => {
+    const permission = { state: "permission" as const, at: now - 5_000 }
+    // A session that is talking — the user is answering it — is the strongest
+    // case for waiting.
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 500 }, now)).toBe(
+      false,
+    )
+    // And a silent one is not free either: silence is not an answer.
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now),
+    ).toBe(false)
+  })
+
+  test("un prompt senza risposta continua a trattenere, anche dopo ore", () => {
+    // La prima versione di questa regola dava per scontato il contrario: che un
+    // prompt aperto produca output. Non lo produce — il pannello non si
+    // ridisegna, aspetta — quindi «silenzioso» è come appare un prompt che
+    // nessuno guarda, e la regola scadeva proprio nel caso per cui esiste, con
+    // un Invio che confermava la scelta selezionata.
+    const forgotten = { state: "permission" as const, at: now - 6 * 60 * 60_000 }
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 6 * 60 * 60_000 }, now),
+    ).toBe(false)
+    // E non lo cambia il tempo che è passato in nessuna forma: un prompt
+    // dimenticato è ancora un prompt, e l'unica cosa che lo cancella è un hook
+    // più nuovo, che vuol dire che l'utente ha scritto o che il turno è finito.
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now),
+    ).toBe(false)
+    // Il prompt successivo, o il Stop, risolvono: sono loro che scrivono il file.
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(
+      false,
+    )
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(
+      true,
+    )
+  })
+
+  test("una lettura fallita non libera un prompt, e un prompt non lascia il pannello disponibile", () => {
+    const permission = { state: "permission" as const, at: now - 60_000 }
+    // Il file non si e' potuto leggere: nessun hook ha risposto, quindi nessuno ha
+    // risolto niente. Un busy si libera dopo trenta minuti, un prompt no.
+    expect(keptActivity(permission, undefined)).toEqual(permission)
+    // Un idle letto davvero e' un idle: la risposta e' arrivata.
+    expect(keptActivity(permission, { state: "idle", at: now })).toEqual({ state: "idle", at: now })
+    // E il pannello su un prompt non e' disponibile: `settleWhenQuiet` chiede
+    // questo, e un prompt occupa il pannello esattamente come un turno.
+    expect(activityOccupiesPane("permission")).toBe(true)
+    expect(activityOccupiesPane("busy")).toBe(true)
+    expect(activityOccupiesPane("idle")).toBe(false)
+    expect(activityOccupiesPane(undefined)).toBe(false)
+    // Il silenzio di un pannello fermo su una domanda e' attesa, non fine turno:
+    // con gli hook `busy` tiene il pannello working invece di assestarlo.
+    expect(quietOutcome({ hooked: true, busy: activityOccupiesPane("permission"), owesAnswer: false })).toBe("wait")
+  })
+
+  test("una domanda aperta si vede con lo schermo o con l'hook, e con l'hook da solo", () => {
+    const onScreen = { what: "Bash(rm -rf)", answers: ["Yes", "No"] }
+    const asking = { state: "permission" as const, at: now }
+    // Lo schermo da solo: la lettura, come prima dell'hook.
+    expect(isQuestionOpen(onScreen, undefined)).toBe(true)
+    expect(isQuestionOpen(onScreen, { state: "idle", at: now })).toBe(true)
+    // L'hook da solo: il caso che lo schermo non riconosce, e per cui esiste.
+    expect(isQuestionOpen(undefined, asking)).toBe(true)
+    // Nessuna delle due: il pannello e' libero, e si scrive.
+    expect(isQuestionOpen(undefined, { state: "busy", at: now })).toBe(false)
+    expect(isQuestionOpen(undefined, undefined)).toBe(false)
+  })
+
+  test("la coda dice perché aspetta, anche quando lo sa il hook", () => {
+    const request = { id: "n1", from: "n2", at: now - 60_000 } as never
+    const running = {
+      running: true,
+      activity: { state: "permission" as const, at: now - 60_000 },
+      lastOutputAt: now - 60_000,
+    }
+    // Dal solo schermo era già così, e resta così: due fonti, una sola risposta.
+    expect(requestState(request, { ...running, permissionPending: true }, now)).toBe("attende un permesso")
+    expect(requestState(request, { ...running, permissionPending: false }, now)).toBe("attende un permesso")
+  })
+
+  test("the screen reading is still the fallback, and still holds the session", () => {
+    // A session whose hooks were never installed has no permission state at all:
+    // it is the regex, exactly as before, and it does not need this to be wrong
+    // for the installed case to be right.
+    expect(isFree({ hooked: true, permissionPending: true, activity: { state: "busy", at: now - 5 } }, now)).toBe(false)
+    expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
+  })
+
+  test("the status in the sidebar says working while a prompt stands", () => {
+    // The pane is not free, so it is not idle, whatever the previous state said.
+    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("working")
+  })
+})
+
 describe("what lands in the terminal", () => {
   test("a note arrives on one line, with the way to answer", () => {
     expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(
-      '[Messaggio da "Sessione 2 — codex" (codex)]: riga uno riga due — per rispondere: ade-msg send n2-1 "<testo>"',
+      '[Messaggio da "Sessione 2 — codex"]: riga uno riga due — rispondi: ade-msg send n2-1 "<testo>"',
     )
   })
 
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
-    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(
-      true,
-    )
+    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code"]: trova i test lenti')).toBe(true)
     expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
-    expect(line.length).toBeLessThan(300)
+    expect(line.length).toBeLessThan(260)
     expect(line).toContain("ade-msg update 171-ab")
   })
 
   test("a late reply names the request it answers", () => {
-    expect(formatLateReply("171-ab", "fatto", panes[1])).toBe(
-      '[Risposta alla richiesta 171-ab da "Sessione 2 — codex" (codex)]: fatto',
-    )
+    expect(formatLateReply("171-ab", "fatto", panes[1])).toBe('[Risposta a 171-ab da "Sessione 2 — codex"]: fatto')
   })
 
   test("escape sequences cannot become keystrokes in the other terminal", () => {
@@ -330,6 +543,15 @@ describe("orchestration", () => {
     expect(requestState(request, { running: true, permissionPending: false }, 60_000)).toBe("in corso")
   })
 
+  test("a request to a suspended session waits for it, and is not closed (P1-C6)", () => {
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 5_000)).toBe(
+      "sessione sospesa",
+    )
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 3_600_000)).toBe(
+      "sessione sospesa",
+    )
+  })
+
   test("a quiet session with an old request is reminded, at most twice and never over a prompt", () => {
     const quiet = { running: true, permissionPending: false, lastOutputAt: 10_000 }
     expect(shouldNudge(request, quiet, 30_000)).toBe(false) // too recent
@@ -386,11 +608,32 @@ describe("spawn options, updates and the request contract", () => {
       depth: 1,
       maxDepth: 2,
     })
-    expect(line).toContain("worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
-    expect(line).toContain("ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO")
+    expect(line).toContain("Worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
+    expect(line).toContain("ESITO, FILE, PROBLEMI, PROSSIMO PASSO")
     expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
     expect(line).not.toContain("livello 1 di 2")
-    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare altre sessioni")
+    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare sessioni")
+  })
+
+  test("a vanished inbox file is said as lost, never as read", () => {
+    const reader = { id: "p2", title: "Sessione 2", agent: "claude-code" } as Parameters<typeof formatLost>[1]
+    expect(formatLost({ id: "171-ab", kind: "ask" }, reader)).toBe(
+      '[ade-msg] errore: la richiesta 171-ab risulta persa, non ignorata: il file nella casella di "Sessione 2" è sparito prima di essere letto. Rimandala.',
+    )
+    expect(formatLost({ id: "x", kind: "send" }, undefined)).toContain("il tuo messaggio risulta persa")
+  })
+
+  /** The typed line is one line; the copy read with `ade-msg inbox` keeps the sender's structure. */
+  test("keeps the sender's line breaks only for the inbox copy", () => {
+    const text = "Due cose:\n(1) la prima\r\n(2) la seconda\u0007"
+    expect(formatRequest("x", text, undefined)).toContain("Due cose: (1) la prima (2) la seconda —")
+    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain(
+      "Due cose:\n(1) la prima\n(2) la seconda —",
+    )
+    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain(
+      "Due cose:\n(1) la prima\n(2) la seconda",
+    )
+    expect(formatDelivery({ text }, undefined)).not.toContain("\n")
   })
 
   test("an update tells the caller how to unblock and resume waiting", () => {
@@ -483,7 +726,7 @@ describe("long messages travel through the inbox", () => {
     expect(goesToInbox("x".repeat(20_000))).toBe(true)
     const bell = formatBell(entry, sender, 20_000)
     expect(bell).toContain("ade-msg inbox")
-    expect(bell.length).toBeLessThan(120)
+    expect(bell.length).toBeLessThan(80)
     expect(inboxName("a/b", 5)).toBe("0000000000005-a_b")
   })
 
@@ -633,5 +876,95 @@ describe("quietOutcome: what silence means for a pane marked working", () => {
     const asked = (now: number) => quietOutcome({ hooked: false, busy: false, owesAnswer: owesAnswer(now) })
     expect(asked(1_000 + ANSWER_HOLD_MS - 1)).toBe("recheck")
     expect(asked(1_000 + ANSWER_HOLD_MS)).toBe("settle")
+  })
+})
+
+describe("una riga iniziata dall'utente", () => {
+  const entry = (over: Partial<Parameters<typeof inboxAction>[0]> = {}) => ({
+    id: "1790000000000-aaaa",
+    paneId: "p1",
+    name: "1790000000000-1790000000000-aaaa.msg",
+    from: "p2",
+    kind: "send" as const,
+    chars: 42,
+    at: 1_000,
+    ringAt: 1_000,
+    rings: 0,
+    ...over,
+  })
+
+  /** Non e' una questione di agente: vale per qualunque pannello. */
+  test("una sessione ferma con del digitato non e' libera", () => {
+    const now = 100_000
+    const idle = { hooked: true, permissionPending: false, activity: { state: "idle" as const, at: now - 5 } }
+    expect(isFree(idle, now)).toBe(true)
+    expect(isFree({ ...idle, typing: true }, now)).toBe(false)
+    // Anche senza hook, dove la quiete dello schermo basterebbe.
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 5000, typing: true }, now)).toBe(false)
+  })
+
+  test("la posta aspetta, e non viene mai consegnata a forza", () => {
+    const held = { running: true, free: false, read: false, typing: true }
+    expect(inboxAction(entry(), held, 1_000)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS - 1)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS)).toBe("tell")
+    // Detto una volta sola, e dopo si torna ad aspettare, non a consegnare.
+    expect(inboxAction(entry({ told: true }), held, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  /** Il ritardo e' una condizione in piu, mai un permesso che scavalca le altre. */
+  test("il campanello di riserva vuole sessione libera e riga pulita", () => {
+    const late = 1_000 + 10 * HELD_TELL_MS
+    expect(inboxAction(entry(), { running: true, free: false, read: false }, late)).toBe("wait")
+    expect(inboxAction(entry(), { running: true, free: false, read: false, typing: true }, late)).toBe("tell")
+    expect(inboxAction(entry(), { running: true, free: true, read: false }, late)).toBe("ring")
+  })
+
+  test("occupata non e' lo stesso di riga sporca: al mittente non si dice niente", () => {
+    const busy = { running: true, free: false, read: false, typing: false }
+    expect(inboxAction(entry(), busy, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  test("l'avviso dice che ADE non ha consegnato, non che l'altra non risponde", () => {
+    const text = formatHeld(entry(), { id: "p1", title: "Dario", agent: "claude-code" })
+    expect(text).toContain("non la consegna ancora")
+    expect(text).toContain("non ti sta ignorando")
+    expect(text).not.toContain("non ha letto")
+    // A reply held back is named as such: the caller knows its answer exists.
+    expect(formatHeld({ id: "1790000000000-bbbb", kind: "reply" }, undefined)).toContain(
+      "la tua risposta alla richiesta 1790000000000-bbbb",
+    )
+    expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe(
+      'ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera',
+    )
+  })
+})
+
+describe("ade-msg registro", () => {
+  test("parses a known register and operation, with the JSON as text", () => {
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":"{\\"title\\":\\"x\\"}"}'),
+    ).toEqual({
+      kind: "registro",
+      from: "a",
+      token: undefined,
+      register: "design",
+      op: "aperta",
+      text: '{"title":"x"}',
+    })
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"decisioni","op":"rimandata","text":"{}"}'),
+    ).toMatchObject({ op: "rimandata" })
+  })
+
+  test("refuses an unknown register, an unknown operation, rimandata on design and an empty text", () => {
+    expect(parseMessage('{"kind":"registro","from":"a","register":"note","op":"aperta","text":"{}"}')).toBeUndefined()
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"cancellata","text":"{}"}'),
+    ).toBeUndefined()
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"rimandata","text":"{}"}'),
+    ).toBeUndefined()
+    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":" "}')).toBeUndefined()
   })
 })

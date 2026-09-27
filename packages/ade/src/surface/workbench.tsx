@@ -1,20 +1,56 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
-import { every } from "../host/every"
+import {
+  EXISTS_MS,
+  LIST_MS,
+  MINT_MS,
+  MINT_SLOW_LEFT_S,
+  MINT_SLOW_MS,
+  mintTrace,
+  waitForAnswer,
+} from "../session-new/ask-cli"
+import { every, pageHidden, watchDue } from "../host/every"
+import {
+  mustConfirmLeaving,
+  shouldConfirmWindowClose,
+  closeConfirmationMessage,
+  countWorkingSessions,
+  isWorkingAgentPane,
+} from "./before-unload"
+import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
+import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
-import { discoverProject, openProject, type Project } from "../host/project"
-import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
+import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
+import {
+  addRecent,
+  isMissingRecent,
+  missingRecents,
+  parseRecents,
+  removeRecent,
+  serializeRecents,
+  withMissing,
+  withoutMissing,
+  type RecentEntry,
+} from "../host/recent"
 import { pathEquals } from "../host/path"
+import { belongsTo, goneFolder, paneProject } from "./pane-project"
+import { writeWorkbench } from "./workbench-write"
+import { onePickAtATime } from "../record/folder-pick"
+import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
-import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
+import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
+import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
+import { oneAtATime } from "./one-at-a-time"
+import { RunningSessions } from "./running"
+import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
-import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
+import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
   checkName,
@@ -36,10 +72,40 @@ import {
   worktreeAddArgs,
 } from "../session/orchestra"
 import { detectAgents } from "../session-new/availability"
-import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
-import { followReports, newNonce } from "../session-new/agent-link"
+import {
+  RESUME,
+  lastTakenFor,
+  planFork,
+  planLastHere,
+  planMint,
+  startingState,
+  mintMark,
+  MintLedger,
+  lastHereBesideMints,
+  planRestore,
+  restoreClaims,
+  claimedByRestore,
+  openedConversation,
+  LIST_COLS,
+  planResume,
+  planStart,
+  lostConversation,
+  resumePromise,
+  type ResumePlan,
+} from "../session-new/resume"
+import {
+  countingLines,
+  followReports,
+  followedFolder,
+  lastReportedId,
+  newNonce,
+  otherFolder,
+  parseReport,
+} from "../session-new/agent-link"
+import { sameFolder } from "../session-new/folder"
 import {
   HOOK_TARGETS,
+  HOOK_TIMEOUT,
   hookTarget,
   readHookStatus,
   refreshHookScript,
@@ -54,8 +120,17 @@ import {
   ProviderSection,
   RoutineSection,
   SkillsSection,
+  ThemeSection,
 } from "../settings/sections"
+import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
 import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
+import {
+  formatMb,
+  parseUpdateProgress,
+  progressPercent,
+  UPDATE_PROGRESS_EVENT,
+  type UpdateProgress,
+} from "../update/progress"
 import { exitedActivity } from "../grid/activity"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
@@ -67,6 +142,9 @@ import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
+import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
+import { BarQueueButton } from "./bar-queue-button"
+import { queueShown } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
 const isTauriDesktop = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
@@ -118,12 +196,20 @@ async function adeWindowClose() {
     }
   }
 }
+
+function askCloseConfirmation(message: string): Promise<boolean> {
+  return askYesNo(message, { ok: t("window.closeConfirm.ok"), cancel: t("window.closeConfirm.cancel") })
+}
+
+import { askYesNo } from "../host/ask"
+import { createCloser } from "../editor/closer"
 import {
   createWorkbench,
   type Pane,
   addPane,
   closePane,
   updatePane,
+  withPaneNotice,
   isPanelPane,
   expandPane,
   setColumns,
@@ -132,6 +218,7 @@ import {
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
+  exitedToReopen,
   sessionsToResume,
   nextView,
   ADE_VIEW_LABELS,
@@ -140,22 +227,29 @@ import {
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
+import { clearNaturalVoiceFailure, naturalVoiceFailureFor, type NaturalVoiceFailure } from "../agent/onboarding"
 import { Chat } from "../chat/chat"
+import { appChatStore } from "../chat/store"
+import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster } from "../bots/bots"
+import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen } from "./commands"
+import { buildCommands, guardedBySheet, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
 import { RecordConsentDialog } from "../record/consent-dialog"
+import { UpdateDialog } from "../update/update-dialog"
+import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
@@ -174,9 +268,9 @@ import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
 import { markSaved, openBuffer, saveBlockedReason } from "../editor"
-import { detectPermission, isResolved, type PermissionAnswer } from "../session/permission"
+import { detectPermission, followPermission, type PermissionAnswer } from "../session/permission"
 import { readReportLine } from "../session/report"
-import { asOneLine, asSubmittedLine, pasteSettled } from "../session/typing"
+import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import {
   DEFAULT_MAX_SPAWNED,
@@ -186,6 +280,11 @@ import {
   byProject,
   formatCancel,
   formatNudge,
+  updatesAnsweredBy,
+  formatElapsed,
+  formatTimeNote,
+  timeNoteFor,
+  lineIsTaken,
   formatUpdate,
   parseActivity,
   keptActivity,
@@ -201,18 +300,28 @@ import {
   holdsForAnswer,
   quietOutcome,
   isFree,
+  isQuestionOpen,
+  activityOccupiesPane,
   statusFromActivity,
   sameDir,
   formatLateReply,
+  formatLost,
+  noticeTarget,
+  registerAuthor,
   formatRequest,
   parseMessage,
   resolveAgent,
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
+  voiceConfirmationFor,
   type MailPane,
   type Message,
   formatBell,
+  formatHeld,
+  formatHeldReceipt,
+  HELD_BY_LINE,
   formatUnread,
   formatWedged,
   interruptKeys,
@@ -225,6 +334,39 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { createLineQueue } from "../session/line-queue"
+import {
+  deliveryResult,
+  enterAgain,
+  lineGiven,
+  ringAgain,
+  typeThenEnter,
+  type DeliveryResult,
+  type LineOutcome,
+} from "../session/enter"
+import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import {
+  canSuspend,
+  stopForSuspend,
+  offersSuspend,
+  parseSuspendedMail,
+  suspendedDelivery,
+  suspendedMailToSave,
+  keptWithoutProcess,
+  SUSPEND_REASON,
+  type SuspendCheck,
+  type SuspendContext,
+} from "../session/suspend"
+import {
+  formatFallbackLine,
+  formatHandoff,
+  handoffOutcome,
+  parseHandoffs,
+  parseNativeSessions,
+  routeFor,
+  type Handoff,
+  type NativeSession,
+} from "../session/native-mail"
 
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
@@ -238,14 +380,18 @@ import {
   withMemoryEntry,
   type TokenUsage,
 } from "../session/shared"
-import { displayArgs, introArgs, withIntro } from "../session-new/intro"
+import { displayArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
+import { closeAfterSaving } from "./close-window"
+import { createInFlight } from "../session/in-flight"
+import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
-import { createPanelRouter } from "../panels/router"
-import { panelsHelp } from "../panels/protocol"
+import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
+import { acceptsRequests, panelsHelp } from "../panels/protocol"
+import { alternateRows, createScreenRequests } from "../panels/screen-requests"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import {
   formatRequestDetails,
@@ -262,13 +408,25 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { paneShowing, routeForFile } from "./open-route"
+import {
+  createOutsideConfirmationTracker,
+  markdownLinkRefusal,
+  openPathLink,
+  paneShowing,
+  readsText,
+  routeForFile,
+  viewKind,
+} from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
-import { countLabel } from "../decisions/answer"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
+import { ChoicesSheet } from "../choices/choices-sheet"
+import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
+import { createToast } from "./toast"
+import { createSettled } from "./settled"
 import {
   deliveryLine,
   deliveryState,
+  answerItem,
   enqueue,
   markDelivered,
   OUTBOX_KEY,
@@ -280,11 +438,41 @@ import {
   resolveRecipient,
   type RecipientChoice,
   pruneOutbox,
+  reopenLine,
+  resolveDeliveryTarget,
   type OutboxItem,
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
+import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
+import { formatMoment as formatDesignMoment } from "../design/answer"
+import { DesignSheet } from "../design/design-sheet"
+import { Sheet } from "../ui/sheet"
+import {
+  OUTBOX_KEY as DESIGN_OUTBOX_KEY,
+  RECIPIENT_KEY as DESIGN_RECIPIENT_KEY,
+  chooseRecipient as chooseDesignRecipient,
+  deliveryLine as designDeliveryLine,
+  deliveryState as designDeliveryState,
+  answerItem as designAnswerItem,
+  enqueue as enqueueDesign,
+  markDelivered as markDesignDelivered,
+  parseOutbox as parseDesignOutbox,
+  parseRecipients as parseDesignRecipients,
+  pendingFor as pendingForDesign,
+  pruneOutbox as pruneDesignOutbox,
+  reopenLine as designReopenLine,
+  resolveDeliveryTarget as resolveDesignDeliveryTarget,
+  resolveRecipient as resolveDesignRecipient,
+} from "../design/delivery"
+import { createDesignHub } from "../design/hub"
+import { createDesignRegister } from "../design/register"
+import { watchRegisters } from "../host/register-watch"
+import { designPath } from "../design/store"
+import type { DesignProposal } from "../design/state"
+import { mediaUrl } from "../video/video"
+import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
   createMicMeter,
@@ -293,6 +481,14 @@ import {
   createWebSpeechSpeaker,
   createFakeSpeaker,
   createNaturalSpeaker,
+  activeReplyVoice,
+  speakingReplyVoice,
+  isKokoroVoice,
+  type ReplyVoice,
+  interfaceLocale,
+  replyLocale,
+  g2pLocale,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -307,15 +503,23 @@ import {
   holdsToTalk,
   type VoiceEngine,
   type VoiceSettings,
+  type InstallProgress,
+  type PackState,
+  kokoroVoice,
+  KOKORO_DOWNLOAD_BYTES,
 } from "@nikcli-ai/voice"
+import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
   disposeTerminal,
-  noteInTerminal,
+  getTerminal,
+  hasTerminal,
+  ptySize,
   refreshTerminalThemes,
   startOnCleanScreen,
   writeToTerminal,
 } from "../terminal/registry"
+import type { LinkRequest } from "../terminal/links"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createRawWindows } from "../session/raw-window"
@@ -330,16 +534,18 @@ import {
   type NoticeKind,
 } from "./notifications"
 import { checkMessage, createUpdateWatch, type UpdateMemory, type UpdateWatch } from "../update/watch"
-import { isReleasePage } from "../update/release"
+import { isReleasePage, type AvailableUpdate } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import {
   GLOBAL_VOICE_EVENT,
   globalVoiceAction,
   registerVoiceShortcuts,
+  serialiseRegistrations,
   unknownChordMessage,
 } from "../voice/global-shortcut"
-import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
+import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
+import { createProactiveAlerts } from "../voice/proactive-alerts"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -353,14 +559,17 @@ const HANDLED_COMMANDS = new Set([
   "pane.rename",
   "view.toggle",
   "theme.toggle",
+  "sidebar.toggle",
   "browser.new",
   "process.kill",
   "voice.toggle",
   "voice.settings",
+  "panes.closeGone",
+  "recents.forgetGone",
 ])
 
 function isHandledCommand(id: string): boolean {
-  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.")
+  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.") || parseDesignVariantCommand(id) !== undefined
 }
 
 /**
@@ -375,6 +584,9 @@ function isHandledCommand(id: string): boolean {
  * them a single xterm. A counter makes the case impossible.
  */
 let paneSequence = 0
+
+/** A new pane id for panes that are not sessions: browser, video, design, diff, file (review area 2). */
+const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
 
 /**
  * How much of a session's output a pane keeps in memory.
@@ -396,6 +608,21 @@ const SPLASH_FLOOR_MS = 7000
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
   const bindings = resolveDefaultBindings(platform)
+
+  // The sidebar, shown or hidden from the top bar, the palette or Ctrl+Shift+B (`sidebar-toggle.tsx`).
+  const sidebarStorage = (() => {
+    try {
+      return window.localStorage
+    } catch {
+      return undefined
+    }
+  })()
+  const [sidebarHidden, setSidebarHidden] = createSignal(readSidebarHidden(sidebarStorage))
+  const toggleSidebar = () => {
+    const hidden = !sidebarHidden()
+    setSidebarHidden(hidden)
+    writeSidebarHidden(sidebarStorage, hidden)
+  }
 
   /*
    * The workbench is a store, and `wb()` hands back the store itself.
@@ -424,17 +651,9 @@ export function Workbench() {
    */
   const [revision, setRevision] = createSignal(0, { equals: false })
 
-  /**
-   * Applies a whole new workbench, keeping the parts that did not change.
-   *
-   * The reducers in `state.ts` are pure and return a fresh object; `reconcile`
-   * turns that back into the smallest set of writes against the store, keyed
-   * by pane id, so replacing the object does not invalidate every pane in it.
-   */
+  /** Applies a whole new workbench, keeping the parts that did not change: see `workbench-write.ts`. */
   const setWb = (next: WorkbenchState | ((current: WorkbenchState) => WorkbenchState)) => {
-    const current = unwrap(wbStore)
-    const value = typeof next === "function" ? next(current) : next
-    if (value !== current) setWbStore(reconcile(value, { key: "id" }))
+    writeWorkbench(wbStore, setWbStore, next)
     setRevision((n) => n + 1)
   }
   /*
@@ -454,7 +673,19 @@ export function Workbench() {
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>),
   )
   const [project, setProject] = createSignal<Project>()
+  // The Chat's conversations are sessions of the project too (bar-sessions.ts).
+  const chatStore = appChatStore()
+  /** Who a new pane belongs to: the open project, by name and by folder (see `pane-project.ts`). */
+  const here = () => {
+    const open = project()
+    return { workspaceId: open?.name ?? "workspace", ...(open?.root ? { projectRoot: open.root } : {}) }
+  }
+  /** The installed nikcli, read from the binary; undefined until asked, and
+      after an answer that says nothing. */
+  const [nikcliVersion, setNikcliVersion] = createSignal<string>()
   const [recents, setRecents] = createSignal<RecentEntry[]>([])
+  /* The recent projects whose folder is gone, marked in the sidebar and the palette; never removed on their own. */
+  const [missingRoots, setMissingRoots] = createSignal<ReadonlySet<string>>(new Set())
 
   /**
    * What the startup screen is saying, or nothing once it is done.
@@ -483,9 +714,11 @@ export function Workbench() {
    */
   const workspaces = createMemo(() => {
     const currentProject = project()
-    const list: Array<{ root: string; name: string; branch?: string }> = recents().map((r) => ({
+    const gone = missingRoots()
+    const list: Array<{ root: string; name: string; branch?: string; missing?: boolean }> = recents().map((r) => ({
       root: r.root,
       name: r.name,
+      missing: isMissingRecent(gone, r.root),
       branch: r.root === currentProject?.root || r.name === currentProject?.name ? currentProject?.branch : undefined,
     }))
     if (currentProject && !list.some((p) => p.name === currentProject.name || p.root === currentProject.root)) {
@@ -506,6 +739,8 @@ export function Workbench() {
   const [remoteOpen, setRemoteOpen] = createSignal(false)
   const themeState = createThemeState()
   const theme = themeState.theme
+  const [glassStatus, setGlassStatus] = createSignal<GlassStatus>()
+  onMount(() => void checkNativeGlassStatus().then(setGlassStatus))
 
   /*
    * xterm is handed concrete colours, so it cannot follow the theme on its own.
@@ -516,9 +751,37 @@ export function Workbench() {
    * committed to the DOM, and the probe reads the cascade as it stands.
    */
   createEffect(() => {
-    theme()
+    const currentTheme = theme()
+    const isGlass = currentTheme === "glass"
+    void applyNativeGlass(isGlass).then((err) => {
+      if (err && isGlass) {
+        setGlassStatus({ supported: false, effect: "none", reason: err })
+      }
+    })
+
+    const opacity = themeState.glassOpacity() / 100
+    if (typeof document !== "undefined") {
+      if (isGlass) {
+        document.documentElement.setAttribute("data-theme", "glass")
+        document.documentElement.style.setProperty("--ade-glass-opacity", String(opacity))
+      } else {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
+      const shell = document.querySelector<HTMLElement>('[data-component="ade-shell"]')
+      if (shell) {
+        shell.style.setProperty("--ade-glass-opacity", String(opacity))
+      }
+    }
+
     const frame = requestAnimationFrame(() => refreshTerminalThemes())
-    onCleanup(() => cancelAnimationFrame(frame))
+    onCleanup(() => {
+      cancelAnimationFrame(frame)
+      if (typeof document !== "undefined") {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
+    })
   })
 
   /*
@@ -526,7 +789,7 @@ export function Workbench() {
    * See `pane-records.ts` for why that matters.
    */
   const records = createPaneRecords()
-  const { reports, buffers, bufferLoading, permissions } = records
+  const { reports, buffers, bufferLoading, bufferError, permissions } = records
 
   /*
    * One line for things the user has to be told but must not be stopped for.
@@ -537,6 +800,8 @@ export function Workbench() {
    * the notice is now the shell's own, rendered above the section.
    */
   const [notice, setNotice] = createSignal<string>()
+  // Where the last answer of a sheet went, once the sheet is gone (`surface/toast.ts`).
+  const toast = createToast()
 
   /*
    * The same messages, kept.
@@ -550,12 +815,17 @@ export function Workbench() {
   const [notices, setNotices] = createSignal<Notice[]>([])
   const [noticesOpen, setNoticesOpen] = createSignal(false)
   const [newPaneOpen, setNewPaneOpen] = createSignal(false)
+  // The buttons the two menus give the focus back to on Esc (`bindMenu`).
+  let newPaneButton: HTMLButtonElement | undefined
+  let noticesButton: HTMLButtonElement | undefined
 
   /** Says it once, in both places: the strip now, the bell afterwards. */
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
   }
+  /* A button on the strip, for the one notice it was made for: shown only while that text is. */
+  const [noticeAction, setNoticeAction] = createSignal<{ text: string; label: string; run: () => void }>()
 
   /*
    * What the agents actually wrote, for the detectors that search it.
@@ -583,7 +853,7 @@ export function Workbench() {
    */
   const announcePanels = (paneId: string, panel: string) => {
     if (!running.has(paneId)) return
-    for (const line of panels.greeting(panel)) appendLine(paneId, line, "note")
+    for (const line of panels.greeting(panel)) appendLine(paneId, line, "note", "ade")
   }
 
   /*
@@ -607,14 +877,40 @@ export function Workbench() {
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
   }
   const keysHost = (): KeysHost | undefined => (keysAvailable() ? keysService : undefined)
-  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string }>()
+
+  /** The session that wrote a request, by name: the questions say who asks. */
+  const askerOf = (from: string | undefined): string | undefined => {
+    const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+    return pane?.title || undefined
+  }
+
+  /*
+   * A panel opening a page that is not this machine's, on the user's yes:
+   * once per request, never remembered (review of review-alti, 1.3). A file
+   * an agent shows can carry «@ade browser open …» as well as the agent can.
+   */
+  const confirmOpen = (panel: "browser" | "app", url: string, from: string | undefined) =>
+    askYesNo(
+      t(
+        panel === "browser" ? "panels.consent.browser" : "panels.consent.app",
+        askerOf(from) ?? t("panels.consent.someone"),
+        url,
+      ),
+      {
+        ok: t("panels.consent.allow"),
+        cancel: t("panels.consent.deny"),
+      },
+    )
+  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string; asker?: KeyAsker }>()
   panels.register("keys", {
     verbs: KEYS_VERBS,
-    run: (request) => {
-      return runKeysCommand(
-        { list: keysService.list, ask: (env, reason) => setKeyRequest({ env, reason }) },
-        request,
-      ).catch((failure: unknown) => ({
+    run: (request, from) => {
+      // Who asks, for the dialog: the pane's name and its agent.
+      const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+      const agentId = pane?.agent ?? pane?.model
+      const asker = pane && agentId ? { title: pane.title, agentId } : undefined
+      const ask = (env: string, reason: string) => setKeyRequest({ env, reason, ...(asker ? { asker } : {}) })
+      return runKeysCommand({ list: keysService.list, ask }, request).catch((failure: unknown) => ({
         ok: false as const,
         reason: failure instanceof Error ? failure.message : String(failure),
       }))
@@ -635,14 +931,22 @@ export function Workbench() {
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
   const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
     const pane: Pane = {
-      id: `b${Date.now()}`,
+      id: newPaneId("b"),
       title: "Browser",
       status: "working",
       model: "—",
       mode: "browser",
       browserUrl: url,
       browserOwner: owner,
-      workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
+      // The owning session's project, name and folder both; the open one without an owner pane.
+      ...(() => {
+        const ownerPane = wb().panes.find((p) => p.id === owner.id)
+        if (!ownerPane) return here()
+        return {
+          workspaceId: ownerPane.workspaceId,
+          ...(ownerPane.projectRoot ? { projectRoot: ownerPane.projectRoot } : {}),
+        }
+      })(),
       lines: [],
     }
     setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
@@ -662,6 +966,7 @@ export function Workbench() {
           openPane: (url, owner) => openOwnedBrowser(url, owner, false),
           navigate: (paneId, url) => setWb((w) => updatePane(w, paneId, { browserUrl: url })),
           controller: (paneId) => browserControllers.get(paneId),
+          confirmOpen: (url) => confirmOpen("browser", url, from),
         },
         request,
         from,
@@ -775,7 +1080,8 @@ export function Workbench() {
   })
 
   /** Asks for the folder once, and keeps it for the next takes. */
-  const pickRecordDir = async () => {
+  // One dialog at a time: a second command while it is open waits for its answer.
+  const pickRecordDir = onePickAtATime(async () => {
     const host = await getHost()
     const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
     if (!chosen) return undefined
@@ -786,7 +1092,7 @@ export function Workbench() {
       // A take still records; only the choice is forgotten next launch.
     }
     return chosen
-  }
+  })
 
   /*
    * The folder is not made a write root: Rust writes and serves only the
@@ -828,14 +1134,16 @@ export function Workbench() {
   /** An agent's take waits here for the user's answer. */
   const [recordAsk, setRecordAsk] = createSignal<{
     target: Parameters<typeof recorder.start>[0]
+    asker?: string
     answer: (consent: RecordConsent) => void
   }>()
-  const confirmRecording = (target: Parameters<typeof recorder.start>[0]) =>
+  const confirmRecording = (target: Parameters<typeof recorder.start>[0], asker: string | undefined) =>
     new Promise<RecordConsent>((resolve) => {
       // One question at a time: a second agent asking meanwhile is refused.
       if (recordAsk()) return resolve({ allowed: false, mic: false })
       setRecordAsk({
         target,
+        ...(asker ? { asker } : {}),
         answer: (consent) => {
           setRecordAsk(undefined)
           resolve(consent)
@@ -912,30 +1220,34 @@ export function Workbench() {
 
   panels.register("record", {
     verbs: RECORD_VERBS,
-    run: (request) =>
-      runRecordRequest(request, {
-        confirm: confirmRecording,
-        start: (target, options) => startRecording(target, { mic: options.mic === true, language: options.language }),
-        stop: (language) => recorder.stop(language),
-        paneRect: (name) => {
-          const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
-          if (!pane) return undefined
-          const node = document.querySelector(`[data-pane-id="${pane.id}"]`)
-          const rect = node?.getBoundingClientRect()
-          if (!rect || rect.width < 2 || rect.height < 2) return undefined
-          const scale = window.devicePixelRatio || 1
-          return {
-            x: Math.round(rect.left * scale),
-            y: Math.round(rect.top * scale),
-            width: Math.round(rect.width * scale),
-            height: Math.round(rect.height * scale),
-          }
+    run: (request, from) =>
+      runRecordRequest(
+        request,
+        {
+          confirm: confirmRecording,
+          start: (target, options) => startRecording(target, { mic: options.mic === true, language: options.language }),
+          stop: (language) => recorder.stop(language),
+          paneRect: (name) => {
+            const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
+            if (!pane) return undefined
+            const node = document.querySelector(`[data-pane-id="${pane.id}"]`)
+            const rect = node?.getBoundingClientRect()
+            if (!rect || rect.width < 2 || rect.height < 2) return undefined
+            const scale = window.devicePixelRatio || 1
+            return {
+              x: Math.round(rect.left * scale),
+              y: Math.round(rect.top * scale),
+              width: Math.round(rect.width * scale),
+              height: Math.round(rect.height * scale),
+            }
+          },
+          state: () => {
+            const now = recordState()
+            return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
+          },
         },
-        state: () => {
-          const now = recordState()
-          return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
-        },
-      }).catch((failure: unknown) => ({
+        askerOf(from),
+      ).catch((failure: unknown) => ({
         ok: false as const,
         reason: failure instanceof Error ? failure.message : String(failure),
       })),
@@ -973,13 +1285,13 @@ export function Workbench() {
     }
     setWb((w) =>
       addPane(w, {
-        id: `m${Date.now()}`,
+        id: newPaneId("m"),
         title: path ? (path.split(/[\\/]/).pop() ?? t("newPane.model")) : t("newPane.model"),
         status: "working",
         model: "—",
         mode: "model",
         modelPath: path,
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
     )
@@ -994,13 +1306,13 @@ export function Workbench() {
     }
     setWb((w) =>
       addPane(w, {
-        id: `v${Date.now()}`,
+        id: newPaneId("v"),
         title: path.split(/[\\/]/).pop() ?? t("pane.video.title"),
         status: "working",
         model: "—",
         mode: "video",
         videoPath: path,
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
     )
@@ -1039,7 +1351,10 @@ export function Workbench() {
    * Master session as a `risolta` line, when that session is running and
    * between turns; until then it waits in an outbox that survives a restart.
    */
+  // Which pane asked, as ADE wrote it: a `fromPane` written by hand in a register is not trusted.
+  const askers = askerLedger(() => (typeof localStorage === "undefined" ? undefined : localStorage))
   const decisionsRegister = createDecisionsRegister({
+    vouch: askers.vouch,
     path: () => {
       const root = project()?.root
       return root ? decisionsPath(root) : undefined
@@ -1088,8 +1403,15 @@ export function Workbench() {
       }
     })(),
   )
+  // Two panes of the same title are told apart in «Risposte a», «→» and «chiesta da» (`distinctNames`).
+  const paneNames = () => distinctNames(mailPanes())
   const decisionCandidates = () =>
-    mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: isRunning(pane.id) }))
+    mailPanes().map((pane) => ({
+      id: pane.id,
+      title: paneNames().get(pane.id) ?? pane.title,
+      project: pane.project,
+      running: isRunning(pane.id),
+    }))
   const decisionRecipient = () => {
     const path = decisionsRegister.path()
     return resolveRecipient(decisionCandidates(), path ? decisionsRecipients()[path] : undefined)
@@ -1115,29 +1437,41 @@ export function Workbench() {
     if (kept.length !== decisionsOutbox().length) saveDecisionsOutbox(kept)
     const pending = pendingFor(kept, path)
     if (pending.length === 0) return
-    const target = decisionRecipient()
-    if (target.state !== "pronta") return
+    const currentTarget = decisionRecipient()
+    const candidates = decisionCandidates()
     const host = await getHost()
     if (!host) return
     deliveringDecisions = true
     try {
       for (const item of pending) {
         const decision = state.decisions.find((entry) => entry.k === item.k)
-        if (!decision || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        if (!decision) continue
+        const target = resolveDeliveryTarget(item, candidates, currentTarget)
+        if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
         if (
-          !(await deliverText(host, target.id, deliveryLine(decision), {
+          (await deliverText(host, target.id, item.text ?? deliveryLine(decision), {
             id: `decisione-${decision.k}`,
             kind: "send",
             from: "",
-          }))
+          })) !== "given"
         )
           continue
         const stored = decisionsOutbox().find(
           (entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt,
         )
-        if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
-        appendLine(target.id, t("decisions.delivered", decision.k), "note")
+        if (stored)
+          saveDecisionsOutbox(
+            markDelivered(decisionsOutbox(), stored, { id: target.id, title: target.title }, Date.now()),
+          )
+        appendLine(
+          target.id,
+          item.kind === "riaperta"
+            ? t("decisions.reopened.delivered", decision.k)
+            : t("decisions.delivered", decision.k),
+          "note",
+          "ade",
+        )
       }
     } finally {
       deliveringDecisions = false
@@ -1154,9 +1488,181 @@ export function Workbench() {
       const path = decisionsRegister.path()
       if (!path) return
       saveDecisionsOutbox(
-        enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }),
+        // To the pane that asked, when the event says which (`answerItem`).
+        enqueue(decisionsOutbox(), answerItem(path, decision, event.at, Date.now())),
       )
       void deliverDecisions()
+    },
+    onReopened: (decision, deliveredTo, deliveredToId) => {
+      const path = decisionsRegister.path()
+      if (!path) return
+      saveDecisionsOutbox(
+        enqueue(decisionsOutbox(), {
+          path,
+          k: decision.k,
+          answeredAt: new Date().toISOString(),
+          queuedAt: Date.now(),
+          kind: "riaperta",
+          text: reopenLine(decision.k),
+          to: deliveredTo,
+          ...(deliveredToId ? { toId: deliveredToId } : {}),
+        }),
+      )
+      void deliverDecisions()
+    },
+  })
+
+  /*
+   * Design: the register in `.ade/design.jsonl`, a badge in the bar
+   * while any proposal waits for the user, the window that goes through them one at a
+   * time, and the panel with all of them. See `design/`.
+   */
+  const designRegister = createDesignRegister({
+    vouch: askers.vouch,
+    path: () => {
+      const root = project()?.root
+      return root ? designPath(root) : undefined
+    },
+    io: async () => {
+      const host = await getHost()
+      if (!host?.readTextFile || !host.writeTextFile) return undefined
+      return {
+        readTextFile: (path: string, maxBytes?: number) => host.readTextFile!(path, maxBytes),
+        writeTextFile: (path: string, contents: string) => host.writeTextFile!(path, contents),
+        ...(host.appendTextFile
+          ? { appendTextFile: (path: string, text: string) => host.appendTextFile!(path, text) }
+          : {}),
+        ...(host.readDir ? { readDir: (path: string) => host.readDir!(path) } : {}),
+      }
+    },
+  })
+
+  const [designOutbox, setDesignOutbox] = createSignal<OutboxItem[]>(
+    (() => {
+      try {
+        return parseDesignOutbox(localStorage.getItem(DESIGN_OUTBOX_KEY))
+      } catch {
+        return []
+      }
+    })(),
+  )
+  const saveDesignOutbox = (items: OutboxItem[]) => {
+    setDesignOutbox(items)
+    try {
+      localStorage.setItem(DESIGN_OUTBOX_KEY, JSON.stringify(items))
+    } catch {}
+  }
+
+  const [designRecipients, setDesignRecipients] = createSignal<Record<string, RecipientChoice>>(
+    (() => {
+      try {
+        return parseDesignRecipients(localStorage.getItem(DESIGN_RECIPIENT_KEY))
+      } catch {
+        return {}
+      }
+    })(),
+  )
+  const designCandidates = () =>
+    mailPanes().map((pane) => ({
+      id: pane.id,
+      title: paneNames().get(pane.id) ?? pane.title,
+      project: pane.project,
+      running: isRunning(pane.id),
+    }))
+  const designRecipient = () => {
+    const path = designRegister.path()
+    return resolveDesignRecipient(designCandidates(), path ? designRecipients()[path] : undefined)
+  }
+  const chooseDesignRecipientAction = (id: string | undefined) => {
+    const path = designRegister.path()
+    if (!path) return
+    const pane = id ? designCandidates().find((candidate) => candidate.id === id) : undefined
+    const next = chooseDesignRecipient(designRecipients(), path, pane ? { id: pane.id, title: pane.title } : undefined)
+    setDesignRecipients(next)
+    try {
+      localStorage.setItem(DESIGN_RECIPIENT_KEY, JSON.stringify(next))
+    } catch {}
+    void deliverDesign()
+  }
+
+  let deliveringDesign = false
+  const deliverDesign = async () => {
+    const path = designRegister.path()
+    const state = designRegister.state()
+    if (!path || !state || deliveringDesign) return
+    const kept = pruneDesignOutbox(designOutbox(), path, state.proposals)
+    if (kept.length !== designOutbox().length) saveDesignOutbox(kept)
+    const pending = pendingForDesign(kept, path)
+    if (pending.length === 0) return
+    const currentTarget = designRecipient()
+    const candidates = designCandidates()
+    const host = await getHost()
+    if (!host) return
+    deliveringDesign = true
+    try {
+      for (const item of pending) {
+        const proposal = state.proposals.find((entry) => entry.k === item.k)
+        if (!proposal) continue
+        const target = resolveDesignDeliveryTarget(item, candidates, currentTarget)
+        if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        if (
+          (await deliverText(host, target.id, item.text ?? designDeliveryLine(proposal), {
+            id: `design-${proposal.k}`,
+            kind: "send",
+            from: "",
+          })) !== "given"
+        )
+          continue
+        const stored = designOutbox().find(
+          (entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt,
+        )
+        if (stored)
+          saveDesignOutbox(
+            markDesignDelivered(designOutbox(), stored, { id: target.id, title: target.title }, Date.now()),
+          )
+        appendLine(
+          target.id,
+          item.kind === "riaperta"
+            ? t("design.reopened.delivered", proposal.k)
+            : t("design.delivery.done", target.title, formatDesignMoment(Date.now(), new Date())),
+          "note",
+          "ade",
+        )
+      }
+    } finally {
+      deliveringDesign = false
+    }
+  }
+
+  const designHub = createDesignHub({
+    register: designRegister,
+    projectRoot: () => project()?.root,
+    recipient: designRecipient,
+    sessions: designCandidates,
+    choose: chooseDesignRecipientAction,
+    delivery: (proposal) => designDeliveryState(designOutbox(), designRegister.path() ?? "", proposal),
+    onAnswered: (proposal, event) => {
+      const path = designRegister.path()
+      if (!path) return
+      saveDesignOutbox(enqueueDesign(designOutbox(), designAnswerItem(path, proposal, event.at, Date.now())))
+      void deliverDesign()
+    },
+    onReopened: (proposal, deliveredTo, deliveredToId) => {
+      const path = designRegister.path()
+      if (!path) return
+      saveDesignOutbox(
+        enqueueDesign(designOutbox(), {
+          path,
+          k: proposal.k,
+          answeredAt: new Date().toISOString(),
+          queuedAt: Date.now(),
+          kind: "riaperta",
+          text: designReopenLine(proposal.k),
+          to: deliveredTo,
+          ...(deliveredToId ? { toId: deliveredToId } : {}),
+        }),
+      )
+      void deliverDesign()
     },
   })
 
@@ -1170,16 +1676,109 @@ export function Workbench() {
     onCleanup(() => window.removeEventListener("languagechange", refreshSystemLocale))
   })
 
+  /*
+   * «Da scegliere»: one button and one list for what waits for the user,
+   * decisions and design alike (notifiche-design). An entry opens its own
+   * window at that entry.
+   */
+  const [choicesOpen, setChoicesOpen] = createSignal(false)
+  const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(
     () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "aperta").length ?? 0,
   )
 
+  const [designOpen, setDesignOpen] = createSignal(false)
+  const designWaiting = createMemo(
+    () => designRegister.state()?.proposals.filter((proposal) => proposal.status === "aperta").length ?? 0,
+  )
+  // Answers recorded but not delivered: the bar says so, even with nothing left open.
+  const decisionsQueued = createMemo(
+    () =>
+      decisionsRegister
+        .state()
+        ?.decisions.filter(
+          (decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda",
+        ).length ?? 0,
+  )
+  // Lines thrown away and events refused: the button shows them too, so a wrong line never passes unseen.
+  const decisionsDiscarded = createMemo(
+    () => (decisionsRegister.loaded()?.problems.length ?? 0) + (decisionsRegister.state()?.rejected.length ?? 0),
+  )
+  const designDiscarded = createMemo(
+    () => (designRegister.loaded()?.problems.length ?? 0) + (designRegister.state()?.rejected.length ?? 0),
+  )
+  const designQueued = createMemo(
+    () =>
+      designRegister
+        .state()
+        ?.proposals.filter(
+          (proposal) =>
+            (proposal.status === "risposta" || proposal.status === "giro") &&
+            designHub.delivery(proposal).state === "in coda",
+        ).length ?? 0,
+  )
+  // An answer on its way to the pane that asked is queued for half a second: not «0» on the button (`createSettled`).
+  const settledQueued = createSettled(() => decisionsQueued() + designQueued())
+  const choicesCounts = createMemo(() => ({
+    ...choiceCounts(
+      { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
+      { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
+    ),
+    queued: settledQueued(),
+  }))
+  // Not a memo: it reads the panes (`mailPanes`), defined further down, and a memo runs at once.
+  const choices = () =>
+    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? [], paneNames())
+  /** An entry of «Da scegliere» opens its own window, at that entry. */
+  const pickChoice = (item: ChoiceItem) => {
+    setChoicesOpen(false)
+    setChoiceStart(item.k)
+    if (item.kind === "decision") setDecisionsOpen(true)
+    else setDesignOpen(true)
+  }
+
   onMount(() => {
-    onCleanup(decisionsRegister.watch())
+    // One pass and one listing of `.ade/` for both registers (P1-C2c).
+    onCleanup(
+      watchRegisters([decisionsRegister, designRegister], async () => {
+        const host = await getHost()
+        return host?.readDir ? (path: string) => host.readDir!(path) : undefined
+      }),
+    )
     // Only does work while an answer is waiting to go out.
-    onCleanup(every(3000, () => deliverDecisions(), { whenHidden: 15_000 }))
+    onCleanup(
+      every(
+        3000,
+        () => {
+          void deliverDecisions()
+          void deliverDesign()
+        },
+        { whenHidden: 15_000 },
+      ),
+    )
   })
+
+  /** Opens the Design panel, or focuses the one already open. */
+  const openDesignPane = () => {
+    const existing = wb().panes.find((pane) => pane.mode === "design")
+    if (existing) {
+      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
+      return
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: newPaneId("des"),
+        title: "Design",
+        status: "working",
+        model: "—",
+        mode: "design",
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+    }))
+  }
 
   /** Opens the Decisions panel, or focuses the one already open. */
   const openDecisionsPane = () => {
@@ -1190,12 +1789,12 @@ export function Workbench() {
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: `d${Date.now()}`,
+        id: newPaneId("d"),
         title: "Decisioni",
         status: "working",
         model: "—",
         mode: "decisions",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -1220,6 +1819,36 @@ export function Workbench() {
     return path
   }
 
+  /*
+   * Panel answers waiting for their pane (`createPendingPanelReplies`, which says
+   * why each of its rules is there).
+   *
+   * Not `heldLines`: those are mail, they are persisted so a suspended session
+   * finds them on the next start, and a panel answer persisted would be typed
+   * into a session that stopped waiting minutes ago — a stale answer arriving as
+   * a new turn of the user's. This one lives minutes at most, and only while the
+   * pane is not free: the agent is blocked on its stdin until it goes, so the
+   * retry is not politeness, it is the delivery.
+   */
+  const pendingPanelReplies = createPendingPanelReplies<SpawnedSession>()
+
+  /*
+   * The requests of an agent that draws its screen with the cursor (nikcli),
+   * which never reach `onLine` as a line: read from the screen once the pane
+   * goes quiet (`panels/screen-requests.ts`, which says why each rule is there).
+   */
+  const onAlternateScreen = (paneId: string) =>
+    hasTerminal(paneId) && getTerminal(paneId).terminal.buffer.active.type === "alternate"
+  const screenRequests = createScreenRequests({
+    rows: (paneId) => {
+      const pane = wb().panes.find((candidate) => candidate.id === paneId)
+      // Only from an agent, as on `onLine` (`acceptsRequests`).
+      if (!pane || !acceptsRequests(pane.agent ?? pane.model) || !hasTerminal(paneId)) return undefined
+      return alternateRows(getTerminal(paneId).terminal)
+    },
+    onRequest: (paneId, line) => void handlePanelRequest(paneId, line),
+  })
+
   /**
    * Acts on one line of agent output, if it was addressed to a panel.
    *
@@ -1231,12 +1860,83 @@ export function Workbench() {
     const handled = await panels.handle(line, paneId)
     if (!handled) return
     // A skipped line is said in the transcript only: typed back, the TUI would redraw it.
-    if ("skipped" in handled) return appendLine(paneId, handled.skipped, "note")
+    if ("skipped" in handled) return appendLine(paneId, handled.skipped, "note", "ade")
     // Written to the transcript too, because what an agent did to a panel is
     // something the user has to be able to see afterwards.
-    appendLine(paneId, handled.reply, "note")
-    panels.typed(paneId, handled.reply)
-    running.get(paneId)?.write(asSubmittedLine(handled.reply))
+    appendLine(paneId, handled.reply, "note", "ade")
+    const session = running.get(paneId)
+    if (!session) return
+    /*
+     * Typed like every other line, and that is the whole of the change: the road
+     * through `typeLine` is the line queue, the paste, the wait, `questionOpen` and
+     * the Enter check, and writing the pty here went past all of them. An agent
+     * that printed an `@ade` line and then asked for a permission used to have
+     * this answer typed over the prompt, and its Enter confirmed the selected
+     * choice — a numbered option list makes it worse, because a reply beginning
+     * with a digit picks one.
+     */
+    const hold = panelReplyHold({
+      alive: running.get(paneId) === session,
+      typing: isTyping(records.typed.get(paneId)),
+      questionOpen: questionOpen(paneId),
+    })
+    if (hold) {
+      pendingPanelReplies.queue(paneId, session, handled.reply)
+      return appendLine(paneId, t("note.panelReplyHeld", hold), "note", "ade")
+    }
+    /*
+     * Something already waiting for this pane: this answer goes to the end of that
+     * list and the round writes them in order. Typing it straight out here would
+     * overtake the ones before it, and if it could not be given it would be
+     * dropped — the check after the write used to see the *older* answers waiting
+     * and read them as a reason to leave this one out, when it is the newest of
+     * the three.
+     */
+    if (!pendingPanelReplies.admit(paneId, session, handled.reply)) return
+    // Out of the waiting before it is typed, so the round below cannot send it a
+    // second time while this one is still in the queue.
+    pendingPanelReplies.take(paneId, handled.reply)
+    void typeLine(session, handled.reply, { unlessBusy: true }).then((given) => {
+      // Given, nothing to retry. Not given, back in the waiting with the age it
+      // was made at, where the round will find it in the right place in the order.
+      if (given) return
+      pendingPanelReplies.restore(paneId, session, handled.reply, Date.now())
+    })
+  }
+
+  /** Types the panel answers whose pane has gone free, and keeps or drops the rest. */
+  const flushPanelReplies = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    const now = Date.now()
+    for (const paneId of pendingPanelReplies.panes()) {
+      const session = running.get(paneId)
+      // A pane closed, or restarted or resumed: the same id, a process that never
+      // asked for these answers.
+      if (!session || session !== pendingPanelReplies.sessionOf(paneId)) {
+        pendingPanelReplies.forget(paneId)
+        continue
+      }
+      // Ageing first, so a pane that stays busy for an hour gives its answers up
+      // instead of keeping them until the heat death of the app.
+      const { waits, stale } = pendingPanelReplies.claim(paneId, now)
+      if (stale > 0) appendLine(paneId, t("note.panelReplyStale", stale), "note", "ade")
+      if (waits.length === 0) continue
+      if (!(await freeNow(host, paneId))) continue
+      for (const wait of waits) {
+        pendingPanelReplies.take(paneId, wait.text)
+        const outcome = await typeLineOutcome(session, wait.text, { unlessBusy: true })
+        if (deliveryResult(outcome, running.get(paneId) === session) !== "held") continue
+        // Not given — a prompt opened again, or the user is typing: back in the
+        // waiting, still as old as it was, so it cannot be kept alive by trying,
+        // and in the place that age puts it, so the answers asked after it do not
+        // overtake it (`restore`).
+        pendingPanelReplies.restore(paneId, session, wait.text, wait.at)
+        // And the round stops here, which is the other half of the same thing:
+        // `restore` puts the order back for the next round, and this stops the
+        // one after it from sending a later answer off while this one is still
+        // unanswered. Either alone leaves an inversion, one round apart.
+        break
+      }
+    }
   }
 
   /*
@@ -1273,17 +1973,23 @@ export function Workbench() {
     const failure = await host.writeTextFile(details, formatRequestDetails(request, { at, shot }))
     if (failure) return { ok: false, reason: failure }
     heldLines.push({ paneId: to, text: formatRequestLine(request, details) })
-    appendLine(to, t("note.browserRequest", request.paneTitle), "note")
+    tellPane(to, t("note.browserRequest", request.paneTitle))
     return { ok: true }
   }
 
-  const running = new Map<string, SpawnedSession>()
+  // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
+  const running = new RunningSessions()
+  onCleanup(() => running.endAll())
+  // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
+  const reopening = oneAtATime()
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick((n) => n + 1)
   const isRunning = (id: string) => {
     runningTick()
     return running.has(id)
   }
+  /** Suspended by the user (P1-C6): its mail waits for "Riprendi", and nothing wakes it. */
+  const isSuspendedPane = (paneId: string) => wb().panes.some((pane) => pane.id === paneId && pane.suspended)
 
   /*
    * Messages between sessions. See `session/mailbox.ts` and `mailbox.rs`.
@@ -1301,7 +2007,7 @@ export function Workbench() {
           id: pane.id,
           title: pane.title,
           agent: pane.agent ?? pane.model,
-          status: running.has(pane.id) ? pane.status : "chiusa",
+          status: running.has(pane.id) ? pane.status : pane.suspended ? "sospesa" : "chiusa",
           project: pane.workspaceId,
         })),
     )
@@ -1309,6 +2015,8 @@ export function Workbench() {
   /** Long enough for a TUI's paste detection to close before Enter arrives. */
   const SUBMIT_DELAY_MS = 400
   let delivering = false
+  // When the watch half of the last pass ran: see `watchDue`.
+  let watchedAt = 0
 
   const deliverMail = async () => {
     // One pass at a time: a pass now waits between text and Enter, and two
@@ -1331,7 +2039,61 @@ export function Workbench() {
    * for someone to press Enter. A keystroke that arrives after the paste has
    * settled is a keystroke. False when the session went away in between.
    */
-  const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
+  /*
+   * One line at a time per session (`session/line-queue.ts`): the next line
+   * starts once the one before has had its Enter, or two texts share one
+   * Enter. With `unlessBusy`, the check is made in the queue, at the moment of
+   * writing, and the line is dropped (false) if the user has begun a draft or
+   * a permission prompt has opened since it was queued (`lineIsTaken`): the
+   * caller then does not count it as given.
+   */
+  const lineQueue = createLineQueue()
+  /*
+   * A fit that came while `host.spawn` was awaited went to `sessionFor`,
+   * found nothing in `running` and was lost; the cell does not change size
+   * again, so nothing sent it later (S77). Called right after `running.set`.
+   */
+  const resyncSize = (paneId: string, session: SpawnedSession, bornAt: { cols: number; rows: number } | undefined) => {
+    const now = ptySize(paneId)
+    if (now && (now.cols !== bornAt?.cols || now.rows !== bornAt?.rows)) session.resize(now.cols, now.rows)
+  }
+
+  /*
+   * True when the text reached the input box, with its Enter or without
+   * (`lineGiven`): a line held back by a permission prompt is given all the
+   * same, and typing it again would put it there twice.
+   */
+  const typeLine = async (
+    session: SpawnedSession,
+    text: string,
+    options: { unlessBusy?: boolean } = {},
+  ): Promise<boolean> => lineGiven(await typeLineOutcome(session, text, options))
+
+  /** The lines queued or being typed, per pane: `freeNow` reads it first. */
+  const linesInFlight = createInFlight()
+
+  const typeLineOutcome = (
+    session: SpawnedSession,
+    text: string,
+    options: { unlessBusy?: boolean } = {},
+  ): Promise<LineOutcome> => {
+    const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
+    const job = async (): Promise<LineOutcome> => {
+      if (
+        options.unlessBusy &&
+        paneId !== undefined &&
+        lineIsTaken({
+          typing: isTyping(records.typed.get(paneId)),
+          permissionPending: paneId !== undefined && questionOpen(paneId),
+        })
+      )
+        return "not-typed"
+      return typeLineNow(session, text)
+    }
+    return paneId === undefined ? job() : linesInFlight.track(paneId, lineQueue(paneId, job))
+  }
+
+  const typeLineNow = async (session: SpawnedSession, text: string): Promise<LineOutcome> => {
     const line = asOneLine(text)
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
@@ -1351,21 +2113,36 @@ export function Workbench() {
       panels.typed(paneId, line)
     }
     const typedAt = Date.now()
-    session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
-    if (bracketed) {
-      while (!pasteSettled({ typedAt, lastOutputAt: lastOutputAt.get(paneId), now: Date.now() })) {
-        if (![...running.values()].includes(session)) return false
-        await new Promise((resolve) => setTimeout(resolve, 25))
-      }
-    } else await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)))
-    if (![...running.values()].includes(session)) return false
-    session.write("\r")
-    if (paneId !== undefined) {
+    const alive = () => [...running.values()].includes(session)
+    /*
+     * The Enter is pressed only if no permission prompt opened during the
+     * wait (B1 bis): it would confirm the selected choice. The text stays in
+     * the box, and the pane says why it was not sent.
+     */
+    const outcome = await typeThenEnter({
+      text: bracketed ? `${ESC}[200~${line}${ESC}[201~` : line,
+      write: (data) => session.write(data),
+      wait: async () => {
+        if (!bracketed)
+          return void (await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)),
+          ))
+        while (alive() && !pasteSettled({ typedAt, lastOutputAt: lastOutputAt.get(paneId), now: Date.now() })) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+      },
+      alive,
+      permissionOpen: () => paneId !== undefined && questionOpen(paneId),
+      // A key of the user's since the text went in: not a draft from before.
+      typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt,
+    })
+    if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
     }
-    return true
+    if (paneId !== undefined && outcome === "typed-no-enter") appendLine(paneId, t("note.enterHeld"), "note", "ade")
+    return outcome
   }
 
   const ESC = String.fromCharCode(27)
@@ -1381,55 +2158,306 @@ export function Workbench() {
   /**
    * Makes sure a typed line became a turn, where the CLI's hooks can say so.
    *
-   * `UserPromptSubmit` runs the moment a prompt is sent. If it has not run
-   * within a few seconds the line is still in the input box, and Enter goes
-   * again — twice at most, never over a permission prompt, and not at all for
-   * a CLI without the hook, where no answer is not evidence of anything.
+   * `UserPromptSubmit` runs the moment a prompt is sent. The confirmation
+   * window is `HOOK_TIMEOUT` plus 2 s because under load the hook can take
+   * several seconds, and an Enter sent before the hook writes lands inside a
+   * turn that has already started. We do not use pane output to detect
+   * submission: `confirmSubmitted` exists for when CR gets swallowed into a
+   * paste, where Claude Code redraws the input box with an extra newline and
+   * produces output even though the line was never submitted.
    */
   const confirmSubmitted = async (paneId: string, session: SpawnedSession, typedAt: number) => {
     const host = await getHost()
     const nonce = paneNonces.get(paneId)
     if (!host?.readAgentActivity || !nonce || !hooked(paneId)) return
     for (let attempt = 0; attempt < 2; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      if (running.get(paneId) !== session || permissions()[paneId]) return
-      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
-      if (activity && activity.at >= typedAt) {
-        activityOf.set(paneId, activity)
-        return
+      const sentAt = Date.now()
+      const deadline = confirmDeadline(sentAt, HOOK_TIMEOUT)
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        if (running.get(paneId) !== session || questionOpen(paneId)) return
+        const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+        const check = submitCheck({ typedAt, activity, now: Date.now(), deadline })
+        if (check === "confirmed") {
+          activityOf.set(paneId, activity!)
+          return
+        }
+        if (check === "queued") {
+          /*
+           * Busy from before the line was typed: the CLI queued it behind the
+           * current turn, and it will be submitted when that turn ends. An Enter
+           * now would land in whatever the turn is doing.
+           */
+          return
+        }
+        if (check === "wait") {
+          continue
+        }
+        if (check === "resend") {
+          // Not over a prompt (B1 bis), not into the user's draft, and in the pane's queue (`enterAgain`).
+          if (!(await pressAgain(paneId, session))) return
+          appendLine(paneId, t("note.resent"), "note", "ade")
+          break
+        }
       }
-      /*
-       * Busy from before the line was typed: the CLI queued it behind the
-       * current turn, and it will be submitted when that turn ends. An Enter
-       * now would land in whatever the turn is doing.
-       */
-      if (activity?.state === "busy") return
-      session.write("\r")
-      appendLine(paneId, t("note.resent"), "note")
     }
   }
 
+  /** An Enter on its own, for a line ADE typed and no turn took: see `enterAgain`. */
+  const pressAgain = (paneId: string, session: SpawnedSession): Promise<boolean> =>
+    enterAgain({
+      queue: lineQueue,
+      key: paneId,
+      write: (data) => session.write(data),
+      alive: () => running.get(paneId) === session,
+      typing: () => isTyping(records.typed.get(paneId)),
+      permissionOpen: () => questionOpen(paneId),
+    })
+
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
+  /** The state last written for a queued request, so a waiter hears about changes only. */
+  const heldStates = new Map<string, string>()
+
+  /*
+   * The sessions Claude Code lists (`claude agents --json`, documented), so a
+   * pane can be addressed by the name the CLI actually kept. Asked at most
+   * every few seconds and never waited on for long: a CLI that hangs, is too
+   * old to list, or is not installed answers "nobody", and the message is
+   * typed as it always was.
+   */
+  /**
+   * Native handoffs waiting for the sender's word. Booked when the receipt
+   * goes out, closed by `ade-msg delivered`, by the target's turn hook, or by
+   * the clock — the last two so a sender that forgets never leaves the other
+   * session without its mail.
+   */
+  const handoffs = new Map<string, Handoff & { failed?: string; acked?: boolean }>()
+  /** Saved with the same care as the requests: a `send` has no other line on disk. */
+  let saveHandoffs = () => {}
+  /**
+   * How each closed handoff ended. The live test showed the target's turn hook
+   * confirming a delivery before the sender got round to `ade-msg delivered`,
+   * and the sender then read "no handoff waiting" as a failure. A confirmation
+   * that arrives after the fact is answered with what happened, not an error.
+   */
+  const closedHandoffs = new Map<string, "confermata" | "digitata">()
+
+  /** Types what a handoff did not deliver, and says so on both sides. */
+  const fallBackToTyping = (handoff: Handoff, reason: string) => {
+    handoffs.delete(handoff.id)
+    saveHandoffs()
+    closedHandoffs.set(handoff.id, "digitata")
+    const request = openRequests.get(handoff.id)
+    if (request) {
+      request.via = "digitata"
+      delete request.acked
+      saveRequests()
+    }
+    heldLines.push({
+      paneId: handoff.paneId,
+      text: formatFallbackLine(handoff.line, reason),
+      ...(handoff.full ? { full: formatFallbackLine(handoff.full, reason) } : {}),
+      inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from },
+    })
+    appendLine(handoff.paneId, t("note.viaFallback", reason), "note", "ade")
+    if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note", "ade")
+  }
+
+  /** Closes the handoffs the sender confirmed, the hook showed, or the clock ran out on. */
+  const settleHandoffs = (now: number) => {
+    for (const handoff of [...handoffs.values()]) {
+      const outcome = handoffOutcome(
+        handoff,
+        { ...(handoff.acked ? { acked: true } : {}), ...(handoff.failed !== undefined ? { failed: true } : {}) },
+        now,
+      )
+      if (outcome === "wait") continue
+      if (outcome === "fallback") {
+        /*
+         * Deleted after the work, not before. A held line for a pane that is
+         * not running is discarded, and at a restart the panes come back a
+         * moment after the handoffs are loaded: the review found an expired
+         * handoff lost in the very pass that was recovering it. The handoff
+         * stays saved until its pane is alive; only a pane that no longer
+         * exists lets it go.
+         */
+        if (!running.has(handoff.paneId)) {
+          if (!wb().panes.some((pane) => pane.id === handoff.paneId)) {
+            handoffs.delete(handoff.id)
+            saveHandoffs()
+          }
+          continue
+        }
+        fallBackToTyping(handoff, handoff.failed || "nessuna conferma dal mittente")
+        continue
+      }
+      handoffs.delete(handoff.id)
+      saveHandoffs()
+      closedHandoffs.set(handoff.id, "confermata")
+      const request = openRequests.get(handoff.id)
+      if (request) {
+        request.acked = true
+        saveRequests()
+      }
+      appendLine(handoff.paneId, t("note.viaNativeAck"), "note", "ade")
+      if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaNativeAck"), "note", "ade")
+    }
+  }
+
+  const NATIVE_LIST_TTL_MS = 5_000
+  const NATIVE_LIST_TIMEOUT_MS = 3_000
+  let nativeList: { at: number; sessions: NativeSession[] | undefined } | undefined
+  const listNativeSessions = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+  ): Promise<NativeSession[] | undefined> => {
+    const now = Date.now()
+    if (nativeList && now - nativeList.at < NATIVE_LIST_TTL_MS) return nativeList.sessions
+    // Not `host.run`: that door is git-only by design. The live test of S70
+    // found every claude→claude message falling back on "the CLI does not list"
+    // because of it, so the listing has a door of its own.
+    if (!host.claudeAgents) return undefined
+    const listing = host
+      .claudeAgents(project()?.root)
+      .then((result) => (result.code === 0 ? parseNativeSessions(result.stdout) : undefined))
+      .catch(() => undefined)
+    const late = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), NATIVE_LIST_TIMEOUT_MS))
+    const sessions = await Promise.race([listing, late])
+    nativeList = { at: Date.now(), sessions }
+    return sessions
+  }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta }[] = []
+  const heldLines: {
+    paneId: string
+    text: string
+    inbox?: InboxMeta
+    told?: boolean
+    full?: string
+    suspended?: true
+  }[] = []
+  /**
+   * Replies to natively delivered requests, kept as files until the caller is
+   * free. On the typed route the caller is already blocked in `ade-msg ask`
+   * when the answer lands; on the native route it delivered the request itself
+   * and reaches `ade-msg wait` a few tool calls later. The live test saw the
+   * answer taken back after three seconds, the wait run its 110 s out empty,
+   * and the answer typed only then. So: claimed by the wait whenever it starts,
+   * taken back and typed only once the caller's turn has ended.
+   */
+  const lateReplies: { ref: string; callerId: string; from: string; sender: MailPane | undefined }[] = []
+
+  /*
+   * How much mail is waiting for each pane, for the badge in its header.
+   *
+   * Recomputed from the two queues on every pass rather than kept in step by
+   * hand at each push and splice: a count that drifts is a badge that lies,
+   * and the queues are touched from a dozen places.
+   */
+  const [mailWaiting, setMailWaiting] = createSignal<Record<string, number>>({})
+  const refreshMailWaiting = () => {
+    const counts: Record<string, number> = {}
+    for (const held of heldLines) counts[held.paneId] = (counts[held.paneId] ?? 0) + 1
+    for (const entry of inboxPending) counts[entry.paneId] = (counts[entry.paneId] ?? 0) + 1
+    setMailWaiting((current) => {
+      const ids = new Set([...Object.keys(current), ...Object.keys(counts)])
+      for (const id of ids) if ((current[id] ?? 0) !== (counts[id] ?? 0)) return counts
+      return current
+    })
+  }
+
+  /**
+   * Writes into a session's input line on the user's behalf — dropped paths,
+   * dictated speech — and counts it as typed, because it is: nothing is
+   * submitted until the user says so, and until then the line is theirs.
+   *
+   * Not over a question, and the reason is where the text lands rather than an
+   * Enter: `dictationHold` says it at length. The words are not written and the
+   * pane says why, so the user answers with the keys or the card's buttons and
+   * dictates again afterwards.
+   */
+  const typeAsUser = (paneId: string, text: string) => {
+    const session = running.get(paneId)
+    if (!session) return
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }))
+      return tellPane(paneId, t("note.dictationHeld"))
+    records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
+    session.write(text)
+  }
+
+  /**
+   * Shows the user what a pane is waiting for, without typing a character.
+   *
+   * The badge opens into the pane's own transcript: the mail is ADE's to
+   * show, and the session reads it when its line is free. Looking is not
+   * reading — the badge stays until the session itself takes the mail.
+   */
+  const showMail = (paneId: string) => {
+    const panes = mailPanes()
+    const named = (from: string | undefined) => panes.find((pane) => pane.id === from)?.title ?? "una sessione"
+    const waiting = [
+      ...heldLines.filter((held) => held.paneId === paneId).map((held) => held.text),
+      ...inboxPending
+        .filter((entry) => entry.paneId === paneId)
+        .map((entry) => `${named(entry.from)}: ${entry.chars} caratteri, ${entry.id}`),
+    ]
+    if (waiting.length === 0) return
+    for (const line of waiting) tellPane(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)))
+  }
+
+  /** The activity files, one call a pass; a delivery reuses the pass's read for a second (P1-C2a). */
+  let activityReads: { host: object; reads: ActivityReads } | undefined
+  /** Lines sent into each pane, so the hook report's check speeds up after one (P1-C2b). */
+  const linesSent = new Map<string, number>()
+  const readsOf = (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    readOne: (nonce: string) => Promise<string | null>,
+  ) => {
+    if (activityReads?.host !== host) {
+      activityReads = {
+        host,
+        reads: createActivityReads({
+          readOne,
+          ...(host.readAgentActivities ? { readMany: host.readAgentActivities } : {}),
+        }),
+      }
+    }
+    return activityReads.reads
+  }
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
+    // A line on its way is a turn about to start (`createInFlight`).
+    if (linesInFlight.has(paneId)) return false
     const isHooked = hooked(paneId)
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      activity = keptActivity(activity, parseActivity(await host.readAgentActivity(nonce), resumeId))
+      activity = keptActivity(
+        activity,
+        parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+      )
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
+    }
+    /*
+     * The CLI's own hook is certain where the count is a guess: a turn that
+     * began after the last keystroke means the line was sent, whatever key
+     * emptied it. Heals a count left too high by Ctrl+K, a vim command, or
+     * any key `typed-line.ts` does not know — for every CLI that has the hook.
+     */
+    if (activity?.state === "busy") {
+      const submittedAt = activity.at
+      records.typed.update(paneId, (line) => submittedSince(line, submittedAt))
     }
     return isFree(
       {
         hooked: isHooked,
-        permissionPending: Boolean(permissions()[paneId]),
+        permissionPending: questionOpen(paneId),
+        // A line the user began is not the agent being busy, but it is just
+        // as much a reason not to type: see `session/typing.ts`.
+        typing: isTyping(records.typed.get(paneId)),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -1439,6 +2467,14 @@ export function Workbench() {
 
   /** Messages taken from the outbox and not delivered yet, oldest first. */
   const mailQueue: { id: string; message: Message; at: number }[] = []
+
+  /*
+   * A `send` the voice agent wrote is held here until the user says yes out
+   * loud (rilievo 20). `requested` keeps the question from being asked twice
+   * while the message waits in the queue on the next passes.
+   */
+  const voiceSendDecisions = new Map<string, "approved" | "rejected">()
+  const voiceSendRequested = new Set<string>()
 
   /*
    * What survives a restart, in localStorage: the requests still waiting for
@@ -1467,10 +2503,28 @@ export function Workbench() {
   )
   const saveRequests = () => writeStored(REQUESTS_KEY, JSON.stringify([...openRequests.values()]))
 
+  /*
+   * Native handoffs still in the sender's hands, replayed after a restart.
+   * The review's serious loss: a `send` booked natively, ADE closed before the
+   * sender's `delivered`, and at reopening no clock, no fallback, no trace.
+   * Loaded here, they run into the same clock as live ones on the first pass
+   * of `settleHandoffs`: one older than the limit is typed, marked as a
+   * possible repeat; a younger one keeps waiting for the sender's word.
+   */
+  const HANDOFFS_KEY = "ade.mailbox.handoffs"
+  for (const handoff of parseHandoffs(readStored(HANDOFFS_KEY))) handoffs.set(handoff.id, handoff)
+  saveHandoffs = () => writeStored(HANDOFFS_KEY, JSON.stringify([...handoffs.values()]))
+
   /** Long messages left in an inbox and not yet read (S20). */
   const INBOX_KEY = "ade.mailbox.inbox"
   const inboxPending: InboxEntry[] = parseInbox(readStored(INBOX_KEY))
   const saveInbox = () => writeStored(INBOX_KEY, JSON.stringify(inboxPending))
+
+  /* The mail queued for suspended sessions (P1-C6), read back once the panes are restored. */
+  const SUSPENDED_MAIL_KEY = "ade.mailbox.suspended"
+  const paneExists = (paneId: string) => wb().panes.some((pane) => pane.id === paneId)
+  const saveSuspendedMail = () =>
+    writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, paneExists)))
 
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
@@ -1484,10 +2538,27 @@ export function Workbench() {
     paneId: string,
     line: string,
     meta: InboxMeta,
-  ): Promise<boolean> => {
+    /** What the inbox file holds when it differs from the typed line: the same text with its line breaks. */
+    full: string = line,
+  ): Promise<DeliveryResult> => {
     const session = running.get(paneId)
-    if (!session) return false
-    if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return typeLine(session, line)
+    if (!session) return "closed"
+    // A prompt open now takes no text at all: the message waits for it to go (`deliveryResult`).
+    if (questionOpen(paneId)) return "held"
+    // Given even when a prompt held its Enter back; the sender is told it is waiting.
+    const given = (outcome: LineOutcome, stored = false) => {
+      if (outcome === "typed-no-enter" && meta.from) {
+        appendLine(
+          meta.from,
+          t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId),
+          "note",
+          "ade",
+        )
+      }
+      return deliveryResult(outcome, running.get(paneId) === session, stored)
+    }
+    if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead)
+      return given(await typeLineOutcome(session, line))
     const at = Date.now()
     const entry: InboxEntry = {
       id: meta.id,
@@ -1495,26 +2566,36 @@ export function Workbench() {
       name: inboxName(meta.id, at),
       from: meta.from,
       kind: meta.kind,
-      chars: line.length,
+      chars: full.length,
       at,
       ringAt: at,
       rings: 0,
     }
-    const stored = await host.mailboxInboxPut(paneId, entry.name, line).then(
+    const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
       () => false,
     )
-    if (!stored) return typeLine(session, line)
+    if (!stored) return given(await typeLineOutcome(session, line))
     inboxPending.push(entry)
     saveInbox()
-    return typeLine(
-      session,
-      formatBell(
-        entry,
-        mailPanes().find((pane) => pane.id === meta.from),
-        line.length,
+    return given(
+      await typeLineOutcome(
+        session,
+        formatBell(
+          entry,
+          mailPanes().find((pane) => pane.id === meta.from),
+          line.length,
+        ),
       ),
+      true,
     )
+  }
+
+  /** A notice for whoever sent a message: its session, or the window's notices when none is behind it (`noticeTarget`). */
+  const tellSender = (from: string | undefined, text: string) => {
+    const target = noticeTarget(from, (paneId) => running.has(paneId))
+    if (target === "window") report(text, "info")
+    else if (target) heldLines.push({ paneId: target.pane, text })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -1523,11 +2604,47 @@ export function Workbench() {
     let changed = false
     for (const entry of [...inboxPending]) {
       const session = running.get(entry.paneId)
-      const read = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => false) : false
+      const state = session
+        ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const)
+        : "unread"
+      if (state === "lost") {
+        /*
+         * Gone before it was read: said as lost, to the sender and, for a
+         * request, to whoever waits on it, so nobody believes it arrived. A
+         * file the reader moved is "read"; only a file in neither place is this.
+         */
+        inboxPending.splice(inboxPending.indexOf(entry), 1)
+        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
+        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
+        if (entry.kind === "ask" || entry.kind === "spawn") {
+          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+        } else {
+          tellSender(entry.from, formatLost(entry, reader))
+        }
+        changed = true
+        continue
+      }
+      const read = state === "read"
       const free = session && !read ? await freeNow(host, entry.paneId) : false
-      const action = inboxAction(entry, { running: Boolean(session), free, read }, now)
+      const action = inboxAction(
+        entry,
+        { running: Boolean(session), free, read, typing: isTyping(records.typed.get(entry.paneId)) },
+        now,
+      )
       if (action === "wait") continue
       const panes = mailPanes()
+      if (action === "tell") {
+        entry.told = true
+        tellSender(
+          entry.from,
+          formatHeld(
+            entry,
+            panes.find((pane) => pane.id === entry.paneId),
+          ),
+        )
+        changed = true
+        continue
+      }
       if (action === "ring" && session) {
         entry.rings += 1
         entry.ringAt = now
@@ -1539,17 +2656,17 @@ export function Workbench() {
             entry.chars,
           ),
         )
-        appendLine(entry.paneId, t("note.rang", entry.rings), "note")
+        appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
       } else {
         inboxPending.splice(inboxPending.indexOf(entry), 1)
-        if (action === "warn" && entry.from && running.has(entry.from)) {
-          heldLines.push({
-            paneId: entry.from,
-            text: formatUnread(
+        if (action === "warn") {
+          tellSender(
+            entry.from,
+            formatUnread(
               entry,
               panes.find((pane) => pane.id === entry.paneId),
             ),
-          })
+          )
         }
       }
       changed = true
@@ -1619,6 +2736,25 @@ export function Workbench() {
   }
 
   /*
+   * Whether a question is open in a pane, and so nothing may be typed into it or
+   * Entered into it: the prompt the screen found, or the one a `Notification` hook
+   * reported (`isQuestionOpen`, which says why both are needed).
+   *
+   * Every place that holds a line, an Enter or a nudge back asks this, and not one
+   * of the two sources alone. Reading only the screen is what the first version of
+   * the hook did, and it is a hole the size of the thing the hook was added for: the
+   * prompt the reading does not recognise — an option list, a live-updating counter,
+   * a frame that changed since the pane was sampled — is precisely the prompt a
+   * delivery then Enters over, confirming whichever choice was selected. The nudge
+   * after 45 s of silence, the re-ring, the Enter of `confirmSubmitted`, the line's
+   * own Enter, the free test, the held line, the target of a request, the cancel
+   * note, the suspension and the voice alert all come through here. The first time
+   * this was reviewed the miss was in `isFree` alone, and the Architect says he had
+   * missed the rest here too on the first pass.
+   */
+  const questionOpen = (paneId: string) => isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
+
+  /*
    * One secret per spawn, in that process tree's environment only. A pane id
    * is public — `ade-msg list` prints them — so a `from` counts as the sender
    * only when the token that came with it is this pane's.
@@ -1635,7 +2771,8 @@ export function Workbench() {
   /** How long a session that replied with `--close` keeps running, so its own `ade-msg reply` can finish. */
   const AUTO_CLOSE_DELAY_MS = 2500
 
-  const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal")
+  // Nor an app run as a server (T3 Code): an agent asking for help wants another agent.
+  const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal" && agent.kind !== "app")
 
   /*
    * The quota rule for spawn (S9, `session/quota-pick.ts`).
@@ -1659,11 +2796,14 @@ export function Workbench() {
 
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
-    permissionPending: Boolean(permissions()[request.to]),
+    suspended: isSuspendedPane(request.to),
+    permissionPending: questionOpen(request.to),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
+    // A line the user began there: nothing is typed over it (the reminders and the time notes).
+    typing: isTyping(records.typed.get(request.to)),
     ...(folderChanges.has(request.to) ? { lastWriteAt: folderChanges.get(request.to)!.changedAt } : {}),
   })
 
@@ -1764,11 +2904,14 @@ export function Workbench() {
    */
   const readActivities = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
     if (!host.readAgentActivity) return
-    for (const paneId of running.keys()) {
+    const hookedPanes = [...running.keys()].flatMap((paneId) => {
       const nonce = paneNonces.get(paneId)
-      if (!nonce || !hooked(paneId)) continue
+      return nonce && hooked(paneId) ? [{ paneId, nonce }] : []
+    })
+    const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
+    for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
+      const read = parseActivity(texts[index] ?? null, pane?.resumeId)
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
@@ -1797,7 +2940,24 @@ export function Workbench() {
   let publishedRequests = ""
 
   /** Ends a request: its waiter gets `result`, and nothing about it is kept. */
-  const settle = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, result?: string) => {
+  const settle = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    id: string,
+    result?: string,
+  ): Promise<boolean> => {
+    /*
+     * The answer first, the closing after. Closing first meant a result that
+     * failed to be written left a closed request and, since a closed request
+     * takes no second answer, no way to send it again. Now a failed write
+     * leaves the request open, and the replier is told to try again.
+     */
+    if (result !== undefined && host.mailboxResult) {
+      try {
+        await host.mailboxResult(id, result)
+      } catch {
+        return false
+      }
+    }
     const answering = openRequests.get(id)?.to
     openRequests.delete(id)
     saveRequests()
@@ -1809,7 +2969,7 @@ export function Workbench() {
     if (answering) settleWhenQuiet(answering)
     statesWritten.delete(id)
     await host.mailboxState?.(id, "").catch(() => {})
-    if (result !== undefined) await host.mailboxResult?.(id, result).catch(() => {})
+    return true
   }
 
   /** How deep sessions may start sessions; `ade.mailbox.maxDepth` in localStorage overrides it. */
@@ -1857,7 +3017,7 @@ export function Workbench() {
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
     paneId: string,
     force: boolean,
-  ): Promise<{ closed: string[]; kept: string[] } | { error: string }> => {
+  ): Promise<{ closed: string[]; kept: string[]; asking: string[] } | { error: string }> => {
     const ids = [...descendants(paneId, spawnedBy), paneId].filter((id) => wb().panes.some((pane) => pane.id === id))
     const blocked = new Map<string, string>()
     for (const id of ids) {
@@ -1871,9 +3031,16 @@ export function Workbench() {
     }
     const closed: string[] = []
     const kept: string[] = []
+    const asking: string[] = []
     for (const id of ids) {
       const pane = wb().panes.find((candidate) => candidate.id === id)
       if (!pane) continue
+      // An unsaved file waits on the user's answer, and may be kept: not «closed» (review F-confirm, BASSO 1).
+      if (buffers()[id]?.dirty) {
+        close(id)
+        asking.push(pane.title)
+        continue
+      }
       for (const request of [...openRequests.values()]) {
         if (request.to === id)
           await settle(
@@ -1896,7 +3063,7 @@ export function Workbench() {
       }
     }
     saveSpawned()
-    return { closed, kept }
+    return { closed, kept, asking }
   }
 
   /** Makes sure `.ade/` (where subagents put long results) is ignored by git in this project. */
@@ -1927,12 +3094,70 @@ export function Workbench() {
       else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }
 
+    for (const item of [...lateReplies]) {
+      if (!running.has(item.callerId)) {
+        lateReplies.splice(lateReplies.indexOf(item), 1)
+      } else if (await freeNow(host, item.callerId)) {
+        lateReplies.splice(lateReplies.indexOf(item), 1)
+        const text = await host.mailboxResultReclaim?.(item.ref).catch(() => null)
+        if (text != null) {
+          heldLines.push({
+            paneId: item.callerId,
+            text: formatLateReply(item.ref, text, item.sender),
+            full: formatLateReply(item.ref, text, item.sender, { keepLines: true }),
+            inbox: { id: item.ref, kind: "reply", from: item.from },
+          })
+        }
+      }
+    }
+
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
-      if (!session) heldLines.splice(heldLines.indexOf(item), 1)
-      else if (await freeNow(host, item.paneId)) {
+      if (!session) {
+        // A suspended session keeps its mail until the user resumes it, and until it is typed.
+        if (keptWithoutProcess(item, { exists: paneExists(item.paneId), suspended: isSuspendedPane(item.paneId) }))
+          continue
         heldLines.splice(heldLines.indexOf(item), 1)
-        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
+        if (item.suspended) saveSuspendedMail()
+      } else if (await freeNow(host, item.paneId)) {
+        heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
+        // Not typed while the session is still there (a prompt opened): back among the held lines.
+        void (
+          item.inbox
+            ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => {
+                // Queued while suspended: the request reached the session now, and its clock starts now.
+                const request =
+                  item.suspended && item.inbox?.kind === "ask" && result === "given"
+                    ? openRequests.get(item.inbox.id)
+                    : undefined
+                if (request) {
+                  request.at = request.deliveredAt = Date.now()
+                  saveRequests()
+                }
+                return result === "held"
+              })
+            : typeLineOutcome(session, item.text).then(
+                (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
+              )
+        ).then((again) => {
+          if (!again) return
+          heldLines.push(item)
+          if (item.suspended) saveSuspendedMail()
+        })
+      } else if (
+        !item.told &&
+        item.inbox?.from &&
+        item.inbox.from !== item.paneId &&
+        isTyping(records.typed.get(item.paneId))
+      ) {
+        // Replies and updates too, not only what went to the inbox: the
+        // sender is told at once, and once, why this is not arriving.
+        item.told = true
+        if (running.has(item.inbox.from)) {
+          const reader = mailPanes().find((pane) => pane.id === item.paneId)
+          heldLines.push({ paneId: item.inbox.from, text: formatHeld(item.inbox, reader), told: true })
+        }
       }
     }
 
@@ -1941,12 +3166,26 @@ export function Workbench() {
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
 
+    /*
+     * Minimised (P1-C1): the messages above move on every pass; what follows —
+     * activity, open requests and their reminders, the inbox — only keeps
+     * watch, and runs once every `HIDDEN_WATCH_MS` until the window is back.
+     */
+    if (!watchDue(pageHidden(), Date.now(), watchedAt)) return
+    watchedAt = Date.now()
     await readActivities(host)
     const now = Date.now()
     const panes = mailPanes()
     await watchFolders(host, now)
     await readDecisions(host, now)
     for (const request of [...openRequests.values()]) {
+      /*
+       * Still in the sender's hands: nothing was typed, so there is nothing to
+       * re-ring, and a reminder now would only open a turn in the target
+       * before the message — the live test saw that reminder pass for a
+       * delivery. The clock in `settleHandoffs` is what happens next.
+       */
+      if (handoffs.has(request.id)) continue
       const state = stateOf(request, now)
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
       if (state === "sessione chiusa") {
@@ -1971,7 +3210,7 @@ export function Workbench() {
             ),
           })
         }
-        appendLine(request.to, t("pane.maybeStuck", request.id), "note")
+        tellPane(request.to, t("pane.maybeStuck", request.id))
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
@@ -1979,16 +3218,35 @@ export function Workbench() {
         await host.mailboxState?.(request.id, state === "in corso" ? "" : state).catch(() => {})
       }
       const session = running.get(request.to)
-      // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
-      if (session && shouldRering(request, targetOf(request), now)) {
-        request.rings = (request.rings ?? 0) + 1
+      /*
+       * The budget (D73): half-way and at the end, one line each, typed like
+       * the reminders. Information for whoever works: it closes nothing and
+       * leaves the reminders below as they were.
+       */
+      // Not over a line begun there, nor over a permission prompt (B1): not given either, so it comes on a later round.
+      const timeNote = session ? timeNoteFor(request, now, targetOf(request)) : undefined
+      if (session && timeNote) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = request.timeNotes
+        request.timeNotes = timeNote
         saveRequests()
-        session.write("\r")
-        appendLine(request.to, t("note.resentRequest", request.id), "note")
+        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessBusy: true }).then((typed) => {
+          if (typed || request.timeNotes !== timeNote) return
+          request.timeNotes = before
+          saveRequests()
+        })
+      }
+      // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
+      if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
+        void ringAgain(request, () => pressAgain(request.to, session), saveRequests).then((pressed) => {
+          if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note", "ade")
+        })
         continue
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
       if (session && shouldNudge(request, targetOf(request), now)) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = { nudges: request.nudges, nudgedAt: request.nudgedAt }
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
         saveRequests()
@@ -1998,12 +3256,21 @@ export function Workbench() {
             request.id,
             panes.find((pane) => pane.id === request.from),
           ),
-        )
-        appendLine(request.to, t("note.nudged", request.id), "note")
+          { unlessBusy: true },
+        ).then((typed) => {
+          if (typed) return appendLine(request.to, t("note.nudged", request.id), "note", "ade")
+          if (request.nudgedAt !== now) return
+          request.nudges = before.nudges
+          request.nudgedAt = before.nudgedAt
+          saveRequests()
+        })
       }
     }
 
     await followInbox(host, now)
+    await flushPanelReplies(host)
+    settleHandoffs(now)
+    refreshMailWaiting()
 
     const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now, decisions)
     if (table !== publishedRequests) {
@@ -2013,18 +3280,143 @@ export function Workbench() {
   }
 
   /** Delivers one message; false leaves it queued for the next pass. */
+  /**
+   * A `send` or `ask` to a suspended session (P1-C6): queued among the held
+   * lines, to be typed once the user resumes it, and the sender told at once.
+   * An `ask` stays open, in the state "sessione sospesa"; a caller blocked in
+   * `ade-msg ask` is woken with the same words instead of waiting it out.
+   */
+  const queueForSuspended = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    id: string,
+    message: Extract<Message, { kind: "send" | "ask" }>,
+    target: MailPane,
+    sender: MailPane | undefined,
+    receipt: string,
+  ): Promise<true> => {
+    const ask = message.kind === "ask"
+    const targetPane = wb().panes.find((pane) => pane.id === target.id)
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: depthOf(target.id, parentOf),
+      maxDepth: maxDepth(),
+      ...(ask && message.budget ? { budget: message.budget } : {}),
+    }
+    const line = ask ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    const full = ask
+      ? formatRequest(id, message.text, sender, { ...context, keepLines: true })
+      : formatDelivery(message, sender, { keepLines: true })
+    heldLines.push({
+      paneId: target.id,
+      text: line,
+      full,
+      inbox: { id, kind: ask ? "ask" : "send", from: message.from },
+      suspended: true,
+    })
+    saveSuspendedMail()
+    if (ask) {
+      openRequests.set(id, {
+        id,
+        kind: "ask",
+        from: message.from,
+        to: target.id,
+        at: Date.now(),
+        brief: briefOf(message.text),
+        via: "digitata",
+        ...(message.budget ? { budget: message.budget } : {}),
+      })
+      saveRequests()
+    }
+    appendLine(
+      target.id,
+      t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text),
+      "note",
+      "ade",
+    )
+    if (sender)
+      appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note", "ade")
+    heldStates.delete(id)
+    // Held before, for a turn that has ended since: its sender was answered then, and stopped listening.
+    if (!held.delete(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
+    if (ask) {
+      await host
+        .mailboxState?.(
+          id,
+          `${receipt.replace(/^ok: /, "")}; la richiesta ${id} resta aperta: la risposta arriva con ade-msg wait ${id}`,
+          "update",
+        )
+        .catch(() => {})
+      // Taken back if nobody woke on it (`--no-wait`): a later `ade-msg wait` waits for the answer, not for this.
+      setTimeout(() => void host.mailboxResultReclaim?.(id, "update").catch(() => null), CLAIM_WINDOW_MS)
+    }
+    return true
+  }
+
   const deliverOne = async (
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
     id: string,
     message: Message,
   ): Promise<boolean> => {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
+    const refusal = unverifiedSenderRefusal(message)
+    if (refusal) {
+      await answer(refusal)
+      return true
+    }
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
 
+    /*
+     * A message from verified voice never acts unattended (rilievo 20; V1-bis,
+     * ALTO 8: every kind that writes or acts, not only `send`): the first pass
+     * asks for a spoken yes and leaves it in the queue; the next pass either
+     * carries it out or tells the waiting `ade-msg` it was refused. Without a
+     * running voice there is nobody to ask, so it is refused rather than
+     * carried out in silence.
+     */
+    const spoken = voiceConfirmationFor(message)
+    if (spoken) {
+      const decision = voiceSendDecisions.get(id)
+      if (decision === "rejected") {
+        voiceSendDecisions.delete(id)
+        voiceSendRequested.delete(id)
+        await answer("errore: invio annullato dall'utente")
+        return true
+      }
+      if (decision !== "approved") {
+        if (!voiceSendRequested.has(id)) {
+          voiceSendRequested.add(id)
+          const asked = await voiceEngine
+            .requestSendConfirmation(id, spoken.to, spoken.text, spoken.lead)
+            .catch(() => false)
+          if (!asked) {
+            voiceSendRequested.delete(id)
+            await answer("errore: invio rifiutato: la conferma vocale non è disponibile")
+            return true
+          }
+        }
+        return false
+      }
+      voiceSendDecisions.delete(id)
+      voiceSendRequested.delete(id)
+    }
+
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
-      if (request && request.to !== message.from) {
+      /*
+       * Every `ask` and `spawn` is booked here and stays until it is settled,
+       * so an id that is not here is closed or was never made. The review
+       * found the second reply to a request — the target answering both the
+       * native copy and the typed repeat — accepted and overwriting the result
+       * file in silence; now it is refused and the replier told.
+       */
+      if (!request) {
+        await answer(
+          `errore: la richiesta ${message.ref} non è aperta (già risposta, annullata o mai fatta): questa risposta non è stata consegnata`,
+        )
+        return true
+      }
+      if (request.to !== message.from) {
         await answer(`errore: la richiesta ${message.ref} non è stata fatta a questa sessione`)
         return true
       }
@@ -2032,22 +3424,43 @@ export function Workbench() {
         await answer("errore: questa versione di ADE non accetta risposte")
         return true
       }
-      await settle(host, message.ref, message.text)
+      /*
+       * The answer is the one certain witness of delivery: only a session
+       * that has the request can answer it. A sender that forgot its
+       * `ade-msg delivered` no longer costs the target a repeat (the live
+       * test's scenario E).
+       */
+      const handoff = handoffs.get(message.ref)
+      if (handoff && request && handoff.paneId === message.from) {
+        handoff.acked = true
+        settleHandoffs(Date.now())
+      }
+      if (!(await settle(host, message.ref, message.text))) {
+        await answer(
+          `errore: risposta non scritta, la richiesta ${message.ref} resta aperta: riprova ade-msg reply ${message.ref}`,
+        )
+        return true
+      }
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
       if (sender)
         appendLine(
           sender.id,
           caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref),
           "note",
+          "ade",
         )
       if (caller)
-        appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+        appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note", "ade")
       await answer(
         `ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}` +
           (request?.autoClose
             ? " — se non ha lavoro da integrare questa sessione ora si chiude"
             : " — la sessione resta aperta per i seguiti"),
       )
+      if (request?.via === "nativa" && caller) {
+        lateReplies.push({ ref: message.ref, callerId: caller.id, from: message.from, sender })
+        return true
+      }
       // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
@@ -2064,12 +3477,15 @@ export function Workbench() {
       if (request?.autoClose) {
         setTimeout(() => {
           void closeTree(host, request.to, false).then((outcome) => {
+            // A pane that should have closed and did not is said over the terminal; one that closed, only in the transcript.
+            const say =
+              "error" in outcome ? tellPane : (id: string, text: string) => appendLine(id, text, "note", "ade")
             const note =
               "error" in outcome
                 ? t("note.keptOpen", outcome.error)
                 : t("note.closedAfterReply", outcome.closed.join(", "))
-            appendLine(request.to, note, "note")
-            if (caller) appendLine(caller.id, note, "note")
+            say(request.to, note)
+            if (caller) say(caller.id, note)
           })
         }, AUTO_CLOSE_DELAY_MS)
       }
@@ -2096,9 +3512,11 @@ export function Workbench() {
           caller.id,
           t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text),
           "note",
+          "ade",
         )
+      const elapsed = formatElapsed(request, Date.now())
       await answer(
-        `ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta`,
+        `ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta${elapsed ? `; ${elapsed}` : ""}`,
       )
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
@@ -2111,6 +3529,33 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "delivered") {
+      const handoff = handoffs.get(message.ref)
+      if (!handoff) {
+        const closed = closedHandoffs.get(message.ref)
+        await answer(
+          closed === "confermata"
+            ? `ok: consegna ${message.ref} già confermata dal turno del destinatario${message.ok ? "" : "; nessun doppione"}`
+            : closed === "digitata"
+              ? `ok: consegna ${message.ref} già digitata da ADE${message.ok ? ": il destinatario può averla due volte" : ""}`
+              : `errore: nessuna consegna nativa in attesa con id ${message.ref}`,
+        )
+        return true
+      }
+      if (!message.from || handoff.from !== message.from) {
+        await answer("errore: solo chi ha ricevuto la consegna può confermarla")
+        return true
+      }
+      if (message.ok) handoff.acked = true
+      else handoff.failed = message.text.trim() || "SendMessage non riuscito"
+      settleHandoffs(Date.now())
+      await answer(
+        message.ok
+          ? `ok: consegna ${message.ref} confermata`
+          : `ok: ADE digita ${message.ref} nella sessione, con la protezione della riga`,
+      )
+      return true
+    }
     if (message.kind === "cancel") {
       const request = openRequests.get(message.ref)
       if (!request) {
@@ -2123,8 +3568,9 @@ export function Workbench() {
       }
       await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)
       // The session stays: it may have other work, and closing is `ade-msg close`'s decision.
-      const session = running.get(request.to)
-      if (session && !permissions()[request.to]) void typeLine(session, formatCancel(request.id, sender))
+      // Held, like every other note: typed at once it landed mid-turn or inside
+      // the user's draft (review area 2). The round types it when the line is free.
+      if (running.has(request.to)) heldLines.push({ paneId: request.to, text: formatCancel(request.id, sender) })
       await answer(
         `ok: richiesta ${request.id} annullata; la sessione resta aperta (chiudila con ade-msg close se non serve più)`,
       )
@@ -2200,8 +3646,61 @@ export function Workbench() {
         return true
       }
       await excludeAdeResults(host, owner.root)
-      appendLine(sender.id, t("note.memory", entry.line.trim()), "note")
+      appendLine(sender.id, t("note.memory", entry.line.trim()), "note", "ade")
       await answer(memoryAddReply(path, next.length))
+      return true
+    }
+
+    /*
+     * `ade-msg registro`: the one writer of the two registers (S75 point 5).
+     * `registerWrite` checks, appends and reads back; here only the project,
+     * the file and the host's I/O.
+     */
+    if (message.kind === "registro") {
+      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      if (!owner || owner.remote || !host.readTextFile) {
+        await answer("errore: i registri esistono solo per i progetti locali")
+        return true
+      }
+      const path = message.register === "design" ? designPath(owner.root) : decisionsPath(owner.root)
+      const read = async () => {
+        try {
+          return (await host.readTextFile!(path)).text
+        } catch (error) {
+          if (/not found|no such file|os error 2|impossibile trovare/i.test(String(error))) return ""
+          throw error
+        }
+      }
+      const reply = await registerWrite(
+        {
+          read,
+          append: async (text) =>
+            host.appendTextFile
+              ? host.appendTextFile(path, text)
+              : host.writeTextFile
+                ? host.writeTextFile(path, `${await read()}${text}`)
+                : "scrittura non disponibile",
+          now: () => new Date(),
+          sender: registerAuthor(sender?.title, message.from),
+          // Verified by the token above: the answer goes back to this pane.
+          fromPane: sender ? message.from : undefined,
+          agent: wb().panes.find((pane) => pane.id === message.from)?.agent,
+          remember: (k, at) => (sender ? askers.remember(path, k, at, message.from) : undefined),
+        },
+        message,
+      )
+      if (reply.startsWith("ok"))
+        void (message.register === "design" ? designRegister.refresh() : decisionsRegister.refresh())
+      // Which project's register, and whether it is the one the button shows (`withPlace`).
+      const asked = message.from ? wb().panes.find((pane) => pane.id === message.from) : undefined
+      const shown = project()
+      await answer(
+        withPlace(reply, message.register, {
+          written: owner,
+          ...(shown ? { shown } : {}),
+          ...(asked ? { asked } : {}),
+        }),
+      )
       return true
     }
 
@@ -2405,12 +3904,13 @@ export function Workbench() {
       if (root) await excludeAdeResults(host, root)
 
       const title = name ?? `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
-      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      const index = (ownerProject ? wb().panes.filter((pane) => belongsTo(pane, ownerProject)) : wb().panes).length + 1
       const task = formatRequest(id, message.text, sender, {
         ...(worktree ? { worktree } : {}),
         ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
         depth,
         maxDepth: maxDepth(),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       const created = addAgent(
         {
@@ -2419,6 +3919,7 @@ export function Workbench() {
           task,
           title,
           workspaceId: owner,
+          ...(root ? { projectRoot: root } : {}),
           ...(worktree ? { worktree } : {}),
           spawnArgs,
           ...(fork ? { fork } : {}),
@@ -2433,13 +3934,14 @@ export function Workbench() {
         at: Date.now(),
         brief: briefOf(message.text),
         ...(message.autoClose ? { autoClose: true } : {}),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       saveRequests()
       if (message.from) {
         spawnedBy.set(created.id, message.from)
         saveSpawned()
       }
-      if (sender) appendLine(sender.id, t("note.subagent", created.title), "note")
+      if (sender) appendLine(sender.id, t("note.subagent", created.title), "note", "ade")
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
@@ -2457,6 +3959,12 @@ export function Workbench() {
       await answer(`errore: ${target.error}`)
       return true
     }
+    // Nothing wakes a suspended session: a restart is refused, and mail is queued below.
+    const toSuspended = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+    if (toSuspended && !toSuspended.queue) {
+      await answer(toSuspended.refusal)
+      return true
+    }
 
     if (message.kind === "interrupt") {
       if (!message.from) {
@@ -2470,7 +3978,9 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
-      appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note")
+      // The TUI drops whatever was in the line with the work: so does the count.
+      records.typed.forget(target.pane.id)
+      tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await answer(
@@ -2535,14 +4045,13 @@ export function Workbench() {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
         if (updated) void reopen(updated)
       }
-      appendLine(
+      tellPane(
         pane.id,
         t(
           message.fresh ? "note.restartedFresh" : "note.restarted",
           sender?.title ?? t("note.someSession"),
           message.model ?? "",
         ),
-        "note",
       )
       // The note is typed once the new process is up, like any held line; given up after a minute.
       const noteText = `[Nota di ripresa da ${sender?.title ?? "una sessione"}]: ${message.note.trim()}`
@@ -2577,7 +4086,10 @@ export function Workbench() {
       }
       await answer(
         `ok: chiuse ${outcome.closed.map((title) => `"${title}"`).join(", ")}` +
-          (outcome.kept.length ? `; worktree lasciate su disco: ${outcome.kept.join(", ")}` : ""),
+          (outcome.kept.length ? `; worktree lasciate su disco: ${outcome.kept.join(", ")}` : "") +
+          (outcome.asking.length
+            ? `; aperte in attesa dell'utente (file non salvato, può tenerle): ${outcome.asking.map((title) => `"${title}"`).join(", ")}`
+            : ""),
       )
       return true
     }
@@ -2591,6 +4103,10 @@ export function Workbench() {
     if (message.kind === "ask" && target.pane.id === message.from) {
       await answer("errore: una sessione non può fare una richiesta a se stessa")
       return true
+    }
+    // Before the route: a suspended Claude session has no pipe, and `SendMessage` to it fails with ENOINBOX.
+    if (toSuspended?.queue && (message.kind === "send" || message.kind === "ask")) {
+      return queueForSuspended(host, id, message, target.pane, sender, toSuspended.receipt)
     }
     const session = running.get(target.pane.id)
     if (!session) {
@@ -2607,8 +4123,86 @@ export function Workbench() {
       await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
       return true
     }
+    /*
+     * Which way. Two Claude sessions talk over the CLI's own channel: the
+     * caller sends, with `SendMessage`, the very line ADE would have typed,
+     * and the message lands in the other's context without a keystroke —
+     * between two tool calls if it is working, as a new turn if it is idle.
+     * So nothing below about turns, permissions or half-written lines
+     * applies to it. Every other pairing is typed, protected, as before,
+     * and the reason is written where the user can read it.
+     */
+    const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
+    const route = routeFor({
+      senderAgent: sender?.agent,
+      targetAgent: target.pane.agent,
+      targetSessionId: targetPane?.resumeId,
+      listed:
+        sender?.agent === "claude-code" && target.pane.agent === "claude-code" && !message.via && !held.has(id)
+          ? await listNativeSessions(host)
+          : undefined,
+      typedRequested: message.via === "typed",
+      alreadyQueued: held.has(id),
+    })
+    if (route.via === "nativa") {
+      const nativeContext = {
+        ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+        depth: depthOf(target.pane.id, parentOf),
+        maxDepth: maxDepth(),
+        ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
+      }
+      const line =
+        message.kind === "ask"
+          ? formatRequest(id, message.text, sender, nativeContext)
+          : formatDelivery(message, sender)
+      const full =
+        message.kind === "ask"
+          ? formatRequest(id, message.text, sender, { ...nativeContext, keepLines: true })
+          : formatDelivery(message, sender, { keepLines: true })
+      if (message.kind === "ask") {
+        const at = Date.now()
+        openRequests.set(id, {
+          id,
+          kind: "ask",
+          from: message.from,
+          to: target.pane.id,
+          at,
+          deliveredAt: at,
+          brief: briefOf(message.text),
+          via: "nativa",
+          ...(message.budget ? { budget: message.budget } : {}),
+        })
+        saveRequests()
+      }
+      const ask = message.kind === "ask"
+      appendLine(
+        target.pane.id,
+        t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text),
+        "note",
+        "ade",
+      )
+      appendLine(target.pane.id, t("note.viaNative", route.name), "note", "ade")
+      if (sender) {
+        appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note", "ade")
+        appendLine(sender.id, t("note.viaNative", route.name), "note", "ade")
+      }
+      held.delete(id)
+      handoffs.set(id, {
+        paneId: target.pane.id,
+        line,
+        full,
+        id,
+        kind: ask ? "ask" : "send",
+        from: message.from,
+        at: Date.now(),
+      })
+      saveHandoffs()
+      await answer(formatHandoff(route.name, id, line))
+      return true
+    }
+
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
-    if (permissions()[target.pane.id]) return false
+    if (questionOpen(target.pane.id)) return false
 
     /*
      * In the background: a note or a request waits for the recipient's turn
@@ -2616,39 +4210,66 @@ export function Workbench() {
      * sender is told at once, so it neither resends nor stops waiting.
      */
     if (!(await freeNow(host, target.pane.id))) {
+      const byLine = isTyping(records.typed.get(target.pane.id))
       if (!held.has(id)) {
         held.add(id)
-        await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+        await answer(
+          byLine
+            ? formatHeldReceipt(target.pane)
+            : `ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`,
+        )
+      }
+      /*
+       * Whoever waits on `ade-msg wait` sees the reason as the request's
+       * state, the moment it applies and the moment it stops: a line half
+       * written in the other session is not the other session ignoring them.
+       */
+      if (message.kind === "ask") {
+        const state = byLine ? HELD_BY_LINE : ""
+        if (heldStates.get(id) !== state) {
+          heldStates.set(id, state)
+          await host.mailboxState?.(id, state).catch(() => {})
+        }
       }
       return false
     }
+    heldStates.delete(id)
 
-    const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
     const targetDepth = depthOf(target.pane.id, parentOf)
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: targetDepth,
+      maxDepth: maxDepth(),
+      ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
+    }
     const line =
+      message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    // The inbox copy, read and never typed, keeps the sender's line breaks.
+    const stored =
       message.kind === "ask"
-        ? formatRequest(id, message.text, sender, {
-            ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
-            depth: targetDepth,
-            maxDepth: maxDepth(),
-          })
-        : formatDelivery(message, sender)
-    if (
-      !(await deliverText(host, target.pane.id, line, {
-        id,
-        kind: message.kind === "ask" ? "ask" : "send",
-        from: message.from,
-      }))
-    ) {
+        ? formatRequest(id, message.text, sender, { ...context, keepLines: true })
+        : formatDelivery(message, sender, { keepLines: true })
+    const delivered = await deliverText(
+      host,
+      target.pane.id,
+      line,
+      { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from },
+      stored,
+    )
+    // A prompt opened before the text: the message stays queued, as for a prompt seen above.
+    if (delivered === "held") return false
+    if (delivered === "closed") {
+      // Suspended while this was on its way: queued like the rest of its mail.
+      const late = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+      if (late?.queue && (message.kind === "send" || message.kind === "ask"))
+        return queueForSuspended(host, id, message, target.pane, sender, late.receipt)
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
-    // The caller has spoken to a session that said it was blocked on it: that is the answer it was waiting for.
-    for (const request of openRequests.values()) {
-      if (request.update && request.from === message.from && request.to === target.pane.id) {
-        delete request.update
-        saveRequests()
-      }
+    // The caller has written to a session that said it was blocked on it: that note is the answer it was waiting for.
+    for (const request of updatesAnsweredBy(openRequests.values(), message, target.pane.id)) {
+      delete request.update
+      saveRequests()
     }
     if (message.kind === "ask") {
       const at = Date.now()
@@ -2660,6 +4281,8 @@ export function Workbench() {
         at,
         deliveredAt: at,
         brief: briefOf(message.text),
+        via: "digitata",
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       saveRequests()
     }
@@ -2668,8 +4291,15 @@ export function Workbench() {
       target.pane.id,
       t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text),
       "note",
+      "ade",
     )
-    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
+    // Typed: say so, and why the CLI's channel was not used, so a message that
+    // went missing can be looked for where it actually went.
+    appendLine(target.pane.id, t("note.viaTyped", route.reason), "note", "ade")
+    if (sender && sender.id !== target.pane.id && running.has(sender.id))
+      appendLine(sender.id, t("note.viaTyped", route.reason), "note", "ade")
+    if (sender)
+      appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note", "ade")
     // A held message's sender was answered when it was held, and has stopped listening since.
     if (held.delete(id)) return true
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
@@ -2692,7 +4322,8 @@ export function Workbench() {
     if (!isTauriDesktop()) return
     const watch = createUpdateWatch({
       currentVersion: async () => (await import("@tauri-apps/api/app")).getVersion(),
-      onUpdate: (update) =>
+      onUpdate: (update) => {
+        setLatestUpdate(update)
         setNotices((list) =>
           addNotice(list, {
             kind: "info",
@@ -2700,7 +4331,8 @@ export function Workbench() {
             href: update.url,
             at: Date.now(),
           }),
-        ),
+        )
+      },
       /*
        * The tag GitHub last answered with and the release it stood for, kept
        * together across restarts: the first check after launch then usually
@@ -2822,21 +4454,90 @@ export function Workbench() {
    * release page, so the notice is never a dead end.
    */
   const [updating, setUpdating] = createSignal(false)
-  const installUpdate = async (href: string) => {
-    if (updating()) return
-    const running = wb().panes.filter(
+  /*
+   * How far the download is, from the Rust side: the only sign of life ADE
+   * gives between «Aggiorna e riavvia» and the window closing, so it must be
+   * there for every megabyte and not only at the end.
+   */
+  const [updateProgress, setUpdateProgress] = createSignal<UpdateProgress | undefined>(undefined)
+  const updateProgressText = () => {
+    const progress = updateProgress()
+    if (!progress) return t("update.acting")
+    if (progress.phase === "install") return t("update.installing")
+    return t(
+      "update.downloading",
+      formatMb(progress.downloaded, locale()),
+      progress.total ? formatMb(progress.total, locale()) : null,
+    )
+  }
+  onMount(() => {
+    if (!isTauriDesktop()) return
+    let unlisten: (() => void) | undefined
+    let gone = false
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen(UPDATE_PROGRESS_EVENT, (event) => {
+          const progress = parseUpdateProgress(event.payload)
+          if (progress) setUpdateProgress(progress)
+        }),
+      )
+      .then((stop) => {
+        if (gone) stop()
+        else unlisten = stop
+      })
+    onCleanup(() => {
+      gone = true
+      unlisten?.()
+    })
+  })
+  /*
+   * The release the bell announced, and whether the question is open. The
+   * dialog is ADE's own (see update/update-dialog.tsx): it names the
+   * version, says what happens to the running sessions, and stays up through
+   * the download, so the window is never silent between the click and its
+   * own closing. Asked every time, sessions or not, because the choice to
+   * close and reopen ADE should always be the user's.
+   */
+  const [latestUpdate, setLatestUpdate] = createSignal<AvailableUpdate | undefined>(undefined)
+  const [updateAsk, setUpdateAsk] = createSignal<{ href: string; version: string; running: number } | undefined>(
+    undefined,
+  )
+  /*
+   * What the dialog was showing when «Nascondi» put it away, so the bell can
+   * bring it back while the download runs, and a failure brings it back by
+   * itself: a person who hid the panel and went to work must not learn from
+   * silence that the update failed.
+   */
+  const [hiddenAsk, setHiddenAsk] = createSignal<{ href: string; version: string; running: number } | undefined>(
+    undefined,
+  )
+  const [updateError, setUpdateError] = createSignal<string | undefined>(undefined)
+  const [installedVersion] = createResource(async () => {
+    if (!isTauriDesktop()) return undefined
+    return (await import("@tauri-apps/api/app")).getVersion()
+  })
+  const runningSessions = () =>
+    wb().panes.filter(
       (pane) => !isPanelPane(pane) && (pane.agent ?? pane.model) && pane.status !== "done" && pane.status !== "error",
     ).length
-    if (running > 0) {
-      const { ask } = await import("@tauri-apps/plugin-dialog")
-      const go = await ask(t("update.restart", running), {
-        title: t("update.restart.title"),
-        kind: "warning",
-        okLabel: t("update.restart.ok"),
-        cancelLabel: t("update.restart.later"),
-      })
-      if (!go) return
-    }
+  const installUpdate = (href: string) => {
+    if (updating()) return
+    const latest = latestUpdate()
+    const version = latest && latest.url === href ? latest.version : (/\d+\.\d+\.\d+/.exec(href)?.[0] ?? "")
+    setUpdateError(undefined)
+    setHiddenAsk(undefined)
+    setUpdateAsk({ href, version, running: runningSessions() })
+  }
+  const showUpdate = () => {
+    const hidden = hiddenAsk()
+    if (!hidden) return
+    setHiddenAsk(undefined)
+    setUpdateAsk(hidden)
+  }
+  const runUpdate = async () => {
+    if (updating()) return
+    setUpdateError(undefined)
+    setUpdateProgress(undefined)
     setUpdating(true)
     autosave.flush()
     // localStorage reaches WebView2's disk store a moment after setItem.
@@ -2846,17 +4547,20 @@ export function Workbench() {
       await invoke("ade_update_install")
     } catch (error) {
       setUpdating(false)
+      setUpdateProgress(undefined)
+      setUpdateError(String(error))
+      showUpdate()
       report(t("update.installFailed", String(error)))
-      await openNoticeLink(href)
     }
   }
 
   onMount(() => {
     /*
      * Mail has to keep moving while ADE is minimised — agents message each
-     * other whether or not anyone is watching — but a hidden window can wait
-     * longer, and with no session running a pass every three seconds is
-     * plenty for a request arriving from outside.
+     * other whether or not anyone is watching — so a hidden window delivers
+     * at the same pace (P1-C1): only the watch half of the pass slows down,
+     * inside `deliverPending`. With no session running a pass every three
+     * seconds is plenty for a request arriving from outside.
      */
     let mailPass = 0
     onCleanup(
@@ -2867,11 +4571,31 @@ export function Workbench() {
           if (running.size === 0 && mailPass % 4 !== 0) return
           return deliverMail()
         },
-        { whenHidden: 2_000 },
+        { whenHidden: 700 },
       ),
     )
     // Usage only feeds what is on screen and `ade-msg stats`: paused while hidden.
     onCleanup(every(15_000, () => refreshUsage()))
+    /*
+     * Which nikcli is installed, for the top bar.
+     *
+     * Asked of the binary, not of any package.json: the project open here is
+     * usually not nikcli's own. Once at startup and then very rarely, because
+     * the answer only changes when nikcli updates itself, and paused while the
+     * window is hidden. Every failure is the same silence.
+     */
+    onCleanup(
+      every(
+        NIKCLI_VERSION_EVERY_MS,
+        async () => {
+          const host = await getHost()
+          if (!host?.nikcliBot) return
+          const answer = await host.nikcliBot(["--version"]).catch(() => null)
+          setNikcliVersion(parseNikcliVersion(answer))
+        },
+        { immediate: true },
+      ),
+    )
     void getHost().then((host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
       const panelVerbs = [
@@ -2905,6 +4629,24 @@ export function Workbench() {
   const initialVoice = loadVoiceSettings()
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceSettings>(initialVoice.settings)
   const [voiceSettingsOpen, setVoiceSettingsOpen] = createSignal(false)
+  const [voiceSettingsSection, setVoiceSettingsSection] = createSignal<string | undefined>(undefined)
+  const closeVoiceSettings = () => {
+    setVoiceSettingsSection(undefined)
+    setVoiceSettingsOpen(false)
+  }
+  /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
+  const sheetOpen = () =>
+    choicesOpen() ||
+    decisionsOpen() ||
+    designOpen() ||
+    voiceSettingsOpen() ||
+    remoteOpen() ||
+    Boolean(recordAsk()) ||
+    Boolean(keyRequest())
+  const openVoiceSettings = (section?: string) => {
+    setVoiceSettingsSection(section)
+    setVoiceSettingsOpen(true)
+  }
 
   /*
    * Which CLIs are set up to report their own session id.
@@ -2956,27 +4698,37 @@ export function Workbench() {
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
+  const listeningOff = initialVoice.migrations.includes("listening-off")
   const movedToName = initialVoice.migrations.some(
     (m) => m === "name-only" || m === "wake-word" || m === "always-listen",
   )
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-      ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-      : movedToShortcut
-        ? t("voice.shortcutOnly", agentShortcut)
-        : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-          ? t(
-              "voice.alwaysListening",
-              initialVoice.settings.wakeWord,
-              t("vui.listen.manual"),
-              t("vui.activation.toggle"),
-            )
-          : undefined,
+    listeningOff
+      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+        : movedToShortcut
+          ? t("voice.shortcutOnly", agentShortcut)
+          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+            ? t(
+                "voice.alwaysListening",
+                initialVoice.settings.wakeWord,
+                t("vui.listen.manual"),
+                t("vui.activation.toggle"),
+              )
+            : undefined,
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
     [
+      /*
+       * Listening turned off under the user goes in the strip at the top, not
+       * only next to the switch: it is their money and their microphone, and
+       * a note that waits for someone to open the voice settings is a note
+       * nobody reads.
+       */
+      listeningOff ? t("voice.listeningOff", agentShortcut, t("vui.listen.always")) : undefined,
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
         ? initialVoice.corrections.filter((c) => !c.includes("assenti")).join(" ")
         : rawSavedVoice !== null && initialVoice.corrections.length > 0
@@ -3010,15 +4762,27 @@ export function Workbench() {
     project,
     runCommand: (id) => runCommand(id),
     isRunning,
-    getRunningSession: (id) => running.get(id),
+    // Dictated text goes into the line and is not submitted: it counts as typed.
+    getRunningSession: (id) => {
+      const session = running.get(id)
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+    },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
+    tellPane: (id, text) => tellPane(id, text),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
+    confirmVoiceSend: (id, approved) => {
+      if (approved) voiceSendDecisions.set(id, "approved")
+      else voiceSendDecisions.set(id, "rejected")
+    },
     getHost,
     recents,
     agentAvailability: () => agentStatuses(),
+    codexFallback: () => voiceSettings().codexFallback === true,
     switchProject: (root) => switchProjectTo(root),
+    // M11: a dictated path outside the project or the recent ones is asked, not opened.
+    confirm: (question) => askYesNo(question, { ok: t("voice.path.open"), cancel: t("voice.path.cancel") }),
     openAgentSession: (input) => openVoiceSession(input),
   })
 
@@ -3046,7 +4810,7 @@ export function Workbench() {
   const playbackMeter = createPlaybackMeter()
   const webSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
-      ? createWebSpeechSpeaker({ lang: "it-IT" })
+      ? createWebSpeechSpeaker({ lang: () => (locale() === "en" ? "en-US" : "it-IT") })
       : createFakeSpeaker()
   const systemSpeaker = {
     ...webSpeaker,
@@ -3060,35 +4824,181 @@ export function Workbench() {
     },
     cancel: () => webSpeaker.cancel(),
   }
+  const [voiceInstalled, setVoiceInstalled] = createSignal(false)
+  const [voiceDownloading, setVoiceDownloading] = createSignal(false)
+  const [voiceFailure, setVoiceFailure] = createSignal<NaturalVoiceFailure>()
+  /** How the Piper download started from the panel is going (K3), while it goes. */
+  const [piperProgress, setPiperProgress] = createSignal<InstallProgress>()
+  /** The Kokoro pack as the host reports it, and what the panel started on it (K6). */
+  const [kokoroPack, setKokoroPack] = createSignal<PackState>({})
+  const kokoro = createPackController({
+    provider: "kokoro",
+    host: getHost,
+    get: kokoroPack,
+    set: setKokoroPack,
+    fallback: t("voice.download.failed"),
+    sizeBytes: KOKORO_DOWNLOAD_BYTES,
+  })
+  /*
+   * «Prova»: a sentence in the language of the voice, so the reply-language
+   * rule does not hand an English voice's sample to Ugo. Kokoro's and Lessac's
+   * are English; the rest follow the interface.
+   */
+  const testReplyVoice = () => {
+    const settings = voiceSettings()
+    const voice = activeReplyVoice(settings.replyVoice, locale())
+    const english =
+      Boolean(kokoroVoice(settings.replyVoice)) || voice === "lessac" || (voice === "system" && locale() === "en")
+    void speaker.speak(english ? t("vui.replies.sample.en") : t("vui.replies.sample.it"))
+  }
+
+  const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
+  /*
+   * The voice the speaker is actually asking the host for, which is not always
+   * the one the panel shows: a Kokoro voice on an Italian reply is spoken by
+   * Piper, and it is Piper's download that has to be tracked. The panel's own
+   * choice stays `activePiperVoice`, and K6 is where the two are put together.
+   */
+  const speakingVoice = () => speakingReplyVoice(voiceSettings().replyVoice, voiceSettings().ttsLocale, locale())
+  // The failure is looked for with the voice that is actually speaking, not with
+  // the one the panel shows: they differ as soon as a Kokoro voice meets an
+  // Italian reply, and a download error recorded under one and looked for under
+  // the other is an error that never appears.
+  const voiceError = createMemo(() => naturalVoiceFailureFor(voiceFailure(), speakingVoice()))
+  const clearVoiceFailure = (voice: string) => {
+    setVoiceFailure((current) => clearNaturalVoiceFailure(current, voice))
+  }
+  const failNaturalVoice = (voice: string, problem: unknown) => {
+    const message =
+      (problem instanceof Error ? problem.message : String(problem ?? "")).trim() || t("voice.download.failed")
+    setVoiceFailure({ voice, problem: message })
+    if (voice === speakingVoice()) report(t("voice.download.report", message))
+  }
+
+  const checkVoiceInstalled = async () => {
+    const v = speakingVoice()
+    if (v === "system") {
+      setVoiceInstalled(true)
+      clearVoiceFailure(v)
+      return
+    }
+    try {
+      const host = await getHost()
+      if (!host?.ttsPiperStatus) {
+        if (speakingVoice() === v) setVoiceInstalled(true)
+        return
+      }
+      const st = await host.ttsPiperStatus(v)
+      if (speakingVoice() !== v) return
+      setVoiceInstalled(Boolean(st.installed))
+      if (st.installed) clearVoiceFailure(v)
+    } catch {
+      if (speakingVoice() === v) setVoiceInstalled(false)
+    }
+  }
+
   /*
    * S15: replies in Piper's voice where the desktop host has it, with the
    * system voice underneath while it downloads or when it fails. The host is
    * looked up per call, so the browser harness simply never gets past status.
    */
   const naturalSpeaker = createNaturalSpeaker({
-    voice: () => voiceSettings().replyVoice,
+    /*
+     * Which voice speaks, and in which language — one answer, because the voice
+     * is chosen *for* the language and two of them could come apart. The
+     * language is the one of the reply as its text says it, and the setting is
+     * what answers when the text says nothing: a reply in Italian is read in
+     * Italian, which is what keeps a Kokoro voice from reading it with an
+     * English mouth. See `replyLocale`.
+     */
+    voiceFor: (detected) => {
+      const settings = voiceSettings()
+      // Not called `locale`: that is the language of the window, and it is asked
+      // for one line below.
+      const spoken = replyLocale(settings.replyVoice, detected, interfaceLocale(locale(), settings.ttsLocale))
+      return { voice: speakingReplyVoice(settings.replyVoice, spoken, locale()), locale: spoken }
+    },
     status: async (voice) => {
       const host = await getHost()
-      return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
+      // Which backend reads the voice decides which command answers: Piper's
+      // voices are files of their own, Kokoro's four are one 219 MB download, and
+      // asking the wrong backend about a voice it does not have is a question
+      // with no answer.
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        // The panel's shape: undefined means this build cannot run Kokoro at all,
+        // which is not the same as a pack that is not there yet.
+        const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
+        return { supported: pack !== undefined, installed: pack?.installed ?? false }
+      }
+      if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
+      return { supported: false, installed: false }
     },
     install: async (voice) => {
       const host = await getHost()
-      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
-      await host.ttsPiperInstall(voice)
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
+      } else if (host?.ttsPiperInstall) {
+        return host.ttsPiperInstall(voice)
+      }
+      throw new Error(t("voice.noHost.download"))
     },
-    synthesize: async (voice, text) => {
+    synthesize: async (voice, text, token, ttsLocale) => {
       const host = await getHost()
+      // The locale goes across as what the G2P is asked for, not as the setting:
+      // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
+      // outright. This is the boundary where that becomes true.
+      const lang = g2pLocale(ttsLocale)
+      // A Kokoro voice is read by the other backend, and it takes the voice id
+      // too: its four voices are speaker numbers inside one model, not four files.
+      if (isKokoroVoice(voice as ReplyVoice)) {
+        if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
+        throw new Error(t("voice.noHost"))
+      }
       if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
-      return host.ttsPiperSpeak(voice, text)
+      return host.ttsPiperSpeak(voice, text, token, lang)
     },
+    cancel: async (tokens) => {
+      const host = await getHost()
+      // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
+      // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
+      // non e' ancora partita non parte.
+      await host?.ttsPiperCancel?.(tokens)
+    },
+    stop: async () => {
+      const host = await getHost()
+      // I due figli sono uno per backend: fermare quello che stava parlando, e la
+      // catena si rimette sola al turno dopo.
+      await host?.ttsLocalStop?.()
+      return (await host?.ttsPiperStop?.()) ?? { busy: false }
+    },
+    stopOnCreate: true,
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+        // The device the user picked is not there: the answer comes out of the
+        // default speakers, and it says so once instead of never.
+        report(t("vui.device.missing"), "warning")
+      })
     },
     fallback: systemSpeaker,
+    fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
-      if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+      if (voice !== speakingVoice()) return
+      if (state === "ready") {
+        setVoiceInstalled(true)
+        setVoiceDownloading(false)
+        clearVoiceFailure(voice)
+      } else if (state === "downloading") {
+        setVoiceDownloading(true)
+      } else if (state === "failed") {
+        setVoiceInstalled(false)
+        setVoiceDownloading(false)
+        // A download the user cancelled from the panel is not a failure (K6 review).
+        void getHost().then(async (host) => {
+          if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
+        })
+      }
     },
   })
   /*
@@ -3143,17 +5053,104 @@ export function Workbench() {
     speaker,
     micMeter,
     now: () => Date.now(),
+    /*
+     * What the planning provider said, beside the sentence the user heard. It
+     * is the only way to tell a "riprova fra un momento" that keeps coming back
+     * because of a rate limit from one that will because the key is wrong, and
+     * a 401 quotes the key it refused — so it is scrubbed before it is shown,
+     * and the Italian sentence is the only thing said out loud.
+     */
+    onProviderError: (detail) => report(scrubSecrets(detail)),
     getContext: () => ({
       focusedPaneId: wb().focusedId,
     }),
   })
+
+  const downloadNaturalVoice = async () => {
+    if (voiceDownloading()) return
+    const v = activePiperVoice()
+    setVoiceDownloading(true)
+    speaker.prepare()
+    if (v === "system") {
+      setVoiceInstalled(true)
+      clearVoiceFailure(v)
+      setVoiceDownloading(false)
+      return
+    }
+    let stopFollowing = () => {}
+    const host = await getHost()
+    try {
+      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
+      // K3's progress, read while the install runs: the command answers only at the end.
+      stopFollowing = followInstall(host, "piper", setPiperProgress)
+      await host.ttsPiperInstall(v)
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(true)
+      clearVoiceFailure(v)
+    } catch (error) {
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(false)
+      // Annulla in the panel ends the download with an error: it was asked for, it is not one.
+      if (!(await installCancelled(host, "piper"))) failNaturalVoice(v, error)
+    } finally {
+      stopFollowing()
+      setPiperProgress(undefined)
+      if (activePiperVoice() === v) setVoiceDownloading(false)
+    }
+  }
+
+  const hasVoiceAgent = createMemo(() => {
+    const statuses = agentStatuses()
+    if (!statuses) return true
+    const engine = voiceSettings().agentEngine
+    if (engine === "claude") {
+      return statuses.find((s) => s.agent.id === "claude-code")?.availability !== "assente"
+    }
+    if (engine === "codex") {
+      return statuses.find((s) => s.agent.id === "codex")?.availability !== "assente"
+    }
+    return statuses.some(
+      (s) => (s.agent.id === "claude-code" || s.agent.id === "codex") && s.availability !== "assente",
+    )
+  })
+
+  // Status only: never starts a download. Looking at Agent or Voice must not
+  // pull 63 MB; that happens from the checklist button or when the voice speaks.
+  const preloadNaturalVoice = () => {
+    void checkVoiceInstalled()
+  }
 
   // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
   createEffect(
     on(
       () => voiceEngine.isRunning(),
       (running) => {
-        if (running && voiceSettings().speakReplies !== false) speaker.prepare()
+        if (running) {
+          preloadNaturalVoice()
+          if (voiceSettings().speakReplies !== false && voiceEngine.activeMode() === "agent") speaker.prepare()
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => wb().view === "agent",
+      (isAgent) => {
+        if (isAgent) preloadNaturalVoice()
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => voiceSettingsOpen(),
+      (open) => {
+        if (open) preloadNaturalVoice()
+        // What the host has of Kokoro, asked when the panel opens: it can change under ADE.
+        if (open) void kokoro.refresh()
       },
       { defer: true },
     ),
@@ -3175,7 +5172,8 @@ export function Workbench() {
     s.mode === "agent" &&
     (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
   const listenForName = () => {
-    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true })
+    // Not the user's hand: a stop for spending is not lifted by a launch.
+    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
   }
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
@@ -3183,8 +5181,16 @@ export function Workbench() {
     // and the profile was written back on the way in, so it does not return.
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
+    const previousVoice = activePiperVoice()
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
+    const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
+    if (nextVoice !== previousVoice) {
+      setVoiceFailure(undefined)
+      setVoiceInstalled(nextVoice === "system")
+      setVoiceDownloading(false)
+      void checkVoiceInstalled()
+    }
     await voiceEngine.updateSettings(saved.settings)
     await registerGlobalShortcuts?.(saved.settings)
     const after = listensByItself(saved.settings)
@@ -3193,40 +5199,111 @@ export function Workbench() {
     else if (before && !after && voiceEngine.isRunning()) void voiceEngine.stop()
   }
 
+  const isScreenLocked = async () => {
+    // Set from a test driving the page, in a dev build only: a lock cannot be
+    // staged on the user's PC, and a release must not read it.
+    const staged = import.meta.env.DEV
+      ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+      : undefined
+    if (typeof staged === "boolean") return staged
+    if (!isTauriDesktop()) return false
+    const { invoke } = await import("@tauri-apps/api/core")
+    return (await invoke("session_locked")) === true
+  }
+
+  const proactiveAlerts = createProactiveAlerts({
+    now: () => Date.now(),
+    isLocked: isScreenLocked,
+    isEnabled: () => voiceSettings().spokenAlerts === true,
+    isBusy: () => voiceEngine.isBusy(),
+    speak: async (text) => {
+      await speaker.speak(text)
+    },
+    openResponseWindow: async (options) => {
+      await voiceEngine.openResponseWindow(options)
+    },
+    isPermissionPending: (paneId) => questionOpen(paneId),
+    isDecisionOpen: (k) => {
+      const decs = decisionsRegister.state()?.decisions
+      return Boolean(decs?.some((d) => d.k === k && d.status === "aperta"))
+    },
+    report: (text) => report(text, "info"),
+  })
+
+  /** ADE's window is hidden in the tray (G11): set by Rust's `ade-window-hidden`/`ade-window-shown`. */
+  let hiddenInTray = false
+
   onMount(() => {
+    preloadNaturalVoice()
     if (listensByItself(voiceSettings())) listenForName()
     /* Paused only while the PC is locked or asleep; see `voice/listen-guard.ts`. */
     const guard = createListenGuard({
       now: () => Date.now(),
-      isLocked: async () => {
-        // Set from a test driving the page, in a dev build only: a lock cannot be
-        // staged on the user's PC, and a release must not read it.
-        const staged = import.meta.env.DEV
-          ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
-          : undefined
-        if (typeof staged === "boolean") return staged
-        if (!isTauriDesktop()) return false
-        const { invoke } = await import("@tauri-apps/api/core")
-        return (await invoke("session_locked")) === true
-      },
+      isLocked: isScreenLocked,
+      isHidden: () => hiddenInTray,
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
+      isHalted: () => voiceEngine.listenHalted(),
       pause: () => voiceEngine.pauseListening(),
-      resume: () => voiceEngine.start("agent", { waitForName: true }),
+      resume: () => voiceEngine.start("agent", { waitForName: true, automatic: true }),
       restart: async () => {
         await voiceEngine.stop()
-        await voiceEngine.start("agent", { waitForName: true })
+        await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
-    let ticking = false
-    const timer = setInterval(() => {
-      if (ticking) return
-      ticking = true
-      void guard.tick().finally(() => (ticking = false))
-    }, LOCK_POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    /* `every` and not a bare interval, and a hidden window does not slow it: a
+       lock is what the guard is here to notice, and a minimised ADE is how
+       listening to it looks for most of the day. What to ask the guard is the
+       guard's own decision, and it asks nothing with the voice off. */
+    const stopGuard = pollListenGuard(guard)
+    onCleanup(stopGuard)
   })
+
+  const completionTurns = new Map<string, number>()
+
+  // Proactive alerts: session completed work
+  createEffect(
+    on(
+      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status, lines: p.lines })),
+      (currentPanes, previousPanes) => {
+        if (!previousPanes) return
+        for (const pane of currentPanes) {
+          const prev = previousPanes.find((p) => p.id === pane.id)
+          if (!prev) continue
+          if (pane.status === "working" && prev.status !== "working") {
+            completionTurns.set(pane.id, (completionTurns.get(pane.id) ?? 0) + 1)
+            continue
+          }
+          if (prev.status === "working" && pane.status === "idle") {
+            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines, completionTurns.get(pane.id) ?? 0)
+          }
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  // Proactive alerts: open decision awaiting in register
+  createEffect(
+    on(
+      () => decisionsRegister.state()?.decisions,
+      (decisions) => {
+        if (!decisions) return
+        for (const dec of decisions) {
+          if (dec.status === "aperta") {
+            const latest = dec.history.at(-1)
+            proactiveAlerts.notifyDecision(
+              dec.k,
+              dec.title,
+              `${dec.openedAt}:${dec.history.length}:${latest?.type ?? "aperta"}:${latest?.at ?? ""}`,
+            )
+          }
+        }
+      },
+      { defer: true },
+    ),
+  )
 
   // Too many sentences sent in an hour: said on screen, listening goes on.
   createEffect(
@@ -3327,7 +5404,7 @@ export function Workbench() {
             status: "done",
             model: "—",
             mode: "plugin",
-            workspaceId: project()?.name ?? "workspace",
+            ...here(),
             lines: [],
             plugin: { pluginId: pane.pluginId, name: pane.name },
           }),
@@ -3378,6 +5455,8 @@ export function Workbench() {
     if (savedRecents) {
       setRecents(parseRecents(savedRecents))
     }
+    // Which of them are gone, asked in the background: marked, not removed.
+    if (host?.exists) void missingRecents(recents(), host.exists).then(setMissingRoots)
 
     themeState.restore()
     setBooting(t("boot.restore"))
@@ -3390,13 +5469,20 @@ export function Workbench() {
       if (state) {
         restored = state
         setWb(fromWorkspaceState(state))
+        // The suspended sessions' queues, now that their panes are back (P1-C6).
+        // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
+        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
       }
     }
 
     // Discover project
     if (host) {
       setBooting(t("boot.project"))
-      const path = restored?.projectPath || (host.currentDir ? await host.currentDir() : "")
+      const here = host.currentDir ? await host.currentDir() : ""
+      const saved = restored?.projectPath
+      // The last project's folder gone: ADE opens where it was started, and says why.
+      const gone = saved ? await refuseMissingRoot(host, saved) : false
+      const path = (!gone && saved) || here
       const p = await discoverProject(host, path)
       setProject(p)
 
@@ -3437,16 +5523,29 @@ export function Workbench() {
          * `p.root` (see `startProcess`), so that is where its transcript is.
          */
         const sessions = await Promise.all(
-          sessionsToResume(restored).map(async (pane) => ({
-            agentId: pane.agent,
-            cwd: pane.cwd || p.root,
-            ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-            missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
-            pane,
-          })),
+          sessionsToResume(restored).map(async (saved) => {
+            // The conversation the pane last switched to, when ADE closed before reading it.
+            const reported = await adoptLastReport(saved)
+            const pane = reported ? { ...saved, resumeId: reported } : saved
+            return {
+              agentId: pane.agent,
+              cwd: pane.cwd || p.root,
+              ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
+              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              pane,
+            }
+          }),
         )
-        for (const { session, plan } of planRestore(sessions)) {
-          void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
+        const planned = planRestore(sessions)
+        for (const { session, plan, sharedWith } of planned) {
+          if (sharedWith) {
+            // The conversation stays with the other pane: this one must not reopen it by its saved id.
+            setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
+            tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
+          }
+          void reopening.run(session.pane.id, () =>
+            startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
+          )
         }
 
         /*
@@ -3457,13 +5556,10 @@ export function Workbench() {
          * asks for the conversation by id when there is one, and starts the
          * agent fresh when there is not.
          */
-        const planned = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of wb().panes) {
-          if (planned.has(pane.id)) continue
-          if (isPanelPane(pane)) continue
-          if (!(pane.agent ?? pane.model)) continue
-          void reopen(pane)
-        }
+        // With the claims just handed out: a pane planned `here` has not reported its id yet.
+        const claims = restoreClaims(planned)
+        const plannedIds = new Set(sessions.map((session) => session.pane.id))
+        for (const pane of exitedToReopen(wb().panes, plannedIds)) void reopen(pane, undefined, claims)
       }
     }
 
@@ -3516,6 +5612,12 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
+        if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+          if (wb().view !== "agent") {
+            setWb((w) => ({ ...w, view: "agent" }))
+            return
+          }
+        }
         if (holdsToTalk(voiceSettings(), mode)) {
           const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
           void pttHandler.onKeyDown(parseChord(chord, platform), e, mode)
@@ -3539,10 +5641,22 @@ export function Workbench() {
        * daily occurrence.
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
-      if (isTerminal && resolution.type === "ade") return
+      if (isTerminal && resolution.type === "ade" && !FROM_TERMINALS.has(resolution.commandId ?? "")) return
+      // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
+      if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
+      // Nor a close, from a text field: the chord is swallowed, so it closes neither the pane nor the window.
+      if (
+        isInput &&
+        resolution.type === "ade" &&
+        resolution.commandId &&
+        NOT_FROM_TEXT_FIELDS.has(resolution.commandId)
+      ) {
+        e.preventDefault()
+        return
+      }
 
       if (resolution.type === "ade") {
         if (resolution.commandId && isHandledCommand(resolution.commandId)) {
@@ -3568,65 +5682,167 @@ export function Workbench() {
       }
     }
 
+    let closingConfirmed = false
+    let isHandlingClose = false
+
     /*
      * Closing the window is the one way out of ADE that `close` cannot guard.
      * A modified buffer lives only in memory, so quitting with one open loses
-     * it as completely as closing its pane would.
+     * it as completely as closing its pane would; and a reload ends every
+     * running agent (`mustConfirmLeaving`).
      */
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      const unsaved = Object.values(buffers()).filter((buffer) => buffer.dirty)
-      if (unsaved.length === 0) return
+      if (closingConfirmed) return
+      const unsavedBuffers = Object.values(buffers()).filter((buffer) => buffer.dirty).length
+      if (!mustConfirmLeaving({ unsavedBuffers, runningSessions: running.size })) return
       event.preventDefault()
       // Browsers ignore the text and show their own, but setting returnValue
       // is still what makes the prompt appear at all.
       event.returnValue = ""
     }
 
+    let unlistenClose: (() => void) | undefined
+    let unlistenHide: (() => void) | undefined
+    let unlistenHidden: (() => void) | undefined
+    let unlistenShown: (() => void) | undefined
+    if (isTauriDesktop()) {
+      void import("@tauri-apps/api/event").then(({ listen }) => {
+        listen<{ requestId?: number }>("ade-window-close-requested", async (event) => {
+          const requestId = event.payload?.requestId
+          if (isHandlingClose) return
+          isHandlingClose = true
+          const closeForGood = () =>
+            closeAfterSaving({
+              flush: () => autosave.flush(),
+              close: async () => {
+                try {
+                  const { invoke } = await import("@tauri-apps/api/core")
+                  await invoke("ade_confirm_close", { requestId })
+                } catch {
+                  const { getCurrentWindow } = await import("@tauri-apps/api/window")
+                  await getCurrentWindow().close()
+                }
+              },
+            })
+
+          try {
+            // Acknowledge receipt to Rust to disarm the safety timeout while
+            // prompting the user, or while the workbench reaches the disk.
+            try {
+              const { invoke } = await import("@tauri-apps/api/core")
+              await invoke("ade_close_ack", { requestId })
+            } catch {}
+
+            const working = countWorkingSessions(wb().panes, running)
+            if (!shouldConfirmWindowClose({ working })) {
+              closingConfirmed = true
+              await closeForGood()
+              return
+            }
+
+            const message = closeConfirmationMessage(working)
+            const allowed = await askCloseConfirmation(message)
+            if (allowed) {
+              closingConfirmed = true
+              await closeForGood()
+            } else {
+              try {
+                const { invoke } = await import("@tauri-apps/api/core")
+                await invoke("ade_cancel_close", { requestId })
+              } catch {}
+            }
+          } finally {
+            isHandlingClose = false
+          }
+        }).then((unlisten) => {
+          unlistenClose = unlisten
+        })
+
+        /*
+         * The X with a bot's gateway on hides ADE to the tray (G11): said
+         * first, and with sessions at work asked (`surface/tray-hide.ts`).
+         * Rust waits a few seconds for `ade_tray_take`, then hides anyway.
+         */
+        listen<{ requestId?: number }>("ade-window-hide-requested", async (event) => {
+          const requestId = event.payload?.requestId
+          const { invoke } = await import("@tauri-apps/api/core")
+          if (requestId === undefined || !(await invoke<boolean>("ade_tray_take", { requestId }).catch(() => false)))
+            return
+          const working = wb().panes.filter((pane) => isWorkingAgentPane(pane, running))
+          const storage = (() => {
+            try {
+              return window.localStorage
+            } catch {
+              return undefined
+            }
+          })()
+          const plan = planHide({ working: working.length, noticed: trayNoticed(storage) })
+          const dialog = await import("@tauri-apps/plugin-dialog")
+          if (plan.kind === "ask") {
+            const buttons = hideButtons()
+            const answer = await dialog
+              .message(t("tray.hide.working", plan.working), { title: "ADE", kind: "warning", buttons })
+              .catch(() => undefined)
+            const choice = hideChoice(answer, buttons)
+            if (choice === "keep") return
+            if (choice === "close-sessions") await closer.closeAll(working.map((pane) => pane.id))
+          } else if (plan.kind === "notice") {
+            await dialog.message(t("tray.hide.notice"), { title: "ADE", kind: "info" }).catch(() => undefined)
+            markTrayNoticed(storage)
+          }
+          await invoke("ade_hide_to_tray").catch(() => {})
+        }).then((unlisten) => {
+          unlistenHide = unlisten
+        })
+        // Hidden: no microphone open in a window nobody sees; the guard brings listening back with the window.
+        listen("ade-window-hidden", () => {
+          hiddenInTray = true
+          if (voiceEngine.isRunning()) void voiceEngine.pauseListening()
+        }).then((unlisten) => {
+          unlistenHidden = unlisten
+        })
+        listen("ade-window-shown", () => {
+          hiddenInTray = false
+        }).then((unlisten) => {
+          unlistenShown = unlisten
+        })
+      })
+    }
+
     window.addEventListener("keydown", handleKeyDown, true)
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", handleBlur)
     window.addEventListener("beforeunload", handleBeforeUnload)
-    // Auto-sync OpenRouter API key from nikcli auth.json if not present in localStorage
+    // The voice's OpenRouter key from nikcli's auth.json when the profile has none;
+    // never under ADE Test's identity, whose profiles would get the user's paid key.
     if (!voiceSettings().openRouterApiKey) {
       void (async () => {
-        try {
-          const host = await getHost()
-          const home = await host?.homeDir?.()
-          if (home) {
-            const normalizedHome = home.replace(/\\/g, "/")
-            const candidatePaths = [
-              `${normalizedHome}/AppData/Local/nikcli/auth.json`,
-              `${home}/AppData/Local/nikcli/auth.json`,
-              `${home}\\AppData\\Local\\nikcli\\auth.json`,
-              `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
-              `${home}/AppData/Roaming/nikcli/auth.json`,
-              `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
-              `${normalizedHome}/.config/nikcli/auth.json`,
-              `${normalizedHome}/.nikcli/auth.json`,
-            ]
-            for (const authPath of candidatePaths) {
-              try {
-                const file = await host?.readTextFile?.(authPath, 64 * 1024)
-                if (file?.text) {
-                  const parsed = JSON.parse(file.text)
-                  const orKey = parsed?.openrouter?.key
-                  if (typeof orKey === "string" && orKey.trim().length > 0) {
-                    await handleVoiceSettingsChange({
-                      ...voiceSettings(),
-                      openRouterApiKey: orKey.trim(),
-                    })
-                    break
-                  }
-                }
-              } catch {
-                // check next path
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      })()
+        const host = await getHost()
+        if (!host?.homeDir || !host.readTextFile) return
+        await syncOpenRouterKey({
+          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
+          homeDir: () => host.homeDir!(),
+          readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
+          save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key }),
+          removed: isOpenRouterKeyRemoved,
+        })
+      })().catch(() => {})
+    }
+
+    // The bots' gateways: a message from a chat becomes a turn of its bot (G4).
+    // Rust reads no chat until this listens; the cleanup is registered before
+    // the await, so a reloaded workbench never answers a chat twice.
+    if (isTauriDesktop()) {
+      let gateway: { stop: () => void } | undefined
+      let gatewayGone = false
+      onCleanup(() => {
+        gatewayGone = true
+        gateway?.stop()
+      })
+      void import("../bots/gateway/bridge")
+        .then(({ startAppGatewayController }) => startAppGatewayController())
+        .then((started) => (gatewayGone ? started.stop() : (gateway = started)))
+        .catch((error) => console.warn("ADE: gateway dei bot non avviato", error))
     }
 
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)) {
@@ -3652,14 +5868,18 @@ export function Workbench() {
            * they change: the panel used to save a new chord that the OS kept
            * ignoring until the next launch, while the old one still opened
            * the microphone from anywhere.
+           *
+           * Through the serialiser, because a second save arriving while this
+           * one is still claiming used to unregister what it had just claimed:
+           * the chords the user kept were whichever finished last.
            */
-          const syncGlobalShortcuts = async (settings: VoiceSettings) => {
+          const syncGlobalShortcuts = serialiseRegistrations(async (settings: VoiceSettings) => {
             await registerVoiceShortcuts(settings, {
               unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
               register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
               report: (message) => report(message, "warning"),
             })
-          }
+          })
 
           await syncGlobalShortcuts(voiceSettings())
           registerGlobalShortcuts = syncGlobalShortcuts
@@ -3709,6 +5929,10 @@ export function Workbench() {
     }
 
     onCleanup(() => {
+      unlistenClose?.()
+      unlistenHide?.()
+      unlistenHidden?.()
+      unlistenShown?.()
       window.removeEventListener("keydown", handleKeyDown, true)
       window.removeEventListener("keyup", handleKeyUp, true)
       window.removeEventListener("blur", handleBlur)
@@ -3717,7 +5941,8 @@ export function Workbench() {
   })
 
   // Commands
-  const runCommand = async (id: string) => {
+  // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+  const runCommand = guardedBySheet(sheetOpen, async (id: string) => {
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
     if (keepsPaletteOpen(id)) {
@@ -3770,7 +5995,8 @@ export function Workbench() {
         }
       }
     } else if (id === "pane.close") {
-      if (wb().focusedId) close(wb().focusedId!)
+      // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
+      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb((w) => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -3785,8 +6011,10 @@ export function Workbench() {
       // Only a section the bar shows: a hidden one has no command to run (S40).
       const target = VISIBLE_VIEWS.find((view) => `view.${view}` === id)
       if (target) setWb((w) => ({ ...w, view: target }))
-    } else if (id === "theme.set.light" || id === "theme.set.dark") {
-      themeState.set(id === "theme.set.light" ? "light" : "dark")
+    } else if (id === "theme.set.light" || id === "theme.set.dark" || id === "theme.set.glass") {
+      themeState.set(id === "theme.set.light" ? "light" : id === "theme.set.dark" ? "dark" : "glass")
+    } else if (id === "sidebar.toggle") {
+      toggleSidebar()
     } else if (id === "theme.toggle") {
       // The attribute goes on ADE's own root, not the document's: ADE is mounted
       // inside another application and must not restyle its host.
@@ -3800,22 +6028,25 @@ export function Workbench() {
        */
       setWb((w) =>
         addPane(w, {
-          id: `v${Date.now()}`,
+          id: newPaneId("v"),
           title: t("pane.video.title"),
           status: "working",
           model: "—",
           mode: "video",
           videoPath: "",
-          workspaceId: project()?.name ?? "workspace",
+          ...here(),
           lines: [],
         }),
       )
     } else if (id === "update.check") {
       void checkForUpdates()
-    } else if (id === "decisions.open") {
-      setDecisionsOpen(true)
+    } else if (id === "decisions.open" || id === "design.open") {
+      // Both open the one list; the voice's «apri le decisioni» comes here too.
+      setChoicesOpen(true)
     } else if (id === "decisions.pane") {
       openDecisionsPane()
+    } else if (id === "design.pane") {
+      openDesignPane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -3827,18 +6058,18 @@ export function Workbench() {
        */
       setWb((w) =>
         addPane(w, {
-          id: `a${Date.now()}`,
+          id: newPaneId("a"),
           title: "Simulatore",
           status: "working",
           model: "—",
           mode: "app",
           appUrl: "",
-          workspaceId: project()?.name ?? "workspace",
+          ...here(),
           lines: [],
         }),
       )
     } else if (id === "browser.new") {
-      const newId = `b${Date.now()}`
+      const newId = newPaneId("b")
       setWb((w) =>
         addPane(w, {
           id: newId,
@@ -3859,10 +6090,12 @@ export function Workbench() {
            * It worked in the browser harness only because `project()` is
            * undefined there and the filter is skipped.
            */
-          workspaceId: project()?.name ?? "workspace",
+          ...here(),
           lines: [],
         }),
       )
+    } else if (id === "session.suspend") {
+      if (wb().focusedId) void suspendSession(wb().focusedId!)
     } else if (id === "process.kill") {
       if (wb().focusedId && isRunning(wb().focusedId!)) {
         running.get(wb().focusedId!)?.kill()
@@ -3880,8 +6113,16 @@ export function Workbench() {
         )
       }
     } else if (id === "voice.toggle") {
+      if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+        if (wb().view !== "agent") {
+          setWb((w) => ({ ...w, view: "agent" }))
+          return
+        }
+      }
       void voiceEngine.toggle()
     } else if (id === "record.toggle") {
+      // Closed first: the folder dialog may open, and a palette left open behind it takes another Enter.
+      setPaletteOpen(false)
       const problem =
         recordState().status === "recording"
           ? await recorder.stop()
@@ -3917,10 +6158,34 @@ export function Workbench() {
       await pickRecordDir()
     } else if (id === "voice.settings") {
       setVoiceSettingsOpen(true)
+    } else if (id === "panes.closeGone") {
+      await closer.closeAll(
+        wb()
+          .panes.filter((pane) => pane.gone && !running.has(pane.id))
+          .map((pane) => pane.id),
+      )
+    } else if (id === "recents.forgetGone") {
+      const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
+      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count)))) {
+        const next = withoutMissing(recents(), missingRoots())
+        setRecents(next)
+        localStorage.setItem("ade.recents", serializeRecents(next))
+        setMissingRoots(new Set<string>())
+        // The notice's «Togli dall'elenco» has nothing left to remove.
+        setNoticeAction(undefined)
+      }
+    } else if (parseDesignVariantCommand(id)) {
+      const wanted = parseDesignVariantCommand(id)!
+      const proposal = designRegister.state()?.proposals.find((candidate) => candidate.k === wanted.k)
+      // The proposal's one sheet, where every variant is (notifiche-design); the browser pane's Design mode is gone.
+      if (proposal) {
+        setChoiceStart(proposal.k)
+        setDesignOpen(true)
+      } else report(t("design.variant.missing", wanted.k, wanted.variant))
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
-      if (host) {
+      if (host && !(await refuseMissingRoot(host, root))) {
         const p = await discoverProject(host, root)
         setProject(p)
         setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
@@ -3933,7 +6198,7 @@ export function Workbench() {
     // columns, so `SessionGrid` owns the arrow keys and answers with the real
     // geometry rather than a guess made from the window size.
     setPaletteOpen(false)
-  }
+  })
 
   const allCommands = createMemo(() => {
     // Reading the tick is what makes "uccidi processo" enable itself the moment
@@ -3942,12 +6207,22 @@ export function Workbench() {
     return buildCommands({
       workbench: wb(),
       recents: recents(),
+      missingRecent: (root) => isMissingRecent(missingRoots(), root),
+      designVariants: (designRegister.state()?.proposals ?? [])
+        .filter((proposal) => proposal.status !== "chiusa")
+        .map((proposal) => ({
+          k: proposal.k,
+          title: proposal.title,
+          variants: proposal.variants.map((variant) => variant.name),
+        })),
       hasHost: hasHost(),
       running: new Set(running.keys()),
+      sidebarHidden: sidebarHidden(),
       platform,
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
+      ...(wb().focusedId ? { suspendCheck: suspendCheckFor(wb().focusedId!) } : {}),
       recording: recordState().status === "recording",
       recordMic: recordMic(),
       recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
@@ -3985,9 +6260,11 @@ export function Workbench() {
         quietTimers.delete(paneId)
         if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
         // Without turn hooks, a session that owes an answer is working until it answers (S14).
+        // A prompt counts as work here too, so a pane waiting on a key is not offered
+        // as idle: see `activityOccupiesPane`.
         const outcome = quietOutcome({
           hooked: hooked(paneId),
-          busy: activityOf.get(paneId)?.state === "busy",
+          busy: activityOccupiesPane(activityOf.get(paneId)?.state),
           owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
         })
         // The hold has to be re-armed: it ends with time passing, and nothing
@@ -4022,6 +6299,7 @@ export function Workbench() {
     if (pane.status === "working") settleWhenQuiet(paneId)
 
     writeToTerminal(paneId, chunk)
+    screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
     }
@@ -4065,6 +6343,7 @@ export function Workbench() {
     if (current && pathEquals(current.root, root)) return
     const host = await getHost()
     if (!host) return
+    if (await refuseMissingRoot(host, root)) return
     const opened = await discoverProject(host, root)
     setProject(opened)
     /*
@@ -4078,6 +6357,34 @@ export function Workbench() {
      */
     setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
     setStarting(false)
+  }
+
+  /**
+   * A saved root whose folder is gone — a recent project, a Space, the one
+   * restored at start — is not opened: `git` would fail in it and the
+   * sessions would start in nothing. The notice says so and offers to take it
+   * off the list; nothing is removed unless the user asks. True when refused.
+   */
+  const refuseMissingRoot = async (
+    host: Pick<NonNullable<Awaited<ReturnType<typeof getHost>>>, "exists">,
+    root: string,
+  ) => {
+    const gone = await rootMissing(host, root)
+    setMissingRoots((set) => withMissing(set, root, gone))
+    if (!gone) return false
+    const text = t("project.missing", root)
+    report(text, "warning")
+    setNoticeAction({ text, label: t("project.missing.remove"), run: () => forgetRecent(root) })
+    return true
+  }
+
+  /** "Togli dall'elenco": the one way a gone project leaves the list. */
+  const forgetRecent = (root: string) => {
+    const next = removeRecent(recents(), root)
+    setRecents(next)
+    localStorage.setItem("ade.recents", serializeRecents(next))
+    setMissingRoots((set) => withMissing(set, root, false))
+    setNotice(undefined)
   }
 
   /** Switches to a project already in the list, by the name its row carries. */
@@ -4121,6 +6428,7 @@ export function Workbench() {
     records.forget(id)
     rawWindows.forget(id)
     forgetQuiet(id)
+    screenRequests.forget(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
@@ -4131,23 +6439,40 @@ export function Workbench() {
     bracketedPaste.delete(id)
   }
 
-  const close = (id: string) => {
-    /*
-     * An unsaved file is not closed without asking.
-     *
-     * The buffer model has always known whether there is anything to lose;
-     * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
-     * command — dropped the draft with no warning and no way back.
-     */
-    const buffer = buffers()[id]
-    if (buffer?.dirty) {
-      const discard = confirm(t("editor.closeDirty", buffer.path))
-      if (!discard) return
-    }
+  /*
+   * An unsaved file is not closed without asking.
+   *
+   * The buffer model has always known whether there is anything to lose;
+   * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
+   * command — dropped the draft with no warning and no way back. The question
+   * is the dialog plugin's, so it is answered later: `close` says whether the
+   * pane went now, and it goes only on the yes (`editor/closer.ts`).
+   */
+  const closer = createCloser({
+    unsaved: (id) => {
+      const buffer = buffers()[id]
+      return buffer?.dirty ? buffer.path : undefined
+    },
+    ask: (path) => askYesNo(t("editor.closeDirty", path)),
+    closeNow: (id) => closeNow(id),
+    exists: (id) => wb().panes.some((pane) => pane.id === id),
+    running: (id) => {
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
+    },
+    askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
+  })
+  const close = (id: string): boolean => closer.close(id)
 
+  const closeNow = (id: string) => {
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
+    // A question the voice is asking about this pane has nobody left to answer it.
+    if (questionOpen(id)) {
+      permissions.forget(id)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(id)
+    }
     disposeTerminal(id)
     setLiveTerminals((ids) => {
       if (!ids.has(id)) return ids
@@ -4163,14 +6488,24 @@ export function Workbench() {
     setWb((w) => closePane(w, id))
   }
 
-  const finish = (id: string, code: number | null) => {
+  /*
+   * `failed`: the host refused to start it (`onRefused`). There is no exit
+   * code to show — «Uscito con ?» read as a process that ran and died — so
+   * the header says what happened instead.
+   */
+  const finish = (id: string, code: number | null, failed?: "startFailed" | "connectFailed") => {
     running.delete(id)
     touchRunning()
     forgetQuiet(id)
+    // Whatever was half-written belonged to the process that has gone. Left
+    // behind, it would hold mail back from the session that starts next.
+    records.typed.forget(id)
+    // Suspended: the exit is the one asked for, not the session ending (P1-C6).
+    if (wb().panes.find((pane) => pane.id === id)?.suspended) return
     setWb((w) =>
       updatePane(w, id, {
-        status: code === 0 ? "done" : "error",
-        activity: code === 0 ? "done" : exitedActivity(code),
+        status: code === 0 && !failed ? "done" : "error",
+        activity: failed ?? (code === 0 ? "done" : exitedActivity(code)),
       }),
     )
   }
@@ -4230,8 +6565,9 @@ export function Workbench() {
    * open is focused rather than opened twice: two panes over one path would
    * let the user edit the same file against itself.
    */
-  const openFile = async (path: string) => {
+  const openFile = async (path: string, line?: number) => {
     setSelectedFile(path)
+    const goTo = line ? { line, at: Date.now() } : undefined
 
     // A model or a video is looked at, not edited as text: each opens in its panel.
     const route = routeForFile(path)
@@ -4246,14 +6582,14 @@ export function Workbench() {
 
     const existing = wb().panes.find((pane) => pane.filePath === path)
     if (existing) {
-      setWb((w) => ({ ...w, focusedId: existing.id }))
+      setWb((w) => ({ ...updatePane(w, existing.id, goTo ? { fileGoTo: goTo } : {}), focusedId: existing.id }))
       return
     }
 
     const host = await getHost()
     if (!host?.readTextFile) return
 
-    const id = `f${Date.now()}`
+    const id = newPaneId("f")
     setWb((w) =>
       addPane(w, {
         id,
@@ -4262,20 +6598,64 @@ export function Workbench() {
         model: "—",
         mode: "file",
         filePath: path,
+        fileGoTo: goTo,
         lines: [],
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
       }),
     )
+
+    // An image, a font or a sound is drawn from its bytes, never read as text.
+    if (!readsText(viewKind(path))) return
 
     bufferLoading.set(id, true)
     try {
       const read = await host.readTextFile(path)
       buffers.set(id, openBuffer({ path, text: read.text, truncated: read.truncated }))
     } catch (error) {
-      appendLine(id, error instanceof Error ? error.message : String(error))
+      // Into the pane's own state: `appendLine` wrote it to lines a file pane never shows.
+      bufferError.set(id, error instanceof Error ? error.message : String(error))
     } finally {
       bufferLoading.set(id, false)
     }
+  }
+
+  /*
+   * A click on a link in a session's terminal (`terminal/links.ts`).
+   *
+   * A URL opens in the browser panel tied to the session, like the offers do;
+   * with Ctrl, in the system browser, for the logins that do not work in the
+   * panel. A path is read against the folder the session works in and opens in
+   * the editor at its line.
+   */
+  const terminalOutsideConfirm = createOutsideConfirmationTracker()
+  // The roots granted to this window, as the host writes and ade-media serves them; not the recents (D1-2).
+  const projectRoots = () => grantedRoots()
+
+  const openLink = async (paneId: string, request: LinkRequest) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const say = (text: string) => tellPane(paneId, text)
+    if (request.kind === "url") {
+      if (!request.external) {
+        openOwnedBrowser(request.target, { id: paneId, title: pane?.title ?? "" }, true)
+        return
+      }
+      try {
+        const { invoke } = await import("@tauri-apps/api/core")
+        await invoke("ade_open_external", { url: request.target })
+      } catch (error) {
+        say(String(error))
+      }
+      return
+    }
+    const host = await getHost()
+    await openPathLink(request.target, activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root, request.line, {
+      readTextFile: host?.readTextFile,
+      open: openFile,
+      say: (path) => say(t("pane.link.missing", path)),
+      roots: projectRoots(),
+      sayNote: (note) => say(note),
+      confirmOutside: (path) => terminalOutsideConfirm.checkAndRecord(path),
+    })
   }
 
   const saveFile = async (paneId: string) => {
@@ -4313,13 +6693,13 @@ export function Workbench() {
       }
 
       if (unreadable !== undefined) {
-        const anyway = confirm(t("editor.saveUnreadable", buffer.path, String(unreadable)))
+        const anyway = await askYesNo(t("editor.saveUnreadable", buffer.path, String(unreadable)))
         if (!anyway) {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
       } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
-        const overwrite = confirm(t("editor.saveChanged", buffer.path))
+        const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
           return
@@ -4348,7 +6728,32 @@ export function Workbench() {
     buffers.update(paneId, (now) => (now ? markSaved(now, written) : now))
   }
 
-  const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note") => {
+  /**
+   * A note the user has to read: in the transcript, and over the terminal of
+   * a pane that has one, where the transcript is hidden (`withPaneNotice`).
+   */
+  const tellPane = (id: string, text: string) => {
+    appendLine(id, text, "note", "ade")
+    setWb((w) => {
+      const pane = w.panes.find((candidate) => candidate.id === id)
+      return pane ? updatePane(w, id, { notices: withPaneNotice(pane.notices, text) }) : w
+    })
+  }
+  const dismissNotices = (id: string) => setWb((w) => updatePane(w, id, { notices: undefined }))
+
+  /*
+   * `from` says who wrote the line. ADE's own notes go in the transcript like
+   * the rest, but they are not the agent: read as its report, «Cerco l'ultima
+   * conversazione…» became the pane's activity and stayed in its header after
+   * the conversation was found and open (Verifiche, live 4). Nor is a note of
+   * ADE's a question the agent is asking.
+   */
+  const appendLine = (
+    id: string,
+    text: string,
+    kind: "step" | "shell" | "note" = "note",
+    from: "agent" | "ade" = "agent",
+  ) => {
     /*
      * What is stored is the readable form; what is inspected below is the raw
      * line.
@@ -4382,6 +6787,7 @@ export function Workbench() {
       )
       setRevision((n) => n + 1)
     }
+    if (from === "ade") return
     watchForPermission(id, text)
 
     // Agents print what they are spending in among everything else. Reading it
@@ -4422,8 +6828,16 @@ export function Workbench() {
 
     const pending = permissions()[paneId]
     if (pending) {
-      if (!isResolved(pending, recent, agent)) return
+      // Still asked, perhaps with an answer more than when it was found (the «3. No» of a menu).
+      const still = followPermission(pending, recent, agent)
+      if (still === pending) return
+      if (still) {
+        permissions.set(paneId, still)
+        return
+      }
       permissions.forget(paneId)
+      // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
       setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       return
@@ -4435,7 +6849,10 @@ export function Workbench() {
     permissions.set(paneId, request)
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
-      void voiceEngine.handlePermissionRequest(paneId, request.what)
+      void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
+    } else {
+      const pane = wb().panes.find((p) => p.id === paneId)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what, request.kind)
     }
   }
 
@@ -4512,7 +6929,136 @@ export function Workbench() {
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
-    return path ? !(await host.exists(path)) : false
+    if (path) return !(await host.exists(path))
+    // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
+    const exists = RESUME[agentId]?.exists
+    const command = agentById(agentId)?.command
+    if (!exists || !command) return false
+    const answer = await askCli(command, exists.args(resumeId), root, (output) => exists.read(output, resumeId), {
+      timeoutMs: EXISTS_MS,
+    })
+    return answer === "gone"
+  }
+
+  /**
+   * Asking a CLI for a conversation, for the ones that refuse an invented id.
+   *
+   * The command prints the new conversation and then stays up — it holds the
+   * CLI's background service open — so this reads until the id appears and
+   * kills it, rather than waiting for an exit that is not coming.
+   */
+  const mints = new MintLedger()
+  const mintConversation = async (agentId: string, command: string, cwd: string, title: string, paneId: string) => {
+    const plan = planMint(agentId, title)
+    if (!plan) return undefined
+    // Past `MINT_SLOW_MS` the pane says it is still waiting; past `MINT_MS` it starts without an id.
+    const label = agentById(agentId)?.label || agentId
+    const timing = {
+      timeoutMs: MINT_MS,
+      slow: { afterMs: MINT_SLOW_MS, say: () => tellPane(paneId, t("resume.slowMint", label, MINT_SLOW_LEFT_S)) },
+    }
+    // How long it took and what the CLI printed first, for a slow one to be traced (`mintTrace`).
+    const began = performance.now()
+    let first: { ms: number; line: string } | undefined
+    const read = (output: string) => {
+      first ??= { ms: performance.now() - began, line: output.split("\n")[0] ?? "" }
+      return plan.read(output)
+    }
+    return await mints.track(
+      askCli(command, plan.args, cwd, read, timing).then((id) => {
+        const outcome = id ? "id" : id === null ? "none" : "timeout"
+        console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))
+        return id ?? undefined
+      }),
+      paneId,
+    )
+  }
+
+  /**
+   * The most recent conversation of `cwd` that no other pane holds and no
+   * other open pane minted, asked of the CLI (`ResumeRecipe.lastHere`).
+   * Undefined when there is none or the command did not answer in time.
+   */
+  const lastConversationHere = async (
+    agentId: string,
+    command: string,
+    cwd: string,
+    taken: ReadonlySet<string>,
+    paneId: string,
+  ) => {
+    // The other open panes' conversations by title, a mint whose id ADE never read among them.
+    const marks = wb()
+      .panes.filter((pane) => pane.id !== paneId)
+      .map((pane) => mintMark(pane.id))
+    const plan = planLastHere(agentId, cwd, taken, marks)
+    if (!plan) return undefined
+    return await lastHereBesideMints(
+      (read) => askCli(command, plan.args, cwd, read, { timeoutMs: LIST_MS }),
+      (output, excluded) => planLastHere(agentId, cwd, excluded, marks)!.read(output),
+      taken,
+      mints,
+      (owner) => owner !== paneId && wb().panes.some((pane) => pane.id === owner),
+    )
+  }
+
+  /**
+   * Runs a short CLI command under a pty until `read` finds its answer in the
+   * output, then kills it (`waitForAnswer`, which says what the answers mean).
+   */
+  const askCli = async (
+    command: string,
+    args: string[],
+    cwd: string,
+    read: (output: string) => string | null | undefined,
+    timing: { timeoutMs: number; slow?: { afterMs: number; say: () => void } },
+  ): Promise<string | null | undefined> => {
+    const host = await getHost()
+    if (!host) return undefined
+    return await waitForAnswer({
+      ...timing,
+      read,
+      start: (onLine, onExit) =>
+        host.spawn({
+          command,
+          args,
+          cwd,
+          // A terminal, like every other agent: pipes are Claude Code's alone
+          // (`pty.rs`). Wide enough that no line of the printed JSON is
+          // wrapped: at 80 the id was cut, and a line past 400 (a long UNC
+          // folder, a long permission rule) broke the parse and lost the
+          // conversation (lettura di Mimo, F8).
+          cols: LIST_COLS,
+          rows: 12,
+          onLine: (line) => onLine(stripAnsi(line)),
+          onExit,
+        }),
+    })
+  }
+
+  /**
+   * The id in the report the pane's previous spawn left and nobody took
+   * (`lastReportedId`), written onto the pane; the file is cleared once read.
+   */
+  const adoptLastReport = async (pane: {
+    id: string
+    cwd?: string
+    resumeId?: string
+    otherDir?: string
+    linkNonce?: string
+  }) => {
+    const nonce = pane.linkNonce
+    if (!nonce) return undefined
+    const host = await getHost()
+    const text = (await host?.readAgentLink?.(nonce).catch(() => null)) ?? null
+    if (text === null) return undefined
+    await host?.clearAgentLink?.(nonce).catch(() => {})
+    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
+    if (id) {
+      const report = parseReport(text)
+      const elsewhere = report && pane.cwd ? followedFolder(report, pane.cwd, pane) : undefined
+      setWb((w) => updatePane(w, pane.id, { resumeId: id, otherDir: elsewhere }))
+    }
+    return id
   }
 
   /**
@@ -4524,20 +7070,123 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (pane: Pane, line?: string) => {
-    const agentId = pane.agent ?? pane.model
-    if (running.has(pane.id)) return
+  const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+    if (running.has(given.id)) return
+    // One at a time: its awaits left room for a second one to start the same pane twice (ALTO 3).
+    await reopening.run(given.id, () => reopenPane(given, line, claims))
+  }
+
+  const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+    const agentId = given.agent ?? given.model
+    // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
+    const restart = restartOf(given)
+    if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])
+    const reported = await adoptLastReport(given)
+    let pane = reported ? { ...given, resumeId: reported } : given
+    // Another open pane holds this conversation (ripristino review, point 1): it stays there.
+    const holder = pane.resumeId
+      ? wb().panes.find(
+          (other) =>
+            other.id !== pane.id && (other.agent ?? other.model) === agentId && other.resumeId === pane.resumeId,
+        )
+      : undefined
+    if (holder) {
+      pane = { ...pane, resumeId: undefined }
+      setWb((w) => updatePane(w, pane.id, { resumeId: undefined }))
+      tellPane(pane.id, t("resume.shared", holder.title))
+    }
     const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
-      // "The most recent one here" only when this is the one pane of that
-      // agent: with two, the latest thread is as likely the other's.
-      lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
+      // "The most recent one here" unless another pane of this folder may be
+      // in it: per folder, and for nikcli only a pane without an id of its own.
+      lastTaken: lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root),
       missing,
     })
-    const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
+    // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
+    const text = line?.trim() ? line : plan.kind === "fresh" || plan.kind === "here" ? (pane.task ?? "") : ""
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
+  }
+
+  /*
+   * Suspending a Claude session at rest (P1-C6): its processes are closed, the
+   * pane keeps its place and its text, and "Riprendi" reopens the conversation.
+   */
+  const suspendContext = (pane: Pane, conversationMissing: boolean): SuspendContext => ({
+    running: running.has(pane.id),
+    conversationMissing,
+    permission: questionOpen(pane.id),
+    openRequests: openRequests.values(),
+    heldLines,
+    typing: isTyping(records.typed.get(pane.id)),
+  })
+
+  /**
+   * The button's and the palette's answer. Whether the conversation is on disk
+   * is asked on the disk, so only at the click: here it is taken as there.
+   */
+  const suspendCheckFor = (paneId: string): SuspendCheck | undefined => {
+    // Read so the answer follows a process starting or ending, and the mail queues.
+    runningTick()
+    mailWaiting()
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return undefined
+    return canSuspend(pane, suspendContext(pane, false))
+  }
+
+  const suspendSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return
+    const refuse = (check: SuspendCheck) => {
+      if (!check.ok) tellPane(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])))
+    }
+    const missing = await conversationMissing(pane.agent ?? pane.model, pane.resumeId, pane.cwd)
+    const first = canSuspend(pane, suspendContext(pane, missing))
+    if (!first.ok) return refuse(first)
+    /*
+     * The mark first, so a message arriving from here on is queued rather than
+     * typed; then the same check again, since one may have come in while the
+     * disk was asked; only then the kill. A check that fails now takes the
+     * mark back and closes nothing.
+     */
+    setWb((w) => updatePane(w, paneId, { suspended: true }))
+    const marked = wb().panes.find((candidate) => candidate.id === paneId)
+    const again = marked ? canSuspend({ ...marked, suspended: undefined }, suspendContext(marked, missing)) : first
+    if (!marked || !again.ok) {
+      setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+      return refuse(again)
+    }
+    // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
+    const closed = await stopForSuspend(paneId, running, touchRunning)
+    if (!closed) {
+      // Tracked again, so the mark goes; but deaf (see `stopForSuspend`), so the note asks for the pane to be closed and reopened.
+      setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+      saveSuspendedMail()
+      tellPane(paneId, t("note.suspendKillFailed"))
+      return
+    }
+    forgetQuiet(paneId)
+    setWb((w) => updatePane(w, paneId, { activity: "suspended" }))
+    appendLine(paneId, t("note.suspended"), "note", "ade")
+  }
+
+  /**
+   * "Riprendi": the same conversation by its id (`reopen`), then the mark goes
+   * and the queued mail is typed in the order it came, as held lines are, once
+   * the session is free. A session that does not start stays suspended, its
+   * mail with it.
+   */
+  const resumeSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane?.suspended) return
+    await reopen(pane)
+    if (!running.has(paneId)) {
+      tellPane(paneId, t("note.resumeFailed"))
+      return
+    }
+    setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+    saveSuspendedMail()
   }
 
   /**
@@ -4546,18 +7195,21 @@ export function Workbench() {
    * Panes of every project stay in the workbench and keep talking to each
    * other, so a session of a project that is not on screen — restarted, or
    * spawned by one of its agents — has to start in its own root. Found by
-   * name among the known projects; the open one when the pane's is unknown.
+   * the folder the pane keeps, or by name for a pane saved before it kept one;
+   * the open one when the pane's is unknown. See `pane-project.ts`.
    */
   const projectOfPane = async (
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
     paneId: string,
   ): Promise<Project | undefined> => {
     const open = project()
-    const owner = wb().panes.find((pane) => pane.id === paneId)?.workspaceId
-    if (!owner || owner === open?.name) return open
-    const entry = recents().find((candidate) => candidate.name === owner)
-    if (!entry) return open
-    return discoverProject(host, entry.root).catch(() => open)
+    const found = paneProject(
+      wb().panes.find((pane) => pane.id === paneId),
+      open,
+      recents(),
+    )
+    if (found.kind === "open") return open
+    return discoverProject(host, found.root).catch(() => open)
   }
 
   const startProcess = async (
@@ -4578,7 +7230,29 @@ export function Workbench() {
     typeIntoResumed = false,
   ) => {
     const agent = agentById(agentId)
+    // An app's pane is its server's console: a task typed there is a line the server does not read.
+    if (agent?.kind === "app") task = ""
     const host = await getHost()
+    /*
+     * Its folder gone (a project removed, a worktree cleaned up): not started
+     * somewhere else, and not left to die starting. The pane says which folder
+     * and offers to be closed.
+     */
+    const gone = host
+      ? await goneFolder(
+          wb().panes.find((pane) => pane.id === paneId),
+          project(),
+          recents(),
+          (path) => rootMissing(host, path),
+        )
+      : undefined
+    if (gone) {
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
+      appendLine(paneId, t("project.missing", gone), "note", "ade")
+      return
+    }
+    if (wb().panes.some((pane) => pane.id === paneId && pane.gone))
+      setWb((w) => updatePane(w, paneId, { gone: undefined }))
     const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
     if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host)
@@ -4592,8 +7266,11 @@ export function Workbench() {
      * because a pane that is running under an id ADE did not write down is
      * a session that cannot be resumed and looks like one that can.
      */
-    const resumed = resume?.kind === "resume"
-    const opening = resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
+    let resumed = resume?.kind === "resume"
+    let opening: { args: string[]; resumeId?: string } =
+      resume?.kind === "resume"
+        ? { args: resume.args }
+        : planStart(agentId, resume?.kind === "fresh" ? resume.resumeId : undefined)
     /*
      * The `ade-msg` notice first: `codex -c …` has to precede a `resume`
      * subcommand, and for the rest the order does not matter. The shell has
@@ -4607,8 +7284,95 @@ export function Workbench() {
      */
     const launched = wb().panes.find((pane) => pane.id === paneId)
     const workDir = launched?.worktree || p.root
-    const extraArgs = [...introArgs(agentId), ...(launched?.spawnArgs ?? []), ...opening.args, ...(extra ?? [])]
-    const mintedId = "resumeId" in opening ? opening.resumeId : undefined
+
+    /*
+     * And the id asked of the CLI, when that is the only way to have one.
+     *
+     * Before the real session starts, so it can be started *as* that
+     * conversation: nikcli's `--session` continues one, it does not open one.
+     * When the ask fails the session still starts — just without a
+     * conversation ADE can name, which the pane then says out loud rather
+     * than discovering at the next restart.
+     */
+    const recipe = RESUME[agentId]
+    /*
+     * "The most recent conversation here", asked of the CLI for this folder
+     * rather than left to its `--continue`, which for nikcli is the whole
+     * repository's latest: another worktree's conversation. The ids other
+     * panes hold are left out. None found: a new one, asked for below.
+     */
+    if (resume?.kind === "here" && recipe?.byId) {
+      appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note", "ade")
+      const taken = new Set(
+        wb()
+          .panes.filter((pane) => pane.id !== paneId && pane.resumeId)
+          .map((pane) => pane.resumeId as string),
+      )
+      const found = await lastConversationHere(agentId, agent.command, workDir, taken, paneId)
+      if (found) {
+        opening = { args: recipe.byId(found), resumeId: found }
+        resumed = true
+      } else tellPane(paneId, t("resume.noneHere", agent.label || agentId))
+    }
+    /*
+     * A conversation the CLI no longer has (deleted from nikcli): not reopened,
+     * which failed on the raw NotFoundError, and not kept, or every restart
+     * would ask for it again. The pane starts a new one and says so.
+     */
+    const conversationGone = resume?.kind === "fresh" && resume.gone === true && launched?.resumeId !== undefined
+    if (conversationGone) {
+      setWb((w) => updatePane(w, paneId, { resumeId: undefined }))
+      tellPane(paneId, t("resume.gone", agent.label || agentId))
+    }
+    if (!resumed && !opening.resumeId && launched?.resumeId && !conversationGone && recipe?.byId) {
+      // Already has one: a restart reopens it. Minting here is what made the
+      // pane lose its conversation on the second start.
+      opening = { args: recipe.byId(launched.resumeId), resumeId: launched.resumeId }
+    } else if (!resumed && !opening.resumeId && recipe?.mint) {
+      /*
+       * A title that tells the conversations apart inside the CLI, where they
+       * are listed together: panes are often all called "Sessione 1 — nikcli".
+       */
+      const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`
+      appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")
+      const minted = await mintConversation(agentId, agent.command, workDir, title, paneId)
+      if (minted && recipe.byId) opening = { args: recipe.byId(minted), resumeId: minted }
+      else tellPane(paneId, t("resume.noMint", agent.label || agentId))
+    }
+
+    const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
+    // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
+    const extraArgs = startArgsFor(agentId, launched, {
+      title: paneTitle,
+      opening: opening.args,
+      ...(extra ? { extra } : {}),
+    })
+    const mintedId = opening.resumeId
+    const openedId = openedConversation(resume, mintedId, launched?.resumeId)
+
+    /*
+     * What ADE can promise about this session coming back, said once, here.
+     *
+     * A pane that cannot be reopened by id looks exactly like one that can
+     * until the day ADE is restarted — which is the bug this was written for:
+     * two nikcli sessions in one directory, and the second one came back as a
+     * new conversation with the old title.
+     */
+    const others = wb().panes.some(
+      (pane) => pane.id !== paneId && (pane.agent ?? pane.model) === agentId && sameFolder(pane.cwd || p.root, workDir),
+    )
+    /*
+     * Said only where there is something to say: "the most recent one here" is
+     * what these CLIs have always done and it is usually right, so announcing
+     * it on every start of codex, agy or opencode would be noise. Two panes in
+     * one directory is the case that is not right, and that one is said.
+     */
+    const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
+    if (lostConversation(agentId, promise, resumed)) tellPane(paneId, t("resume.none"))
+    // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
+    if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {
+      tellPane(paneId, t("resume.otherFolder", launched.otherDir))
+    }
 
     /*
      * And the other direction: the CLI telling ADE which conversation it
@@ -4631,6 +7395,8 @@ export function Workbench() {
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
     let spawned: SpawnedSession | undefined
+    // The host refused to start it: said by `onRefused`, then the exit that follows.
+    let refused = false
 
     /*
      * The project itself, not a worktree cut for the session.
@@ -4642,8 +7408,8 @@ export function Workbench() {
      * they make it in the terminal like anywhere else. The worktree board still
      * lists and integrates the trees that exist — it just stops making them.
      */
+    const starting = startingState({ task, resumed, typeIntoResumed })
     try {
-      const hasTask = Boolean(task.trim())
       setWb((w) =>
         updatePane(w, paneId, {
           cwd: workDir,
@@ -4653,8 +7419,12 @@ export function Workbench() {
               : p.branch
                 ? { branch: p.branch, fidelity: "project" }
                 : undefined,
-          status: hasTask ? "working" : "idle",
-          activity: resumed ? "resumed" : hasTask ? "running" : "ready",
+          status: starting.status,
+          activity: starting.activity,
+          // Saved, so the next start can read what this spawn reported last.
+          linkNonce: nonce,
+          // Another conversation than the one followed: its folder no longer applies.
+          ...(openedId !== launched?.resumeId ? { otherDir: undefined } : {}),
           // A fresh start drops an id whose conversation is gone, so the pane
           // stops promising to reopen it.
           ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
@@ -4675,9 +7445,9 @@ export function Workbench() {
           const assigned = await host.assignedSecrets(agent.command)
           secretNames = assigned.map((key) => key.name)
           if (assigned.length > 0)
-            appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note")
+            appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note", "ade")
         } catch (failure) {
-          appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note")
+          tellPane(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)))
         }
       }
 
@@ -4703,7 +7473,15 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      // A conversation reopened is drawn again, requests and all: those were acted on.
+      screenRequests.start(
+        paneId,
+        resumed || (launched?.resumeId !== undefined && opening.resumeId === launched.resumeId),
+      )
+      // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
+      const bornAt = ptySize(paneId)
       const session = await host.spawn({
+        ...bornAt,
         command: agent.command,
         args: extraArgs,
         cwd: workDir,
@@ -4728,7 +7506,9 @@ export function Workbench() {
            * works with every CLI ADE runs: they read keystrokes and write
            * text, and this is text.
            */
-          void handlePanelRequest(paneId, line)
+          // Only from an agent: a terminal's output is the user's own, and may be anything (`acceptsRequests`).
+          // Not from a screen drawn with the cursor: those lines are the screen's words run together, and its requests are read from the screen (`screenRequests`).
+          if (acceptsRequests(agentId) && !onAlternateScreen(paneId)) void handlePanelRequest(paneId, line)
           noticeDevServer(paneId, line)
         },
         /*
@@ -4737,7 +7517,13 @@ export function Workbench() {
          * must not mark the new session finished.
          */
         onExit: (code) => {
-          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+          if (!running.has(paneId) || running.get(paneId) === spawned)
+            finish(paneId, code, refused ? "startFailed" : undefined)
+        },
+        // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
+        onRefused: (reason) => {
+          refused = true
+          tellPane(paneId, t("pane.startFailed", reason))
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
@@ -4745,9 +7531,10 @@ export function Workbench() {
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
-      spawned = session
+      spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
       running.set(paneId, session)
       touchRunning()
+      resyncSize(paneId, session, bornAt)
 
       /*
        * Learning the id from the CLI's own record, for the ones that keep one.
@@ -4764,7 +7551,7 @@ export function Workbench() {
         const home = await host.homeDir().catch(() => "")
         const readLatest = async () =>
           home
-            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", p.root)
+            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", workDir)
             : undefined
         const before = await readLatest()
         const poll = setInterval(async () => {
@@ -4808,9 +7595,25 @@ export function Workbench() {
             await host.clearAgentLink?.(n)
           },
           cancelled: () => running.get(paneId) !== session,
+          linesSent: () => linesSent.get(paneId) ?? 0,
           onReport: (report) => {
             if (running.get(paneId) !== session) return
-            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+            const elsewhere = otherFolder(report, workDir)
+            // Kept with the pane, so a restore says it again (ripristino review, BASSO 2); a report without its folder keeps what was known.
+            const followed = wb().panes.find((pane) => pane.id === paneId)
+            setWb((w) =>
+              updatePane(w, paneId, {
+                resumeId: report.sessionId,
+                otherDir: followedFolder(report, workDir, followed ?? {}),
+              }),
+            )
+            // Followed all the same, since the TUI does show it; but only one of the two can reopen it.
+            const holder = wb().panes.find(
+              (other) =>
+                other.id !== paneId && (other.agent ?? other.model) === agentId && other.resumeId === report.sessionId,
+            )
+            if (holder) tellPane(paneId, t("resume.alsoOpen", holder.title))
+            if (elsewhere) tellPane(paneId, t("resume.otherFolder", elsewhere))
           },
         })
       }
@@ -4831,7 +7634,7 @@ export function Workbench() {
       // Not typed when the session was resumed: the agent already has the
       // thread, and sending the original prompt again would ask for the whole
       // job a second time.
-      if (task.trim() && (!resumed || typeIntoResumed)) {
+      if (starting.typesTask) {
         const startedAt = Date.now()
         const poll = setInterval(() => {
           // The pane was closed, or the process died, while we were waiting.
@@ -4845,7 +7648,7 @@ export function Workbench() {
             firstByteAt,
             lastByteAt,
             now: Date.now(),
-            permissionPending: Boolean(permissions()[paneId]),
+            permissionPending: questionOpen(paneId),
           })
           if (decision === "wait") return
 
@@ -4866,11 +7669,13 @@ export function Workbench() {
               (request) => request.kind === "spawn" && request.to === paneId,
             )
             if (session && spawned) {
-              void getHost().then((host) =>
-                host
-                  ? deliverText(host, paneId, opening, { id: spawned.id, kind: "spawn", from: spawned.from })
-                  : typeLine(session, opening),
-              )
+              const meta = { id: spawned.id, kind: "spawn" as const, from: spawned.from }
+              void getHost().then(async (host) => {
+                if (!host) return void typeLine(session, opening)
+                // A prompt at start-up: the task waits among the held lines instead of going missing.
+                if ((await deliverText(host, paneId, opening, meta)) === "held")
+                  heldLines.push({ paneId, text: opening, inbox: meta })
+              })
             } else if (session) void typeLine(session, opening)
             return
           }
@@ -4885,13 +7690,13 @@ export function Workbench() {
               activity: "ready",
             }),
           )
-          noteInTerminal(paneId, t("task.notSent"))
-          appendLine(paneId, t("task.notSent.short"), "note")
+          tellPane(paneId, t("task.notSent"))
         }, 100)
         openingPolls.add(poll)
       }
     } catch (e) {
-      appendLine(paneId, String(e))
+      // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
+      tellPane(paneId, t("pane.startFailed", String(e)))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
@@ -4919,6 +7724,7 @@ export function Workbench() {
     paneNonces.delete(paneId)
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
+    records.typed.forget(paneId)
     setWb((w) =>
       updatePane(w, paneId, {
         cwd: remoteRoot(target),
@@ -4932,9 +7738,14 @@ export function Workbench() {
 
     let tail = ""
     let spawned: SpawnedSession | undefined
+    // The host refused to start it: said by `onRefused`, then the exit that follows.
+    let refused = false
     try {
       startOnCleanScreen(paneId)
+      // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
+      const bornAt = ptySize(paneId)
       const session = await host.spawn({
+        ...bornAt,
         command: "ssh",
         args,
         ...(home ? { cwd: home } : {}),
@@ -4946,7 +7757,12 @@ export function Workbench() {
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
-          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+          if (!running.has(paneId) || running.get(paneId) === spawned)
+            finish(paneId, code, refused ? "connectFailed" : undefined)
+        },
+        onRefused: (reason) => {
+          refused = true
+          tellPane(paneId, t("pane.connectFailed", reason))
         },
         pane: paneId,
         paneToken: mintPaneToken(paneId),
@@ -4954,6 +7770,7 @@ export function Workbench() {
       spawned = session
       running.set(paneId, session)
       touchRunning()
+      resyncSize(paneId, session, bornAt)
 
       const steps = [...(shellOnly ? [] : [command]), ...(task.trim() ? [task] : [])]
       if (steps.length === 0) return
@@ -4977,14 +7794,14 @@ export function Workbench() {
           firstByteAt: stepFirst,
           lastByteAt: stepFirst === undefined ? undefined : last,
           now: Date.now(),
-          permissionPending: sshAsking(lastLine) || Boolean(permissions()[paneId]),
+          permissionPending: sshAsking(lastLine) || questionOpen(paneId),
           // The first step waits out a password typed by hand.
           ...(index === 0 ? { timeoutMs: 180_000 } : {}),
         })
         if (decision === "wait") return
         if (decision === "abandon") {
           stopOpeningPoll(poll)
-          noteInTerminal(paneId, t("task.stepNotSent", String(steps[index])))
+          tellPane(paneId, t("task.stepNotSent", String(steps[index])))
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
@@ -5003,7 +7820,7 @@ export function Workbench() {
       }, 150)
       openingPolls.add(poll)
     } catch (e) {
-      appendLine(paneId, String(e))
+      tellPane(paneId, t("pane.connectFailed", String(e)))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
@@ -5019,7 +7836,7 @@ export function Workbench() {
     setProject(opened)
     setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
     setRemoteOpen(false)
-    if (!wb().panes.some((pane) => pane.workspaceId === opened.name)) {
+    if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(
         { agentId: "terminal", count: 1, task: "", title: `ssh ${target.destination}` },
         { index: 1, agentId: "terminal", role: "shell" },
@@ -5054,6 +7871,8 @@ export function Workbench() {
       preset?: string
       title?: string
       workspaceId?: string
+      /** That project's folder, when known: the name alone can belong to two. */
+      projectRoot?: string
       /** A spawned session's own checkout, with the branch it is on. */
       worktree?: { path: string; branch: string }
       spawnArgs?: string[]
@@ -5070,7 +7889,13 @@ export function Workbench() {
     const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
-    const currentProj = input.workspaceId && input.workspaceId !== open?.name ? undefined : open
+    const currentProj = input.projectRoot
+      ? paneProject({ projectRoot: input.projectRoot }, open, []).kind === "open"
+        ? open
+        : undefined
+      : input.workspaceId && input.workspaceId !== open?.name
+        ? undefined
+        : open
     setWb((w) =>
       addPane(w, {
         id,
@@ -5084,6 +7909,7 @@ export function Workbench() {
         task,
         lines: [{ kind: "note", text: task || t("task.none") }],
         workspaceId: input.workspaceId || currentProj?.name || "workspace",
+        ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
         cwd: input.worktree?.path ?? currentProj?.root,
         tree: input.worktree
           ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
@@ -5115,8 +7941,8 @@ export function Workbench() {
    * "Sessione 3 — Claude Code" next to the two already there.
    */
   const openVoiceSession = (input: { agentId: string; task: string }) => {
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const created = addAgent(
       { agentId: input.agentId, count: 1, task: input.task },
       { index: mine.length + 1, agentId: input.agentId, role: "agent" },
@@ -5137,8 +7963,8 @@ export function Workbench() {
   const openBotSession = (bot: AgentFile) => {
     const launch = botLaunch(bot)
     if (!launch) return undefined
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const id = `n${Date.now()}-bot-${++paneSequence}`
 
     setWb((w) =>
@@ -5152,14 +7978,20 @@ export function Workbench() {
         mode: "bot",
         task: "",
         lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
-        workspaceId: owner || "workspace",
+        ...here(),
+        /*
+         * The bot's own flags, kept with the pane (review, ALTO 5): handed only
+         * to this start, a restart ran the bare agent, without `--agent` and on
+         * the default model, which can be a paid one.
+         */
+        ...(launch.args.length ? { spawnArgs: [...launch.args] } : {}),
       }),
     )
     /* Narrowed to nothing, or the grid keeps showing whichever session was
        expanded and the one just started is off screen. */
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
-    void startProcess(id, launch.agentId, "", undefined, launch.args)
+    void startProcess(id, launch.agentId, "")
     return { id, index: mine.length + 1 }
   }
 
@@ -5170,7 +8002,6 @@ export function Workbench() {
   const openLoginSession = (runner: Runner) => {
     const agentId = runner.id === "claude" ? "claude-code" : runner.id
     if (!agentById(agentId) || runner.login.length === 0) return
-    const owner = project()?.name
     const id = `n${Date.now()}-login-${++paneSequence}`
     setWb((w) =>
       addPane(w, {
@@ -5183,7 +8014,8 @@ export function Workbench() {
         mode: "bot",
         task: "",
         lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
-        workspaceId: owner || "workspace",
+        ...here(),
+        signIn: [...runner.login],
       }),
     )
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
@@ -5207,13 +8039,13 @@ export function Workbench() {
     setVoiceSettingsOpen(false)
     setWb((w) => ({
       ...addPane(w, {
-        id: `b${Date.now()}`,
+        id: newPaneId("b"),
         title: "Guida MCP",
         status: "working",
         model: "—",
         mode: "browser",
         browserUrl: url,
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -5229,10 +8061,14 @@ export function Workbench() {
     isRunning,
     sessionFor: (id) => running.get(id),
     appendLine,
+    tellPane,
     close,
     saveFile: (id) => void saveFile(id),
     answerPermission,
     restart: (pane, line) => void reopen(pane, line),
+    suspendCheck: suspendCheckFor,
+    suspend: (id) => void suspendSession(id),
+    resume: (id) => void resumeSession(id),
     pickVideo,
     pickModel,
     readBytes: (path, maxBytes) =>
@@ -5243,8 +8079,21 @@ export function Workbench() {
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
     guessServers,
+    confirmOpen,
     decisions: decisionsHub,
+    design: designHub,
     panels,
+    mailWaiting,
+    showMail,
+    dismissNotices,
+    openLink: (id, request) => void openLink(id, request),
+    openFileLink: (id, link) => {
+      // Refused: the note goes back to the file pane, which flashes it (it has no transcript to append to).
+      if (link.kind === "file") return markdownLinkRefusal(link.path, projectRoots(), openFile)
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      openOwnedBrowser(link.url, { id, title: pane?.title ?? "" }, true)
+    },
+    typeAsUser,
     announceToAll,
     pluginRuntime,
     browserControllers,
@@ -5254,20 +8103,6 @@ export function Workbench() {
   const paletteChord = createMemo(() => {
     const entry = DEFAULT_BINDINGS.find((binding) => binding.commandId === "palette.open")
     return entry ? formatChord(parseChord(entry.chord, platform), platform) : ""
-  })
-
-  /*
-   * How much of the window the sidebar takes, so the bar's middle group can
-   * centre on the sessions rather than on the whole window. Measured, not read
-   * from state: the sidebar owns its width while it is being dragged.
-   */
-  const [sidebarPx, setSidebarPx] = createSignal(0)
-  onMount(() => {
-    const sidebar = document.querySelector<HTMLElement>('[data-component="ade-sidebar"]')
-    if (!sidebar || typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(() => setSidebarPx(sidebar.getBoundingClientRect().width))
-    observer.observe(sidebar)
-    onCleanup(() => observer.disconnect())
   })
 
   return (
@@ -5280,16 +8115,13 @@ export function Workbench() {
         data-slot="ade-bar"
         data-platform={isTauriDesktop() && isMacOS() ? "macos" : undefined}
         data-tauri-drag-region
-        style={{ "--ade-bar-offset": `${sidebarPx()}px` }}
         onDblClick={(e) => {
           if (e.target === e.currentTarget) void adeWindowToggleMaximize()
         }}
       >
-        {/* Three groups: who and where on the left, the navigation in the
-            middle, the controls on the right. The middle one is centred on
-            the sessions area — the window minus the sidebar — rather than on
-            what is left over, so the section you are in does not move when a
-            project name gets longer. */}
+        {/* Three groups in a grid: who and where on the left, the navigation
+            in the middle, the controls on the right. The left one gives way
+            first, so nothing is ever laid over anything (DS-polish). */}
         <div data-slot="ade-bar-side" data-side="start">
           {/*
             The mark, not the word.
@@ -5299,7 +8131,7 @@ export function Workbench() {
             and the label is on the box around it.
           */}
           <Show when={!(isTauriDesktop() && isMacOS())}>
-            <span data-slot="ade-brand" role="img" aria-label="ADE">
+            <span data-slot="ade-brand" role="img" aria-label={BRAND.name}>
               {/*
                 Concept 03: Molten Chrome Mercury (N).
                 Continuous liquid metal ribbon with animated caustic sheen
@@ -5308,8 +8140,17 @@ export function Workbench() {
               <NikChromeLogo size={30} />
             </span>
           </Show>
-          <ProjectBar project={project()} />
-          <span data-slot="ade-count">{t("bar.sessions", wb().panes.filter((p) => !isPanelPane(p)).length)}</span>
+          <ProjectBar
+            project={project()}
+            adeVersion={installedVersion()}
+            nikcliVersion={nikcliVersion()}
+            sessions={barSessionCount(wb().panes, project(), chatStore)}
+          />
+          <SidebarToggle
+            hidden={sidebarHidden()}
+            onToggle={toggleSidebar}
+            shortcut={formatChord(parseChord("mod+shift+b", platform), platform)}
+          />
         </div>
 
         <div data-slot="ade-bar-center">
@@ -5358,16 +8199,17 @@ export function Workbench() {
               <path d="M10.2 10.2L14 14" stroke-linecap="round" />
             </svg>
           </button>
-          {/* Decisions waiting for the user. Hidden at zero; opens only when pressed. */}
-          <Show when={decisionsWaiting() > 0}>
-            <button
-              type="button"
-              data-slot="decisions-badge"
-              onClick={() => setDecisionsOpen(true)}
-              title={t("decisions.waiting")}
-            >
-              {countLabel(decisionsWaiting())}
-            </button>
+          {/* Decisions and design proposals waiting for the user: one button
+            for both, «Da scegliere» (notifiche-design; it was one each).
+            Hidden at zero; it opens its list only when pressed. */}
+          <Show when={queueShown(choicesCounts())}>
+            <BarQueueButton
+              family="choices"
+              counts={choicesCounts()}
+              open={choicesOpen() || decisionsOpen() || designOpen()}
+              theme={theme()}
+              onOpen={() => setChoicesOpen(true)}
+            />
           </Show>
         </div>
 
@@ -5411,63 +8253,74 @@ export function Workbench() {
             One button per kind worked while there were two; with a video
             player, and an emulator and a 3D viewer behind it, the bar would
             become a row of verbs competing with the navigation beside it. */}
-          <Show when={showsNewPane(wb().view)}>
-            <div data-slot="ade-menu-anchor">
-              <button
-                type="button"
-                data-slot="ade-icon"
-                data-action="new-pane"
-                data-open={newPaneOpen() ? "true" : undefined}
-                aria-haspopup="menu"
-                aria-expanded={newPaneOpen()}
-                onClick={() => setNewPaneOpen((open) => !open)}
-                aria-label={t("bar.newPane")}
-                title={t("bar.newPane")}
+          {/* Always in the layout, hidden where it does nothing (DS-polish,
+            closure 9): the right group keeps its width, and the navigation
+            in the middle does not move from one view to the next. */}
+          <div
+            data-slot="ade-menu-anchor"
+            data-idle={showsNewPane(wb().view) ? undefined : "true"}
+            inert={!showsNewPane(wb().view)}
+          >
+            <button
+              type="button"
+              data-slot="ade-icon"
+              data-action="new-pane"
+              data-open={newPaneOpen() ? "true" : undefined}
+              aria-haspopup="menu"
+              aria-expanded={newPaneOpen()}
+              ref={newPaneButton}
+              onClick={() => setNewPaneOpen((open) => !open)}
+              aria-label={t("bar.newPane")}
+              title={t("bar.newPane")}
+            >
+              {/* Four frames: the grid this button adds to. */}
+              <svg
+                viewBox="0 0 16 16"
+                width="15"
+                height="15"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
               >
-                {/* Four frames: the grid this button adds to. */}
-                <svg
-                  viewBox="0 0 16 16"
-                  width="15"
-                  height="15"
-                  aria-hidden="true"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.3"
-                >
-                  <rect x="2" y="2" width="5" height="5" rx="1.2" />
-                  <rect x="9" y="2" width="5" height="5" rx="1.2" />
-                  <rect x="2" y="9" width="5" height="5" rx="1.2" />
-                  <rect x="9" y="9" width="5" height="5" rx="1.2" />
-                </svg>
-              </button>
+                <rect x="2" y="2" width="5" height="5" rx="1.2" />
+                <rect x="9" y="2" width="5" height="5" rx="1.2" />
+                <rect x="2" y="9" width="5" height="5" rx="1.2" />
+                <rect x="9" y="9" width="5" height="5" rx="1.2" />
+              </svg>
+            </button>
 
-              <Show when={newPaneOpen()}>
-                <div data-slot="ade-menu" role="menu" aria-label={t("bar.newPane")}>
-                  <For each={NEW_PANE_ITEMS}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        data-slot="ade-menu-item"
-                        onClick={() => {
-                          setNewPaneOpen(false)
-                          void runCommand(item.commandId)
-                        }}
-                      >
-                        <span data-slot="ade-menu-glyph" aria-hidden="true">
-                          <NewPaneGlyph kind={item.glyph} />
-                        </span>
-                        <span data-slot="ade-menu-text">
-                          <span data-slot="ade-menu-label">{item.label}</span>
-                          <span data-slot="ade-menu-hint">{item.hint}</span>
-                        </span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </div>
-          </Show>
+            <Show when={newPaneOpen() && showsNewPane(wb().view)}>
+              <div
+                data-slot="ade-menu"
+                role="menu"
+                aria-label={t("bar.newPane")}
+                ref={(menu) => onCleanup(bindMenu(menu, { close: () => setNewPaneOpen(false), anchor: newPaneButton }))}
+              >
+                <For each={NEW_PANE_ITEMS}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-slot="ade-menu-item"
+                      onClick={() => {
+                        setNewPaneOpen(false)
+                        void runCommand(item.commandId)
+                      }}
+                    >
+                      <span data-slot="ade-menu-glyph" aria-hidden="true">
+                        <NewPaneGlyph kind={item.glyph} />
+                      </span>
+                      <span data-slot="ade-menu-text">
+                        <span data-slot="ade-menu-label">{item.label}</span>
+                        <span data-slot="ade-menu-hint">{item.hint}</span>
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
 
           {/* The user must never be unsure whether ADE is filming: the badge
             stays above everything, says where the file is going, and stops
@@ -5500,7 +8353,7 @@ export function Workbench() {
           {/* On macOS the traffic lights hold the left edge, so the mark takes
             the place the window controls have elsewhere. */}
           <Show when={isTauriDesktop() && isMacOS()}>
-            <span data-slot="ade-brand" data-place="end" role="img" aria-label="ADE">
+            <span data-slot="ade-brand" data-place="end" role="img" aria-label={BRAND.name}>
               <NikChromeLogo size={30} />
             </span>
           </Show>
@@ -5611,7 +8464,7 @@ export function Workbench() {
         </div>
       </Show>
 
-      <div data-slot="ade-body">
+      <div data-slot="ade-body" data-sidebar-hidden={sidebarHidden() ? "true" : undefined}>
         <Sidebar
           workspaces={workspaces()}
           selectedSessionId={wb().focusedId}
@@ -5637,6 +8490,7 @@ export function Workbench() {
           bottom={
             <ShotTray
               shots={shotSource.shots()}
+              unavailable={shotSource.state() === "none"}
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
               onDelete={(path) => void shotSource.remove(path)}
@@ -5657,23 +8511,57 @@ export function Workbench() {
                 type="button"
                 data-slot="ade-icon"
                 onClick={() => runCommand("theme.toggle")}
-                aria-label={theme() === "dark" ? "Passa al tema chiaro" : "Passa al tema scuro"}
-                title={theme() === "dark" ? "Tema chiaro" : "Tema scuro"}
+                aria-label={
+                  theme() === "light"
+                    ? t("settings.theme.toDark")
+                    : theme() === "dark"
+                      ? t("settings.theme.toGlass")
+                      : t("settings.theme.toLight")
+                }
+                title={
+                  theme() === "light"
+                    ? t("settings.theme.toDark")
+                    : theme() === "dark"
+                      ? t("settings.theme.toGlass")
+                      : t("settings.theme.toLight")
+                }
               >
                 <Show
-                  when={theme() === "dark"}
+                  when={theme() === "light"}
                   fallback={
-                    <svg
-                      viewBox="0 0 16 16"
-                      width="14"
-                      height="14"
-                      aria-hidden="true"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.3"
+                    <Show
+                      when={theme() === "dark"}
+                      fallback={
+                        <svg
+                          viewBox="0 0 16 16"
+                          width="14"
+                          height="14"
+                          aria-hidden="true"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.3"
+                        >
+                          <circle cx="8" cy="8" r="3.2" />
+                          <path
+                            d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"
+                            stroke-linecap="round"
+                          />
+                        </svg>
+                      }
                     >
-                      <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
-                    </svg>
+                      <svg
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.3"
+                      >
+                        <path d="M4 2h8l3 5-7 7-7-7 3-5z" stroke-linejoin="round" />
+                        <path d="M1 7h14M7.5 2l-2 5 2 7M8.5 2l2 5-2 7" stroke-linejoin="round" />
+                      </svg>
+                    </Show>
                   }
                 >
                   <svg
@@ -5685,11 +8573,7 @@ export function Workbench() {
                     stroke="currentColor"
                     stroke-width="1.3"
                   >
-                    <circle cx="8" cy="8" r="3.2" />
-                    <path
-                      d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"
-                      stroke-linecap="round"
-                    />
+                    <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
                   </svg>
                 </Show>
               </button>
@@ -5702,6 +8586,7 @@ export function Workbench() {
                   type="button"
                   data-slot="ade-icon"
                   data-action="notifications"
+                  ref={noticesButton}
                   data-tone={bellTone(notices())}
                   aria-haspopup="menu"
                   aria-expanded={noticesOpen()}
@@ -5737,7 +8622,15 @@ export function Workbench() {
                 </button>
 
                 <Show when={noticesOpen()}>
-                  <div data-slot="ade-menu" data-wide="true" role="menu" aria-label={t("bell.title")}>
+                  <div
+                    data-slot="ade-menu"
+                    data-wide="true"
+                    role="menu"
+                    aria-label={t("bell.title")}
+                    ref={(menu) =>
+                      onCleanup(bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton }))
+                    }
+                  >
                     {/* The bell is where a release shows up, so it is also where
                         asking for one belongs: the answer lands in this list,
                         "nothing new" included. */}
@@ -5757,14 +8650,49 @@ export function Workbench() {
                             <span data-slot="ade-notice-text">{notice.text}</span>
                             <Show when={notice.href}>
                               {(href) => (
-                                <button
-                                  type="button"
-                                  data-slot="ade-notice-link"
-                                  disabled={updating()}
-                                  onClick={() => void installUpdate(href())}
+                                <Show
+                                  when={!updating()}
+                                  fallback={
+                                    <span
+                                      data-slot="ade-notice-progress"
+                                      role="progressbar"
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                      aria-valuenow={progressPercent(updateProgress())}
+                                      aria-label={updateProgressText()}
+                                    >
+                                      <span data-slot="ade-notice-progress-text">
+                                        {updateProgressText()}
+                                        <Show when={hiddenAsk()}>
+                                          <button
+                                            type="button"
+                                            data-slot="ade-notice-progress-show"
+                                            onClick={showUpdate}
+                                          >
+                                            {t("update.dialog.show")}
+                                          </button>
+                                        </Show>
+                                      </span>
+                                      <span data-slot="ade-notice-progress-track">
+                                        <span
+                                          data-slot="ade-notice-progress-fill"
+                                          data-indeterminate={
+                                            progressPercent(updateProgress()) === undefined ? "true" : undefined
+                                          }
+                                          style={{ width: `${progressPercent(updateProgress()) ?? 100}%` }}
+                                        />
+                                      </span>
+                                    </span>
+                                  }
                                 >
-                                  {updating() ? "Aggiornamento…" : "Aggiorna"}
-                                </button>
+                                  <button
+                                    type="button"
+                                    data-slot="ade-notice-link"
+                                    onClick={() => void installUpdate(href())}
+                                  >
+                                    {t("update.action")}
+                                  </button>
+                                </Show>
                               )}
                             </Show>
                             <button
@@ -5787,7 +8715,34 @@ export function Workbench() {
         />
 
         <Show when={recordAsk()}>
-          {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+          {(ask) => (
+            <RecordConsentDialog
+              target={ask().target}
+              {...(ask().asker ? { asker: ask().asker } : {})}
+              onAnswer={(consent) => ask().answer(consent)}
+            />
+          )}
+        </Show>
+
+        <Show when={updateAsk()}>
+          {(ask) => (
+            <UpdateDialog
+              fromVersion={installedVersion()}
+              toVersion={ask().version}
+              releaseUrl={ask().href}
+              running={ask().running}
+              updating={updating()}
+              progress={updateProgress()}
+              error={updateError()}
+              onLater={() => {
+                setHiddenAsk(updating() ? ask() : undefined)
+                setUpdateError(undefined)
+                setUpdateAsk(undefined)
+              }}
+              onGo={() => void runUpdate()}
+              onOpenRelease={() => void openNoticeLink(ask().href)}
+            />
+          )}
         </Show>
 
         <main data-slot="ade-main">
@@ -5800,6 +8755,13 @@ export function Workbench() {
             {(text) => (
               <div data-slot="ade-notice" role="status">
                 <span data-slot="ade-notice-text">{text()}</span>
+                <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
+                  {(action) => (
+                    <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
+                      {action().label}
+                    </button>
+                  )}
+                </Show>
                 <button
                   type="button"
                   data-slot="ade-notice-close"
@@ -5819,17 +8781,23 @@ export function Workbench() {
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
+              hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
+              hasAgent={hasVoiceAgent()}
+              hasVoice={voiceInstalled() && !voiceError()}
+              isVoiceDownloading={voiceDownloading()}
+              voiceError={voiceError()}
+              onDownloadVoice={() => void downloadNaturalVoice()}
+              onOpenKeySettings={() => openVoiceSettings("voice-sec-backend")}
+              onOpenAgentSettings={() => openVoiceSettings("set-sec-provider")}
               held={voiceEngine.held()}
               onSubmit={(text) => void voiceEngine.submitText(text)}
               onToggleMic={() => void (voiceEngine.isRunning() ? voiceEngine.stop() : voiceEngine.toggle())}
-              onOpenSettings={() => setVoiceSettingsOpen(true)}
+              onOpenSettings={(sec) => openVoiceSettings(sec)}
             />
           </Show>
 
           <Show when={wb().view === "chat" && isViewVisible("chat")}>
-            {/* The same credential the assistant uses. Asking for it twice is
-                a way to get one of the two wrong. */}
-            <Chat apiKey={voiceSettings().openRouterApiKey ?? ""} onOpenSettings={() => setVoiceSettingsOpen(true)} />
+            <Chat projectRoot={project()?.root} />
           </Show>
 
           <Show when={wb().view === "bot" && isViewVisible("bot")}>
@@ -5840,6 +8808,7 @@ export function Workbench() {
               {...(project()?.root ? { projectRoot: project()!.root } : {})}
               onLaunch={(bot) => openBotSession(bot)}
               onOpenFile={(path) => void openFile(path)}
+              onOpenKeys={() => openVoiceSettings("set-sec-keys")}
             />
           </Show>
 
@@ -5894,13 +8863,59 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={toast.text()}>
+        {(text) => (
+          <div data-slot="ade-toast" role="status" aria-live="polite">
+            {text()}
+          </div>
+        )}
+      </Show>
+
+      <Show when={choicesOpen()}>
+        <ChoicesSheet
+          items={choices()}
+          onPick={pickChoice}
+          onClose={() => setChoicesOpen(false)}
+          onOpenPanels={() => {
+            setChoicesOpen(false)
+            openDecisionsPane()
+            openDesignPane()
+          }}
+        />
+      </Show>
+
       <Show when={decisionsOpen()}>
         <DecisionsSheet
           hub={decisionsHub}
+          start={choiceStart()}
+          waiting={() => choices().length}
+          onDone={(next, said) => {
+            setDecisionsOpen(false)
+            if (next === "list") setChoicesOpen(true)
+            if (said) toast.show(said)
+          }}
           onClose={() => setDecisionsOpen(false)}
           onOpenPanel={() => {
             setDecisionsOpen(false)
             openDecisionsPane()
+          }}
+        />
+      </Show>
+
+      <Show when={designOpen()}>
+        <DesignSheet
+          hub={designHub}
+          start={choiceStart()}
+          waiting={() => choices().length}
+          onDone={(next, said) => {
+            setDesignOpen(false)
+            if (next === "list") setChoicesOpen(true)
+            if (said) toast.show(said)
+          }}
+          onClose={() => setDesignOpen(false)}
+          onOpenPanel={() => {
+            setDesignOpen(false)
+            openDesignPane()
           }}
         />
       </Show>
@@ -5911,6 +8926,7 @@ export function Workbench() {
           agents={AGENTS}
           env={keyRequest()!.env}
           reason={keyRequest()!.reason}
+          {...(keyRequest()!.asker ? { asker: keyRequest()!.asker } : {})}
           onClose={() => setKeyRequest(undefined)}
         />
       </Show>
@@ -5933,115 +8949,152 @@ export function Workbench() {
         panel, one gear, one answer to "where are the settings".
       */}
       <Show when={voiceSettingsOpen()}>
-        <VoiceSettingsPanel
-          engine={voiceEngine}
-          settings={voiceSettings()}
-          onChange={handleVoiceSettingsChange}
-          onClose={() => setVoiceSettingsOpen(false)}
-          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
-          existingBindings={bindings}
-          settingsNotice={voiceSettingsNotice()}
-          title={t("settings.title")}
-          subtitle={t("settings.subtitle")}
-          /*
-           * Two headings, because the rail is now two lists.
-           * Six voice screens followed by six of ADE's own, unbroken, gave
-           * no clue where the microphone stopped and the application began.
-           */
-          builtInGroup={t("settings.group.voice")}
-          extraGroup="ADE"
-          extraSections={[
-            {
-              id: "set-sec-language",
-              label: t("settings.language.label"),
-              glyph: "文",
-              render: () => <LanguageSection />,
-            },
-            {
-              id: "set-sec-routine",
-              label: t("settings.routine"),
-              glyph: "↻",
-              render: () => <RoutineSection />,
-            },
-            {
-              id: "set-sec-bot",
-              label: "Bot",
-              glyph: "◍",
-              // The project, so the list holds the bots that belong to it as
-              // well as the global ones — which is what nikcli would see.
-              render: () => <BotSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
-            },
-            {
-              /*
-               * "Codice" is the coding view's own settings: how its grid is
-               * laid out, and how a session finds its way back to the
-               * conversation it was having. Both are about the panes, and
-               * the panes are what the `code` view is.
-               */
-              id: "set-sec-code",
-              label: t("settings.code"),
-              glyph: "⌗",
-              value: String(Object.values(hookStates()).filter((state) => state.installed).length),
-              render: () => (
-                <>
-                  <GridSection
-                    columns={wb().pinnedColumns}
-                    onChange={(columns) => setWb((w) => setColumns(w, columns))}
+        {/* On Kobalte, as the other sheets: the panel draws its own box and title. */}
+        <Sheet
+          component="voice-settings-overlay"
+          onClose={closeVoiceSettings}
+          surface={false}
+          labelledBy="voice-panel-title"
+        >
+          <VoiceSettingsPanel
+            framed
+            engine={voiceEngine}
+            settings={voiceSettings()}
+            initialSection={voiceSettingsSection()}
+            onChange={handleVoiceSettingsChange}
+            onClose={closeVoiceSettings}
+            onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+            naturalVoiceError={voiceError()}
+            naturalVoiceDownloading={voiceDownloading()}
+            onDownloadNaturalVoice={() => void downloadNaturalVoice()}
+            {...(piperProgress() ? { naturalVoiceProgress: piperProgress() } : {})}
+            onCancelInstall={(provider) =>
+              void (provider === "kokoro"
+                ? kokoro.cancel()
+                : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
+            }
+            kokoroPack={kokoroPack()}
+            onInstallKokoro={() => void kokoro.install()}
+            onDeleteKokoro={() => void kokoro.remove()}
+            onTestVoice={testReplyVoice}
+            existingBindings={bindings}
+            settingsNotice={voiceSettingsNotice()}
+            title={t("settings.title")}
+            subtitle={t("settings.subtitle")}
+            /*
+             * Two headings, because the rail is now two lists.
+             * Six voice screens followed by six of ADE's own, unbroken, gave
+             * no clue where the microphone stopped and the application began.
+             */
+            builtInGroup={t("settings.group.voice")}
+            extraGroup={BRAND.name}
+            extraSections={[
+              {
+                id: "set-sec-theme",
+                label: t("settings.theme.title"),
+                glyph: "◐",
+                render: () => (
+                  <ThemeSection
+                    value={themeState.preference}
+                    onChange={(next) => themeState.set(next)}
+                    opacity={themeState.glassOpacity}
+                    onOpacityChange={(val) => themeState.setGlassOpacity(val)}
+                    glassStatus={glassStatus}
                   />
-                  <AgentHooksSection host={hookHost()} states={hookStates()} onChanged={() => void refreshHooks()} />
-                </>
-              ),
-            },
-            {
-              id: "set-sec-provider",
-              label: "Provider",
-              glyph: "⚿",
-              render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
-            },
-            {
-              id: "set-sec-keys",
-              label: t("settings.keys"),
-              glyph: "⚷",
-              render: () => <KeysSection host={keysHost()} agents={AGENTS} />,
-            },
-            {
-              /*
-               * MCP and plugins on one page (S16, variant B): what is
-               * installed, the verified MCP catalog, and the plugins. The two
-               * separate entries were one question — "what does ADE add to
-               * the agents?" — asked in two places, one of them empty.
-               */
-              id: "set-sec-extensions",
-              label: t("settings.extensions"),
-              glyph: "⊞",
-              value: String(pluginRuntime.registry.sections().length),
-              render: () => (
-                <ExtensionsPage
-                  projectRoot={project()?.root}
-                  io={extensionsIo()}
-                  pluginCount={pluginRuntime.registry.sections().length}
-                  onOpenGuide={(url) => openGuide(url)}
-                  plugins={() => (
-                    <Show
-                      when={pluginRuntime.registry.sections().length > 0}
-                      fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
-                    >
-                      <For each={pluginRuntime.registry.sections()}>
-                        {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
-                      </For>
-                    </Show>
-                  )}
-                />
-              ),
-            },
-            {
-              id: "set-sec-skills",
-              label: t("settings.tools"),
-              glyph: "✦",
-              render: () => <SkillsSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
-            },
-          ]}
-        />
+                ),
+              },
+              {
+                id: "set-sec-language",
+                label: t("settings.language.label"),
+                glyph: "文",
+                render: () => <LanguageSection />,
+              },
+              {
+                id: "set-sec-routine",
+                label: t("settings.routine"),
+                glyph: "↻",
+                render: () => <RoutineSection />,
+              },
+              {
+                id: "set-sec-bot",
+                label: "Bot",
+                glyph: "◍",
+                // The project, so the list holds the bots that belong to it as
+                // well as the global ones — which is what nikcli would see.
+                render: () => <BotSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
+              },
+              {
+                /*
+                 * "Codice" is the coding view's own settings: how its grid is
+                 * laid out, and how a session finds its way back to the
+                 * conversation it was having. Both are about the panes, and
+                 * the panes are what the `code` view is.
+                 */
+                id: "set-sec-code",
+                label: t("settings.code"),
+                glyph: "⌗",
+                value: String(Object.values(hookStates()).filter((state) => state.installed).length),
+                render: () => (
+                  <>
+                    <GridSection
+                      columns={wb().pinnedColumns}
+                      onChange={(columns) => setWb((w) => setColumns(w, columns))}
+                    />
+                    <AgentHooksSection host={hookHost()} states={hookStates()} onChanged={() => void refreshHooks()} />
+                  </>
+                ),
+              },
+              {
+                id: "set-sec-provider",
+                label: "Provider",
+                glyph: "⚿",
+                render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
+              },
+              {
+                id: "set-sec-keys",
+                label: t("settings.keys"),
+                glyph: "⚷",
+                render: () => <KeysSection host={keysHost()} agents={AGENTS} />,
+              },
+              {
+                /*
+                 * MCP and plugins on one page (S16, variant B): what is
+                 * installed, the verified MCP catalog, and the plugins. The two
+                 * separate entries were one question — "what does ADE add to
+                 * the agents?" — asked in two places, one of them empty.
+                 */
+                id: "set-sec-extensions",
+                label: t("settings.extensions"),
+                glyph: "⊞",
+                value: String(pluginRuntime.registry.sections().length),
+                render: () => (
+                  <ExtensionsPage
+                    projectRoot={project()?.root}
+                    io={extensionsIo()}
+                    pluginCount={pluginRuntime.registry.sections().length}
+                    onOpenGuide={(url) => openGuide(url)}
+                    plugins={() => (
+                      <Show
+                        when={pluginRuntime.registry.sections().length > 0}
+                        fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
+                      >
+                        <For each={pluginRuntime.registry.sections()}>
+                          {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
+                        </For>
+                      </Show>
+                    )}
+                  />
+                ),
+              },
+              {
+                id: "set-sec-skills",
+                label: t("settings.tools"),
+                glyph: "✦",
+                render: () => <SkillsSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
+              },
+            ]}
+          />
+        </Sheet>
       </Show>
 
       {/*
@@ -6052,6 +9105,7 @@ export function Workbench() {
       */}
       <VoiceHud
         engine={voiceEngine}
+        naturalVoiceError={voiceError()}
         target={(() => {
           const focused = wb().panes.find((pane) => pane.id === wb().focusedId)
           return focused?.title
@@ -6066,7 +9120,10 @@ export function Workbench() {
             setWb((w) => ({ ...w, focusedId: nextPane.id }))
           }
         }}
-        onOpenSettings={() => setVoiceSettingsOpen(true)}
+        onOpenSettings={() => {
+          setVoiceSettingsSection("voice-sec-mode")
+          setVoiceSettingsOpen(true)
+        }}
       />
 
       {/* S33: the agent speaks through its own sphere, over the workspace. */}
@@ -6120,6 +9177,10 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
         <path d="M8 1.8v3.4M8 5.2L3.2 9.4M8 5.2l4.8 4.2" stroke-linecap="round" stroke-linejoin="round" />
         <circle cx="3.2" cy="11.6" r="2.2" />
         <circle cx="12.8" cy="11.6" r="2.2" />
+      </Show>
+      <Show when={props.kind === "design"}>
+        <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M10 4l2 2" stroke-linecap="round" />
       </Show>
     </svg>
   )

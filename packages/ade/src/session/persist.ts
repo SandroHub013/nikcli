@@ -64,12 +64,26 @@ export interface PaneState {
    * id — see `session-new/resume.ts`, which is where the difference lives.
    */
   resumeId?: string
+  /**
+   * The nonce of the spawn that was running, so the restore can read the
+   * report it left (`agent-link.ts`, `lastReportedId`). Hex.
+   */
+  linkNonce?: string
+  /**
+   * The folder of the conversation the pane followed, when it is not the
+   * pane's own (nikcli's shared tabs), so a restore says so again.
+   */
+  otherDir?: string
   /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */
   project?: string
+  /** That project's folder: two projects can share a name. Absent in states saved before it was kept. */
+  projectRoot?: string
   /** The worktree a spawned session works in. */
   worktree?: string
   /** Arguments chosen at spawn, replayed on every start. */
   spawnArgs?: string[]
+  /** Suspended by the user (P1-C6): restored as it was, and never started by the restore. */
+  suspended?: true
   /**
    * The cells the user resized the pane to. Absent means the default size
    * of one cell.
@@ -100,6 +114,7 @@ export interface BrowserPaneState {
   /** The session the pane is bound to, see `browser/binding.ts`. */
   owner?: { id: string; title: string }
   project?: string
+  projectRoot?: string
   span?: { columns: number; rows: number }
 }
 
@@ -203,6 +218,11 @@ function sanitisePane(raw: unknown): PaneState {
   const task = asOptionalString(raw.task)
   const model = asOptionalString(raw.model)
   const resumeId = asOptionalString(raw.resumeId)
+  // A nonce names a file: anything but hex is dropped.
+  const linkNonce =
+    typeof raw.linkNonce === "string" && /^[0-9a-f]{1,64}$/i.test(raw.linkNonce) ? raw.linkNonce : undefined
+  const otherDir =
+    typeof raw.otherDir === "string" && raw.otherDir.trim() && raw.otherDir.length <= 4096 ? raw.otherDir : undefined
   const lines = sanitiseLines(raw.lines)
   const span = sanitiseSpan(raw.span)
   return {
@@ -215,14 +235,19 @@ function sanitisePane(raw: unknown): PaneState {
     ...(task !== undefined ? { task } : {}),
     ...(model !== undefined ? { model } : {}),
     ...(resumeId !== undefined ? { resumeId } : {}),
+    ...(linkNonce !== undefined ? { linkNonce } : {}),
+    ...(otherDir !== undefined ? { otherDir } : {}),
     ...(lines !== undefined ? { lines } : {}),
     ...(typeof raw.wasRunning === "boolean" ? { wasRunning: raw.wasRunning } : {}),
     ...(asOptionalString(raw.project) ? { project: raw.project as string } : {}),
+    ...(asOptionalString(raw.projectRoot) ? { projectRoot: raw.projectRoot as string } : {}),
     ...(asOptionalString(raw.worktree) ? { worktree: raw.worktree as string } : {}),
     ...(Array.isArray(raw.spawnArgs) && raw.spawnArgs.every((arg) => typeof arg === "string")
       ? { spawnArgs: raw.spawnArgs as string[] }
       : {}),
     ...(span ? { span } : {}),
+    // `true` or nothing: anything else would wake a session the user put to sleep, or keep one asleep by accident.
+    ...(raw.suspended === true ? { suspended: true as const } : {}),
   }
 }
 
@@ -253,6 +278,7 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
     const history = isObject(entry.history) ? restoreHistory(url, entry.history) : undefined
     const span = sanitiseSpan(entry.span)
     const project = asOptionalString(entry.project)
+    const projectRoot = asOptionalString(entry.projectRoot)
     const ownerId = isObject(entry.owner) ? asOptionalString(entry.owner.id) : undefined
     const owner = ownerId && isObject(entry.owner) ? { id: ownerId, title: asString(entry.owner.title, "") } : undefined
     browsers.push({
@@ -262,6 +288,7 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
       ...(history ? { history } : {}),
       ...(owner ? { owner } : {}),
       ...(project ? { project } : {}),
+      ...(projectRoot ? { projectRoot } : {}),
       ...(span ? { span } : {}),
     })
   }

@@ -1,4 +1,5 @@
 import { t } from "../i18n"
+import { NIKCLI_PLUGIN_NAME } from "./nikcli-plugin"
 /**
  * Installing ADE's reporting hook into a CLI's own configuration.
  *
@@ -65,6 +66,13 @@ export interface HookTarget {
    * the screen looks — a long turn with nothing new drawn is not an idle agent.
    */
   readonly activityEvents?: readonly string[]
+  /** avviato con args, senza shell: formato verificato in Claude Code 2.1.280 */
+  readonly execForm?: boolean
+  /**
+   * `tui-plugin`: no configuration to edit, only a file of ADE's in the CLI's
+   * plugin folder (`nikcli-plugin.ts`). `config` is then empty.
+   */
+  readonly kind?: "tui-plugin"
 }
 
 /**
@@ -87,7 +95,19 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     config: [".claude", "settings.json"],
     script: [".claude", "hooks", `${HOOK_MARKER}.ps1`],
     matcher: "startup|resume|clear",
-    activityEvents: ["UserPromptSubmit", "Stop"],
+    /*
+     * Notification, for the permission questions.
+     *
+     * Until now the only way ADE knew a prompt was standing was to read the
+     * glyphs on the screen, and that is the fragile half of the whole thing: a
+     * CLI update can change the words, and a delivery's Enter would answer
+     * whichever choice the prompt had selected. The hook is the CLI telling us,
+     * and it is the same hook the user already installed from the settings — no
+     * new file in their home, no new permission, and the screen reading stays as
+     * the fallback for a session whose hooks were never installed.
+     */
+    activityEvents: ["UserPromptSubmit", "Stop", "Notification"],
+    execForm: true,
   },
   {
     id: "codex",
@@ -95,6 +115,21 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     agent: "codex",
     config: [".codex", "hooks.json"],
     script: [".codex", `${HOOK_MARKER}.ps1`],
+  },
+  /*
+   * nikcli: a plugin of its TUI rather than a hook, read off nikcli's own
+   * loader (`plugin/tui` under its config folder, `%APPDATA%\nikcli` on
+   * Windows, where Rust puts it). Off until the user switches it on, like
+   * the other two.
+   */
+  {
+    id: "nikcli",
+    label: "nikcli",
+    agent: "nikcli",
+    config: [],
+    // As it lands on Windows. Rust puts it under nikcli's configuration folder on every platform (`config_home`).
+    script: ["AppData", "Roaming", "nikcli", "plugin", "tui", NIKCLI_PLUGIN_NAME],
+    kind: "tui-plugin",
   },
 ]
 
@@ -108,13 +143,18 @@ export function hookCommand(scriptPath: string): string {
   return `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`
 }
 
+/** Invocazione in forma exec (command + args), senza passare dalla shell. */
+export function hookExec(scriptPath: string): { command: string; args: string[] } {
+  return { command: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath] }
+}
+
 /** True for a command string that belongs to ADE. */
 export function isAdeCommand(command: unknown): boolean {
   return typeof command === "string" && command.includes(HOOK_MARKER)
 }
 
-/** How long the CLI waits for the hook, in seconds. Writing a file is instant. */
-const HOOK_TIMEOUT = 5
+/** How long the CLI waits for the hook, in seconds. */
+export const HOOK_TIMEOUT = 10
 
 /**
  * A JSON object, as far as anything here is concerned.
@@ -147,6 +187,15 @@ function leaves(group: Table): unknown[] {
 
 function commandOf(leaf: unknown): string | undefined {
   if (!isTable(leaf)) return undefined
+  if (
+    typeof leaf.command === "string" &&
+    Array.isArray(leaf.args) &&
+    leaf.args.length > 0 &&
+    leaf.args.every((item) => typeof item === "string")
+  ) {
+    const args = leaf.args as string[]
+    return `${leaf.command} ${args.slice(0, -1).join(" ")} "${args[args.length - 1]}"`
+  }
   return typeof leaf.command === "string" ? leaf.command : undefined
 }
 
@@ -180,11 +229,14 @@ export function installHook(
   command: string,
   matcher?: string,
   activityEvents: readonly string[] = [],
+  exec?: { command: string; args: string[] },
 ): string {
   const config = withoutAde(parse(configText))
   const hooks: Table = isTable(config.hooks) ? config.hooks : {}
   config.hooks = hooks
-  const leaf = { type: "command", command, timeout: HOOK_TIMEOUT }
+  const leaf: Table = exec
+    ? { type: "command", command: exec.command, args: exec.args, timeout: HOOK_TIMEOUT }
+    : { type: "command", command, timeout: HOOK_TIMEOUT }
   const append = (event: string, group: Table) => {
     const groups: unknown[] = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : []
     groups.push(group)
@@ -203,6 +255,79 @@ export function missingActivityEvents(configText: string | undefined, events: re
     const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter(isTable) : []
     return !groups.some((group) => leaves(group).some((leaf) => isAdeCommand(commandOf(leaf))))
   })
+}
+
+/**
+ * The Claude Code that reads `args`: the release ADE's exec form was checked
+ * against (see `execForm`). The documentation gives no version for the field.
+ */
+export const EXEC_FORM_SINCE = [2, 1, 280] as const
+
+/** `2.1.280` in whatever `claude --version` printed around it, or undefined. */
+export function parseVersion(text: string | null | undefined): [number, number, number] | undefined {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(text ?? "")
+  return found ? [Number(found[1]), Number(found[2]), Number(found[3])] : undefined
+}
+
+/*
+ * Whether this Claude Code may be given the exec form (audit 0.7.7, C3).
+ *
+ * An older one may not know `args`: dropped, it leaves `command: "powershell"`
+ * to run bare, and a bare PowerShell with its stdin redirected reads it as
+ * commands — the hook's stdin is the JSON with the user's prompt in it. So the
+ * exec form only from the release it was verified on; anything older,
+ * unreadable or unknown gets the shell form ADE used before S74, whose
+ * command line is fixed and carries nothing from stdin.
+ */
+export function execFormReadable(versionText: string | null | undefined): boolean {
+  const version = parseVersion(versionText)
+  if (!version) return false
+  for (let i = 0; i < 3; i++) {
+    if (version[i] !== EXEC_FORM_SINCE[i]) return version[i] > EXEC_FORM_SINCE[i]
+  }
+  return true
+}
+
+/* `claude --version`, asked once per ADE session: a refresh must not start a CLI every time. */
+let claudeVersionOnce: Promise<string | null> | undefined
+
+/** Forgets the version read, for tests. */
+export function forgetClaudeVersion(): void {
+  claudeVersionOnce = undefined
+}
+
+/** Whether `target`'s hook is written in the exec form on this machine: the target wants it and its CLI reads it. */
+export async function usesExecForm(host: HookHost, target: HookTarget): Promise<boolean> {
+  if (!target.execForm) return false
+  claudeVersionOnce ??= (host.claudeVersion?.() ?? Promise.resolve(null)).catch(() => null)
+  return execFormReadable(await claudeVersionOnce)
+}
+
+/**
+ * True when an installed ADE hook has an outdated timeout or command form.
+ *
+ * `exec` is whether this machine's CLI gets the exec form (`usesExecForm`):
+ * an entry in the other form is outdated either way, so an exec entry written
+ * for a Claude Code that is older than the gate goes back to the shell form.
+ */
+export function hookOutdated(configText: string | undefined, target: HookTarget, exec: boolean): boolean {
+  const config = parse(configText)
+  const hooks = isTable(config.hooks) ? config.hooks : {}
+  for (const event of Object.keys(hooks)) {
+    const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter(isTable) : []
+    for (const group of groups) {
+      for (const leaf of leaves(group)) {
+        if (!isTable(leaf)) continue
+        const cmd = commandOf(leaf)
+        if (cmd !== undefined && isAdeCommand(cmd)) {
+          if (leaf.timeout !== HOOK_TIMEOUT) return true
+          const hasArgs = Array.isArray(leaf.args) && leaf.args.length > 0
+          if (hasArgs !== (exec && target.execForm === true)) return true
+        }
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -298,8 +423,14 @@ export interface HookHost {
     configText: string | null
     scriptPath: string
     scriptPresent: boolean
+    /** For a plugin: whether the file on disk is this version's. */
+    scriptCurrent?: boolean
+    /** For a hook: the SHA-256 of the script on disk, lowercase hex. */
+    scriptDigest?: string
   }>
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
+  /** The first line of `claude --version`, or null. See `usesExecForm`. */
+  claudeVersion?: () => Promise<string | null>
 }
 
 /** What the settings panel shows for one CLI. */
@@ -321,6 +452,52 @@ export interface HookStatus {
   readonly scriptPath: string
   /** Set when the state could not be read at all. */
   readonly error?: string
+  /** Installed by an earlier ADE, whose plugin is not this one's: the panel offers the update. */
+  readonly outdated?: boolean
+  /**
+   * The script on disk is not this build's, and this is a test build.
+   *
+   * `outdated` and this are the same digest test, and on a release build
+   * `outdated` is the right reading: the user upgraded ADE and the hook is an
+   * older one's. On a test build it is not — the hook belongs to the **official**
+   * ADE, and it is what carries the user's Claude and Codex sessions. This build
+   * cannot tell whether that ADE is older or newer, and rewriting its script
+   * with this one's would be a test build changing the official ADE's plumbing.
+   * So the panel says whose it is and offers neither the update nor the removal.
+   */
+  readonly foreign?: boolean
+}
+
+/**
+ * Whether this is a test build, which is the one `dev.tsx` marks. Read here the
+ * same way `chat/model.ts` reads it, rather than a second way of asking.
+ */
+function isTestBuild(): boolean {
+  return typeof document !== "undefined" && document.documentElement?.dataset?.adeBuild === "test"
+}
+
+/** SHA-256, lowercase hex, as Rust reports the script on disk (`scriptDigest`). */
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+/**
+ * Whether the hook's script on disk is an earlier ADE's: rewriting it opens
+ * the confirmation dialog. Unknown (no digest from the host) is not outdated.
+ */
+async function scriptOutdated(target: HookTarget, digest: string | undefined): Promise<boolean> {
+  return digest !== undefined && digest !== (await sha256(hookScript(target.agent)))
+}
+
+/** How old a script that is installed but not this build's is. See `foreign`. */
+async function describeScriptAge(
+  target: HookTarget,
+  digest: string | undefined,
+  installed: boolean,
+): Promise<{ outdated?: true; foreign?: true }> {
+  if (!installed || !(await scriptOutdated(target, digest))) return {}
+  return isTestBuild() ? { foreign: true } : { outdated: true }
 }
 
 /** What ADE has installed for this CLI right now. */
@@ -338,14 +515,31 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
   }
   try {
     const files = await read(target.id)
+    // A plugin has no entry to point at it: the file being there is the whole install.
+    if (target.kind === "tui-plugin") {
+      return {
+        target,
+        installed: files.scriptPresent,
+        broken: false,
+        configPath: "",
+        scriptPath: files.scriptPath,
+        ...(files.scriptPresent && files.scriptCurrent === false
+          ? isTestBuild()
+            ? { foreign: true }
+            : { outdated: true }
+          : {}),
+      }
+    }
     const command = installedCommand(files.configText ?? undefined)
     const wanted = hookCommand(files.scriptPath)
+    const installed = command === wanted && files.scriptPresent
     return {
       target,
-      installed: command === wanted && files.scriptPresent,
+      installed,
       broken: command !== undefined && (command !== wanted || !files.scriptPresent),
       configPath: files.configPath,
       scriptPath: files.scriptPath,
+      ...(await describeScriptAge(target, files.scriptDigest, installed)),
     }
   } catch (error) {
     return {
@@ -373,12 +567,24 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
   if (!read || !write) return readHookStatus(host, target)
 
   const files = await read(target.id)
+  if (target.kind === "tui-plugin") {
+    // The text is Rust's own (`nikcli-plugin.ts`): the page only says install ("") or remove (null).
+    await write(target.id, "", install ? "" : null)
+    return readHookStatus(host, target)
+  }
   const current = files.configText ?? undefined
   if (install) {
     const command = hookCommand(files.scriptPath)
+    const exec = await usesExecForm(host, target)
     await write(
       target.id,
-      installHook(current, command, target.matcher, target.activityEvents),
+      installHook(
+        current,
+        command,
+        target.matcher,
+        target.activityEvents,
+        exec ? hookExec(files.scriptPath) : undefined,
+      ),
       hookScript(target.agent),
     )
   } else {
@@ -388,32 +594,59 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
 }
 
 /**
- * Rewrites an installed hook's script with this version's, config untouched.
+ * Rewrites an installed hook's script with this version's, or upgrades a config
+ * with an outdated timeout or command form.
  *
  * The script is ADE's own file and changes when ADE does (it began sending
  * `source`); an install from an older version would otherwise keep the old
  * one until the user thought to reinstall. The config is written back as the
- * exact text just read, because `writeAgentHook` writes both halves and the
- * config is not ADE's to reformat. Done only when `lastWritten` differs, so a
- * launch with nothing new does not touch another program's settings file.
- * Answers the script now on disk, for the caller to remember.
+ * exact text just read, unless the activity events, timeout or exec form
+ * need an upgrade. Done only when `lastWritten` differs or the install is
+ * stale, so a launch with nothing new does not touch another program's
+ * settings file. Answers the script now on disk, for the caller to remember.
  */
 export async function refreshHookScript(
   host: HookHost,
   target: HookTarget,
   lastWritten: string | undefined,
 ): Promise<string | undefined> {
-  const script = hookScript(target.agent)
-  if (lastWritten === script || !host.readAgentHook || !host.writeAgentHook) return undefined
+  if (!host.readAgentHook || !host.writeAgentHook) return undefined
   const files = await host.readAgentHook(target.id)
+  if (target.kind === "tui-plugin") {
+    /*
+     * Not rewritten here. Writing it opens Rust's confirmation, and this runs
+     * when ADE starts: after an update that changed the plugin, a native
+     * dialog came up that nobody had asked for (lettura di Mimo, F9). The
+     * status says it is outdated, and the settings panel updates it when the
+     * user presses the button.
+     */
+    return undefined
+  }
+  const script = hookScript(target.agent)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
+  /*
+   * An earlier ADE's script is not rewritten here, for the same reason as the
+   * plugin above: this runs at start, and a new script is shown to the user
+   * in a native dialog first. The status says it is outdated; the panel's
+   * button updates it. A configuration to bring up to date with the same
+   * script asks nothing, and is still written.
+   */
+  if (await scriptOutdated(target, files.scriptDigest)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.
   const missing = missingActivityEvents(files.configText, target.activityEvents)
-  const config =
-    missing.length > 0
-      ? installHook(files.configText, command, target.matcher, target.activityEvents)
-      : files.configText
+  const exec = await usesExecForm(host, target)
+  const stale = missing.length > 0 || hookOutdated(files.configText, target, exec)
+  if (lastWritten === script && !stale) return undefined
+  const config = stale
+    ? installHook(
+        files.configText,
+        command,
+        target.matcher,
+        target.activityEvents,
+        exec ? hookExec(files.scriptPath) : undefined,
+      )
+    : files.configText
   await host.writeAgentHook(target.id, config, script)
   return script
 }
@@ -459,9 +692,14 @@ if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
 
 # A turn starting or ending: whether the agent is working, for ADE to wait on or remind.
 $event = "$($payload.hook_event_name)"
-if ($event -eq "UserPromptSubmit" -or $event -eq "Stop") {
+# A permission question is its own state and not a flavour of busy: typing there
+# would answer it. It is read from the hook because the hook is the CLI saying
+# so; the reading of the screen stays as the fallback for a session whose hooks
+# were never installed.
+$permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq "permission_prompt"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission) {
   $activity = [ordered]@{
-    state     = $(if ($event -eq "Stop") { "idle" } else { "busy" })
+    state     = $(if ($event -eq "Stop") { "idle" } elseif ($permission) { "permission" } else { "busy" })
     sessionId = "$sessionId"
     cwd       = "$($payload.cwd)"
     at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()

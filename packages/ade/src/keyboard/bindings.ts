@@ -40,7 +40,33 @@ export const DEFAULT_BINDINGS: BindingEntry[] = [
   // Views and theme
   { chord: "mod+shift+v", commandId: "view.toggle" },
   { chord: "mod+shift+t", commandId: "theme.toggle" },
+  /*
+   * B for the bar, with Shift: Ctrl+B belongs to what runs in the terminal
+   * (tmux's prefix, readline's back-a-character), and xterm sends nothing at
+   * all for Ctrl+Shift+a letter, so this one takes no key from a program.
+   */
+  { chord: "mod+shift+b", commandId: "sidebar.toggle" },
 ]
+
+/**
+ * Commands a chord does not run while a text field has the focus.
+ *
+ * A Ctrl chord in a field is otherwise read as a command, which is right for
+ * the palette and wrong for a close: Ctrl+W typed in a composer, out of the
+ * habit of deleting a word, closed the pane and ended the agent in it (review
+ * of the frontend, ALTO 6).
+ */
+export const NOT_FROM_TEXT_FIELDS: ReadonlySet<string> = new Set(["pane.close"])
+
+/**
+ * Commands a chord runs even while a terminal has the focus.
+ *
+ * Every other ADE chord goes to the terminal there (see the keydown handler
+ * in the workbench): Ctrl+W deletes a word, Ctrl+Shift+V pastes. Hiding the
+ * sidebar is asked for from inside a session more than from anywhere else,
+ * and its chord is one xterm turns into nothing.
+ */
+export const FROM_TERMINALS: ReadonlySet<string> = new Set(["sidebar.toggle"])
 
 /*
  * Moving focus between panes is deliberately absent from this list. The grid

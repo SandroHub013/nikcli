@@ -12,6 +12,8 @@ function machine() {
     args: string[]
     cwd?: string
     pipe?: boolean
+    flags?: readonly string[]
+    secrets?: readonly string[]
     written: string[]
     killed: boolean
     say: (line: string) => void
@@ -23,6 +25,8 @@ function machine() {
       args: string[]
       cwd?: string
       pipe?: boolean
+      flags?: readonly string[]
+      secrets?: readonly string[]
       onExit: (code: number | null) => void
       onLine: (line: string) => void
     }) => {
@@ -30,6 +34,8 @@ function machine() {
         args: options.args,
         cwd: options.cwd,
         pipe: options.pipe,
+        flags: options.flags,
+        secrets: options.secrets,
         written: [] as string[],
         killed: false,
         say: options.onLine,
@@ -58,7 +64,7 @@ const request = (message: string, extra: Partial<TurnRequest> = {}): TurnRequest
   message,
   cwd: "C:/p",
   instructions: "Sei nik.",
-  disabledTools: ["edit", "write", "bash"],
+  disabledTools: ["edit", "write", "bash", "webfetch", "websearch"],
   lean: true,
   partial: true,
   ...extra,
@@ -278,5 +284,16 @@ describe("a Claude Code kept running between sentences", () => {
     warm.prepare(request(""))
     await new Promise((resolve) => setTimeout(resolve, 40))
     expect(m.spawns[0]!.killed).toBe(true)
+  })
+
+  test("il processo tenuto acceso porta il flag dell'account", async () => {
+    const m = machine()
+    const warm = warmOn(m)
+    const turn = warm.run(request("ciao", { account: { mode: "key", key: "lavoro" } }))
+    await tick()
+    expect(m.spawns[0]!.flags).toEqual(["account-key"])
+    expect(m.spawns[0]!.secrets).toEqual(["lavoro"])
+    turn.stop()
+    await turn.result
   })
 })

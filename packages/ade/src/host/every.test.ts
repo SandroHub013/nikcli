@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, jest } from "bun:test"
-import { every } from "./every"
+import { HIDDEN_WATCH_MS, every, watchDue } from "./every"
 
 beforeEach(() => jest.useFakeTimers())
 afterEach(() => jest.useRealTimers())
@@ -58,4 +58,14 @@ test("stops for good", async () => {
   jest.advanceTimersByTime(1000)
   await flush()
   expect(count).toBe(0)
+})
+
+test("watchDue: every pass while visible, once every 5 s while hidden (P1-C1)", () => {
+  expect(HIDDEN_WATCH_MS).toBe(5_000)
+  expect(watchDue(false, 1_000, 900)).toBe(true)
+  expect(watchDue(true, 1_000, 0)).toBe(false)
+  expect(watchDue(true, 4_999, 0)).toBe(false)
+  expect(watchDue(true, 5_000, 0)).toBe(true)
+  // Back in view: the next pass watches at once, whenever the last one was.
+  expect(watchDue(false, 5_001, 5_000)).toBe(true)
 })

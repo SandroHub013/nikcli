@@ -149,6 +149,7 @@ export function SessionGrid(props: SessionGridProps) {
     const pane = props.panes[next]
     if (next === -1 || !pane) return
     event.preventDefault()
+    event.stopPropagation()
     props.onFocus(pane.id)
   }
 
@@ -182,9 +183,19 @@ export function SessionGrid(props: SessionGridProps) {
     )
   }
 
+  /*
+   * Both chords on the way down. Alt+Arrow was left to bubble, and xterm
+   * stops it first: the focus did not move from a terminal, and the shell got
+   * `ESC[1;3D` (review area 2). At the edge it still reaches the pane, where
+   * a shell reads it as a word jump.
+   */
   onMount(() => {
     container.addEventListener("keydown", onMoveKey, true)
-    onCleanup(() => container.removeEventListener("keydown", onMoveKey, true))
+    container.addEventListener("keydown", onKeyDown, true)
+    onCleanup(() => {
+      container.removeEventListener("keydown", onMoveKey, true)
+      container.removeEventListener("keydown", onKeyDown, true)
+    })
   })
 
   /* ---------------------------------------------------------------- drag */
@@ -301,7 +312,6 @@ export function SessionGrid(props: SessionGridProps) {
       data-component="session-grid"
       data-empty={props.panes.length === 0 ? "true" : undefined}
       data-arranging={dragging() || resizing() ? "true" : undefined}
-      onKeyDown={onKeyDown}
       style={{
         "grid-template-columns": `repeat(${columns()}, minmax(0, 1fr))`,
         "grid-auto-rows": `minmax(${MIN_PANE_HEIGHT}px, calc((100% - ${

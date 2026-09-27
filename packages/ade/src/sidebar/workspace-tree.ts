@@ -11,9 +11,17 @@ import type { PaneStatus } from "../grid/pane"
 
 export type WorkspaceSessionStatus = PaneStatus
 
-export type AgentDisplayStatus = "disponibile" | "a lavoro" | "in attesa di input" | "task completata" | "errore"
+export type AgentDisplayStatus =
+  | "disponibile"
+  | "a lavoro"
+  | "in attesa di input"
+  | "task completata"
+  | "errore"
+  | "sospesa"
 
-export function mapAgentStatus(status: WorkspaceSessionStatus): AgentDisplayStatus {
+/** A suspended session (P1-C6) has no process: it is neither available nor at work, whatever its last status. */
+export function mapAgentStatus(status: WorkspaceSessionStatus, suspended?: boolean): AgentDisplayStatus {
+  if (suspended) return "sospesa"
   switch (status) {
     case "working":
       return "a lavoro"
@@ -36,10 +44,20 @@ export function normalizeAgentId(raw?: string): string {
   if (s.includes("claude")) return "claude-code"
   if (s.includes("codex") || s.includes("openai")) return "codex"
   if (s.includes("opencode")) return "opencode"
+  if (s.includes("grok") || s.includes("xai")) return "grok"
   if (s.includes("agy") || s.includes("antigravity")) return "agy"
   if (s.includes("hermes") || s.includes("nous")) return "hermes"
   if (s.includes("kimi") || s.includes("moonshot")) return "kimi"
   if (s.includes("prime")) return "prime"
+  // Before "pi": «copilot» holds it.
+  if (s.includes("copilot")) return "copilot"
+  if (s.includes("freebuff") || s.includes("codebuff")) return "freebuff"
+  if (s.includes("cline")) return "cline"
+  if (s.includes("crush")) return "crush"
+  if (s.includes("kilo")) return "kilo"
+  if (s.includes("goose")) return "goose"
+  if (s.includes("cursor")) return "cursor"
+  if (/\bt3\b/.test(s)) return "t3"
   if (s.includes("ohmypi")) return "ohmypi"
   if (s.includes("pi")) return "pi"
   if (s.includes("shell") || s.includes("term") || s.includes("bash") || s.includes("zsh") || s.includes("powershell"))
@@ -54,6 +72,8 @@ export interface SidebarSession {
   status: WorkspaceSessionStatus
   workspaceId?: string
   activity?: string
+  /** Suspended by the user (P1-C6): the dot goes grey. */
+  suspended?: true
   startTime?: number
   agent?: string
   branch?: string
@@ -65,6 +85,8 @@ export interface Workspace {
   name: string
   path?: string
   branch?: string
+  /** Its folder no longer exists: marked, not removed (the list is the user's). */
+  missing?: true
   sessions: SidebarSession[]
 }
 

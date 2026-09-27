@@ -19,6 +19,7 @@
 import { createEffect, createSignal, on, For, Show, onCleanup } from "solid-js"
 import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@nikcli-ai/voice"
 import { presenceLabel, presenceOf } from "./status"
+import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"
 import { t } from "../i18n"
 
@@ -34,7 +35,15 @@ export interface AgentConsoleProps {
   held?: string | null
   onSubmit: (text: string) => void
   onToggleMic: () => void
-  onOpenSettings: () => void
+  onOpenSettings: (section?: string) => void
+  hasKey?: boolean
+  hasAgent?: boolean
+  hasVoice?: boolean
+  isVoiceDownloading?: boolean
+  voiceError?: string
+  onDownloadVoice?: () => void
+  onOpenKeySettings?: () => void
+  onOpenAgentSettings?: () => void
 }
 
 function timeOf(at: number): string {
@@ -117,9 +126,84 @@ export function AgentConsole(props: AgentConsoleProps) {
 
       {/* Said once, at the top, rather than as a failure on the first sentence
           the grammar cannot match: without a key the assistant still works,
-          it just cannot plan. That is a setup fact, not an error. */}
+          it just cannot plan. That is a setup fact, not an error. Shown even
+          when the checklist is hidden (someone who skipped first-run). */}
       <Show when={!props.canPlan}>
         <p data-slot="agent-notice">{t("agent.noPlanner")}</p>
+      </Show>
+
+      {/* A4: Guided onboarding checklist: shown if any prerequisite is missing */}
+      <Show
+        when={
+          !isVoiceReady({
+            hasKey: props.hasKey ?? props.canPlan,
+            hasAgent: props.hasAgent ?? true,
+            hasVoice: props.hasVoice ?? true,
+          })
+        }
+      >
+        <section data-slot="agent-onboarding" aria-label={t("agent.onboarding.title")}>
+          <div data-slot="agent-onboarding-head">
+            <span data-slot="agent-onboarding-title">{t("agent.onboarding.title")}</span>
+            <span data-slot="agent-onboarding-sub">{t("agent.onboarding.subtitle")}</span>
+          </div>
+          <div data-slot="agent-onboarding-items">
+            <For
+              each={voicePrerequisitesList({
+                hasKey: props.hasKey ?? props.canPlan,
+                hasAgent: props.hasAgent ?? true,
+                hasVoice: props.hasVoice ?? true,
+                isVoiceDownloading: props.isVoiceDownloading,
+                voiceError: props.voiceError,
+              })}
+            >
+              {(item) => (
+                <div data-slot="agent-onboarding-row" data-done={item.done ? "true" : "false"}>
+                  <label data-slot="agent-onboarding-check">
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      readOnly
+                      data-slot="agent-checkbox"
+                      aria-label={item.title}
+                    />
+                    <span data-slot="agent-check-mark" aria-hidden="true">
+                      {item.done ? "✓" : "○"}
+                    </span>
+                  </label>
+                  <div data-slot="agent-onboarding-body">
+                    <div data-slot="agent-onboarding-item-title">{item.title}</div>
+                    <div data-slot="agent-onboarding-item-desc">{item.desc}</div>
+                    <Show when={item.error}>
+                      <div data-slot="agent-onboarding-error" role="alert">
+                        {item.error}
+                      </div>
+                    </Show>
+                  </div>
+                  <button
+                    type="button"
+                    data-slot="agent-onboarding-btn"
+                    data-done={item.done ? "true" : undefined}
+                    disabled={item.actionDisabled}
+                    onClick={() => {
+                      if (item.id === "key") {
+                        if (props.onOpenKeySettings) props.onOpenKeySettings()
+                        else props.onOpenSettings("voice-sec-backend")
+                      } else if (item.id === "agent") {
+                        if (props.onOpenAgentSettings) props.onOpenAgentSettings()
+                        else props.onOpenSettings("set-sec-provider")
+                      } else if (item.id === "voice") {
+                        props.onDownloadVoice?.()
+                      }
+                    }}
+                  >
+                    {item.actionLabel}
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </section>
       </Show>
 
       <div data-slot="agent-scroll" ref={(el) => (scroller = el)}>
@@ -129,10 +213,10 @@ export function AgentConsole(props: AgentConsoleProps) {
             <div data-slot="agent-empty">
               <p data-slot="agent-empty-title">{t("agent.empty.title")}</p>
               <p data-slot="agent-empty-body">{t("agent.empty.body")}</p>
-              <ul data-slot="agent-examples" lang="it">
-                <li>«avvia quattro sessioni claude su questo progetto»</li>
-                <li>«apri il pannello due»</li>
-                <li>«cosa sta succedendo»</li>
+              <ul data-slot="agent-examples">
+                <li>{t("agent.empty.example1")}</li>
+                <li>{t("agent.empty.example2")}</li>
+                <li>{t("agent.empty.example3")}</li>
               </ul>
             </div>
           }

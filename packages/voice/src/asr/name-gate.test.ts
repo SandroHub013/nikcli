@@ -75,6 +75,65 @@ describe("while it waits for the name, only the start of a sentence goes to the 
   })
 })
 
+describe("error purpose at the OpenRouter boundary", () => {
+  async function hearEarlySentence(fetch: (...args: Parameters<typeof globalThis.fetch>) => Promise<Response>) {
+    let clock = 10_000
+    const purposes: Array<string | undefined> = []
+    const accepted: string[] = []
+    const capture = createMicCapture({
+      now: () => clock,
+      preferredFormat: "wav",
+      mediaStream: { getTracks: () => [] } as any,
+      isTypeSupported: () => true,
+      speechDetectorConfig: { silenceDurationMs: 800 },
+    })
+    const transcriber = createOpenRouterTranscriber({
+      apiKey: "k",
+      capture,
+      now: () => clock,
+      fetch: fetch as typeof globalThis.fetch,
+      onError: (_error, context) => purposes.push(context?.purpose),
+      nameGate: {
+        active: () => true,
+        accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+        onAccepted: () => accepted.push("accepted"),
+      },
+    })
+    await transcriber.start()
+    for (let i = 0; i < 150; i++) {
+      clock += 20
+      capture.processAudioFrame(new Float32Array(320).fill(0.2))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    for (let i = 0; i < 50; i++) {
+      clock += 20
+      capture.processAudioFrame(new Float32Array(320))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    transcriber.stop()
+    return { accepted, purposes }
+  }
+
+  test("an early room probe failure is marked as a probe", async () => {
+    const { purposes } = await hearEarlySentence(async () => new Response("busy", { status: 503 }))
+
+    expect(purposes).toEqual(["probe"])
+  })
+
+  test("the full request after an accepted probe is marked as a turn", async () => {
+    let requests = 0
+    const { accepted, purposes } = await hearEarlySentence(async () => {
+      requests++
+      return requests === 1
+        ? new Response(JSON.stringify({ text: "ei nik raccontami" }), { status: 200 })
+        : new Response("busy", { status: 503 })
+    })
+
+    expect(accepted).toEqual(["accepted"])
+    expect(purposes).toEqual(["turn"])
+  })
+})
+
 describe("wavHead", () => {
   test("keeps the header valid for the shorter audio", async () => {
     const head = (await wavHead(wavOf(4_000), 1_500))!
@@ -216,5 +275,29 @@ describe("the start of a long sentence is heard before it ends", () => {
     expect(sent).toHaveLength(2)
     expect(sent[1]!.bytes).toBeGreaterThan(bytesFor(NAME_PROBE_MS))
     expect(finals).toEqual(["ei nik raccontami la storia di Roma"])
+  })
+})
+
+describe("what is left on the key", () => {
+  const { openRouterCreditLeft } = require("./openrouter")
+  const answering = (status: number, body: unknown) =>
+    (async () =>
+      new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch
+
+  test("the credit left, a refused key, and everything else as not knowing", async () => {
+    expect(
+      await openRouterCreditLeft("k", answering(200, { data: { total_credits: 101, total_usage: 99.79 } })),
+    ).toEqual({
+      left: 101 - 99.79,
+    })
+    expect(await openRouterCreditLeft("k", answering(401, { error: "no" }))).toEqual({ refused: true })
+    expect(await openRouterCreditLeft("k", answering(403, { error: "no" }))).toEqual({ refused: true })
+    expect(await openRouterCreditLeft("k", answering(500, "boom"))).toBeUndefined()
+    expect(await openRouterCreditLeft("k", answering(200, { data: { total_credits: "molti" } }))).toBeUndefined()
+    expect(
+      await openRouterCreditLeft("k", (async () => {
+        throw new Error("no network")
+      }) as unknown as typeof fetch),
+    ).toBeUndefined()
   })
 })

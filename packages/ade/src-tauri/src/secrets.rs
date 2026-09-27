@@ -258,12 +258,21 @@ pub fn agent_for_command(command: &str) -> Option<&'static str> {
         "codex" => Some("codex"),
         "opencode" => Some("opencode"),
         "nikcli" => Some("nikcli"),
+        "grok" => Some("grok"),
         "agy" => Some("agy"),
         "kimi" => Some("kimi"),
         "prime" => Some("prime"),
         "pi" => Some("pi"),
         "ohmypi" => Some("ohmypi"),
         "hermes" => Some("hermes"),
+        "freebuff" => Some("freebuff"),
+        "cline" => Some("cline"),
+        "crush" => Some("crush"),
+        "kilo" => Some("kilo"),
+        "goose" => Some("goose"),
+        "copilot" => Some("copilot"),
+        "t3" => Some("t3"),
+        "cursor-agent" => Some("cursor"),
         "cmd" | "powershell" | "pwsh" | "sh" | "bash" | "zsh" | "fish" => Some("terminal"),
         _ => None,
     }
@@ -315,6 +324,24 @@ fn env_in(
         }
     }
     Ok(vars)
+}
+
+/// Every key's value, for the gateways to take out of what they send. A key
+/// the keychain will not give is skipped: hiding is a second line, not a gate.
+fn values_in(vault: &dyn Vault, service: &str, path: &std::path::Path) -> Vec<String> {
+    read_index(path)
+        .keys
+        .iter()
+        .filter_map(|key| vault.get(service, &key.name).ok().flatten())
+        .collect()
+}
+
+/// The keys' values, for `gateway` to hide. Called from Rust only; never sent to the page.
+pub fn values(app: &AppHandle) -> Vec<String> {
+    match index_path(app) {
+        Ok(path) => values_in(&SystemVault, &service(app), &path),
+        Err(_) => Vec::new(),
+    }
 }
 
 /// The variables `pty_spawn` sets when `command` is started with `names`. Called from Rust only.
@@ -441,6 +468,18 @@ mod tests {
     }
 
     const FAKE: &str = "sk-test-0000000000000000abcd";
+
+    #[test]
+    fn the_values_for_the_gateway_are_every_saved_key_and_nothing_else() {
+        let vault = MemoryVault::default();
+        let path = temp_index("values");
+        save_in(&vault, "svc", &path, "openai", "OPENAI_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "altra", "ALTRA_API_KEY", vec!["codex".into()], Some("sk-altra-0000000000000"), 2).unwrap();
+        vault.set("svc", "fuori-indice", "non-in-indice-000000").unwrap();
+        let mut values = values_in(&vault, "svc", &path);
+        values.sort();
+        assert_eq!(values, vec!["sk-altra-0000000000000".to_string(), FAKE.to_string()]);
+    }
 
     #[test]
     fn the_value_goes_to_the_vault_and_only_names_to_the_file() {

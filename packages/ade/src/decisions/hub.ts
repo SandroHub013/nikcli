@@ -8,13 +8,17 @@
 
 import { createSignal } from "solid-js"
 import { answerEvent, deferEvent, reopenEvent } from "./answer"
+import { t } from "../i18n"
+import { runSubmit, submitControl, submitSteps, waitsForRecipient } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
+import { recipientFor } from "./delivery"
 import type { AnsweredEvent } from "./log"
 import type { DecisionsRegister } from "./register"
 import type { Decision } from "./state"
 
 export interface DecisionDraft {
-  readonly picked?: number
+  /** One option, or the boxes ticked on a `multi` question. */
+  readonly picked?: number | readonly number[]
   readonly note: string
 }
 
@@ -22,6 +26,8 @@ export interface DecisionsHub {
   readonly register: DecisionsRegister
   /** Who the project's answers go to, as the user chose. */
   recipient: () => RecipientStatus
+  /** Who receives this one: the pane that asked while it runs, else the chosen session. */
+  recipientFor: (decision: Decision) => RecipientStatus
   /** The sessions the user can choose from, every project's. */
   sessions: () => readonly DeliveryCandidate[]
   /** Chooses the recipient by pane id; `undefined` chooses nobody. */
@@ -33,6 +39,14 @@ export interface DecisionsHub {
   problem: (k: string) => string | undefined
   /** Writes the answer from the draft; resolves true once it is in the register. */
   answer: (decision: Decision) => Promise<boolean>
+  /** The session picked in a card's own "who receives" select, not yet chosen. */
+  inlineRecipient: () => string | undefined
+  setInlineRecipient: (id: string | undefined) => void
+  /**
+   * The card's buttons and Enter: `primary` sends, first choosing the session
+   * picked inline when nobody receives yet; `record` writes without sending.
+   */
+  submit: (decision: Decision, press: "primary" | "record") => Promise<boolean>
   defer: (decision: Decision, until: string) => Promise<boolean>
   reopen: (decision: Decision) => Promise<boolean>
 }
@@ -45,10 +59,13 @@ export function createDecisionsHub(deps: {
   delivery: (decision: Decision) => DeliveryState
   /** Called after an answer is in the register, to queue the message. */
   onAnswered: (decision: Decision, event: AnsweredEvent) => void
+  /** Called after a delivered decision is reopened, to queue the reopen message. */
+  onReopened?: (decision: Decision, deliveredTo?: string, deliveredToId?: string) => void
 }): DecisionsHub {
   const [drafts, setDrafts] = createSignal<Record<string, DecisionDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
+  const [inline, setInline] = createSignal<string>()
 
   const setProblem = (k: string, text: string | undefined) => setProblems((all) => ({ ...all, [k]: text }))
   const setBusy = (k: string, on: boolean) =>
@@ -83,9 +100,24 @@ export function createDecisionsHub(deps: {
       return next
     })
 
+  const answer = (decision: Decision): Promise<boolean> => {
+    const current = draft(decision.k)
+    const event = answerEvent(decision, current.picked, current.note, new Date())
+    if (typeof event === "string") {
+      setProblem(decision.k, event)
+      return Promise.resolve(false)
+    }
+    return write(decision.k, async () => {
+      await deps.register.append(event)
+      clearDraft(decision.k)
+      deps.onAnswered(decision, event)
+    })
+  }
+
   return {
     register: deps.register,
     recipient: deps.recipient,
+    recipientFor: (decision) => recipientFor(decision.raisedFrom, deps.sessions(), deps.recipient()),
     sessions: deps.sessions,
     choose: deps.choose,
     delivery: deps.delivery,
@@ -96,21 +128,48 @@ export function createDecisionsHub(deps: {
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
-    answer: (decision) => {
-      const current = draft(decision.k)
-      const event = answerEvent(decision, current.picked, current.note, new Date())
-      if (typeof event === "string") {
-        setProblem(decision.k, event)
+    answer,
+    inlineRecipient: inline,
+    setInlineRecipient: (id) => {
+      setInline(id)
+      // A session picked: the note asking for one is done with.
+      setProblems((all) =>
+        Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("decisions.sheet.needRecipient"))),
+      )
+    },
+    submit: (decision, press) => {
+      const control = submitControl({
+        recipient: recipientFor(decision.raisedFrom, deps.sessions(), deps.recipient()),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(decision.k),
+        label: "",
+      })
+      if (waitsForRecipient(control, deps.sessions(), inline(), press)) {
+        setProblem(decision.k, t("decisions.sheet.needRecipient"))
         return Promise.resolve(false)
       }
-      return write(decision.k, async () => {
-        await deps.register.append(event)
-        clearDraft(decision.k)
-        deps.onAnswered(decision, event)
+      const steps = submitSteps(control, deps.sessions(), inline(), press)
+      return runSubmit(steps, {
+        choose: (id) => {
+          deps.choose(id)
+          setInline(undefined)
+        },
+        answer: () => answer(decision),
       })
     },
     defer: (decision, until) =>
       write(decision.k, () => deps.register.append(deferEvent(decision.k, until, new Date()))),
-    reopen: (decision) => write(decision.k, () => deps.register.append(reopenEvent(decision.k, new Date()))),
+    reopen: (decision) =>
+      write(decision.k, async () => {
+        const delivery = deps.delivery(decision)
+        const wasDelivered = delivery.state === "consegnata"
+        const deliveredTo = wasDelivered ? delivery.to : undefined
+        const deliveredToId = wasDelivered && delivery.state === "consegnata" ? delivery.toId : undefined
+        await deps.register.append(reopenEvent(decision.k, new Date()))
+        if (wasDelivered) {
+          deps.onReopened?.(decision, deliveredTo, deliveredToId)
+        }
+      }),
   }
 }

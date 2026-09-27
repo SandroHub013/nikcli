@@ -32,25 +32,12 @@
   --pane-status: var(--ade-text-weak);
 
   /*
-   * No border, no radius, no shadow.
-   *
-   * This card used to be a card: a hairline frame, rounded corners, a lift off
-   * the ground. Tiled six across that costs two pixels of frame and four of
-   * corner radius on every edge, and it buys nothing a terminal needs — the
-   * grid's one-pixel gap already says where one session ends and the next
-   * begins. Everything here that still draws is either information or a
-   * control; the pane's whole remaining job is to hand its height to xterm.
+   * Geometry, ground, framelessness and the focus line come from the shell on
+   * the cell's child (index.css), with every other cell's. This pane keeps
+   * only what is its own: the size container for the header's queries, and —
+   * further down — the terminal ground and the focus ring, both declared with
+   * the `--ade-pane-*` variables rather than by overriding the shell.
    */
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  background: var(--ade-surface);
-  overflow: hidden;
-  /* Children query the card's own width to decide what to drop when it gets
-     narrow — a four-column grid halves this card twice. */
   container-type: inline-size;
 }
 
@@ -97,20 +84,6 @@
 }
 [data-component="session-pane"][data-status="error"] {
   --pane-status: var(--ade-error);
-}
-
-/*
- * Focus is an outline drawn inside the pane, not a ring around it.
- *
- * A ring and a lift both need room outside the card, and there is no outside
- * any more — the next terminal starts one pixel away. `outline-offset: -1px`
- * paints the accent over the pane's own first pixel row, so the focused
- * session is findable from across the screen without costing a single column
- * or line of terminal.
- */
-[data-component="session-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
 }
 
 /* ── header ────────────────────────────────────────────────────────────────── */
@@ -249,6 +222,63 @@
   height: 100%;
 }
 
+/* Says a selection was copied; never in the way of the next one. */
+[data-slot="pane-toast"] {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 3px 8px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+/* ADE's notes over a live terminal: a strip that pushes it down, not a layer over its text. */
+[data-slot="pane-notice"] {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ade-border-subtle);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="pane-notice-lines"] {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="pane-notice-lines"] > p {
+  margin: 0;
+}
+
+[data-slot="pane-notice-lines"] > p + p {
+  margin-top: 4px;
+}
+
+[data-slot="pane-notice-close"] {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+[data-slot="pane-mouse-hint"] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 [data-slot="pane-tokens"],
 [data-slot="pane-cost"] {
   flex: 0 0 auto;
@@ -257,6 +287,44 @@
   font-variant-numeric: tabular-nums;
   color: var(--ade-text-weak);
   white-space: nowrap;
+}
+
+/*
+ * Mail ADE is holding for this session, because the user has a line half
+ * written in it. A counter, not an alarm: the mail is not late, it is simply
+ * not being typed over somebody's sentence.
+ *
+ * Chrome size (20px): under 24 it does not scale on press, per S62 — three
+ * per cent of twenty pixels is half a pixel and reads as a flicker.
+ */
+[data-slot="pane-mail"] {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--ade-space-2);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-working-bg);
+  color: var(--ade-working);
+  font: inherit;
+  font-size: var(--ade-font-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--ade-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--ade-btn-transition, background 120ms var(--ade-ease));
+}
+
+[data-slot="pane-mail"]:hover {
+  background: var(--ade-active);
+}
+
+[data-slot="pane-mail"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="pane-actions"] {
@@ -269,12 +337,13 @@
 }
 
 /*
- * Revealed for every kind of pane, in one place. Each pane used to add its own
- * rule, and the video and editor panes never did: their expand and close
- * buttons stayed invisible (0.6.1). `pane-chrome.test.ts` keeps it so.
+ * Revealed by the cell, in one place: hovering or focusing the tile shows
+ * them, whichever kind of pane it holds. Each pane used to add its own rule,
+ * and the video and editor panes never did: their expand and close buttons
+ * stayed invisible (0.6.1). `pane-chrome.test.ts` keeps it so.
  */
-[data-component$="-pane"]:hover [data-slot="pane-actions"],
-[data-component$="-pane"][data-focused] [data-slot="pane-actions"],
+[data-slot="grid-cell"]:hover > [data-component] [data-slot="pane-actions"],
+[data-slot="grid-cell"][data-focused] > [data-component] [data-slot="pane-actions"],
 [data-slot="pane-actions"]:focus-within {
   opacity: 1;
 }
@@ -350,10 +419,18 @@
   line-height: var(--ade-leading);
   display: flex;
   flex-direction: column;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Short output falls to the bottom, next to the prompt, the way a terminal
    behaves. Long output simply overflows upward and scrolls. */
+[data-slot="pane-lines"],
+[data-slot="pane-line"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 [data-slot="pane-lines"] {
   margin-top: auto;
   display: flex;
@@ -423,6 +500,9 @@
      into confetti, so it wraps at whitespace and scrolls only as a last resort. */
   overflow-wrap: break-word;
   white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* Progress bars emit the same line hundreds of times; the count is the whole
@@ -810,7 +890,7 @@
 
 /* ── the shell: the terminal's ground, corner to corner ── */
 [data-component="session-pane"] {
-  background: var(--ade-terminal-bg, var(--ade-sunken));
+  --ade-pane-ground: var(--ade-terminal-bg, var(--ade-sunken));
   transition: box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
@@ -821,13 +901,16 @@
 
 /*
  * Focus is a ring on the shell and a longer shadow, not a line drawn inside.
- * There is an outside again — the gutter — so the ring can sit on it.
+ * There is an outside again — the gutter — so the ring can sit on it. The
+ * shell's default line is opted out with one variable and the ring handed to
+ * it with another, rather than by overriding it: a `box-shadow` here ties
+ * with the shell's rule on specificity, and index.css, loaded after, won —
+ * the focused session had no mark at all.
  */
 [data-component="session-pane"][data-focused] {
-  outline: none;
-  box-shadow:
-    0 0 0 1.5px var(--ade-accent),
-    0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
+  --ade-pane-focus: none;
+  --ade-pane-shadow:
+    0 0 0 1.5px var(--ade-border-strong), 0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
 }
 
 /* ── the header: a pill of glass over the first lines ── */
@@ -851,10 +934,13 @@
   font-family: var(--ade-sans);
 }
 
+/* The header's inner line, like the ring around it: neutral (contorni A). It
+   was `--ade-accent-soft`, and on the focused pane it read as a second green
+   edge inside the first. */
 [data-component="session-pane"][data-focused] > [data-slot="pane-header"] {
   box-shadow:
     var(--ade-shadow-sm),
-    inset 0 0 0 1px var(--ade-accent-soft);
+    inset 0 0 0 1px var(--ade-border-subtle);
 }
 
 /* The mark in a round chip, with the status as a halo around it. */
@@ -951,10 +1037,10 @@
   margin: 0;
   padding: 0 4px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   outline: none;
-  background: color-mix(in srgb, var(--ade-accent) 10%, transparent);
-  box-shadow: inset 0 -1.5px 0 var(--ade-accent);
+  background: var(--ade-raised);
+  box-shadow: inset 0 -1.5px 0 var(--ade-text-weak);
   font: inherit;
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
@@ -1005,10 +1091,20 @@
  * pixels — six of margin, thirty of pill, six of air — is the top padding that
  * keeps the first prompt readable, and it is the two rows this direction
  * costs. Bottom and sides stay at zero: those are terminal columns.
+ *
+ * The room follows the lifted header, not a list of bodies: every direct
+ * sibling after it makes space, so a view added to this pane tomorrow starts
+ * below the pill without anyone remembering to edit this rule. The three
+ * bodies used to be named here one by one, and the first view that was not in
+ * the list began underneath the pill. The dock is the single exception — it is
+ * the bottom row, the pill is at the top, and clearance inside the dock would
+ * only make the dock taller. The «Copiato» toast is the other: it floats in
+ * the bottom corner, and the clearance made it a 62-pixel box with 42 empty
+ * on top of the word (Verifiche, medi-restyle).
  */
-[data-component="session-pane"] [data-slot="pane-terminal"],
-[data-component="session-pane"] [data-slot="pane-transcript"],
-[data-component="session-pane"] [data-slot="pane-plugin"] {
+[data-component="session-pane"]
+  > [data-slot="pane-header"]
+  ~ *:not([data-slot="pane-dock"]):not([data-slot="pane-toast"]) {
   padding-top: 42px;
 }
 
@@ -1127,18 +1223,26 @@
   }
 }
 
-/* Dense header pill layout */
+/*
+ * Dense header pill layout: the look of the pill, not where it sits.
+ *
+ * A header is in the flow by default, like every other pane's bar. Floating
+ * over the content is the session pane's own choice, made in its rule above
+ * (`[data-component="session-pane"] > [data-slot="pane-header"]`), because
+ * over a terminal the pill covers blank lines. This class used to carry the
+ * absolute position too, so the video pane had to undo it — over a picture
+ * the pill covered the picture — with a rule keyed on this class, which is
+ * a name the video pane does not own (S67.3). A pane that wants the pill
+ * lifted says so in its own sheet; a pane that says nothing gets a bar.
+ */
 .pill.hA {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  right: 6px;
+  flex: 0 0 auto;
   height: 30px;
   min-height: 30px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px 0 9px;
+  padding: 0 var(--ade-space-3) 0 var(--ade-space-4);
   border: 0;
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--ade-raised) 90%, transparent);
@@ -1149,7 +1253,6 @@
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   font-family: var(--ade-sans);
-  z-index: 3;
 }
 
 .hA .logo {
@@ -1160,7 +1263,7 @@
 
 .hA .nm {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   letter-spacing: -0.012em;
   color: var(--ade-text);
   white-space: nowrap;
@@ -1173,14 +1276,14 @@
 .hA .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--ade-space-2);
   height: 20px;
-  padding: 0 8px 0 5px;
+  padding: 0 var(--ade-space-4) 0 var(--ade-space-2);
   border: 0;
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--st) 14%, transparent);
   color: var(--ade-text-soft);
-  font: 500 11px / 1 var(--ade-sans);
+  font: var(--ade-weight-medium) 11px / 1 var(--ade-sans);
   white-space: nowrap;
   min-width: 0;
   overflow: hidden;
@@ -1233,7 +1336,7 @@
 .hA .a-q {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--ade-space-2);
   flex: 0 0 auto;
 }
 
@@ -1267,7 +1370,7 @@
 }
 
 .hA .qv {
-  font: 600 10px var(--ade-mono);
+  font: var(--ade-weight-semibold) 10px var(--ade-mono);
   color: var(--qc);
   font-variant-numeric: tabular-nums;
 }
@@ -1334,7 +1437,7 @@
    low one. */
 .hA [data-lv="na"] .qv {
   color: var(--ade-text-weak);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
 }
 
 .hA .acts {
@@ -1368,6 +1471,8 @@
 .hA .act:focus-visible {
   border-radius: var(--ade-radius-full);
   color: var(--ade-text);
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 .hA .more {
@@ -1451,4 +1556,15 @@
   .ic-ask .d3 {
     animation: none !important;
   }
+}
+
+/* "Sospendi" off: visible, its tooltip says why (P1-C6). */
+.hA .act[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hA .act[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--ade-text-weak);
 }

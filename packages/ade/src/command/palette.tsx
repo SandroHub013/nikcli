@@ -1,9 +1,10 @@
 import { createSignal, createMemo, createEffect, on, untrack, Show, For } from "solid-js"
 import { type Command, type CommandHit, filterCommands, moveSelection } from "./registry"
 import { groupHits, type GroupedHits } from "./group-hits"
-import { Overlay, Surface } from "../ui/layout"
+import { Sheet } from "../ui/sheet"
 import "./palette.css"
 import { t } from "../i18n"
+import { paletteStep } from "./palette-keys"
 
 export type { GroupedHits }
 
@@ -24,7 +25,6 @@ export function CommandPalette(props: CommandPaletteProps) {
   const [selectedIndex, setSelectedIndex] = createSignal(0)
   let inputRef!: HTMLInputElement
   let listboxRef!: HTMLDivElement
-  let previousFocus: HTMLElement | null = null
 
   const hits = createMemo(() => filterCommands(props.commands, query()))
   const groups = createMemo(() => groupHits(hits()))
@@ -53,15 +53,9 @@ export function CommandPalette(props: CommandPaletteProps) {
     on(
       () => props.open,
       (open) => {
-        if (!open) {
-          if (previousFocus) {
-            previousFocus.focus()
-            previousFocus = null
-          }
-          return
-        }
-
-        previousFocus = document.activeElement as HTMLElement
+        // The focus goes back to whoever had it through the Sheet, which also
+        // follows it when a command hands it on (a pane, the terminal).
+        if (!open) return
         setQuery("")
         // Read untracked: this is the list as it is at the moment of opening,
         // not a subscription to every later version of it.
@@ -87,10 +81,10 @@ export function CommandPalette(props: CommandPaletteProps) {
 
     const list = hits()
 
-    if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
+    if (e.key === "ArrowDown" || paletteStep(e) === 1) {
       e.preventDefault()
       setSelectedIndex((prev) => moveSelection(list, prev, 1))
-    } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
+    } else if (e.key === "ArrowUp" || paletteStep(e) === -1) {
       e.preventDefault()
       setSelectedIndex((prev) => moveSelection(list, prev, -1))
     } else if (e.key === "Home") {
@@ -129,69 +123,70 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   return (
     <Show when={props.open}>
-      <Overlay data-component="palette" onClose={props.onClose}>
-        <Surface size="lg" data-slot="dialog" role="dialog" aria-modal="true" aria-label={t("palette.label")}>
-          <div data-slot="input-wrap">
-            <input
-              ref={inputRef}
-              data-slot="input"
-              role="combobox"
-              aria-expanded="true"
-              aria-controls="ade-cp-listbox"
-              aria-activedescendant={selectedIndex() >= 0 ? `ade-cp-option-${selectedIndex()}` : undefined}
-              value={query()}
-              onInput={(e) => setQuery(e.currentTarget.value)}
-              onKeyDown={onKeyDown}
-              placeholder={t("palette.search")}
-            />
-          </div>
-          <div data-slot="listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>
-            <Show
-              when={hits().length > 0}
-              fallback={<div data-slot="empty">{props.emptyLabel ?? "No commands found."}</div>}
-            >
-              <For each={groups()}>
-                {(group) => (
-                  <div data-slot="group">
-                    <div data-slot="group-title">
-                      {group.hits.length > 0 ? highlightText(group.name, group.hits[0].hit.groupRanges) : group.name}
-                    </div>
-                    <For each={group.hits}>
-                      {({ hit, index }) => {
-                        const isSelected = () => selectedIndex() === index
-                        const disabled = hit.command.enabled === false
-                        return (
-                          <div
-                            id={`ade-cp-option-${index}`}
-                            data-index={index}
-                            data-slot="option"
-                            role="option"
-                            data-selected={isSelected() ? "true" : undefined}
-                            aria-selected={isSelected()}
-                            aria-disabled={disabled}
-                            onPointerEnter={() => !disabled && setSelectedIndex(index)}
-                            onClick={() => {
-                              if (!disabled) props.onRun(hit.command.id)
-                            }}
-                          >
-                            <div data-slot="option-title">{highlightText(hit.command.title, hit.titleRanges)}</div>
-                            <Show when={hit.command.shortcut}>
-                              {/* Already formatted for this platform by whoever
+      {/* On Kobalte's Dialog, as the other sheets: the Overlay trapped nothing,
+          and Tab walked out of the palette into the terminals behind (review area 2). */}
+      <Sheet component="palette" onClose={props.onClose} size="lg" label={t("palette.label")}>
+        <div data-slot="input-wrap">
+          <input
+            ref={inputRef}
+            data-slot="input"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="ade-cp-listbox"
+            aria-activedescendant={selectedIndex() >= 0 ? `ade-cp-option-${selectedIndex()}` : undefined}
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            onKeyDown={onKeyDown}
+            placeholder={t("palette.search")}
+          />
+        </div>
+        <div data-slot="listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>
+          <Show
+            when={hits().length > 0}
+            fallback={<div data-slot="empty">{props.emptyLabel ?? "No commands found."}</div>}
+          >
+            <For each={groups()}>
+              {(group) => (
+                <div data-slot="group">
+                  <div data-slot="group-title">
+                    {group.hits.length > 0 ? highlightText(group.name, group.hits[0].hit.groupRanges) : group.name}
+                  </div>
+                  <For each={group.hits}>
+                    {({ hit, index }) => {
+                      const isSelected = () => selectedIndex() === index
+                      const disabled = hit.command.enabled === false
+                      return (
+                        <div
+                          id={`ade-cp-option-${index}`}
+                          data-index={index}
+                          data-slot="option"
+                          role="option"
+                          data-selected={isSelected() ? "true" : undefined}
+                          aria-selected={isSelected()}
+                          aria-disabled={disabled}
+                          title={disabled ? hit.command.disabledReason : undefined}
+                          onPointerEnter={() => !disabled && setSelectedIndex(index)}
+                          onClick={() => {
+                            if (!disabled) props.onRun(hit.command.id)
+                          }}
+                        >
+                          <div data-slot="option-title">{highlightText(hit.command.title, hit.titleRanges)}</div>
+                          <Show when={hit.command.shortcut}>
+                            {/* Already formatted for this platform by whoever
                                   built the command: re-parsing it would only
                                   work by accident, and not on mac at all. */}
-                              <div data-slot="option-shortcut">{hit.command.shortcut}</div>
-                            </Show>
-                          </div>
-                        )
-                      }}
-                    </For>
-                  </div>
-                )}
-              </For>
-            </Show>
-          </div>
-        </Surface>
-      </Overlay>
+                            <div data-slot="option-shortcut">{hit.command.shortcut}</div>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              )}
+            </For>
+          </Show>
+        </div>
+      </Sheet>
     </Show>
   )
 }

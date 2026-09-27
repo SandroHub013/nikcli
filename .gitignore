@@ -47,6 +47,15 @@ packages/ade/src-tauri/target/
 .ade-webview/
 .ade-appdata/
 .ade-trees/
+# Worktree annidata di una sessione aperta: Windows non lascia spostarla finche
+# la sessione ci lavora dentro, e senza questa riga un git clean -fd qui la
+# cancellerebbe con dentro il lavoro non committato. La regola resta: le
+# worktree si creano A FIANCO del progetto, mai dentro; questa riga copre il
+# caso finche quella di layout non viene spostata.
+/layout/
+# ATTENZIONE: una cartella ignorata NON e protetta da git clean -fdx o -fdX, che
+# cancellano proprio cio che e ignorato. Finche /layout/ e .ade-trees/ stanno
+# dentro questo albero, qui non si lancia clean con la x.
 
 # Local wrangler state (D1/KV/R2 emulation), written by `wrangler dev` and
 # `d1 migrations apply --local`. Machine-local, never committed.

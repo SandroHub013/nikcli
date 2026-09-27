@@ -17,6 +17,8 @@
  * and can be tested without mounting anything.
  */
 
+import type { Activity } from "./mailbox"
+
 /**
  * Everything a terminal or a line discipline can read as "the line ends here",
  * collapsed to a single space.
@@ -32,9 +34,22 @@
  */
 const LINE_BREAKS = new RegExp("[\\r\\n\\v\\f\\u0085\\u2028\\u2029]+", "g")
 
-/** `text` with every line break turned into a space, ready to be typed. */
+/**
+ * Every remaining C0/C1 control character: things a terminal *executes*
+ * rather than prints — ESC opens a sequence, Ctrl-C can interrupt the agent,
+ * NUL truncates. They never come from a person's voice, and after the line
+ * breaks above have been flattened the ones still here have no job left.
+ * Built from a string, for the same reason as LINE_BREAKS: a character class
+ * nobody can review is a character class nobody reviews.
+ */
+const CONTROL = new RegExp("[\\u0000-\\u0008\\u0009\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]", "g")
+
+/**
+ * `text` with every line break turned into a space and every remaining
+ * control character removed, ready to be typed.
+ */
 export function asOneLine(text: string): string {
-  return text.replace(LINE_BREAKS, " ")
+  return text.replace(LINE_BREAKS, " ").replace(CONTROL, "")
 }
 
 /**
@@ -66,4 +81,24 @@ export function pasteSettled(input: { typedAt: number; lastOutputAt?: number; no
   const { typedAt, lastOutputAt, now } = input
   if (now - typedAt >= PASTE_SETTLE_MAX_MS) return true
   return lastOutputAt !== undefined && lastOutputAt > typedAt && now - lastOutputAt >= PASTE_QUIET_MS
+}
+
+export const CONFIRM_MARGIN_MS = 2000
+
+export function confirmDeadline(sentAt: number, hookTimeoutSeconds: number): number {
+  return sentAt + hookTimeoutSeconds * 1000 + CONFIRM_MARGIN_MS
+}
+
+export type SubmitCheck = "confirmed" | "queued" | "wait" | "resend"
+
+export function submitCheck(input: {
+  typedAt: number
+  activity: Activity | undefined
+  now: number
+  deadline: number
+}): SubmitCheck {
+  if (input.activity && input.activity.at >= input.typedAt) return "confirmed"
+  if (input.activity?.state === "busy") return "queued"
+  if (input.now < input.deadline) return "wait"
+  return "resend"
 }

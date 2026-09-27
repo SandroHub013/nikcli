@@ -1,7 +1,8 @@
 import { describe, test, expect } from "bun:test"
 import {
   ADE_VIEWS,
-  CHAT_AND_BOT_ENABLED,
+  BOT_ENABLED,
+  CHAT_ENABLED,
   VISIBLE_VIEWS,
   visibleViews,
   isViewVisible,
@@ -135,27 +136,39 @@ describe("panes of several projects, and spawned worktrees, survive a restart", 
     expect(back.panes[1]?.tree?.fidelity).toBe("full")
   })
 })
-describe("the Chat and Bot switch (S40)", () => {
-  test("the visible sections follow the switch, and agent and code are always there", () => {
-    expect(visibleViews(false)).toEqual(["agent", "code"])
-    expect(visibleViews(true)).toEqual([...ADE_VIEWS])
-    expect(VISIBLE_VIEWS).toEqual(visibleViews(CHAT_AND_BOT_ENABLED))
+describe("the Chat and Bot switches (S40)", () => {
+  test("the Bots are back (B7), and the Chat with them (C9)", () => {
+    expect(BOT_ENABLED).toBe(true)
+    expect(CHAT_ENABLED).toBe(true)
+    expect(VISIBLE_VIEWS).toEqual([...ADE_VIEWS])
+    expect(reachableView("bot")).toBe("bot")
+    expect(reachableView("chat")).toBe("chat")
   })
 
-  for (const enabled of [false, true]) {
-    test(`a hidden section is never where the cycle or an outside request lands (switch ${enabled ? "on" : "off"})`, () => {
-      const views = visibleViews(enabled)
-      const visited = new Set<string>()
-      let view = nextView("code", views)
-      for (let i = 0; i < ADE_VIEWS.length * 2; i++) {
-        expect(isViewVisible(view, views)).toBe(true)
-        visited.add(view)
-        view = nextView(view, views)
-      }
-      expect(visited.size).toBe(views.length)
-      for (const asked of ADE_VIEWS) expect(isViewVisible(reachableView(asked, views), views)).toBe(true)
-      expect(reachableView("chat", views)).toBe(enabled ? "chat" : "code")
-      expect(reachableView("bot", views)).toBe(enabled ? "bot" : "code")
-    })
+  test("the visible sections follow each switch, and agent and code are always there", () => {
+    expect(visibleViews({ chat: false, bot: false })).toEqual(["agent", "code"])
+    expect(visibleViews({ chat: false, bot: true })).toEqual(["agent", "code", "bot"])
+    expect(visibleViews({ chat: true, bot: false })).toEqual(["agent", "code", "chat"])
+    expect(visibleViews({ chat: true, bot: true })).toEqual([...ADE_VIEWS])
+    expect(VISIBLE_VIEWS).toEqual(visibleViews({ chat: CHAT_ENABLED, bot: BOT_ENABLED }))
+  })
+
+  for (const chat of [false, true]) {
+    for (const bot of [false, true]) {
+      test(`a hidden section is never where the cycle or an outside request lands (chat ${chat ? "on" : "off"}, bot ${bot ? "on" : "off"})`, () => {
+        const views = visibleViews({ chat, bot })
+        const visited = new Set<string>()
+        let view = nextView("code", views)
+        for (let i = 0; i < ADE_VIEWS.length * 2; i++) {
+          expect(isViewVisible(view, views)).toBe(true)
+          visited.add(view)
+          view = nextView(view, views)
+        }
+        expect(visited.size).toBe(views.length)
+        for (const asked of ADE_VIEWS) expect(isViewVisible(reachableView(asked, views), views)).toBe(true)
+        expect(reachableView("chat", views)).toBe(chat ? "chat" : "code")
+        expect(reachableView("bot", views)).toBe(bot ? "bot" : "code")
+      })
+    }
   }
 })

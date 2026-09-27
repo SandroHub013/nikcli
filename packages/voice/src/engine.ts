@@ -17,7 +17,7 @@
 
 import { createSignal } from "solid-js"
 import { Effect, Exit, Scope, Stream } from "effect"
-import type { VoiceHost } from "./bridge/host"
+import type { PermissionSpeechKind, VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"
 import { createInitialDialogState, type DialogState, type DialogStatus } from "./dialog/session"
 import type { ParseContext, ParseResult } from "./intent/parse"
@@ -26,9 +26,13 @@ import type { Speaker } from "./tts/speaker"
 import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
-import { disposeParakeetModel, warmupParakeetModel, type ParakeetProgress } from "./asr/parakeet-local"
+import { disposeParakeetModel, type ParakeetProgress } from "./asr/parakeet-local"
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
+import { voiceStorage } from "./settings/storage"
+import { createSpendTally, formatSpendCost, type DaySpend, type SpendTally } from "./settings/spend"
+import { createHaltStore, type HaltStore } from "./settings/halt"
+import { openRouterCreditLeft } from "./asr/openrouter"
 import { firstWords } from "./dialog/while-thinking"
 
 import { errorKind, HostActionFailed, spokenMessage, type VoiceErrorKind } from "./effect/errors"
@@ -81,10 +85,30 @@ export interface VoiceEngineOptions {
   plan?: Completion
   /** Overrides the planner model. */
   plannerModel?: string
+  /** Overrides the planner's fetch, for tests. */
+  plannerFetch?: typeof fetch
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
+  /** Where a stop for spending is written down; the browser's storage by default. */
+  readonly haltStore?: HaltStore
+  /** How long what the key had left is believed, before asking again. */
+  readonly creditCheckMs?: number
+  /** How much credit is left on the key; asks OpenRouter by default. */
+  readonly creditLeft?: (apiKey: string) => Promise<{ left: number } | { refused: true } | undefined>
+  /** Where what listening spends is counted; the browser's storage by default. */
+  readonly spendTally?: SpendTally
+  /** Overrides `LOW_CREDIT_USD`, for tests. */
+  readonly lowCreditUsd?: number
+  /** Overrides the inactivity timeout, for tests. */
+  readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
+  /**
+   * Where what the planning provider said goes when its call could not be
+   * made — the notice strip, in the app. Takes the keys out of it first: the
+   * provider quotes the key it refused, and this is not a place to write one.
+   */
+  onProviderError?: (detail: string) => void
 }
 
 export interface VoiceEngine {
@@ -106,6 +130,18 @@ export interface VoiceEngine {
   readonly dialogState: () => DialogState
   readonly lastParseResult: () => ParseResult | undefined
   readonly isRunning: () => boolean
+  readonly isBusy: () => boolean
+  /**
+   * Whether the next sentence would be heard, not only recorded (D74).
+   *
+   * `isRunning` says the microphone is open, and with always-on listening it
+   * always is: an orb reading it lit up while the next sentence, said without
+   * the name, was about to be dropped. This is the program's own rule
+   * (`nameGate`), true while the name, the button or an answer holds a
+   * window, a question waits, a turn is at work or a key is held — and false
+   * whenever the microphone is closed.
+   */
+  readonly hearing: () => boolean
   readonly settings: () => VoiceSettings
   /**
    * Which of the two the microphone is doing right now.
@@ -161,11 +197,23 @@ export interface VoiceEngine {
   /** Until when the next sentence needs no name, after an answer; undefined otherwise. */
   readonly followUp: () => number | undefined
   /**
-   * Set when always-on listening has sent more than `LISTEN_REQUESTS_PER_HOUR`
-   * sentences to the cloud in the last hour: said on screen, and listening
-   * goes on. At most once an hour.
+   * Set when listening stopped by itself: past `LISTEN_REQUESTS_PER_HOUR`
+   * sentences in an hour, or `LISTEN_IDLE_MS` without being called. Says why,
+   * on screen, until listening starts again.
    */
   readonly listenWarning: () => string | undefined
+
+  /** What listening has spent today: requests sent, and what they cost. */
+  readonly listenSpend: () => DaySpend
+
+  /**
+   * Whether listening stopped itself and must not come back on its own.
+   *
+   * A pause for a locked PC ends at the unlock; a stop for spending does not,
+   * or the cap and the idle timer would be a five-second interruption of the
+   * same bill. Only the user starts it again.
+   */
+  readonly listenHalted: () => boolean
 
   // Control methods
   /**
@@ -174,7 +222,18 @@ export interface VoiceEngine {
    * Opening it means "I am talking to you", so the first sentence needs no
    * name — unless `waitForName`, which is how ADE opens it by itself.
    */
-  start(mode?: VoiceMode, options?: { waitForName?: boolean }): Promise<void>
+  start(
+    mode?: VoiceMode,
+    options?: {
+      waitForName?: boolean
+      /**
+       * Not the user: the guard bringing listening back, or ADE opening it at
+       * launch. A start like that does not lift a stop for spending — only a
+       * hand on the button or the shortcut does.
+       */
+      automatic?: boolean
+    },
+  ): Promise<void>
   stop(): Promise<void>
   /** Closes the microphone because nobody can be talking to it, and remembers to open it again. */
   pauseListening(): Promise<void>
@@ -190,7 +249,25 @@ export interface VoiceEngine {
    */
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
-  handlePermissionRequest(paneId: string, what: string): Promise<void>
+  handlePermissionRequest(
+    paneId: string,
+    what: string,
+    options?: { silent?: boolean; kind?: PermissionSpeechKind },
+  ): Promise<void>
+  /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
+  handlePermissionResolved(paneId: string): Promise<void>
+  /**
+   * Asks for a spoken yes before a voice-agent `send` is delivered (rilievo
+   * 20). Returns false when no program is running, so the host can refuse
+   * rather than deliver unattended.
+   */
+  /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
+  requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
+  openResponseWindow(options?: {
+    durationMs?: number
+    rescheduleMs?: number
+    permission?: { paneId: string; what: string; kind?: PermissionSpeechKind }
+  }): Promise<void>
   cancel(): Promise<void>
   /**
    * A tap while the assistant talks or works: it stops, and the next sentence
@@ -219,12 +296,42 @@ export const DRAIN_TIMEOUT_MS = 32_000
 
 /**
  * How many sentences always-on listening may send to the cloud in an hour
- * before the user is told. Silence costs nothing — the capture only sends
- * speech — so this is a room that talks a lot: a television, a call. Past it
- * listening goes on, and the screen says why the bill may grow.
+ * before it stops. Silence costs nothing — the capture only sends speech —
+ * so this is a room that talks a lot: a television, a call. Each one is paid
+ * for (about $0.000056 at the measured price), and the room is not talking to
+ * the assistant: past the cap listening stops and says so, and the button
+ * starts it again.
  */
 export const LISTEN_REQUESTS_PER_HOUR = 120
 const HOUR_MS = 60 * 60_000
+
+/**
+ * How long listening waits, unused, before it stops by itself.
+ *
+ * An open microphone nobody has called costs money in a room with voices in
+ * it and keeps a microphone open in a room without. Half an hour with nobody
+ * saying the name is a room that forgot it was listening.
+ */
+export const LISTEN_IDLE_MS = 30 * 60_000
+export const MANUAL_LISTEN_IDLE_MS = 30_000
+
+/**
+ * Below this much credit left, in dollars, the user is told before the voice
+ * starts spending it. At the measured price it is some tens of thousands of
+ * sentences, or a few days of a room with a television in it: enough warning
+ * to top up before the voice stops mid-sentence.
+ */
+export const LOW_CREDIT_USD = 2
+
+/**
+ * How long what the key had left is believed.
+ *
+ * Asking at every opening of the microphone is a request to OpenRouter for
+ * every sentence a push-to-talk user says. The number moves slowly, and the
+ * failures that matter — a key refused, credit gone — arrive as errors on the
+ * transcription itself, which asks again.
+ */
+export const CREDIT_CHECK_MS = 60 * 60_000
 
 /**
  * A push-to-talk press shorter than this is a tap, and a tap latches.
@@ -245,6 +352,27 @@ export function holdsToTalk(settings: Pick<VoiceSettings, "activation">, mode: V
   return settings.activation === "push-to-talk" || mode === "transcription"
 }
 const DRAIN_POLL_MS = 25
+
+type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+
+/**
+ * Writes the clipboard through the desktop host, once. False where there is no
+ * host (the browser build, the tests): the text is then not in the clipboard,
+ * and nothing says it is. The webview's own clipboard API is not used:
+ * it was the second of two writes of every sentence (verdict of area 3, A4).
+ */
+export function writeClipboard(
+  text: string,
+  win: unknown = typeof window !== "undefined" ? window : undefined,
+): boolean {
+  const tauri = win as
+    | { __TAURI_INTERNALS__?: { invoke?: TauriInvoke }; __TAURI__?: { core?: { invoke?: TauriInvoke } } }
+    | undefined
+  const invoke = tauri?.__TAURI_INTERNALS__?.invoke ?? tauri?.__TAURI__?.core?.invoke
+  if (!invoke) return false
+  void invoke("write_clipboard", { text }).catch(() => {})
+  return true
+}
 
 export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const { host, speaker, micMeter, now } = options
@@ -309,6 +437,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
   const [lastParseResult, setLastParseResult] = createSignal<ParseResult | undefined>(undefined)
   const [isRunning, setIsRunning] = createSignal<boolean>(false)
+  const [hearing, setHearing] = createSignal<boolean>(false)
   const [parakeetProgress, setParakeetProgress] = createSignal<ParakeetProgress | undefined>(undefined)
   /*
    * The last few dictated sentences, newest last.
@@ -323,7 +452,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [held, setHeld] = createSignal<string | null>(null)
   const [listenPaused, setListenPaused] = createSignal(false)
   const [followUp, setFollowUp] = createSignal<number | undefined>(undefined)
-  const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
+  /* A stop for spending outlives the app: see `settings/halt.ts`. */
+  const halts = options.haltStore ?? createHaltStore(voiceStorage())
+  const stored = halts.read()
+  /* Said again on the next launch: the microphone is shut and this is why. */
+  const [listenWarning, setListenWarning] = createSignal<string | undefined>(stored?.reason)
+  const [listenHalted, setListenHalted] = createSignal(stored !== undefined)
+  /*
+   * What listening has cost today, kept where the settings are so it is still
+   * there tomorrow morning — and so the user sees it before the bill does.
+   */
+  const spendTally = options.spendTally ?? createSpendTally(voiceStorage(), now())
+  const [listenSpend, setListenSpend] = createSignal<DaySpend>(spendTally.today(now()))
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
@@ -331,17 +471,26 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let transcriberScope: Scope.CloseableScope | null = null
   let programScope: Scope.CloseableScope | null = null
   let programHandle: VoiceProgramHandle | null = null
+
+  /*
+   * `hearing`, read again from the program.
+   *
+   * Every write of the gate raises a callback (`onNameGate`, or the state,
+   * cue, follow-up and outcome ones); only a window running out does not, so
+   * that one gets a single timer at its end. No polling.
+   */
+  let hearingTimer: ReturnType<typeof setTimeout> | undefined
+  const refreshHearing = (): void => {
+    if (hearingTimer !== undefined) clearTimeout(hearingTimer)
+    hearingTimer = undefined
+    const gate = isRunning() && programHandle ? programHandle.nameGate() : undefined
+    setHearing(gate?.open === true)
+    if (gate?.open && gate.until !== undefined) {
+      hearingTimer = setTimeout(refreshHearing, Math.max(0, gate.until - now()) + 1)
+    }
+  }
   let activeTranscriber: Transcriber | null = null
   let hasOverriddenTranscriber = Boolean(options.transcriber)
-
-  // If Parakeet is configured and already downloaded, warm it up in the background so activation is instant.
-  if (initialSettings.backend === "parakeet" && !hasOverriddenTranscriber) {
-    void warmupParakeetModel({
-      executionBackend: initialSettings.parakeetBackend,
-      language: initialSettings.language,
-      onlyIfDownloaded: true,
-    }).catch(() => {})
-  }
 
   /*
    * Whether the microphone is being held open by a key, and whether it was
@@ -380,27 +529,38 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
   }
 
-  /**
-   * Which session is the current one, and whether one is being opened.
-   *
-   * `isRunning()` was the only guard, and it is written *after* `startSession()`
-   * resolves — which for the local model is a multi-minute download. Two presses
-   * inside that window both passed the guard, both built a session, and the
-   * second overwrote the first's scopes: a microphone, an audio graph and a
-   * recognition fibre with nothing left pointing at them, for the rest of the
-   * run. The mirror case was worse — `stop()` during that window set the flag
-   * to false and closed scopes that were still null, and the session that
-   * landed afterwards kept the microphone open with the whole interface saying
-   * it was off.
-   *
-   * So the truth is a counter, taken before the await and checked after it.
-   * Anything that ends a session bumps it, and a start that comes back to find
-   * its number stale tears down what it built instead of installing it. The
-   * promise beside it makes a second press wait for the first rather than
-   * racing it.
-   */
   let sessionGeneration = 0
+  let responseWindowToken = 0
+  const takeSessionMode = (mode: VoiceMode): void => {
+    if (mode !== activeMode()) {
+      responseWindowToken++
+      setFollowUp(undefined)
+    }
+    setSessionMode(mode)
+  }
+  let lifecycleTail: Promise<void> | null = null
   let startInFlight: Promise<void> | null = null
+  let restartInFlight: Promise<void> | null = null
+
+  const trackLifecycle = (result: Promise<unknown>): Promise<void> => {
+    const tracked = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    lifecycleTail = tracked
+    void tracked.finally(() => {
+      if (lifecycleTail === tracked) lifecycleTail = null
+    })
+    return tracked
+  }
+
+  const enqueueLifecycle = <T>(operation: (generation: number) => Promise<T>): Promise<T> => {
+    const generation = ++sessionGeneration
+    const previous = lifecycleTail
+    const result = previous ? previous.then(() => operation(generation)) : operation(generation)
+    trackLifecycle(result)
+    return result
+  }
 
   /**
    * Closes one scope, and says so when it will not close.
@@ -446,6 +606,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       engineScope = null
       await closeScope(scope, "motore")
     }
+  }
+
+  const discardSession = async (): Promise<void> => {
+    await releaseSession()
+    if (micMeter) micMeter.stop()
+    setIsRunning(false)
   }
 
   /**
@@ -494,6 +660,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * sentence.
    */
   let stopping: Promise<void> | null = null
+  const isBusy = (): boolean => isRunning() || startInFlight !== null || restartInFlight !== null || stopping !== null
 
   /*
    * The assistant opened by a tap of its shortcut, or by the button, closes
@@ -530,17 +697,112 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * the user was last told there were too many.
    */
   let listenRequests: number[] = []
-  let listenWarnedAt: number | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  /**
+   * Stops listening and says why; only the user starts it again.
+   *
+   * `listenHalted` is what keeps it stopped: the guard that brings listening
+   * back after a locked PC would otherwise resume within five seconds, and
+   * the cap on spending would stop nothing at all.
+   */
+  function stopListening(text: string): void {
+    setListenWarning(text)
+    record({ kind: "error", text, at: now() })
+    setListenHalted(true)
+    halts.write({ reason: text, at: now() })
+    void (async () => {
+      if (!isRunning()) return
+      await stop()
+      setListenPaused(true)
+    })()
+  }
+
+  /*
+   * Nobody has called it for a while: listening stops rather than waiting on
+   * a microphone that costs money to hold open. Restarted by every sentence
+   * that reaches the assistant, and by every start of listening.
+   */
+  function keepListeningAwake(): void {
+    clearTimeout(idleTimer)
+    idleTimer = undefined
+    const alwaysListen = currentSettings().alwaysListen
+    const after = options.listenIdleMs ?? (alwaysListen ? LISTEN_IDLE_MS : MANUAL_LISTEN_IDLE_MS)
+    idleTimer = setTimeout(() => {
+      idleTimer = undefined
+      if (!isRunning() || chordHeld) return
+      const current = currentSettings()
+      if (current.alwaysListen !== alwaysListen) return
+      const busy =
+        activeTranscriber?.hasInFlight === true ||
+        dialogState().status === "executing" ||
+        dialogState().status === "confirming" ||
+        dialogState().status === "dictating"
+      if (!current.alwaysListen && busy) {
+        keepListeningAwake()
+        return
+      }
+      const seconds = Math.max(1, Math.round(after / 1000))
+      const idle =
+        after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
+      stopListening(
+        current.alwaysListen
+          ? `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`
+          : `Non ho sentito una frase per ${idle}, quindi ho spento il microfono. Aprilo per riprovare.`,
+      )
+    }, after)
+  }
+
+  /* Requests counted while waiting for the name, whose cost has not come back yet. */
+  let listenCostsDue = 0
+
+  /*
+   * What is left on the key, said once per start of the microphone.
+   *
+   * A key that is refused, or nearly spent, used to show up as a sentence
+   * that got no answer: the user heard nothing and had to go and look at
+   * their OpenRouter page to find out why.
+   */
+  let creditAskedAt: number | undefined
+  let creditAskedFor: string | undefined
+
+  async function warnAboutCredit(s: VoiceSettings): Promise<void> {
+    const key = s.openRouterApiKey
+    if (s.backend !== "openrouter" || !key) return
+    const since = creditAskedAt === undefined ? Number.POSITIVE_INFINITY : now() - creditAskedAt
+    if (creditAskedFor === key && since < (options.creditCheckMs ?? CREDIT_CHECK_MS)) return
+    creditAskedAt = now()
+    creditAskedFor = key
+    const credit = await (options.creditLeft ?? ((apiKey: string) => openRouterCreditLeft(apiKey)))(key)
+    if (!credit) return
+    if ("refused" in credit) {
+      setListenWarning(
+        "La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.",
+      )
+      return
+    }
+    if (credit.left > (options.lowCreditUsd ?? LOW_CREDIT_USD)) return
+    setListenWarning(
+      credit.left <= 0
+        ? "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente."
+        : // The sentence is Italian, so the sum in it is written the Italian way.
+          // Without the locale the machine's own decided: «1,21 USD» here and
+          // «$1.21» on CI, which is what turned this test red there and not here.
+          `Sul credito OpenRouter restano ${formatSpendCost(credit.left, "it-IT")}: ricaricalo prima che la voce si fermi a metà frase.`,
+    )
+  }
+
   function countListenRequest(): void {
     const at = now()
+    listenCostsDue++
+    setListenSpend(spendTally.add(at, undefined))
     listenRequests = [...listenRequests.filter((t) => at - t < HOUR_MS), at]
     const cap = options.listenRequestsPerHour ?? LISTEN_REQUESTS_PER_HOUR
     if (listenRequests.length <= cap) return
-    if (listenWarnedAt !== undefined && at - listenWarnedAt < HOUR_MS) return
-    listenWarnedAt = at
-    const text = `Nell'ultima ora l'ascolto sempre attivo ha mandato al servizio di trascrizione più di ${cap} frasi: c'è molto parlato intorno, per esempio la televisione. Continua ad ascoltare; per fermarlo premi «In ascolto» in alto.`
-    setListenWarning(text)
-    record({ kind: "error", text, at })
+    listenRequests = []
+    stopListening(
+      `Nell'ultima ora l'ascolto ha mandato al servizio di trascrizione più di ${cap} frasi, e ognuna si paga: c'è molto parlato intorno, per esempio la televisione. Ho smesso di ascoltare; premi «In ascolto» in alto per riprendere.`,
+    )
   }
 
   /*
@@ -548,16 +810,24 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * dictation that took it over), so the agent kept ready stays. Released and
    * prepared again, it would start its process over for nothing.
    */
-  const stop = (options?: { keepAgent?: boolean }): Promise<void> => {
-    if (stopping) return stopping
-    stopping = (async () => {
-      try {
-        await stopNow(options?.keepAgent === true)
-      } finally {
-        stopping = null
-      }
-    })()
-    return stopping
+  const stop = (options?: { keepAgent?: boolean; drain?: boolean; releaseText?: boolean }): Promise<void> => {
+    sessionGeneration++
+    startInFlight = null
+    restartInFlight = null
+    setIsRunning(false)
+    if (stopping) {
+      if (options?.releaseText !== true) return stopping
+      return Promise.all([stopping, releaseTextProgram()]).then(() => undefined)
+    }
+    const cleanup = enqueueLifecycle(async () => {
+      await stopNow(options?.keepAgent === true, options?.drain !== false)
+      if (options?.releaseText === true) await releaseTextProgram()
+    })
+    stopping = cleanup
+    void cleanup.finally(() => {
+      if (stopping === cleanup) stopping = null
+    })
+    return cleanup
   }
 
   /*
@@ -570,27 +840,30 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const listenAgain = back && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
     await stop({ keepAgent: listenAgain })
     if (listenAgain) {
-      await startListening("agent", { waitForName: true })
+      // Not a new start by hand: a stop that arrived meanwhile still holds.
+      await startListening("agent", { waitForName: true, automatic: true })
     }
   }
-  let startListening: (mode: VoiceMode, o: { waitForName: boolean }) => Promise<void> = async () => {}
+  let startListening: (
+    mode: VoiceMode,
+    o: { waitForName: boolean; automatic?: boolean },
+  ) => Promise<void> = async () => {}
 
-  const stopNow = async (keepAgent = false): Promise<void> => {
-    /* Before anything else: a start still in flight must find its number
-       stale and free what it has built rather than install it. */
-    sessionGeneration++
+  const stopNow = async (keepAgent = false, drain = true): Promise<void> => {
     clearPttTimers()
     setListenPaused(false)
     dictationInterruptedListening = false
     heldDictation = false
 
     setIsRunning(false)
+    refreshHearing()
     setFollowUp(undefined)
+    clearTimeout(idleTimer)
     if (!keepAgent) host.releaseAgent?.()
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
-    await drainSession()
+    if (drain) await drainSession()
 
     setPartialTranscript("")
     setParakeetProgress(undefined)
@@ -610,6 +883,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     cancelSpeech()
 
     await releaseSession()
+    if (!keepAgent && currentSettings().backend === "parakeet") {
+      await disposeParakeetModel()
+    }
 
     setDialogState((prev) => ({ ...prev, status: "asleep" }))
   }
@@ -633,10 +909,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     if (options.plan) return options.plan
     const key = currentSettings().openRouterApiKey
     if (!key) return undefined
-    return createOpenRouterCompletion({
+    const completion = createOpenRouterCompletion({
       apiKey: key,
+      ...(options.plannerFetch ? { fetchFn: options.plannerFetch } : {}),
       ...(options.plannerModel ? { model: options.plannerModel } : {}),
+      onUsage: (usage) => {
+        if (typeof usage.cost === "number") setListenSpend(spendTally.addCost(now(), usage.cost))
+      },
     })
+    return async (request) => {
+      setListenSpend(spendTally.add(now(), undefined))
+      return completion(request)
+    }
   }
 
   function resolveTranscriber(s: VoiceSettings): Transcriber {
@@ -662,11 +946,27 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       language: s.language,
       openRouterOptions: {
         now,
+        /*
+         * What each request cost, as the service reports it, put against the
+         * requests listening sent: they are answered one at a time, so the
+         * cost that comes back belongs to the oldest one still owed.
+         */
+        onUsage: (usage: { cost?: number }, context: { gated: boolean } = { gated: false }) => {
+          options.backendOptions?.openRouterOptions?.onUsage?.(usage, context)
+          // A dictation is not listening: it costs the user what they asked for.
+          if (!context.gated) return
+          if (listenCostsDue <= 0 || typeof usage?.cost !== "number" || usage.cost <= 0) return
+          listenCostsDue--
+          setListenSpend(spendTally.addCost(now(), usage.cost))
+        },
         nameGate: {
           active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
           onRequest: countListenRequest,
-          onAccepted: () => cancelSpeech(),
+          onAccepted: () => {
+            keepListeningAwake()
+            cancelSpeech()
+          },
           onUncut: () =>
             record({
               kind: "action",
@@ -733,6 +1033,15 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         bridgeTranscriber(transcriber, undefined, (err) => {
           const msg = spokenMessage(err) || err.message
           noteError(err, msg)
+          /* A key that is refused or spent answers nothing, and listening
+             would go on opening the microphone and asking for the rest of
+             the day. It stops, and says so, until the user has seen it. */
+          const tag = (err as { _tag?: string })?._tag
+          if (tag === "ApiKeyInvalid" || tag === "QuotaExhausted") {
+            // What it had left is no longer what it has: ask again next time.
+            creditAskedAt = undefined
+            stopListening(msg)
+          }
           setPartialTranscript("")
           if (dialogState().status === "executing") {
             setDialogState((prev) => ({ ...prev, status: "idle" }))
@@ -818,13 +1127,22 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     getSettings: effectiveSettings,
     getHistory: () => history(),
     isPushToTalkActive: () => chordHeld || openedWithoutChord,
-    onStateChange: (state) => setDialogState(state),
+    onStateChange: (state) => {
+      setDialogState(state)
+      refreshHearing()
+    },
+    onNameGate: () => refreshHearing(),
     onPartialTranscript: (text) => setPartialTranscript(text),
+    onProviderError: options.onProviderError,
     onSpeaking: (text) => {
       if (activeMode() !== "transcription") setLastSpoken(text)
     },
-    onFollowUp: (until) => setFollowUp(until),
+    onFollowUp: (until) => {
+      setFollowUp(until)
+      refreshHearing()
+    },
     onCue: (kind) => {
+      refreshHearing()
       if (activeMode() !== "transcription") (options.cue ?? playCue)(kind)
     },
     onSpoken: (text) => {
@@ -834,6 +1152,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     },
     onOutcome: (outcome) => {
       setLastOutcome(outcome)
+      refreshHearing()
       /*
        * Only outcomes that say something are worth a line. A successful
        * action whose `spoken` is empty has already been announced by the
@@ -861,23 +1180,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (closesAfterTurn() && activeMode() === "agent") closeAfterTurn()
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
+    /*
+     * A dictation that did not reach a pane goes to the clipboard, once,
+     * through the host (verdict of area 3, A4). It used to be written on
+     * every sentence, twice (the host's and the webview's), whatever
+     * happened, and the user's own copy was lost to each one.
+     */
+    onUndelivered: (text) => writeClipboard(text),
     onHeld: (text) => setHeld(text),
     onTranscribed: (text) => {
       setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
       record({ kind: "user", text, at: now() })
-      if (typeof window !== "undefined") {
-        const win = window as unknown as {
-          __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
-          __TAURI__?: { core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } }
-        }
-        const invoke = win.__TAURI_INTERNALS__?.invoke ?? win.__TAURI__?.core?.invoke
-        if (invoke) {
-          void invoke("write_clipboard", { text }).catch(() => {})
-        }
-      }
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {})
-      }
       if (pressHolds() && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
         void endPress()
@@ -915,7 +1228,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
      * in settings the user can change while the app is open, and a
      * planner pinned at construction would keep using the old ones.
      */
-    plan: resolvePlanner(),
+    resolvePlan: resolvePlanner,
   })
 
   /*
@@ -972,6 +1285,159 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     return textHandle
   }
 
+  const startNow = async (
+    mode: VoiceMode | undefined,
+    startOptions: { waitForName?: boolean; automatic?: boolean } | undefined,
+    generation: number,
+  ): Promise<void> => {
+    if (generation !== sessionGeneration) return
+    if (mode !== undefined) setSessionMode(mode)
+    if (activeMode() === "transcription") cancelSpeech()
+    if (isRunning()) return
+    if (startOptions?.automatic === true) {
+      if (listenHalted()) return
+    } else {
+      setListenHalted(false)
+      halts.clear()
+      setListenWarning(undefined)
+    }
+
+    openedWithoutChord = !chordHeld
+
+    try {
+      if (micMeter && hasOverriddenTranscriber) {
+        try {
+          micMeter.setDevice(currentSettings().inputDeviceId)
+          await micMeter.start()
+        } catch {
+          setMicLevel(0)
+        }
+      }
+      if (generation !== sessionGeneration) {
+        if (micMeter) micMeter.stop()
+        return
+      }
+
+      engineScope = Effect.runSync(Scope.make())
+      await startSession()
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      setIsRunning(true)
+      clearError()
+      setParakeetProgress(undefined)
+      setListenPaused(false)
+      keepListeningAwake()
+      void warnAboutCredit(currentSettings())
+      const agentSettings = currentSettings()
+      if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
+        host.prepareAgent?.({ engine: agentSettings.agentEngine, speed: agentSettings.agentSpeed })
+      }
+
+      const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
+      if (waitForName && programHandle) {
+        await Effect.runPromise(programHandle.listenForName)
+      } else if (dialogState().status === "asleep") {
+        if (programHandle) await Effect.runPromise(programHandle.wake)
+      } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
+        await Effect.runPromise(programHandle.wake)
+      } else {
+        setDialogState((prev) => ({ ...prev, status: "idle" }))
+      }
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+      refreshHearing()
+    } catch (err: unknown) {
+      await discardSession()
+      if (generation !== sessionGeneration) return
+      const message =
+        typeof err === "string"
+          ? err
+          : spokenMessage(err) ||
+            (err && typeof err === "object" && err instanceof Error
+              ? err.message
+              : "Non sono riuscito ad aprire il microfono: riprova.")
+      noteError(err, message)
+      await stopNow()
+      if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
+        void Promise.resolve(speaker.speak(message)).catch(() => {})
+      }
+    }
+  }
+
+  const restartNow = async (normalized: VoiceSettings, previous: VoiceSettings, generation: number): Promise<void> => {
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
+    setIsRunning(false)
+    refreshHearing()
+    await releaseTextProgram()
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
+    hasOverriddenTranscriber = false
+
+    try {
+      if (programScope) {
+        const scope = programScope
+        programScope = null
+        programHandle = null
+        await closeScope(scope, "programma")
+      }
+      if (transcriberScope) {
+        const scope = transcriberScope
+        transcriberScope = null
+        await closeScope(scope, "trascrittore")
+      }
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      if (micMeter && normalized.inputDeviceId !== previous.inputDeviceId) {
+        micMeter.stop()
+        micMeter.setDevice(normalized.inputDeviceId)
+        await micMeter.start()
+        if (generation !== sessionGeneration) {
+          await discardSession()
+          return
+        }
+      }
+
+      await startSession()
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      setIsRunning(true)
+      clearError()
+      setParakeetProgress(undefined)
+      setListenPaused(false)
+      keepListeningAwake()
+      void warnAboutCredit(currentSettings())
+      refreshHearing()
+    } catch (err: unknown) {
+      await discardSession()
+      if (generation !== sessionGeneration) return
+      const message =
+        typeof err === "string"
+          ? err
+          : spokenMessage(err) ||
+            (err && typeof err === "object" && err instanceof Error
+              ? err.message
+              : "Le nuove impostazioni vocali non sono state applicate.")
+      noteError(err, message)
+      await stopNow()
+    }
+  }
+
   const engine: VoiceEngine = {
     status: () => dialogState().status,
     partialTranscript,
@@ -983,6 +1449,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     dialogState,
     lastParseResult,
     isRunning,
+    isBusy,
+    hearing,
     settings: currentSettings,
     activeMode,
     parakeetProgress,
@@ -991,116 +1459,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     held,
     listenPaused,
     listenWarning,
+    listenSpend,
+    listenHalted,
     followUp,
 
-    async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
-      /* A session still delivering its last sentence owns the scopes this
-         start would overwrite; and the stop resets the mode, so wait first. */
-      if (stopping) await stopping
-      if (mode !== undefined) setSessionMode(mode)
-      if (activeMode() === "transcription") {
-        cancelSpeech()
-      }
-      if (isRunning()) return
-      /*
-       * Someone is already opening it. Waiting for them is the whole fix: the
-       * second press gets the session the first one is building instead of
-       * building a second one on top of it.
-       */
-      if (startInFlight) {
-        await startInFlight
-        return
-      }
-
-      // A start that did not come through pressToTalk came from a button, a
-      // command or the palette, and those mean "listen", not "listen while I
-      // keep holding something I am not holding".
-      openedWithoutChord = !chordHeld
-
-      const generation = ++sessionGeneration
-
-      const attempt = async (): Promise<void> => {
-        try {
-          if (micMeter && hasOverriddenTranscriber) {
-            // Built-in transcribers already stream onLevel from their single hardware capture.
-            // Only start external micMeter when transcriber is overridden (e.g. test doubles).
-            try {
-              micMeter.setDevice(currentSettings().inputDeviceId)
-              await micMeter.start()
-            } catch {
-              // Level meter is visual only; do not abort voice session on meter failure
-            }
-          }
-
-          engineScope = Effect.runSync(Scope.make())
-          await startSession()
-
-          /*
-           * Stopped while we were loading. Everything just built is already
-           * orphaned — nothing else holds a reference to these scopes — so it
-           * is freed here rather than installed; the alternative is a live
-           * microphone behind an interface that says the session is closed.
-           */
-          if (generation !== sessionGeneration) {
-            await releaseSession()
-            if (micMeter) micMeter.stop()
-            return
-          }
-
-          setIsRunning(true)
-          clearError()
-          /* The model is loaded by the time the session is up. Cleared here,
-             rather than when a file reports 100%, because a download is three
-             or four files and the first one finishing is not the end of it. */
-          setParakeetProgress(undefined)
-
-          setListenPaused(false)
-          // The agent starts now, so the first sentence does not wait for it.
-          const agentSettings = currentSettings()
-          if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
-            host.prepareAgent?.({ engine: agentSettings.agentEngine, speed: agentSettings.agentSpeed })
-          }
-          const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
-          if (waitForName && programHandle) {
-            await Effect.runPromise(programHandle.listenForName)
-          } else if (dialogState().status === "asleep") {
-            if (programHandle) {
-              await Effect.runPromise(programHandle.wake)
-            }
-          } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
-            /* Opened by hand is called: the first sentence needs no name,
-               the first time as much as after a stop. */
-            await Effect.runPromise(programHandle.wake)
-          } else {
-            setDialogState((prev) => ({ ...prev, status: "idle" }))
-          }
-        } catch (err: unknown) {
-          const message =
-            typeof err === "string"
-              ? err
-              : spokenMessage(err) ||
-                (err && typeof err === "object" && err instanceof Error
-                  ? err.message
-                  : "Non sono riuscito ad aprire il microfono: riprova.")
-          noteError(err, message)
-          await stop()
-          /* Said as well as written, when someone asked for the microphone:
-             whoever is not looking would otherwise hear nothing at all. */
-          if (
-            !startOptions?.waitForName &&
-            activeMode() !== "transcription" &&
-            currentSettings().speakReplies !== false
-          ) {
-            void Promise.resolve(speaker.speak(message)).catch(() => {})
-          }
-        }
-      }
-
-      startInFlight = attempt()
+    async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean; automatic?: boolean }): Promise<void> {
+      if (startInFlight) return startInFlight
+      const result = enqueueLifecycle((generation) => startNow(mode, startOptions, generation))
+      startInFlight = result
       try {
-        await startInFlight
+        await result
       } finally {
-        startInFlight = null
+        if (startInFlight === result) startInFlight = null
       }
     },
 
@@ -1114,6 +1484,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async toggle(mode?: VoiceMode): Promise<void> {
       if (!isRunning()) {
+        if (mode !== undefined && startInFlight !== null) {
+          dictationInterruptedListening =
+            mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
+          takeSessionMode(mode)
+        }
         await this.start(mode)
         return
       }
@@ -1152,13 +1527,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         const listenAgain = backToListening && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
         await stop({ keepAgent: listenAgain })
         if (listenAgain) {
-          await this.start("agent", { waitForName: true })
+          await this.start("agent", { waitForName: true, automatic: true })
         }
         return
       }
       dictationInterruptedListening =
         mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
-      setSessionMode(mode)
+      takeSessionMode(mode)
       if (mode === "transcription") {
         cancelSpeech()
       }
@@ -1170,10 +1545,70 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await Effect.runPromise(handle.submitText(text))
     },
 
-    async handlePermissionRequest(paneId: string, what: string): Promise<void> {
+    async handlePermissionRequest(
+      paneId: string,
+      what: string,
+      options?: { silent?: boolean; kind?: PermissionSpeechKind },
+    ): Promise<void> {
       if (programHandle) {
-        await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what))
+        await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
+    },
+
+    async handlePermissionResolved(paneId: string): Promise<void> {
+      if (programHandle) {
+        await Effect.runPromise(programHandle.resolvePermission(paneId))
+      }
+    },
+
+    async requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean> {
+      if (!programHandle) return false
+      await Effect.runPromise(programHandle.requestSendConfirmation(id, to, text, lead))
+      return true
+    },
+
+    async openResponseWindow(options?: {
+      durationMs?: number
+      rescheduleMs?: number
+      permission?: { paneId: string; what: string; kind?: PermissionSpeechKind }
+    }): Promise<void> {
+      if (isBusy()) return
+      const durationMs = options?.durationMs ?? 8_000
+      const rescheduleMs = options?.rescheduleMs ?? 1_000
+      const generationBeforeStart = sessionGeneration
+      const token = responseWindowToken
+      const start = this.start("agent", { waitForName: false, automatic: true })
+      const generation = sessionGeneration
+      if (generation === generationBeforeStart) return
+      await start
+      if (generation !== sessionGeneration || token !== responseWindowToken || !isRunning()) return
+      const until = now() + durationMs
+      setFollowUp(until)
+      if (options?.permission && programHandle) {
+        await Effect.runPromise(
+          programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, {
+            silent: true,
+            kind: options.permission.kind,
+          }),
+        )
+      }
+      const checkAndClose = () => {
+        if (generation !== sessionGeneration || token !== responseWindowToken || !isRunning()) return
+        const status = dialogState().status
+        if (status === "executing" || status === "dictating") {
+          setTimeout(checkAndClose, rescheduleMs)
+          return
+        }
+        setFollowUp(undefined)
+        const s = currentSettings()
+        const keepAlwaysListening = s.alwaysListen && s.activation === "wake-word" && activeMode() === "agent"
+        if (keepAlwaysListening && programHandle) {
+          void Effect.runPromise(programHandle.listenForName)
+        } else {
+          void stop()
+        }
+      }
+      setTimeout(checkAndClose, durationMs)
     },
 
     async cancel(): Promise<void> {
@@ -1201,7 +1636,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          as it does everywhere else. */
       if (latched && isRunning()) {
         if (mode !== undefined && mode !== activeMode()) {
-          setSessionMode(mode)
+          takeSessionMode(mode)
           if (mode === "transcription") cancelSpeech()
           pressEndsLatch = true
           return
@@ -1216,14 +1651,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       pressedAt = now()
       if (currentSettings().activation !== "push-to-talk" && mode === "transcription") {
         /* Taken from always-on listening, it is given back on release. */
-        if (isRunning() && activeMode() === "agent" && currentSettings().alwaysListen) {
+        if ((isRunning() || startInFlight !== null) && activeMode() === "agent" && currentSettings().alwaysListen) {
           dictationInterruptedListening = true
         }
         heldDictation = true
       }
       /* Holding the other chord hands the microphone over mid-session, the
          same way pressing the other button does. */
-      if (mode !== undefined) setSessionMode(mode)
+      if (mode !== undefined) takeSessionMode(mode)
       if (activeMode() === "transcription") {
         cancelSpeech()
       }
@@ -1252,6 +1687,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (programHandle) {
         await Effect.runPromise(programHandle.releaseToTalk)
       }
+      if (isRunning()) keepListeningAwake()
 
       if (pressHolds() && !openedWithoutChord) {
         clearPttTimers()
@@ -1334,67 +1770,54 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         normalized.language !== prev.language ||
         normalized.inputDeviceId !== prev.inputDeviceId
 
+      /*
+       * Turning listening on is the user's hand on the switch, and the only
+       * place a stop for spending can be undone from the settings: without
+       * this the switch moved and nothing opened, which reads as broken.
+       */
+      if (normalized.alwaysListen && !prev.alwaysListen) {
+        setListenHalted(false)
+        halts.clear()
+        setListenWarning(undefined)
+      }
+
       setCurrentSettings(normalized)
+      // Mode and activation are half of the name gate.
+      refreshHearing()
 
-      if (backendChanged) {
-        if (prev.backend === "parakeet" && normalized.backend !== "parakeet") {
-          void disposeParakeetModel().catch(() => {})
-        } else if (normalized.backend === "parakeet" && !hasOverriddenTranscriber) {
-          void warmupParakeetModel({
-            executionBackend: normalized.parakeetBackend,
-            language: normalized.language,
-            onlyIfDownloaded: true,
-          }).catch(() => {})
-        }
+      if (backendChanged && prev.backend === "parakeet" && normalized.backend !== "parakeet") {
+        void disposeParakeetModel().catch(() => {})
       }
 
-      if (isRunning() && backendChanged) {
-        hasOverriddenTranscriber = false
-
-        try {
-          // Release old program and transcriber strictly through Scope before acquiring new one
-          if (programScope) {
-            const scope = programScope
-            programScope = null
-            programHandle = null
-            await closeScope(scope, "programma")
-          }
-
-          if (transcriberScope) {
-            const scope = transcriberScope
-            transcriberScope = null
-            await closeScope(scope, "trascrittore")
-          }
-
-          /*
-           * The meter opens its own stream, so it has its own device to
-           * change. Left alone, the ring animated off the old microphone
-           * while recognition ran on the new one — two devices, one interface
-           * claiming to show one.
-           */
-          if (micMeter && normalized.inputDeviceId !== prev.inputDeviceId) {
-            micMeter.stop()
-            micMeter.setDevice(normalized.inputDeviceId)
-            await micMeter.start()
-          }
-
-          await startSession()
-        } catch (err: unknown) {
-          /*
-           * A rejection here used to travel out into the settings panel's
-           * change handler, which has nowhere to put it: the engine was left
-           * with `isRunning()` true and no program at all — the orb lit, the
-           * microphone shut, and no way back except reloading the window.
-           */
-          const message =
-            typeof err === "string"
-              ? err
-              : spokenMessage(err) ||
-                (err instanceof Error ? err.message : "Le nuove impostazioni vocali non sono state applicate.")
-          noteError(err, message)
-          await this.stop()
+      const keyChanged = normalized.openRouterApiKey !== prev.openRouterApiKey
+      const keyRemoved = keyChanged && !normalized.openRouterApiKey
+      const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
+      if (keyRemoved) {
+        if (normalized.backend !== "parakeet" || prev.backend === "openrouter") {
+          await stop({ drain: false, releaseText: true })
+          return
         }
+        if (programHandle) await Effect.runPromise(programHandle.cancelPlanner)
+        await releaseTextProgram()
+        return
       }
+      if (keyChanged || (sessionPending && backendChanged)) {
+        const result = enqueueLifecycle(async (generation) => {
+          if (generation !== sessionGeneration) return
+          if (sessionPending && backendChanged) {
+            await restartNow(normalized, prev, generation)
+            return
+          }
+          await releaseTextProgram()
+        })
+        restartInFlight = result
+        void result.finally(() => {
+          if (restartInFlight === result) restartInFlight = null
+        })
+        await result
+        return
+      }
+      if (isRunning()) keepListeningAwake()
     },
   }
   startListening = (mode, o) => engine.start(mode, o)

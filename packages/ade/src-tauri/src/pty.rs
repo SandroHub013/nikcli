@@ -37,6 +37,68 @@ struct Session {
 #[derive(Default)]
 pub struct Registry(Mutex<HashMap<String, Session>>);
 
+impl Registry {
+    /// Takes every session out, so nothing can reach them any more.
+    fn take_all(&self) -> Vec<Session> {
+        let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        sessions.drain().map(|(_, session)| session).collect()
+    }
+
+    /*
+     * Ends every session: for when the page that started them is gone.
+     *
+     * The page is the only owner of a pty. It holds the ids, the listeners
+     * and the panes; Rust holds the process. A reload (F5, Ctrl+R and the
+     * context menu's Reload all work in a release: WebView2's accelerator
+     * keys and default menus are left on) throws the page away and the new
+     * one restores its panes by spawning again, so every process of the old
+     * page ran on with no one to read it or kill it: four cmd for two panes.
+     * Closing ADE did not end them either, beyond what ConPTY's own
+     * teardown does to the direct child.
+     *
+     * The whole tree, as closing a pane does: an agent's own children
+     * outlive a kill of the agent alone.
+     */
+    pub fn end_all(&self) -> usize {
+        let sessions = self.take_all();
+        let count = sessions.len();
+        for session in sessions {
+            end_session(session);
+        }
+        count
+    }
+
+    /*
+     * The same, with the killing off the calling thread.
+     *
+     * The sessions are taken at once, on the caller's thread: a page-load
+     * handler that only started a thread could have that thread take a
+     * session the new page had already spawned. Walking the process table
+     * for each tree is what takes time, and that is what moves off.
+     */
+    pub fn end_all_in_background(&self) -> usize {
+        let sessions = self.take_all();
+        let count = sessions.len();
+        if count > 0 {
+            std::thread::spawn(move || {
+                for session in sessions {
+                    end_session(session);
+                }
+            });
+        }
+        count
+    }
+}
+
+fn end_session(mut session: Session) {
+    if let Some(pid) = session.child.process_id() {
+        kill_tree(pid);
+    }
+    let _ = session.child.kill();
+    // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
+    let _ = session.child.wait();
+}
+
 #[derive(Clone, serde::Serialize)]
 struct Chunk {
     id: String,
@@ -66,8 +128,9 @@ struct Exit {
  * form offers: a name added there and not here cannot start.
  */
 const ALLOWED_AGENTS: &[&str] = &[
-    "claude", "codex", "opencode", "nikcli", "agy", "kimi", "prime", "pi", "ohmypi",
+    "claude", "codex", "opencode", "nikcli", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
+    "freebuff", "cline", "crush", "kilo", "goose", "copilot", "t3", "cursor-agent",
 ];
 
 /// Environment ADE sets for one agent CLI, whatever the user's shell has.
@@ -88,15 +151,184 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
+/// Variables an `account-plan` or `account-key` spawn must not inherit (B10).
+///
+/// A subscription must not silently spend a key ADE was started with. A key
+/// mode strips the same names first, then sets the one key the user chose.
+const CLAUDE_ACCOUNT_VARS: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+    "AWS_BEARER_TOKEN_BEDROCK",
+];
+const CODEX_ACCOUNT_VARS: &[&str] = &["OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"];
+
+/// The variables `flags` take out of the inherited environment, or why one is refused.
+///
+/// The only flags are an account's (B10). nikcli's bot turns used to run with
+/// their rules in a variable named by a flag (`NIKCLI_PERMISSION`); they run
+/// on ADE's nikcli server now, with the rules of their session (B8d,
+/// `serve-rules.ts`), and no spawn sets a variable by name.
+///
+/// `secret_names` are key names. `secret_envs` are the variables those names
+/// stand for, from the index, never their values. A wrong variable is named
+/// in the error; a value is not an argument of this function.
+pub(crate) fn spawn_flag_effect(
+    command: &str,
+    flags: &[String],
+    secret_names: &[String],
+    secret_envs: &[String],
+) -> Result<Vec<&'static str>, String> {
+    let agent = command_stem(command.trim()).to_ascii_lowercase();
+    let mut account: Option<&str> = None;
+    for flag in flags {
+        if (flag != "account-plan" && flag != "account-key") || account.is_some() || (agent != "claude" && agent != "codex") {
+            return Err(format!("opzione di avvio non consentita per {command}: {flag}"));
+        }
+        account = Some(flag.as_str());
+    }
+    let remove: Vec<&'static str> = match (account, agent.as_str()) {
+        (Some(_), "claude") => CLAUDE_ACCOUNT_VARS.to_vec(),
+        (Some(_), "codex") => CODEX_ACCOUNT_VARS.to_vec(),
+        (Some(flag), _) => return Err(format!("opzione di avvio non consentita per {command}: {flag}")),
+        (None, _) => Vec::new(),
+    };
+    match account {
+        Some("account-key") => {
+            if secret_names.len() != 1 {
+                return Err("modalità chiave senza una chiave".into());
+            }
+            // An empty list means the index has not been read yet. `pty_spawn`
+            // asks again once `env_for` has named the variable. A value is
+            // never an argument of this function.
+            if !secret_envs.is_empty() {
+                if secret_envs.len() != 1 {
+                    return Err("modalità chiave senza una chiave".into());
+                }
+                let env = secret_envs[0].as_str();
+                if agent == "claude" && env != "ANTHROPIC_API_KEY" {
+                    return Err("modalità chiave: attesa la variabile ANTHROPIC_API_KEY".into());
+                }
+                if agent == "codex" && env != "CODEX_API_KEY" && env != "OPENAI_API_KEY" {
+                    return Err("modalità chiave: attesa la variabile CODEX_API_KEY o OPENAI_API_KEY".into());
+                }
+            }
+        }
+        Some("account-plan") if !secret_names.is_empty() => {
+            return Err("un abbonamento non riceve chiavi".into());
+        }
+        _ => {}
+    }
+    Ok(remove)
+}
+
+/// Variables every terminal ADE opens carries, whatever runs in it.
+///
+/// `PSExecutionPolicyPreference=Bypass`: the user's choice, D77 A (2026-09-23).
+/// `ade-msg` in a PowerShell pane runs `ade-msg.ps1`, not the `.cmd` or sh
+/// wrappers that already pass `-ExecutionPolicy Bypass`, and ADE does not
+/// launch it: the pane does. On a stock Windows the policy is `Restricted` and
+/// no pane could run it; under `RemoteSigned`, an unsigned script in a folder
+/// PowerShell treats as remote (Favorites, where ADE Test keeps its mailbox)
+/// is refused. `powershell` and `pwsh` read this variable at start as the
+/// `Process` scope, which comes before `CurrentUser` and `LocalMachine`, and
+/// every PowerShell started under the pane inherits it — agents' shells and
+/// hooks too. It is what Claude Code already sets for its own shells.
+///
+/// The cost, accepted by the user: in ADE's terminals any script runs without
+/// a signature check, the same as in Claude Code's shells, and a user in a
+/// Terminal pane already runs whatever they like. A policy set by Group Policy
+/// (`MachinePolicy`, `UserPolicy`) still wins over this; only signing the
+/// script would help there. See `briefs/S78-correzione.md`.
+const PANE_ENV: &[(&str, &str)] = &[("PSExecutionPolicyPreference", "Bypass")];
+
+fn apply_pane_env(builder: &mut CommandBuilder) {
+    for (key, value) in PANE_ENV {
+        builder.env(key, value);
+    }
+}
+
 /// Environment an agent must not inherit from whatever launched ADE.
 ///
-/// Prefixes, matched from the start of the name: a session marker set by one
-/// agent CLI is not something the next one should read, and the messaging
-/// socket and token under `CLAUDE_CODE_` are credentials scoped to a session
-/// that is not this one. `ADE_MAILBOX_ROOT` is `test:app`'s choice for one
-/// ADE Test: a `native:dev` started from a session inside it would otherwise
-/// share that mailbox.
-const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID", "ADE_MAILBOX_ROOT"];
+/// Whole names, any case: a session marker set by one agent CLI is not
+/// something the next one should read, and the messaging socket and token are
+/// credentials scoped to a session that is not this one. `ADE_MAILBOX_ROOT` is
+/// `test:app`'s choice for one ADE Test: a `native:dev` started from a session
+/// inside it would otherwise share that mailbox.
+///
+/// Not the whole `CLAUDE_CODE_` prefix any more (review, MEDIO 7): under it are
+/// the user's own settings too — `CLAUDE_CODE_USE_BEDROCK`, `_USE_VERTEX`,
+/// the OAuth token's variable, `CLAUDE_CODE_GIT_BASH_PATH` — and Claude Code in
+/// a pane lost them: another provider, another login, no Git Bash. (The token's
+/// name is spelt in pieces in the test: ADE's source never names a CLI's
+/// credential, `bots/terms.test.ts`.)
+///
+/// The Claude Code names are the ones it puts on every command it runs
+/// (2.1.283: `CLAUDECODE`, `AI_AGENT`, `CLAUDE_CODE_SESSION_ID`,
+/// `_CHILD_SESSION`, `_SESSION_ATTENDED`, `CLAUDE_PID`, `TRACEPARENT`,
+/// `_EXECPATH`, `CLAUDE_EFFORT`, `_INVOKED_SKILLS`), plus its messaging and IDE
+/// ones. Not `GIT_EDITOR`, `TMP` and the like, which it sets too: those are
+/// also the user's.
+const INHERITED_SESSION_MARKERS: &[&str] = &[
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_INVOKED_SKILLS",
+    "CLAUDE_CODE_SSE_PORT",
+    "CLAUDECODE",
+    "CLAUDE_PID",
+    "CLAUDE_EFFORT",
+    "AI_AGENT",
+    "TRACEPARENT",
+    "ADE_MAILBOX_ROOT",
+];
+
+/// Whether `key`, inherited from whatever launched ADE, is another session's.
+///
+/// Besides the names above, the shapes a new one of Claude Code's takes, so it
+/// does not reach the child just because it is new: anything under
+/// `CLAUDE_CODE_SESSION_` (its id, its access token, its kind, name and
+/// origin) and any `CLAUDE_CODE_…_SESSION_ID` or `_SESSION_UUID` (a bridge's,
+/// a host's, a remote or cloud session's). The user's settings that mention a
+/// session have other shapes: `_PER_SESSION`, `_SESSIONEND_…`,
+/// `_SUPPRESS_SESSION_…`.
+fn is_session_marker(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase();
+    INHERITED_SESSION_MARKERS.contains(&upper.as_str())
+        || upper.starts_with("CLAUDE_CODE_SESSION_")
+        || (upper.starts_with("CLAUDE_CODE_") && (upper.ends_with("_SESSION_ID") || upper.ends_with("_SESSION_UUID")))
+}
+
+/// Takes out of `builder` what the child must not inherit of `inherited`: other
+/// sessions' markers, the launcher's colour switches, and the names the
+/// account in use removes.
+fn scrub_inherited(builder: &mut CommandBuilder, inherited: impl IntoIterator<Item = String>, account_remove: &[&str]) {
+    for key in inherited {
+        /*
+         * The colour switches belong in the same sweep, and were not in it.
+         *
+         * `INHERITED_COLOUR_SWITCHES` and `is_launcher_colour_switch` were
+         * written for this loop, documented the exact symptom — a session in
+         * a real 24-bit pane rendering white on black, logo included — and
+         * were then never called from anywhere. The compiler said so, twice,
+         * as a `dead_code` warning that had become part of the scenery.
+         *
+         * They matter because of how ADE is launched: from a shell whose own
+         * output goes to a pipe, or from a bench runner, both of which set
+         * `NO_COLOR`. The pane is not that pipe.
+         */
+        let dropped_for_account = account_remove.iter().any(|name| name.eq_ignore_ascii_case(&key));
+        if is_session_marker(&key) || is_launcher_colour_switch(&key) || dropped_for_account {
+            builder.env_remove(&key);
+        }
+    }
+}
 
 /// Colour switches that describe the output of whatever launched ADE, not the
 /// pty an agent is given.
@@ -183,6 +415,23 @@ struct Spawned {
     reader: Result<Box<dyn Read + Send>, String>,
     writer: Result<Box<dyn Write + Send>, String>,
     errors: Option<Box<dyn Read + Send>>,
+}
+
+/// A start the system refused, as the pane says it. portable-pty writes its
+/// failure with Rust's debug form — «CreateProcessW `"ohmypi\0"` in cwd
+/// `Some("…\0")` failed: … (os error 2)» — and that text reached the strip
+/// over the terminal as it was. A program that is not there (errors 2 and 3)
+/// is named as such; anything else keeps only the system's own reason.
+fn spawn_failure(command: &str, error: &str) -> String {
+    let code = error
+        .rsplit_once("(os error ")
+        .and_then(|(_, rest)| rest.split(')').next())
+        .and_then(|code| code.trim().parse::<i32>().ok());
+    if matches!(code, Some(2) | Some(3)) {
+        return format!("programma non trovato: {command}");
+    }
+    let reason = error.rsplit_once(" failed: ").map_or(error, |(_, reason)| reason);
+    format!("{command} non parte: {}", reason.replace('\0', "").trim())
 }
 
 fn spawn_in_pty(builder: CommandBuilder, rows: u16, cols: u16) -> Result<Spawned, String> {
@@ -575,7 +824,9 @@ pub async fn pty_spawn(
      * are read here from the system keychain (`secrets.rs`) and go straight
      * into the child's environment. Which keys a session gets is chosen per
      * key, per agent, in Impostazioni › Chiavi API, and checked again here
-     * against the agent the command starts; bot turns pass none.
+     * against the agent the command starts. A bot in key mode passes one
+     * name; a subscription passes none, and the account flag strips inherited
+     * keys so a key ADE was started with is not spent by surprise.
      */
     secrets: Option<Vec<String>>,
     /*
@@ -587,11 +838,27 @@ pub async fn pty_spawn(
      * refuses to when stdin is a terminal. See `src/bots/warm.ts`.
      */
     pipe: Option<bool>,
+    /*
+     * An account's switch (`account-plan`, `account-key`, B10), and nothing
+     * else. Not an environment: the page cannot set anything through here.
+     */
+    flags: Option<Vec<String>>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
     check_args(&command, &args)?;
+    let secret_names = secrets.clone().unwrap_or_default();
+    let flag_list = flags.clone().unwrap_or_default();
+    // Count and shape before the keychain: a plan must not even read a key.
+    let _ = spawn_flag_effect(&command, &flag_list, &secret_names, &[])?;
+    let keyed = if secret_names.is_empty() {
+        Vec::new()
+    } else {
+        crate::secrets::env_for(&app, &command, &secret_names)?
+    };
+    let secret_envs: Vec<String> = keyed.iter().map(|(env, _)| env.clone()).collect();
+    let account_remove = spawn_flag_effect(&command, &flag_list, &secret_names, &secret_envs)?;
     let pipe = pipe == Some(true);
     if pipe && !is_pipe_command(&command) {
         return Err(format!("{command} non si avvia senza terminale"));
@@ -604,7 +871,14 @@ pub async fn pty_spawn(
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
     let resolved = which_on_path(&command).unwrap_or_else(|| command.clone());
-    let mut builder = CommandBuilder::new(&resolved);
+    /*
+     * A `.cmd` or `.bat` is run by cmd.exe, which reads its command line again
+     * with its own rules (B1, audit A1): `&` ran a second command, `%VAR%`
+     * expanded, and everything after a line break was lost — a bot's first
+     * Codex turn never reached the question. See `launch_plan`.
+     */
+    let (program, args) = launch_plan(&resolved, &args)?;
+    let mut builder = CommandBuilder::new(&program);
     for arg in &args {
         builder.arg(arg);
     }
@@ -620,14 +894,6 @@ pub async fn pty_spawn(
      */
     builder.env("TERM", "xterm-256color");
     builder.env("COLORTERM", "truecolor");
-    /*
-     * The user's keys, before ADE's own variables so those always win. A key
-     * that cannot be read fails the launch: an agent started without the key
-     * it was meant to have fails later, somewhere less obvious.
-     */
-    for (name, value) in crate::secrets::env_for(&app, &command, secrets.as_deref().unwrap_or_default())? {
-        builder.env(name, value);
-    }
 
     /*
      * Somebody else's session does not come along.
@@ -645,27 +911,13 @@ pub async fn pty_spawn(
      * real terminal, exactly as the user would start it themselves". These are
      * the variables that made that untrue.
      */
-    for (key, _) in std::env::vars() {
-        let is_session_marker = INHERITED_SESSION_MARKERS
-            .iter()
-            .any(|marker| key == *marker || key.starts_with(marker));
-
-        /*
-         * The colour switches belong in the same sweep, and were not in it.
-         *
-         * `INHERITED_COLOUR_SWITCHES` and `is_launcher_colour_switch` were
-         * written for this loop, documented the exact symptom — a session in
-         * a real 24-bit pane rendering white on black, logo included — and
-         * were then never called from anywhere. The compiler said so, twice,
-         * as a `dead_code` warning that had become part of the scenery.
-         *
-         * They matter because of how ADE is launched: from a shell whose own
-         * output goes to a pipe, or from a bench runner, both of which set
-         * `NO_COLOR`. The pane is not that pipe.
-         */
-        if is_session_marker || is_launcher_colour_switch(&key) {
-            builder.env_remove(&key);
-        }
+    scrub_inherited(&mut builder, std::env::vars().map(|(key, _)| key), &account_remove);
+    /*
+     * The chosen key, after the sweep and the account removals, so it is not
+     * taken back out and no inherited key of the same name survives (B10).
+     */
+    for (name, value) in &keyed {
+        builder.env(name, value);
     }
 
     /*
@@ -706,6 +958,8 @@ pub async fn pty_spawn(
     for (key, value) in agent_env(&command) {
         builder.env(key, value);
     }
+    // After the scrub as well, so the user's own shell cannot take it back.
+    apply_pane_env(&mut builder);
 
     if let Some(link) = link.as_ref() {
         if let Some(dir) = crate::agent_link::link_dir(&app) {
@@ -716,9 +970,9 @@ pub async fn pty_spawn(
     }
 
     let spawned = if pipe {
-        spawn_piped(&resolved, &builder).map_err(|e| format!("{command} non parte: {e}"))?
+        spawn_piped(&program, &builder).map_err(|e| spawn_failure(&command, &e))?
     } else {
-        spawn_in_pty(builder, rows, cols).map_err(|e| format!("{command} non parte: {e}"))?
+        spawn_in_pty(builder, rows, cols).map_err(|e| spawn_failure(&command, &e))?
     };
     let Spawned { mut child, master, reader, writer, errors } = spawned;
 
@@ -1110,7 +1364,7 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// A CLI turn that runs past its time has children of its own — a shell, an
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
-fn kill_tree(pid: u32) {
+pub(crate) fn kill_tree(pid: u32) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
@@ -1183,6 +1437,25 @@ pub async fn pty_which(command: String) -> Option<String> {
     which_on_path(&command)
 }
 
+/// Whether CreateProcess would accept this file as a program.
+///
+/// On Windows an extensionless file on PATH is not a program, it is the shell
+/// shim an installer left for Git Bash, and `CreateProcessW` refuses it with
+/// "not a valid Win32 application" (193). Answering with it reports the agent
+/// installed and fails every launch — which is what grok did on this machine,
+/// where `~/bin/grok` (a `#!/usr/bin/env bash` shim) sits on PATH ahead of
+/// `~/.grok/bin/grok.exe`. A PE image is recognised by its first two bytes,
+/// `MZ`, which is the whole test: a script with the execute bit has neither.
+#[cfg(windows)]
+fn runnable_on_windows(candidate: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(candidate) else {
+        return false;
+    };
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic).is_ok() && magic == *b"MZ"
+}
+
 /// Shared with `serve`, which has to find the same `nikcli` this module would
 /// start — on Windows that means honouring PATHEXT rather than guessing `.exe`.
 pub(crate) fn which_on_path(command: &str) -> Option<String> {
@@ -1221,6 +1494,17 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
             }
         }
         let base = dir.join(command);
+        /*
+         * The bare name, on the platforms where it means a program. On Windows
+         * it is checked rather than trusted: a directory may hold nothing but a
+         * Git Bash shim under that name, and taking it is the failure this
+         * function's comment above describes.
+         */
+        #[cfg(windows)]
+        if runnable_on_windows(&base) {
+            return Some(base.to_string_lossy().into_owned());
+        }
+        #[cfg(not(windows))]
         if base.is_file() {
             return Some(base.to_string_lossy().into_owned());
         }
@@ -1228,9 +1512,285 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
     None
 }
 
+/// Whether `path` is a script cmd.exe runs: `.cmd` or `.bat`, any case.
+fn is_cmd_script(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".cmd") || lower.ends_with(".bat")
+}
+
+/// The characters cmd.exe gives a meaning to on a command line, plus the
+/// control characters (a line break ends the command there).
+fn unsafe_for_cmd(arg: &str) -> Option<char> {
+    arg.chars().find(|c| "\"%!^&|<>()".contains(*c) || c.is_control())
+}
+
+/**
+ * The JavaScript file an npm shim runs, when `shim` is one.
+ *
+ * npm writes every CLI it installs on Windows as a `.cmd` whose last line is
+ * `… "%_prog%"  "%dp0%\<path>.js" %*`, `%_prog%` being `node.exe` next to the
+ * shim or `node` on the PATH. That is the only shape recognised: the script
+ * must sit under the shim's own folder, and anything else is not a shim.
+ */
+fn npm_shim_script(shim: &std::path::Path) -> Option<std::path::PathBuf> {
+    let meta = std::fs::metadata(shim).ok()?;
+    if !meta.is_file() || meta.len() > 64 * 1024 {
+        return None;
+    }
+    let text = std::fs::read_to_string(shim).ok()?;
+    let line = text.lines().rev().find(|line| line.trim_end().ends_with("%*"))?;
+    let node_first = line.contains("\"%_prog%\"") || line.to_ascii_lowercase().contains("\"%dp0%\\node.exe\"");
+    if !node_first {
+        return None;
+    }
+    const OPEN: &str = "\"%dp0%\\";
+    let start = line.rfind(OPEN)? + OPEN.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    let relative = &rest[..end];
+    if rest[end + 1..].trim() != "%*" {
+        return None;
+    }
+    let lower = relative.to_ascii_lowercase();
+    let script_like = lower.ends_with(".js") || lower.ends_with(".cjs") || lower.ends_with(".mjs");
+    let clean = !relative.is_empty()
+        && !relative.contains('%')
+        && !relative.chars().any(|c| c.is_control())
+        && relative.split(['\\', '/']).all(|part| !part.is_empty() && part != "." && part != "..");
+    if !script_like || !clean {
+        return None;
+    }
+    let script = shim.parent()?.join(relative.replace('\\', std::path::MAIN_SEPARATOR_STR));
+    script.is_file().then_some(script)
+}
+
+/// The `node.exe` an npm shim would use: the one beside it, or the one on the PATH.
+fn shim_node(shim: &std::path::Path) -> Option<String> {
+    let beside = shim.parent()?.join("node.exe");
+    if beside.is_file() {
+        return Some(beside.to_string_lossy().into_owned());
+    }
+    which_on_path("node").filter(|node| !is_cmd_script(node))
+}
+
+/**
+ * The program to start and its arguments, for a resolved command (B1).
+ *
+ * A program that is not a `.cmd` or `.bat` gets its arguments as they are.
+ * One that is would be run by cmd.exe, which parses the command line a second
+ * time: an argument with `&` ran what followed it, `%VAR%` expanded — a
+ * secret's value included — and a line break cut the rest. So:
+ *
+ * - an npm shim (Codex, and Claude Code or nikcli where installed that way)
+ *   is started as what it would start, `node <script>.js`, and every argument
+ *   arrives whole, line breaks included, with nothing for cmd.exe to read;
+ * - any other script refuses an argument cmd.exe would read, rather than
+ *   quoting it: quoting for cmd.exe cannot carry a line break, and a quote
+ *   that is almost right is how the injection happened.
+ */
+pub(crate) fn launch_plan(resolved: &str, args: &[String]) -> Result<(String, Vec<String>), String> {
+    if !is_cmd_script(resolved) {
+        return Ok((resolved.to_string(), args.to_vec()));
+    }
+    let shim = std::path::Path::new(resolved);
+    if let (Some(script), Some(node)) = (npm_shim_script(shim), shim_node(shim)) {
+        let mut all = Vec::with_capacity(args.len() + 1);
+        all.push(script.to_string_lossy().into_owned());
+        all.extend(args.iter().cloned());
+        return Ok((node, all));
+    }
+    for arg in args {
+        if let Some(c) = unsafe_for_cmd(arg) {
+            let shown = if c.is_control() { format!("U+{:04X}", c as u32) } else { c.to_string() };
+            let name = shim.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            return Err(format!("argomento non sicuro per {name}: contiene {shown}, che cmd.exe interpreta"));
+        }
+    }
+    Ok((resolved.to_string(), args.to_vec()))
+}
+
+#[cfg(test)]
+mod cmd_script_tests {
+    //! B1: what reaches a `.cmd` agent is what was sent, and nothing runs.
+    //! Only a harmless `probe.cmd`/`probe.js` in a fresh folder; no agent is started.
+    use super::{launch_plan, spawn_failure};
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_refused_start_is_said_without_the_debug_form() {
+        let missing = "CreateProcessW `\"ohmypi\\0\"` in cwd `Some(\"C:/progetto\\0\")` failed: Impossibile trovare il file specificato. (os error 2)";
+        assert_eq!(spawn_failure("ohmypi", missing), "programma non trovato: ohmypi");
+        let no_path = "CreateProcessW `\"x\\0\"` in cwd `None` failed: Impossibile trovare il percorso specificato. (os error 3)";
+        assert_eq!(spawn_failure("x", no_path), "programma non trovato: x");
+        // std's own error, from the piped start: the same code, the same sentence.
+        let piped = std::io::Error::from_raw_os_error(2).to_string();
+        assert_eq!(spawn_failure("claude", &piped), "programma non trovato: claude");
+        let denied = "CreateProcessW `\"x\\0\"` in cwd `Some(\"C:/p\\0\")` failed: Accesso negato. (os error 5)";
+        let said = spawn_failure("x", denied);
+        assert_eq!(said, "x non parte: Accesso negato. (os error 5)");
+        assert!(!said.contains("Some(") && !said.contains('\0') && !said.contains("CreateProcessW"));
+        assert_eq!(spawn_failure("x", "pty non creata: nessuna console"), "x non parte: pty non creata: nessuna console");
+    }
+
+    fn fresh_dir(tag: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("ade-b1-{tag}-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    const NPM_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\lib\\probe.js\" %*\r\n";
+
+    /// The arguments the audit ran commands with, and the line break that cut the message.
+    fn hostile() -> Vec<String> {
+        vec![
+            "ciao&type nul > INIETTATO1".into(),
+            "-c".into(),
+            "model_reasoning_effort=\"high & type nul > INIETTATO3 & rem \"".into(),
+            "dimmi \"ciao & type nul > INIETTATO4".into(),
+            "valore %USERNAME% e %PATH%".into(),
+            "Istruzioni del bot \"x\":\nriga due\n\n---\n\nla domanda (vera) ^ | < > !".into(),
+        ]
+    }
+
+    #[test]
+    fn an_npm_shim_runs_its_script_with_every_argument_whole_and_nothing_else() {
+        let dir = fresh_dir("npm");
+        std::fs::create_dir_all(dir.join("lib")).unwrap();
+        std::fs::write(
+            dir.join("lib").join("probe.js"),
+            "require('fs').writeFileSync(process.env.PROBE_OUT, JSON.stringify(process.argv.slice(2)))\n",
+        )
+        .unwrap();
+        let shim = dir.join("probe.cmd");
+        std::fs::write(&shim, NPM_SHIM).unwrap();
+
+        let args = hostile();
+        let (program, plan) = launch_plan(&shim.to_string_lossy(), &args).expect("an npm shim is planned");
+        assert!(!super::is_cmd_script(&program), "cmd.exe must not be the program: {program}");
+        assert_eq!(plan[0], dir.join("lib").join("probe.js").to_string_lossy());
+        assert_eq!(&plan[1..], &args[..]);
+
+        if !std::path::Path::new(&program).is_file() {
+            eprintln!("node non trovato: il piano è verificato, l'esecuzione no");
+            return;
+        }
+        let out = dir.join("argv.json");
+        let status = std::process::Command::new(&program)
+            .args(&plan)
+            .current_dir(&dir)
+            .env("PROBE_OUT", &out)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let received: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert_eq!(received, args, "every argument arrives whole: &, %VAR%, quotes, line breaks");
+        for n in ["INIETTATO1", "INIETTATO3", "INIETTATO4"] {
+            assert!(!dir.join(n).exists(), "{n} was created: a command ran");
+        }
+    }
+
+    #[test]
+    fn another_cmd_script_refuses_what_cmd_would_read() {
+        let dir = fresh_dir("plain");
+        let script = dir.join("probe.cmd");
+        std::fs::write(&script, "@echo %*\r\n").unwrap();
+        let path = script.to_string_lossy().into_owned();
+        for arg in hostile() {
+            if arg == "-c" {
+                continue;
+            }
+            let refused = launch_plan(&path, &[arg.clone()]);
+            assert!(refused.is_err(), "not refused: {arg:?}");
+        }
+        assert!(launch_plan(&path, &["exec".into(), "--json".into()]).is_ok());
+    }
+
+    #[test]
+    fn a_shim_whose_script_leaves_its_folder_is_not_a_shim() {
+        let dir = fresh_dir("escape");
+        std::fs::create_dir_all(dir.join("inner")).unwrap();
+        std::fs::write(dir.join("x.js"), "").unwrap();
+        let shim = dir.join("inner").join("probe.cmd");
+        std::fs::write(&shim, NPM_SHIM.replace("lib\\probe.js", "..\\x.js")).unwrap();
+        let refused = launch_plan(&shim.to_string_lossy(), &["a&b".into()]);
+        assert!(refused.is_err(), "a script outside the shim's folder must fall back to refusing");
+    }
+
+    #[test]
+    fn a_program_that_is_not_a_script_keeps_its_arguments() {
+        let args = hostile();
+        let (program, plan) = launch_plan("C:/x/codex.exe", &args).unwrap();
+        assert_eq!(program, "C:/x/codex.exe");
+        assert_eq!(plan, args);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A session like `pty_spawn`'s, running a shell whose own child sleeps.
+    fn sleeping_session() -> (Session, u32) {
+        let pair = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = if cfg!(windows) { CommandBuilder::new("cmd") } else { CommandBuilder::new("sh") };
+        if cfg!(windows) {
+            cmd.args(["/c", "ping -n 60 127.0.0.1 >NUL"]);
+        } else {
+            cmd.args(["-c", "sleep 60; true"]);
+        }
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id().unwrap();
+        let writer = Arc::new(Mutex::new(pair.master.take_writer().unwrap()));
+        (Session { master: Some(pair.master), writer, child }, pid)
+    }
+
+    /// Whether `pid`, or any process it started, is still running.
+    fn tree_alive(pid: u32) -> bool {
+        use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        sys.processes().values().any(|process| {
+            process.pid().as_u32() == pid || process.parent().map(|parent| parent.as_u32()) == Some(pid)
+        })
+    }
+
+    #[test]
+    fn a_reloaded_page_leaves_no_pty_of_the_old_one_running() {
+        let registry = Registry::default();
+        let (first, first_pid) = sleeping_session();
+        let (second, second_pid) = sleeping_session();
+        registry.0.lock().unwrap().insert("pty-old-1".into(), first);
+        registry.0.lock().unwrap().insert("pty-old-2".into(), second);
+        // Give the shells a moment to start their own child.
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(first_pid) && tree_alive(second_pid));
+
+        assert_eq!(registry.end_all(), 2);
+        assert!(registry.0.lock().unwrap().is_empty());
+        assert!(!tree_alive(first_pid), "the first shell or its child is still running");
+        assert!(!tree_alive(second_pid), "the second shell or its child is still running");
+        // Nothing left: a second page load ends nothing.
+        assert_eq!(registry.end_all(), 0);
+    }
+
+    #[test]
+    fn ending_in_the_background_empties_the_registry_at_once() {
+        let registry = Registry::default();
+        let (session, pid) = sleeping_session();
+        registry.0.lock().unwrap().insert("pty-old".into(), session);
+        assert_eq!(registry.end_all_in_background(), 1);
+        // Taken before the call returned: a spawn of the new page cannot be caught by it.
+        assert!(registry.0.lock().unwrap().is_empty());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while tree_alive(pid) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(!tree_alive(pid));
+    }
 
     #[test]
     fn only_claude_runs_on_pipes() {
@@ -1240,6 +1800,28 @@ mod tests {
         assert!(!is_pipe_command("codex"));
         assert!(!is_pipe_command("powershell"));
         assert!(!is_pipe_command("claude-evil"));
+    }
+
+    /*
+     * The shim that hid grok. `~/bin/grok` is a bash script with no extension
+     * and it comes before `~/.grok/bin/grok.exe` on PATH, so the lookup
+     * answered with a file Windows cannot start: the card said "installato",
+     * the launch said "non è un'applicazione di Win32 valida".
+     */
+    #[cfg(windows)]
+    #[test]
+    fn an_extensionless_shell_script_is_not_a_program() {
+        let dir = std::env::temp_dir().join("ade-which-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("grok");
+        std::fs::write(&shim, "#!/usr/bin/env bash\nexec \"$HOME/.grok/bin/grok.exe\" \"$@\"\n").unwrap();
+        let binary = dir.join("grok.exe");
+        std::fs::write(&binary, b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00").unwrap();
+
+        assert!(!runnable_on_windows(&shim), "a shell script is not a PE image");
+        assert!(runnable_on_windows(&binary), "an .exe is");
+        assert!(!runnable_on_windows(&dir.join("nothing-here")), "a missing file is neither");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -1417,16 +1999,87 @@ mod tests {
             "CLAUDE_CODE_MESSAGING_SOCKET",
             "CLAUDE_CODE_MESSAGING_TOKEN",
             "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_CODE_SSE_PORT",
             "CLAUDECODE",
             "CLAUDE_PID",
             "ADE_MAILBOX_ROOT",
+            // Windows' names have no case.
+            "claude_code_session_id",
         ] {
-            assert!(
-                INHERITED_SESSION_MARKERS
-                    .iter()
-                    .any(|marker| leaked == *marker || leaked.starts_with(marker)),
-                "{leaked} should not reach a spawned agent"
-            );
+            assert!(is_session_marker(leaked), "{leaked} should not reach a spawned agent");
+        }
+    }
+
+    #[test]
+    fn a_session_variable_new_in_claude_code_does_not_reach_the_child() {
+        // What Claude Code 2.1.283 puts on every command it runs, read from its
+        // binary and from a session's own environment on 2026-09-27: the ones
+        // that are its session's, not the user's.
+        for leaked in [
+            "CLAUDE_CODE_SESSION_ATTENDED",
+            "CLAUDE_CODE_EXECPATH",
+            "CLAUDE_CODE_INVOKED_SKILLS",
+            "CLAUDE_EFFORT",
+            "AI_AGENT",
+            "TRACEPARENT",
+        ] {
+            assert!(is_session_marker(leaked), "{leaked} is the launching session's");
+        }
+        // Names the binary knows and ADE's list does not: a session's by their
+        // shape. The last two are made up, as the next version could name them.
+        for leaked in [
+            "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+            "CLAUDE_CODE_SESSION_KIND",
+            "CLAUDE_CODE_SESSION_NAME",
+            "CLAUDE_CODE_SESSION_ORIGIN",
+            "CLAUDE_CODE_BRIDGE_SESSION_ID",
+            "CLAUDE_CODE_HOST_SESSION_ID",
+            "CLAUDE_CODE_CLOUD_SESSION_ID",
+            "CLAUDE_CODE_REMOTE_SESSION_UUID",
+            "CLAUDE_CODE_SESSION_PARENT",
+            "claude_code_teammate_session_id",
+        ] {
+            assert!(is_session_marker(leaked), "{leaked} is shaped like a session's own");
+        }
+        // The user's settings that mention a session keep reaching the child.
+        for kept in [
+            "CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION",
+            "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS",
+            "CLAUDE_CODE_SUPPRESS_SESSION_ATTRIBUTION",
+            "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE",
+            "CLAUDE_CODE_SCROLL_SPEED",
+            "CLAUDE_CODE_TMPDIR",
+            "GIT_EDITOR",
+        ] {
+            assert!(!is_session_marker(kept), "{kept} is the user's and must reach the child");
+        }
+    }
+
+    #[test]
+    fn a_setting_of_the_user_reaches_the_child_and_a_session_marker_does_not() {
+        // Review, MEDIO 7: the whole `CLAUDE_CODE_` prefix went, the user's own
+        // provider, login and Git Bash with it. Fake values only; the token's
+        // name in pieces, as ADE's source never spells a CLI's credential.
+        const OAUTH: &str = concat!("CLAUDE_CODE_", "OAUTH_TOKEN");
+        let inherited = [
+            ("CLAUDE_CODE_USE_BEDROCK", "1"),
+            ("CLAUDE_CODE_USE_VERTEX", "1"),
+            (OAUTH, "finto-token-di-prova"),
+            ("CLAUDE_CODE_GIT_BASH_PATH", "C:/Git/bin/bash.exe"),
+            ("CLAUDE_CODE_SESSION_ID", "sessione-di-un-altro"),
+            ("CLAUDE_CODE_MESSAGING_TOKEN", "token-di-un-altro"),
+            ("CLAUDECODE", "1"),
+        ];
+        let mut builder = CommandBuilder::new("agente");
+        for (key, value) in inherited {
+            builder.env(key, value);
+        }
+        scrub_inherited(&mut builder, inherited.iter().map(|(key, _)| key.to_string()), &[]);
+        for kept in ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", OAUTH, "CLAUDE_CODE_GIT_BASH_PATH"] {
+            assert!(builder.get_env(kept).is_some(), "{kept} is the user's setting and must reach the child");
+        }
+        for gone in ["CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDECODE"] {
+            assert!(builder.get_env(gone).is_none(), "{gone} is another session's and must not reach the child");
         }
     }
 
@@ -1456,6 +2109,97 @@ mod tests {
         assert!(tree_of(999, &rows).is_empty());
     }
 
+    /// B8d: nikcli's bot turns run on ADE's server; no spawn sets a variable by name any more.
+    #[test]
+    fn no_flag_but_an_accounts_is_taken() {
+        for flag in [
+            "no-project-config",
+            "bot-ask-shell",
+            "bot-ask-outside",
+            "bot-no-shell",
+            "bot-read-only",
+            "remote-ask-shell",
+            "remote-no-shell",
+            "PATH=C:/x",
+            "NIKCLI_PERMISSION",
+        ] {
+            for agent in ["nikcli", "claude", "codex"] {
+                assert!(super::spawn_flag_effect(agent, &[flag.to_string()], &[], &[]).is_err(), "{agent} {flag}");
+            }
+        }
+        assert!(super::spawn_flag_effect("nikcli", &[], &[], &[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_account_flag_removes_inherited_keys_and_never_names_a_value() {
+        let fake = "sk-or-v1-VALORE-FINTO-NON-DEVE-USCIRE";
+        let remove = super::spawn_flag_effect("claude", &["account-plan".to_string()], &[], &[]).unwrap();
+        for name in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_VERTEX_PROJECT_ID",
+            "AWS_BEARER_TOKEN_BEDROCK",
+        ] {
+            assert!(remove.contains(&name), "{name}");
+        }
+        let remove = super::spawn_flag_effect("codex", &["account-plan".to_string()], &[], &[]).unwrap();
+        for name in ["OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"] {
+            assert!(remove.contains(&name), "{name}");
+        }
+        let missing = super::spawn_flag_effect("claude", &["account-key".to_string()], &[], &[]).unwrap_err();
+        assert_eq!(missing, "modalità chiave senza una chiave");
+        assert!(!missing.contains(fake));
+        // One name, variable not known yet: the spawn looks it up, then checks.
+        let pending = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &[],
+        )
+        .unwrap();
+        assert!(pending.contains(&"ANTHROPIC_API_KEY"));
+        let two = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["a".to_string(), "b".to_string()],
+            &["ANTHROPIC_API_KEY".to_string(), "ANTHROPIC_API_KEY".to_string()],
+        )
+        .unwrap_err();
+        assert_eq!(two, "modalità chiave senza una chiave");
+        let wrong = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &["OPENAI_API_KEY".to_string()],
+        )
+        .unwrap_err();
+        assert!(wrong.contains("ANTHROPIC_API_KEY"), "{wrong}");
+        assert!(!wrong.contains(fake), "{wrong}");
+        assert!(!wrong.contains("OPENAI_API_KEY"), "{wrong}");
+        let plan_with_key =
+            super::spawn_flag_effect("claude", &["account-plan".to_string()], &["finta".to_string()], &[]).unwrap_err();
+        assert_eq!(plan_with_key, "un abbonamento non riceve chiavi");
+        assert!(super::spawn_flag_effect("nikcli", &["account-plan".to_string()], &[], &[]).is_err());
+        assert!(super::spawn_flag_effect("powershell", &["account-key".to_string()], &[], &[]).is_err());
+        assert!(super::spawn_flag_effect(
+            "claude",
+            &["account-plan".to_string(), "account-key".to_string()],
+            &[],
+            &[]
+        )
+        .is_err());
+        let ok = super::spawn_flag_effect(
+            "codex",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &["CODEX_API_KEY".to_string()],
+        )
+        .unwrap();
+        assert!(ok.contains(&"CODEX_API_KEY"));
+    }
+
     #[test]
     fn nikcli_runs_its_tools_in_the_pane_not_in_the_shared_server() {
         for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
@@ -1467,16 +2211,46 @@ mod tests {
     }
 
     #[test]
+    fn a_new_pane_runs_powershell_scripts_under_bypass() {
+        // The same step the spawn takes, on a builder that starts from this process's environment.
+        let mut builder = if cfg!(windows) { CommandBuilder::new("powershell") } else { CommandBuilder::new("sh") };
+        // Whatever the launching shell had, the pane gets Bypass.
+        builder.env("PSExecutionPolicyPreference", "Restricted");
+        apply_pane_env(&mut builder);
+        assert_eq!(
+            builder.get_env("PSExecutionPolicyPreference"),
+            Some(std::ffi::OsStr::new("Bypass"))
+        );
+    }
+
+    #[test]
+    fn bypass_is_documented_as_the_users_choice() {
+        // D77 A: the reason and the cost sit next to the line, and name the decision.
+        let source = include_str!("pty.rs");
+        let line = source.find("const PANE_ENV").expect("PANE_ENV is where the policy is set");
+        let comment = &source[source[..line].rfind("/// Variables every terminal").expect("the comment above PANE_ENV")..line];
+        for needed in ["D77 A", "PSExecutionPolicyPreference=Bypass", "Group Policy", "signature"] {
+            assert!(comment.contains(needed), "the comment must say {needed}");
+        }
+    }
+
+    #[test]
     fn scrubbing_leaves_the_rest_of_the_environment_alone() {
         // An agent needs the environment it would have had in a terminal —
         // PATH above all, plus whatever the user configured for it.
-        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM", "ADE_MAILBOX", "ADE_PANE_ID"] {
-            assert!(
-                !INHERITED_SESSION_MARKERS
-                    .iter()
-                    .any(|marker| kept == *marker || kept.starts_with(marker)),
-                "{kept} must still be inherited"
-            );
+        for kept in [
+            "PATH",
+            "HOME",
+            "USERPROFILE",
+            "ANTHROPIC_API_KEY",
+            "TERM",
+            "ADE_MAILBOX",
+            "ADE_PANE_ID",
+            "CLAUDE_CODE_USE_BEDROCK",
+            concat!("CLAUDE_CODE_", "OAUTH_TOKEN"),
+            "CLAUDE_CODE_GIT_BASH_PATH",
+        ] {
+            assert!(!is_session_marker(kept), "{kept} must still be inherited");
         }
     }
 

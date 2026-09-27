@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { t } from "../i18n"
 import { MAX_PARALLEL_TURNS, turnsRunning } from "./terms"
 import { runTurn, timeoutProblem, TURN_EXIT_GRACE_MS, TURN_TIMEOUT_MS, type Turn, type TurnDeps } from "./turn"
 
@@ -29,6 +30,7 @@ function machine() {
     kills,
     exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
     say: (line: string, at = lines.length - 1) => lines[at]?.(line),
+    spawned: () => exits.length,
   }
 }
 
@@ -121,6 +123,31 @@ describe("runTurn", () => {
     expect(m.kills).toEqual([])
   })
 
+  test("a CLI that fails says why: its last plain line goes with the exit code (review B7, BASSO 3)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "codex", message: "ciao" }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say("Reading additional input from stdin...")
+    m.say('Error: approval_policy = "untrusted" is no longer supported; remove this setting')
+    m.exit(1)
+    const result = await turn.result
+    expect(result.exitCode).toBe(1)
+    expect(result.talk.messages.at(-1)?.text).toBe(
+      'Codex è uscito con codice 1: Error: approval_policy = "untrusted" is no longer supported; remove this setting',
+    )
+  })
+
+  /* B8d: a bot's nikcli turn runs on ADE's server, with its session's rules; nothing here would carry them. */
+  test("a nikcli turn is not started here", async () => {
+    const m = machine()
+    const result = await runTurn({ runner: "nikcli", message: "ciao" }, m.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe(t("bots.turn.nikcliOnServer"))
+    expect(m.spawned()).toBe(0)
+    expect(turnsRunning("nikcli")).toBe(0)
+  })
+
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {
     const m = machine()
     const running = Array.from({ length: MAX_PARALLEL_TURNS }, () => start(m))
@@ -165,5 +192,81 @@ describe("bots/turn, stopped by newer questions", () => {
     expect((await turn.result).status).toBe("stopped")
     expect(m.kills).toEqual([{ tree: true }])
     expect(turnsRunning("claude")).toBe(0)
+  })
+})
+
+/*
+ * B2 (audit A3): the host reports a CLI it could not start as an "err" line
+ * and an exit, then returns a session anyway. The turn ended «done» with
+ * nothing said, and the voice read out nothing.
+ */
+describe("a CLI that does not start", () => {
+  test("ends the turn in error with the host's reason, and gives the place back", async () => {
+    const host = {
+      spawn: async (options: {
+        onExit: (code: number | null) => void
+        onLine: (line: string, stream: "out" | "err") => void
+      }) => {
+        options.onLine("comando non consentito: codex", "err")
+        options.onExit(null)
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const result = await runTurn({ runner: "codex", message: "ciao" }, deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe("Codex non si avvia: comando non consentito: codex")
+    expect(result.exitCode).toBeUndefined()
+    expect(turnsRunning("codex")).toBe(0)
+  })
+})
+
+describe("le opzioni di avvio arrivano all'host", () => {
+  test("Claude in abbonamento toglie le chiavi ereditate e non ne passa", async () => {
+    const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
+    let exit: (code: number | null) => void = () => {}
+    const host = {
+      spawn: async (options: {
+        flags?: readonly string[]
+        secrets?: readonly string[]
+        onExit: (code: number | null) => void
+      }) => {
+        seen.push({
+          ...(options.flags ? { flags: options.flags } : {}),
+          ...(options.secrets ? { secrets: options.secrets } : {}),
+        })
+        exit = options.onExit
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const turn = runTurn({ runner: "claude", message: "ciao", exitGraceMs: 30 }, deps)
+    while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
+    exit(0)
+    await turn.result
+    expect(seen[0]!.flags).toEqual(["account-plan"])
+    expect(seen[0]!.secrets).toBeUndefined()
+  })
+
+  test("una chiave tolta fallisce il turno e non parte in abbonamento", async () => {
+    const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
+    const host = {
+      spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[] }) => {
+        seen.push({
+          ...(options.flags ? { flags: options.flags } : {}),
+          ...(options.secrets ? { secrets: options.secrets } : {}),
+        })
+        throw new Error("chiave «finta» non assegnata a claude-code in Impostazioni › Chiavi API")
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const result = await runTurn({ runner: "claude", message: "ciao", account: { mode: "key", key: "finta" } }, deps)
+      .result
+    expect(seen[0]!.flags).toEqual(["account-key"])
+    expect(seen[0]!.flags).not.toContain("account-plan")
+    expect(seen[0]!.secrets).toEqual(["finta"])
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain("chiave «finta» non assegnata a claude-code")
+    expect(result.problem).not.toContain("sk-")
   })
 })

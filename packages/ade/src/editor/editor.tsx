@@ -1,5 +1,6 @@
-import { createSignal, createMemo, Show, For } from "solid-js"
-import { type Buffer, saveBlockedReason, lineCount, positionOf } from "./buffer"
+import { createSignal, createMemo, createEffect, Show, For } from "solid-js"
+import { type Buffer, saveBlockedReason, lineCount, positionOf, offsetOfLine } from "./buffer"
+import { goToDue, type GoTo } from "./go-to"
 import "./editor.css"
 import { t } from "../i18n"
 
@@ -9,6 +10,8 @@ export interface EditorProps {
   onChange: (draft: string) => void
   onSave: () => void
   onRevert?: () => void
+  /** Puts the cursor at the start of this line and scrolls it to the middle. */
+  goTo?: GoTo
 }
 
 export function Editor(props: EditorProps) {
@@ -44,6 +47,34 @@ export function Editor(props: EditorProps) {
       gutterRef.scrollTop = e.currentTarget.scrollTop
     }
   }
+
+  // This effect also runs on every keystroke (the draft changes): goToDue lets
+  // each goTo move the cursor once.
+  let done: GoTo | undefined
+  createEffect(() => {
+    const target = props.goTo
+    if (!goToDue(target, done, props.buffer !== undefined && !props.loading)) return
+    /*
+     * A copy, not the object: the workbench is a store, and `reconcile` writes
+     * the next link's line and time into this same proxy. Keeping the proxy
+     * made every later goTo equal to the one already done, so a link to a
+     * file already open never moved the cursor.
+     */
+    done = { line: target!.line, at: target!.at }
+    // After the textarea has its text: the effect can run before it renders it.
+    requestAnimationFrame(() => {
+      const text = props.buffer?.draft
+      if (!textareaRef || !target || text === undefined) return
+      const offset = offsetOfLine(text, target.line)
+      textareaRef.focus()
+      textareaRef.setSelectionRange(offset, offset)
+      const lineHeight = parseFloat(getComputedStyle(textareaRef).lineHeight) || 18
+      const row = positionOf(text, offset).line - 1
+      textareaRef.scrollTop = Math.max(0, row * lineHeight - textareaRef.clientHeight / 2)
+      if (gutterRef) gutterRef.scrollTop = textareaRef.scrollTop
+      setCursor(positionOf(text, offset))
+    })
+  })
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {

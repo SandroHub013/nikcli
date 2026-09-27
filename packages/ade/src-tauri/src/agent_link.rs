@@ -12,7 +12,7 @@
 //! - the drop file is addressed by its nonce, and a nonce is hex, so nothing
 //!   the frontend sends can escape the directory;
 //! - the hook configuration is addressed by an agent id that must appear in
-//!   [`HOOK_TARGETS`], so the only files reachable are the two listed there.
+//!   [`HOOK_TARGETS`], so the only files reachable are the ones listed there.
 //!
 //! Neither install nor removal happens on its own. Both are commands, invoked
 //! from the settings panel, because they edit files ADE does not own.
@@ -45,6 +45,26 @@ const LINK_TTL: Duration = Duration::from_secs(60 * 60 * 24);
 /// Filename of the script ADE installs. Mirrors `HOOK_MARKER` in `agent-hooks.ts`.
 const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 
+/// Filename of nikcli's TUI plugin. Mirrors `NIKCLI_PLUGIN_NAME` in `nikcli-plugin.ts`.
+const PLUGIN_NAME: &str = "ade-agent-session.js";
+
+/// The plugin's text, compiled in: the only one ADE writes (ripristino
+/// review, BASSO 1). The page asks for the install and sends no program, so
+/// a compromised page cannot make every nikcli TUI load one of its choosing.
+/// The TypeScript tests load this same file and run it.
+const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
+
+/// Where a target's paths start.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Base {
+    /// The user's home directory.
+    Home,
+    /// Where nikcli keeps its configuration (its `Global.Path.config`, one
+    /// level up): `%APPDATA%` on Windows, `$XDG_CONFIG_HOME` or `~/.config`
+    /// elsewhere. See `config_home`.
+    ConfigHome,
+}
+
 /// A CLI ADE knows how to install a reporting hook into.
 ///
 /// Mirrors `HOOK_TARGETS` in `src/session-new/agent-hooks.ts`, which decides
@@ -53,6 +73,8 @@ const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 /// fails until it is added there too.
 struct HookTarget {
     id: &'static str,
+    base: Base,
+    /// Empty for a plugin: there is no configuration to edit, only its file.
     config: &'static [&'static str],
     script: &'static [&'static str],
 }
@@ -60,13 +82,22 @@ struct HookTarget {
 const HOOK_TARGETS: &[HookTarget] = &[
     HookTarget {
         id: "claude-code",
+        base: Base::Home,
         config: &[".claude", "settings.json"],
         script: &[".claude", "hooks", SCRIPT_NAME],
     },
     HookTarget {
         id: "codex",
+        base: Base::Home,
         config: &[".codex", "hooks.json"],
         script: &[".codex", SCRIPT_NAME],
+    },
+    // A TUI plugin, not a hook: the folder nikcli's TUI scans, and one file of ADE's in it.
+    HookTarget {
+        id: "nikcli",
+        base: Base::ConfigHome,
+        config: &[],
+        script: &["nikcli", "plugin", "tui", PLUGIN_NAME],
     },
 ];
 
@@ -151,6 +182,34 @@ pub async fn agent_activity_read(app: tauri::AppHandle, nonce: String) -> Result
     }
 }
 
+/// The most nonces one `agent_activity_read_many` reads: more panes than a grid holds.
+const ACTIVITY_BATCH_MAX: usize = 64;
+
+/// Every hooked session's activity in one call, in the order asked (P1-C2a).
+///
+/// The mail pass read each pane's file with its own `agent_activity_read`: 4.2
+/// invokes a second with seven panes open, for files of a few bytes. The same
+/// reads, one round trip. An unreadable file or a nonce that is not one is
+/// `None` at its place, as the single read's error is `null` to the frontend.
+#[tauri::command]
+pub async fn agent_activity_read_many(app: tauri::AppHandle, nonces: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    if nonces.len() > ACTIVITY_BATCH_MAX {
+        return Err("troppe sessioni in una lettura".to_string());
+    }
+    let dir = link_dir(&app).ok_or_else(|| "cartella sessioni non disponibile".to_string())?;
+    Ok(read_activities(&dir, &nonces))
+}
+
+fn read_activities(dir: &Path, nonces: &[String]) -> Vec<Option<String>> {
+    nonces
+        .iter()
+        .map(|nonce| {
+            let name = nonce_file(nonce).ok()?;
+            fs::read_to_string(dir.join(name).with_extension("activity")).ok()
+        })
+        .collect()
+}
+
 /// Forgets a report the frontend has taken.
 #[tauri::command]
 pub async fn agent_link_clear(app: tauri::AppHandle, nonce: String) -> Result<(), String> {
@@ -174,6 +233,21 @@ pub struct HookFiles {
     pub script_path: String,
     /// Whether that script is on disk right now.
     pub script_present: bool,
+    /// For a plugin: whether the file on disk is the one this ADE writes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script_current: Option<bool>,
+    /// For a hook: the SHA-256 of the script on disk, lowercase hex. The page
+    /// builds the script, so only it can say whether this is its version; a
+    /// different one would be rewritten behind the confirmation dialog.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script_digest: Option<String>,
+}
+
+/// The SHA-256 of a file, lowercase hex, or `None` when it cannot be read.
+fn file_digest(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = fs::read(path).ok()?;
+    Some(Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn target(agent: &str) -> Result<&'static HookTarget, String> {
@@ -183,9 +257,36 @@ fn target(agent: &str) -> Result<&'static HookTarget, String> {
         .ok_or_else(|| format!("nessun hook noto per {agent}"))
 }
 
-fn under_home(segments: &[&str]) -> Result<PathBuf, String> {
-    let home = dirs_home().ok_or_else(|| "cartella utente non trovata".to_string())?;
-    Ok(segments.iter().fold(home, |path, segment| path.join(segment)))
+/// A target's path, from where its `base` says.
+fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
+    let root = match base {
+        Base::Home => dirs_home(),
+        Base::ConfigHome => config_home(
+            cfg!(windows),
+            std::env::var("APPDATA").ok(),
+            std::env::var("XDG_CONFIG_HOME").ok(),
+            dirs_home(),
+        ),
+    }
+    .ok_or_else(|| "cartella utente non trovata".to_string())?;
+    Ok(segments.iter().fold(root, |path, segment| path.join(segment)))
+}
+
+/// The folder nikcli's configuration lives under, as `@nikcli-ai/util`'s
+/// `global.ts` works it out: `%APPDATA%` (or `<home>\AppData\Roaming`) on
+/// Windows; `$XDG_CONFIG_HOME` (or `<home>/.config`) on macOS and Linux.
+///
+/// It was `AppData/Roaming` everywhere, so on a Mac the plugin went to
+/// `~/AppData/Roaming/nikcli/plugin/tui`, a folder nikcli never scans, and the
+/// panel said it was installed (lettura di Mimo, F1). Arguments rather than
+/// the environment, so both platforms are tested on either.
+fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String>, home: Option<PathBuf>) -> Option<PathBuf> {
+    let set = |value: Option<String>| value.filter(|value| !value.trim().is_empty()).map(PathBuf::from);
+    if windows {
+        set(appdata).or_else(|| home.map(|home| home.join("AppData").join("Roaming")))
+    } else {
+        set(xdg_config).or_else(|| home.map(|home| home.join(".config")))
+    }
 }
 
 /// The user's home directory.
@@ -213,12 +314,24 @@ fn dirs_home() -> Option<PathBuf> {
 #[tauri::command]
 pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
     let target = target(&agent)?;
-    let config = under_home(target.config)?;
-    let script = under_home(target.script)?;
+    let script = under_base(target.base, target.script)?;
+    if target.config.is_empty() {
+        return Ok(HookFiles {
+            config_path: String::new(),
+            config_text: None,
+            script_present: script.is_file(),
+            script_current: Some(fs::read_to_string(&script).ok().as_deref() == Some(PLUGIN_TEXT)),
+            script_digest: None,
+            script_path: script.to_string_lossy().to_string(),
+        });
+    }
+    let config = under_base(target.base, target.config)?;
     Ok(HookFiles {
         config_text: fs::read_to_string(&config).ok(),
         config_path: config.to_string_lossy().to_string(),
         script_present: script.is_file(),
+        script_current: None,
+        script_digest: file_digest(&script),
         script_path: script.to_string_lossy().to_string(),
     })
 }
@@ -241,12 +354,79 @@ pub async fn agent_hook_write(
     script: Option<String>,
 ) -> Result<(), String> {
     let target = target(&agent)?;
-    let config = under_home(target.config)?;
-    let script_path = under_home(target.script)?;
+    let script_path = under_base(target.base, target.script)?;
+    if target.config.is_empty() {
+        // A plugin: its file and nothing else, and no configuration may come with it.
+        if !config_text.is_empty() {
+            return Err(format!("{agent} non ha una configurazione da scrivere"));
+        }
+        // Whatever text the page sent, the one written is ADE's own.
+        let text = script.map(|_| PLUGIN_TEXT);
+        return tauri::async_runtime::spawn_blocking(move || {
+            write_plugin_file(&script_path, text, |path| {
+                let brand = crate::brand::name();
+                let question = format!(
+                    "{brand} vuole installare o aggiornare il suo plugin per il TUI di {agent}:\n\n{}\n\nIl plugin viene caricato da ogni TUI di {agent} e scrive qualcosa solo in quelli avviati da {brand}, per dirgli quale conversazione mostrano. Consentire?",
+                    path.display()
+                );
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                app.dialog()
+                    .message(question)
+                    .title(format!("Plugin di {}", crate::brand::name()))
+                    .kind(MessageDialogKind::Warning)
+                    .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                    .blocking_show()
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    let config = under_base(target.base, target.config)?;
 
+    tauri::async_runtime::spawn_blocking(move || {
+        write_hook_files(&config, &script_path, &config_text, script.as_deref(), |script_path| {
+            let brand = crate::brand::name();
+            let question = format!(
+                "{brand} vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire a {brand} quale conversazione ha aperto. Consentire?",
+                script_path.display()
+            );
+            use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+            app.dialog()
+                .message(question)
+                .title(format!("Hook di {}", crate::brand::name()))
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                .blocking_show()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/*
+ * The body of `agent_hook_write`, with the confirmation handed in so a test
+ * can stand in for the dialog.
+ *
+ * The dialog can stay open for as long as the user leaves it, and the file
+ * belongs to another program: whatever it or the user wrote to it meanwhile
+ * was overwritten by a configuration built from the copy read before
+ * (audit 0.7.7, point 0 of the post-0.7.7 list). So the file is read again
+ * after the dialog, and if it is no longer the one the check passed on,
+ * nothing is written: the caller gets an error and tries again, from what is
+ * on disk now. Nothing is merged — the configuration was built from the old
+ * copy, and guessing how the two fit together is how someone's settings get
+ * damaged.
+ */
+fn write_hook_files(
+    config: &Path,
+    script_path: &Path,
+    config_text: &str,
+    script: Option<&str>,
+    confirm: impl FnOnce(&Path) -> bool,
+) -> Result<(), String> {
     /*
-     * This command writes a program another CLI runs and the configuration
-     * that makes it run, so it must not be a way to install any program.
+     * This writes a program another CLI runs and the configuration that makes
+     * it run, so it must not be a way to install any program.
      *
      * The configuration may differ from what is on disk only in ADE's own
      * entries, and those must invoke ADE's script exactly as `hookCommand`
@@ -254,28 +434,21 @@ pub async fn agent_hook_write(
      * that is not already the one on disk is shown to the user first, in a
      * native dialog nothing in the webview can click.
      */
-    let current = fs::read_to_string(&config).ok();
-    check_hook_config(current.as_deref(), &config_text, &hook_command(&script_path))?;
-    if let Some(text) = script.as_ref() {
-        let on_disk = fs::read_to_string(&script_path).ok();
-        if on_disk.as_deref() != Some(text.as_str()) {
-            let question = format!(
-                "ADE vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire ad ADE quale conversazione ha aperto. Consentire?",
-                script_path.display()
-            );
-            let allowed = tauri::async_runtime::spawn_blocking(move || {
-                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-                app.dialog()
-                    .message(question)
-                    .title("Hook di ADE")
-                    .kind(MessageDialogKind::Warning)
-                    .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
-                    .blocking_show()
-            })
-            .await
-            .map_err(|e| e.to_string())?;
-            if !allowed {
+    let current = fs::read_to_string(config).ok();
+    check_hook_config(current.as_deref(), config_text, &hook_command(script_path))?;
+    if let Some(text) = script {
+        let on_disk = fs::read_to_string(script_path).ok();
+        if on_disk.as_deref() != Some(text) {
+            if !confirm(script_path) {
                 return Err("installazione dell'hook annullata".to_string());
+            }
+            // Read again: the dialog may have been open for minutes.
+            let now = fs::read_to_string(config).ok();
+            if now != current {
+                return Err(format!(
+                    "{} è cambiato mentre il dialogo era aperto: riprova",
+                    config.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+                ));
             }
         }
     }
@@ -285,9 +458,9 @@ pub async fn agent_hook_write(
             if let Some(parent) = script_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| format!("cartella hook non creata: {e}"))?;
             }
-            write_atomic(&script_path, text.as_bytes())?;
+            write_atomic(script_path, text.as_bytes())?;
         }
-        None => match fs::remove_file(&script_path) {
+        None => match fs::remove_file(script_path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(format!("script non rimosso: {error}")),
@@ -297,7 +470,53 @@ pub async fn agent_hook_write(
     if let Some(parent) = config.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("cartella configurazione non creata: {e}"))?;
     }
-    write_atomic(&config, config_text.as_bytes())
+    write_atomic(config, config_text.as_bytes())
+}
+
+/// Installs or removes a plugin target's one file.
+///
+/// Only ever the file named by [`PLUGIN_NAME`]: the path comes from
+/// [`HOOK_TARGETS`], and one that names anything else is refused before any
+/// write. A text that is not already the one on disk is shown to the user
+/// first, as the hook scripts are: it is a program another CLI will load.
+///
+/// Removing takes the two folders the install may have made (`plugin\tui`,
+/// then `plugin`) when they are left empty, and only then: an empty folder
+/// holds nothing anyone reads, nikcli scans an absent one the same way, and a
+/// folder with anything else in it is the user's. «Rimuovi» used to leave an
+/// empty `plugin\tui` behind (prove dal vivo 2).
+fn write_plugin_file(path: &Path, script: Option<&str>, confirm: impl FnOnce(&Path) -> bool) -> Result<(), String> {
+    if path.file_name().and_then(|name| name.to_str()) != Some(PLUGIN_NAME) {
+        return Err(format!("{} non è il plugin di {}", path.display(), crate::brand::name()));
+    }
+    match script {
+        Some(text) => {
+            if fs::read_to_string(path).ok().as_deref() != Some(text) && !confirm(path) {
+                return Err("installazione del plugin annullata".to_string());
+            }
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("cartella plugin non creata: {e}"))?;
+            }
+            write_atomic(path, text.as_bytes())
+        }
+        None => {
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(format!("plugin non rimosso: {error}")),
+            }
+            // `remove_dir` refuses a folder that is not empty, which is the check.
+            let mut folder = path.parent();
+            for _ in 0..2 {
+                let Some(dir) = folder else { break };
+                if fs::remove_dir(dir).is_err() {
+                    break;
+                }
+                folder = dir.parent();
+            }
+            Ok(())
+        }
+    }
 }
 
 /// How a CLI's configuration invokes ADE's script. Mirrors `hookCommand` in `agent-hooks.ts`.
@@ -305,39 +524,163 @@ fn hook_command(script_path: &Path) -> String {
     format!("powershell -NoProfile -ExecutionPolicy Bypass -File \"{}\"", script_path.display())
 }
 
-/// The configuration with every ADE entry taken out, and whatever that emptied.
-fn without_ade(value: &serde_json::Value) -> Option<serde_json::Value> {
+/// How one configuration entry invokes its program, as a single command line.
+///
+/// The same entry can be written two ways: a shell-shaped one, where `command`
+/// holds the whole line, and the exec form, where `command` is the program and
+/// `args` are its arguments. ADE installs the exec form because the script's
+/// path may contain spaces, and in that form the script's name is nowhere in
+/// `command` — which is how this module missed its own entries and refused to
+/// write the configuration.
+///
+/// Mirrors `commandOf` in `agent-hooks.ts`, quoting included, so the string it
+/// returns is directly comparable with `hook_command`.
+fn command_of(leaf: &serde_json::Value) -> Option<String> {
+    use serde_json::Value;
+    let map = leaf.as_object()?;
+    let command = map.get("command")?.as_str()?;
+    let args = match map.get("args").and_then(Value::as_array) {
+        Some(args) if !args.is_empty() && args.iter().all(Value::is_string) => args,
+        _ => return Some(command.to_string()),
+    };
+    let last = args[args.len() - 1].as_str().unwrap_or_default();
+    let rest = args[..args.len() - 1]
+        .iter()
+        .map(|arg| arg.as_str().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(format!("{command} {rest} \"{last}\""))
+}
+
+/// The fields of ADE's hook entry, as `agent-hooks.ts` writes it.
+const ADE_ENTRY_KEYS: [&str; 4] = ["type", "command", "args", "timeout"];
+
+/// A configuration with ADE's entries taken out, remembering what their going emptied.
+#[derive(Debug)]
+enum Stripped {
+    /// ADE's own entry.
+    Gone,
+    /// A container that held something and holds nothing now that ADE's entries are out: a
+    /// hook group whose `hooks` held only ADE's, whatever `matcher` it keeps, counts too.
+    Emptied,
+    Object(std::collections::BTreeMap<String, Stripped>),
+    Array(Vec<Stripped>),
+    Leaf(serde_json::Value),
+}
+
+/// The configuration with every ADE entry taken out (see `Stripped`).
+///
+/// Only what ADE's going emptied is marked as such. An empty container the
+/// user wrote stays one, so a write that adds or drops `"permissions": {}` is
+/// a change like any other (audit 0.7.7, C2 BASSO); and a hook group left as
+/// `{matcher}` once ADE's entry is out is emptied, not a group that stays
+/// (MEDIO 15): Claude Code's groups carry a `matcher`, and every install on a
+/// file without ADE's group was refused as "changes more than the hooks".
+fn without_ade(value: &serde_json::Value) -> Stripped {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
-            if map.get("command").and_then(Value::as_str).is_some_and(|c| c.contains(SCRIPT_NAME)) {
-                return None;
+            // ADE's own entry, whichever form it is written in: the script's
+            // name is in the command line, or among the arguments. And
+            // nothing else in it: ADE writes `type`, `command`, `args` and
+            // `timeout`. An `env` beside ADE's command went out with the entry
+            // and was never compared, so a write could smuggle
+            // `ANTHROPIC_BASE_URL` into the user's settings (review area 1, MEDIO 4).
+            if command_of(value).is_some_and(|c| c.contains(SCRIPT_NAME))
+                && map.keys().all(|key| ADE_ENTRY_KEYS.contains(&key.as_str()))
+            {
+                return Stripped::Gone;
             }
-            let kept: serde_json::Map<String, Value> = map
-                .iter()
-                .filter_map(|(k, v)| without_ade(v).map(|v| (k.clone(), v)))
-                .collect();
-            // Empty containers compare as absent: removing ADE's entry may
-            // leave `"hooks": {}` where there was no `hooks` key before.
-            (!kept.is_empty()).then_some(Value::Object(kept))
+            let mut touched = false;
+            let mut hooks_emptied = false;
+            let mut kept = std::collections::BTreeMap::new();
+            for (key, child) in map {
+                match without_ade(child) {
+                    Stripped::Gone => touched = true,
+                    Stripped::Emptied => {
+                        touched = true;
+                        hooks_emptied |= key == "hooks" && child.is_array();
+                        kept.insert(key.clone(), Stripped::Emptied);
+                    }
+                    other => {
+                        kept.insert(key.clone(), other);
+                    }
+                }
+            }
+            if touched && hooks_emptied {
+                Stripped::Emptied
+            } else {
+                Stripped::Object(kept)
+            }
         }
         Value::Array(items) => {
-            let kept: Vec<Value> = items.iter().filter_map(without_ade).collect();
-            (!kept.is_empty()).then_some(Value::Array(kept))
+            let mut touched = false;
+            let mut kept = Vec::new();
+            for item in items {
+                match without_ade(item) {
+                    Stripped::Gone | Stripped::Emptied => touched = true,
+                    other => kept.push(other),
+                }
+            }
+            if touched && kept.is_empty() {
+                Stripped::Emptied
+            } else {
+                Stripped::Array(kept)
+            }
         }
-        other => Some(other.clone()),
+        other => Stripped::Leaf(other.clone()),
     }
 }
 
+/// Whether nothing but ADE's going is left: emptied, or an object of emptied things.
+fn ade_only(s: &Stripped) -> bool {
+    match s {
+        Stripped::Emptied | Stripped::Gone => true,
+        Stripped::Object(map) => !map.is_empty() && map.values().all(ade_only),
+        _ => false,
+    }
+}
+
+/// Whether two stripped configurations say the same thing. What ADE emptied
+/// matches a missing key or an empty container of either kind, and nothing else.
+fn same_without_ade(before: &Stripped, after: &Stripped) -> bool {
+    use Stripped::*;
+    let empty = |s: &Stripped| match s {
+        Object(map) => map.is_empty() || ade_only(s),
+        Array(items) => items.is_empty(),
+        other => ade_only(other),
+    };
+    match (before, after) {
+        (Emptied | Gone, other) | (other, Emptied | Gone) => empty(other),
+        (Object(b), Object(a)) => b.keys().chain(a.keys()).all(|key| match (b.get(key), a.get(key)) {
+            (Some(x), Some(y)) => same_without_ade(x, y),
+            (Some(only), None) | (None, Some(only)) => ade_only(only),
+            (None, None) => true,
+        }),
+        (Array(b), Array(a)) => b.len() == a.len() && b.iter().zip(a).all(|(x, y)| same_without_ade(x, y)),
+        (Leaf(b), Leaf(a)) => b == a,
+        _ => false,
+    }
+}
+
+/// Every invocation in the configuration that belongs to ADE, as whole command
+/// lines, so each one can be compared with the line ADE is supposed to write.
+///
+/// An entry is ADE's when the script's name appears in it, in the command line
+/// or among the arguments; what comes out is the joined form either way, so a
+/// matching script behind a different program, or with an argument added, is
+/// still a mismatch rather than a pass.
 fn ade_commands(value: &serde_json::Value, out: &mut Vec<String>) {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
-            for (key, v) in map {
-                match v {
-                    Value::String(s) if key == "command" && s.contains(SCRIPT_NAME) => out.push(s.clone()),
-                    other => ade_commands(other, out),
-                }
+            if let Some(command) = command_of(value).filter(|c| c.contains(SCRIPT_NAME)) {
+                out.push(command);
+                // The entry itself: nothing inside it is another entry.
+                return;
+            }
+            for v in map.values() {
+                ade_commands(v, out);
             }
         }
         Value::Array(items) => items.iter().for_each(|v| ade_commands(v, out)),
@@ -355,8 +698,8 @@ fn check_hook_config(current: Option<&str>, next: &str, command: &str) -> Result
     };
     let before = parse(current.unwrap_or(""))?;
     let after = parse(next)?;
-    if without_ade(&before) != without_ade(&after) {
-        return Err("la configurazione cambia più degli hook di ADE: scrittura rifiutata".to_string());
+    if !same_without_ade(&without_ade(&before), &without_ade(&after)) {
+        return Err(format!("la configurazione cambia più degli hook di {}: scrittura rifiutata", crate::brand::name()));
     }
     let mut commands = Vec::new();
     ade_commands(&after, &mut commands);
@@ -410,11 +753,204 @@ mod tests {
     }
 
     #[test]
+    fn a_hook_group_with_a_matcher_goes_with_ades_entry() {
+        // Audit 0.7.7, MEDIO 15: Claude Code's groups carry a matcher, and `{matcher}` used to stay behind.
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let group = format!(
+            r#"{{"matcher":"startup|resume|clear","hooks":[{{"type":"command","command":{}}}]}}"#,
+            serde_json::to_string(&command).unwrap()
+        );
+        let user = r#"{"matcher":"startup","hooks":[{"type":"command","command":"notify"}]}"#;
+        // Installed on a file with no hooks, with an empty hooks object, beside a group of the user's.
+        assert!(check_hook_config(Some(r#"{"model":"opus"}"#), &format!(r#"{{"model":"opus","hooks":{{"SessionStart":[{group}]}}}}"#), &command).is_ok());
+        assert!(check_hook_config(Some(r#"{"hooks":{}}"#), &format!(r#"{{"hooks":{{"SessionStart":[{group}]}}}}"#), &command).is_ok());
+        let beside = format!(r#"{{"hooks":{{"SessionStart":[{user},{group}]}}}}"#);
+        assert!(check_hook_config(Some(&format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#)), &beside, &command).is_ok());
+        // And taken out again.
+        assert!(check_hook_config(Some(&beside), &format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#), &command).is_ok());
+        // The user's group loses its hooks: not ADE's doing, refused.
+        let emptied_user = r#"{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[]}]}}"#;
+        assert!(check_hook_config(Some(&format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#)), emptied_user, &command).is_err());
+    }
+
+    #[test]
+    fn the_users_empty_containers_are_not_absent() {
+        // C2 BASSO: an empty object or array the user wrote is part of the file like anything else.
+        let command = hook_command(&Path::new("C:\\h").join(SCRIPT_NAME));
+        assert!(check_hook_config(Some(r#"{"x":{}}"#), "{}", &command).is_err());
+        assert!(check_hook_config(Some("{}"), r#"{"permissions":{"allow":[]}}"#, &command).is_err());
+        assert!(check_hook_config(Some(r#"{"x":{}}"#), r#"{"x":{}}"#, &command).is_ok());
+    }
+
+    /// A settings file and a script path in a fresh folder of their own, under the test TEMP.
+    fn hook_scratch(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "ade-hook-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        (dir.join("settings.json"), dir.join("hooks").join(SCRIPT_NAME), dir)
+    }
+
+    #[test]
+    fn many_activities_are_read_in_one_call_each_at_its_place() {
+        let (_, _, dir) = hook_scratch("activities");
+        let busy = "aaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let idle = "bbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+        let silent = "cccccccccccccccccccccccc".to_string();
+        fs::write(dir.join(format!("{busy}.activity")), r#"{"state":"busy"}"#).unwrap();
+        fs::write(dir.join(format!("{idle}.activity")), r#"{"state":"idle"}"#).unwrap();
+        // A report is not an activity, and a path is not a nonce.
+        fs::write(dir.join(format!("{silent}.json")), "{}").unwrap();
+        let read = read_activities(&dir, &[idle, silent, "..\\..\\x".to_string(), busy]);
+        assert_eq!(
+            read,
+            vec![Some(r#"{"state":"idle"}"#.to_string()), None, None, Some(r#"{"state":"busy"}"#.to_string())]
+        );
+    }
+
+    #[test]
+    fn a_settings_file_changed_while_the_dialog_was_open_is_not_written() {
+        let (config, script, dir) = hook_scratch("changed");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let external = r#"{"model":"opus","theme":"dark"}"#;
+        let mut asked = 0;
+        let result = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| {
+            asked += 1;
+            // Someone saves the file while the dialog waits for an answer.
+            fs::write(&config, external).unwrap();
+            true
+        });
+        let error = result.expect_err("a changed file was overwritten");
+        assert!(error.contains("è cambiato mentre il dialogo era aperto"), "{error}");
+        assert_eq!(asked, 1);
+        // The change made meanwhile survives, and nothing of ADE's was written.
+        assert_eq!(fs::read_to_string(&config).unwrap(), external);
+        assert!(!script.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_settings_file_left_as_it_was_is_written_as_before() {
+        let (config, script, dir) = hook_scratch("same");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let next = r#"{"model":"opus"}"#;
+        write_hook_files(&config, &script, next, Some("# script"), |_| true).expect("an unchanged file is written");
+        assert_eq!(fs::read_to_string(&config).unwrap(), next);
+        assert_eq!(fs::read_to_string(&script).unwrap(), "# script");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_file_is_read_again_after_the_dialog_not_before() {
+        let (config, script, dir) = hook_scratch("order");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let mut asked = false;
+        // A change before the dialog is caught by the first check; one inside it only by a read after it.
+        let result = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| {
+            asked = true;
+            fs::write(&config, r#"{"model":"sonnet"}"#).unwrap();
+            true
+        });
+        assert!(asked, "the dialog was not shown");
+        assert!(result.is_err(), "the read after the dialog did not happen");
+        // Refused and not asked: nothing written either.
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let refused = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| false);
+        assert!(refused.is_err());
+        assert!(!script.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn every_target_has_a_script_this_module_recognises() {
         for target in HOOK_TARGETS {
-            assert_eq!(target.script.last(), Some(&SCRIPT_NAME));
-            assert!(!target.config.is_empty());
+            // A hook: a configuration and ADE's script; a plugin: ADE's plugin file alone.
+            if target.config.is_empty() {
+                assert_eq!(target.script.last(), Some(&PLUGIN_NAME));
+            } else {
+                assert_eq!(target.script.last(), Some(&SCRIPT_NAME));
+            }
         }
+    }
+
+    #[test]
+    fn nikclis_plugin_goes_in_the_folder_its_tui_scans_and_nowhere_else() {
+        let nikcli = target("nikcli").expect("nikcli is a target");
+        assert!(nikcli.config.is_empty());
+        let path = under_base(nikcli.base, nikcli.script).expect("a path");
+        assert!(path.ends_with(Path::new("nikcli").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
+        let roaming = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| dirs_home().unwrap().join("AppData").join("Roaming"));
+        assert!(path.starts_with(&roaming), "{} is not under {}", path.display(), roaming.display());
+    }
+
+    #[test]
+    fn the_plugin_written_is_the_one_compiled_in() {
+        // The file the TypeScript tests load and run, with ADE's marker and its guard on the environment.
+        assert!(PLUGIN_TEXT.contains("ade-agent-session"));
+        assert!(PLUGIN_TEXT.contains("process.env.ADE_SPAWN_NONCE"));
+        assert!(PLUGIN_TEXT.contains("export default"));
+    }
+
+    #[test]
+    fn a_plugin_write_touches_its_own_file_only() {
+        let (_, _, dir) = hook_scratch("plugin");
+        let path = dir.join("plugin").join("tui").join(PLUGIN_NAME);
+        let mut asked = 0;
+        write_plugin_file(&path, Some("export default {}"), |_| {
+            asked += 1;
+            true
+        })
+        .expect("installed");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "export default {}");
+        // The same text again: nothing to ask.
+        write_plugin_file(&path, Some("export default {}"), |_| {
+            asked += 1;
+            true
+        })
+        .expect("rewritten");
+        assert_eq!(asked, 1);
+        // A new text the user refuses: the old one stays.
+        assert!(write_plugin_file(&path, Some("altro"), |_| false).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "export default {}");
+        // Any other file name is refused before anything is asked or written.
+        let other = dir.join("plugin").join("tui").join("evil.js");
+        assert!(write_plugin_file(&other, Some("x"), |_| panic!("asked for a foreign file")).is_err());
+        assert!(!other.exists());
+        // Removed, and removing again is not an error.
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!path.exists());
+        write_plugin_file(&path, None, |_| true).expect("already gone");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn removing_the_plugin_takes_the_folders_it_left_empty_and_no_others() {
+        // Prove dal vivo 2: «Rimuovi» left an empty plugin\tui behind.
+        let (_, _, dir) = hook_scratch("plugin-folders");
+        let plugin = dir.join("plugin");
+        let path = plugin.join("tui").join(PLUGIN_NAME);
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!plugin.join("tui").exists(), "plugin\\tui vuota resta");
+        assert!(!plugin.exists(), "plugin vuota resta");
+        assert!(dir.exists(), "oltre le due cartelle del plugin non si risale");
+
+        // The user's own plugin beside it: the folder is theirs, and it stays.
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        fs::write(plugin.join("suo.js"), "// dell'utente").unwrap();
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(!plugin.join("tui").exists());
+        assert_eq!(fs::read_to_string(plugin.join("suo.js")).unwrap(), "// dell'utente");
+
+        // And a file of theirs in tui keeps tui.
+        write_plugin_file(&path, Some("export default {}"), |_| true).expect("installed");
+        fs::write(plugin.join("tui").join("altro.js"), "// dell'utente").unwrap();
+        write_plugin_file(&path, None, |_| true).expect("removed");
+        assert!(plugin.join("tui").join("altro.js").exists());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -426,6 +962,27 @@ mod tests {
     }
 
     #[test]
+    fn the_plugin_goes_where_nikcli_reads_its_configuration_on_every_platform() {
+        let home = Some(PathBuf::from("/home/utente"));
+        // macOS and Linux: XDG first, then ~/.config — never AppData.
+        let unix = config_home(false, None, None, home.clone()).unwrap();
+        assert_eq!(unix, PathBuf::from("/home/utente").join(".config"));
+        let xdg = config_home(false, Some("C:/finto/Roaming".into()), Some("/xdg/config".into()), home.clone()).unwrap();
+        assert_eq!(xdg, PathBuf::from("/xdg/config"), "APPDATA non conta fuori da Windows");
+        assert_eq!(config_home(false, None, Some("  ".into()), home.clone()).unwrap(), unix);
+        // Windows: APPDATA, then the home's AppData\Roaming; XDG does not count.
+        let windows = config_home(true, Some("C:/Utenti/u/AppData/Roaming".into()), Some("/xdg/config".into()), home.clone()).unwrap();
+        assert_eq!(windows, PathBuf::from("C:/Utenti/u/AppData/Roaming"));
+        let fallback = config_home(true, None, None, home.clone()).unwrap();
+        assert_eq!(fallback, PathBuf::from("/home/utente").join("AppData").join("Roaming"));
+        assert!(config_home(false, None, None, None).is_none());
+        // And the plugin's segments sit under it as nikcli scans them: `<config>/nikcli/plugin/tui`.
+        let plugin = target("nikcli").unwrap();
+        assert_eq!(plugin.base, Base::ConfigHome);
+        assert_eq!(&plugin.script[..3], &["nikcli", "plugin", "tui"]);
+    }
+
+    #[test]
     fn an_unknown_agent_has_no_files_to_touch() {
         assert!(target("gemini").is_err());
         assert!(target("../../etc").is_err());
@@ -434,12 +991,24 @@ mod tests {
     #[test]
     fn a_config_path_stays_under_the_home_directory() {
         let home = dirs_home().expect("a home directory");
-        for entry in HOOK_TARGETS {
-            let config = under_home(entry.config).expect("a path");
-            let script = under_home(entry.script).expect("a path");
+        for entry in HOOK_TARGETS.iter().filter(|entry| entry.base == Base::Home) {
+            let config = under_base(entry.base, entry.config).expect("a path");
+            let script = under_base(entry.base, entry.script).expect("a path");
             assert!(config.starts_with(&home), "{} escaped", config.display());
             assert!(script.starts_with(&home), "{} escaped", script.display());
         }
+    }
+
+    #[test]
+    fn a_hook_script_is_read_back_as_its_sha256_only() {
+        let dir = std::env::temp_dir().join(format!("ade-hook-digest-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("a directory");
+        let path = dir.join("ade-session-link.ps1");
+        fs::write(&path, b"abc").expect("a file");
+        // SHA-256("abc"), the standard test vector: what the page computes of the script it built.
+        assert_eq!(file_digest(&path).as_deref(), Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+        assert_eq!(file_digest(&dir.join("assente.ps1")), None);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -454,5 +1023,99 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).expect("the file"), "dopo");
         assert!(!path.with_extension("ade-part").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The entry ADE installs now: program in `command`, script in `args`.
+    fn exec_entry(program: &str, script: &Path, extra: &[&str]) -> serde_json::Value {
+        let mut args = vec![
+            "-NoProfile".to_string(),
+            "-ExecutionPolicy".to_string(),
+            "Bypass".to_string(),
+            "-File".to_string(),
+            script.to_string_lossy().to_string(),
+        ];
+        args.extend(extra.iter().map(|arg| arg.to_string()));
+        serde_json::json!({
+            "type": "command",
+            "command": program,
+            "args": args,
+            "timeout": 10
+        })
+    }
+
+    /// A configuration like the user's: someone else's `Stop` hook, and ADE's
+    /// own entry at the end of `SessionStart` under a matcher.
+    fn with_ade_entry(leaf: serde_json::Value) -> String {
+        serde_json::json!({
+            "model": "opus",
+            "hooks": {
+                "Stop": [{ "hooks": [{ "type": "command", "command": "notify" }] }],
+                "SessionStart": [{
+                    "matcher": "startup|resume|clear",
+                    "hooks": [leaf]
+                }]
+            }
+        })
+        .to_string()
+    }
+
+    /// The migration that was silently failing: the entry on disk written the
+    /// old way, the one ADE is about to write with the script among the args.
+    /// While the exec entry was taken for a stranger's, the configuration
+    /// looked changed and every write was refused.
+    #[test]
+    fn an_exec_form_entry_is_recognised_as_ades_own() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let string_form = with_ade_entry(serde_json::json!({
+            "type": "command",
+            "command": command,
+            "timeout": 5
+        }));
+        let exec_form = with_ade_entry(exec_entry("powershell", &script, &[]));
+
+        assert!(check_hook_config(Some(&string_form), &exec_form, &command).is_ok());
+        assert!(check_hook_config(Some(&exec_form), &string_form, &command).is_ok());
+    }
+
+    #[test]
+    fn an_exec_form_entry_that_runs_another_program_is_refused() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let current = with_ade_entry(exec_entry("powershell", &script, &[]));
+        let next = with_ade_entry(exec_entry("cmd", &script, &[]));
+
+        let error = check_hook_config(Some(&current), &next, &command).expect_err("cmd was accepted");
+        assert!(error.contains("non riconosciuto"), "{error}");
+    }
+
+    #[test]
+    fn an_exec_form_entry_with_an_extra_argument_is_refused() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let current = with_ade_entry(exec_entry("powershell", &script, &[]));
+        let next = with_ade_entry(exec_entry("powershell", &script, &["-Verbose"]));
+
+        let error = check_hook_config(Some(&current), &next, &command).expect_err("-Verbose was accepted");
+        assert!(error.contains("non riconosciuto"), "{error}");
+    }
+
+    /// Review area 1, MEDIO 4: a field beside ADE's command went out with the
+    /// entry and was never compared.
+    #[test]
+    fn an_entry_with_a_field_ade_does_not_write_is_refused() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let mut smuggled = exec_entry("powershell", &script, &[]);
+        smuggled["env"] = serde_json::json!({ "ANTHROPIC_BASE_URL": "https://example.invalid" });
+        let current = with_ade_entry(exec_entry("powershell", &script, &[]));
+        let next = with_ade_entry(smuggled);
+
+        let error = check_hook_config(Some(&current), &next, &command).expect_err("env was accepted");
+        assert!(error.contains("cambia più"), "{error}");
+        // ADE's own entry, with its timeout, still passes.
+        let mut own = exec_entry("powershell", &script, &[]);
+        own["timeout"] = serde_json::json!(10);
+        assert_eq!(check_hook_config(Some(&current), &with_ade_entry(own), &command), Ok(()));
     }
 }

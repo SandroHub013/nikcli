@@ -10,8 +10,12 @@
  */
 
 export interface SpawnedSession {
-  /** Kills the process; with `tree`, the processes it started too. Safe to call more than once. */
-  kill: (options?: { tree?: boolean }) => void
+  /**
+   * Kills the process; with `tree`, the processes it started too. Safe to call
+   * more than once. The desktop shell resolves once the kill has run, false
+   * when it failed; nothing rejects.
+   */
+  kill: (options?: { tree?: boolean }) => void | Promise<boolean>
   /**
    * Types into the session's terminal, exactly as given.
    *
@@ -87,6 +91,13 @@ export interface Host {
     onLine: (line: string, stream: "out" | "err") => void
     onExit: (code: number | null) => void
     /**
+     * The host refused to start the process: a program not found, an
+     * argument cmd.exe would read again. Given, it hears the reason instead of
+     * `onLine` — a line on the agent's stderr is hidden by a terminal that is
+     * still live from the pane's last process. `onExit(null)` follows either way.
+     */
+    onRefused?: (reason: string) => void
+    /**
      * Lets the CLI report which conversation it opened.
      *
      * Passed only for an agent whose reporting hook is installed. The host
@@ -110,6 +121,11 @@ export interface Host {
      * the values from the system keychain; they never pass through here.
      */
     secrets?: string[]
+    /**
+     * An account's switch for Claude Code or Codex (`account-plan`,
+     * `account-key`, `spawn_flag_effect` in `pty.rs`); nothing else is taken.
+     */
+    flags?: readonly string[]
   }) => Promise<SpawnedSession>
 
   // -- API keys (see `src-tauri/src/secrets.rs`) ----------------------------
@@ -177,7 +193,8 @@ export interface Host {
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
   mailboxInboxPut?: (pane: string, name: string, text: string) => Promise<void>
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
-  mailboxInboxRead?: (pane: string, name: string) => Promise<boolean>
+  /** Where a long message is: still in the inbox, moved to `handled/` by `ade-msg inbox`, or in neither. */
+  mailboxInboxRead?: (pane: string, name: string) => Promise<InboxFileState>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -187,10 +204,53 @@ export interface Host {
   ttsPiperStatus?: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
   /** Downloads the Piper runtime and the voice, checked against pinned digests. */
   ttsPiperInstall?: (voice: string) => Promise<void>
-  /** One sentence as WAV bytes, from the resident Piper process. */
-  ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+  /** One sentence as WAV bytes, from the resident Piper process. `token` names the request for `ttsPiperCancel`. */
+  /**
+   * One unit as WAV bytes, in the G2P locale of the reply.
+   *
+   * `lang` is what the synthesiser is asked for, and it is the fourth argument
+   * because it was the fourth thing to exist: a Piper voice is one language and
+   * has always known it, so this is for the backends that do not. K4 is the
+   * first to read it, and a host that does not know what to do with it is one
+   * that speaks one language anyway.
+   */
+  ttsPiperSpeak?: (voice: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
+  /**
+   * Skips the queued sentences of the abandoned tokens: each is dropped when
+   * it reaches the front of the queue, and the one in corso finishes alone.
+   */
+  ttsPiperCancel?: (tokens: number[]) => Promise<void>
+  /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
+  ttsPiperStop?: () => Promise<{ busy: boolean }>
+  /**
+   * The same things, for the second local backend, with the provider as a
+   * parameter. They are their own names because the resident process is one per
+   * backend and stopping one is not stopping the other, and they take a provider
+   * because the shape is one — but only `kokoro` is accepted today, and Piper's
+   * own commands stay where they are. A comment that said otherwise was here.
+   *
+   * No `voiceId` on status, install and stop: Kokoro's four voices are one
+   * 219 MB download, so installing them is one operation with nothing to choose.
+   *
+   * The status and the delete keep K6's shapes — `PackStatus | undefined` and a
+   * `void` — because the panel reads them; the host answers more than that
+   * (`sizeBytes` on the status, the bytes freed on the delete) and the two
+   * implementations below fold it in.
+   */
+  ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
+  ttsLocalInstall?: (provider: string) => Promise<void>
+  /** One unit as WAV bytes. `lang` is the G2P language, not a locale. */
+  ttsLocalSpeak?: (provider: string, voiceId: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
+  /** Ends the resident child of the second backend. One child, so no provider. */
+  ttsLocalStop?: () => Promise<void>
+  /** Takes the second backend away again; the host answers with the bytes freed. */
+  ttsLocalDelete?: (provider: string) => Promise<void>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
+  /** K3: how the install of a provider's files is going, running or just ended. */
+  ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
+  /** K3: stops the install under way for a provider; whether there was one. */
+  ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -228,8 +288,12 @@ export interface Host {
    * file into the user's startup folder.
    *
    * Absent in the browser harness, which cannot write at all.
+   *
+   * True only when the host granted the root: it refuses one too broad to be a
+   * project (a home folder, the root of a drive), and a refused root must not
+   * count as granted anywhere else either (audit 0.7.7, D1-2).
    */
-  allowWriteRoot?: (path: string) => Promise<void>
+  allowWriteRoot?: (path: string) => Promise<boolean>
 
   /** Opens a native directory picker. Returns the chosen path, or undefined when the user cancels. */
   pickDirectory?: (title?: string) => Promise<string | undefined>
@@ -261,6 +325,8 @@ export interface Host {
   clearAgentLink?: (nonce: string) => Promise<void>
   /** The last turn start or end the CLI's hook wrote for this spawn, as text, or null. */
   readAgentActivity?: (nonce: string) => Promise<string | null>
+  /** The same for several spawns in one call, in order: what the mail pass reads each round. */
+  readAgentActivities?: (nonces: string[]) => Promise<(string | null)[]>
   /**
    * One CLI's hook configuration, so ADE can show its state and merge into it.
    *
@@ -277,11 +343,21 @@ export interface Host {
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** `nikcli models` or `nikcli agent create …`: the only nikcli commands the bots panel runs. */
   nikcliBot?: (args: string[], cwd?: string) => Promise<RunResult>
+  /**
+   * `claude agents --json`, the only claude command ADE runs by itself: the
+   * CLI's list of its live sessions, which native mail delivery is routed on.
+   */
+  claudeAgents?: (cwd?: string) => Promise<RunResult>
+  /** The first line of `claude --version`, or null: which hook form Claude Code can read (C3). */
+  claudeVersion?: () => Promise<string | null>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
+
+/** What `mailboxInboxRead` answers. Mirrors `mailbox_inbox_read` in `mailbox.rs`. */
+export type InboxFileState = "unread" | "read" | "lost"
 
 /** ADE only: this app, its webview and every agent it started. */
 export interface SystemStats {
@@ -300,6 +376,10 @@ export interface AgentHookFiles {
   configText: string | null
   scriptPath: string
   scriptPresent: boolean
+  /** For a plugin: whether the file on disk is the one this ADE writes. */
+  scriptCurrent?: boolean
+  /** For a hook: the SHA-256 of the script on disk, lowercase hex. */
+  scriptDigest?: string
 }
 
 // Moved to `./ansi` so `./line-stream` can use it without importing the host,
@@ -308,6 +388,7 @@ export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
+import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 
@@ -378,6 +459,20 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
+    async claudeAgents(cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<RunResult>("claude_agents", { cwd })
+      } catch (error) {
+        return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
+      }
+    },
+
+    async claudeVersion() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("claude_version").catch(() => null)
+    },
+
     async deleteBotFile(path) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
@@ -392,14 +487,32 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
         await invoke("allow_write_root", { path })
+        return true
       } catch {
         // Not fatal here: the write itself will refuse, with a message that
         // names the path, which is a better place to learn about it than a
         // silent failure during project discovery.
+        return false
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe }) {
+    async spawn({
+      command,
+      args,
+      cwd,
+      cols,
+      rows,
+      onData,
+      onLine,
+      onExit,
+      onRefused,
+      link,
+      pane,
+      paneToken,
+      secrets,
+      pipe,
+      flags,
+    }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -464,20 +577,26 @@ export async function getHost(): Promise<Host | undefined> {
           paneToken: paneToken ?? null,
           secrets: secrets && secrets.length > 0 ? secrets : null,
           pipe: pipe === true,
+          flags: flags && flags.length > 0 ? [...flags] : null,
         })
       } catch (error) {
         dead = true
         stop()
-        onLine(error instanceof Error ? error.message : String(error), "err")
+        const reason = error instanceof Error ? error.message : String(error)
+        if (onRefused) onRefused(reason)
+        else onLine(reason, "err")
         onExit(null)
       }
 
       return {
         kill: (options) => {
-          if (dead) return
+          if (dead) return Promise.resolve(true)
           dead = true
           stop()
-          void invoke("pty_kill", { id, tree: options?.tree === true }).catch(() => undefined)
+          return invoke("pty_kill", { id, tree: options?.tree === true }).then(
+            () => true,
+            () => false,
+          )
         },
         write: (data) => {
           if (dead) return
@@ -624,9 +743,69 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("tts_open_voice_source", { voiceId: voice })
     },
 
-    async ttsPiperSpeak(voice, text) {
+    async ttsInstallStatus(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text })
+      return invoke<InstallProgress>("tts_install_status", { provider })
+    },
+
+    async ttsInstallCancel(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ cancelled: boolean }>("tts_install_cancel", { provider })
+    },
+
+    /*
+     * The names are K4b's: `tts_local_*` with the provider as a parameter
+     * (Kokoro plan, K4). Until that is in the build the command is missing,
+     * the call fails, and the panel says Kokoro is not available here.
+     */
+    async ttsLocalStatus(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // `sizeBytes` comes with K4b's LocalStatus; until it does, the panel uses the size it knows.
+      const status = await invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", {
+        provider,
+      })
+      if (!status.supported) return undefined
+      return {
+        installed: Boolean(status.installed),
+        ...(typeof status.sizeBytes === "number" ? { sizeBytes: status.sizeBytes } : {}),
+      }
+    },
+
+    async ttsLocalInstall(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_install", { provider })
+    },
+
+    async ttsLocalDelete(provider) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_delete", { provider })
+    },
+
+    // K4b's own two: the panel does not speak, the speaker does, and it needs the
+    // voice id because Kokoro's four voices are numbers inside one model.
+    async ttsLocalSpeak(provider, voiceId, text, token, lang) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_local_speak", { provider, voiceId, text, token, lang })
+    },
+
+    async ttsLocalStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_local_stop")
+    },
+
+    async ttsPiperSpeak(voice, text, token, lang) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text, token, lang })
+    },
+
+    async ttsPiperCancel(tokens) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_piper_cancel", { tokens })
+    },
+
+    async ttsPiperStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ busy: boolean }>("tts_piper_stop")
     },
 
     async mailboxTake() {
@@ -707,7 +886,8 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxInboxRead(pane, name) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<boolean>("mailbox_inbox_read", { pane, name })
+      const state = await invoke<string>("mailbox_inbox_read", { pane, name })
+      return state === "read" || state === "lost" ? state : "unread"
     },
 
     async mailboxResult(id, text) {
@@ -781,6 +961,16 @@ export async function getHost(): Promise<Host | undefined> {
       } catch {
         // Unknown, which is what it is: never read as idle.
         return null
+      }
+    },
+
+    async readAgentActivities(nonces) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<(string | null)[]>("agent_activity_read_many", { nonces })
+      } catch {
+        // Unknown for all of them, as for one.
+        return nonces.map(() => null)
       }
     },
 

@@ -1,13 +1,13 @@
+import { BRAND } from "../brand"
 import type { Command } from "../command/registry"
 import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
 import type { RecentEntry } from "../host/recent"
 import { t } from "../i18n"
+import { SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type AdeView, type Workbench } from "./state"
 
 export interface SurfaceCommand extends Command {
-  /** Why the command cannot run now. Shown instead of hiding the row. */
-  disabledReason?: string
   description?: string
 }
 
@@ -31,6 +31,8 @@ export interface PluginCommandEntry {
 export interface CommandContext {
   workbench: Workbench
   recents: RecentEntry[]
+  /** Whether a recent project's folder is gone: still offered, since choosing it offers to remove it. */
+  missingRecent?: (root: string) => boolean
   hasHost: boolean
   /** Ids of panes with a live process behind them. */
   running: ReadonlySet<string>
@@ -48,6 +50,23 @@ export interface CommandContext {
   pluginCommands?: PluginCommandEntry[]
   /** The sections that can be reached. `VISIBLE_VIEWS` unless a test injects the other branch. */
   views?: readonly AdeView[]
+  /** Whether the focused pane can be suspended now (`canSuspend`); absent when it is not a Claude session. */
+  suspendCheck?: SuspendCheck
+  /** Whether the sidebar is hidden, so the palette says what the command will do. */
+  sidebarHidden?: boolean
+  /** The design proposals still open, with their variants' names: «Design: apri la variante…» (D1). */
+  designVariants?: readonly { k: string; title: string; variants: readonly string[] }[]
+}
+
+/** The palette id of «Design: apri la variante…» for variant `variant` (from 1) of proposal `k`. */
+export function designVariantCommandId(k: string, variant: number): string {
+  // The number first: a key may hold dots.
+  return `design.variant.${variant}.${k}`
+}
+
+export function parseDesignVariantCommand(id: string): { k: string; variant: number } | undefined {
+  const match = /^design\.variant\.(\d+)\.(.+)$/.exec(id)
+  return match ? { k: match[2]!, variant: Number(match[1]) } : undefined
 }
 
 /**
@@ -83,6 +102,31 @@ export function keepsPaletteOpen(commandId: string): boolean {
 }
 
 /**
+ * Whether this command does nothing while a sheet is open (kobalte-overlay, M1).
+ *
+ * A sheet is modal: its focus trap takes back any focus that leaves it. A
+ * command that opens something to type into behind it — the palette, the
+ * launch screen, a pane's title — opened it in plain sight, but every key
+ * still went to the sheet: in Decisioni a digit picked an option and Enter
+ * sent the answer to the agent. While a sheet is open these wait for it to
+ * close (Esc), as everything behind a modal does.
+ */
+export function waitsForSheet(commandId: string): boolean {
+  return commandId === "palette.open" || commandId === "session.new" || commandId === "pane.rename"
+}
+
+/** `run`, doing nothing for the commands that `waitsForSheet` while a sheet is open. */
+export function guardedBySheet(
+  sheetOpen: () => boolean,
+  run: (id: string) => Promise<void>,
+): (id: string) => Promise<void> {
+  return async (id) => {
+    if (sheetOpen() && waitsForSheet(id)) return
+    await run(id)
+  }
+}
+
+/**
  * Every command the palette can offer, given what is true right now.
  *
  * A command that cannot run stays in the list with the reason attached. Removing
@@ -95,6 +139,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
   const focusedPane = workbench.focusedId ? workbench.panes.find((pane) => pane.id === workbench.focusedId) : undefined
   const focusedRuns = !!focusedPane && running.has(focusedPane.id)
   const desktopOnly = hasHost ? undefined : t("palette.desktopOnly")
+  const suspend: SuspendCheck = ctx.suspendCheck ?? { ok: false, reason: "notClaude" }
 
   const commands: SurfaceCommand[] = [
     {
@@ -129,6 +174,18 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       shortcut: shortcutFor("pane.expand", platform),
     },
     {
+      id: "session.suspend",
+      title: t("palette.session.suspend"),
+      group: t("palette.group.session"),
+      keywords: ["sospendi", "pausa", "memoria", "libera", "suspend", "pause", "memory", "free"],
+      enabled: !!focusedPane && suspend.ok,
+      disabledReason: !focusedPane
+        ? t("palette.noFocusedPane")
+        : suspend.ok
+          ? undefined
+          : t(SUSPEND_REASON[suspend.reason]),
+    },
+    {
       id: "pane.rename",
       title: t("palette.pane.rename"),
       group: t("palette.group.pane"),
@@ -159,10 +216,17 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       disabledReason: workbench.view === view ? t("palette.view.here") : undefined,
     })),
     {
+      id: "sidebar.toggle",
+      title: ctx.sidebarHidden ? t("bar.sidebar.show") : t("bar.sidebar.hide"),
+      group: t("palette.group.view"),
+      keywords: ["barra laterale", "colonna", "schermo intero", "sidebar", "full screen", "panel"],
+      shortcut: shortcutFor("sidebar.toggle", platform),
+    },
+    {
       id: "theme.toggle",
       title: t("palette.theme.toggle"),
       group: t("palette.group.view"),
-      keywords: ["chiaro", "scuro", "light", "dark", "theme"],
+      keywords: ["chiaro", "scuro", "vetro", "light", "dark", "glass", "theme"],
       shortcut: shortcutFor("theme.toggle", platform),
     },
     {
@@ -293,9 +357,21 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["decisioni", "registro", "risposte", "rimandate", "chiuse", "bearings", "decisions", "log", "answers"],
     },
     {
+      id: "design.open",
+      title: t("palette.design.open"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "proposte", "varianti", "anteprima", "mockup", "bozza", "proposals", "preview", "variants"],
+    },
+    {
+      id: "design.pane",
+      title: t("palette.design.pane"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "pannello", "registro", "varianti", "anteprime", "panel", "log"],
+    },
+    {
       id: "update.check",
       title: t("palette.update.check"),
-      group: "ADE",
+      group: BRAND.name,
       keywords: ["aggiornamento", "versione", "release", "novità", "installa", "update", "version", "install"],
       enabled: hasHost,
       disabledReason: desktopOnly,
@@ -310,6 +386,49 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     },
   ]
 
+  /*
+   * The folders that are gone, all at once (the Architect, on radice-sparita):
+   * after a cleanup of dozens of folders, one click each is not a way out.
+   * Offered only when there is something to do.
+   */
+  const gonePanes = workbench.panes.filter((pane) => pane.gone && !running.has(pane.id)).length
+  if (gonePanes > 0) {
+    commands.push({
+      id: "panes.closeGone",
+      title: t("palette.panes.closeGone", gonePanes),
+      group: t("palette.group.pane"),
+      keywords: ["sparite", "chiudi", "gone", "close"],
+      enabled: true,
+    })
+  }
+  /*
+   * A variant of a proposal still open, in a browser pane in Design mode
+   * (D1). Until the cards have «Apri grande» (D3), this is the way in.
+   */
+  for (const proposal of ctx.designVariants ?? []) {
+    proposal.variants.forEach((name, index) => {
+      commands.push({
+        id: designVariantCommandId(proposal.k, index + 1),
+        title: t("palette.design.variant", proposal.k, proposal.title, index + 1, name),
+        group: t("palette.group.pane"),
+        keywords: ["design", "variante", "proposta", "apri", "ispeziona", "variant", "proposal", "open", "inspect"],
+        enabled: hasHost,
+        disabledReason: desktopOnly,
+      })
+    })
+  }
+
+  const goneRecents = recents.filter((recent) => ctx.missingRecent?.(recent.root)).length
+  if (goneRecents > 0) {
+    commands.push({
+      id: "recents.forgetGone",
+      title: t("palette.recents.forgetGone", goneRecents),
+      group: t("palette.group.recent"),
+      keywords: ["sparite", "togli", "recenti", "spaces", "gone", "remove"],
+      enabled: true,
+    })
+  }
+
   for (const recent of recents) {
     commands.push({
       id: `project.recent.${recent.root}`,
@@ -317,7 +436,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       group: t("palette.group.recent"),
       enabled: hasHost,
       disabledReason: desktopOnly,
-      description: recent.root,
+      description: ctx.missingRecent?.(recent.root) ? t("palette.recent.missing", recent.root) : recent.root,
     })
   }
 

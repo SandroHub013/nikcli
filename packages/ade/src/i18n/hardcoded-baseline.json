@@ -1,8 +1,10 @@
 {
-  "agent/agent-console.tsx": 3,
-  "settings/sections.tsx": 11,
-  "splash/splash.tsx": 1,
-  "surface/nik-chrome-logo.tsx": 2,
-  "voice/global-shortcut.ts": 1,
-  "voice/host.ts": 1
+  "browser/browser-pane.tsx": 1,
+  "grid/pane.tsx": 2,
+  "shots/tray.tsx": 2,
+  "simulator/simulator-pane.tsx": 1,
+  "surface/workbench.tsx": 2,
+  "video/video-pane.tsx": 2,
+  "voice/ui/voice-hud.tsx": 3,
+  "voice/ui/voice-settings-panel.tsx": 7
 }
