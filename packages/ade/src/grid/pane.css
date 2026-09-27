@@ -1098,9 +1098,13 @@
  * bodies used to be named here one by one, and the first view that was not in
  * the list began underneath the pill. The dock is the single exception — it is
  * the bottom row, the pill is at the top, and clearance inside the dock would
- * only make the dock taller.
+ * only make the dock taller. The «Copiato» toast is the other: it floats in
+ * the bottom corner, and the clearance made it a 62-pixel box with 42 empty
+ * on top of the word (Verifiche, medi-restyle).
  */
-[data-component="session-pane"] > [data-slot="pane-header"] ~ *:not([data-slot="pane-dock"]) {
+[data-component="session-pane"]
+  > [data-slot="pane-header"]
+  ~ *:not([data-slot="pane-dock"]):not([data-slot="pane-toast"]) {
   padding-top: 42px;
 }
 
