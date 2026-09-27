@@ -19,6 +19,7 @@ import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../sess
 import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
+import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
@@ -5060,6 +5061,8 @@ export function Workbench() {
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
       if (isTerminal && resolution.type === "ade") return
+      // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
+      if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
