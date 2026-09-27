@@ -54,6 +54,10 @@ interface EventBase {
   readonly at: string
   /** Who wrote it: a session title, "fable", "utente", "Master". */
   readonly by: string
+  /** The pane that wrote it, when ADE wrote it: the answer goes back there. */
+  readonly fromPane?: string
+  /** That pane's agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly agent?: string
 }
 
 export interface OpenedDesignEvent extends EventBase {
@@ -81,6 +85,17 @@ export interface OpenedDesignEvent extends EventBase {
   readonly order?: number
   /** More than one variant may be picked; needs at least two variants. */
   readonly multi?: true
+  /**
+   * The one sheet as a claude.ai artifact page, published by a Claude Code
+   * session: ADE opens it in the system browser, and «Ho scelto sul foglio»
+   * tells the session to read the choice from the page (notifiche-design).
+   */
+  readonly url?: string
+}
+
+/** A claude.ai page: the only link a proposal's sheet can be. */
+export function isArtifactUrl(url: string): boolean {
+  return /^https:\/\/claude\.ai\/[^\s]+$/i.test(url)
 }
 
 export interface AnsweredDesignEvent extends EventBase {
@@ -169,7 +184,7 @@ export function toEvent(value: unknown): DesignEvent | string {
   if (!at || Number.isNaN(Date.parse(at))) return t("design.log.date")
   const by = text(record.by)
   if (!by) return t("design.log.author")
-  const base = { k, at, by }
+  const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
 
   switch (type as DesignEventType) {
     case "aperta": {
@@ -194,6 +209,8 @@ export function toEvent(value: unknown): DesignEvent | string {
       const newFormat = Boolean(question || why || keeps || recommend || variants.some((variant) => variant.changes))
       // A build that knows none of them shows the context alone: without one it would show an empty card.
       if (newFormat && !context) return t("design.log.contextNeeded")
+      const url = text(record.url)
+      if (url && !isArtifactUrl(url)) return t("design.log.url")
       return compact({
         type: "aperta",
         ...base,
@@ -207,6 +224,7 @@ export function toEvent(value: unknown): DesignEvent | string {
         variants,
         order: order as number | undefined,
         multi: multi ? true : undefined,
+        url,
       }) as OpenedDesignEvent
     }
     case "risposta": {

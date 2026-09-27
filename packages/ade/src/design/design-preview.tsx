@@ -150,37 +150,47 @@ export function previewPlan(
   return { kind: "image", path, src: mediaUrl(path, windows) }
 }
 
-export interface ScaledThumbnail {
+export interface FittedPage {
   readonly scale: number
+  /** What the page takes on screen. */
   readonly width: number
   readonly height: number
+  /** The page's own size, at which the frame lays it out. */
   readonly frameWidth: number
   readonly frameHeight: number
 }
 
 /**
- * Computes scaling factors for a miniature thumbnail fitting within box dimensions (D3).
- * Scales to fit the box width, clipping height to fixed boxH so the top of tall pages is clearly visible.
- * Keeps original frame dimensions for native iframe rendering.
+ * A variant at its own size, made smaller only when the column is narrower,
+ * and never cut (notifiche-design). The miniatures were scaled to a 220-pixel
+ * box and clipped, and the user had to open each one in the browser pane to
+ * see it: «mini sezioni da ingrandire che non si capisce niente».
  */
-export function thumbnailScale(size: PreviewSize, boxW = 330, boxH = 220): ScaledThumbnail {
-  const scale = size.width > 0 ? boxW / size.width : 1
+export function fitScale(size: PreviewSize, columnWidth: number): FittedPage {
+  const scale = size.width > 0 && columnWidth > 0 ? Math.min(1, columnWidth / size.width) : 1
   return {
     scale,
-    width: boxW,
-    height: Math.min(boxH, Math.round(size.height * scale)),
+    width: Math.round(size.width * scale),
+    height: Math.round(size.height * scale),
     frameWidth: size.width,
     frameHeight: size.height,
   }
 }
 
-/** The frame's attributes: static miniature without scripts (sandbox: ""), lazy loading. No `srcdoc`. */
+/**
+ * Scripts and forms, not the same origin: the page runs as it would in a
+ * browser, at an opaque origin that cannot reach ADE (the modes the browser
+ * pane's Design mode gave it, which the one sheet replaces).
+ */
+export const VARIANT_SANDBOX = "allow-scripts allow-forms"
+
+/** The frame's attributes: the page itself, live, from `ade-media`. No `srcdoc`. */
 export function frameProps(plan: { src: string }, size: PreviewSize, title: string) {
   return {
     src: plan.src,
     width: String(size.width),
     height: String(size.height),
-    sandbox: "",
+    sandbox: VARIANT_SANDBOX,
     loading: "lazy" as const,
     title,
   }
@@ -311,33 +321,32 @@ export function DesignPreview(props: {
               </Show>
               <Show when={!failure() && size()}>
                 {(measured) => {
-                  const thumb = () => thumbnailScale(measured(), measuredWidth() > 0 ? measuredWidth() : 330)
+                  const fit = () => fitScale(measured(), measuredWidth())
                   return (
                     <div
                       data-slot="preview-frame-wrap"
                       style={{
-                        width: `${thumb().width}px`,
-                        height: `${thumb().height}px`,
+                        width: `${fit().width}px`,
+                        height: `${fit().height}px`,
                         overflow: "hidden",
                         position: "relative",
-                        "pointer-events": "none",
                       }}
                     >
                       {/*
                         `src` from ade-media, never `srcdoc`: a srcdoc document inherits
                         ADE's CSP, whose release nonce stops every inline script. No
                         `allow-same-origin`: the page stays at an opaque origin, and ADE's
-                        IPC stub in the frame refuses `invoke`. Scaled as miniature (D3).
+                        IPC stub in the frame refuses `invoke`. At its own size, smaller
+                        only when the column is (`fitScale`), and live.
                       */}
                       <iframe
                         data-slot="preview-frame"
                         {...frameProps(current, measured(), title())}
                         style={{
-                          width: `${thumb().frameWidth}px`,
-                          height: `${thumb().frameHeight}px`,
-                          transform: `scale(${thumb().scale})`,
+                          width: `${fit().frameWidth}px`,
+                          height: `${fit().frameHeight}px`,
+                          transform: `scale(${fit().scale})`,
                           "transform-origin": "top left",
-                          "pointer-events": "none",
                           border: "0",
                         }}
                       />

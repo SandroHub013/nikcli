@@ -9,7 +9,8 @@
  */
 import { t } from "../i18n"
 
-export type QueueFamily = "decisions" | "design"
+/** `choices` is the one button of both (notifiche-design); the other two name its halves. */
+export type QueueFamily = "choices" | "decisions" | "design"
 
 export interface QueueCounts {
   /** Waiting for the user: the pill. */
@@ -55,7 +56,7 @@ export function queueShown(counts: QueueCounts): boolean {
 }
 
 export function queueText(family: QueueFamily, counts: QueueCounts): QueueText {
-  const name = t(family === "decisions" ? "decisions.title" : "design.title")
+  const name = t(family === "choices" ? "choices.title" : family === "decisions" ? "decisions.title" : "design.title")
   const queued = counts.queued > 0 ? t("bar.queue.queued", counts.queued) : undefined
   const discarded = counts.discarded > 0 ? t("bar.queue.discarded", counts.discarded) : undefined
   const label = [name, t("bar.queue.forYou", counts.waiting), queued, discarded].filter(Boolean).join(", ")

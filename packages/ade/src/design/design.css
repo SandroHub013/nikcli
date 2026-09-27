@@ -37,16 +37,18 @@
 }
 
 /* The window / sheet */
+/* The one sheet of a proposal (notifiche-design): nearly the whole window, as the page the user chose from. */
 [data-component="design-sheet"] [data-layout="surface"] {
   outline: none;
-  max-width: 900px;
-  width: 92vw;
+  max-width: 1500px;
+  width: 96vw;
+  max-height: 94vh;
 }
 
 [data-component="design-sheet"] [data-slot="sheet-body"] {
   padding: 0 var(--ade-space-5);
   overflow-y: auto;
-  max-height: calc(85vh - 100px);
+  max-height: calc(94vh - 100px);
 }
 
 /* Steps progress indicator: inactive dots styled with strong border token to be visible in dark mode */
@@ -150,11 +152,12 @@
 }
 
 /*
- * Variants: responsive grid without horizontal scrolling so no variant is cut off (A3).
+ * Variants: side by side while each column is at least 420 px, one under the
+ * other below that; never a horizontal scroll (A3). Each page fits its column.
  */
 [data-slot="design-variants"] {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: var(--ade-space-3);
   margin: var(--ade-space-1) 0;
 }
@@ -257,12 +260,11 @@
   margin-bottom: 2px;
 }
 
-/* Scaled miniature preview (D3): 220px fixed height, aligned to top to show page header */
+/* The page at its own size, smaller only when the column is (`fitScale`): no fixed box, nothing cut. */
 [data-slot="variant-preview-wrap"] {
   border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-sm);
   overflow: hidden;
-  height: 220px;
   position: relative;
   background: var(--ade-sunken);
   display: flex;
@@ -282,32 +284,26 @@
 [data-slot="preview-frame-wrap"] {
   overflow: hidden;
   display: block;
-  pointer-events: none;
 }
 
-/* Width and height come from the page's `ade-size`, as attributes. Scaled by transform. */
+/* Width and height come from the page's `ade-size`, as attributes. Live: the page can be tried. */
 [data-slot="preview-frame"] {
   border: 0;
   background: #ffffff;
   display: block;
-  pointer-events: none;
 }
 
+/* An image variant at its own size, as wide as the column at most. */
 [data-slot="preview-image-wrap"] {
   width: 100%;
-  height: 220px;
-  overflow: hidden;
   display: grid;
   place-items: center;
-  pointer-events: none;
 }
 
 [data-slot="preview-image"] {
   max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  height: auto;
   display: block;
-  pointer-events: none;
 }
 
 [data-slot="variant-open-large"] {
@@ -633,4 +629,55 @@
 [data-slot="design-shared-preview"] {
   font-size: 11.5px;
   color: var(--ade-warning, #b7791f);
+}
+
+/* «Scegli questa»: one press chooses (notifiche-design). Neutral, like every button of the sheet. */
+[data-slot="variant-choose"] {
+  align-self: stretch;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="variant-choose"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="variant-choose"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="variant-choose"][data-on="true"] {
+  background: var(--ade-text);
+  border-color: var(--ade-text);
+  color: var(--ade-surface);
+}
+
+[data-slot="variant-choose"]:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* A proposal published as a claude.ai page: where to choose, and the button that says it is done. */
+[data-slot="design-url"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-2) var(--ade-space-3);
+  padding: var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="design-url"] > span {
+  flex: 1 1 240px;
 }

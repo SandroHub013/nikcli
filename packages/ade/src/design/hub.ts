@@ -1,11 +1,11 @@
 import { createSignal } from "solid-js"
-import { againEvent, answerEvent, reopenEvent, togglePick } from "./answer"
-import { appendNoteLine } from "./note-line"
+import { againEvent, answerEvent, reopenEvent, sheetAnswerEvent, togglePick } from "./answer"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
 import { waitsForRecipient } from "../decisions/card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
+import { recipientFor } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
 import type { DesignProposal } from "./state"
@@ -25,6 +25,8 @@ export interface DesignHub {
   readonly register: DesignRegister
   projectRoot?: () => string | undefined
   recipient: () => RecipientStatus
+  /** Who receives this one: the pane that asked while it runs, else the chosen session. */
+  recipientFor: (proposal: DesignProposal) => RecipientStatus
   sessions: () => readonly DeliveryCandidate[]
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
@@ -42,8 +44,6 @@ export interface DesignHub {
    * finds without this mark is cleared (D2 review, MEDIO).
    */
   chosen: (k: string) => boolean
-  /** Adds `line` to the note of `k` on a line of its own, leaving what is written (D2, «Aggiungi alla nota»). */
-  addNoteLine: (k: string, line: string) => void
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
@@ -62,12 +62,8 @@ export interface DesignHub {
    * picked, that session is chosen first.
    */
   again: (proposal: DesignProposal) => Promise<boolean>
-  /**
-   * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
-   * or the pane already showing this proposal. Resolves to why it could
-   * not, or nothing when it opened.
-   */
-  openVariant: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
+  /** «Ho scelto sul foglio»: the choice was made on the claude.ai page; the answer says to read it there. */
+  sheetChosen: (proposal: DesignProposal) => Promise<boolean>
   reopen: (proposal: DesignProposal) => Promise<boolean>
 }
 
@@ -80,7 +76,6 @@ export function createDesignHub(deps: {
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
   onReopened?: (proposal: DesignProposal, deliveredTo?: string, deliveredToId?: string) => void
-  openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
   const [chosenKeys, setChosenKeys] = createSignal<ReadonlySet<string>>(new Set())
@@ -151,6 +146,7 @@ export function createDesignHub(deps: {
     register: deps.register,
     projectRoot: deps.projectRoot,
     recipient: deps.recipient,
+    recipientFor: (proposal) => recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
     sessions: deps.sessions,
     choose: deps.choose,
     delivery: deps.delivery,
@@ -162,10 +158,6 @@ export function createDesignHub(deps: {
       setChosenKeys((keys) => new Set(keys).add(proposal.k))
     },
     chosen: (k) => chosenKeys().has(k),
-    addNoteLine: (k, line) => {
-      const current = draft(k)
-      setDraft(k, { ...current, note: appendNoteLine(current.note, line) })
-    },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
     answer,
@@ -179,7 +171,7 @@ export function createDesignHub(deps: {
     },
     submit: (proposal, press) => {
       const control = submitControl({
-        recipient: deps.recipient(),
+        recipient: recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(proposal.k),
@@ -198,11 +190,12 @@ export function createDesignHub(deps: {
         answer: () => answer(proposal),
       })
     },
+    sheetChosen: (proposal) => record(proposal, sheetAnswerEvent(proposal, draft(proposal.k).note, new Date())),
     again: (proposal) => {
       const event = againEvent(proposal, draft(proposal.k).note, new Date())
       if (typeof event === "string") return record(proposal, event)
       const control = submitControl({
-        recipient: deps.recipient(),
+        recipient: recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(proposal.k),
@@ -217,13 +210,6 @@ export function createDesignHub(deps: {
         setInline(undefined)
       }
       return record(proposal, event)
-    },
-    openVariant: async (proposal, variant) => {
-      const result = await (deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")))
-      if (result) {
-        setProblem(proposal.k, result)
-      }
-      return result
     },
     reopen: (proposal) =>
       write(proposal.k, async () => {

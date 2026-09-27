@@ -244,3 +244,32 @@ export function deliveryState(outbox: readonly OutboxItem[], path: string, propo
   }
   return { state: "in coda" }
 }
+
+/**
+ * Who receives the answer to a question: the pane that asked, while it runs.
+ *
+ * The answer used to go to whoever was chosen in «Risposte a», whoever had
+ * asked. ADE now keeps the asking pane in the event (`fromPane`), so the
+ * answer goes back to it; a question written before that, or one whose pane
+ * is closed, still goes to the chosen session (notifiche-design).
+ */
+export function recipientFor(
+  asker: string | undefined,
+  candidates: readonly DeliveryCandidate[],
+  chosen: RecipientStatus,
+): RecipientStatus {
+  const pane = asker ? candidates.find((candidate) => candidate.id === asker && candidate.running) : undefined
+  return pane ? { state: "pronta", id: pane.id, title: pane.title } : chosen
+}
+
+/** The outbox entry for an answer: addressed to the pane that asked, when ADE knows it. */
+export function answerItem(
+  path: string,
+  asked: { readonly k: string; readonly raisedFrom?: string },
+  answeredAt: string,
+  queuedAt: number,
+): OutboxItem {
+  const item = { path, k: asked.k, answeredAt, queuedAt }
+  // Only the id: a title can be another pane's too, and a closed asker falls back to the chosen session.
+  return asked.raisedFrom ? { ...item, toId: asked.raisedFrom } : item
+}

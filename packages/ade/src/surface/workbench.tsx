@@ -418,9 +418,12 @@ import {
 } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
+import { ChoicesSheet } from "../choices/choices-sheet"
+import { choiceCounts, choiceItems, type ChoiceItem } from "../choices/list"
 import {
   deliveryLine,
   deliveryState,
+  answerItem,
   enqueue,
   markDelivered,
   OUTBOX_KEY,
@@ -448,6 +451,7 @@ import {
   chooseRecipient as chooseDesignRecipient,
   deliveryLine as designDeliveryLine,
   deliveryState as designDeliveryState,
+  answerItem as designAnswerItem,
   enqueue as enqueueDesign,
   markDelivered as markDesignDelivered,
   parseOutbox as parseDesignOutbox,
@@ -462,7 +466,6 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
-import { declaredSize, designForVariant, designPaneFor, openedDesign } from "../design/open-variant"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
 import { registerWrite, withPlace } from "../session/register-write"
@@ -1453,7 +1456,8 @@ export function Workbench() {
       const path = decisionsRegister.path()
       if (!path) return
       saveDecisionsOutbox(
-        enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }),
+        // To the pane that asked, when the event says which (`answerItem`).
+        enqueue(decisionsOutbox(), answerItem(path, decision, event.at, Date.now())),
       )
       void deliverDecisions()
     },
@@ -1602,9 +1606,7 @@ export function Workbench() {
     onAnswered: (proposal, event) => {
       const path = designRegister.path()
       if (!path) return
-      saveDesignOutbox(
-        enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }),
-      )
+      saveDesignOutbox(enqueueDesign(designOutbox(), designAnswerItem(path, proposal, event.at, Date.now())))
       void deliverDesign()
     },
     onReopened: (proposal, deliveredTo, deliveredToId) => {
@@ -1624,7 +1626,6 @@ export function Workbench() {
       )
       void deliverDesign()
     },
-    openVariant: (proposal, variant) => openDesignVariant(proposal, variant),
   })
 
   /*
@@ -1637,6 +1638,13 @@ export function Workbench() {
     onCleanup(() => window.removeEventListener("languagechange", refreshSystemLocale))
   })
 
+  /*
+   * «Da scegliere»: one button and one list for what waits for the user,
+   * decisions and design alike (notifiche-design). An entry opens its own
+   * window at that entry.
+   */
+  const [choicesOpen, setChoicesOpen] = createSignal(false)
+  const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(
     () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "aperta").length ?? 0,
@@ -1672,6 +1680,22 @@ export function Workbench() {
             designHub.delivery(proposal).state === "in coda",
         ).length ?? 0,
   )
+  const choicesCounts = createMemo(() =>
+    choiceCounts(
+      { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
+      { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
+    ),
+  )
+  const choices = createMemo(() =>
+    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? []),
+  )
+  /** An entry of «Da scegliere» opens its own window, at that entry. */
+  const pickChoice = (item: ChoiceItem) => {
+    setChoicesOpen(false)
+    setChoiceStart(item.k)
+    if (item.kind === "decision") setDecisionsOpen(true)
+    else setDesignOpen(true)
+  }
 
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
@@ -1713,59 +1737,6 @@ export function Workbench() {
       }),
       view: "code",
     }))
-  }
-
-  /**
-   * Opens variant `variant` (from 1) of `proposal` in a browser pane in
-   * Design mode (D1), or shows it in the pane already open for the same
-   * proposal. The pane is given the page's path; it makes the URL itself,
-   * through `designUrlFor`. The page's `ade-size` is read first, to be the
-   * pane's viewport. Resolves to why it could not, or nothing.
-   */
-  const openDesignVariant = async (proposal: DesignProposal, variant: number): Promise<string | undefined> => {
-    const found = designForVariant(proposal, variant, project()?.root, grantedRoots())
-    if (!found.ok) {
-      return found.reason === "no-variant"
-        ? t("design.variant.missing", proposal.k, variant)
-        : t("design.variant.notDesign", proposal.k)
-    }
-    const host = await getHost()
-    const html = host?.readTextFile
-      ? await host
-          .readTextFile(found.design.path)
-          .then((file) => file.text)
-          .catch(() => "")
-      : ""
-    const design = openedDesign(found.design, declaredSize(html), Date.now())
-    const title = t("browser.design.label", design.k, "", design.variant)
-    // The URL the layout and the record veil read; the pane loads only what `designUrlFor` gives it.
-    const browserUrl = mediaUrl(design.path)
-    const existing = designPaneFor(wb().panes, proposal.k)
-    if (existing) {
-      setWb((w) => ({
-        ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }),
-        view: "code",
-        focusedId: existing.id,
-      }))
-      return undefined
-    }
-    const newId = newPaneId("bd")
-    setWb((w) => ({
-      ...addPane(w, {
-        id: newId,
-        title,
-        status: "working",
-        model: "—",
-        mode: "browser",
-        browserUrl,
-        browserDesign: design,
-        ...here(),
-        lines: [],
-      }),
-      view: "code",
-      focusedId: newId,
-    }))
-    return undefined
   }
 
   /** Opens the Decisions panel, or focuses the one already open. */
@@ -3669,6 +3640,9 @@ export function Workbench() {
                 : "scrittura non disponibile",
           now: () => new Date(),
           sender: registerAuthor(sender?.title, message.from),
+          // Verified by the token above: the answer goes back to this pane.
+          fromPane: sender ? message.from : undefined,
+          agent: wb().panes.find((pane) => pane.id === message.from)?.agent,
         },
         message,
       )
@@ -4619,6 +4593,7 @@ export function Workbench() {
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
   const sheetOpen = () =>
+    choicesOpen() ||
     decisionsOpen() ||
     designOpen() ||
     voiceSettingsOpen() ||
@@ -6020,12 +5995,11 @@ export function Workbench() {
       )
     } else if (id === "update.check") {
       void checkForUpdates()
-    } else if (id === "decisions.open") {
-      setDecisionsOpen(true)
+    } else if (id === "decisions.open" || id === "design.open") {
+      // Both open the one list; the voice's «apri le decisioni» comes here too.
+      setChoicesOpen(true)
     } else if (id === "decisions.pane") {
       openDecisionsPane()
-    } else if (id === "design.open") {
-      setDesignOpen(true)
     } else if (id === "design.pane") {
       openDesignPane()
     } else if (id === "model.new") {
@@ -6158,10 +6132,11 @@ export function Workbench() {
     } else if (parseDesignVariantCommand(id)) {
       const wanted = parseDesignVariantCommand(id)!
       const proposal = designRegister.state()?.proposals.find((candidate) => candidate.k === wanted.k)
-      const problem = proposal
-        ? await openDesignVariant(proposal, wanted.variant)
-        : t("design.variant.missing", wanted.k, wanted.variant)
-      if (problem) report(problem)
+      // The proposal's one sheet, where every variant is (notifiche-design); the browser pane's Design mode is gone.
+      if (proposal) {
+        setChoiceStart(proposal.k)
+        setDesignOpen(true)
+      } else report(t("design.variant.missing", wanted.k, wanted.variant))
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
@@ -8172,30 +8147,15 @@ export function Workbench() {
             </svg>
           </button>
           {/* Decisions and design proposals waiting for the user: one button
-            each, the same component (DS-polish). Hidden at zero; each opens
-            its panel only when pressed, and says whether it is open. */}
-          <Show
-            when={queueShown({
-              waiting: decisionsWaiting(),
-              queued: decisionsQueued(),
-              discarded: decisionsDiscarded(),
-            })}
-          >
+            for both, «Da scegliere» (notifiche-design; it was one each).
+            Hidden at zero; it opens its list only when pressed. */}
+          <Show when={queueShown(choicesCounts())}>
             <BarQueueButton
-              family="decisions"
-              counts={{ waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() }}
-              open={decisionsOpen()}
+              family="choices"
+              counts={choicesCounts()}
+              open={choicesOpen() || decisionsOpen() || designOpen()}
               theme={theme()}
-              onOpen={() => setDecisionsOpen(true)}
-            />
-          </Show>
-          <Show when={queueShown({ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() })}>
-            <BarQueueButton
-              family="design"
-              counts={{ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() }}
-              open={designOpen()}
-              theme={theme()}
-              onOpen={() => setDesignOpen(true)}
+              onOpen={() => setChoicesOpen(true)}
             />
           </Show>
         </div>
@@ -8850,9 +8810,23 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={choicesOpen()}>
+        <ChoicesSheet
+          items={choices()}
+          onPick={pickChoice}
+          onClose={() => setChoicesOpen(false)}
+          onOpenPanels={() => {
+            setChoicesOpen(false)
+            openDecisionsPane()
+            openDesignPane()
+          }}
+        />
+      </Show>
+
       <Show when={decisionsOpen()}>
         <DecisionsSheet
           hub={decisionsHub}
+          start={choiceStart()}
           onClose={() => setDecisionsOpen(false)}
           onOpenPanel={() => {
             setDecisionsOpen(false)
@@ -8864,6 +8838,7 @@ export function Workbench() {
       <Show when={designOpen()}>
         <DesignSheet
           hub={designHub}
+          start={choiceStart()}
           onClose={() => setDesignOpen(false)}
           onOpenPanel={() => {
             setDesignOpen(false)

@@ -37,6 +37,10 @@ export interface RegisterWriteDeps {
   now: () => Date
   /** The sender pane's title: the event's `by`. */
   sender: string
+  /** The sender pane's id: the answer goes back to it. */
+  fromPane?: string
+  /** The sender pane's agent (`claude-code`, `agy`…). */
+  agent?: string
 }
 
 export interface RegisterMessage {
@@ -56,10 +60,12 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
   }
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) return "errore: il json non è un oggetto"
   const record: Record<string, unknown> = { ...(fields as Record<string, unknown>) }
-  // ADE says when and who: whatever the JSON says about it is ignored.
+  // ADE says when and who, and from which pane: whatever the JSON says about it is ignored.
   delete record.at
   delete record.by
   delete record.type
+  delete record.fromPane
+  delete record.agent
 
   const before = await readText(deps)
   if (typeof before !== "string") return before.error
@@ -68,7 +74,14 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
   if (record.k === undefined && message.op === "aperta") record.k = book.nextKey(before, deps.now())
   if (typeof record.k !== "string" || !record.k.trim()) return "errore: manca la chiave k"
 
-  const event = { ...record, type: message.op, at: deps.now().toISOString(), by: deps.sender }
+  const event = {
+    ...record,
+    type: message.op,
+    at: deps.now().toISOString(),
+    by: deps.sender,
+    fromPane: deps.fromPane,
+    agent: deps.agent,
+  }
   let line: string
   try {
     line = book.serialize(event)
@@ -112,7 +125,7 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
    */
   const own = book.own(after, { k, type: message.op, at: event.at, by: event.by }, deps.now())
   if (own !== true) return `errore: scritta ma non conta: ${own}`
-  return `ok: ${k} ${expected.word}, nel tasto ${message.register === "design" ? "Design" : "Decisioni"} entro 3 s`
+  return `ok: ${k} ${expected.word}, nel tasto Da scegliere entro 3 s`
 }
 
 async function readText(deps: RegisterWriteDeps): Promise<string | { error: string }> {
@@ -244,7 +257,7 @@ export interface RegisterPlace {
  */
 export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
   if (!reply.startsWith("ok")) return reply
-  const button = register === "design" ? "Design" : "Decisioni"
+  const button = "Da scegliere"
   const written = place.written
   const shown = place.shown
   // Two projects of one name are told apart by their folders.

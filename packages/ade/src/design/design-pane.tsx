@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
+import { openExternally } from "../browser/host-bridge"
 import { recipientHint } from "./design-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
@@ -40,7 +41,7 @@ export function DesignPane(props: {
       busy={props.hub.busy(proposal.k)}
       problem={props.hub.problem(proposal.k)}
       control={submitControl({
-        recipient: props.hub.recipient(),
+        recipient: props.hub.recipientFor(proposal),
         sessions: props.hub.sessions(),
         inline: props.hub.inlineRecipient(),
         busy: props.hub.busy(proposal.k),
@@ -49,13 +50,18 @@ export function DesignPane(props: {
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(proposal, "record")}
       onAgain={() => void props.hub.again(proposal)}
-      recipientHint={recipientHint(props.hub.recipient())}
+      recipientHint={recipientHint(props.hub.recipientFor(proposal))}
       now={now()}
       projectRoot={root()}
       onPick={(index) => props.hub.pick(proposal, index)}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
-      onOpenVariant={(variantNumber) => void props.hub.openVariant(proposal, variantNumber)}
+      onChoose={(index) => {
+        props.hub.pick(proposal, index)
+        if (!proposal.multi) void props.hub.submit(proposal, "primary")
+      }}
+      onOpenUrl={() => void openExternally(proposal.url!)}
+      onSheetChosen={() => void props.hub.sheetChosen(proposal)}
     />
   )
 

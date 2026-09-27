@@ -11,6 +11,7 @@ import { answerEvent, deferEvent, reopenEvent } from "./answer"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps, waitsForRecipient } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
+import { recipientFor } from "./delivery"
 import type { AnsweredEvent } from "./log"
 import type { DecisionsRegister } from "./register"
 import type { Decision } from "./state"
@@ -25,6 +26,8 @@ export interface DecisionsHub {
   readonly register: DecisionsRegister
   /** Who the project's answers go to, as the user chose. */
   recipient: () => RecipientStatus
+  /** Who receives this one: the pane that asked while it runs, else the chosen session. */
+  recipientFor: (decision: Decision) => RecipientStatus
   /** The sessions the user can choose from, every project's. */
   sessions: () => readonly DeliveryCandidate[]
   /** Chooses the recipient by pane id; `undefined` chooses nobody. */
@@ -114,6 +117,7 @@ export function createDecisionsHub(deps: {
   return {
     register: deps.register,
     recipient: deps.recipient,
+    recipientFor: (decision) => recipientFor(decision.raisedFrom, deps.sessions(), deps.recipient()),
     sessions: deps.sessions,
     choose: deps.choose,
     delivery: deps.delivery,
@@ -135,7 +139,7 @@ export function createDecisionsHub(deps: {
     },
     submit: (decision, press) => {
       const control = submitControl({
-        recipient: deps.recipient(),
+        recipient: recipientFor(decision.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(decision.k),

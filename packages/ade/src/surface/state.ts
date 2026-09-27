@@ -1,5 +1,4 @@
 import { redactHistory, redactUrl, type BrowserHistory } from "../browser/history"
-import type { PaneDesign } from "../design/open-variant"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
@@ -166,11 +165,6 @@ export interface Pane {
    * rebuilt it on the URL the pane was opened with.
    */
   browserHistory?: BrowserHistory
-  /**
-   * A browser pane in Design mode (D1): the variant it shows. Not saved with
-   * the layout: see `toWorkspaceState`.
-   */
-  browserDesign?: PaneDesign
   /**
    * The session a browser pane belongs to (S46): what the inspector sends
    * goes there. The title is the one it had when bound, for the chip once the
@@ -576,7 +570,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * away, with nobody having asked to see it.
    */
   const browsers = workbench.panes
-    .filter((p) => p.browserUrl && !p.plugin && !p.browserDesign)
+    .filter((p) => p.browserUrl && !p.plugin)
     .map((p) => ({
       id: p.id,
       title: p.title,

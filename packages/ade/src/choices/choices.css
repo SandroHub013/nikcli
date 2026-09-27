@@ -1,0 +1,62 @@
+/* «Da scegliere»: one list of what waits for the user. Head, body, foot and
+   the empty state come from decisions.css; only the entries are here. */
+
+[data-slot="choices-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="choice"] {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "kind title"
+    ". meta";
+  column-gap: var(--ade-space-3);
+  row-gap: 2px;
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="choice"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="choice"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="choice-kind"] {
+  grid-area: kind;
+  align-self: center;
+  padding: 1px 6px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="choice-title"] {
+  grid-area: title;
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-slot="choice-meta"] {
+  grid-area: meta;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-xs);
+}

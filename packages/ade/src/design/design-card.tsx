@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js"
 import { formatDay, isPicked, type Picked } from "./answer"
 import { withoutNumber } from "./note-line"
-import { DesignPreview, previewPlan, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
+import { DesignPreview, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
@@ -27,7 +27,12 @@ export function DesignCard(props: {
   onRecord: () => void
   /** «Altro giro»: the note, as a request for new variants. */
   onAgain: () => void
-  onOpenVariant?: (variantNumber: number) => void
+  /** «Scegli questa»: picks and sends; on a `multi` question, ticks. Without it, it picks. */
+  onChoose?: (index: number) => void
+  /** Opens the proposal's claude.ai page in the system browser. */
+  onOpenUrl?: () => void
+  /** «Ho scelto sul foglio». */
+  onSheetChosen?: () => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
   return (
@@ -65,6 +70,25 @@ export function DesignCard(props: {
 
       <Show when={props.proposal.context}>
         <p data-slot="design-context">{props.proposal.context}</p>
+      </Show>
+
+      {/* The sheet as a claude.ai page, from a Claude Code session: chosen there, told here (notifiche-design). */}
+      <Show when={props.proposal.url}>
+        <div data-slot="design-url">
+          <span>{t("design.url.note")}</span>
+          <button type="button" data-slot="design-ghost" onClick={() => props.onOpenUrl?.()}>
+            {t("design.url.open")}
+          </button>
+          <button
+            type="button"
+            data-slot="design-ghost"
+            data-action="sheet-chosen"
+            disabled={props.busy}
+            onClick={() => props.onSheetChosen?.()}
+          >
+            {t("design.url.chosen")}
+          </button>
+        </div>
       </Show>
 
       <Show when={sharedPreview(props.proposal.variants)}>
@@ -130,47 +154,18 @@ export function DesignCard(props: {
                       {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
                     </span>
                   </div>
-                  <Show when={props.onOpenVariant}>
-                    {(() => {
-                      const plan = () => previewPlan(variant.preview, props.projectRoot, props.proposal.k)
-                      const cannotOpenReason = () => {
-                        const p = plan()
-                        if (p.kind === "error") return p.text
-                        if (p.kind === "none") return t("design.variant.cannotOpen")
-                        return undefined
-                      }
-                      const reason = cannotOpenReason()
-                      return (
-                        <button
-                          type="button"
-                          data-slot="variant-open-large"
-                          disabled={Boolean(reason)}
-                          title={reason ?? t("design.variant.openLarge")}
-                          onClick={() => {
-                            if (!reason) props.onOpenVariant?.(index() + 1)
-                          }}
-                        >
-                          <svg
-                            viewBox="0 0 16 16"
-                            width="12"
-                            height="12"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M2 10v4h4M14 6V2h-4M14 2L9 7M2 14l5-5"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                            />
-                          </svg>
-                          <span>{t("design.variant.openLarge")}</span>
-                        </button>
-                      )
-                    })()}
-                  </Show>
                 </Show>
+
+                {/* One press: the choice, sent; on a question of several, the box ticked (notifiche-design). */}
+                <button
+                  type="button"
+                  data-slot="variant-choose"
+                  data-on={isPicked(props.picked, index()) ? "true" : undefined}
+                  disabled={props.busy}
+                  onClick={() => (props.onChoose ?? props.onPick)(index())}
+                >
+                  {isPicked(props.picked, index()) ? t("design.variant.chosen") : t("design.variant.choose")}
+                </button>
               </div>
             )
           }}

@@ -45,7 +45,7 @@ describe("the queue buttons' words", () => {
     expect(queueShown({ waiting: 0, queued: 1, discarded: 0 })).toBe(true)
   })
 
-  test("one component for both buttons, with the open state and no title in place of the name", () => {
+  test("one component, with the open state and no title in place of the name", () => {
     const button = read("surface", "bar-queue-button.tsx")
     expect(button).toContain("aria-label={text().label}")
     expect(button).toContain("aria-expanded={props.open}")
@@ -54,10 +54,13 @@ describe("the queue buttons' words", () => {
     expect(button).toContain("title={queueTitle(text(), narrow())}")
     expect(button).toContain("matchMedia(NARROW_BAR)")
     const workbench = read("surface", "workbench.tsx")
-    expect(workbench).toContain('family="decisions"')
-    expect(workbench).toContain('family="design"')
-    expect(workbench).toContain("open={decisionsOpen()}")
-    expect(workbench).toContain("open={designOpen()}")
+    // notifiche-design: one button for decisions and design, «Da scegliere», not one each.
+    expect(workbench.match(/<BarQueueButton/g)).toEqual(["<BarQueueButton"])
+    expect(workbench).toContain('family="choices"')
+    expect(workbench).not.toContain('family="decisions"')
+    expect(workbench).not.toContain('family="design"')
+    expect(workbench).toContain("counts={choicesCounts()}")
+    expect(workbench).toContain("onOpen={() => setChoicesOpen(true)}")
     expect(workbench).not.toContain('data-slot="decisions-badge"')
     expect(workbench).not.toContain('data-slot="design-badge"')
   })

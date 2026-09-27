@@ -4,20 +4,29 @@ import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
+import { openExternally } from "../browser/host-bridge"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
 
-export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpenPanel: () => void }) {
+export function DesignSheet(props: {
+  hub: DesignHub
+  onClose: () => void
+  onOpenPanel: () => void
+  /** The key to open at: the entry picked in «Da scegliere». */
+  start?: string
+}) {
   const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
     [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda")
       .length
-  const [index, setIndex] = createSignal(0)
+  const [index, setIndex] = createSignal(
+    Math.max(0, props.start ? open().findIndex((item) => item.k === props.start) : 0),
+  )
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
   let surface: HTMLDivElement | undefined
@@ -103,7 +112,8 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     <Sheet
       component="design-sheet"
       onClose={props.onClose}
-      size="lg"
+      // The one sheet of a proposal: every variant at its own size, one under the other or side by side.
+      size="xl"
       ref={(element) => (surface = element)}
       onKeyDown={onKeyDown}
     >
@@ -154,7 +164,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 busy={props.hub.busy(k)}
                 problem={props.hub.problem(k) ?? (needChoice() === k ? t("design.sheet.needChoice") : undefined)}
                 control={submitControl({
-                  recipient: props.hub.recipient(),
+                  recipient: props.hub.recipientFor(proposal()),
                   sessions: props.hub.sessions(),
                   inline: props.hub.inlineRecipient(),
                   busy: props.hub.busy(k),
@@ -163,18 +173,19 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
                 onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
-                recipientHint={recipientHint(props.hub.recipient())}
+                recipientHint={recipientHint(props.hub.recipientFor(proposal()))}
                 now={new Date()}
                 projectRoot={root()}
                 onPick={(index) => pick(k, index, Boolean(proposal().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                 onSubmit={() => void submit()}
-                onOpenVariant={async (variantNumber) => {
-                  const problem = await props.hub.openVariant(proposal(), variantNumber)
-                  if (!problem) {
-                    props.onClose()
-                  }
+                onChoose={(index) => {
+                  // One press: picked and sent; on a question of several, ticked.
+                  pick(k, index, Boolean(proposal().multi))
+                  if (!proposal().multi) void submit()
                 }}
+                onOpenUrl={() => void openExternally(proposal().url!)}
+                onSheetChosen={() => void props.hub.sheetChosen(proposal()).then((done) => done && surface?.focus())}
                 noteRef={(element) => (note = element)}
               />
             )
