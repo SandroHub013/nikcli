@@ -2,8 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createEffect, createRoot, createSignal, on } from "solid-js"
-import { changedLinesAreSensitive, createFileCover, fileIsSensitive, whenToJudge, type CoverState } from "./sensitive-file"
+import {
+  changedLinesAreSensitive,
+  createFileCover,
+  fileIsSensitive,
+  whenToJudge,
+  type CoverState,
+} from "./sensitive-file"
 import { RECORDING_ATTRIBUTE } from "../record/sensitive"
+import { codeOf } from "../test-support/source-text"
 
 /** A selector list split on its own commas, not on those inside `:is(...)`. */
 function splitSelectors(header: string): string[] {
@@ -47,7 +54,18 @@ describe("fileIsSensitive", () => {
   })
 
   test("the names secrets are kept under", () => {
-    for (const path of ["id_rsa", "~/.ssh/id_ed25519", "server.pem", "tls.key", ".npmrc", ".netrc", ".pypirc", ".git-credentials", "aws-credentials.json", "client_secret.json"]) {
+    for (const path of [
+      "id_rsa",
+      "~/.ssh/id_ed25519",
+      "server.pem",
+      "tls.key",
+      ".npmrc",
+      ".netrc",
+      ".pypirc",
+      ".git-credentials",
+      "aws-credentials.json",
+      "client_secret.json",
+    ]) {
       expect(fileIsSensitive(path, undefined)).toBe(true)
     }
     expect(fileIsSensitive("id_rsa.pub", "ssh-ed25519 AAAA")).toBe(false)
@@ -146,7 +164,9 @@ describe("when the pane is judged (audit 0.7.7, R2)", () => {
 
 describe("the viewers under a covered pane", () => {
   test("an image, a video, a canvas or an SVG is blurred: a colour does not hide its pixels", () => {
-    const rule = sensitiveRules().find((rule) => rule.selector === `html[${RECORDING_ATTRIBUTE}] [data-sensitive] :is(img, video, canvas, svg)`)
+    const rule = sensitiveRules().find(
+      (rule) => rule.selector === `html[${RECORDING_ATTRIBUTE}] [data-sensitive] :is(img, video, canvas, svg)`,
+    )
     expect(rule).toBeDefined()
     expect(rule!.body).toMatch(/filter:\s*blur\(0\.8em\)/)
   })
@@ -157,7 +177,10 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
   const blurRule = () => {
     const text = css()
     const rule = text.slice(text.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="file-view"]`))
-    return { selectors: splitSelectors(rule.slice(0, rule.indexOf("{"))), body: rule.slice(rule.indexOf("{"), rule.indexOf("}")) }
+    return {
+      selectors: splitSelectors(rule.slice(0, rule.indexOf("{"))),
+      body: rule.slice(rule.indexOf("{"), rule.indexOf("}")),
+    }
   }
 
   test("are blurred whole, whatever the file is called; the markdown preview and the editor are not", () => {
@@ -219,12 +242,12 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     const svgIndex = view.indexOf("function SvgView")
     expect(svgIndex).toBeGreaterThan(-1)
     const svgBody = view.slice(svgIndex, view.indexOf("\n}", svgIndex))
-    expect(svgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
+    expect(codeOf(svgBody)).toContain(codeOf("createEffect(on(() => props.src, () => setFailed(false)))"))
 
     const imgIndex = view.indexOf("function ImageView")
     expect(imgIndex).toBeGreaterThan(-1)
     const imgBody = view.slice(imgIndex, view.indexOf("\n}", imgIndex))
-    expect(imgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
+    expect(codeOf(imgBody)).toContain(codeOf("createEffect(on(() => props.src, () => setFailed(false)))"))
   })
 
   test("lint: the file view centres with safe center, never margin: auto on children", () => {

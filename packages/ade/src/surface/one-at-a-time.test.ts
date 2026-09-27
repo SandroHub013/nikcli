@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { oneAtATime } from "./one-at-a-time"
+import { codeOf } from "../test-support/source-text"
 
 /*
  * Review of the frontend, ALTO 3: two reopens of one pane, the second while
@@ -32,16 +33,22 @@ describe("one start per pane at a time (ALTO 3)", () => {
     expect(await guard.run("p2", async () => {})).toBe(true)
     finish()
     await slow
-    await guard.run("p3", async () => { throw new Error("spawn") }).catch(() => undefined)
+    await guard
+      .run("p3", async () => {
+        throw new Error("spawn")
+      })
+      .catch(() => undefined)
     expect(guard.busy("p3")).toBe(false)
   })
 
   test("lint: reopen and the restore start a pane through the reopening guard (ALTO 3)", () => {
     const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
     const reopen = source.slice(source.indexOf("const reopen = async "), source.indexOf("const reopenPane = async "))
-    expect(reopen).toContain("reopening.run(given.id, () => reopenPane(given, line, claims))")
-    expect(source).toContain(
-      'void reopening.run(session.pane.id, () => startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan))',
+    expect(codeOf(reopen)).toContain(codeOf("reopening.run(given.id, () => reopenPane(given, line, claims))"))
+    expect(codeOf(source)).toContain(
+      codeOf(
+        'void reopening.run(session.pane.id, () => startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan))',
+      ),
     )
   })
 })

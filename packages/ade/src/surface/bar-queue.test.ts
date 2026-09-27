@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
 import { NARROW_BAR, queueShown, queueText, queueTitle } from "./bar-queue"
+import { codeOf } from "../test-support/source-text"
 
 /*
  * DS-polish, piece 1: the bar. The queue buttons speak one grammar, their
@@ -27,7 +28,12 @@ describe("the queue buttons' words", () => {
     }
     const design = queueText("design", { waiting: 3, queued: 2, discarded: 1 })
     expect(design.label).toBe("Design, 3 per te, 2 in coda, 1 scartata")
-    expect([design.name, design.pill, design.queued, design.discarded]).toEqual(["Design", "3", "2 in coda", "1 scartata"])
+    expect([design.name, design.pill, design.queued, design.discarded]).toEqual([
+      "Design",
+      "3",
+      "2 in coda",
+      "1 scartata",
+    ])
     setLocalePreference("en")
     expect(queueText("decisions", { waiting: 2, queued: 0, discarded: 0 }).label).toBe("Decisions, 2 for you")
     setLocalePreference(before)
@@ -82,7 +88,9 @@ describe("the bar's layout", () => {
   }
 
   test("a grid whose left side gives way first; the middle is in the flow", () => {
-    expect(rule('[data-slot="ade-bar"]')).toContain("grid-template-columns: minmax(0, max-content) minmax(max-content, 1fr) max-content")
+    expect(rule('[data-slot="ade-bar"]')).toContain(
+      "grid-template-columns: minmax(0, max-content) minmax(max-content, 1fr) max-content",
+    )
     expect(rule('[data-slot="ade-bar-center"]')).not.toContain("position: absolute")
     expect(css).not.toContain("--ade-bar-offset")
   })
@@ -90,8 +98,10 @@ describe("the bar's layout", () => {
   test("«Nuovo pannello» keeps its place in every view, unseen where it does nothing", () => {
     expect(rule('[data-slot="ade-menu-anchor"][data-idle]')).toContain("visibility: hidden")
     const workbench = read("surface", "workbench.tsx")
-    expect(workbench).toContain('data-idle={showsNewPane(wb().view) ? undefined : "true"} inert={!showsNewPane(wb().view)}')
-    expect(workbench).not.toContain("<Show when={showsNewPane(wb().view)}>")
+    expect(codeOf(workbench)).toContain(
+      codeOf('data-idle={showsNewPane(wb().view) ? undefined : "true"} inert={!showsNewPane(wb().view)}'),
+    )
+    expect(codeOf(workbench)).not.toContain(codeOf("<Show when={showsNewPane(wb().view)}>"))
   })
 
   test("the left side has two weights and no capitals spaced out", () => {
@@ -117,7 +127,9 @@ describe("the bar's contrasts", () => {
     return [match[1]!, match[2]!]
   }
   const luminance = (hex: string) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    const [r, g, b] = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
     return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
   }
   const ratio = (a: string, b: string) => {

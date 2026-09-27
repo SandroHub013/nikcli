@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { it } from "../../i18n/it"
 import { en } from "../../i18n/en"
+import { codeOf } from "../../test-support/source-text"
 
 /*
  * «Chi può scrivere» and the remote commands said Telegram on every platform.
@@ -14,7 +15,8 @@ const KEYS = ["gateway.panel.nobody", "gateway.panel.remoteOn", "gateway.panel.r
 
 describe("the gateway panel speaks of the platform it shows", () => {
   test("lint: every gateway panel text is picked by the platform shown, with that platform's own wording", () => {
-    for (const key of KEYS) expect(panel).toContain(`said(t("${key}"), t("${key}Discord"), t("${key}Slack"))`)
+    for (const key of KEYS)
+      expect(codeOf(panel)).toContain(codeOf(`said(t("${key}"), t("${key}Discord"), t("${key}Slack"))`))
   })
 
   test("Discord's and Slack's never send you to Telegram, in either language", () => {

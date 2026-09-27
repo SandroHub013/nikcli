@@ -2,8 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { readReportLine } from "../session/report"
 import { join } from "node:path"
+import { callsTo, codeOf } from "../test-support/source-text"
 import { translate } from "../i18n"
-import { MAX_NOTICES, NOTICE_MAX_CHARS, addPane, createWorkbench, toWorkspaceState, withPaneNotice, type Pane } from "./state"
+import {
+  MAX_NOTICES,
+  NOTICE_MAX_CHARS,
+  addPane,
+  createWorkbench,
+  toWorkspaceState,
+  withPaneNotice,
+  type Pane,
+} from "./state"
 
 /*
  * Prove dal vivo 2, difetto A: the restore's notes («già aperta», «aperta
@@ -26,7 +35,7 @@ describe("the notes over a terminal", () => {
 
   test("are shown over the terminal, where the transcript is hidden, and can be dismissed", () => {
     const pane = read("grid", "pane.tsx")
-    expect(pane).toContain('<Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>')
+    expect(pane).toContain("<Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>")
     expect(pane).toContain('data-slot="pane-notice"')
     expect(pane).toContain("props.onDismissNotices?.()")
     const renderer = read("surface", "pane-renderer.tsx")
@@ -36,14 +45,30 @@ describe("the notes over a terminal", () => {
 
   test("carry every note of the restore, and none of them only in the transcript", () => {
     const workbench = read("surface", "workbench.tsx")
-    for (const key of ["resume.shared", "resume.alsoOpen", "resume.otherFolder", "resume.noneHere", "resume.none", "resume.noMint"]) {
+    for (const key of [
+      "resume.shared",
+      "resume.alsoOpen",
+      "resume.otherFolder",
+      "resume.noneHere",
+      "resume.none",
+      "resume.noMint",
+    ]) {
       expect(workbench).toMatch(new RegExp(`tellPane\\([^\\n]*t\\("${key.replace(".", "\\.")}"`))
       expect(workbench).not.toMatch(new RegExp(`appendLine\\([^\\n]*t\\("${key.replace(".", "\\.")}"`))
     }
   })
 
   test("are not saved with the workspace", () => {
-    const pane: Pane = { id: "p1", title: "T", status: "idle", model: "nikcli", mode: "auto", lines: [], workspaceId: "w1", notices: ["nota da non salvare"] }
+    const pane: Pane = {
+      id: "p1",
+      title: "T",
+      status: "idle",
+      model: "nikcli",
+      mode: "auto",
+      lines: [],
+      workspaceId: "w1",
+      notices: ["nota da non salvare"],
+    }
     const saved = JSON.stringify(toWorkspaceState(addPane(createWorkbench(), pane)))
     expect(saved).not.toContain("nota da non salvare")
   })
@@ -73,7 +98,10 @@ describe("ADE's own notes are not the agent's report", () => {
     expect(workbench).toContain('appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")')
     expect(workbench).toContain('appendLine(id, text, "note", "ade")')
     // The report and the permission watch come after the line is kept, and only for the agent's.
-    const body = workbench.slice(workbench.indexOf("const appendLine = "), workbench.indexOf("const watchForPermission = "))
+    const body = workbench.slice(
+      workbench.indexOf("const appendLine = "),
+      workbench.indexOf("const watchForPermission = "),
+    )
     expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("watchForPermission(id, text)"))
     expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("readReportLine"))
   })
@@ -82,11 +110,16 @@ describe("ADE's own notes are not the agent's report", () => {
     const workbench = read("surface", "workbench.tsx")
     // A message, a reply, an update, a memory line: another session's text, in a note ADE writes.
     for (const key of ["note.messageFrom", "note.replyFrom", "note.updateFrom", "note.memory"]) {
-      const calls = workbench.split("\n").filter((line) => line.includes("appendLine(") && line.includes(`"${key}"`))
-      expect([key, calls.length > 0, calls.every((line) => line.trimEnd().endsWith('"note", "ade")'))]).toEqual([key, true, true])
+      // Whole calls, not lines: prettier spreads a long call over several.
+      const calls = callsTo(workbench, "appendLine").filter((call) => call.includes(`"${key}"`))
+      expect([key, calls.length > 0, calls.every((call) => call.endsWith(codeOf('"note", "ade")')))]).toEqual([
+        key,
+        true,
+        true,
+      ])
     }
     // And no note of ADE's is left to be read as the agent's report.
-    const agentNotes = workbench.split("\n").filter((line) => /appendLine\(.*"note"\)+$/.test(line.trimEnd()))
+    const agentNotes = callsTo(workbench, "appendLine").filter((call) => call.endsWith('"note")'))
     expect(agentNotes).toEqual([])
   })
 })
@@ -100,9 +133,10 @@ describe("ADE's own notes are not the agent's report", () => {
  */
 describe("the notes that go over the terminal", () => {
   const workbench = read("surface", "workbench.tsx")
-  const lines = workbench.split("\n")
-  const told = (key: string) => lines.filter((line) => line.includes(`"${key}"`) && /tellPane\(|\bsay\(/.test(line))
-  const onlyWritten = (key: string) => lines.filter((line) => line.includes(`"${key}"`) && line.includes("appendLine("))
+  // Whole calls, not lines: prettier spreads a long call over several.
+  const told = (key: string) =>
+    [...callsTo(workbench, "tellPane"), ...callsTo(workbench, "say")].filter((call) => call.includes(`"${key}"`))
+  const onlyWritten = (key: string) => callsTo(workbench, "appendLine").filter((call) => call.includes(`"${key}"`))
 
   test("errors, and what the user has to do, are told, not only written", () => {
     const keys = [
@@ -123,15 +157,23 @@ describe("the notes that go over the terminal", () => {
       expect([key, told(key).length > 0, onlyWritten(key)]).toEqual([key, true, []])
     }
     // The failed auto-close is told; the one that closed is only written.
-    expect(workbench).toContain('const say = "error" in outcome ? tellPane : (id: string, text: string) => appendLine(id, text, "note", "ade")')
+    expect(codeOf(workbench)).toContain(
+      codeOf(
+        'const say = "error" in outcome ? tellPane : (id: string, text: string) => appendLine(id, text, "note", "ade")',
+      ),
+    )
   })
 
   test("a start that failed says why, and no bare error goes to the transcript alone", () => {
     expect(workbench).toContain('tellPane(paneId, t("pane.startFailed", String(e)))')
     expect(workbench).toContain('tellPane(paneId, t("pane.connectFailed", String(e)))')
     // A start the host refused (a program not found) comes back as a reason, not as the agent's stderr.
-    expect(workbench).toMatch(/onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.startFailed", reason\)\)/)
-    expect(workbench).toMatch(/onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.connectFailed", reason\)\)/)
+    expect(workbench).toMatch(
+      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.startFailed", reason\)\)/,
+    )
+    expect(workbench).toMatch(
+      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.connectFailed", reason\)\)/,
+    )
     const shell = read("host", "shell.ts")
     expect(shell).toContain("if (onRefused) onRefused(reason)")
     expect(workbench).not.toMatch(/appendLine\(paneId, String\(e\)\)/)

@@ -2,8 +2,16 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { t } from "../i18n"
-import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants, parseModelCatalog } from "./catalog"
+import {
+  botModelLabel,
+  catalogFree,
+  catalogFromText,
+  modelGone,
+  nikcliModelVariants,
+  parseModelCatalog,
+} from "./catalog"
 import { modelsFromConfigProviders } from "../chat/model"
+import { codeOf } from "../test-support/source-text"
 
 /* The shape of `nikcli models opencode --verbose`, with made-up models. */
 const record = (id: string, input: number, output: number) =>
@@ -78,7 +86,9 @@ describe("the bot form's model list", () => {
     expect(form).toContain("const botModelSource = createModelSource(botModels)")
     expect(form).toContain("onOpen={() => props.catalog?.open()}")
     expect(form).toContain("onRetry={() => props.catalog?.retry()}")
-    expect(form).toContain("if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }")
+    expect(form).toContain(
+      "if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }",
+    )
     expect(form).not.toMatch(/createResource\(\s*\(\) => projectRoot\(\) \?\? "",\s*\(cwd\) => botModels/)
   })
 })
@@ -103,7 +113,10 @@ describe("a nikcli model's efforts, from its catalog", () => {
   const load = async (provider: string) => (provider === "openrouter" ? OPENROUTER : "")
 
   test("the variants a model has; none for one without; unknown for one not listed or unread", async () => {
-    expect(parseModelCatalog(OPENROUTER).get("openrouter/google/gemma-4-31b-it:free")?.variants).toEqual(["none", "thinking"])
+    expect(parseModelCatalog(OPENROUTER).get("openrouter/google/gemma-4-31b-it:free")?.variants).toEqual([
+      "none",
+      "thinking",
+    ])
     expect(await nikcliModelVariants("openrouter/google/gemma-4-31b-it:free", load)).toEqual(["none", "thinking"])
     expect(await nikcliModelVariants("openrouter/plain/model:free", load)).toEqual([])
     expect(await nikcliModelVariants("openrouter/missing/one", load)).toBeUndefined()
@@ -115,16 +128,30 @@ describe("a nikcli model's efforts, from its catalog", () => {
   test("lint: the form offers the model's variants, not a fixed list (chat-bot-facili, pezzo 0)", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     // Since pezzo 4 the form and the composer's chip share `createEfforts`.
-    expect(form).toContain("const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))")
-    expect(form).toContain("(name) => nikcliModelVariants(name, loadCatalog),")
+    expect(codeOf(form)).toContain(
+      codeOf(
+        "const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))",
+      ),
+    )
+    expect(codeOf(form)).toContain(codeOf("(name) => nikcliModelVariants(name, loadCatalog),"))
     // This model's only: a resource keeps the last model's value when the model is cleared (A occhio).
-    expect(form).toContain('variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,')
+    expect(codeOf(form)).toContain(
+      codeOf(
+        'variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,',
+      ),
+    )
     // The catalog's first: the provider's CLI only for a model it does not list.
-    expect(form).toContain("variantsOf(input().models, parseModelRef(model()))")
-    expect(form).toContain("levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}")
-    expect(form).not.toContain("when={runner().efforts.length > 0}")
+    expect(codeOf(form)).toContain(codeOf("variantsOf(input().models, parseModelRef(model()))"))
+    expect(codeOf(form)).toContain(
+      codeOf("levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}"),
+    )
+    expect(codeOf(form)).not.toContain(codeOf("when={runner().efforts.length > 0}"))
     // Said under the row, the whole width: the effort's column cut it to «predef» (A occhio).
-    expect(form).toContain('<span data-slot="bots-hint" data-state="warn">\n          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}')
+    expect(codeOf(form)).toContain(
+      codeOf(
+        '<span data-slot="bots-hint" data-state="warn">\n          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}',
+      ),
+    )
   })
 })
 
@@ -152,12 +179,17 @@ describe("the whole CLI catalog as the one catalog", () => {
     const source = catalogFromText(TEXT)
     expect(source.providers.map((provider) => provider.id)).toEqual(["openrouter", "opencode"])
     const models = modelsFromConfigProviders(source)
-    expect(models.map((model) => [`${model.providerID}/${model.modelID}`, model.name, model.free, model.variants])).toEqual([
+    expect(
+      models.map((model) => [`${model.providerID}/${model.modelID}`, model.name, model.free, model.variants]),
+    ).toEqual([
       ["openrouter/qwen/qwen3-coder:free", "Qwen3 Coder", true, ["low", "high"]],
       ["opencode/space-bunny-free", "Space Bunny", true, []],
       ["opencode/gpt-x", "GPT X", false, []],
     ])
-    expect(modelsFromConfigProviders(source, { isTest: true }).map((model) => model.modelID)).toEqual(["qwen/qwen3-coder:free", "space-bunny-free"])
+    expect(modelsFromConfigProviders(source, { isTest: true }).map((model) => model.modelID)).toEqual([
+      "qwen/qwen3-coder:free",
+      "space-bunny-free",
+    ])
   })
 
   test("nothing read is an empty catalog", () => {
@@ -167,7 +199,9 @@ describe("the whole CLI catalog as the one catalog", () => {
 
 /* Review of bot-riquadro, a: nex-n2.5-mini:free left the catalog, and a bot pinned to it answers mute. */
 describe("a bot's model gone from its provider's catalog", () => {
-  const OPENROUTER = ["openrouter/google/gemma-4-31b-it:free", "{", '  "id": "google/gemma-4-31b-it:free"', "}"].join("\n")
+  const OPENROUTER = ["openrouter/google/gemma-4-31b-it:free", "{", '  "id": "google/gemma-4-31b-it:free"', "}"].join(
+    "\n",
+  )
 
   test("a model the provider's catalog lacks is gone; one it lists is not", async () => {
     const load = async (provider: string) => (provider === "openrouter" ? OPENROUTER : "")
@@ -177,7 +211,11 @@ describe("a bot's model gone from its provider's catalog", () => {
 
   test("a catalog that cannot be read, or is empty, or a name without a provider: not known", async () => {
     expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => "")).toBeUndefined()
-    expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => { throw new Error("no nikcli") })).toBeUndefined()
+    expect(
+      await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => {
+        throw new Error("no nikcli")
+      }),
+    ).toBeUndefined()
     expect(await modelGone("sonnet", async () => OPENROUTER)).toBeUndefined()
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { rowsInside, terminalBox, watchCellSize, type ScaleWindow, type TerminalBox } from "./fit-rows"
+import { codeOf } from "../test-support/source-text"
 
 /*
  * ade/pannello-righe: measured live in ADE Test, a Claude Code pane at 1800 px.
@@ -9,7 +10,14 @@ import { rowsInside, terminalBox, watchCellSize, type ScaleWindow, type Terminal
  * for the header pill, and cells 17.59 px tall. FitAddon proposed 47 rows,
  * floor(836 / 17.59); the last row ended at 923 px, under a box ending at 890.
  */
-const PANE: TerminalBox = { height: 836, borderBox: true, paddingTop: 42, paddingBottom: 0, borderTop: 0, borderBottom: 0 }
+const PANE: TerminalBox = {
+  height: 836,
+  borderBox: true,
+  paddingTop: 42,
+  paddingBottom: 0,
+  borderTop: 0,
+  borderBottom: 0,
+}
 const CELL = 17.59
 
 describe("the rows a terminal box holds", () => {
@@ -85,7 +93,14 @@ function fakeTerminal() {
 describe("a new scale, the same box", () => {
   test("the rows are counted again when the cell changes, and the last one is back inside", () => {
     // 42 px of padding and 21 rows of 17.61 px fit a 413 px box; of 18 px they end at 420.
-    const box: TerminalBox = { height: 413, borderBox: true, paddingTop: 42, paddingBottom: 0, borderTop: 0, borderBottom: 0 }
+    const box: TerminalBox = {
+      height: 413,
+      borderBox: true,
+      paddingTop: 42,
+      paddingBottom: 0,
+      borderTop: 0,
+      borderBottom: 0,
+    }
     let cell = 17.61
     let rows = rowsInside(box, cell)
     expect(rows).toBe(21)
@@ -148,7 +163,9 @@ describe("a new scale, the same box", () => {
     const start = registry.indexOf("export function attachTerminal(")
     expect(start).toBeGreaterThan(-1)
     const body = registry.slice(start)
-    expect(body.includes("const stopCellWatch = watchCellSize(session.terminal, () => applyFit()")).toBe(true)
+    expect(
+      codeOf(body).includes(codeOf("const stopCellWatch = watchCellSize(session.terminal, () => applyFit()")),
+    ).toBe(true)
     const detach = body.indexOf("const detach = () => {")
     expect(detach).toBeGreaterThan(-1)
     expect(body.slice(detach, detach + 200).includes("stopCellWatch()")).toBe(true)

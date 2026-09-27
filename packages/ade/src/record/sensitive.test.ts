@@ -11,6 +11,28 @@ import {
 
 const src = join(import.meta.dir, "..")
 
+/**
+ * A rule's selector list, one selector each, written as `SENSITIVE_PARTS`
+ * writes them. Split on the commas outside parentheses, since prettier breaks
+ * a long `:is(…)` over lines and a comma inside it is not a new selector; each
+ * one on a single line, with no space just inside a parenthesis.
+ */
+function selectorList(header: string): string[] {
+  const selectors: string[] = []
+  let depth = 0
+  let from = 0
+  for (let at = 0; at < header.length; at++) {
+    if (header[at] === "(") depth++
+    else if (header[at] === ")") depth--
+    else if (header[at] === "," && depth === 0) {
+      selectors.push(header.slice(from, at))
+      from = at + 1
+    }
+  }
+  selectors.push(header.slice(from))
+  return selectors.map((selector) => selector.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim())
+}
+
 /** Every .tsx under src, so a field cannot hide in a file this test forgot. */
 function sources(dir = src): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -133,13 +155,22 @@ describe("record/sensitive", () => {
       .map((header) => header.slice(header.includes("*/") ? header.lastIndexOf("*/") + 2 : 0).trim())
       .filter((header) => header.startsWith(prefix))
       // The covers of D68 (terminal rows, transcript, screenshots), R2 (viewers) and D78 (browser veil and frame) are not field covers: they have their own tests.
-      .filter((header) => !/\.xterm|pane-transcript|shot-image|:is\(img, video, canvas, svg\)|file-view|video-element|browser-record-veil|browser-frame/.test(header))
-      .map((header) => header.split(new RegExp(",\\r?\\n")).map((line) => line.trim().slice(prefix.length)))
+      .filter(
+        (header) =>
+          !/\.xterm|pane-transcript|shot-image|:is\(img, video, canvas, svg\)|file-view|video-element|browser-record-veil|browser-frame/.test(
+            header,
+          ),
+      )
+      .map((header) => selectorList(header).map((selector) => selector.slice(prefix.length)))
     // The last block covers the children of a zone; it is not a part.
     const extra = ["[data-sensitive] *", `[${SECRET_ZONE_ATTRIBUTE}] *`]
     expect(blocks.length).toBe(4)
     for (const written of blocks) {
-      const suffix = written[0].endsWith("::selection") ? "::selection" : written[0].endsWith("::placeholder") ? "::placeholder" : ""
+      const suffix = written[0].endsWith("::selection")
+        ? "::selection"
+        : written[0].endsWith("::placeholder")
+          ? "::placeholder"
+          : ""
       const bare = written.map((selector) => selector.slice(0, selector.length - suffix.length))
       if (bare.join() === extra.join()) continue
       for (const selector of bare) {

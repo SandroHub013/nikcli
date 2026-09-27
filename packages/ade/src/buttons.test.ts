@@ -66,7 +66,8 @@ describe("the button tokens", () => {
    */
   test("hover and press darken in the glass theme, because white is spent", () => {
     const glass = rules(index.text, ':root[data-theme="glass"]').join("\n")
-    expect(glass).toContain("--ade-hover: rgba(0, 0, 0, 0.10)")
+    // 0.10 or 0.1, which is how prettier writes it.
+    expect(glass).toMatch(/--ade-hover: rgba\(0, 0, 0, 0\.10?\)/)
     expect(glass).toContain("--ade-active: rgba(0, 0, 0, 0.18)")
   })
 })
@@ -95,7 +96,10 @@ describe("every sheet", () => {
     for (const { path, text } of CSS) {
       for (const [index, line] of text.split("\n").entries()) {
         if (!line.includes(":focus-visible")) continue
-        const body = text.split("\n").slice(index, index + 8).join("\n")
+        const body = text
+          .split("\n")
+          .slice(index, index + 8)
+          .join("\n")
         const declarations = body.slice(0, body.indexOf("}") + 1)
         const outline = declarations.match(/outline:\s*([^;]+);/)
         if (outline && !/^none$/.test(outline[1]!.trim())) rolled.push(`${path}: ${outline[1]!.trim()}`)
@@ -114,7 +118,9 @@ describe("every sheet", () => {
 
     // Both should use :focus-visible with the shared ring
     expect(ext.text).toMatch(/\[data-slot="ext-search"\]:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
-    expect(keys.text).toMatch(/\[data-slot="keys-field"\]\s*input:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
+    expect(keys.text).toMatch(
+      /\[data-slot="keys-field"\]\s*input:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/,
+    )
   })
 
   test("uses --ade-radius-full instead of 999px, token radii instead of 6px, and tokens for B2 spacings (polish B2)", () => {
@@ -157,8 +163,9 @@ describe("the button scale", () => {
 
   for (const [selector, height] of Object.entries(SCALED)) {
     test(`${selector} is ${height}px, and says so once`, () => {
-      const heights = CSS.flatMap(({ text }) => rules(text, selector))
-        .flatMap((body) => body.match(/height:\s*(\d+)px/g) ?? [])
+      const heights = CSS.flatMap(({ text }) => rules(text, selector)).flatMap(
+        (body) => body.match(/height:\s*(\d+)px/g) ?? [],
+      )
       expect(heights).toContain(`height: ${height}px`)
     })
   }

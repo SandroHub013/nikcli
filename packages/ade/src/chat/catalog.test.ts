@@ -13,6 +13,7 @@ import {
   type RecentStorage,
 } from "./model"
 import { t } from "../i18n"
+import { codeOf } from "../test-support/source-text"
 
 /*
  * Composer-chip, pezzo 1: one catalog for the Chat and the bots, from
@@ -51,7 +52,12 @@ const CONFIGURED = {
           capabilities: { toolcall: true, output: { text: true } },
           variants: { high: {} },
         },
-        "some/tts": { id: "some/tts", providerID: "openrouter", name: "Voce", capabilities: { toolcall: false, output: { text: false } } },
+        "some/tts": {
+          id: "some/tts",
+          providerID: "openrouter",
+          name: "Voce",
+          capabilities: { toolcall: false, output: { text: false } },
+        },
       },
     },
   ],
@@ -63,9 +69,20 @@ const QWEN = { providerID: "openrouter", modelID: "qwen/qwen3-coder:free" }
 describe("the catalog from /config/providers", () => {
   test("chat models only, with a name to read, free or paid, and their variants", () => {
     const models = modelsFromConfigProviders(CONFIGURED)
-    expect(models.map((model) => model.id)).toEqual(["qwen/qwen3-coder:free", "nvidia/nemotron:free", "anthropic/claude-sonnet-5"])
+    expect(models.map((model) => model.id)).toEqual([
+      "qwen/qwen3-coder:free",
+      "nvidia/nemotron:free",
+      "anthropic/claude-sonnet-5",
+    ])
     const [qwen, nemotron, sonnet] = models
-    expect(qwen).toMatchObject({ name: "Qwen3 Coder", free: true, context: 262_000, reasoning: true, tools: true, variants: ["low", "medium", "high"] })
+    expect(qwen).toMatchObject({
+      name: "Qwen3 Coder",
+      free: true,
+      context: 262_000,
+      reasoning: true,
+      tools: true,
+      variants: ["low", "medium", "high"],
+    })
     expect(qwen!.label).toBe(`Qwen3 Coder · ${t("chat.model.free")}`)
     expect(nemotron).toMatchObject({ name: "Nemotron", free: true, reasoning: false, variants: [] })
     expect(sonnet).toMatchObject({ free: false, variants: ["high"] })
@@ -114,8 +131,15 @@ describe("the recent models, per project", () => {
   test("newest first, once each, at most five, per folder whatever its spelling", () => {
     const storage = memory()
     const root = "C:\\Progetti\\app"
-    for (const id of ["a", "b", "c", "a", "d", "e", "f"]) rememberModel(storage, root, { providerID: "openrouter", modelID: `${id}:free` })
-    expect(recentModels(storage, "c:/progetti/app/").map((ref) => ref.modelID)).toEqual(["f:free", "e:free", "d:free", "a:free", "c:free"])
+    for (const id of ["a", "b", "c", "a", "d", "e", "f"])
+      rememberModel(storage, root, { providerID: "openrouter", modelID: `${id}:free` })
+    expect(recentModels(storage, "c:/progetti/app/").map((ref) => ref.modelID)).toEqual([
+      "f:free",
+      "e:free",
+      "d:free",
+      "a:free",
+      "c:free",
+    ])
     expect(RECENT_MODELS_MAX).toBe(5)
     expect(recentModels(storage, "C:\\Progetti\\altro")).toEqual([])
   })
@@ -132,13 +156,15 @@ describe("the recent models, per project", () => {
 describe("the Chat reads the one catalog", () => {
   test("lint: the Chat reads the catalog from /config/providers and validates the model against it before a send", () => {
     const connection = readFileSync(join(import.meta.dir, "connection.ts"), "utf8")
-    expect(connection).toContain("within(client.config.providers(), timeoutMs)")
-    expect(connection).not.toContain("client.provider.list()")
+    expect(codeOf(connection)).toContain(codeOf("within(client.config.providers(), timeoutMs)"))
+    expect(codeOf(connection)).not.toContain(codeOf("client.provider.list()"))
     const store = readFileSync(join(import.meta.dir, "store.ts"), "utf8")
-    expect(store).toContain("configuredHasModel((await catalog()).configProviders, model)")
+    expect(codeOf(store)).toContain(codeOf("configuredHasModel((await catalog()).configProviders, model)"))
     const view = readFileSync(join(import.meta.dir, "chat.tsx"), "utf8")
-    expect(view).toContain("modelsFromConfigProviders(catalog.configProviders ?? props.configProviders, { isTest: testBuild })")
-    expect(view).toContain("rememberModel(localStorage, props.projectRoot, validated)")
+    expect(codeOf(view)).toContain(
+      codeOf("modelsFromConfigProviders(catalog.configProviders ?? props.configProviders, { isTest: testBuild })"),
+    )
+    expect(codeOf(view)).toContain(codeOf("rememberModel(localStorage, props.projectRoot, validated)"))
   })
 })
 
@@ -147,8 +173,19 @@ describe("models of one name", () => {
   test("keep their name; the menu tells them apart by the provider it shows on every row", () => {
     const configured = {
       providers: [
-        { id: "opencode", name: "OpenCode Zen", models: { "nemotron-free": { id: "nemotron-free", name: "Nemotron 3 Ultra", cost: { input: 0, output: 0 } } } },
-        { id: "openrouter", name: "OpenRouter", models: { "nvidia/nemotron:free": { id: "nvidia/nemotron:free", name: "Nemotron 3 Ultra (free)" }, "x/solo:free": { id: "x/solo:free", name: "Solo" } } },
+        {
+          id: "opencode",
+          name: "OpenCode Zen",
+          models: { "nemotron-free": { id: "nemotron-free", name: "Nemotron 3 Ultra", cost: { input: 0, output: 0 } } },
+        },
+        {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "nvidia/nemotron:free": { id: "nvidia/nemotron:free", name: "Nemotron 3 Ultra (free)" },
+            "x/solo:free": { id: "x/solo:free", name: "Solo" },
+          },
+        },
       ],
       default: {},
     } as unknown as ConfigProviders

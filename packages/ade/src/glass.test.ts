@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { oneSpace } from "./test-support/source-text"
 import { GLASS_READABLE_MIN } from "./theme"
 
 /*
@@ -30,7 +31,8 @@ function glassRules(): { selector: string; body: string }[] {
   const rules: { selector: string; body: string }[] = []
   const pattern = /([^{}]+)\{([^{}]*)\}/g
   for (const match of rulesOnly.matchAll(pattern)) {
-    const selector = match[1].trim()
+    // One space: prettier breaks a long selector over lines.
+    const selector = oneSpace(match[1])
     if (selector.includes('data-theme="glass"')) rules.push({ selector, body: match[2] })
   }
   return rules
@@ -56,7 +58,10 @@ function channels(colour: string): number[] {
   if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16))
   const rgb = /rgba?\(([^)]+)\)/.exec(colour)
   if (!rgb) throw new Error(`colore non leggibile: ${colour}`)
-  return rgb[1].split(",").slice(0, 3).map((part) => Number(part.trim()))
+  return rgb[1]
+    .split(",")
+    .slice(0, 3)
+    .map((part) => Number(part.trim()))
 }
 
 function token(name: string): string {
@@ -74,9 +79,7 @@ describe("il tema vetro vale per default", () => {
 
   test("il fondo della finestra è dipinto una volta sola", () => {
     const painters = glassRules().filter(({ body }) => /background:[^;]*--ade-glass-veil/.test(body))
-    expect(painters.map((rule) => rule.selector)).toEqual([
-      '[data-component="ade-shell"][data-theme="glass"]',
-    ])
+    expect(painters.map((rule) => rule.selector)).toEqual(['[data-component="ade-shell"][data-theme="glass"]'])
   })
 
   test("il fondo di lettura lo aggiungono gli slot del guscio, non i componenti", () => {
@@ -207,9 +210,7 @@ describe("il tema vetro vale per default", () => {
      * the rgb(80,79,79) of the glass beside them.
      */
     const blurred = glassRules().filter(({ body }) => /(^|\s|-)backdrop-filter:/.test(body))
-    expect(blurred.map((rule) => rule.selector)).toEqual([
-      '[data-component="ade-shell"][data-theme="glass"]',
-    ])
+    expect(blurred.map((rule) => rule.selector)).toEqual(['[data-component="ade-shell"][data-theme="glass"]'])
   })
 })
 
@@ -227,8 +228,7 @@ describe("leggibilità lungo il cursore", () => {
   // The `pow()` line wins the cascade; the linear one above it is the fallback.
   const readDecl = [...glassTokens.matchAll(/--ade-glass-read:\s*([^;]+);/g)].pop()![1]
   const readCurve = /calc\(([\d.]+) \+ ([\d.]+) \* pow\(var\([^)]+\), ([\d.]+)\)\)/.exec(readDecl)
-  const readAt = (slider: number) =>
-    Number(readCurve![1]) + Number(readCurve![2]) * slider ** Number(readCurve![3])
+  const readAt = (slider: number) => Number(readCurve![1]) + Number(readCurve![2]) * slider ** Number(readCurve![3])
 
   /** The ground text sits on: floor, reading ground, and the 6% lift over it. */
   function ground(slider: number, lift: boolean): number[] {

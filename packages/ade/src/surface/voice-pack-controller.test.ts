@@ -3,11 +3,22 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { InstallProgress, PackState } from "@nikcli-ai/voice"
 import { createPackController, followInstall, installCancelled, type VoicePackHost } from "./voice-pack-controller"
+import { codeOf } from "../test-support/source-text"
 
 const MB = 1024 * 1024
 
 function progress(overrides: Partial<InstallProgress> = {}): InstallProgress {
-  return { provider: "kokoro", running: true, files_done: 0, files_total: 3, bytes_done: 0, bytes_total: 192 * MB, cancelled: false, error: null, ...overrides }
+  return {
+    provider: "kokoro",
+    running: true,
+    files_done: 0,
+    files_total: 3,
+    bytes_done: 0,
+    bytes_total: 192 * MB,
+    cancelled: false,
+    error: null,
+    ...overrides,
+  }
 }
 
 /** A watch that reads once, at once, as a tick would, and records the stop. */
@@ -42,7 +53,9 @@ describe("the Kokoro pack, driven from the panel", () => {
     const { pack, state } = controller({})
     await pack.refresh()
     expect(state().status).toBeUndefined()
-    const failing = controller({ ttsLocalStatus: async () => Promise.reject(new Error("command tts_local_status not found")) })
+    const failing = controller({
+      ttsLocalStatus: async () => Promise.reject(new Error("command tts_local_status not found")),
+    })
     await failing.pack.refresh()
     expect(failing.state().status).toBeUndefined()
   })
@@ -82,8 +95,10 @@ describe("the Kokoro pack, driven from the panel", () => {
   test("a failed install says why; a cancelled one is not a failure", async () => {
     const failing = controller({
       ttsLocalStatus: async () => ({ installed: false }),
-      ttsInstallStatus: async () => progress({ running: false, error: "Il file scaricato non corrisponde a quello atteso: scartato." }),
-      ttsLocalInstall: async () => Promise.reject(new Error("Il file scaricato non corrisponde a quello atteso: scartato.")),
+      ttsInstallStatus: async () =>
+        progress({ running: false, error: "Il file scaricato non corrisponde a quello atteso: scartato." }),
+      ttsLocalInstall: async () =>
+        Promise.reject(new Error("Il file scaricato non corrisponde a quello atteso: scartato.")),
     })
     await failing.pack.install()
     expect(failing.state().error).toContain("non corrisponde")
@@ -119,16 +134,33 @@ describe("the Kokoro pack, driven from the panel", () => {
   })
 
   test("a cancelled Piper download is told apart from a failed one", async () => {
-    expect(await installCancelled({ ttsInstallStatus: async () => progress({ provider: "piper", running: false, cancelled: true }) }, "piper")).toBe(true)
-    expect(await installCancelled({ ttsInstallStatus: async () => progress({ provider: "piper", running: false, error: "rete" }) }, "piper")).toBe(false)
-    expect(await installCancelled({ ttsInstallStatus: async () => Promise.reject(new Error("no")) }, "piper")).toBe(false)
+    expect(
+      await installCancelled(
+        { ttsInstallStatus: async () => progress({ provider: "piper", running: false, cancelled: true }) },
+        "piper",
+      ),
+    ).toBe(true)
+    expect(
+      await installCancelled(
+        { ttsInstallStatus: async () => progress({ provider: "piper", running: false, error: "rete" }) },
+        "piper",
+      ),
+    ).toBe(false)
+    expect(await installCancelled({ ttsInstallStatus: async () => Promise.reject(new Error("no")) }, "piper")).toBe(
+      false,
+    )
     expect(await installCancelled(undefined, "piper")).toBe(false)
   })
 
   test("the Piper download is followed with the same reading, and without one nothing is", () => {
     const log: string[] = []
     const seen: number[] = []
-    const stop = followInstall({ ttsInstallStatus: async () => progress({ provider: "piper", bytes_done: 7 }) }, "piper", (p) => seen.push(p.bytes_done), onceWatch(log))
+    const stop = followInstall(
+      { ttsInstallStatus: async () => progress({ provider: "piper", bytes_done: 7 }) },
+      "piper",
+      (p) => seen.push(p.bytes_done),
+      onceWatch(log),
+    )
     stop()
     expect(log).toEqual(["watch", "stop"])
     const none = followInstall({}, "piper", () => seen.push(-1), onceWatch(log))
@@ -151,19 +183,27 @@ describe("K3's progress and cancel have a caller", () => {
 
   test("the panel's part of the bridge: status with its size, install, delete; and the speaking is here now", () => {
     const shell = read("src", "host", "shell.ts")
-    expect(shell).toContain('invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })')
-    expect(shell).toContain('invoke("tts_local_install", { provider })')
-    expect(shell).toContain('invoke("tts_local_delete", { provider })')
+    expect(codeOf(shell)).toContain(
+      codeOf(
+        'invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })',
+      ),
+    )
+    expect(codeOf(shell)).toContain(codeOf('invoke("tts_local_install", { provider })'))
+    expect(codeOf(shell)).toContain(codeOf('invoke("tts_local_delete", { provider })'))
     // The speaker's two commands were expected to be elsewhere when the panel was
     // written, on the assumption that whoever synthesises would wire them. K4b is
     // that whoever, so they are here, and the voice id travels with them: Kokoro's
     // four voices are speaker numbers inside one model, not four files.
-    expect(shell).toContain('"tts_local_speak", { provider, voiceId, text, token, lang }')
-    expect(shell).toContain('invoke("tts_local_stop")')
+    expect(codeOf(shell)).toContain(codeOf('"tts_local_speak", { provider, voiceId, text, token, lang }'))
+    expect(codeOf(shell)).toContain(codeOf('invoke("tts_local_stop")'))
   })
 
   test("the host's size wins over the one the panel knows", async () => {
-    const { pack, state } = controller({ ttsLocalStatus: async () => ({ installed: false, sizeBytes: 230 * MB }) }, [], 209 * MB)
+    const { pack, state } = controller(
+      { ttsLocalStatus: async () => ({ installed: false, sizeBytes: 230 * MB }) },
+      [],
+      209 * MB,
+    )
     await pack.refresh()
     expect(state().status?.sizeBytes).toBe(230 * MB)
   })

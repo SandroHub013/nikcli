@@ -23,6 +23,7 @@ import {
   usesExecForm,
 } from "./agent-hooks"
 import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
+import { codeOf } from "../test-support/source-text"
 
 /**
  * The real shape of `~/.claude/settings.json` on a machine that already has
@@ -55,7 +56,8 @@ const CODEX = JSON.stringify(
         {
           hooks: [
             {
-              command: 'powershell -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\x\\.codex\\herdr-agent-state.ps1" session',
+              command:
+                'powershell -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\x\\.codex\\herdr-agent-state.ps1" session',
               timeout: 10,
               type: "command",
             },
@@ -121,13 +123,17 @@ describe("the targets here and the paths in Rust", () => {
 
   test("the plugin's text is compiled into Rust, from the file the tests load", () => {
     expect(source).toContain('const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");')
-    expect(new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js")).toBe(true)
+    expect(
+      new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js"),
+    ).toBe(true)
   })
 
   test("and nikcli's plugin under the same marker, with no configuration", () => {
     expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
     expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
-    expect(source).toMatch(/id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/)
+    expect(source).toMatch(
+      /id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/,
+    )
   })
 
   test("the environment variables the script reads are the ones Rust sets", () => {
@@ -294,7 +300,11 @@ describe("readHookStatus and setHook", () => {
   // Each test reads the version afresh: ADE asks once per session, and each test is one.
   beforeEach(() => forgetClaudeVersion())
 
-  function disk(configText: string | null = null, scriptPresent = false, version: string | null = "2.1.280 (Claude Code)") {
+  function disk(
+    configText: string | null = null,
+    scriptPresent = false,
+    version: string | null = "2.1.280 (Claude Code)",
+  ) {
     const state = { configText, scriptPresent, writes: 0, versionAsked: 0 }
     const host = {
       claudeVersion: async () => {
@@ -364,7 +374,9 @@ describe("readHookStatus and setHook", () => {
     await setHook(host, claude, true)
 
     const groups = JSON.parse(state.configText).hooks.SessionStart
-    expect(groups.some((g: { hooks: { command: string }[] }) => g.hooks[0].command === "another-tool --hook")).toBe(true)
+    expect(groups.some((g: { hooks: { command: string }[] }) => g.hooks[0].command === "another-tool --hook")).toBe(
+      true,
+    )
     expect(installedCommand(state.configText)).toBe(hookCommand(CLAUDE_SCRIPT))
   })
 
@@ -424,13 +436,21 @@ describe("readHookStatus and setHook", () => {
   })
 
   test("an exec entry left on a machine whose Claude Code is older goes back to the shell form", async () => {
-    const execConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(CLAUDE_SCRIPT))
+    const execConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
     const { state, host } = disk(execConfig, true, "2.1.100 (Claude Code)")
     const script = hookScript(claude.agent)
     expect(await refreshHookScript(host, claude, script)).toBe(script)
     const parsed = JSON.parse(state.configText!)
     for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
-      const ours = parsed.hooks[event].flatMap((group: { hooks: { command: string; args?: string[] }[] }) => group.hooks).filter((leaf: { command: string }) => leaf.command.includes(HOOK_MARKER))
+      const ours = parsed.hooks[event]
+        .flatMap((group: { hooks: { command: string; args?: string[] }[] }) => group.hooks)
+        .filter((leaf: { command: string }) => leaf.command.includes(HOOK_MARKER))
       expect(ours).toEqual([{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: HOOK_TIMEOUT }])
     }
     // Settled: the next refresh writes nothing.
@@ -450,7 +470,9 @@ describe("readHookStatus and setHook", () => {
   test("a CLI that does not answer, or a host that cannot ask, gets the shell form", async () => {
     expect(await usesExecForm({ claudeVersion: async () => null }, claude)).toBe(false)
     forgetClaudeVersion()
-    expect(await usesExecForm({ claudeVersion: () => Promise.reject(new Error("claude non trovato")) }, claude)).toBe(false)
+    expect(await usesExecForm({ claudeVersion: () => Promise.reject(new Error("claude non trovato")) }, claude)).toBe(
+      false,
+    )
     forgetClaudeVersion()
     expect(await usesExecForm({}, claude)).toBe(false)
     // codex never gets it, whatever the version.
@@ -478,8 +500,17 @@ describe("which Claude Code gets the exec form (C3)", () => {
 
   test("hookOutdated follows the same gate: an exec entry is outdated when the CLI may not read it", () => {
     const target = hookTarget("claude-code")!
-    const execConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(CLAUDE_SCRIPT))
-    const shellConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"])
+    const execConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
+    const shellConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", [
+      "UserPromptSubmit",
+      "Stop",
+    ])
     expect(hookOutdated(execConfig, target, false)).toBe(true)
     expect(hookOutdated(shellConfig, target, false)).toBe(false)
     expect(hookOutdated(shellConfig, target, true)).toBe(true)
@@ -643,7 +674,12 @@ describe("nikcli's TUI plugin as a target", () => {
 
   test("off until installed: the file being there is the whole install", async () => {
     const { host } = disk()
-    expect(await readHookStatus(host, nikcli)).toMatchObject({ installed: false, broken: false, configPath: "", scriptPath: PLUGIN })
+    expect(await readHookStatus(host, nikcli)).toMatchObject({
+      installed: false,
+      broken: false,
+      configPath: "",
+      scriptPath: PLUGIN,
+    })
   })
 
   test("installing asks Rust for its plugin, sending no text; removing takes only the plugin away", async () => {
@@ -676,8 +712,8 @@ describe("nikcli's TUI plugin as a target", () => {
 
   test("lint: the panel shows the outdated notice and the update button from the outdated flag", () => {
     const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
-    expect(panel).toContain('<Show when={state()?.outdated}>')
-    expect(panel).toContain('state()?.outdated ? t("hooks.update")')
+    expect(codeOf(panel)).toContain(codeOf("<Show when={state()?.outdated}>"))
+    expect(codeOf(panel)).toContain(codeOf('state()?.outdated ? t("hooks.update")'))
   })
 })
 
@@ -812,7 +848,14 @@ describe("an earlier ADE's hook script", () => {
 
   test("this version's script with a configuration to bring up to date is still written: no dialog comes of that", async () => {
     const oldConfig = JSON.stringify({
-      hooks: { SessionStart: [{ matcher: "startup|resume|clear", hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }] }] },
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
     })
     const script = hookScript(claude.agent)
     const { state, host } = disk(oldConfig, sha(script))
