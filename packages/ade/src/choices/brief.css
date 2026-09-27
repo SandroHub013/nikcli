@@ -1,0 +1,26 @@
+/* The head of a question: what is asked, why now, what is recommended (`brief.tsx`). */
+[data-slot="choice-brief"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  margin: var(--ade-space-1) 0;
+}
+
+[data-slot="choice-brief"] p {
+  margin: 0;
+}
+
+[data-slot="brief-question"] {
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-slot="brief-why"],
+[data-slot="brief-recommend"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="brief-why"] b {
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-medium);
+}

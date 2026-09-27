@@ -469,6 +469,10 @@ export const en: Messages = {
   "choices.kind.decision": "Decision",
   "choices.kind.design": "Design",
   "choices.asked": (by, age) => `asked by ${by}, ${age}`,
+  "choices.samePane": (title, place) => `${title} (${place})`,
+  "choices.brief.why": "Why",
+  "choices.brief.recommend": (option, because) =>
+    because ? `Recommended: ${option}, because ${because}` : `Recommended: ${option}`,
   "choices.age.now": "just now",
   "choices.age.minutes": (count) => `${count} min ago`,
   "choices.age.hours": (count) => `${count} h ago`,

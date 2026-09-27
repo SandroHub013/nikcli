@@ -1,11 +1,12 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
 import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { openExternally } from "../browser/host-bridge"
-import type { RecipientStatus } from "./delivery"
+import { answeredStatus, type RecipientStatus } from "./delivery"
+import { afterAnswer } from "../choices/list"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
@@ -17,6 +18,10 @@ export function DesignSheet(props: {
   onOpenPanel: () => void
   /** The key to open at: the entry picked in «Da scegliere». */
   start?: string
+  /** How many entries wait in «Da scegliere», this sheet's included. */
+  waiting?: () => number
+  /** After the last answer here: back to «Da scegliere», or closed (`afterAnswer`). */
+  onDone?: (next: "list" | "close") => void
 }) {
   const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
@@ -55,6 +60,13 @@ export function DesignSheet(props: {
   })
 
   const [statusMessage, setStatusMessage] = createSignal<string>()
+  // An answer given here: the sheet empty after it is done, not «none open».
+  const [answered, setAnswered] = createSignal(false)
+  createEffect(() => {
+    if (!answered()) return
+    const next = afterAnswer(open().length, props.waiting?.() ?? 0)
+    if (next !== "stay") props.onDone?.(next)
+  })
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
@@ -76,14 +88,9 @@ export function DesignSheet(props: {
     const draft = props.hub.draft(proposal.k)
     const label = designChoiceLabel(proposal, draft.picked, draft.note)
     if (await props.hub.submit(proposal, press)) {
-      const recipient = props.hub.recipient()
-      const status =
-        recipient.state === "pronta"
-          ? t("design.sheet.status.sent", proposal.k, label, recipient.title)
-          : recipient.state === "non attiva"
-            ? t("design.sheet.status.idle", proposal.k, label, recipient.title)
-            : t("design.sheet.status.none", proposal.k, label)
-      showStatus(status)
+      // The answer's own session, the pane that asked when it runs; not «Risposte a».
+      showStatus(answeredStatus(proposal.k, label, props.hub.recipientFor(proposal)))
+      setAnswered(true)
       surface?.focus()
     }
   }
@@ -185,7 +192,12 @@ export function DesignSheet(props: {
                   if (!proposal().multi) void submit()
                 }}
                 onOpenUrl={() => void openExternally(proposal().url!)}
-                onSheetChosen={() => void props.hub.sheetChosen(proposal()).then((done) => done && surface?.focus())}
+                onSheetChosen={() =>
+                  void props.hub.sheetChosen(proposal()).then((done) => {
+                    if (done) setAnswered(true)
+                    if (done) surface?.focus()
+                  })
+                }
                 noteRef={(element) => (note = element)}
               />
             )

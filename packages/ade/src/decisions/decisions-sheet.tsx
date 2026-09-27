@@ -1,9 +1,10 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
 import { enterReady, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
-import type { RecipientStatus } from "./delivery"
+import { answeredStatus, type RecipientStatus } from "./delivery"
+import { afterAnswer } from "../choices/list"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, type Decision } from "./state"
 import "./decisions.css"
@@ -22,6 +23,10 @@ export function DecisionsSheet(props: {
   onOpenPanel: () => void
   /** The key to open at: the entry picked in «Da scegliere». */
   start?: string
+  /** How many entries wait in «Da scegliere», this sheet's included. */
+  waiting?: () => number
+  /** After the last answer here: back to «Da scegliere», or closed (`afterAnswer`). */
+  onDone?: (next: "list" | "close") => void
 }) {
   const buckets = createMemo(() => bucketDecisions(props.hub.register.state()?.decisions ?? []))
   const open = () => buckets().forYou
@@ -58,6 +63,13 @@ export function DecisionsSheet(props: {
   })
 
   const [statusMessage, setStatusMessage] = createSignal<string>()
+  // An answer given here: the sheet empty after it is done, not «none open».
+  const [answered, setAnswered] = createSignal(false)
+  createEffect(() => {
+    if (!answered()) return
+    const next = afterAnswer(open().length, props.waiting?.() ?? 0)
+    if (next !== "stay") props.onDone?.(next)
+  })
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
@@ -79,14 +91,9 @@ export function DecisionsSheet(props: {
     const draft = props.hub.draft(decision.k)
     const label = decisionChoiceLabel(decision, draft.picked, draft.note)
     if (await props.hub.submit(decision, press)) {
-      const recipient = props.hub.recipient()
-      const status =
-        recipient.state === "pronta"
-          ? t("decisions.sheet.status.sent", decision.k, label, recipient.title)
-          : recipient.state === "non attiva"
-            ? t("decisions.sheet.status.idle", decision.k, label, recipient.title)
-            : t("decisions.sheet.status.none", decision.k, label)
-      showStatus(status)
+      // The answer's own session, the pane that asked when it runs; not «Risposte a».
+      showStatus(answeredStatus(decision.k, label, props.hub.recipientFor(decision)))
+      setAnswered(true)
       surface?.focus()
     }
   }
@@ -186,7 +193,12 @@ export function DecisionsSheet(props: {
                 onPick={(index) => pick(k, index, Boolean(decision().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                 onSubmit={() => void submit()}
-                onDefer={(until) => void props.hub.defer(decision(), until).then((done) => done && surface?.focus())}
+                onDefer={(until) =>
+                  void props.hub.defer(decision(), until).then((done) => {
+                    if (done) setAnswered(true)
+                    if (done) surface?.focus()
+                  })
+                }
                 noteRef={(element) => (note = element)}
               />
             )

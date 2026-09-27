@@ -178,6 +178,17 @@ export function fitScale(size: PreviewSize, columnWidth: number): FittedPage {
 }
 
 /**
+ * The width a page may take: the whole row of variants, less its card's
+ * padding and border (Verifiche, da-scegliere, problem 1). Each page measured
+ * its own column, and the columns were 420 px whatever the pages said: a page
+ * of 640 was shown at 64% on a wide screen. Now a page is 1:1 unless it is
+ * wider than the whole row, and the cards wrap when they do not fit side by side.
+ */
+export function roomFor(rowWidth: number, cardWidth: number, ownWidth: number): number {
+  return Math.max(0, rowWidth - Math.max(0, cardWidth - ownWidth))
+}
+
+/**
  * Scripts and forms, not the same origin: the page runs as it would in a
  * browser, at an opaque origin that cannot reach ADE (the modes the browser
  * pane's Design mode gave it, which the one sheet replaces).
@@ -276,15 +287,21 @@ export function DesignPreview(props: {
     if (props.containerWidth !== undefined) return
     const el = containerRef
     if (!el) return
-    const initial = el.getBoundingClientRect().width || el.clientWidth
-    if (initial > 0) setMeasuredWidth(Math.round(initial))
+    // The row of variants, when the preview is in one (`roomFor`); its own box otherwise.
+    const row = el.closest<HTMLElement>('[data-slot="design-variants"]')
+    const card = el.closest<HTMLElement>('[data-slot="design-variant-item"]')
+    const measure = () => {
+      const own = el.getBoundingClientRect().width || el.clientWidth
+      const width =
+        row && card
+          ? roomFor(row.getBoundingClientRect().width || row.clientWidth, card.getBoundingClientRect().width, own)
+          : own
+      if (width > 0) setMeasuredWidth(Math.round(width))
+    }
+    measure()
     if (typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(([entry]) => {
-      if (!entry) return
-      const w = entry.contentRect.width || el.clientWidth
-      if (w > 0) setMeasuredWidth(Math.round(w))
-    })
-    observer.observe(el)
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(row ?? el)
     onCleanup(() => observer.disconnect())
   })
 
