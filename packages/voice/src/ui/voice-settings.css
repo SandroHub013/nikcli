@@ -637,7 +637,11 @@
   font-weight: var(--ade-weight-bold);
   color: var(--ade-text);
   letter-spacing: -0.005em;
-  margin: 0;
+  /* The heading takes focus when a section opens, and its ring hugged the
+     text. The padding gives the ring air; the equal negative margin keeps
+     the text where it was. */
+  padding: var(--ade-space-1) var(--ade-space-2);
+  margin: calc(-1 * var(--ade-space-1)) calc(-1 * var(--ade-space-2));
 }
 
 [data-component="voice-settings-panel"] [data-slot="section-title"]:focus {
