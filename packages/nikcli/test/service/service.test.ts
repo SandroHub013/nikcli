@@ -303,6 +303,49 @@ describe("BackgroundService.start", () => {
   })
 })
 
+describe("BackgroundService after an upgrade", () => {
+  // The service is spawned from the binary the upgrade installed, which a
+  // Homebrew or Scoop install keeps somewhere other than `process.execPath`.
+  async function spawnedCommand(options: Parameters<typeof BackgroundService.start>[0], standalone: boolean) {
+    let command: string[] | undefined
+    const isStandalone = spyOn(Installation, "isStandaloneExecutable").mockReturnValue(standalone)
+    const spawn = spyOn(Bun, "spawn").mockImplementation(((cmd: string[]) => {
+      command = cmd
+      throw new Error("captured")
+    }) as unknown as typeof Bun.spawn)
+    try {
+      await expect(BackgroundService.start(options)).rejects.toThrow("captured")
+    } finally {
+      spawn.mockRestore()
+      isStandalone.mockRestore()
+    }
+    return command
+  }
+
+  it("starts a standalone service from the executable it is given", async () => {
+    const command = await spawnedCommand({ executable: "/opt/homebrew/bin/nikcli" }, true)
+    expect(command?.[0]).toBe("/opt/homebrew/bin/nikcli")
+    expect(command?.slice(1, 3)).toEqual(["serve", "--service"])
+  })
+
+  it("keeps this build's own command when no executable is given", async () => {
+    const command = await spawnedCommand({}, true)
+    expect(command?.[0]).toBe(process.execPath)
+  })
+
+  it("does not restart a service that is not running", async () => {
+    const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
+      throw new Error("restartIfRunning() started a service")
+    })
+    try {
+      expect(await BackgroundService.restartIfRunning({ executable: "/usr/local/bin/nikcli" })).toBeUndefined()
+      expect(spawn).not.toHaveBeenCalled()
+    } finally {
+      spawn.mockRestore()
+    }
+  })
+})
+
 describe("BackgroundService.register", () => {
   it("writes an owned registration and cleans it up through the disposer", async () => {
     const release = await BackgroundService.register("http://127.0.0.1:4096")

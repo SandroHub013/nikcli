@@ -6,7 +6,7 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { withInstanceAsync } from "@/effect"
 import { Rpc } from "@tui/util/rpc"
 import { setMainThreadDaemonHost } from "@nikcli-ai/browser-control/daemon-client"
-import { upgrade, upgradeNow } from "@/cli/upgrade"
+import { enableAutoUpdate, upgrade, upgradeNow } from "@/cli/upgrade"
 import { GlobalBus } from "@nikcli-ai/util/global-bus"
 import { createNikcliClient, type Event } from "@nikcli-ai/sdk/httpapi"
 import { Process } from "@nikcli-ai/util/process"
@@ -161,6 +161,9 @@ export const rpc = {
     await withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
       await upgradeNow(input.method as Installation.Method, input.version)
     })
+  },
+  async enableAutoUpdate() {
+    await enableAutoUpdate()
   },
   async reload() {
     await Instance.disposeAll()

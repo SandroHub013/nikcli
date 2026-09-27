@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { Installation } from "@/installation"
+import { shouldAutoInstall } from "@/cli/upgrade"
 import fs from "fs/promises"
 import path from "path"
 
@@ -112,8 +113,74 @@ describe("post-upgrade verification", () => {
 
   it("does not claim completion while a Windows swap is still pending", async () => {
     const cli = await readSrc("packages/nikcli/src/cli/handlers/upgrade.ts")
-    expect(cli).toContain('Installation.resolveUpgradeStrategy(method).type === "windows-installer"')
-    expect(cli).toContain("Upgrade staged")
+    // Asked of the install directory, not assumed from the strategy: the
+    // installer now swaps a running binary in place whenever it can.
+    const pending = cli.indexOf("if (await Installation.upgradePending())")
+    expect(pending).toBeGreaterThan(-1)
+    expect(cli.slice(pending)).toContain("Upgrade staged")
+    expect(cli.indexOf("Upgrade staged")).toBeLessThan(cli.indexOf('spinner.stop("Upgrade complete")'))
+  })
+
+  it("only reports a pending upgrade on Windows", async () => {
+    if (process.platform === "win32") return
+    expect(await Installation.upgradePending()).toBe(false)
+  })
+})
+
+describe("after an upgrade", () => {
+  it("moves a running background service onto the new binary", async () => {
+    const cli = await readSrc("packages/nikcli/src/cli/handlers/upgrade.ts")
+    const complete = cli.indexOf('spinner.stop("Upgrade complete")')
+    const restart = cli.indexOf('restartServiceAfterUpgrade("if-running")')
+    expect(restart).toBeGreaterThan(complete)
+    const upgrade = await readSrc("packages/nikcli/src/cli/upgrade.ts")
+    expect(upgrade).toContain("executable: Installation.installedExecutable()")
+    // A deferred Windows swap would bring the service back on the old binary.
+    expect(upgrade.indexOf("Installation.upgradePending()")).toBeLessThan(upgrade.indexOf("BackgroundService.restart"))
+  })
+
+  it("starts the service from nikcli on PATH, not from the old binary's own path", () => {
+    const execPath = "/opt/homebrew/Cellar/nikcli/1.402.0/bin/nikcli"
+    expect(
+      Installation.pickInstalledExecutable({ found: "/opt/homebrew/bin/nikcli", execPath, platform: "darwin" }),
+    ).toBe("/opt/homebrew/bin/nikcli")
+    expect(Installation.pickInstalledExecutable({ found: null, execPath, platform: "linux" })).toBe(execPath)
+  })
+
+  it("only spawns an .exe on Windows, never an npm .cmd shim", () => {
+    const execPath = "C:\\Users\\me\\.nikcli\\bin\\nikcli.exe"
+    const scoop = "C:\\Users\\me\\scoop\\shims\\nikcli.exe"
+    expect(Installation.pickInstalledExecutable({ found: scoop, execPath, platform: "win32" })).toBe(scoop)
+    const npm = "C:\\Users\\me\\AppData\\Roaming\\npm\\nikcli.cmd"
+    expect(Installation.pickInstalledExecutable({ found: npm, execPath, platform: "win32" })).toBe(execPath)
+  })
+
+  it("swaps a running Windows binary in place before falling back to a deferred swap", async () => {
+    const ps1 = await readSrc("install.ps1")
+    const aside = ps1.indexOf("Move-Item -LiteralPath $targetExe -Destination $aside")
+    const staged = ps1.indexOf("$pendingExe = Join-Path $installDir")
+    expect(aside).toBeGreaterThan(-1)
+    expect(aside).toBeLessThan(staged)
+    // A failed copy puts the old binary back rather than leaving no binary.
+    expect(ps1).toContain("Move-Item -LiteralPath $aside -Destination $targetExe")
+    expect(ps1).toContain("if (-not $installedInPlace) {")
+  })
+})
+
+describe("shouldAutoInstall", () => {
+  const release = { method: "brew" as const, local: false, preview: false }
+
+  it("installs without asking only on an explicit autoupdate: true", () => {
+    expect(shouldAutoInstall({ ...release, autoupdate: true })).toBe(true)
+    expect(shouldAutoInstall({ ...release, autoupdate: undefined })).toBe(false)
+    expect(shouldAutoInstall({ ...release, autoupdate: "notify" })).toBe(false)
+    expect(shouldAutoInstall({ ...release, autoupdate: false })).toBe(false)
+  })
+
+  it("never replaces a local or preview build, or one whose install method is unknown", () => {
+    expect(shouldAutoInstall({ ...release, autoupdate: true, local: true })).toBe(false)
+    expect(shouldAutoInstall({ ...release, autoupdate: true, preview: true })).toBe(false)
+    expect(shouldAutoInstall({ ...release, autoupdate: true, method: "unknown" })).toBe(false)
   })
 })
 

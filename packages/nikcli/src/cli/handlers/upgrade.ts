@@ -8,6 +8,7 @@ import { Installation } from "@/installation"
 import { runPromiseWithLayer } from "@/effect"
 import { Effect } from "effect"
 import { TERMINAL_RESET_SEQUENCE } from "@nikcli-ai/util/win32"
+import { restartServiceAfterUpgrade } from "@/cli/upgrade"
 
 export function runInstallation<A, E>(effect: Effect.Effect<A, E, Installation.Service>) {
   return runPromiseWithLayer(Installation.defaultLayer, effect)
@@ -91,14 +92,26 @@ export default Runtime.handler(Commands.commands["upgrade"], async (input) => {
     prompts.outro("Done")
     process.exit(1)
   }
-  // The Windows installer cannot overwrite the binary that is running this
-  // command, so it stages the new one and swaps it in once this process
-  // exits. Saying "complete" there would be a lie until then.
-  if (Installation.resolveUpgradeStrategy(method).type === "windows-installer") {
+  // When the Windows installer cannot put the new binary in place while this
+  // command runs, it stages it and swaps it in once this process exits.
+  // Saying "complete" there would be a lie until then.
+  if (await Installation.upgradePending()) {
     spinner.stop("Upgrade staged")
     prompts.log.info(`nikcli ${target} will be in place once this command exits. Open a new terminal to use it.`)
-  } else {
-    spinner.stop("Upgrade complete")
+    prompts.outro("Done")
+    return
   }
+  spinner.stop("Upgrade complete")
+  // The background service is a long-lived copy of the old binary: move it
+  // onto the new one now, instead of leaving it on the old engine until some
+  // later client notices the version skew. Open terminals reconnect on their own.
+  const restarted = await restartServiceAfterUpgrade("if-running").catch((error: unknown) => {
+    prompts.log.warn(
+      `Could not restart the background service: ${error instanceof Error ? error.message : String(error)}. Run \`nikcli service restart\`.`,
+    )
+    return undefined
+  })
+  if (restarted && restarted !== "pending")
+    prompts.log.info(`Background service restarted on ${restarted.version || target}`)
   prompts.outro("Done")
 })

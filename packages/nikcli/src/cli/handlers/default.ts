@@ -357,6 +357,28 @@ export default Runtime.handler(Commands, async (input) => {
             await upgradeNow(method as import("@/installation").Installation.Method, version)
           })
         },
+        enableAutoUpdate: async () => {
+          await withUpgradeInstance(async () => {
+            const { enableAutoUpdate } = await import("@/cli/upgrade")
+            await enableAutoUpdate()
+          })
+        },
+        // After an upgrade: move the service onto the binary just installed and
+        // hand the terminal the new transport, as `/restart` does. `undefined`
+        // while a Windows swap is still pending — the service would come back
+        // on the old binary, and the next start moves it on its own.
+        onUpgraded: async () => {
+          const { restartServiceAfterUpgrade } = await import("@/cli/upgrade")
+          const next = await restartServiceAfterUpgrade("always")
+          if (!next || next === "pending") return undefined
+          return {
+            url: next.url,
+            fetch: BackgroundService.authorizedFetch(
+              next.url,
+              BackgroundService.authorization(await BackgroundService.password()),
+            ),
+          }
+        },
         // `/restart` in the TUI. The service is the thing being restarted here:
         // a separate process, whose live sessions are suspended on SIGTERM and
         // resumed by the engine that comes back. The terminal stays up and
@@ -566,6 +588,11 @@ export default Runtime.handler(Commands, async (input) => {
           })
           throw error
         })
+      },
+      // No `onUpgraded`: the server is this process's own worker, running the
+      // binary the upgrade just replaced, so only a new launch picks it up.
+      enableAutoUpdate: async () => {
+        await client.call("enableAutoUpdate", undefined)
       },
       startServer: !shouldStartServer
         ? async (options = {}) => {

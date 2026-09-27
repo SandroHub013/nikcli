@@ -161,7 +161,7 @@ describe("host wiring", () => {
 
   it("gives the CLI and the TUI one restart sequence", async () => {
     const service = stripComments(await source("service/service.ts"))
-    expect(service).toContain("export async function restart()")
+    expect(service).toContain("export async function restart(options: StartOptions = {})")
     const handler = stripComments(await source("cli/handlers/service/restart.ts"))
     expect(handler).toContain("await BackgroundService.restart()")
     // One definition, or the two drift: the CLI's `service restart` and the

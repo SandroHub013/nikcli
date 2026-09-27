@@ -5,6 +5,8 @@ import { For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { Locale } from "@nikcli-ai/util/locale"
 
+type ConfirmKey = "cancel" | "extra" | "confirm"
+
 export type DialogConfirmProps = {
   title: string
   message: string
@@ -12,22 +14,35 @@ export type DialogConfirmProps = {
   onCancel?: () => void
   /** Which button should be focused by default. Defaults to "cancel" for safety. */
   defaultFocus?: "confirm" | "cancel"
+  /** Button text; defaults to "Cancel" and "Confirm". */
+  labels?: { confirm?: string; cancel?: string }
+  /** A third choice between cancel and confirm, e.g. "Auto-update". */
+  extra?: { label: string; onSelect: () => void }
 }
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [store, setStore] = createStore({
-    active: (props.defaultFocus ?? "cancel") as "confirm" | "cancel",
+    active: (props.defaultFocus ?? "cancel") as ConfirmKey,
   })
+  const keys = (): ConfirmKey[] => (props.extra ? ["cancel", "extra", "confirm"] : ["cancel", "confirm"])
+  const label = (key: ConfirmKey) => {
+    if (key === "extra") return props.extra?.label ?? ""
+    return props.labels?.[key] ?? Locale.titlecase(key)
+  }
+  const select = (key: ConfirmKey) => {
+    if (key === "confirm") props.onConfirm?.()
+    if (key === "cancel") props.onCancel?.()
+    if (key === "extra") props.extra?.onSelect()
+    dialog.clear()
+  }
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
       evt.preventDefault()
       evt.stopPropagation()
-      if (store.active === "confirm") props.onConfirm?.()
-      if (store.active === "cancel") props.onCancel?.()
-      dialog.clear()
+      select(store.active)
       return
     }
 
@@ -50,7 +65,9 @@ export function DialogConfirm(props: DialogConfirmProps) {
     if (evt.name === "left" || evt.name === "right") {
       evt.preventDefault()
       evt.stopPropagation()
-      setStore("active", store.active === "confirm" ? "cancel" : "confirm")
+      const all = keys()
+      const step = evt.name === "right" ? 1 : all.length - 1
+      setStore("active", all[(all.indexOf(store.active) + step) % all.length])
     }
   })
   return (
@@ -60,7 +77,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
         <text fg={theme.foreground.muted}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1} gap={2}>
-        <For each={["cancel", "confirm"]}>
+        <For each={keys()}>
           {(key) => (
             <box
               paddingLeft={4}
@@ -70,13 +87,9 @@ export function DialogConfirm(props: DialogConfirmProps) {
               border={true}
               borderColor={key === store.active ? theme.border.focus : theme.border.default}
               backgroundColor={key === store.active ? theme.badge.bg : undefined}
-              onMouseUp={() => {
-                if (key === "confirm") props.onConfirm?.()
-                if (key === "cancel") props.onCancel?.()
-                dialog.clear()
-              }}
+              onMouseUp={() => select(key)}
             >
-              <text fg={key === store.active ? theme.badge.fg : theme.foreground.muted}>{Locale.titlecase(key)}</text>
+              <text fg={key === store.active ? theme.badge.fg : theme.foreground.muted}>{label(key)}</text>
             </box>
           )}
         </For>
@@ -104,6 +117,37 @@ DialogConfirm.show = (dialog: DialogContext, title: string, message: string, def
         />
       ),
       () => resolve(false),
+    )
+  })
+}
+
+/**
+ * Three-way variant: resolves to the button chosen, and to "cancel" when the
+ * dialog is dismissed.
+ */
+DialogConfirm.choose = (
+  dialog: DialogContext,
+  input: {
+    title: string
+    message: string
+    labels: { confirm: string; cancel: string; extra: string }
+    defaultFocus?: "confirm" | "cancel"
+  },
+) => {
+  return new Promise<ConfirmKey>((resolve) => {
+    dialog.replace(
+      () => (
+        <DialogConfirm
+          title={input.title}
+          message={input.message}
+          defaultFocus={input.defaultFocus}
+          labels={input.labels}
+          extra={{ label: input.labels.extra, onSelect: () => resolve("extra") }}
+          onConfirm={() => resolve("confirm")}
+          onCancel={() => resolve("cancel")}
+        />
+      ),
+      () => resolve("cancel"),
     )
   })
 }

@@ -483,13 +483,15 @@ export namespace BackgroundService {
   }
 
   /**
-   * The argv that re-runs this same build.
+   * The argv that re-runs this same build — or, after an upgrade, `executable`:
+   * the binary the upgrade installed, which is not always at `process.execPath`
+   * (a Homebrew or Scoop install lives in a versioned directory).
    *
    * A standalone executable is its own interpreter; from source the interpreter
    * is bun and the entry has to be passed along or the child starts a REPL.
    */
-  function selfCommand(extra: string[]): string[] {
-    if (Installation.isStandaloneExecutable()) return [process.execPath, ...extra]
+  function selfCommand(extra: string[], executable?: string): string[] {
+    if (Installation.isStandaloneExecutable()) return [executable ?? process.execPath, ...extra]
     const entry = process.argv[1]
     if (!entry) throw new Error("cannot locate the nikcli entrypoint to spawn a background service")
     return [process.execPath, entry, ...extra]
@@ -532,6 +534,11 @@ export namespace BackgroundService {
     return undefined
   }
 
+  export interface StartOptions {
+    /** The binary to run instead of this one — the one an upgrade just installed. */
+    readonly executable?: string
+  }
+
   /**
    * Spawn a service and wait for it to register.
    *
@@ -540,7 +547,7 @@ export namespace BackgroundService {
    * because a daemon whose stdout stays piped to a parent that then exits takes
    * EPIPE on its next write.
    */
-  export async function start(): Promise<Registration> {
+  export async function start(options: StartOptions = {}): Promise<Registration> {
     const held = await acquireLock()
     if (!held) {
       // Someone else is spawning. Wait for their service rather than starting a
@@ -573,7 +580,7 @@ export namespace BackgroundService {
         settings.hostname ?? "127.0.0.1",
       ]
       for (const origin of settings.cors ?? []) args.push("--cors", origin)
-      const command = selfCommand(args)
+      const command = selfCommand(args, options.executable)
       log.info("starting background service", { command })
       const child = Bun.spawn(command, {
         stdin: "ignore",
@@ -631,9 +638,19 @@ export namespace BackgroundService {
    * The calls go through the namespace so a caller (or a test) can observe the
    * order they happen in; `stop` is what makes the port free for `start`.
    */
-  export async function restart(): Promise<Registration> {
+  export async function restart(options: StartOptions = {}): Promise<Registration> {
     await BackgroundService.stop()
-    return BackgroundService.start()
+    return BackgroundService.start(options)
+  }
+
+  /**
+   * `restart`, but only for a service that is running: after `nikcli upgrade`
+   * the service has to move to the new binary, and one that is not running
+   * will be started from it anyway. `undefined` when there was nothing to restart.
+   */
+  export async function restartIfRunning(options: StartOptions = {}): Promise<Registration | undefined> {
+    if (!(await discover())) return undefined
+    return BackgroundService.restart(options)
   }
 
   /**

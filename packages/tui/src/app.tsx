@@ -140,6 +140,8 @@ export type UpdateAvailable = {
   version: string
   method?: InstallMethod
   current: string
+  /** Install without asking: the user chose "Auto-update" (`autoupdate: true`). */
+  auto?: boolean
 }
 
 const log = Log.create({ service: "tui.app" })
@@ -171,6 +173,10 @@ export function tui(input: {
   restartTarget?: string
   checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   upgradeNow?: (method: string, version: string) => Promise<void>
+  /** Persist "Auto-update" (`autoupdate: true` in the global config). */
+  enableAutoUpdate?: () => Promise<void>
+  /** See `UpgradeProvider`'s `onUpgraded`. */
+  onUpgraded?: () => Promise<Transport | undefined>
   startServer?: (options?: StartServerOptions) => Promise<string>
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
@@ -273,7 +279,11 @@ export function tui(input: {
                                                         <FrecencyProvider>
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
-                                                              <UpgradeProvider upgradeNow={input.upgradeNow}>
+                                                              <UpgradeProvider
+                                                                upgradeNow={input.upgradeNow}
+                                                                enableAutoUpdate={input.enableAutoUpdate}
+                                                                onUpgraded={input.onUpgraded}
+                                                              >
                                                                 <AttentionProvider renderer={renderer}>
                                                                   <SessionTabsProvider>
                                                                     <App
@@ -430,35 +440,48 @@ function App(props: {
   const keybind = useKeybind()
 
   /**
-   * Offer the update the check found, and install it if the user agrees.
+   * Offer the update the check found, and install it if the user agrees — or
+   * without asking, once they chose "Auto-update".
    *
    * Driven by `checkUpgrade`'s return value rather than by the `installation.update-available`
    * event: that event is published on the Bus of whichever process ran the check, and since the
    * background service became the default that process is this CLI — not the server the event
    * stream comes from, so the TUI never saw it. See `UpdateAvailable`.
+   *
+   * After installing, the background service is moved onto the new version and this terminal
+   * reconnects to it in place, as `/restart` does. The terminal itself keeps running the code it
+   * started with; the new interface loads on the next launch.
    */
   async function offerUpdate(available: UpdateAvailable) {
     const { version, method } = available
     const currentVersion = available.current || VERSION
 
-    // Skip version already dismissed by the user
-    const skipped = kv.get("skipped_version")
-    if (skipped && version === skipped) return
+    if (!available.auto) {
+      // Skip version already dismissed by the user
+      const skipped = kv.get("skipped_version")
+      if (skipped && version === skipped) return
 
-    const hint = method ? ` via ${method}` : ""
-    const choice = await DialogConfirm.show(
-      dialog,
-      `Update Available`,
-      `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
-      "confirm",
-    )
+      const hint = method ? ` via ${method}` : ""
+      const choice = await DialogConfirm.choose(dialog, {
+        title: "Update Available",
+        message: `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now? Auto-update installs this and every later release without asking.`,
+        labels: { cancel: "Skip", extra: "Auto-update", confirm: "Update" },
+        defaultFocus: "confirm",
+      })
 
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
+      if (choice === "cancel") {
+        kv.set("skipped_version", version)
+        return
+      }
+
+      if (choice === "extra") {
+        // Saved before installing: the preference stands even if this install fails.
+        await upgradeCtx.enableAutoUpdate?.().catch((error) => {
+          log.error("enabling auto-update failed", { error: errorMessage(error) })
+          toast.error(error)
+        })
+      }
     }
-
-    if (!choice) return
 
     // No detected installation method (e.g. running from source / unknown
     // package manager). The TUI still shows the dialog so the user is
@@ -503,13 +526,19 @@ function App(props: {
       return
     }
 
-    await DialogAlert.show(
-      dialog,
-      "Update Complete",
-      `Successfully updated to v${version}. Please restart the application.`,
-    )
-
-    await exit()
+    const onUpgraded = upgradeCtx.onUpgraded
+    const restarted = onUpgraded
+      ? await runRestart(onUpgraded, { success: `Updated to v${version}` })
+      : ("skipped" as const)
+    if (restarted === "failed") return
+    if (restarted === "skipped") {
+      toast.show({
+        variant: "success",
+        title: `Updated to v${version}`,
+        message: "Restart nikcli to use the new version.",
+        duration: 10_000,
+      })
+    }
   }
 
   // Plugin routes — mutable map + reactive stamp for re-renders
@@ -883,7 +912,10 @@ function App(props: {
    * old client. A host that fails leaves the terminal on whatever it had, with
    * the reason on screen.
    */
-  async function runRestart(restartBackend: () => Promise<Transport>) {
+  async function runRestart(
+    restartBackend: () => Promise<Transport | undefined>,
+    options: { success?: string } = {},
+  ): Promise<"restarted" | "skipped" | "failed"> {
     const target = props.restartTarget ?? "nikcli server"
     dialog.replace(() => <DialogRestart target={target} />)
     await afterPaint(renderer)
@@ -893,6 +925,8 @@ function App(props: {
     beginRestart()
     try {
       const next = await restartBackend()
+      // The host had nothing to restart onto (see `onUpgraded`).
+      if (!next) return "skipped"
       await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch((error) => {
         // The backend registered but its stream has not answered yet. Requests
         // already go to it; the stream keeps retrying on its own.
@@ -901,7 +935,8 @@ function App(props: {
       const failure = await sync.bootstrap({ fatal: false })
       if (failure) throw failure
       await TuiPluginRuntime.reload()
-      toast.show({ variant: "success", message: `Restarted the ${target}` })
+      toast.show({ variant: "success", message: options.success ?? `Restarted the ${target}` })
+      return "restarted"
     } catch (error) {
       log.error("restart failed", { error: errorMessage(error) })
       toast.error(error)
@@ -909,6 +944,7 @@ function App(props: {
       // is down must not turn this refetch into an exit, and the stream's own
       // reconnect refetches again once it is back.
       await sync.bootstrap({ fatal: false })
+      return "failed"
     } finally {
       endRestart()
       dialog.clear()

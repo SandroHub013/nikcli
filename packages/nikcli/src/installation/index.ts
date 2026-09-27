@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import path from "path"
+import fs from "fs/promises"
 import { $ } from "bun"
 import { Log } from "@nikcli-ai/util/log"
 import { iife } from "@nikcli-ai/util/iife"
@@ -280,6 +281,49 @@ export namespace Installation {
         stderr: `Upgrade did not take effect: nikcli on PATH reports ${installed}, expected ${expected}.`,
       })
     }
+  }
+
+  /**
+   * The `nikcli` an upgrade just installed, for starting the background service
+   * on the new version.
+   *
+   * Not `process.execPath` alone: that is this still-running old binary, and a
+   * Homebrew (Cellar) or Scoop (apps/<version>) install keeps it in a versioned
+   * directory the upgrade moves away from. What the user runs is `nikcli` on
+   * PATH — the same thing `verifyUpgrade` checks. On Windows only an `.exe` is
+   * spawnable directly (not an npm `.cmd` shim), and a curl install replaces
+   * the binary at `execPath` itself, so that stays the fallback everywhere.
+   */
+  export function pickInstalledExecutable(input: {
+    found: string | null | undefined
+    execPath: string
+    platform: NodeJS.Platform
+  }): string {
+    if (!input.found) return input.execPath
+    if (input.platform === "win32" && !/\.exe$/i.test(input.found)) return input.execPath
+    return input.found
+  }
+
+  export function installedExecutable(): string {
+    return pickInstalledExecutable({
+      found: Bun.which("nikcli"),
+      execPath: process.execPath,
+      platform: process.platform,
+    })
+  }
+
+  /**
+   * Whether the last upgrade is still waiting to be swapped in.
+   *
+   * Only the Windows installer defers: when it could not replace the running
+   * binary it stages `nikcli.update.<id>.exe` beside it and swaps it in after
+   * this process exits (see install.ps1). Until then, anything started from
+   * the installed path is still the old version.
+   */
+  export async function upgradePending(): Promise<boolean> {
+    if (process.platform !== "win32") return false
+    const entries = await fs.readdir(path.dirname(process.execPath)).catch(() => [] as string[])
+    return entries.some((name) => /^nikcli\.update\..+\.exe$/i.test(name))
   }
 
   // Defined in @nikcli-ai/util/version; re-exported so existing `Installation.VERSION` callers
