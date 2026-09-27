@@ -220,6 +220,31 @@ describe("lint: no pane draws its focus in accent", () => {
     expect(offenders).toEqual([])
   })
 
+  test("lint: the drop zone's pill is neutral like the zone, and readable in both themes", () => {
+    // «Sotto», «Sopra», «Scambia»… sat on a solid accent pill in the middle of a
+    // grey dashed zone (contorni-terzo, 3). The pill is the zone's, so it is the
+    // zone's colour: no accent, and its text 4.5:1 or better on its ground.
+    let found = 0
+    sheet("index.css").walkRules('[data-slot="drop-zone-label"]', (rule) => {
+      found++
+      const decls = new Map<string, string>()
+      rule.walkDecls((decl) => {
+        decls.set(decl.prop, decl.value.trim())
+      })
+      const accents = [...decls].filter(([, value]) => /--ade-accent/.test(value)).map(([prop]) => prop)
+      expect(accents).toEqual([])
+      const ink = /^var\((--ade-[a-z-]+)\)$/.exec(decls.get("color") ?? "")?.[1]
+      const ground = /^var\((--ade-[a-z-]+)\)$/.exec(decls.get("background") ?? "")?.[1]
+      expect([ink !== undefined, ground !== undefined]).toEqual([true, true])
+      const [a, b] = [readToken(ink!), readToken(ground!)]
+      for (const theme of ["light", "dark"] as const) {
+        const value = contrast(a[theme], b[theme])
+        expect([theme, value >= 4.5, value.toFixed(2)]).toEqual([theme, true, value.toFixed(2)])
+      }
+    })
+    expect(found).toBe(1)
+  })
+
   test("lint: the neutral token has a light-dark value, so the ring follows the theme", () => {
     // A ring that reads an undefined token draws nothing, and a focus that draws
     // nothing is the accessibility cost of this change. ADE's themes are `light`,
