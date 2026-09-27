@@ -27,7 +27,8 @@ preserveTestEnv([
 ])
 
 const { Instance } = await import("../../src/project/instance")
-const { getBrainConfig, getBrainProviderModel } = await import("../../src/brain")
+const { Brain, getBrainConfig, getBrainProviderModel, isBrainEnabled } = await import("../../src/brain")
+const { InstanceState } = await import("@/effect")
 const { BRAIN_SESSION_TITLE } = await import("@nikcli-ai/util/brain-constants")
 
 const projectDirs: string[] = []
@@ -78,6 +79,45 @@ afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
   await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
   await removeTestDir(testHome)
+})
+
+describe("Brain opt-in", () => {
+  it("is disabled without configuration while keeping memory enabled", async () => {
+    await withProject(async () => {
+      const cfg = await getBrainConfig()
+      expect(cfg.enabled).toBe(false)
+      expect(cfg.memoryEnabled).toBe(true)
+      expect(await isBrainEnabled()).toBe(false)
+      expect(await Brain.shouldTrigger(InstanceState.ambient())).toBe(false)
+      expect(await Brain.trigger(InstanceState.ambient(), { force: true })).toEqual({
+        success: false,
+        sessionsReviewed: 0,
+        hoursSinceLastBrain: 0,
+        error: "brain disabled",
+      })
+    })
+  })
+
+  it("does not opt in when only model and scheduling settings are configured", async () => {
+    await withProject(async (projectDir) => {
+      await writeConfig(projectDir, {
+        brainModel: "openai/gpt-4o",
+        brainMinHours: 1,
+        brainMinSessions: 1,
+        memory: true,
+      })
+      expect(await isBrainEnabled()).toBe(false)
+      expect(await Brain.shouldTrigger(InstanceState.ambient())).toBe(false)
+    })
+  })
+
+  it.each([true, false])("respects explicit brain: %s", async (enabled) => {
+    await withProject(async (projectDir) => {
+      await writeConfig(projectDir, { brain: enabled })
+      expect((await getBrainConfig()).enabled).toBe(enabled)
+      expect(await isBrainEnabled()).toBe(enabled)
+    })
+  })
 })
 
 describe("Brain config brainModel", () => {
