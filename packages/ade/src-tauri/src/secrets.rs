@@ -265,6 +265,13 @@ pub fn agent_for_command(command: &str) -> Option<&'static str> {
         "pi" => Some("pi"),
         "ohmypi" => Some("ohmypi"),
         "hermes" => Some("hermes"),
+        "freebuff" => Some("freebuff"),
+        "cline" => Some("cline"),
+        "crush" => Some("crush"),
+        "kilo" => Some("kilo"),
+        "goose" => Some("goose"),
+        "copilot" => Some("copilot"),
+        "t3" => Some("t3"),
         "cmd" | "powershell" | "pwsh" | "sh" | "bash" | "zsh" | "fish" => Some("terminal"),
         _ => None,
     }

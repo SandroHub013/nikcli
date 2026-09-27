@@ -49,6 +49,14 @@ export function normalizeAgentId(raw?: string): string {
   if (s.includes("hermes") || s.includes("nous")) return "hermes"
   if (s.includes("kimi") || s.includes("moonshot")) return "kimi"
   if (s.includes("prime")) return "prime"
+  // Before "pi": «copilot» holds it.
+  if (s.includes("copilot")) return "copilot"
+  if (s.includes("freebuff") || s.includes("codebuff")) return "freebuff"
+  if (s.includes("cline")) return "cline"
+  if (s.includes("crush")) return "crush"
+  if (s.includes("kilo")) return "kilo"
+  if (s.includes("goose")) return "goose"
+  if (/\bt3\b/.test(s)) return "t3"
   if (s.includes("ohmypi")) return "ohmypi"
   if (s.includes("pi")) return "pi"
   if (s.includes("shell") || s.includes("term") || s.includes("bash") || s.includes("zsh") || s.includes("powershell"))

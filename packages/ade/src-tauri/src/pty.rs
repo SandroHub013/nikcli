@@ -130,6 +130,7 @@ struct Exit {
 const ALLOWED_AGENTS: &[&str] = &[
     "claude", "codex", "opencode", "nikcli", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
+    "freebuff", "cline", "crush", "kilo", "goose", "copilot", "t3",
 ];
 
 /// Environment ADE sets for one agent CLI, whatever the user's shell has.

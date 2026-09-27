@@ -7,6 +7,7 @@
  * the only proof that every start reads them was a grep of the workbench.
  * The rules are here now, where a test runs them.
  */
+import { agentById } from "../session-new/agents"
 import { introArgs, introText } from "../session-new/intro"
 import { nativeLaunchArgs } from "../session/native-mail"
 import { modelIn } from "../session/orchestra"
@@ -44,6 +45,8 @@ export function startArgsFor(
   const kept = pane?.spawnArgs ?? []
   const extra = start.extra ?? []
   return [
+    // What this CLI always needs, first: Cline's `--tui` (`AgentOption.args`).
+    ...(agentById(agentId)?.args ?? []),
     ...introArgs(agentId, introText(agentId, modelIn([...kept, ...extra]))),
     ...nativeLaunchArgs(agentId, start.title),
     ...kept,

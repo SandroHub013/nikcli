@@ -36,6 +36,10 @@ export const REAL_MARK_IDS: readonly string[] = [
   "pi",
   "ohmypi",
   "hermes",
+  "copilot",
+  "cline",
+  "goose",
+  "kilo",
   "terminal",
 ]
 
