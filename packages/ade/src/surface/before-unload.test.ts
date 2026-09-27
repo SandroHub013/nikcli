@@ -114,6 +114,21 @@ describe("counting active working sessions for window close (D81)", () => {
     expect(shouldConfirmWindowClose({ working })).toBe(false)
   })
 
+  /*
+   * Review area 2, MEDIO: the panes above have no model, so `!agentId` left
+   * them out and `isPanelPane` was never what the tests saw. The real ones do:
+   * ADE opens browser and video panes with `model: "—"`, working, and only
+   * `isPanelPane` keeps them from asking before the window closes.
+   */
+  test("a browser or video pane as ADE opens it, with a model, is not a working session", () => {
+    const running = new Set(["browser-1", "video-1"])
+    const panes = [
+      { id: "browser-1", model: "—", browserUrl: "http://localhost:3000", status: "working" as const },
+      { id: "video-1", model: "—", mode: "video", videoPath: "C:/v.mp4", status: "working" as const },
+    ]
+    expect(countWorkingSessions(panes, running)).toBe(0)
+  })
+
   test("isWorkingAgentPane helper matches working/waiting agent panes alive in running", () => {
     const running = new Set(["p1", "p2", "p3", "p4", "p5"])
     expect(isWorkingAgentPane({ id: "p1", agent: "claude-code", status: "working" }, running)).toBe(true)
