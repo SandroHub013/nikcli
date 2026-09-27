@@ -44,6 +44,8 @@ export const voiceIt = {
     `Per qualche secondo puoi continuare senza dire «${wakeWord}». Premi per smettere di ascoltare.`,
   "vui.paused.title": "Riprende da solo quando sblocchi il PC. Premi per riprendere adesso.",
   "vui.shortcut.invalid": "Scorciatoia non valida.",
+  "vui.shortcut.notSystem":
+    "Questo tasto non funziona fuori da ADE: usa una lettera, un numero, il tastierino, un tasto F o le frecce.",
   "vui.shortcut.conflict": (command: string) => `In conflitto con il comando '${command}'.`,
   "vui.hud.waiting": "in attesa",
   "vui.hud.say": (wakeWord: string) => `di' «${wakeWord}»`,

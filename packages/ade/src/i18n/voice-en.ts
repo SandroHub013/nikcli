@@ -44,6 +44,8 @@ export const voiceEn: VoiceMessages = {
     `For a few seconds you can go on without saying “${wakeWord}”. Press to stop listening.`,
   "vui.paused.title": "It resumes by itself when you unlock the PC. Press to resume now.",
   "vui.shortcut.invalid": "Invalid shortcut.",
+  "vui.shortcut.notSystem":
+    "This key does not work outside ADE: use a letter, a digit, the keypad, an F key or the arrows.",
   "vui.shortcut.conflict": (command) => `Conflicts with the '${command}' command.`,
   "vui.hud.waiting": "waiting",
   "vui.hud.say": (wakeWord) => `say “${wakeWord}”`,

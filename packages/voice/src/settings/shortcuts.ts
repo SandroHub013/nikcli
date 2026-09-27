@@ -20,6 +20,30 @@ import { t } from "@nikcli-ai/ade/i18n"
 export const VOICE_COMMAND_AGENT = "voice.mode.agent"
 export const VOICE_COMMAND_TRANSCRIPTION = "voice.mode.transcription"
 
+/*
+ * The keys a system-wide hotkey can be registered on, whatever the layout.
+ *
+ * The voice chords are registered with the operating system, and on Windows
+ * that is a virtual-key code the `global-hotkey` crate maps from a fixed,
+ * American table. Letters, digits, the numeric keypad and the named keys have
+ * a code that means the same key on every layout. Punctuation does not:
+ * VK_OEM_1 is «;» on an American keyboard and «è» on an Italian one, so a
+ * chord recorded on «,» was registered on a different key, and a character
+ * the table does not know at all («ò», «!», «€») could not be registered.
+ */
+const SYSTEM_KEY =
+  /^([a-z0-9]|f([1-9]|1[0-9]|2[0-4])|numpad[0-9]|space|enter|backspace|delete|insert|home|end|pageup|pagedown|arrowup|arrowdown|arrowleft|arrowright|printscreen|pause|capslock|numlock|scrolllock)$/
+
+/** Whether the chord's key can be held system-wide, so it works outside ADE's window too. */
+export function isSystemChord(chord: string | Chord, platform: Platform = "other"): boolean {
+  try {
+    const parsed = typeof chord === "string" ? parseChord(chord, platform) : chord
+    return SYSTEM_KEY.test(parsed.key)
+  } catch {
+    return false
+  }
+}
+
 /**
  * Builds ADE keymap bindings for configured voice mode shortcut chords.
  */

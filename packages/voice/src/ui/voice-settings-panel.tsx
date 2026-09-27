@@ -849,6 +849,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     const result = captureKeyboardEvent(
       {
         key: e.key,
+        code: e.code,
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         shiftKey: e.shiftKey,

@@ -20,7 +20,7 @@
  */
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
-import type { VoiceMode, VoiceSettings } from "@nikcli-ai/voice/core"
+import { isSystemChord, type VoiceMode, type VoiceSettings } from "@nikcli-ai/voice/core"
 import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */
@@ -215,13 +215,16 @@ export function unknownChordMessage(chord: string): string {
   return t("voice.shortcut.unknown", chord)
 }
 
-/** What to say about a chord the system would not give ADE. */
+/**
+ * What to say about a chord the system would not give ADE.
+ *
+ * Two different refusals: a key the system-wide table cannot name (see
+ * `isSystemChord`), which no other application has anything to do with, and a
+ * chord someone else already holds.
+ */
 export function busyMessage(mode: VoiceMode, chord: string): string {
-  return t(
-    "voice.shortcut.busy",
-    chord,
-    t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription"),
-  )
+  const feature = t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription")
+  return isSystemChord(chord) ? t("voice.shortcut.busy", chord, feature) : t("voice.shortcut.notSystem", chord, feature)
 }
 
 /**
@@ -273,6 +276,14 @@ export async function registerVoiceShortcuts(
   ]
 
   for (const { mode, chord } of wanted) {
+    /* Not claimed at all: on a layout other than the American one the system
+       would give ADE a different key, taken from whatever else uses it. It
+       still works in ADE's window, where the keydown listener sees it. */
+    if (!isSystemChord(chord)) {
+      failed.push({ mode, chord, problem: "not a system-wide key" })
+      deps.report?.(busyMessage(mode, chord))
+      continue
+    }
     try {
       await deps.register(toTauriChord(chord))
       registered.push(mode)

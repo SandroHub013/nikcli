@@ -417,6 +417,7 @@ export {
   describeCommandId,
   describeShortcut,
   findVoiceShortcutConflicts,
+  isSystemChord,
   isChordUsable,
   summarizeVoiceShortcutConflicts,
   type ChordRisk,
