@@ -333,6 +333,7 @@ import { displayArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
+import { closeAfterSaving } from "./close-window"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
@@ -5118,38 +5119,40 @@ export function Workbench() {
           const requestId = event.payload?.requestId
           if (isHandlingClose) return
           isHandlingClose = true
+          const closeForGood = () =>
+            closeAfterSaving({
+              flush: () => autosave.flush(),
+              close: async () => {
+                try {
+                  const { invoke } = await import("@tauri-apps/api/core")
+                  await invoke("ade_confirm_close", { requestId })
+                } catch {
+                  const { getCurrentWindow } = await import("@tauri-apps/api/window")
+                  await getCurrentWindow().close()
+                }
+              },
+            })
 
           try {
-            const working = countWorkingSessions(wb().panes, running)
-            if (!shouldConfirmWindowClose({ working })) {
-              closingConfirmed = true
-              try {
-                const { invoke } = await import("@tauri-apps/api/core")
-                await invoke("ade_confirm_close", { requestId })
-              } catch {
-                const { getCurrentWindow } = await import("@tauri-apps/api/window")
-                await getCurrentWindow().close()
-              }
-              return
-            }
-
-            // Acknowledge receipt to Rust to disarm the safety timeout while prompting the user
+            // Acknowledge receipt to Rust to disarm the safety timeout while
+            // prompting the user, or while the workbench reaches the disk.
             try {
               const { invoke } = await import("@tauri-apps/api/core")
               await invoke("ade_close_ack", { requestId })
             } catch {}
 
+            const working = countWorkingSessions(wb().panes, running)
+            if (!shouldConfirmWindowClose({ working })) {
+              closingConfirmed = true
+              await closeForGood()
+              return
+            }
+
             const message = closeConfirmationMessage(working)
             const allowed = await askCloseConfirmation(message)
             if (allowed) {
               closingConfirmed = true
-              try {
-                const { invoke } = await import("@tauri-apps/api/core")
-                await invoke("ade_confirm_close", { requestId })
-              } catch {
-                const { getCurrentWindow } = await import("@tauri-apps/api/window")
-                await getCurrentWindow().close()
-              }
+              await closeForGood()
             } else {
               try {
                 const { invoke } = await import("@tauri-apps/api/core")
