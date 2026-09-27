@@ -211,6 +211,25 @@ describe("terminal selection & copy (S50)", () => {
         expect(written).toEqual(["selected output line"])
       })
 
+      // Verifiche: «Copiato» came on release and not on Ctrl+C.
+      it("says it copied, as a copy on release does", async () => {
+        const model = xterm()
+        model.drag(new EventTarget(), new EventTarget(), [2, 3], [10, 5])
+        await model.settle()
+        let said = 0
+        createTerminalKeyHandler(model.terminal as any, undefined, () => said++)(
+          new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
+        )
+        await model.settle()
+        expect(said).toBe(1)
+      })
+
+      it("lint: the pane's onCopied reaches the Ctrl+C handler", () => {
+        const source = readFileSync(join(import.meta.dir, "registry.ts"), "utf8")
+        expect(source).toContain("() => created.copied?.(),")
+        expect(source).toContain("session.copied = options.onCopied")
+      })
+
       it("after the copy a resize draws no teal block", async () => {
         const model = xterm()
         await selectThenCtrlC(model, [2, 3], [10, 5])

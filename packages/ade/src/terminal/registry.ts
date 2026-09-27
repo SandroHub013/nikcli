@@ -26,6 +26,8 @@ export interface SessionTerminal {
   uncover?: () => void
   /** The pane that draws it says a copy was refused during a take. */
   copyBlocked?: () => void
+  /** The pane that draws it says a selection was copied, by Ctrl+C as on release. */
+  copied?: () => void
   /** The last size that held still in its cell and was handed to `onResize` (S77). */
   settled?: { cols: number; rows: number }
 }
@@ -378,7 +380,11 @@ export function copyOnRelease(
  * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and forgets the selection
  * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
  */
-export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () => void): (event: KeyboardEvent) => boolean {
+export function createTerminalKeyHandler(
+  terminal: Terminal,
+  onCopyBlocked?: () => void,
+  onCopied?: () => void,
+): (event: KeyboardEvent) => boolean {
   return (event: KeyboardEvent) => {
     const isMod = event.ctrlKey || event.metaKey
     if (isMod && event.shiftKey) {
@@ -392,7 +398,11 @@ export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () 
       if (terminal.hasSelection()) {
         if (event.type === "keydown") {
           if (copyIsCovered(terminal)) onCopyBlocked?.()
-          else void copyToClipboard(selectionText(terminal))
+          // «Copiato», as a copy on release says it: Ctrl+C said nothing (Verifiche).
+          else
+            void copyToClipboard(selectionText(terminal)).then((copied) => {
+              if (copied) onCopied?.()
+            })
           // Not `clearSelection`: its teal comes back on a resize (see `forgetSelection`).
           forgetSelection(terminal)
         }
@@ -440,7 +450,13 @@ export function getTerminal(id: string): SessionTerminal {
   terminal.loadAddon(fit)
 
   const created: SessionTerminal = { terminal, fit }
-  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal, () => created.copyBlocked?.()))
+  terminal.attachCustomKeyEventHandler(
+    createTerminalKeyHandler(
+      terminal,
+      () => created.copyBlocked?.(),
+      () => created.copied?.(),
+    ),
+  )
 
   terminals.set(id, created)
   return created
@@ -633,6 +649,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
 
   session.copyBlocked = options.onCopyBlocked
+  session.copied = options.onCopied
 
   // A pane drawn or moved during a take is born covered, with a reader of its own.
   if (covering) cover(session)
@@ -703,6 +720,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     session.uncover?.()
     session.uncover = undefined
     session.copyBlocked = undefined
+    session.copied = undefined
     session.element = undefined
     session.detach = undefined
   }
