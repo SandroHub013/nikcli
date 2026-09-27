@@ -30,7 +30,7 @@ export namespace Flag {
   export const NIKCLI_GIT_BASH_PATH = process.env["NIKCLI_GIT_BASH_PATH"]
   export const NIKCLI_CONFIG = process.env["NIKCLI_CONFIG"]
   export declare const NIKCLI_CONFIG_DIR: string | undefined
-  export const NIKCLI_CONFIG_CONTENT = process.env["NIKCLI_CONFIG_CONTENT"]
+  export declare const NIKCLI_CONFIG_CONTENT: string | undefined
   export const NIKCLI_DISABLE_AUTOUPDATE = truthy("NIKCLI_DISABLE_AUTOUPDATE")
   export const NIKCLI_DISABLE_PRUNE = truthy("NIKCLI_DISABLE_PRUNE")
   export const NIKCLI_DISABLE_TERMINAL_TITLE = truthy("NIKCLI_DISABLE_TERMINAL_TITLE")
@@ -294,6 +294,17 @@ Object.defineProperty(Flag, "NIKCLI_HERDR", {
 Object.defineProperty(Flag, "NIKCLI_CONFIG_DIR", {
   get() {
     return process.env["NIKCLI_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for NIKCLI_CONFIG_CONTENT: tests assign it at runtime (e.g.
+// `test/brain/brain-pass.test.ts` turning on `experimental.brain`), after
+// flag.ts may already have been imported.
+Object.defineProperty(Flag, "NIKCLI_CONFIG_CONTENT", {
+  get() {
+    return process.env["NIKCLI_CONFIG_CONTENT"]
   },
   enumerable: true,
   configurable: false,
