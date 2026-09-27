@@ -6871,7 +6871,7 @@ export function Workbench() {
         const home = await host.homeDir().catch(() => "")
         const readLatest = async () =>
           home
-            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", p.root)
+            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", workDir)
             : undefined
         const before = await readLatest()
         const poll = setInterval(async () => {
