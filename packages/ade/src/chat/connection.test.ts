@@ -207,8 +207,8 @@ describe("the chat on a folder", () => {
    * call answers with its own here.
    */
   test("loadChatCatalog takes each field from its own call", async () => {
-    const providers = { providers: [{ id: "openrouter" }], default: {} }
-    const agents = [{ name: "build" }]
+    const providers = { providers: [{ id: "openrouter" }], default: {} } as never
+    const agents = [{ name: "build" }] as never
     const client = {
       config: { providers: async () => ({ data: providers }), get: async () => ({ data: { model: "openrouter/x:free" } }) },
       app: { agents: async () => ({ data: agents }) },
