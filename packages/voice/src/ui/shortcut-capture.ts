@@ -7,6 +7,7 @@
 
 import {
   describeChordRisk,
+  isSystemChord,
   describeCommandId,
   findVoiceShortcutConflicts,
   describeShortcut,
@@ -21,6 +22,8 @@ import { t } from "@nikcli-ai/ade/i18n"
 
 export interface KeyInput {
   key: string
+  /** The physical key (`KeyboardEvent.code`); a keyboard event always has it. */
+  code?: string
   ctrlKey: boolean
   metaKey: boolean
   shiftKey: boolean
@@ -66,6 +69,25 @@ export function getPlatform(): Platform {
 }
 
 /**
+ * The key a recorded chord is written with.
+ *
+ * `event.key` is the character the layout makes, and with Shift or AltGr down
+ * that is not the key: on an Italian keyboard Ctrl+Shift+1 is «!», and
+ * Ctrl+Alt+E is «€». Stored like that, the chord matched in ADE's window and
+ * could not be registered with the system — the dictation chord did nothing
+ * outside the window. A digit is written from the physical key, and so is a
+ * letter the layout turned into something else; the keypad is its own key.
+ */
+function chordKey(event: KeyInput): string {
+  const fromKey = normalizeKeyName(event.key)
+  const fromCode = event.code ? normalizeKeyName(event.code) : ""
+  if (/^numpad[0-9]$/.test(fromCode) || /^[0-9]$/.test(fromCode)) return fromCode
+  if (/^[a-z]$/.test(fromKey)) return fromKey
+  if (/^[a-z]$/.test(fromCode)) return fromCode
+  return fromKey
+}
+
+/**
  * Translates a minimal keyboard event into a normalized chord string.
  *
  * Guarantees:
@@ -107,7 +129,7 @@ export function captureKeyboardEvent(event: KeyInput, platform: Platform): Short
    * case that used to break: it was stored as "space" and compared against the
    * literal " " the browser reports, which never agreed.
    */
-  const canonical = normalizeKeyName(event.key)
+  const canonical = chordKey(event)
   if (canonical.length === 0) {
     return { type: "ignored" }
   }
@@ -158,6 +180,10 @@ export function checkShortcutConflict(
       hasConflict: true,
       message: risk.message ?? t("vui.shortcut.invalid"),
     }
+  }
+  // Refused here rather than accepted and then refused by the system, or registered on another key.
+  if (!isSystemChord(proposedChord, platform)) {
+    return { hasConflict: true, message: t("vui.shortcut.notSystem") }
   }
 
   const candidateSettings: VoiceSettings = {
