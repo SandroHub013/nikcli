@@ -335,6 +335,7 @@ import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
 import { closeAfterSaving } from "./close-window"
+import { createInFlight } from "../session/in-flight"
 import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
@@ -1871,6 +1872,9 @@ export function Workbench() {
   const typeLine = async (session: SpawnedSession, text: string, options: { unlessBusy?: boolean } = {}): Promise<boolean> =>
     lineGiven(await typeLineOutcome(session, text, options))
 
+  /** The lines queued or being typed, per pane: `freeNow` reads it first. */
+  const linesInFlight = createInFlight()
+
   const typeLineOutcome = (session: SpawnedSession, text: string, options: { unlessBusy?: boolean } = {}): Promise<LineOutcome> => {
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     const job = async (): Promise<LineOutcome> => {
@@ -1882,7 +1886,7 @@ export function Workbench() {
         return "not-typed"
       return typeLineNow(session, text)
     }
-    return paneId === undefined ? job() : lineQueue(paneId, job)
+    return paneId === undefined ? job() : linesInFlight.track(paneId, lineQueue(paneId, job))
   }
 
   const typeLineNow = async (session: SpawnedSession, text: string): Promise<LineOutcome> => {
@@ -2191,6 +2195,8 @@ export function Workbench() {
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
+    // A line on its way is a turn about to start (`createInFlight`).
+    if (linesInFlight.has(paneId)) return false
     const isHooked = hooked(paneId)
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
