@@ -121,7 +121,12 @@
 
 [data-component="voice-settings-panel"] [data-slot="header"] {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* Mark and title, then a column per control on the same row: the reset shows
+     on the voice's sections only, and a fixed count of tracks sent the X under
+     the title whenever it did. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   align-items: center;
   gap: var(--ade-space-6);
   padding: var(--ade-space-6) var(--ade-space-7);
@@ -1548,8 +1553,16 @@
 
   [data-component="voice-settings-panel"] [data-slot="header"] {
     grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-auto-flow: row;
     row-gap: var(--ade-space-4);
     padding: var(--ade-space-5) var(--ade-space-6);
+  }
+
+  /* Narrow, the pill and the reset take rows of their own; the X stays on the
+     title's row, at its end. */
+  [data-component="voice-settings-panel"] [data-slot="close-btn"] {
+    grid-row: 1;
+    grid-column: 3;
   }
 
   [data-component="voice-settings-panel"] [data-slot="status-pill"] {
