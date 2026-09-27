@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { source, stripComments, tuiSource } from "./tui-source"
+import { source, stripComments, TUI_SRC, tuiSource } from "./tui-source"
 
 /**
  * `/restart` and `/reload`, pinned to the host seam they are built on.
@@ -79,6 +79,23 @@ describe("restart command", () => {
     const app = stripComments(await tuiSource("app.tsx"))
     const run = app.slice(app.indexOf("async function runRestart"), app.indexOf("const connected = useConnected()"))
     expect(run).not.toMatch(/sync\.bootstrap\(\)/)
+  })
+
+  it("keeps a fatal bootstrap to startup alone", async () => {
+    // Every other caller refetches under a terminal that is already up — after
+    // connecting a provider, switching workspace, opening a worktree session.
+    // Several wrapped the call in try/catch, which never helped: a fatal
+    // bootstrap does not throw, it exits nikcli.
+    const offenders: string[] = []
+    for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: TUI_SRC })) {
+      if (file === "context/sync.tsx") continue
+      const text = stripComments(await tuiSource(file))
+      if (/\bbootstrap\(\s*\)/.test(text)) offenders.push(file)
+    }
+    expect(offenders).toEqual([])
+    const sync = stripComments(await tuiSource("context/sync.tsx"))
+    expect(sync.match(/\bbootstrap\(\s*\)/g)?.length).toBe(1)
+    expect(sync).toMatch(/onMount\(\(\) => \{\s*bootstrap\(\)/)
   })
 
   it("swaps the SDK transport behind getters, so every later request reaches the new backend", async () => {

@@ -200,7 +200,7 @@ export function DialogWorkspaceList() {
       // path/vcs/sessions from the local instance (opencode parity).
       if (project.workspace.current() !== undefined) {
         project.workspace.set(undefined)
-        void sync.bootstrap().catch(() => undefined)
+        void sync.bootstrap({ fatal: false })
       }
       if (localCount() > 0) {
         dialog.replace(() => <DialogSessionList localOnly={true} />)
@@ -404,7 +404,7 @@ export function DialogWorkspaceList() {
               refetchGlobal()
             } else {
               await syncWorkspaces()
-              await sync.bootstrap().catch(() => undefined)
+              await sync.bootstrap({ fatal: false })
             }
             setRemoving(undefined)
           },

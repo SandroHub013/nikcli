@@ -148,9 +148,9 @@ export async function restoreWorkspaceSession(input: {
 
   input.project.workspace.set(input.workspaceID)
 
-  try {
-    await input.sync.bootstrap()
-  } catch {}
+  // Not fatal: a failed refetch here must not exit nikcli, and the syncs
+  // below still bring the workspace's session in.
+  await input.sync.bootstrap({ fatal: false })
 
   await Promise.all([input.project.workspace.sync(), input.sync.session.sync(input.sessionID, { full: true })]).catch(
     (err) => {
