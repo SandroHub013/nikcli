@@ -132,6 +132,32 @@ export async function shutdownWorker(input: {
 }
 
 /**
+ * Re-exec this process with the same arguments, then exit.
+ *
+ * How a `/restart` reconnects: the client is a thin HTTP consumer of the
+ * background service, so replacing it costs a process start, not a second
+ * engine graph. Whatever the host had to restart underneath (the service, the
+ * worker) is already up by the time this is called, and the new client
+ * rediscovers it — which is also what re-reads the channel password and
+ * re-checks version skew, both of which a same-process reconnect would keep
+ * stale.
+ *
+ * `detached` puts the child outside this process group so the exit below does
+ * not take it down, and the stdio streams are inherited so the terminal belongs
+ * to the new process alone.
+ */
+export function relaunchSelf(): never {
+  process.exitCode = 0
+  Bun.spawn([process.execPath, ...process.argv.slice(1)], {
+    windowsHide: true,
+    stdio: ["inherit", "inherit", "inherit"],
+    env: process.env,
+    detached: true,
+  })
+  process.exit(0)
+}
+
+/**
  * How long the server worker may take to start listening before the TUI gives
  * up on it. A safety net, not a budget: a normal start is a few seconds, and
  * this only turns "waits forever on a worker that will never answer" into an
@@ -357,6 +383,20 @@ export default Runtime.handler(Commands, async (input) => {
             await upgradeNow(method as import("@/installation").Installation.Method, version)
           })
         },
+        // `/restart` in the TUI. The service is the thing being restarted here:
+        // a separate process, whose live sessions are suspended on SIGTERM and
+        // resumed by the engine that comes back. `prepare` is the slow half and
+        // runs while the terminal is still ours, so the restart dialog is on
+        // screen for the seconds it actually takes.
+        onRestartPrepare: async () => {
+          const next = await BackgroundService.restart()
+          Log.Default.info("restarted background service", { url: next.url, pid: next.pid })
+        },
+        // The reconnect. The TUI's transport is a URL plus a `fetch` bound to
+        // the credential of the process that just died, and the new service may
+        // have taken an ephemeral port, so only a fresh client has both true.
+        onRestart: relaunchSelf,
+        restartTarget: "background service",
       })
       return
     }
@@ -449,19 +489,6 @@ export default Runtime.handler(Commands, async (input) => {
     simulation?.backend.stop()
   }
 
-  const restart = async () => {
-    await stop()
-    process.exitCode = 0
-    // Re-exec the current process with the same arguments
-    Bun.spawn([process.execPath, ...process.argv.slice(1)], {
-      windowsHide: true,
-      stdio: ["inherit", "inherit", "inherit"],
-      env: process.env,
-      detached: true,
-    })
-    process.exit(0)
-  }
-
   // Mobile (and any nikcli-managed PTY) sets NIKCLI_TERMINAL=1 in env. Bun can still report
   // `stdin.isTTY === false` in that PTY, which would incorrectly take the "piped stdin" path
   // below and block forever on `Bun.stdin.text()` — so the OpenTUI renderer never starts.
@@ -529,7 +556,12 @@ export default Runtime.handler(Commands, async (input) => {
         prompt,
       },
       onExit: stop,
-      onRestart: restart,
+      // `/restart` with no service to restart: the worker *is* the server, so
+      // stopping it is the slow half and the relaunch is the reconnect. `stop` is
+      // idempotent, so `onExit` running it again during teardown costs nothing.
+      onRestartPrepare: stop,
+      onRestart: relaunchSelf,
+      restartTarget: "server",
       checkUpgrade: async () => {
         return client.call("checkUpgrade", { directory: cwd }).catch((error) => {
           Log.Default.warn("upgrade check failed", {

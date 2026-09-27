@@ -562,6 +562,49 @@ describe("BackgroundService.health", () => {
   })
 })
 
+describe("BackgroundService.restart", () => {
+  const next = { id: "next", pid: 4242, url: "http://127.0.0.1:5000", version: "9.9.9", startedAt: 2 }
+
+  it("stops before it starts, and hands back the new registration", async () => {
+    // Spied, not real: `start()` spawns a `serve --service` process, and what
+    // this sequence owes its callers — `nikcli service restart` and the TUI's
+    // `/restart` — is the order (the port has to be free before the new engine
+    // takes it) and the registration the client connects to next.
+    const order: string[] = []
+    const stop = spyOn(BackgroundService, "stop").mockImplementation(async () => {
+      order.push("stop")
+      return true
+    })
+    const start = spyOn(BackgroundService, "start").mockImplementation(async () => {
+      order.push("start")
+      return next
+    })
+    try {
+      expect(await BackgroundService.restart()).toEqual(next)
+      expect(order).toEqual(["stop", "start"])
+    } finally {
+      stop.mockRestore()
+      start.mockRestore()
+    }
+  })
+
+  it("propagates a stop that failed instead of starting a second engine on top of it", async () => {
+    const stop = spyOn(BackgroundService, "stop").mockImplementation(async () => {
+      throw new Error("service is wedged")
+    })
+    const start = spyOn(BackgroundService, "start").mockImplementation(async () => {
+      throw new Error("start must not run")
+    })
+    try {
+      await expect(BackgroundService.restart()).rejects.toThrow("service is wedged")
+      expect(start).not.toHaveBeenCalled()
+    } finally {
+      stop.mockRestore()
+      start.mockRestore()
+    }
+  })
+})
+
 process.on("beforeExit", () => {
   void removeTestDir(testHome)
 })

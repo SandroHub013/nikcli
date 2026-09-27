@@ -31,6 +31,17 @@ describe("session task chrome", () => {
   it("keeps the two kinds as the only visual vocabulary", () => {
     expect(Object.keys(sessionTaskVisual).sort()).toEqual(["background", "subtask"])
   })
+
+  it("paints both kinds in the agent's colour, so a background run is attributable", async () => {
+    // Background cards were `theme.status.info.fg` while subtasks used the
+    // agent's colour, which left the parallel half of a turn's work as the half
+    // you could not place. Both call sites already pass `local.agent.color(...)`,
+    // so the accent is the agent's for both kinds and the distinction stays where
+    // it belongs: the rail, the glyph and the badge.
+    const card = stripComments(await tuiSource("component/session-task-card.tsx"))
+    expect(card).toContain("const accent = createMemo(() => props.color)")
+    expect(card).not.toContain("theme.status.info.fg")
+  })
 })
 
 describe("session transcript uses the card, not a dialog", () => {

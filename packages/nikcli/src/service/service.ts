@@ -621,6 +621,22 @@ export namespace BackgroundService {
   }
 
   /**
+   * Stop the service and start it again, returning the new registration.
+   *
+   * The one definition of the sequence: `nikcli service restart` and the TUI's
+   * `/restart` both mean this, and both have to leave a client connected to
+   * *something* afterwards. `stop()` SIGTERMs, so live sessions are suspended and
+   * resumed by the new engine rather than lost.
+   *
+   * The calls go through the namespace so a caller (or a test) can observe the
+   * order they happen in; `stop` is what makes the port free for `start`.
+   */
+  export async function restart(): Promise<Registration> {
+    await BackgroundService.stop()
+    return BackgroundService.start()
+  }
+
+  /**
    * Whether the process behind `registration` is provably the service.
    *
    * A registration outlives a crash, and the OS reuses pids: a live pid alone

@@ -1,5 +1,5 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createCliRenderer, type CliRendererConfig } from "@opentui/core"
+import { CliRenderEvents, createCliRenderer, type CliRenderer, type CliRendererConfig } from "@opentui/core"
 import { Clipboard } from "@tui/util/clipboard"
 import * as Sound from "@tui/util/sound"
 import { UserApi } from "@tui/util/user-api"
@@ -82,6 +82,7 @@ import { PluginRouteMissing } from "./component/plugin-route-missing"
 import { PluginRouteBoundary } from "./component/plugin-route-boundary"
 import { Reconnecting } from "./component/reconnecting"
 import { StartupLoading } from "./component/startup-loading"
+import { DialogRestart } from "./component/dialog-restart"
 import { SessionTabs } from "./component/session-tabs"
 import { DialogOnboarding } from "@tui/component/dialog-onboarding"
 import { DialogLogin } from "@tui/component/dialog-login"
@@ -123,6 +124,7 @@ function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
 
 import type { EventSource } from "./context/sdk"
 import { Log } from "@nikcli-ai/util/log"
+import { errorMessage } from "@nikcli-ai/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
 
@@ -149,7 +151,32 @@ export function tui(input: {
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
+  /**
+   * What `/restart` does once the terminal has been handed over.
+   *
+   * Reconnects rather than restarts in place: the TUI's transport is a base URL
+   * plus a `fetch` that presents the credential of the process being replaced,
+   * so the only way both are true again is a fresh client. The host owns the
+   * decision — the shared background service, the embedded worker, or nothing
+   * at all for a client attached to somebody else's server.
+   */
   onRestart?: () => Promise<void>
+  /**
+   * The slow half of `/restart`, run while the terminal is still ours.
+   *
+   * Separate from `onRestart` because of ordering, not of ownership: stopping a
+   * service and waiting for the one that replaces it takes seconds, and doing it
+   * after the renderer is destroyed means the user watches a blank terminal for
+   * all of them. A failure here is reported and the terminal is left alone,
+   * which is the one outcome where tearing down would lose the session.
+   */
+  onRestartPrepare?: () => Promise<void>
+  /**
+   * What this host calls the process `/restart` replaces — "background service"
+   * for the shared daemon, "server" for the in-process worker. It is the word
+   * the restart dialog uses, so a client that has no backend says neither.
+   */
+  restartTarget?: string
   checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   upgradeNow?: (method: string, version: string) => Promise<void>
   startServer?: (options?: StartServerOptions) => Promise<string>
@@ -261,7 +288,12 @@ export function tui(input: {
                                                               <UpgradeProvider upgradeNow={input.upgradeNow}>
                                                                 <AttentionProvider renderer={renderer}>
                                                                   <SessionTabsProvider>
-                                                                    <App checkUpgrade={input.checkUpgrade} />
+                                                                    <App
+                                                                      checkUpgrade={input.checkUpgrade}
+                                                                      onRestart={input.onRestart}
+                                                                      onRestartPrepare={input.onRestartPrepare}
+                                                                      restartTarget={input.restartTarget}
+                                                                    />
                                                                   </SessionTabsProvider>
                                                                 </AttentionProvider>
                                                               </UpgradeProvider>
@@ -335,7 +367,45 @@ function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
   return "sessionID" in route ? route.sessionID : undefined
 }
 
-function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> }) {
+/**
+ * Resolve once the next frame has been painted, or after `timeoutMs`.
+ *
+ * `/restart` opens a dialog and then hands the terminal to a process that does
+ * not exist yet, so the dialog has to be *on screen* before that happens — a
+ * promise tick is not a frame, and the dialog would flash for 20ms and tell the
+ * user nothing. The timeout is the point of the helper being more than a
+ * `requestRender()`: a frame that never comes (a renderer that was torn down
+ * first, a terminal that stopped reading) must not leave the restart waiting
+ * forever, and the work it guards is worth doing either way.
+ */
+function afterPaint(renderer: CliRenderer, timeoutMs = 250) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      renderer.off(CliRenderEvents.FRAME, done)
+      resolve()
+    }
+    const timer = setTimeout(done, timeoutMs)
+    timer.unref?.()
+    renderer.on(CliRenderEvents.FRAME, done)
+    renderer.requestRender()
+  })
+}
+
+function App(props: {
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
+  /**
+   * What "restart" means for the host this terminal is attached to.
+   *
+   * Optional because not every host owns a backend: the standalone client
+   * (`startStandaloneTui`) is attached to somebody else's server and must not
+   * claim it can restart it. Undefined is surfaced by `/restart` rather than
+   * quietly doing nothing.
+   */
+  onRestart?: () => Promise<void>
+  onRestartPrepare?: () => Promise<void>
+  restartTarget?: string
+}) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -351,7 +421,7 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
   const { theme, mode, setMode } = themeCtx
   const sync = useSync()
   const tabs = useSessionTabs()
-  const { exit, setSummary } = useExit()
+  const { exit, restart, setSummary } = useExit()
   const promptRef = usePromptRef()
   const attention = useAttention()
   const keybind = useKeybind()
@@ -769,6 +839,62 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       },
     ),
   )
+
+  /**
+   * `/reload`: re-read configuration in place, on both sides of the wire.
+   *
+   * The server half is `POST /config/reload`, which is the same
+   * `InstanceReload.reload` the file watcher runs — providers, agents, commands,
+   * MCP servers and server-side plugins rebuild from what is on disk while live
+   * sessions keep running. The client half is the plugin runtime's reconcile
+   * pass, which re-reads the merged TUI config: that is what picks up a plugin
+   * added since the last pass, and it is the only half a server reload cannot
+   * do for us.
+   *
+   * A second `/reload` while one is in flight is not a second pass: the runtime
+   * serialises them, and a reload is idempotent.
+   */
+  async function reloadAll() {
+    toast.show({
+      variant: "info",
+      message: "Reloading configuration…",
+      duration: 2000,
+    })
+    try {
+      await sdk.client.config.reload({ throwOnError: true })
+      await TuiPluginRuntime.reload()
+      toast.show({ variant: "success", message: "Configuration reloaded" })
+    } catch (error) {
+      log.error("reload failed", { error: errorMessage(error) })
+      toast.error(error)
+    }
+  }
+
+  /**
+   * `/restart`, in the order the user has to see it happen.
+   *
+   * Dialog first, then a painted frame, then the host's slow work, and only then
+   * the teardown. Doing the work after `exit.restart()` instead would put the
+   * seconds that matter behind a destroyed renderer.
+   */
+  async function runRestart() {
+    dialog.replace(() => <DialogRestart target={props.restartTarget ?? "nikcli server"} />)
+    await afterPaint(renderer)
+    try {
+      await props.onRestartPrepare?.()
+    } catch (error) {
+      // A service that would not stop, or would not come back. The terminal is
+      // still ours and still pointed at a working server, so say what happened
+      // and stay.
+      log.error("restart failed before the terminal was released", {
+        error: errorMessage(error),
+      })
+      dialog.clear()
+      toast.error(error)
+      return
+    }
+    await restart()
+  }
 
   const connected = useConnected()
   command.register(() => [
@@ -1423,6 +1549,42 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
         dialog.clear()
       },
       category: "System",
+    },
+    {
+      title: "Reload configuration",
+      value: "nikcli.reload",
+      category: "System",
+      slash: {
+        name: "reload",
+      },
+      onSelect: (dialog) => {
+        // No dialog: the work is a request, and a modal that reported nothing
+        // would be a second thing to keep in sync with the toasts.
+        dialog.clear()
+        void reloadAll()
+      },
+    },
+    {
+      title: "Restart nikcli",
+      value: "nikcli.restart",
+      category: "System",
+      slash: {
+        name: "restart",
+      },
+      onSelect: () => {
+        // `exit.restart()` tears the renderer down and hands the decision to the
+        // host, which is the only layer that knows what there is to restart: the
+        // background service, the embedded worker, or nothing at all.
+        if (!props.onRestart) {
+          toast.show({
+            variant: "warning",
+            message: "This host cannot restart the server it is attached to.",
+            duration: 5000,
+          })
+          return
+        }
+        void runRestart()
+      },
     },
     {
       title: "Exit the app",
