@@ -97,3 +97,69 @@ processes running. Do not interpret swallowed errors, empty arrays, or absent me
 First add measurement without changing runtime behavior, then freeze a baseline, then promote one budgeted slice at a time.
 Do not weaken existing churn limits when adding broader fixtures. Roll back intrusive production instrumentation if its
 cost exceeds budget, retain test-only probes and raw results, and keep existing observability export defaults unchanged.
+
+## Discipline Addendum — 2026-09-20
+
+Lifecycle counters landed (`packages/nikcli/src/effect/lifecycle-counters.ts`, commit `644a8f28`), wired into `InstanceScope` and the runtime bridge. Four rules came out of building them.
+
+1. **A counter with no emitter is anti-evidence.** It reads as "measured, none" when it means "never measured", and nothing in the type system says which. A key is therefore added together with the call site that increments it, never ahead of one. `runtime.bridge.stale-result` was declared and removed again on exactly this ground: a result arriving after its consumer is gone is only observable where the consumer is, which is the TUI lifecycle work in `03-tui-lifecycle.md`, not this bridge.
+2. **Count each outcome once, and count it where the caller can see it.** A cancellation passes through two places — the canceller, and the Exit that interrupting the inner fiber produces — so incrementing in both booked every cancel twice. Counting only at the Exit fixes the double count but moves the increment two promise hops later, and a caller that interrupts and then reads the counter sees nothing. The cancellation is therefore counted synchronously in the canceller, and the Exit handler skips what `cancelled` already recorded. `test/effect/lifecycle-counters.test.ts` asserts `toBe(1)`, not `toBeGreaterThanOrEqual(1)`, because only the exact count catches the regression.
+3. **`scope.failed` is not `scope.interrupted`.** A scope whose instance bootstrap threw never ran its effect; folding it into the interrupt bucket hides a broken instance inside a number that normally means "the user pressed Ctrl+C".
+4. **`scope.finalizer-leak` is a watchdog, not a guess.** `InstanceScope.with` promises that interrupting the caller waits for the inner fiber's finalizers. A finalizer that never returns breaks that promise with no other symptom in the process, so the canceller arms an unref'd `FINALIZER_GRACE_MS` timer and counts the leak if the Exit has not arrived. Unref'd deliberately: an outstanding leak must not itself keep Bun alive.
+
+Counters are module state. `bun test` shares one module registry across a run, so a test that reads them resets in `beforeEach`, not only in `afterEach` — otherwise it inherits whatever an earlier file in the run left behind.
+
+## P0 Closure — 2026-09-20
+
+P0's exit asked for a ratified baseline artifact and a CI gate on the comparison. Neither
+existed, and the reason turned out to be a defect rather than an omission: **the probe
+never returned.**
+
+`script/perf-baseline.ts` finished its measurements in about half a second and then hung
+forever. `main()` fell off the end without `process.exit`, and the in-process server and
+the instance it had booted kept handles open. Anyone who ran it saw a command that never
+came back, so no artifact was ever produced. Two smaller faults came out with it:
+
+- The third probe measured `POST /session/list`, which does not exist — the group is
+  declared with `.prefix("/session")` and the endpoint path is `/`. The router answered
+  405 in microseconds and `time()` recorded it as a sample, so the baseline would have
+  carried an excellent number for a route nobody serves.
+- `time()` caught everything and returned `undefined`. A probe that cannot reach its route
+  produced no gap in the data, which would have been noticeable; it produced a plausible
+  lie, which is not.
+
+All three are fixed, and `specs/perf-baseline.json` is the first real recording: three
+routes, 30 samples each, with the host written into the artifact.
+
+### What the gate enforces, and what it refuses to
+
+`script/check-perf-baseline.ts` splits the artifact along the line that matters.
+
+**Deterministic, enforced.** Every declared route is present with its full sample count,
+`min ≤ median ≤ p95 ≤ max`, and the lifecycle counters balance: `scope.created` equals
+completed + interrupted + failed, and `scope.finalizer-leak` is zero. A scope entered and
+never settled is a behaviour change on any machine, so it blocks.
+
+**Host-dependent, reported.** The timings are printed and, with `--against`, diffed
+against a threshold. They are never gated in CI, and the roadmap's own wording is the
+argument: _"A noisy or missing baseline is not a pass."_ The same probe reports 0.07 ms
+p95 here and something else on a shared runner, so a committed millisecond threshold would
+fire for the runner's reasons rather than the code's — and a gate that fires for reasons
+unrelated to the change is one people learn to re-run until it passes. A diff across
+different hosts refuses outright rather than reporting a percentage nobody should act on.
+
+`test/script/check-perf-baseline.test.ts` drives it in both directions: a missing artifact,
+a short sample count, percentiles out of order, an unsettled scope, a finalizer leak, a
+probe that measured nothing, a regression past the threshold, a move inside it, and the
+cross-host refusal.
+
+Regenerate with `bun run bench:baseline` and review the diff rather than committing it
+blind — the artifact is evidence only for the machine named in it.
+
+## Which Startup the Probe Measures — 2026-09-24
+
+`bench:startup` sets `NIKCLI_TEST_HOME` for isolation, and a test home opts out of the background service
+(`specs/background-service.md`, Rollout). So the probe measures the **private in-process server** path — the one
+`--standalone`, `NIKCLI_SERVICE=0`, `--port` and a failed service start take — not the default path most users run,
+where the TUI attaches to the shared service. Any budget ratified from it describes the private path only; the default
+path needs its own run with `NIKCLI_SERVICE=1` before a startup claim covers it.

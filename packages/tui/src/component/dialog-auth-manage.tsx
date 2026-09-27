@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { Clipboard } from "@tui/util/clipboard"
 import { createMemo, createResource, For, onMount, Show } from "solid-js"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { useDialog, type DialogContext } from "@tui/ui/dialog"
+import { DialogHeader, useDialog, type DialogContext } from "@tui/ui/dialog"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { useToast } from "@tui/ui/toast"
 import { DialogProvider } from "./dialog-provider"
@@ -61,7 +61,9 @@ export function DialogAuthManage() {
           category: "Account",
           description: displayName ? `Current: ${displayName}` : "Set the name shown in chat and account views",
           onSelect: async () => {
-            await updateDisplayName(dialog, sdk, user.id, user.display_name)
+            await updateDisplayName(dialog, sdk, user.id, user.display_name, () =>
+              dialog.replace(() => <DialogAuthManage />),
+            )
             dialog.replace(() => <DialogAuthManage />)
           },
         },
@@ -71,7 +73,7 @@ export function DialogAuthManage() {
           category: "Account",
           description: "Update the password stored for this local account",
           onSelect: async () => {
-            await updatePassword(dialog, sdk)
+            await updatePassword(dialog, sdk, () => dialog.replace(() => <DialogAuthManage />))
             dialog.replace(() => <DialogAuthManage />)
           },
         },
@@ -156,7 +158,10 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
   }
 
   const handleDisplayName = async () => {
-    const updated = await updateDisplayName(dialog, sdk, props.user.id, props.user.display_name)
+    const result = await updateDisplayName(dialog, sdk, props.user.id, props.user.display_name, () =>
+      showProfile(dialog, props.user),
+    )
+    const updated = result.cancelled ? null : result.user
     await restoreProfile(
       updated
         ? {
@@ -169,7 +174,7 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
   }
 
   const handlePassword = async () => {
-    const changed = await updatePassword(dialog, sdk)
+    const changed = await updatePassword(dialog, sdk, () => showProfile(dialog, props.user))
     await restoreProfile(changed ? { tone: "success", message: "Password updated." } : undefined)
   }
 
@@ -243,12 +248,7 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
 
   return (
     <box gap={1} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.foreground.default}>
-          Profile
-        </text>
-        <text fg={theme.foreground.muted}>esc</text>
-      </box>
+      <DialogHeader title="Profile" />
 
       <box
         backgroundColor={theme.surface.offset}
@@ -434,31 +434,53 @@ function ProfileActionRow(props: {
   )
 }
 
-async function updateDisplayName(dialog: DialogContext, sdk: UserApi.Sdk, userId: string, currentName: string | null) {
+/**
+ * Backing out and a failed update are different answers, and this used to give
+ * the same one: `undefined` on cancel, `null` when the update failed. Two falsy
+ * values a caller cannot tell apart.
+ *
+ * Not a cue to skip reopening the menu — in this codebase a nested flow
+ * *replaces* its parent, so the caller restoring it afterwards is how the user
+ * gets back, on cancel exactly as on success.
+ */
+type DisplayNameResult = { cancelled: true } | { cancelled: false; user: UserSchema.PublicUser | null }
+
+async function updateDisplayName(
+  dialog: DialogContext,
+  sdk: UserApi.Sdk,
+  userId: string,
+  currentName: string | null,
+  /** The screen this was opened from. Draws `←`, and both callers know theirs. */
+  back?: () => void,
+): Promise<DisplayNameResult> {
   const value = await DialogPrompt.show(dialog, "Change Display Name", {
+    back,
     placeholder: "Enter display name (leave empty to remove)",
     value: currentName ?? "",
     allowEmpty: true,
   })
-  if (value === null) return
+  if (value === null) return { cancelled: true }
 
   const updated = await UserApi.update(sdk, userId, { displayName: value })
-  return updated.ok ? updated.data : null
+  return { cancelled: false, user: updated.ok ? updated.data : null }
 }
 
-async function updatePassword(dialog: DialogContext, sdk: UserApi.Sdk): Promise<boolean> {
+async function updatePassword(dialog: DialogContext, sdk: UserApi.Sdk, back?: () => void): Promise<boolean> {
   const current = await DialogPrompt.show(dialog, "Change Password — Current", {
+    back,
     placeholder: "Enter current password",
   })
   if (current === null) return false
 
   const newPass = await DialogPrompt.show(dialog, "Change Password — New", {
+    back,
     placeholder: "Enter new password (min 8 chars)",
   })
   if (newPass === null) return false
 
   if (newPass.length < 8) {
     const retry = await DialogPrompt.show(dialog, "Password too short. Press Enter to retry.", {
+      back,
       placeholder: "Press Enter",
     })
     if (retry === null) return false
@@ -466,12 +488,14 @@ async function updatePassword(dialog: DialogContext, sdk: UserApi.Sdk): Promise<
   }
 
   const confirm = await DialogPrompt.show(dialog, "Change Password — Confirm", {
+    back,
     placeholder: "Confirm new password",
   })
   if (confirm === null) return false
 
   if (newPass !== confirm) {
     const retry = await DialogPrompt.show(dialog, "Passwords do not match. Press Enter to retry.", {
+      back,
       placeholder: "Press Enter",
     })
     if (retry === null) return false
@@ -483,6 +507,7 @@ async function updatePassword(dialog: DialogContext, sdk: UserApi.Sdk): Promise<
   const changed = await UserApi.changePassword(sdk, { current, next: newPass })
   if (!changed.ok) {
     const retry = await DialogPrompt.show(dialog, `${changed.error}. Press Enter to retry.`, {
+      back,
       placeholder: "Press Enter",
     })
     if (retry === null) return false

@@ -109,3 +109,208 @@ extend to other groups. Verify each group's spans match the schema and redaction
 on the next group. Roll back a route group behind a per-group span toggle (default-on), never by disabling redaction or
 shrinking the live panel. Removal of the legacy inline logger is the last step and only after every route has the new
 span coverage. A rolled-back group keeps its redaction and metric coverage even if spans are temporarily disabled.
+
+## Discipline Addendum — 2026-09-20
+
+`script/check-observability-schema.ts` is in CI (commit `644a8f28`). The reference consumer it
+originally required, `src/observability/telemetry-consumer.ts`, was deleted later the same day — see
+**Gate Closure** below for why a gate requiring dead code it introduced was circular.
+
+1. **A span only exists if it runs on a runtime that has the layer.** `effect/runtime.ts:makeRuntime` merges `Observability.layer` into every base it builds, so `Effect.withSpan` reaches both the OTLP exporter and the live panel — but only for effects run through `AppRuntime` or `runtimeFor`. A bare `Effect.runPromise` uses Effect's default runtime, whose tracer discards the span silently: the allocation is paid and nothing is reported. The brain scheduler's per-tick span (`src/brain/scheduler.ts`) shipped on `Effect.runPromise` and reported nothing until it moved to `AppRuntime`. It remains the only `withSpan` in `src`, so the rule has no second example to learn from yet.
+2. **The schema gate is structural, and that is its limit as much as its point.** It asserts the spec's forbidden segments and required allowed attributes are present in `span-schema.ts`, and that `otlp.ts` still _contains_ a call to `sanitizeSpanAttributes`. Containing the call is not the same as routing through it, and the OTLP smoke later found the exporter bypassing it entirely — see **Gate Closure**. It reads source and imports nothing, so it costs no build and cannot be defeated by a refactor that keeps the code compiling.
+3. **The live-panel consumer throttles on the producer's clock.** `createTelemetryConsumer` coalesces on `frame.startTime`, not on arrival time. A span's start time is what the panel displays, and reading it makes the consumer a pure function of its input: the same frames coalesce the same way live or replayed from a capture, and no test has to control the wall clock. `push` is synchronous and O(1) so a producer in a tight loop cannot block the input thread — the invariant the bounded window exists to protect.
+
+## Redaction Fuzz — 2026-09-20
+
+The release gate asks for redaction fuzz. It did not exist, and writing it found four holes
+in the choke point — three on the key side, one on the value side. None of them needed a
+clever input; all four are spellings a normal contributor would produce.
+
+1. **camelCase keys walked past the entire forbidden list.** `splitKeySegments` split on
+   `[._\-/]` only, so `authToken` was one unrecognised segment `authtoken`. So were
+   `sessionPassword`, `bearerToken` and `accessToken`. camelCase is this codebase's dominant
+   convention, which made it the _likeliest_ spelling for a new attribute rather than an
+   exotic one. `apiKey` was blocked only by the coincidence that `apikey` is itself a listed
+   segment.
+2. **Separators outside the character class.** `auth:token`, `auth token` and `auth|token`
+   were each a single segment for the same reason.
+3. **A URL's userinfo was not redacted.** `URL_CREDENTIAL_RE` covered the query string, so
+   `?token=…` was handled while `postgres://user:hunter2@host/db` — and any git remote
+   carrying a token — travelled verbatim into spans and logs. The forbidden-dimension list
+   in `README.md` names "URLs with credentials" explicitly; this was the half that was
+   missing.
+4. **A credential glued to a word character escaped every pattern.** The token shapes were
+   anchored with a leading `\b`, which requires a non-word character before the prefix, so
+   a value ending `…somethingnku_AAAA` came back intact. The anchors are gone from the
+   prefixed formats: `sk-`, `ghp_`, `xoxb-`, `nku_`, `eyJ` are each their own signal and
+   nobody writes `xnku_` in prose. `BEARER_RE` keeps its anchor for the opposite reason —
+   "Bearer" is an ordinary English word, and a rule that only measured length redacted the
+   next word in "Bearer authentication failed".
+
+`test/observability/redaction-fuzz.test.ts` enumerates the spellings rather than random
+bytes, because spelling is where the holes were: 13 forbidden words × 5 prefixes × 12
+spellings on the key side, and 9 credential shapes each wrapped in three contexts on the
+value side.
+
+Two of its cases exist to stop the obvious over-correction. A sanitizer that drops
+everything passes a "nothing escaped" test and is useless, so the allowed schema is asserted
+to survive; and whole-word matching is asserted to leave `tokenizer.name` and `queue.depth`
+alone. Redaction happening _before_ truncation is pinned too — slicing to the budget first
+would put the first 200 characters of a credential on screen and in the export.
+
+## Gate Closure — 2026-09-20
+
+The two remaining gate items — _live panel bounded_ and _OTLP smoke against a local
+collector_ — are done, and the smoke found the serious one.
+
+### The redaction choke point did not cover the exporter
+
+`sanitizeSpanAttributes` was called from `stringifyAttributes`, which runs inside
+`buildRecord` — the function that builds the `TelemetryRecord` for the **live panel**. The
+OTLP exporter serialises `span.attributes` itself and never went through it. So with
+`OTEL_EXPORTER_OTLP_ENDPOINT` set, span attributes left the machine **unredacted**: the
+first smoke run posted `user.token` with an `nku_` value and a `postgres://user:pw@host`
+connection string, verbatim, to the collector.
+
+The comment above the function said _"Every span reaches the live panel and the exporter
+through here, so the attribute contract is enforced once, at the choke point."_ It was
+false, and no structural check could see it — `otlp.ts` did contain the call, which is all
+`check-observability-schema.ts` could assert.
+
+`sanitizeSpanInPlace` now cleans the span's own attribute map **before** `realEnd`, which
+is what hands the span to the exporter. One pass covers both readers, and the record for
+the panel is built from the same cleaned map. Forbidden keys are removed rather than
+emptied: a `[REDACTED]` value still announces that the key was present, and the key is the
+half the forbidden list is about.
+
+The wrapper is also applied unconditionally now. It used to be `live ? wrapTracer(base) :
+base`, so an export-only configuration — `NIKCLI_DISABLE_OTEL_LIVE=1` with an endpoint —
+had no wrapper and therefore no redaction at all. `live` now decides only whether the bus
+also hears about the span.
+
+### Why the smoke needs a subprocess
+
+`otlp.ts` reads `OTEL_EXPORTER_OTLP_ENDPOINT` once at module load and decides `enabled`
+and `layer` from it; `otlp.test.ts` already documented that flipping the variable inside a
+test cannot move them. So `test/observability/otlp-smoke.test.ts` starts a throwaway
+`Bun.serve` collector and spawns `script/otlp-smoke-emit.ts` with the endpoint already in
+its environment. It asserts on what the collector actually received — allowed keys present,
+forbidden keys absent, the credential redacted, and no `nku_` or `hunter2` anywhere in the
+payload, including fields the test does not model.
+
+Verified by removing `sanitizeSpanInPlace` and watching it fail on `user.token`.
+
+### Live panel bounded
+
+The panel was bounded and nothing else. `context/telemetry.tsx` capped at 2000 records but
+wrote a Solid signal per `telemetry.record` event, rebuilding a 2000-element array each
+time — a full re-render per span of a busy turn, to show frames faster than a terminal can
+repaint. The cap limits what is _kept_; it says nothing about how often the rest of the app
+is told, which is the part the input thread pays for.
+
+`packages/tui/src/util/telemetry-buffer.ts` is the bounded, coalescing buffer the panel now
+uses: `push` is synchronous and never calls the sink inline, flushes are windowed, and
+`flushNow` exists so a window parked behind the throttle is not the one the panel never
+receives. Its `schedule` is injected, so
+`packages/nikcli/test/tui/telemetry-buffer.test.ts` drives the clock instead of sleeping
+long enough that the throttle has probably fired.
+
+`src/observability/telemetry-consumer.ts` is deleted. It was a reference implementation
+with no caller, written because the real consumer — the panel — was not found, and
+`check-observability-schema.ts` had been made to require its existence. A gate enforcing
+dead code it introduced is circular and certified nothing about the panel anyone sees; the
+gate now asserts the real buffer, its test, and that the panel routes through it.
+
+## The HTTP Runtime Has No Tracer — 2026-09-24
+
+The first slice this spec schedules — span coverage for the `session` route group — cannot start where it was
+assumed to. `HttpApiBridge.layer` in `packages/nikcli/src/server/httpapi/bridge.ts` merges the HttpApi routes with
+`LogRedirect` and nothing else: **`Observability.layer` is not in it.** So every span created while an HTTP handler
+runs on that runtime, including the implicit ones `Effect.fn("…")` opens, is discarded by Effect's default tracer.
+This is Discipline Addendum rule 1 again, one layer up: the brain scheduler's span was lost for the same reason.
+
+Two facts decide how the slice is built once that is fixed:
+
+- Effect's own `HttpMiddleware.tracer` is not usable as-is. It records `url.full`, `url.path` and `url.query` — a
+  concrete path carries session ids (high cardinality) and a query can carry `?token=` — all forbidden dimensions.
+- It is not needed either. `HttpRouter` already sets `http.route` to the matched **template** on the current parent
+  span. A middleware of our own that opens `http.server.<group>` with `http.method`, and records `http.status_code`
+  on exit, gets the allowed schema for free.
+
+Merging `Observability.layer` into the bridge turns tracing on for **every** route's handler spans at once, not one
+group, so the overhead gate (EOT-01: median within 5% of instrumentation-off) has to be measured on that change
+before it lands, with a per-group toggle if the numbers call for one. That measurement is the next slice here.
+
+## The Built-in Server Span, and What Tracing the Bridge Costs — 2026-09-25
+
+The section above planned "a middleware of our own" beside Effect's `HttpMiddleware.tracer`, on the reading that
+the built-in one is optional. It is not. `HttpEffect.toHandled` wraps every request in it unconditionally —
+`toWebHandler`'s `disableLogger` does not reach it — and it runs on this bridge today. Only
+`HttpMiddleware.TracerDisabledWhen` (or `TracerEnabled`) turns it off. A second middleware would have opened two
+server spans per request.
+
+### Two holes, closed before a tracer arrives (`4fe8d73926`)
+
+The built-in span records `url.full`, `url.path`, `url.query`, `client.address`, `user_agent.original` and every
+request and response header. The sanitizer dropped the `url.*` keys, but four header words were in no list:
+`http.request.header.x-forwarded-for` and `…forwarded` (a client IP), and `…referer` and
+`http.response.header.location` (URLs, with the session id in the path) went through unchanged, as did `origin`.
+Nothing leaks today: `HttpApiBridge.layer` installs no tracer, so the span is built, filled and thrown away on
+every request, and nothing in `src` reads the current span or `traceparent`. It was a trap, not a leak. Whoever merged
+`Observability.layer` in, as this spec asks, would have shipped IPs to the live panel and to the exporter.
+
+- `HttpApiBridge.layer` now sets `TracerDisabledWhen` to always, so the built-in span does not run at all.
+  `test/server/httpapi-bridge.test.ts` asserts that no `http.server …` span opens under a capturing tracer. Its
+  control case switches the span back on and shows that it carries `x-forwarded-for`, so the first case cannot pass
+  just because the override never reached the request fiber. Removing the override fails the first case.
+- `forwarded`, `referer`, `referrer`, `origin` and `location` are forbidden segments now, at the choke point, so the
+  rule holds for any span that records headers, not only this one. No emitter in `src` used them as a key.
+  Removing them fails `test/observability/span-schema.test.ts` and the control case above.
+
+`Server.listenEffect`, the other Effect listener, is gone (`1a796f1dec`): its only caller was a test of itself, it
+was never wired in after the Hono removal, and it had already drifted from `Server.listen` (it ignored
+`NIKCLI_SERVER_CORS_ORIGINS`).
+
+### The overhead measurement this section owed
+
+Method: one process, one instance, the bridge built four ways over the same `HttpApiBridge.layer` and memo map,
+called in random order within each round, 300 warm-up rounds and 3000 measured rounds on `GET /session` and
+`GET /question`, three separate runs. For the denominator, the same routes were also measured through
+`Server.fetch`, the production path (router, auth, instance selection, then the bridge). Medians, macOS arm64,
+8 cores, Bun 1.4.2, load average 2.6–3.3:
+
+| Variant, against the bridge as it now ships                                        | `/session` (`Server.fetch` ≈ 80 µs) | `/question` (≈ 63 µs)        |
+| ---------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------- |
+| Built-in span on, no tracer (the bridge before this change)                        | +2.8 – 3.2 µs (3.5–3.9%)            | +2.0 – 2.4 µs (3.2–3.7%)     |
+| Our middleware (`http.server.<group>`, allowed keys only), Effect's native tracer¹ | +5.5 – 5.8 µs (6.8–7.3%)            | +4.5 – 4.9 µs (7.2–7.9%)     |
+| Our middleware + `Observability.layer` (live bus tracer, the default)              | +14.2 – 16.0 µs (17.5–19.7%)        | +16.2 – 18.5 µs (25.5–28.8%) |
+
+¹ Runs two and three only; the variant was added after the first run.
+
+**Tracing the bridge as specified fails EOT-01's budget** (median within 5% of instrumentation-off) by three and a half
+to six times, so it does not land. By EOT-01's own rule the detailed probe stays test-only until that changes. The
+same runs support three more observations:
+
+- The attribute contract works. Every `http.server.*` record carried only `http.method`, `http.route` (the matched
+  template, which the router sets on the parent span) and `http.status_code`.
+- Two thirds of the cost is the live panel, not the span. Each record goes through `Bus.publish`, which runs a
+  `runPromise` on another runtime per span. And tracing the bridge also turns every `Effect.fn` a handler reaches
+  into a published span: `GET /question` produced two records (`http.server.question`, `Question.list`), and the
+  first request on a fresh instance produced nineteen bootstrap spans (`Config.get` seven times, `LSP.init`,
+  `FileWatcher.init`, `Vcs.init`, …).
+- The span alone is already over budget on the cheapest routes. A lean middleware in the style of the built-in one
+  (`onExit` with no `tap`/`tapCause` layers) is the first thing to try. The built-in one records every header and
+  still costs half of ours.
+
+Three questions have to be answered before the next attempt, and none of them is about speed:
+
+1. **Delivery class.** `telemetry.record` is declared without one, so it takes the conservative `ordered` default
+   (`src/bus/bus-event.ts`) and reaches every SSE subscriber. One record per request is a volume EOT-04's admission
+   policy has not been asked to carry, and a telemetry record is the one event that could be lost without harm.
+2. **Instance-less routes.** `Bus.publish` is per instance, and a span that ends without a live one cannot be
+   published; it logs `publish failed` instead. That already happens today: three times in
+   `test/server/httpapi-bridge.test.ts` on HEAD, all `instance has been disposed`, from spans that ended after their
+   instance. `/global/*` and `/user/*` run with no instance bound at all, so by reading `withCurrentInstance` (not yet
+   by measurement) tracing them would log that on every request.
+3. **Scope of the toggle.** The rollback plan asks for a per-group toggle. These numbers argue for the default
+   being the other way round: HTTP server spans off unless an OTLP endpoint is set or a group is explicitly on.

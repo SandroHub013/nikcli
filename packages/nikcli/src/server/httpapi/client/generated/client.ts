@@ -1935,19 +1935,25 @@ const adaptGroup19 = (raw: RawClient["question"]) => ({
 
 const Endpoint20_0 = (raw: RawClient["permission"]) => () => raw["list"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint20_1Request = Parameters<RawClient["permission"]["reply"]>[0]
-type Endpoint20_1Input = {
-  readonly requestID: Endpoint20_1Request["params"]["requestID"]
-  readonly reply: Endpoint20_1Request["payload"]["reply"]
-  readonly message?: Endpoint20_1Request["payload"]["message"]
+const Endpoint20_1 = (raw: RawClient["permission"]) => () => raw["blocked"]({}).pipe(Effect.mapError(mapClientError))
+
+type Endpoint20_2Request = Parameters<RawClient["permission"]["reply"]>[0]
+type Endpoint20_2Input = {
+  readonly requestID: Endpoint20_2Request["params"]["requestID"]
+  readonly reply: Endpoint20_2Request["payload"]["reply"]
+  readonly message?: Endpoint20_2Request["payload"]["message"]
 }
-const Endpoint20_1 = (raw: RawClient["permission"]) => (input: Endpoint20_1Input) =>
+const Endpoint20_2 = (raw: RawClient["permission"]) => (input: Endpoint20_2Input) =>
   raw["reply"]({
     params: { requestID: input["requestID"] },
     payload: { reply: input["reply"], message: input["message"] },
   }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup20 = (raw: RawClient["permission"]) => ({ list: Endpoint20_0(raw), reply: Endpoint20_1(raw) })
+const adaptGroup20 = (raw: RawClient["permission"]) => ({
+  list: Endpoint20_0(raw),
+  blocked: Endpoint20_1(raw),
+  reply: Endpoint20_2(raw),
+})
 
 const Endpoint21_0 = (raw: RawClient["pty"]) => () => raw["list"]({}).pipe(Effect.mapError(mapClientError))
 
@@ -2482,34 +2488,44 @@ const Endpoint23_35 = (raw: RawClient["session"]) => (input: Endpoint23_35Input)
     Effect.mapError(mapClientError),
   )
 
-type Endpoint23_36Request = Parameters<RawClient["session"]["monitor"]>[0]
+type Endpoint23_36Request = Parameters<RawClient["session"]["backgroundResume"]>[0]
 type Endpoint23_36Input = {
   readonly sessionID: Endpoint23_36Request["params"]["sessionID"]
-  readonly monitorID: Endpoint23_36Request["params"]["monitorID"]
+  readonly delegationID: Endpoint23_36Request["params"]["delegationID"]
 }
 const Endpoint23_36 = (raw: RawClient["session"]) => (input: Endpoint23_36Input) =>
+  raw["backgroundResume"]({ params: { sessionID: input["sessionID"], delegationID: input["delegationID"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint23_37Request = Parameters<RawClient["session"]["monitor"]>[0]
+type Endpoint23_37Input = {
+  readonly sessionID: Endpoint23_37Request["params"]["sessionID"]
+  readonly monitorID: Endpoint23_37Request["params"]["monitorID"]
+}
+const Endpoint23_37 = (raw: RawClient["session"]) => (input: Endpoint23_37Input) =>
   raw["monitor"]({ params: { sessionID: input["sessionID"], monitorID: input["monitorID"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint23_37Request = Parameters<RawClient["session"]["monitorLog"]>[0]
-type Endpoint23_37Input = {
-  readonly sessionID: Endpoint23_37Request["params"]["sessionID"]
-  readonly monitorID: Endpoint23_37Request["params"]["monitorID"]
-  readonly lines?: Endpoint23_37Request["query"]["lines"]
+type Endpoint23_38Request = Parameters<RawClient["session"]["monitorLog"]>[0]
+type Endpoint23_38Input = {
+  readonly sessionID: Endpoint23_38Request["params"]["sessionID"]
+  readonly monitorID: Endpoint23_38Request["params"]["monitorID"]
+  readonly lines?: Endpoint23_38Request["query"]["lines"]
 }
-const Endpoint23_37 = (raw: RawClient["session"]) => (input: Endpoint23_37Input) =>
+const Endpoint23_38 = (raw: RawClient["session"]) => (input: Endpoint23_38Input) =>
   raw["monitorLog"]({
     params: { sessionID: input["sessionID"], monitorID: input["monitorID"] },
     query: { lines: input["lines"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint23_38Request = Parameters<RawClient["session"]["monitorCancel"]>[0]
-type Endpoint23_38Input = {
-  readonly sessionID: Endpoint23_38Request["params"]["sessionID"]
-  readonly monitorID: Endpoint23_38Request["params"]["monitorID"]
+type Endpoint23_39Request = Parameters<RawClient["session"]["monitorCancel"]>[0]
+type Endpoint23_39Input = {
+  readonly sessionID: Endpoint23_39Request["params"]["sessionID"]
+  readonly monitorID: Endpoint23_39Request["params"]["monitorID"]
 }
-const Endpoint23_38 = (raw: RawClient["session"]) => (input: Endpoint23_38Input) =>
+const Endpoint23_39 = (raw: RawClient["session"]) => (input: Endpoint23_39Input) =>
   raw["monitorCancel"]({ params: { sessionID: input["sessionID"], monitorID: input["monitorID"] } }).pipe(
     Effect.mapError(mapClientError),
   )
@@ -2551,9 +2567,10 @@ const adaptGroup23 = (raw: RawClient["session"]) => ({
   backgroundInspect: Endpoint23_33(raw),
   backgroundRead: Endpoint23_34(raw),
   backgroundCancel: Endpoint23_35(raw),
-  monitor: Endpoint23_36(raw),
-  monitorLog: Endpoint23_37(raw),
-  monitorCancel: Endpoint23_38(raw),
+  backgroundResume: Endpoint23_36(raw),
+  monitor: Endpoint23_37(raw),
+  monitorLog: Endpoint23_38(raw),
+  monitorCancel: Endpoint23_39(raw),
 })
 
 const Endpoint24_0 = (raw: RawClient["account"]) => () => raw["active"]({}).pipe(Effect.mapError(mapClientError))

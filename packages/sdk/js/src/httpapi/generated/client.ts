@@ -381,6 +381,7 @@ import type {
   QuestionRejectInput,
   QuestionRejectOutput,
   PermissionListOutput,
+  PermissionBlockedOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
   PtyListOutput,
@@ -491,6 +492,8 @@ import type {
   SessionBackgroundReadOutput,
   SessionBackgroundCancelInput,
   SessionBackgroundCancelOutput,
+  SessionBackgroundResumeInput,
+  SessionBackgroundResumeOutput,
   SessionMonitorInput,
   SessionMonitorOutput,
   SessionMonitorLogInput,
@@ -3162,6 +3165,11 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/permission`, successStatus: 200, declaredStatuses: [], empty: false },
           requestOptions,
         ),
+      blocked: (requestOptions?: RequestOptions) =>
+        request<PermissionBlockedOutput>(
+          { method: "GET", path: `/permission/blocked`, successStatus: 200, declaredStatuses: [], empty: false },
+          requestOptions,
+        ),
       reply: (input: PermissionReplyInput, requestOptions?: RequestOptions) =>
         request<PermissionReplyOutput>(
           {
@@ -3844,6 +3852,17 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/session/${encodeURIComponent(input.sessionID)}/background/${encodeURIComponent(input.delegationID)}/cancel`,
+            successStatus: 200,
+            declaredStatuses: [],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      backgroundResume: (input: SessionBackgroundResumeInput, requestOptions?: RequestOptions) =>
+        request<SessionBackgroundResumeOutput>(
+          {
+            method: "POST",
+            path: `/session/${encodeURIComponent(input.sessionID)}/background/${encodeURIComponent(input.delegationID)}/resume`,
             successStatus: 200,
             declaredStatuses: [],
             empty: false,

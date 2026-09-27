@@ -326,7 +326,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: palette.background }}
     >
       <View style={{ flex: 1 }}>
@@ -351,7 +351,14 @@ export default function LoginScreen() {
           <View style={{ alignItems: "center", marginBottom: 32 }}>
             <AnimatedLogo scale={logoScale} opacity={logoOpacity} />
             <Animated.View style={{ opacity: logoOpacity }}>
-              <Text style={{ color: palette.ink, ...typeStyle(26, { weight: "700" }) }}>nikcli</Text>
+              <Text
+                style={{
+                  color: palette.ink,
+                  ...typeStyle(26, { weight: "700" }),
+                }}
+              >
+                nikcli
+              </Text>
             </Animated.View>
             <Animated.View style={{ opacity: logoOpacity, marginTop: 4 }}>
               <Text style={{ color: palette.muted, ...typeStyle(14) }}>
@@ -363,7 +370,12 @@ export default function LoginScreen() {
           <AnimatedFormCard translateY={formTranslateY} opacity={formOpacity}>
             <SurfaceCard>
               <View style={{ gap: 12 }}>
-                <Text style={{ color: palette.ink, ...typeStyle(16, { weight: "700" }) }}>
+                <Text
+                  style={{
+                    color: palette.ink,
+                    ...typeStyle(16, { weight: "700" }),
+                  }}
+                >
                   {isSignup ? "Sign up with Nikcli" : "Sign in with Nikcli"}
                 </Text>
                 <Text style={{ color: palette.muted, ...typeStyle(13) }}>
@@ -396,15 +408,36 @@ export default function LoginScreen() {
                     paddingVertical: 8,
                   })}
                 >
-                  <Text style={{ color: palette.muted, textAlign: "center", ...typeStyle(13) }}>
+                  <Text
+                    style={{
+                      color: palette.muted,
+                      textAlign: "center",
+                      ...typeStyle(13),
+                    }}
+                  >
                     {isSignup ? (
                       <>
                         Already have an account?{" "}
-                        <Text style={{ color: palette.accentLight, fontWeight: "600" }}>Sign in</Text>
+                        <Text
+                          style={{
+                            color: palette.accentLight,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Sign in
+                        </Text>
                       </>
                     ) : (
                       <>
-                        New to nikcli? <Text style={{ color: palette.accentLight, fontWeight: "600" }}>Sign up</Text>
+                        New to nikcli?{" "}
+                        <Text
+                          style={{
+                            color: palette.accentLight,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Sign up
+                        </Text>
                       </>
                     )}
                   </Text>
@@ -427,7 +460,13 @@ export default function LoginScreen() {
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
                     <View
                       style={{
                         width: 44,
@@ -442,10 +481,21 @@ export default function LoginScreen() {
                       <KeyRound size={18} color={palette.accentLight} strokeWidth={2} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: palette.ink, ...typeStyle(15, { weight: "600" }) }}>
+                      <Text
+                        style={{
+                          color: palette.ink,
+                          ...typeStyle(15, { weight: "600" }),
+                        }}
+                      >
                         Use a host mobile token
                       </Text>
-                      <Text style={{ color: palette.muted, marginTop: 2, ...typeStyle(12) }}>
+                      <Text
+                        style={{
+                          color: palette.muted,
+                          marginTop: 2,
+                          ...typeStyle(12),
+                        }}
+                      >
                         Pair with your host using an nkm_ token instead of an account
                       </Text>
                     </View>

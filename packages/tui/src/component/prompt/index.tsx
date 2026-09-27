@@ -17,7 +17,8 @@ import { TuiPluginRuntime } from "@tui/plugin"
 import { useLocal } from "@tui/context/local"
 import { useLanguage } from "@tui/context/language"
 import { useTheme } from "@tui/context/theme"
-import { EmptyBorder, SplitBorder } from "@tui/component/border"
+import { BORDER_CHAR_TABLES, borderCharsFor, EmptyBorder } from "@tui/component/border"
+import { DISCLOSURE } from "@tui/component/disclosure"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -220,8 +221,11 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, component } = useTheme()
   const kv = useKV()
+  const style = () => component("session.prompt")
+  const shadow = () => component("session.prompt-shadow")
+  const promptBackground = createMemo(() => style().colors.background)
   const lang = useLanguage()
   const editor = useEditorContext()
   const activeSession = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
@@ -466,14 +470,28 @@ export function Prompt(props: PromptProps) {
   }
 
   let isStartingRecording = false
+  /**
+   * Set when a stop arrives while `startVoiceRecording` is still detecting.
+   *
+   * `detectVoiceRecorder` probes the filesystem for ffmpeg/sox, which is long
+   * enough to release a hold-to-talk key inside. `stopVoiceRecording` sees no
+   * recorder yet and returns, and the spawn then happens anyway — a microphone
+   * process nobody started and nobody is going to stop.
+   *
+   * A plain flag, deliberately: this is not a disposed owner, it is a press
+   * that ended, and the component is still very much mounted.
+   */
+  let voiceStartCancelled = false
   async function startVoiceRecording() {
     if (voiceStatus() !== "idle") return
     if (isStartingRecording) return
     isStartingRecording = true
+    voiceStartCancelled = false
 
     try {
       const filePath = path.join(os.tmpdir(), `nikcli-voice-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`)
       const recorder = await detectVoiceRecorder(filePath)
+      if (voiceStartCancelled) return
 
       if (!recorder) {
         const msg =
@@ -535,6 +553,9 @@ export function Prompt(props: PromptProps) {
 
   async function stopVoiceRecording() {
     if (!voiceRecorder || !voiceAudioPath) {
+      // Nothing to stop *yet* — a start may still be detecting. Say so, so it
+      // does not spawn into a press that is already over.
+      voiceStartCancelled = true
       setVoiceStatus("idle")
       return
     }
@@ -1827,19 +1848,27 @@ export function Prompt(props: PromptProps) {
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
-          border={["left"]}
+          border={[...style().box.borderSides]}
           borderColor={highlight()}
           customBorderChars={{
-            ...SplitBorder.customBorderChars,
+            // A complete table is required here because this box overrides one
+            // corner, so `"default"` — which means "pass no table" — falls back
+            // to the split set the prompt has always drawn.
+            ...(borderCharsFor(style().box.borderCharset) ?? BORDER_CHAR_TABLES.split),
             bottomLeft: "╹",
           }}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
+            paddingLeft={style().box.paddingLeft}
+            paddingRight={style().box.paddingRight}
+            paddingTop={style().box.paddingTop}
+            // Emitted only when the theme asks for one. At 1.380 this prop was
+            // absent, and "absent" and "zero" are the same to the layout engine
+            // only as long as nothing else sets the edge — not a difference
+            // worth betting the prompt's spacing on.
+            paddingBottom={style().box.paddingBottom || undefined}
             flexShrink={0}
-            backgroundColor={theme.surface.offset}
+            backgroundColor={promptBackground()}
             flexGrow={1}
           >
             <textarea
@@ -2058,7 +2087,7 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.foreground.default}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+            <box flexDirection="row" flexShrink={0} paddingTop={style().box.gap} gap={1}>
               <Show when={kv.get("show_agent", true)}>
                 <text fg={highlight()}>
                   {store.mode === "shell" ? lang.t("prompt.shell") : Locale.titlecase(local.agent.current().name)}{" "}
@@ -2100,32 +2129,36 @@ export function Prompt(props: PromptProps) {
             </box>
           </box>
         </box>
-        <box
-          height={1}
-          border={["left"]}
-          borderColor={highlight()}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: theme.surface.offset.a !== 0 ? "╹" : " ",
-          }}
-        >
+        {/*
+          The rule under the prompt, exactly as it has always drawn — the only
+          difference is that a theme can now take it away by giving
+          `session.prompt-shadow` an empty `borderSides`, instead of it being
+          one row no configuration could reach.
+        */}
+        <Show when={shadow().box.borderSides.length > 0}>
           <box
             height={1}
-            border={["bottom"]}
-            borderColor={theme.surface.offset}
-            customBorderChars={
-              theme.surface.offset.a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
-          />
-        </box>
+            // Its own array, not the prompt box's. Sharing one instance between
+            // two renderables is a different thing from reusing it across
+            // renders, and the renderable keeps the reference it is given.
+            border={["left"]}
+            borderColor={highlight()}
+            customBorderChars={{
+              ...EmptyBorder,
+              vertical: shadow().colors.fill.a !== 0 ? "╹" : " ",
+            }}
+          >
+            <box
+              height={1}
+              border={[...shadow().box.borderSides]}
+              borderColor={shadow().colors.fill}
+              customBorderChars={{
+                ...EmptyBorder,
+                horizontal: shadow().colors.fill.a !== 0 ? "▀" : " ",
+              }}
+            />
+          </box>
+        </Show>
         <box flexDirection="row" justifyContent="space-between">
           <Show
             when={status().type !== "idle"}
@@ -2206,6 +2239,10 @@ export function Prompt(props: PromptProps) {
                       })
                     })
                     const handleMessageClick = () => {
+                      // The message is error text somebody may well want to
+                      // copy; a drag that ends on it is a selection, not a
+                      // request for the dialog.
+                      if (renderer.getSelection()?.getSelectedText()) return
                       const r = retry()
                       if (!r) return
                       if (isTruncated()) {
@@ -2217,7 +2254,8 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return ""
                       const baseMessage = message()
-                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      // The mark, like everywhere else in the transcript.
+                      const truncatedHint = isTruncated() ? ` ${DISCLOSURE.closed}` : ""
                       const duration = formatDuration(seconds())
                       const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
@@ -2321,6 +2359,7 @@ export function Prompt(props: PromptProps) {
 
                 <box
                   onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
                     dialog.replace(() => <DialogWebPreview />)
                   }}
                   backgroundColor={theme.accent.fg}

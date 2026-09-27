@@ -80,3 +80,127 @@ Inventory owners and classify each resource as owner-scoped or durable. Migrate 
 bootstrap/SDK and remaining dialogs. Keep helper interfaces small and preserve existing callers. Roll back a migrated
 adapter if necessary, but retain the new race regression tests and abort/generation safety requirements; never disable
 cleanup assertions to ship. Existing dirty worktree edits are not part of this documentation change.
+
+## Discipline Addendum — 2026-09-20
+
+Two rounds of this audit produced wrong fixes before producing a usable rule. Both
+failures are recorded, because each one is a conclusion the source supports right up
+until you run it.
+
+### The failure is an external effect, not a stale write
+
+In Solid, writing a signal after the owner is disposed is harmless — nothing reads it. So
+"every `createResource` / `onMount` that does not cancel" is not the defect list; it is 30
+files of mostly nothing. The defect is acting on the outside world after an await the user
+has walked away from.
+
+### Round one: reopening after an await is the idiom, not the bug
+
+`ui/dialog.tsx`'s `replace()` sets `store.stack` unconditionally and escape runs
+`closeTop()`, which on a one-deep stack empties it. Read that far and every
+`await …; dialog.replace(…)` looks like it reopens a dialog the user escaped.
+
+It does not, because **a nested flow replaces its parent rather than stacking on it**.
+`DialogPrompt.show` and `DialogConfirm.show` both call `dialog.replace`, so the parent is
+already gone before the user answers; the caller restoring it afterwards is how they get
+back — on cancel exactly as on success. Three call sites were changed to skip the reopen
+on cancel, which dropped the user out of a flow every neighbour returns them to. Reverted.
+
+### Round two: `useAbortOnCleanup` cannot be used by a dialog that opens dialogs
+
+The rule that replaced it — guard the _long-async_ awaits (network, spawn, OAuth) and
+leave the _modal_ ones alone — is right about which awaits matter and wrong about the
+mechanism, and the same sentence contains the proof. **Modal means the sub-dialog replaced
+this component**, so by the time the long-async call after it returns, this component's
+owner was disposed long ago. Not because the user left: as part of the flow working.
+
+That shipped, and the symptom was immediate in a running TUI. Picking a provider opened
+"Select auth method"; selecting an entry there did nothing at all, because
+`createDialogProviderOptions` checked `alive.disposed()` after `provider.oauth.authorize`
+and it was always true. Every guard in the batch had the same shape and all of them are
+reverted.
+
+**`useAbortOnCleanup` is for a leaf dialog** — one that awaits without opening anything,
+like `dialog-provider`'s `AutoMethod` and `CodeMethod`, which have used it correctly all
+along. A component that chains dialogs has no owner left to ask.
+
+### What the right primitive looks like, and what blocks it
+
+The question a chaining caller needs answered is not "is my owner alive" but **"is the
+stack as I left it"**. That is observable: every mutation in `ui/dialog.tsx` — `replace`,
+`clear`, `closeTop`, the non-interactive escape path — could bump a counter the caller
+captures before an await and compares after. Unchanged means nobody moved; changed means
+the user escaped or opened something else, and the effect should be dropped. It is also
+the only signal available to the nine plugin entry points and four ctx-bag helpers that
+have no Solid owner at all, and `api.ui.dialog` exposes nothing of the kind (`depth`
+cannot serve: a replace leaves the depth identical).
+
+It was written and then dropped rather than committed. `init()` in `ui/dialog.tsx` is not
+exported and calls `useRenderer()`, so the dialog host cannot be constructed in a test —
+the primitive would have landed with no consumer and no way to fail. **Making the dialog
+host reachable from `packages/tui/test/` is the precondition**, and it is the next thing
+worth doing here, ahead of any further site-by-site work.
+
+### A third correction: the harness was never missing
+
+Round two was partly justified by "`packages/tui` has no test directory", which is true
+and misleading. The TUI's tests live in **`packages/nikcli/test/tui/`** — 55 files, which
+this roadmap's own evidence table names as the required location for TUI work — and two
+of them, `lifecycle-attempts.test.ts` and `dialog-lifecycle.test.ts`, already cover
+`useAbortOnCleanup` and `useAttempts` with the same `createRoot` owner pattern that was
+written again from scratch a package over. The second test directory has been removed and
+the one thing it held that was genuinely new, `adopt` coverage, folded into the existing
+file.
+
+`test/tui/tui-source.ts` is the part worth knowing about: seven tests there assert against
+the TUI _source text_ precisely because mounting a dialog drags in the whole app. That is
+the tool for pinning a dialog contract without a terminal, and it was available the whole
+time.
+
+### The host was testable after all, and the contract is pinned
+
+"What blocks it" above said the dialog host could not be constructed in a test. **That was
+wrong, in the same way as the "no test directory" claim.** `testRender` from
+`@opentui/solid` builds a real renderer — five tests in `packages/nikcli/test/tui/` already
+use it — and `DialogProvider` yields its context with only a `ToastProvider` above it. The
+cost appears one step later: rendering an _entry_ pulls in `ThemeProvider`, which pulls in
+`SyncProvider`, which bootstraps against a live server.
+
+`test/tui/dialog-replace-contract.test.ts` pins the fact that sat under both wrong rounds,
+using the source-assertion trade `dialog-lifecycle.test.ts` documents:
+
+- `replace` assigns a **single-entry** stack rather than pushing. Making it push fails the
+  test — and would also make the reverted guards correct, which is why this is the line to
+  pin rather than any of the call sites.
+- It carries **no empty-stack guard**, so "the stack is empty" cannot stand in for "the
+  user left": opening from nothing is what a command does.
+- Escape runs `closeTop()`, which on a one-deep stack empties it.
+- `DialogPrompt.show` and `DialogConfirm.show` both open through `replace` — the mechanism
+  by which they unmount their caller.
+
+Plus the owner half, which needs no renderer: a guard whose owner is torn down reports
+disposed whatever tore it down, so in a chaining dialog `if (alive.disposed()) return`
+after such an await always returns.
+
+### What is kept from all of this
+
+`script/audit-late-side-effects.ts`, which reproduces the candidate scan; and one fix that
+never involved an owner — `component/prompt/index.tsx` spawned the microphone after
+`detectVoiceRecorder` resolved with no way to notice the hold-to-talk key had been
+released, so `stopVoiceRecording` found nothing to stop and the spawn happened anyway. A
+plain flag, because that is a press that ended, not a component that unmounted.
+
+### The candidate set, and why it is not a gate
+
+`packages/tui/script/audit-late-side-effects.ts` reports 88 candidate sites, sorted so
+files with no cancellation helper come first. It is triage. The detector is
+indentation-based and cannot distinguish a call from a call _site_ —
+`onSelect: () => dialog.replace(…)` built after an await is safe and looks identical — and
+it misses a real site behind one level of indirection, as it did for `clearProfile`
+followed by a local `reopen()`. `app.tsx` is the clearest illustration: all eight of its
+hits are handler definitions or an `onCleanup` body, and its one genuinely async site
+already guards itself with `dialog.stack.length === 0`, an idiom the detector does not
+recognise and the correct one for "open fresh only if nothing else is up".
+
+A blocking gate would mean accepting that ratio or maintaining an allowlist longer than
+the findings, so it always exits 0 and prints a list for a human.

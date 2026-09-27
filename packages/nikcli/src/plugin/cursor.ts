@@ -1777,13 +1777,31 @@ function parseCursorModelsOutput(output: string): Array<{ id: string; name: stri
   return models
 }
 
+/**
+ * One discovery per process. `ModelsDev.get()` re-patches the catalog on every
+ * call and each patch lands here, so without this the startup path pays a
+ * synchronous Node CLI launch again for every caller.
+ */
+let discoveredCursorModels: Map<string, CursorModelInfo> | undefined
+
 function discoverCursorModelsSync(): Map<string, CursorModelInfo> {
+  discoveredCursorModels ??= discoverCursorModels()
+  return discoveredCursorModels
+}
+
+function discoverCursorModels(): Map<string, CursorModelInfo> {
   const result = new Map<string, CursorModelInfo>()
   try {
     const runner = resolveCursorAgentRunner()
+    // The runner falls back to a bare "cursor-agent", so a machine without the
+    // CLI is only discovered by failing the spawn. Asking first keeps every
+    // such startup off a subprocess it cannot use.
+    if (!path.isAbsolute(runner.command) && !Bun.which(runner.command)) return result
     const out = spawnSync(runner.command, [...runner.args, "models"], {
       encoding: "utf-8",
-      timeout: 15000,
+      // Blocking, and on the startup path: the static catalog below is a fine
+      // answer, waiting a quarter minute for a better one is not.
+      timeout: 5000,
       env: runner.env,
     })
     if (out.status !== 0 || !out.stdout) return result
@@ -1872,11 +1890,13 @@ export async function CursorAuthPlugin(input: PluginInput): Promise<Hooks> {
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
             const currentAuth = await getAuth()
             if (currentAuth?.type === "oauth" && (!currentAuth.access || currentAuth.expires < Date.now() - 30_000)) {
+              // cursor-agent owns this session and renews it itself; the copy
+              // here is only a mirror. Newer CLIs keep the token in the OS
+              // keychain, so a missing cli-config.json does not mean signed
+              // out — the proxy answers a real logout with CURSOR_AUTH_HINT.
               log.info("cursor token expired, reloading from cli config")
               const refreshed = await refreshFromCliConfig(input)
-              if (!refreshed) {
-                throw new Error("Cursor token expired. Run `/login` again or refresh via `cursor-agent login`.")
-              }
+              if (!refreshed) log.info("no cursor cli config to mirror; deferring to cursor-agent's own session")
             }
 
             return handleCursorProxyRequest(new Request(requestInput, init), workspaceDirectory)

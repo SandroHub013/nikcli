@@ -59,6 +59,77 @@ const steps: ValidationStep[] = [
     timeout: 30_000,
   },
   {
+    name: "Open-payload allowlist gate",
+    command: ["bun", "run", "script/check-open-payloads.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Account-required guard gate",
+    command: ["bun", "run", "script/check-account-required.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Observability schema gate",
+    command: ["bun", "run", "script/check-observability-schema.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Plugin v2 contract gate",
+    command: ["bun", "run", "script/check-plugin-v2.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Workspace isolation gate",
+    command: ["bun", "run", "script/check-workspace-isolation.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Network egress accounting gate",
+    command: ["bun", "run", "script/check-network-egress.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    name: "Flag capture-at-import gate",
+    command: ["bun", "run", "script/check-flag-capture.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    // The deterministic half of the EOT-01 baseline: shape and lifecycle
+    // counters, which hold on any machine. Timings are printed, never gated —
+    // see the script's docblock for why a millisecond threshold on a shared
+    // runner is a gate that fires for the runner's reasons.
+    name: "Perf baseline gate",
+    command: ["bun", "run", "script/check-perf-baseline.ts"],
+    cwd: "packages/nikcli",
+    timeout: 30_000,
+  },
+  {
+    // Non-blocking for the same reason as the commit-reference gate: it is a
+    // documentation link, and a red build over one teaches people to ignore
+    // the colour.
+    name: "Spec file-reference gate",
+    command: ["bun", "run", "script/check-spec-paths.ts"],
+    cwd: "packages/nikcli",
+    critical: false,
+    timeout: 30_000,
+  },
+  {
+    name: "Spec commit-reference gate",
+    command: ["bun", "run", "script/check-spec-commit-refs.ts"],
+    cwd: "packages/nikcli",
+    // Non-blocking: it depends on the checkout having history, and a CI
+    // strategy change should not turn a documentation link into a red build.
+    critical: false,
+    timeout: 60_000,
+  },
+  {
     name: "Generated HTTP client drift",
     command: [
       "bash",

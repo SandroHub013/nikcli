@@ -6,6 +6,8 @@ import {
   DEVICE_POLL_INTERVAL_SECONDS,
   isAllowedRedirect,
   isClientID,
+  LEGACY_ISSUER_HOSTS,
+  legacyIssuerHost,
 } from "./constants"
 import { randomDigits, randomToken, secureEqual, sha256 } from "./crypto"
 import {
@@ -25,6 +27,7 @@ import {
   deviceConnectedPage,
   finishGitHub,
   normalizeUserCode,
+  passkeyOfferRoute,
   requestEmailCode,
   startGitHub,
   verifyEmailCode,
@@ -53,8 +56,9 @@ function formRecord(form: URLSearchParams): Record<string, string> {
 }
 
 const allowedOrigins = new Set([
+  "https://nikcli-ai.dev",
+  "https://console.nikcli-ai.dev",
   "https://nikcli.store",
-  "https://console.nikcli.store",
   "tauri://localhost",
   "http://tauri.localhost",
 ])
@@ -72,9 +76,28 @@ app.use(
 
 app.use("*", async (c, next) => {
   await next()
-  if (c.req.path !== "/.well-known/jwks.json") noStore(c.res)
+  if (c.req.path !== "/.well-known/jwks.json" && c.req.path !== "/.well-known/webauthn") noStore(c.res)
   c.res.headers.set("X-Content-Type-Options", "nosniff")
   c.res.headers.set("Referrer-Policy", "no-referrer")
+})
+
+/**
+ * A legacy issuer host (see LEGACY_ISSUER_HOSTS) keeps answering the endpoints
+ * installed clients call directly — token, device, userinfo, revoke and the
+ * well-known documents — but sends browser pages to the current issuer, so new
+ * sign-ins, passkey ceremonies and GitHub callbacks all run on one origin.
+ */
+const legacyHosts = new Set(Object.values(LEGACY_ISSUER_HOSTS))
+
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url)
+  const isPage = c.req.method === "GET" || c.req.method === "HEAD"
+  const isAPI = url.pathname.startsWith("/.well-known/") || url.pathname === "/userinfo" || url.pathname === "/health"
+  if (!legacyHosts.has(url.hostname) || !isPage || isAPI) return next()
+  const issuer = new URL(c.env.ISSUER)
+  url.protocol = issuer.protocol
+  url.host = issuer.host
+  return c.redirect(url.toString(), 308)
 })
 
 app.onError((error, c) => {
@@ -134,6 +157,7 @@ app.post("/login/passkey/authentication/verify", passkeyAuthenticationVerify)
 app.post("/login/passkey/registration/options", passkeyRegistrationOptions)
 app.post("/login/passkey/registration/verify", passkeyRegistrationVerify)
 app.post("/login/passkey/skip", skipPasskey)
+app.get("/login/passkey/offer", passkeyOfferRoute)
 
 // The CLI hands out `verification_uri_complete`, and users forward that link
 // between machines — normalize whatever shape the code arrives in so the field
@@ -153,7 +177,14 @@ app.post("/oauth/device/code", async (c) => {
     c.header("Retry-After", String(rate.retryAfter))
     return c.json({ error: "rate_limited" }, 429)
   }
-  const body = await readJson(c.req.raw)
+  // RFC 8628 specifies this request as form-encoded, and the metadata document
+  // advertises the route as `device_authorization_endpoint`, so a conformant
+  // client sends a form and used to get a bare 415. nikcli's own CLI sets a
+  // JSON content-type explicitly, so reading both costs it nothing — the same
+  // shape `pollDevice` below already uses.
+  const body = c.req.header("content-type")?.startsWith("application/json")
+    ? await readJson(c.req.raw)
+    : formRecord(await readForm(c.req.raw))
   const clientID = typeof body.client_id === "string" ? body.client_id : ""
   if (!isClientID(clientID)) return oauthError(c, "invalid_client", "Unknown public client")
   const now = Date.now()
@@ -189,7 +220,11 @@ app.post("/oauth/device/code", async (c) => {
   return c.json({
     device_code: deviceCode,
     user_code: userCode,
+    // `verification_url` is the name nikcli's own clients read and cannot be
+    // dropped; `verification_uri` is the one RFC 8628 defines, and without it a
+    // conformant client sees the complete URI but no base to fall back on.
     verification_url: verificationURL,
+    verification_uri: verificationURL,
     verification_uri_complete: `${verificationURL}?user_code=${encodeURIComponent(userCode)}`,
     interval: DEVICE_POLL_INTERVAL_SECONDS,
     expires_in: DEVICE_CODE_TTL_SECONDS,
@@ -342,6 +377,17 @@ app.get("/.well-known/oauth-authorization-server", (c) =>
     access_token_ttl: ACCESS_TTL_SECONDS,
   }),
 )
+
+/**
+ * WebAuthn Related Origin Requests: lets the current issuer origin use passkeys
+ * whose RP ID is the legacy issuer host. The browser fetches this from the RP ID
+ * host, so it matters on the legacy host and is harmless on the current one.
+ */
+app.get("/.well-known/webauthn", (c) => {
+  if (!legacyIssuerHost(c.env.ISSUER)) return c.notFound()
+  c.header("Cache-Control", "public, max-age=3600")
+  return c.json({ origins: [new URL(c.env.ISSUER).origin] })
+})
 
 app.get("/.well-known/nikcli/issuer", (c) => c.text(c.env.ISSUER))
 app.get("/.well-known/nikcli", (c) =>

@@ -5,16 +5,24 @@
   "compatibility_date": "2026-06-24",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  // A deploy replaces every Custom Domain on this Worker with this list. The
+  // nikcli.store host stays: installs signed in before the move refresh
+  // against it, and passkeys created there are bound to it (LEGACY_ISSUER_HOSTS
+  // in src/constants.ts).
   "routes": [
+    {
+      "pattern": "auth.nikcli-ai.dev",
+      "custom_domain": true,
+    },
     {
       "pattern": "auth.nikcli.store",
       "custom_domain": true,
     },
   ],
   "vars": {
-    "ISSUER": "https://auth.nikcli.store",
+    "ISSUER": "https://auth.nikcli-ai.dev",
     "AUDIENCE": "nikcli-api",
-    "EMAIL_SENDER": "auth@nikcli.store",
+    "EMAIL_SENDER": "auth@nikcli-ai.dev",
   },
   "d1_databases": [
     {
@@ -50,14 +58,18 @@
       "name": "nikcli-identity-staging",
       "routes": [
         {
+          "pattern": "dev.auth.nikcli-ai.dev",
+          "custom_domain": true,
+        },
+        {
           "pattern": "dev.auth.nikcli.store",
           "custom_domain": true,
         },
       ],
       "vars": {
-        "ISSUER": "https://dev.auth.nikcli.store",
+        "ISSUER": "https://dev.auth.nikcli-ai.dev",
         "AUDIENCE": "nikcli-api",
-        "EMAIL_SENDER": "auth@nikcli.store",
+        "EMAIL_SENDER": "auth@nikcli-ai.dev",
       },
       "d1_databases": [
         {

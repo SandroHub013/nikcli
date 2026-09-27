@@ -66,7 +66,9 @@ describe("pane chrome", () => {
       expect(`${file}: ${source.includes("<PaneActions onExpand=")}`).toBe(`${file}: true`)
     }
     const actions = read("grid/pane-actions.tsx")
-    expect(actions).toContain('class="act" data-slot="pane-action"')
+    // Upstream's form (5fff57851): prettier puts each attribute on a line of its own.
+    expect(actions).toMatch(/class="act"[\s\S]*?data-slot="pane-action"/)
+    expect((actions.match(/data-slot="pane-action"/g) ?? []).length).toBeGreaterThanOrEqual(2)
     expect(actions).toContain('data-slot="pane-actions"')
   })
 

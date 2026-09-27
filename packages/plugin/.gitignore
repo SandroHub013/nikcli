@@ -1,1 +1,3 @@
 dist
+# `bun pm pack` output from script/publish.ts; the release commit is `git add -A`.
+*.tgz

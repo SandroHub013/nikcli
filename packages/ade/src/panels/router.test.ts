@@ -25,7 +25,10 @@ function panel(answer: PanelHandler["run"]): PanelHandler & { asked: string[] } 
 describe("createPanelRouter", () => {
   test("an ordinary line of output is not a request", async () => {
     const router = createPanelRouter()
-    router.register("video", panel(async () => ({ ok: true, detail: "fatto" })))
+    router.register(
+      "video",
+      panel(async () => ({ ok: true, detail: "fatto" })),
+    )
 
     expect(await router.handle("Compiled 3 modules in 412ms")).toBeUndefined()
     // Including a line that talks *about* the protocol without being one.
@@ -59,7 +62,10 @@ describe("createPanelRouter", () => {
 
   test("a panel that is not open is told so, with the ones that are", async () => {
     const router = createPanelRouter()
-    router.register("video", panel(async () => ({ ok: true, detail: "" })))
+    router.register(
+      "video",
+      panel(async () => ({ ok: true, detail: "" })),
+    )
 
     const handled = await router.handle("@ade 3d rotate 90")
     /*
@@ -91,7 +97,10 @@ describe("createPanelRouter", () => {
 
   test("a closed panel stops answering", async () => {
     const router = createPanelRouter()
-    router.register("video", panel(async () => ({ ok: true, detail: "fatto" })))
+    router.register(
+      "video",
+      panel(async () => ({ ok: true, detail: "fatto" })),
+    )
     expect(router.open()).toEqual(["video"])
 
     router.unregister("video")
@@ -196,7 +205,10 @@ describe("createPanelRouter", () => {
     const router = createPanelRouter()
     expect(router.greeting("video")).toEqual([])
 
-    router.register("video", panel(async () => ({ ok: true, detail: "" })))
+    router.register(
+      "video",
+      panel(async () => ({ ok: true, detail: "" })),
+    )
     const lines = router.greeting("video")
     expect(lines.length).toBeGreaterThan(2)
     // Every line is prefixed, so the greeting cannot be read back as requests.

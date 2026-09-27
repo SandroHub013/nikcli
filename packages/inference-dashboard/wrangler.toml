@@ -3,10 +3,13 @@ main = "./dist/_worker.js/index.js"
 compatibility_date = "2025-10-01"
 compatibility_flags = ["nodejs_compat"]
 
-routes = [{ pattern = "dashboard.nikcli.store", custom_domain = true }]
+routes = [{ pattern = "dashboard.nikcli-ai.dev", custom_domain = true }]
 
 [assets]
 directory = "./dist"
+# The Astro adapter serves 404s and static fallbacks through env.ASSETS; without
+# the binding every unknown path throws and answers 500.
+binding = "ASSETS"
 
 # Create with: bun run d1:create
 # Then replace database_id below with the value printed.
@@ -17,7 +20,7 @@ database_id = "5be2b87f-fc61-4642-a444-2f954430bbb6"
 migrations_dir = "./d1-migrations"
 
 [vars]
-INFERENCE_API_BASE = "https://inference.nikcli.store"
-SITE_URL = "https://dashboard.nikcli.store"
-AUTH_ISSUER = "https://auth.nikcli.store"
+INFERENCE_API_BASE = "https://inference.nikcli-ai.dev"
+SITE_URL = "https://dashboard.nikcli-ai.dev"
+AUTH_ISSUER = "https://auth.nikcli-ai.dev"
 AUTH_AUDIENCE = "nikcli-api"

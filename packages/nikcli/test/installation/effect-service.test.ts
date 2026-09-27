@@ -51,7 +51,7 @@ describe("Installation.Service", () => {
     for (const method of ["curl", "unknown"] as Installation.Method[]) {
       expect(Installation.resolveUpgradeStrategy(method, "win32")).toEqual({
         type: "windows-installer",
-        script: "irm https://nikcli.store/install.ps1 | iex",
+        script: "irm https://nikcli-ai.dev/install.ps1 | iex",
       })
     }
 
@@ -112,7 +112,7 @@ describe("Homebrew installation support", () => {
     const source = await readSrc("packages/nikcli/src/installation/index.ts")
 
     // The tap formula should fall back to GitHub releases for version checking
-    expect(source).toContain("api.github.com/repos/nikomatt69/nikcli/releases/latest")
+    expect(source).toContain("api.github.com/repos/nikcli/nikcli/releases/latest")
 
     // Must handle brew.sh API for core formula
     expect(source).toContain("formulae.brew.sh")
@@ -379,7 +379,7 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(source).toContain("brew upgrade ${formula}")
     expect(source).toContain("choco upgrade nikcli --version=${target}")
     expect(source).toContain("scoop install nikcli@${target}")
-    expect(source).toContain("https://nikcli.store/install")
+    expect(source).toContain("https://nikcli-ai.dev/install")
   })
 
   it("every install method has a working latest-version fetch (per platform)", async () => {
@@ -396,7 +396,7 @@ describe("Update dialog wiring (cross-platform)", () => {
     // scoop manifest
     expect(source).toContain("ScoopInstaller/Main")
     // github fallback for unknown / brew-tap
-    expect(source).toContain("api.github.com/repos/nikomatt69/nikcli/releases/latest")
+    expect(source).toContain("api.github.com/repos/nikcli/nikcli/releases/latest")
   })
 
   it("the default config triggers the dialog (only opt-out via autoupdate:false or env)", async () => {

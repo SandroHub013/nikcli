@@ -88,3 +88,73 @@ Start with monitor or one background job family, characterize current limits and
 introduce bounded admission and measured query improvements. Do not combine this with a storage-engine replacement.
 Rollback scheduler/adapter changes while preserving durable records, terminal-state guards, and logs. Additive schema
 changes require a tested compatibility/downgrade plan; never roll back by deleting user data or replaying side effects.
+
+## Bounded Concurrency — 2026-09-20
+
+The other half of the gate. `src/util/queue.ts` holds the two primitives the bound rests
+on, and both were uncovered: `AsyncQueue` and `work` had tests, `Semaphore` and `workMap`
+had none. `Semaphore` is what caps the background-agent fan-out in `tool/task.ts`, and six
+call sites in the session and instruction paths bound their I/O with `workMap`.
+
+Covered now, and each case was checked against a break rather than only run:
+
+- **The permit is released when the body throws.** Removing the `finally` fails it. Without
+  it one rejection removes a permit permanently and the cap walks itself down to zero over
+  a long-running process — a deadlock that appears only after enough failures.
+- **A freed permit is handed to a waiter, not dropped.** Deleting the waiter shift fails
+  three cases. The lost-wakeup shape reads as a hang, not an error.
+- **FIFO order**, and an unpaired `release()` does not hand out extra capacity.
+- **`workMap` returns results in input order however they finish.** The six call sites zip
+  the results back against the input array, so an order that follows completion is silent
+  corruption: the right values attached to the wrong paths.
+
+### One latent bug, fixed
+
+`work()` used `pending.pop() === undefined` as its end-of-queue sentinel, which cannot tell
+an absent item from a present one. A worker that met a nullable item treated it as the end
+of the queue and **silently dropped the rest of its share** — `work(2, [1, undefined, 3,
+4])` ran three of four. Nothing in `src` passes a nullable array today, which is why it
+never showed, and why the next caller would have inherited it. It now walks on
+`pending.length`. `workMap` was never affected: it pops `{item, index}` objects, which are
+never `undefined` — pinned by a test so a simplification back to the plain array
+reintroduces it loudly.
+
+## Durable Recovery — 2026-09-20
+
+The release gate says _durable_ terminal states, and the word was doing work nothing
+checked. `isTerminal` and `canTransition` are pure functions with their own unit tests, and
+neither says anything about what is in the database after a crash.
+
+The state a crash actually leaves is a row that says `running`, owned by a process that is
+gone. Nothing times it out on its own; `reconcileInterrupted` is what turns it into a
+settled outcome, and until it runs the TUI shows a task that will never finish.
+`test/background/recovery.test.ts` drives that path against a real isolated database and
+**re-reads every assertion from the repository** rather than trusting a return value,
+because durability is the entire claim.
+
+Seven cases, of which three are the ones worth naming:
+
+- A live sibling's work is not stolen. One process sweeping another's heartbeating run
+  would settle a task that is still going — worse than the stuck row the sweep exists to
+  clear.
+- `ignore` is honoured, which is how the sweeping process keeps its own in-flight rows:
+  stale by wall clock, not abandoned.
+- `finalize` on a settled row does not land. `canTransition` is enforced at the write path,
+  and this is the half its unit test cannot reach — that the refusal reaches the database.
+
+Two details came out of making it fail on purpose.
+
+**The lease is guarded twice.** Deleting the `leaseExpired` check inside
+`reconcileInterrupted` changes nothing, because `markOrphaned` checks it again before
+settling. That is sound defence and it means the sweep's own check is not what the suite
+discriminates; breaking `leaseExpired` itself is what fails the live-run case. Worth
+knowing before someone deletes the "redundant" line and concludes the tests cover it.
+
+**The repositories return `Effect`, not a promise.** A repo call that is merely `await`ed
+resolves the Effect object itself, so every assertion reads `undefined` off it and every
+test fails identically regardless of the behaviour. The first run of this file failed that
+way in all five cases — an error that looks like a broken subject and is a broken harness.
+
+Each project in the suite is a real git repository, because the project id is derived from
+the root commit: two plain temp directories share the fallback id `global`, which would put
+every case's rows in one table and let a leak read as a pass.

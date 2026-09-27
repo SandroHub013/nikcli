@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import * as WebBrowser from "expo-web-browser"
 import { Link, useFocusEffect, type Href } from "expo-router"
@@ -11,8 +11,9 @@ import { SurfaceCard } from "@/components/ui/SurfaceCard"
 import { TextField } from "@/components/ui/TextField"
 import { CenteredScreenHeader } from "@/components/layout/CenteredScreenHeader"
 import { SectionHeader } from "@/components/ui/SectionHeader"
-import { startGithubDeviceAuthWithHostDefault } from "@/lib/github"
-import { useServer } from "@/lib/server-context"
+import { useGithubDeviceAuth } from "@/hooks/use-github-device-auth"
+import { useServer, userMe } from "@/lib/server-context"
+import { loginWithOAuth } from "@/lib/oauth"
 import { setAppPreferencesWith } from "@/lib/storage"
 import { ensureNotificationPermissions } from "@/lib/notifications"
 import { useUIStore } from "@/lib/store"
@@ -27,16 +28,11 @@ import {
   type SettingsSectionID,
   type SkillInfo,
   type ThemeMode,
-  type GitHubDeviceAuthStart,
   type MobileExecutionTarget,
   type ProviderCatalog,
 } from "@/lib/types"
 
 const EMPTY_ROWS: never[] = []
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 function maybeHandle(message: string | null) {
   return message ? <ErrorBanner message={message} /> : null
@@ -111,8 +107,18 @@ function githubConnectorKey(snapshot: HostConfigSnapshot | null) {
 }
 
 export default function SettingsScreen() {
-  const { client, config, bootstrap, bootstrapLoading, refreshBootstrap, save, clear, currentUser, signOut } =
-    useServer()
+  const {
+    client,
+    config,
+    bootstrap,
+    bootstrapLoading,
+    refreshBootstrap,
+    save,
+    clear,
+    currentUser,
+    signOut,
+    setOAuthSession,
+  } = useServer()
   const { palette, colorScheme } = useAppTheme()
   const { themeId, themeName, setTheme } = useTheme()
   const { setColorScheme } = useColorScheme()
@@ -151,15 +157,13 @@ export default function SettingsScreen() {
   const [mcpUrl, setMcpUrl] = useState("")
   const [mcpCommand, setMcpCommand] = useState("")
   const [saving, setSaving] = useState(false)
+  const [accountOauthLoading, setAccountOauthLoading] = useState(false)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerSaving, setProviderSaving] = useState(false)
   const [defaultsSaving, setDefaultsSaving] = useState(false)
-  const [oauthBusy, setOauthBusy] = useState(false)
   const [mcpBusy, setMcpBusy] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [oauthFlow, setOauthFlow] = useState<GitHubDeviceAuthStart | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const authRun = useRef(0)
 
   const [prevConfig, setPrevConfig] = useState(config)
   if (config !== prevConfig) {
@@ -296,11 +300,36 @@ export default function SettingsScreen() {
     }
   }
 
+  async function signInWithAccount() {
+    if (!config) {
+      setMessage("Save a host first, then sign in.")
+      return
+    }
+    setAccountOauthLoading(true)
+    setMessage(null)
+    try {
+      const tokens = await loginWithOAuth(config.authIssuer)
+      const user = await userMe(config.url, tokens.access)
+      await setOAuthSession(tokens, user)
+      setMessage(`Signed in as ${user.display_name || user.username}`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Sign in failed")
+    } finally {
+      setAccountOauthLoading(false)
+    }
+  }
+
   async function syncBootstrap(messageText?: string) {
     await refreshBootstrap().catch(() => null)
     await loadAutomationData().catch(() => null)
     if (messageText) setMessage(messageText)
   }
+
+  const { oauthBusy, oauthFlow, startGithubOAuth, checkGithubApproval, cancelGithubOAuth } = useGithubDeviceAuth({
+    client,
+    onApproved: (login) => syncBootstrap(`GitHub connected as @${login}`),
+    onMessage: (text) => setMessage(text || null),
+  })
 
   // persistPreferences is intentionally defined here because each field's
   // type is derived from the component's local useState (via `typeof`).
@@ -587,99 +616,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function waitForApproval(flow: GitHubDeviceAuthStart, runID: number) {
-    let interval = flow.interval
-    while (Date.now() < flow.expiresAt && authRun.current === runID) {
-      if (authRun.current !== runID || !client) return
-      await sleep(interval * 1000)
-      if (authRun.current !== runID || !client) return
-      const result = await client.pollGithubDeviceAuth(flow.deviceCode)
-      if (result.status === "pending") {
-        interval = result.interval ?? interval
-        continue
-      }
-      if (result.status === "approved") {
-        authRun.current = 0
-        setOauthFlow(null)
-        await syncBootstrap(`GitHub connected as @${result.user?.login}`)
-        return
-      }
-      if (result.status === "denied") {
-        authRun.current = 0
-        setOauthFlow(null)
-        setMessage("GitHub authorization was denied")
-        return
-      }
-      if (result.status === "expired") {
-        authRun.current = 0
-        setOauthFlow(null)
-        setMessage("GitHub authorization expired. Start a new sign-in.")
-        return
-      }
-    }
-    if (authRun.current === runID) {
-      authRun.current = 0
-      setOauthFlow(null)
-      setMessage("GitHub authorization expired. Start a new sign-in.")
-    }
-  }
-
-  async function startGithubOAuth() {
-    if (!client) return
-
-    try {
-      setOauthBusy(true)
-      setMessage(null)
-      const flow = await startGithubDeviceAuthWithHostDefault(client, Boolean(bootstrap?.github?.oauthDeviceConfigured))
-      const runID = Date.now()
-      authRun.current = runID
-      setOauthFlow(flow)
-      void WebBrowser.openBrowserAsync(flow.verificationUriComplete || flow.verificationUri)
-      void waitForApproval(flow, runID)
-      setMessage("Approve GitHub in your browser. The app is waiting for confirmation.")
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error)
-      setMessage(
-        /github oauth client id is not configured/i.test(text)
-          ? "Could not save the nikcli GitHub App on this host. Restart nikcli on the computer, then tap Reconnect GitHub."
-          : text,
-      )
-    } finally {
-      setOauthBusy(false)
-    }
-  }
-
-  async function checkGithubApproval() {
-    if (!client || !oauthFlow) return
-    try {
-      setOauthBusy(true)
-      const result = await client.pollGithubDeviceAuth(oauthFlow.deviceCode)
-      if (result.status === "approved") {
-        authRun.current = 0
-        setOauthFlow(null)
-        await syncBootstrap(`GitHub connected as @${result.user?.login}`)
-        return
-      }
-      if (result.status === "pending") {
-        setMessage("Still waiting for GitHub approval.")
-        return
-      }
-      if (result.status === "denied") {
-        authRun.current = 0
-        setOauthFlow(null)
-        setMessage("GitHub authorization was denied")
-        return
-      }
-      authRun.current = 0
-      setOauthFlow(null)
-      setMessage("GitHub authorization expired. Start a new sign-in.")
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
-    } finally {
-      setOauthBusy(false)
-    }
-  }
-
   async function connectGithubWithToken() {
     if (!client || !githubToken.trim()) return
     try {
@@ -698,8 +634,7 @@ export default function SettingsScreen() {
     if (!client) return
     try {
       setSaving(true)
-      authRun.current = 0
-      setOauthFlow(null)
+      cancelGithubOAuth()
       await client.clearGithubToken()
       await syncBootstrap("GitHub access removed from host")
     } catch (error) {
@@ -728,8 +663,7 @@ export default function SettingsScreen() {
   }, [skills, skillsSearch])
 
   async function forgetHost() {
-    authRun.current = 0
-    setOauthFlow(null)
+    cancelGithubOAuth()
     await clear()
     setMessage("Host configuration removed from this device")
   }
@@ -1023,6 +957,95 @@ export default function SettingsScreen() {
                 </View>
 
                 <View className="mt-4 gap-3">
+                  <View className="gap-2">
+                    {currentUser ? (
+                      <ActionButton
+                        label={`Sign out (${currentUser.display_name || currentUser.username})`}
+                        variant="secondary"
+                        disabled={accountOauthLoading || oauthBusy}
+                        onPress={() => {
+                          void signOut().then(() => setMessage("Signed out"))
+                        }}
+                      />
+                    ) : (
+                      <ActionButton
+                        label="Sign in with Nikcli"
+                        loading={accountOauthLoading}
+                        disabled={!config || oauthBusy}
+                        onPress={() => void signInWithAccount()}
+                      />
+                    )}
+                    <ActionButton
+                      label={githubConnected ? "Reconnect GitHub" : "Sign in with GitHub"}
+                      variant={currentUser ? "primary" : "secondary"}
+                      loading={oauthBusy}
+                      disabled={!config || accountOauthLoading}
+                      onPress={() => void startGithubOAuth()}
+                    />
+                  </View>
+
+                  {oauthFlow ? (
+                    <View
+                      style={{
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: hexToRgba(palette.ink, 0.08),
+                        backgroundColor: hexToRgba(palette.background, 0.6),
+                        padding: 16,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: palette.muted,
+                          ...typeStyle(12, { weight: "500" }),
+                        }}
+                      >
+                        GitHub authorization in progress
+                      </Text>
+                      <Text
+                        style={{
+                          marginTop: 8,
+                          color: palette.soft,
+                          ...typeStyle(14),
+                        }}
+                      >
+                        Enter this code in GitHub if the browser page asks for it.
+                      </Text>
+                      <Text
+                        selectable
+                        style={{
+                          marginTop: 12,
+                          textAlign: "center",
+                          color: palette.ink,
+                          letterSpacing: 6,
+                          ...typeStyle(28, { weight: "600" }),
+                        }}
+                      >
+                        {oauthFlow.userCode}
+                      </Text>
+                      <View className="mt-3 flex-row gap-2">
+                        <View className="flex-1">
+                          <ActionButton
+                            label="Open GitHub"
+                            onPress={() =>
+                              void WebBrowser.openBrowserAsync(
+                                oauthFlow.verificationUriComplete || oauthFlow.verificationUri,
+                              )
+                            }
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <ActionButton
+                            label="Check approval"
+                            variant="secondary"
+                            loading={oauthBusy}
+                            onPress={() => void checkGithubApproval()}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+
                   <SurfaceCard
                     tone="background"
                     eyebrow="GitHub profile"
@@ -1072,21 +1095,54 @@ export default function SettingsScreen() {
                   padding: 16,
                 }}
               >
-                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Color theme</Text>
+                <Text
+                  style={{
+                    color: palette.muted,
+                    ...typeStyle(12, { weight: "500" }),
+                  }}
+                >
+                  Color theme
+                </Text>
                 <Pressable
                   onPress={() => setThemePickerOpen(true)}
                   accessibilityRole="button"
                   accessibilityLabel={`Current theme ${themeName}`}
                   style={[
                     optionChipStyle(palette, true),
-                    { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+                    {
+                      marginTop: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    },
                   ]}
                 >
                   <View>
-                    <Text style={{ color: palette.ink, ...typeStyle(14, { weight: "600" }) }}>{themeName}</Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>Tap to change theme</Text>
+                    <Text
+                      style={{
+                        color: palette.ink,
+                        ...typeStyle(14, { weight: "600" }),
+                      }}
+                    >
+                      {themeName}
+                    </Text>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
+                      Tap to change theme
+                    </Text>
                   </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     <View
                       style={{
                         width: 24,
@@ -1123,7 +1179,13 @@ export default function SettingsScreen() {
                       >
                         {mode}
                       </Text>
-                      <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
+                      <Text
+                        style={{
+                          marginTop: 4,
+                          color: palette.soft,
+                          ...typeStyle(12),
+                        }}
+                      >
                         {mode === "system"
                           ? "Follow the device appearance automatically."
                           : mode === "light"
@@ -1155,10 +1217,22 @@ export default function SettingsScreen() {
                   padding: 16,
                 }}
               >
-                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>
+                <Text
+                  style={{
+                    color: palette.muted,
+                    ...typeStyle(12, { weight: "500" }),
+                  }}
+                >
                   Visible settings sections
                 </Text>
-                <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <View
+                  style={{
+                    marginTop: 12,
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
                   {SETTINGS_SECTIONS.map((section) => {
                     const active = visibleSettingsSections[section.id]
                     return (
@@ -1168,11 +1242,20 @@ export default function SettingsScreen() {
                         style={optionChipStyle(palette, active)}
                       >
                         <Text
-                          style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                          style={{
+                            color: optionChipTextColor(palette, active),
+                            ...typeStyle(12, { weight: "600" }),
+                          }}
                         >
                           {section.label}
                         </Text>
-                        <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            color: palette.soft,
+                            ...typeStyle(11),
+                          }}
+                        >
                           {active ? "Visible" : "Hidden"}
                         </Text>
                       </Pressable>
@@ -1250,8 +1333,22 @@ export default function SettingsScreen() {
                         padding: 16,
                       }}
                     >
-                      <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>{title}</Text>
-                      <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      <Text
+                        style={{
+                          color: palette.muted,
+                          ...typeStyle(12, { weight: "500" }),
+                        }}
+                      >
+                        {title}
+                      </Text>
+                      <View
+                        style={{
+                          marginTop: 12,
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
+                      >
                         {rows.map(([key, label]) => {
                           const active = Boolean(values[key as keyof typeof values])
                           return (
@@ -1268,7 +1365,13 @@ export default function SettingsScreen() {
                               >
                                 {label}
                               </Text>
-                              <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
+                              <Text
+                                style={{
+                                  marginTop: 4,
+                                  color: palette.soft,
+                                  ...typeStyle(11),
+                                }}
+                              >
                                 {active ? "On" : "Off"}
                               </Text>
                             </Pressable>
@@ -1338,6 +1441,23 @@ export default function SettingsScreen() {
                       </View>
                     ) : null}
                   </View>
+                  <View className="gap-2">
+                    {currentUser ? null : (
+                      <ActionButton
+                        label="Sign in with Nikcli"
+                        loading={accountOauthLoading}
+                        disabled={!config?.url || oauthBusy}
+                        onPress={() => void signInWithAccount()}
+                      />
+                    )}
+                    <ActionButton
+                      label={githubConnected ? "Reconnect GitHub" : "Sign in with GitHub"}
+                      variant="secondary"
+                      loading={oauthBusy}
+                      disabled={!config?.url || accountOauthLoading}
+                      onPress={() => void startGithubOAuth()}
+                    />
+                  </View>
                 </View>
               </SurfaceCard>
             ) : null}
@@ -1379,7 +1499,13 @@ export default function SettingsScreen() {
                     >
                       Local worktree
                     </Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
                       Same behavior as now: server repo, server git, fastest path to publish.
                     </Text>
                   </Pressable>
@@ -1391,7 +1517,13 @@ export default function SettingsScreen() {
                     disabled={!containerReady}
                     style={[
                       optionChipStyle(palette, selectedExecutionTarget === "container"),
-                      { flex: 1, minWidth: 0, borderRadius: 18, padding: 12, opacity: containerReady ? 1 : 0.5 },
+                      {
+                        flex: 1,
+                        minWidth: 0,
+                        borderRadius: 18,
+                        padding: 12,
+                        opacity: containerReady ? 1 : 0.5,
+                      },
                     ]}
                   >
                     <Text
@@ -1402,14 +1534,26 @@ export default function SettingsScreen() {
                     >
                       Container sandbox
                     </Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
                       Runs GitHub session execution inside a same-server container while keeping the worktree publish
                       flow.
                     </Text>
                   </Pressable>
                 </View>
 
-                <Text style={{ marginTop: 12, color: palette.soft, ...typeStyle(12) }}>
+                <Text
+                  style={{
+                    marginTop: 12,
+                    color: palette.soft,
+                    ...typeStyle(12),
+                  }}
+                >
                   {containerReady
                     ? "Recommended when you want stronger execution isolation without changing how PRs and cleanup work."
                     : "Install Docker or Podman on the server to unlock container-backed GitHub sessions."}
@@ -1469,7 +1613,13 @@ export default function SettingsScreen() {
                 }}
               >
                 <ActivityIndicator color={palette.accent} />
-                <Text style={{ marginTop: 12, color: palette.soft, ...typeStyle(14) }}>
+                <Text
+                  style={{
+                    marginTop: 12,
+                    color: palette.soft,
+                    ...typeStyle(14),
+                  }}
+                >
                   Refreshing host and GitHub posture…
                 </Text>
               </View>
@@ -1481,7 +1631,13 @@ export default function SettingsScreen() {
               animationType="slide"
               onRequestClose={() => setThemePickerOpen(false)}
             >
-              <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: hexToRgba(palette.ink, 0.46) }}>
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "flex-end",
+                  backgroundColor: hexToRgba(palette.ink, 0.46),
+                }}
+              >
                 <Pressable
                   style={{ flex: 1 }}
                   onPress={() => setThemePickerOpen(false)}
@@ -1559,7 +1715,13 @@ export default function SettingsScreen() {
                               {theme.name}
                             </Text>
                             {theme.author ? (
-                              <Text style={{ marginTop: 4, color: palette.muted, ...typeStyle(12) }}>
+                              <Text
+                                style={{
+                                  marginTop: 4,
+                                  color: palette.muted,
+                                  ...typeStyle(12),
+                                }}
+                              >
                                 by {theme.author}
                               </Text>
                             ) : null}
@@ -1575,7 +1737,14 @@ export default function SettingsScreen() {
                                 backgroundColor: hexToRgba(palette.accent, 0.19),
                               }}
                             >
-                              <Text style={{ color: palette.accent, fontWeight: "700" }}>✓</Text>
+                              <Text
+                                style={{
+                                  color: palette.accent,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                ✓
+                              </Text>
                             </View>
                           ) : null}
                         </Pressable>

@@ -929,7 +929,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.docs.open"),
         category: language.t("command.category.system"),
         slash: "docs",
-        onSelect: () => platform.openLink("https://nikcli.store/docs"),
+        onSelect: () => platform.openLink("https://nikcli-ai.dev/docs"),
       },
       {
         id: "support.help",
@@ -1924,7 +1924,7 @@ export default function Layout(props: ParentProps) {
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
               helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://nikcli.ai/desktop-feedback")}
+              onOpenHelp={() => platform.openLink("https://nikcli-ai.dev/desktop-feedback")}
               renderPanel={() => <SidebarPanel project={currentProject()} />}
             />
           </div>
@@ -1987,7 +1987,7 @@ export default function Layout(props: ParentProps) {
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
               helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://nikcli.ai/desktop-feedback")}
+              onOpenHelp={() => platform.openLink("https://nikcli-ai.dev/desktop-feedback")}
               renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
             />
           </nav>

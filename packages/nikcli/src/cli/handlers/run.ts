@@ -9,7 +9,7 @@ import { bootstrap } from "@/cli/bootstrap"
 import { Command } from "@/command"
 import { EOL } from "os"
 import { pathToFileURL } from "url"
-import { select } from "@clack/prompts"
+import { isHeadless, resolvePermissionPrompt } from "@/cli/headless"
 import { createNikcliClient, type Event as SdkEvent, type NikcliClient } from "@nikcli-ai/sdk/httpapi"
 import { Server } from "@/server/server"
 import { Provider } from "@/provider/provider"
@@ -143,11 +143,11 @@ export function invalidSessionReference(): never {
 }
 
 export function resolveEnterpriseOrigin(hostname: string): string | undefined {
-  if (hostname === "nikcli.store") return "https://s.nikcli.store"
-  if (hostname === "dev.nikcli.store") return "https://dev.s.nikcli.store"
-  if (hostname.endsWith(".dev.nikcli.store")) {
-    const stage = hostname.slice(0, -".dev.nikcli.store".length)
-    if (stage) return `https://${stage}.dev.s.nikcli.store`
+  if (hostname === "nikcli-ai.dev") return "https://s.nikcli-ai.dev"
+  if (hostname === "dev.nikcli-ai.dev") return "https://dev.s.nikcli-ai.dev"
+  if (hostname.endsWith(".dev.nikcli-ai.dev")) {
+    const stage = hostname.slice(0, -".dev.nikcli-ai.dev".length)
+    if (stage) return `https://${stage}.dev.s.nikcli-ai.dev`
   }
   return undefined
 }
@@ -198,7 +198,9 @@ export const ShareMessageInfo = z.looseObject({
 })
 export type ShareMessageInfo = z.infer<typeof ShareMessageInfo>
 
-export const SharePartData = z.looseObject({ messageID: z.string().optional().catch(undefined) })
+export const SharePartData = z.looseObject({
+  messageID: z.string().optional().catch(undefined),
+})
 
 export const ShareEntry = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session"), data: ShareSessionInfo }),
@@ -335,8 +337,8 @@ export async function importShareReference(project: Project.Info, input: string)
     if (parsedLocal.success) payload = parsedLocal.data
   } else {
     const configOrigin = await configGet()
-      .then((config) => config.enterprise?.url ?? "https://s.nikcli.store")
-      .catch(() => "https://s.nikcli.store")
+      .then((config) => config.enterprise?.url ?? "https://s.nikcli-ai.dev")
+      .catch(() => "https://s.nikcli-ai.dev")
     payload = await fetchSharePayload(parsed.origins.length ? parsed.origins : [configOrigin], parsed.shareID)
   }
 
@@ -399,6 +401,196 @@ export type RunJsonFields =
   | {
       error: NonNullable<Extract<SdkEvent, { type: "session.error" }>["properties"]["error"]>
     }
+
+export type ExecuteTurnInput = {
+  sdk: NikcliClient
+  sessionID: string
+  message: string
+  command?: string
+  agent?: string
+  model?: string
+  variant?: string
+  format: "default" | "json"
+  fileParts?: Array<{
+    type: "file"
+    url: string
+    filename: string
+    mime: string
+  }>
+  /** When true (the `nikcli run` default), a session error exits the process. */
+  exitOnError?: boolean
+}
+
+export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: string }> {
+  const { sdk, sessionID, message } = input
+  const fileParts = input.fileParts ?? []
+  log.debug("Executing session", { sessionID })
+
+  const printEvent = (color: string, type: string, title: string) => {
+    UI.println(
+      color + "|",
+      UI.Style.TEXT_NORMAL + UI.Style.TEXT_DIM + ` ${type.padEnd(7, " ")}`,
+      "",
+      UI.Style.TEXT_NORMAL + title,
+    )
+  }
+
+  const outputJsonEvent = (type: string, data: RunJsonFields) => {
+    if (input.format === "json") {
+      process.stdout.write(
+        JSON.stringify({
+          type,
+          timestamp: Date.now(),
+          sessionID,
+          ...data,
+        }) + EOL,
+      )
+      return true
+    }
+    return false
+  }
+
+  const events = await sdk.event.subscribe()
+  let errorMsg: string | undefined
+
+  const eventProcessor = (async () => {
+    for await (const event of events.stream) {
+      if (event.type === "message.part.updated") {
+        const part = event.properties.part
+        if (part.sessionID !== sessionID) continue
+
+        if (part.type === "tool" && part.state.status === "completed") {
+          if (outputJsonEvent("tool_use", { part })) continue
+          const [tool, color] = TOOL.get(part.tool) ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
+          const title =
+            part.state.title ||
+            (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
+          printEvent(color, tool, title)
+          if (part.tool === "bash" && part.state.output?.trim()) {
+            UI.println()
+            UI.println(part.state.output)
+          }
+        }
+
+        if (part.type === "step-start") {
+          if (outputJsonEvent("step_start", { part })) continue
+        }
+
+        if (part.type === "step-finish") {
+          if (outputJsonEvent("step_finish", { part })) continue
+        }
+
+        if (part.type === "text" && part.time?.end) {
+          if (outputJsonEvent("text", { part })) continue
+          const isPiped = !process.stdout.isTTY
+          if (!isPiped) UI.println()
+          process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
+          if (!isPiped) UI.println()
+        }
+      }
+
+      if (event.type === "session.error") {
+        const props = event.properties
+        if (props.sessionID !== sessionID || !props.error) continue
+        const err = props.error.name === "MessageOutputLengthError" ? props.error.name : props.error.data.message
+        errorMsg = errorMsg ? errorMsg + EOL + err : err
+        if (outputJsonEvent("error", { error: props.error })) continue
+        UI.error(err)
+      }
+
+      if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
+        break
+      }
+
+      if (event.type === "permission.asked") {
+        const permission = event.properties
+        if (permission.sessionID !== sessionID) continue
+        // Auto mode handed this decision back after repeated denials. A headless
+        // run has nobody to answer, so the action does not run — but the turn
+        // keeps going: a reply with feedback lets the agent continue, where a
+        // bare rejection would stop it.
+        if (permission.metadata?.["auto_mode"] && !Flag.autoApprove() && isHeadless()) {
+          UI.error(`Auto mode blocked ${permission.permission} (${permission.patterns.join(", ")}) repeatedly.`)
+          await sdk.permission.reply({
+            requestID: permission.id,
+            reply: "reject",
+            message:
+              "Auto mode blocked this action repeatedly and no one is available to approve it. Do not retry it; continue with work that does not need it.",
+          })
+          continue
+        }
+        const response = await resolvePermissionPrompt({
+          permission: permission.permission,
+          patterns: permission.patterns,
+          always: permission.always,
+        })
+        await sdk.permission.respond({
+          sessionID,
+          permissionID: permission.id,
+          response,
+        })
+      }
+    }
+  })().catch((error) => {
+    // Stream failures must surface through the normal error path: the
+    // processor is only awaited later, after the prompt round-trips, and an
+    // unhandled interim rejection would crash the run instead.
+    errorMsg = errorMsg ? errorMsg + EOL + String(error) : String(error)
+  })
+
+  const resolvedAgent = await (async () => {
+    if (!input.agent) return undefined
+    const agent = await agentGet(input.agent)
+    if (!agent) {
+      UI.println(
+        UI.Style.TEXT_WARNING_BOLD + "!",
+        UI.Style.TEXT_NORMAL,
+        `agent "${input.agent}" not found. Falling back to default agent`,
+      )
+      return undefined
+    }
+    if (agent.mode === "subagent") {
+      UI.println(
+        UI.Style.TEXT_WARNING_BOLD + "!",
+        UI.Style.TEXT_NORMAL,
+        `agent "${input.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+      )
+      return undefined
+    }
+    return input.agent
+  })()
+
+  if (input.command) {
+    await sdk.session.command({
+      sessionID,
+      agent: resolvedAgent,
+      model: input.model,
+      command: input.command,
+      arguments: message,
+      variant: input.variant,
+    })
+  } else {
+    const modelParam = input.model ? Provider.parseModel(input.model) : undefined
+    await sdk.session.prompt({
+      sessionID,
+      agent: resolvedAgent,
+      model: modelParam,
+      variant: input.variant,
+      parts: [...fileParts, { type: "text", text: message }],
+    })
+  }
+
+  await eventProcessor
+  if (errorMsg) {
+    log.error("Session completed with errors", {
+      sessionID,
+      error: errorMsg,
+    })
+    if (input.exitOnError !== false) process.exit(1)
+    return { error: errorMsg }
+  }
+  return {}
+}
 
 /**
  * The body of `nikcli run`, callable on its own.
@@ -471,170 +663,30 @@ export async function runWithArgs(args: any): Promise<void> {
     process.exit(1)
   }
 
-  const execute = async (sdk: NikcliClient, sessionID: string) => {
-    log.debug("Executing session", { sessionID })
-
-    const printEvent = (color: string, type: string, title: string) => {
-      UI.println(
-        color + "|",
-        UI.Style.TEXT_NORMAL + UI.Style.TEXT_DIM + ` ${type.padEnd(7, " ")}`,
-        "",
-        UI.Style.TEXT_NORMAL + title,
-      )
-    }
-
-    const outputJsonEvent = (type: string, data: RunJsonFields) => {
-      if (args.format === "json") {
-        process.stdout.write(
-          JSON.stringify({
-            type,
-            timestamp: Date.now(),
-            sessionID,
-            ...data,
-          }) + EOL,
-        )
-        return true
-      }
-      return false
-    }
-
-    const events = await sdk.event.subscribe()
-    let errorMsg: string | undefined
-
-    const eventProcessor = (async () => {
-      for await (const event of events.stream) {
-        if (event.type === "message.part.updated") {
-          const part = event.properties.part
-          if (part.sessionID !== sessionID) continue
-
-          if (part.type === "tool" && part.state.status === "completed") {
-            if (outputJsonEvent("tool_use", { part })) continue
-            const [tool, color] = TOOL.get(part.tool) ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-            const title =
-              part.state.title ||
-              (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
-            printEvent(color, tool, title)
-            if (part.tool === "bash" && part.state.output?.trim()) {
-              UI.println()
-              UI.println(part.state.output)
-            }
-          }
-
-          if (part.type === "step-start") {
-            if (outputJsonEvent("step_start", { part })) continue
-          }
-
-          if (part.type === "step-finish") {
-            if (outputJsonEvent("step_finish", { part })) continue
-          }
-
-          if (part.type === "text" && part.time?.end) {
-            if (outputJsonEvent("text", { part })) continue
-            const isPiped = !process.stdout.isTTY
-            if (!isPiped) UI.println()
-            process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
-            if (!isPiped) UI.println()
-          }
-        }
-
-        if (event.type === "session.error") {
-          const props = event.properties
-          if (props.sessionID !== sessionID || !props.error) continue
-          const err = props.error.name === "MessageOutputLengthError" ? props.error.name : props.error.data.message
-          errorMsg = errorMsg ? errorMsg + EOL + err : err
-          if (outputJsonEvent("error", { error: props.error })) continue
-          UI.error(err)
-        }
-
-        if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
-          break
-        }
-
-        if (event.type === "permission.asked") {
-          const permission = event.properties
-          if (permission.sessionID !== sessionID) continue
-          const result = await select({
-            message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
-            options: [
-              { value: "once", label: "Allow once" },
-              {
-                value: "always",
-                label: "Always allow: " + permission.always.join(", "),
-              },
-              { value: "reject", label: "Reject" },
-            ],
-            initialValue: "once",
-          }).catch(() => "reject")
-          const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
-          await sdk.permission.respond({
-            sessionID,
-            permissionID: permission.id,
-            response,
-          })
-        }
-      }
-    })().catch((error) => {
-      // Stream failures must surface through the normal error path: the
-      // processor is only awaited later, after the prompt round-trips, and an
-      // unhandled interim rejection would crash the run instead.
-      errorMsg = errorMsg ? errorMsg + EOL + String(error) : String(error)
+  const execute = async (sdk: NikcliClient, sessionID: string) =>
+    executeTurn({
+      sdk,
+      sessionID,
+      message,
+      command: args.command,
+      agent: args.agent,
+      model: args.model,
+      variant: args.variant,
+      format: args.format,
+      fileParts,
     })
-
-    const resolvedAgent = await (async () => {
-      if (!args.agent) return undefined
-      const agent = await agentGet(args.agent)
-      if (!agent) {
-        UI.println(
-          UI.Style.TEXT_WARNING_BOLD + "!",
-          UI.Style.TEXT_NORMAL,
-          `agent "${args.agent}" not found. Falling back to default agent`,
-        )
-        return undefined
-      }
-      if (agent.mode === "subagent") {
-        UI.println(
-          UI.Style.TEXT_WARNING_BOLD + "!",
-          UI.Style.TEXT_NORMAL,
-          `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
-        )
-        return undefined
-      }
-      return args.agent
-    })()
-
-    if (args.command) {
-      await sdk.session.command({
-        sessionID,
-        agent: resolvedAgent,
-        model: args.model,
-        command: args.command,
-        arguments: message,
-        variant: args.variant,
-      })
-    } else {
-      const modelParam = args.model ? Provider.parseModel(args.model) : undefined
-      await sdk.session.prompt({
-        sessionID,
-        agent: resolvedAgent,
-        model: modelParam,
-        variant: args.variant,
-        parts: [...fileParts, { type: "text", text: message }],
-      })
-    }
-
-    await eventProcessor
-    if (errorMsg) {
-      log.error("Session completed with errors", {
-        sessionID,
-        error: errorMsg,
-      })
-      process.exit(1)
-    }
-  }
 
   if (args.attach) {
     log.debug("Attaching to remote server", { url: args.attach })
-    const sdk = createNikcliClient({ baseUrl: args.attach })
+    // The credentials that server expects, and — for the shared service, which
+    // has no directory of its own — the directory this command runs in.
+    const { BackgroundService } = await import("@/service/service")
+    const connection = await BackgroundService.connection(args.attach)
+    const sdk = createNikcliClient({
+      baseUrl: args.attach,
+      fetch: connection.fetch,
+      directory: connection.service ? process.cwd() : undefined,
+    })
 
     const sessionID = await (async () => {
       if (args.continue) {
@@ -699,20 +751,20 @@ export async function runWithArgs(args: any): Promise<void> {
       }
     }
 
-    return await execute(sdk, sessionID)
+    // `runWithArgs` is `Promise<void>`, and `executeTurn` already exits the
+    // process on error unless the caller opts out with `exitOnError: false`.
+    // The envelope is for embedded callers; here it is always `{}` or
+    // unreachable. Matches the sibling call site below.
+    await execute(sdk, sessionID)
+    return
   }
 
   await bootstrap(process.cwd(), async (instance) => {
     log.debug("Running local nikcli session")
 
-    const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init)
-      return Server.fetch(request)
-    }) as typeof globalThis.fetch
-
     const sdk = createNikcliClient({
       baseUrl: "http://nikcli.local",
-      fetch: fetchFn,
+      fetch: Server.localFetch,
     })
 
     if (args.command) {

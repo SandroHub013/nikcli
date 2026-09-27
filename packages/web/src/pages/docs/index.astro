@@ -31,7 +31,7 @@ const toc = [
         the open source coding agent — full credit for the original project goes to its authors and
         contributors. nikcli is not affiliated with or endorsed by them, so please report anything
         you hit here on the
-        <a href="https://github.com/nikomatt69/nikcli" target="_blank" rel="noopener noreferrer">nikcli repository</a>,
+        <a href="https://github.com/nikcli/nikcli" target="_blank" rel="noopener noreferrer">nikcli repository</a>,
         never on the upstream tracker.
       </p>
     </DocCallout>
@@ -43,10 +43,10 @@ const toc = [
       <code>packages/nikcli/src/index.ts</code>.
     </p>
     <DocCode language="bash" title="Terminal · macOS / Linux">
-      curl -fsSL https://nikcli.store/install | bash
+      curl -fsSL https://nikcli-ai.dev/install | bash
     </DocCode>
     <DocCode language="powershell" title="PowerShell · Windows">
-      irm https://nikcli.store/install.ps1 | iex
+      irm https://nikcli-ai.dev/install.ps1 | iex
     </DocCode>
     <DocCode language="bash" title="Terminal">
       nikcli
@@ -129,6 +129,25 @@ const toc = [
         <p>
           Documents host pairing, session streaming, approvals, notifications, offline retry, and
           the Tophat config feature.
+        </p>
+      </DocCard>
+      <DocCard title="Guides" eyebrow="Walkthroughs" href="/docs/guides">
+        <p>
+          Step-by-step: write a plugin from an empty file, copy from eight plugin recipes, drive the
+          HTTP API with curl or the SDK, and stream a response as it is produced.
+        </p>
+      </DocCard>
+      <DocCard title="Build" eyebrow="Extend" href="/docs/build">
+        <p>
+          Plugins that run inside the agent, the typed client that drives a running server, and the
+          embedded host that runs nikcli in your own process.
+        </p>
+      </DocCard>
+      <DocCard title="API Reference" eyebrow="HTTP" href="/docs/api">
+        <p>
+          Every endpoint the server exposes, generated from its OpenAPI document: base URL, the
+          authentication schemes, instance selection, streaming feeds, and all 346 operations
+          grouped by resource.
         </p>
       </DocCard>
       <DocCard title="Packages & Suite" eyebrow="Monorepo" href="/docs/packages">

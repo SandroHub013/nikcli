@@ -7,12 +7,7 @@
  * - Always passes data through normalizeSettings before reading or writing
  */
 
-import {
-  DEFAULT_VOICE_SETTINGS,
-  normalizeSettings,
-  type NormalizedVoiceSettings,
-  type VoiceSettings,
-} from "./model"
+import { DEFAULT_VOICE_SETTINGS, normalizeSettings, type NormalizedVoiceSettings, type VoiceSettings } from "./model"
 import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
@@ -94,7 +89,8 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
      * the old version, and the sentence explaining what changed is shown to
      * the user each time as though it had just happened.
      */
-    const storedVersion = typeof parsed === "object" && parsed !== null ? (parsed as { version?: unknown }).version : undefined
+    const storedVersion =
+      typeof parsed === "object" && parsed !== null ? (parsed as { version?: unknown }).version : undefined
     if (merged !== null && storedVersion !== normalized.settings.version) {
       writeSettings(store, normalized.settings)
     }
@@ -159,10 +155,7 @@ export function clearOpenRouterKeyRemoved(storage = voiceStorage()): void {
  * Guarantees: Never throws. Returns the normalized settings that were stored
  * or recovered.
  */
-export function saveVoiceSettings(
-  patch: Partial<VoiceSettings>,
-  storage?: Storage
-): NormalizedVoiceSettings {
+export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Storage): NormalizedVoiceSettings {
   const current = loadVoiceSettings(storage)
   const merged = { ...current.settings, ...patch }
   const normalized = normalizeSettings(merged)
@@ -171,10 +164,7 @@ export function saveVoiceSettings(
   if (!store) {
     return {
       ...normalized,
-      corrections: [
-        ...normalized.corrections,
-        t("vui.fix.noStorage"),
-      ],
+      corrections: [...normalized.corrections, t("vui.fix.noStorage")],
     }
   }
 
@@ -185,10 +175,7 @@ export function saveVoiceSettings(
   }
   return {
     ...normalized,
-    corrections: [
-      ...normalized.corrections,
-      t("vui.fix.saveFailed"),
-    ],
+    corrections: [...normalized.corrections, t("vui.fix.saveFailed")],
   }
 }
 

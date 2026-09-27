@@ -308,6 +308,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
     path: { get: result0(raw["top-level"]["path"]) },
     permission: {
       list: result0(raw["permission"]["list"]),
+      blocked: result0(raw["permission"]["blocked"]),
       reply: result(raw["permission"]["reply"]),
       respond: result(raw["session"]["permissionRespond"]),
     },
@@ -364,6 +365,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
         cancel: result(raw["session"]["backgroundCancel"]),
         inspect: result(raw["session"]["backgroundInspect"]),
         read: result(raw["session"]["backgroundRead"]),
+        resume: result(raw["session"]["backgroundResume"]),
       },
       children: result(raw["session"]["children"]),
       command: result(raw["session"]["command"]),

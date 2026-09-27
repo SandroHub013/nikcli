@@ -1,6 +1,12 @@
 {
   "name": "@nikcli-ai/slack",
-  "version": "1.360.0",
+  "version": "1.401.0",
+  "files": [
+    "src",
+    "sst-env.d.ts",
+    "README.md",
+    "SETUP_GUIDE.md"
+  ],
   "type": "module",
   "license": "MIT",
   "scripts": {

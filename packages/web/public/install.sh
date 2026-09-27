@@ -149,8 +149,8 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://nikcli.store/install | bash
-    curl -fsSL https://nikcli.store/install | bash -s -- --version 1.5.0
+    curl -fsSL https://nikcli-ai.dev/install | bash
+    curl -fsSL https://nikcli-ai.dev/install | bash -s -- --version 1.5.0
     ./install --binary /path/to/nikcli
 EOF
 }
@@ -337,10 +337,10 @@ else
     step "Detected: ${BOLD}${os}${NC} ${DIM}(${arch})${NC}"
 
     if [ -z "$requested_version" ]; then
-        release_url_primary="https://nikcli.store/releases/latest/download"
-        release_url_fallback="https://github.com/nikomatt69/nikcli/releases/latest/download"
+        release_url_primary="https://nikcli-ai.dev/releases/latest/download"
+        release_url_fallback="https://github.com/nikcli/nikcli/releases/latest/download"
         spinner_start "Resolving latest version"
-        specific_version=$(curl -s https://api.github.com/repos/nikomatt69/nikcli/releases/latest | sed -E -n 's/.*"tag_name": *"v?([^"]*)".*/\1/p' || true)
+        specific_version=$(curl -s https://api.github.com/repos/nikcli/nikcli/releases/latest | sed -E -n 's/.*"tag_name": *"v?([^"]*)".*/\1/p' || true)
         if [ -z "$specific_version" ]; then
             spinner_stop err "Failed to fetch version information"
             outro "Aborted"
@@ -350,20 +350,20 @@ else
     else
         requested_version="${requested_version#v}"
         release_tag="v${requested_version}"
-        release_url_primary="https://nikcli.store/releases/download/${release_tag}"
-        release_url_fallback="https://github.com/nikomatt69/nikcli/releases/download/${release_tag}"
+        release_url_primary="https://nikcli-ai.dev/releases/download/${release_tag}"
+        release_url_fallback="https://github.com/nikcli/nikcli/releases/download/${release_tag}"
         specific_version=$requested_version
 
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/nikomatt69/nikcli/releases/tag/${release_tag}")
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/nikcli/nikcli/releases/tag/${release_tag}")
         if [ "$http_status" = "404" ]; then
-            http_status_bare=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/nikomatt69/nikcli/releases/tag/${requested_version}")
+            http_status_bare=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/nikcli/nikcli/releases/tag/${requested_version}")
             if [ "$http_status_bare" = "200" ] || [ "$http_status_bare" = "302" ]; then
                 release_tag="${requested_version}"
-                release_url_primary="https://nikcli.store/releases/download/${release_tag}"
-                release_url_fallback="https://github.com/nikomatt69/nikcli/releases/download/${release_tag}"
+                release_url_primary="https://nikcli-ai.dev/releases/download/${release_tag}"
+                release_url_fallback="https://github.com/nikcli/nikcli/releases/download/${release_tag}"
             else
                 fail "Release ${requested_version} not found"
-                ui "${GRAY}${G_BAR}${NC}  ${DIM}See https://github.com/nikomatt69/nikcli/releases${NC}"
+                ui "${GRAY}${G_BAR}${NC}  ${DIM}See https://github.com/nikcli/nikcli/releases${NC}"
                 outro "Aborted"
                 exit 1
             fi
@@ -605,5 +605,5 @@ ui "   ${DIM}Next steps${NC}"
 ui "   ${BOLD}cd${NC} <project>          ${DIM}# open your project${NC}"
 ui "   ${BOLD}${APP}${NC}                  ${DIM}# start nikcli${NC}"
 ui ""
-ui "   ${DIM}Docs: ${NC}${CYAN}https://nikcli.store/docs${NC}"
+ui "   ${DIM}Docs: ${NC}${CYAN}https://nikcli-ai.dev/docs${NC}"
 ui ""

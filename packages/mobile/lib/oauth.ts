@@ -8,7 +8,7 @@ WebBrowser.maybeCompleteAuthSession()
 
 export const OAUTH_CLIENT_ID = "nikcli-mobile"
 export const OAUTH_REDIRECT_URI = "nikcli://auth/callback"
-export const DEFAULT_OAUTH_ISSUER = "https://auth.nikcli.store"
+export const DEFAULT_OAUTH_ISSUER = "https://auth.nikcli-ai.dev"
 
 let refreshPromise: Promise<OAuthTokenTriple> | null = null
 
@@ -16,6 +16,16 @@ function isInvalidRefreshToken(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
   const value = error as { code?: unknown; params?: { error?: unknown } }
   return value.code === "invalid_grant" || value.params?.error === "invalid_grant"
+}
+
+/**
+ * Issuer hosts from before the move to nikcli-ai.dev. A session stored under
+ * one of them would otherwise fail discovery forever: the issuer now names its
+ * new host, which is not the one we asked.
+ */
+const LEGACY_ISSUER_HOSTS: Record<string, string> = {
+  "auth.nikcli.store": "auth.nikcli-ai.dev",
+  "dev.auth.nikcli.store": "dev.auth.nikcli-ai.dev",
 }
 
 function normalizedIssuer(override?: string): string {
@@ -33,6 +43,8 @@ function normalizedIssuer(override?: string): string {
     throw new Error("The OAuth issuer must use HTTPS (HTTP is allowed only for localhost)")
   }
   if (url.search || url.hash) throw new Error("The OAuth issuer URL cannot include a query or fragment")
+  const moved = LEGACY_ISSUER_HOSTS[url.hostname]
+  if (moved && url.protocol === "https:") return value.replace(url.host, moved)
   return value
 }
 

@@ -312,14 +312,14 @@ export default function () {
                           <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                             <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
                               <div class="">
-                                <a href="https://nikcli.store">
+                                <a href="https://nikcli-ai.dev">
                                   <Mark />
                                 </a>
                               </div>
                               <div class="flex gap-3 items-center">
                                 <IconButton
                                   as={"a"}
-                                  href="https://github.com/nikomatt69/nikcli"
+                                  href="https://github.com/nikcli/nikcli"
                                   target="_blank"
                                   icon="github"
                                   variant="ghost"

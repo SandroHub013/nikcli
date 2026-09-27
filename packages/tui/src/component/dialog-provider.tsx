@@ -2,7 +2,7 @@ import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { useDialog } from "@tui/ui/dialog"
+import { DialogHeader, useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
@@ -148,44 +148,15 @@ function useDisconnectProvider() {
     const connectedProvider = sync.data.provider.find((item) => item.id === providerID)
     const listedProvider = sync.data.provider_next.all.find((item) => item.id === providerID)
     const providerName = connectedProvider?.name ?? listedProvider?.name ?? providerID
-    const source = connectedProvider?.source ?? "api"
 
+    // Disconnecting is removing the stored credential — nothing is written to
+    // the config. A provider that still resolves afterwards gets its access
+    // from somewhere else (environment, config file, a cloud profile), and
+    // only the user can remove that.
     const remove = await sdk.client.auth.remove({ providerID }).catch((error: unknown) => ({ error }))
     if (remove.error) {
       toast.show({ variant: "error", message: errorMessage(remove.error) })
       return false
-    }
-
-    if (source !== "api") {
-      const policies = sync.data.config.experimental?.policies ?? []
-      const alreadyDenied = policies.some(
-        (statement) =>
-          statement.effect === "deny" && statement.action === "provider.use" && statement.resource === providerID,
-      )
-      if (!alreadyDenied) {
-        const update = await sdk.client.config
-          .update({
-            payload: {
-              experimental: {
-                ...sync.data.config.experimental,
-                policies: [
-                  ...policies,
-                  {
-                    effect: "deny",
-                    action: "provider.use",
-                    resource: providerID,
-                  },
-                ],
-              },
-            },
-          })
-          .catch((error: unknown) => ({ error }))
-        if (update.error) {
-          toast.show({ variant: "error", message: errorMessage(update.error) })
-          return false
-        }
-        if ("data" in update && update.data) sync.set("config", update.data)
-      }
     }
 
     await sdk.client.instance.dispose().catch((error: unknown) => {
@@ -200,6 +171,16 @@ function useDisconnectProvider() {
         message: `Disconnected, but refresh failed: ${errorMessage(error)}`,
       })
     })
+    const remaining = sync.data.provider.find((item) => item.id === providerID)
+    if (remaining) {
+      toast.show({
+        variant: "warning",
+        message: `${providerName} stored credentials removed, but it is still available from: ${providerSourceDescription(
+          remaining.source,
+        ).toLowerCase()}`,
+      })
+      return true
+    }
     toast.show({ variant: "info", message: `${providerName} disconnected` })
     return true
   }
@@ -365,12 +346,7 @@ function AutoMethod(props: AutoMethodProps) {
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.foreground.default}>
-          {props.title}
-        </text>
-        <text fg={theme.foreground.muted}>esc</text>
-      </box>
+      <DialogHeader title={props.title} />
       <box gap={1}>
         <Link href={props.authorization.url} fg={theme.accent.fg} />
         <text fg={theme.foreground.muted}>{props.authorization.instructions}</text>
@@ -589,7 +565,7 @@ function ApiMethod(props: ApiMethodProps) {
                   key.
                 </text>
                 <text fg={theme.foreground.default}>
-                  Go to <span style={{ fg: theme.accent.fg }}>https://nikcli.store/zen</span> to get a key
+                  Go to <span style={{ fg: theme.accent.fg }}>https://nikcli-ai.dev/zen</span> to get a key
                 </text>
               </box>
             )

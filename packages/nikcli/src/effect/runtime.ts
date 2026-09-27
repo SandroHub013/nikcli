@@ -1,8 +1,9 @@
 import { Instance } from "@/project/instance"
 import { Observability } from "@/observability"
 import { Log } from "@nikcli-ai/util/log"
-import { Cause, Effect, Layer, Logger, ManagedRuntime, Option } from "effect"
+import { Cause, Effect, Exit, Layer, Logger, ManagedRuntime, Option } from "effect"
 import { currentInstance, locallyInstance, type InstanceContext } from "./instance-ref"
+import { increment as lifecycleIncrement } from "./lifecycle-counters"
 
 export const sharedMemoMap = Effect.runSync(Layer.makeMemoMap)
 const runtimes = new WeakMap<Layer.Layer<any, any, never>, Map<string, ManagedRuntime.ManagedRuntime<any, any>>>()
@@ -77,14 +78,41 @@ export function runPromiseWithLayer<A, E, R extends ROut, ROut, LE>(
   layer: Layer.Layer<ROut, LE, never>,
   effect: Effect.Effect<A, E, R>,
 ): Promise<A> {
-  return runtimeFor(layer).runPromise(effect)
+  // Classified from the Exit, *inside* the effect, so the rejection the caller
+  // sees is byte-for-byte what `runPromise` has always thrown.
+  //
+  // The promise boundary cannot tell these apart on its own: a defect and an
+  // interruption both arrive as a bare `Error` with no `_tag`, no `cause` and
+  // no symbol — only their messages differ ("boom" against "All fibers
+  // interrupted without error"), and classifying on a message is not
+  // classifying. Booking every non-success as `failure` made the counter say
+  // an interrupted TUI dialog had failed. `Effect.onExit` sees the Cause while
+  // it still exists and leaves the outcome untouched, which is what keeps this
+  // out of the ~165 call sites that catch what this rejects.
+  return runtimeFor(layer).runPromise(Effect.onExit(effect, (exit) => Effect.sync(() => countExit(exit))))
+}
+
+/** The one place bridge outcomes are named. */
+function countExit(exit: Exit.Exit<unknown, unknown>) {
+  if (Exit.isSuccess(exit)) {
+    lifecycleIncrement("runtime.bridge.success")
+    return
+  }
+  lifecycleIncrement(Cause.hasInterrupts(exit.cause) ? "runtime.bridge.interrupted" : "runtime.bridge.failure")
 }
 
 export function runPromiseExitWithLayer<A, E, R extends ROut, ROut, LE>(
   layer: Layer.Layer<ROut, LE, never>,
   effect: Effect.Effect<A, E, R>,
-): Promise<import("effect").Exit.Exit<A, E | LE>> {
-  return runtimeFor(layer).runPromiseExit(effect)
+): Promise<Exit.Exit<A, E | LE>> {
+  return runtimeFor(layer)
+    .runPromiseExit(effect)
+    .then((exit) => {
+      // Same classification as the promise variant, from the same function, so
+      // the two bridges cannot drift into naming one outcome two ways.
+      countExit(exit)
+      return exit
+    })
 }
 
 export function withCurrentInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {

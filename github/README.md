@@ -1,6 +1,6 @@
 # nikcli GitHub Action
 
-A GitHub Action that integrates [nikcli](https://nikcli.store) directly into your GitHub workflow.
+A GitHub Action that integrates [nikcli](https://nikcli-ai.dev) directly into your GitHub workflow.
 
 Mention `/nikcli` in your comment, and nikcli will execute tasks within your GitHub Actions runner.
 
@@ -88,7 +88,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
               persist-credentials: false
 
           - name: Run nikcli
-           uses: nikomatt69/nikcli/github@latest
+           uses: nikcli/nikcli/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,7 +101,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/nikomatt69/nikcli/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/nikcli/nikcli/issues.
 
 ## Development
 

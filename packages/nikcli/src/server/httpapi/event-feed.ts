@@ -68,21 +68,45 @@ export namespace EventFeed {
   export type CloseReason = { name: string; message: string }
 
   /**
-   * Candidate byte ceiling per connection, for P0 ratification.
+   * Byte ceiling for a **single** broadcast frame.
    *
-   * Not enforced. `specs/effect-tui/04-event-delivery.md` requires oversized
-   * producers to be inventoried before limits are switched on, because the
-   * alternative to an inventory is discovering which event was over the line
-   * by having it disconnect a user. `Connection.bytes` is the measurement that
-   * inventory is built from.
+   * Enforced per frame, deliberately not over the connection's lifetime.
+   * `Connection.written` is a lifetime total — it only ever grows — so
+   * spending it as a budget would evict every healthy long-lived reader the
+   * moment a session had streamed eight megabytes of ordinary events, which
+   * a TUI session reaches well inside an hour. That is the failure
+   * `specs/effect-tui/04-event-delivery.md` warns about: discovering where
+   * the line is by having it disconnect a user.
+   *
+   * Per frame the question is answerable without an inventory: one event
+   * larger than this is a producer bug, and forwarding it would put the same
+   * megabytes into the client. Backpressure from a reader that cannot keep
+   * up is a different failure with its own budget — see `LAG_BUDGET`.
+   *
+   * `Connection.cost.bytes` remains the measurement a lifetime or windowed
+   * budget would be ratified against, if one is ever wanted.
    */
   export const BYTE_BUDGET = 8 * 1024 * 1024
+
+  /**
+   * How many `snapshot` frames one connection may have dropped before it is
+   * evicted anyway.
+   *
+   * A reader that is behind on replaceable status is not the reader the lag
+   * budget was written to catch, so dropping the frame and keeping the
+   * connection is the correct answer — but "drop forever" is not a bounded
+   * policy, and ROADMAP non-negotiable 4 requires one. Past this count the
+   * reader is genuinely not consuming and is evicted with the ordinary
+   * overflow reason.
+   */
+  export const COALESCE_BUDGET = 256
 
   /** A single SSE connection, its lag budget, and what it has cost so far. */
   export class Connection {
     private closed = false
     private written = 0
     private frames = 0
+    private coalesced = 0
 
     constructor(
       private readonly controller: ReadableStreamDefaultController<Uint8Array>,
@@ -100,10 +124,31 @@ export namespace EventFeed {
     }
 
     /**
+     * `local`, for a frame the route encodes itself — an SSE comment ping, or
+     * a greeting in a wire shape `envelope` does not produce.
+     */
+    localFrame(encoded: Uint8Array) {
+      this.write(encoded)
+    }
+
+    /**
      * Offer a broadcast frame. Returns false when the connection was evicted
      * rather than written to.
+     *
+     * Eviction has two triggers today, and they answer different questions:
+     *
+     *  - Frame lag: `desiredSize` reaches zero when the reader is
+     *    `LAG_BUDGET` frames behind. That is a reader who cannot keep up.
+     *    Evict with `SubscriberOverflowError`.
+     *  - Frame size: this one frame is larger than `BYTE_BUDGET`. That is a
+     *    producer bug, and it is the connection's reader who would pay for
+     *    it. Evict with `ByteBudgetExceededError`.
+     *
+     * Local frames (greeting, heartbeat, close reason) bypass both — they
+     * exist to hold the connection open and state why it is being dropped,
+     * so they must never be what drops it.
      */
-    offer(encoded: Uint8Array): boolean {
+    offer(encoded: Uint8Array, delivery: BusEvent.Delivery = "ordered"): boolean {
       if (this.closed) return false
       // `desiredSize` is the queuing strategy's high-water mark minus what
       // the reader has not consumed, so it reaches zero exactly when the
@@ -111,12 +156,38 @@ export namespace EventFeed {
       // has closed or errored, which `write` handles.
       const desired = this.controller.desiredSize
       if (desired !== null && desired <= 0) {
+        // The delivery class decides whether being behind is fatal. A
+        // `snapshot` is replaceable by definition — status, progress, an lsp
+        // refresh — so the right answer is to drop this frame and keep the
+        // reader, who will be corrected by the next one. Evicting instead is
+        // the failure `specs/effect-tui/04-event-delivery.md` names: a cap
+        // that does not know which events may be coalesced "drops a permission
+        // prompt to save a progress bar".
+        //
+        // Every other class evicts exactly as before. `ordered` loses content,
+        // `decision` loses a prompt the user is waiting on, `terminal` loses a
+        // completion — none of those may be dropped quietly, and the eviction
+        // is how the client learns to refetch.
+        if (delivery === "snapshot" && this.coalesced < COALESCE_BUDGET) {
+          this.coalesced++
+          return true
+        }
         // The budget belongs to the stream's queuing strategy, not to this
         // object, so the message states the condition rather than a number
         // it cannot actually read back.
         this.fail({
           name: "SubscriberOverflowError",
           message: "subscriber exceeded its lag budget",
+        })
+        return false
+      }
+      // Checked before the write, so the oversized frame is never handed to
+      // the reader: it is dropped, and the close reason `fail` writes in its
+      // place goes out past this check (see `fail`).
+      if (encoded.byteLength > BYTE_BUDGET) {
+        this.fail({
+          name: "ByteBudgetExceededError",
+          message: `frame of ${encoded.byteLength} bytes exceeds the ${BYTE_BUDGET} byte frame budget`,
         })
         return false
       }
@@ -166,8 +237,8 @@ export namespace EventFeed {
      * broadcast traffic would under-report exactly the connections that are
      * being told something is wrong.
      */
-    get cost(): { frames: number; bytes: number } {
-      return { frames: this.frames, bytes: this.written }
+    get cost(): { frames: number; bytes: number; coalesced: number } {
+      return { frames: this.frames, bytes: this.written, coalesced: this.coalesced }
     }
 
     private write(encoded: Uint8Array): boolean {
@@ -241,7 +312,10 @@ export namespace EventFeed {
         })
         return
       }
-      for (const connection of this.connections) connection.offer(encoded)
+      // Resolved once per broadcast, not once per connection: the class is a
+      // property of the event, and the encode above is already shared.
+      const delivery = BusEvent.deliveryOf(this.typeOf(event))
+      for (const connection of this.connections) connection.offer(encoded, delivery)
     }
 
     closeAll() {
@@ -259,6 +333,84 @@ export namespace EventFeed {
    */
   export function stream(source: UnderlyingDefaultSource<Uint8Array>): ReadableStream<Uint8Array> {
     return new ReadableStream<Uint8Array>(source, new CountQueuingStrategy({ highWaterMark: LAG_BUDGET }))
+  }
+
+  export type FilteredOptions = {
+    /** The request's signal: the connection closes when the client goes away. */
+    signal?: AbortSignal
+    /** Wire shape of the close reason frame; see `Envelope`. */
+    envelope: Envelope
+    /** Written first, outside the lag budget. */
+    greeting: Uint8Array
+    /** Written every `intervalMs`, outside the lag budget. */
+    heartbeat: { frame: Uint8Array; intervalMs: number }
+    /** Encodes one event for the wire. Defaults to `frame` (`data: <json>`). */
+    encode?: (value: unknown) => Uint8Array
+    /**
+     * Start delivering. `offer` takes an event and the type its delivery class
+     * is read from; returns the unsubscribe.
+     */
+    subscribe: (offer: (value: unknown, type: string | undefined) => void) => () => void
+  }
+
+  /**
+   * A single connection with its own filter, under the same policy as `Feed`.
+   *
+   * For the routes whose every reader wants a different slice of `GlobalBus` —
+   * one session, one workspace, one project — so there is no fan-out to share
+   * an encode across. What they do share with `/event` is the part that
+   * matters: the lag budget as the stream's queuing strategy, eviction with a
+   * stated reason, `snapshot` coalescing, and exactly one release of the
+   * subscription and heartbeat however the connection ends — eviction, the
+   * request aborting, or the reader cancelling.
+   */
+  export function filtered(options: FilteredOptions): ReadableStream<Uint8Array> {
+    let connection: Connection | undefined
+    let closed = false
+    let unsubscribe: (() => void) | undefined
+    let heartbeat: ReturnType<typeof setInterval> | undefined
+    const abort = () => connection?.close()
+
+    const release = () => {
+      closed = true
+      if (heartbeat) clearInterval(heartbeat)
+      heartbeat = undefined
+      unsubscribe?.()
+      unsubscribe = undefined
+      options.signal?.removeEventListener("abort", abort)
+    }
+
+    return stream({
+      start(controller) {
+        const current = new Connection(controller, options.envelope, release)
+        connection = current
+        current.localFrame(options.greeting)
+        const encode = options.encode ?? frame
+        const detach = options.subscribe((value, type) => {
+          // Encoded here rather than by the route: `offer` runs inside
+          // `GlobalBus.emit`, and a throw would reach whoever published.
+          let encoded: Uint8Array
+          try {
+            encoded = encode(value)
+          } catch (error) {
+            log.error("event encoding failed", { type, error })
+            current.fail({ name: "EncodingError", message: "an event could not be encoded" })
+            return
+          }
+          current.offer(encoded, BusEvent.deliveryOf(type))
+        })
+        // Eviction can happen inside `subscribe` itself (a replay burst past
+        // the budget), before there was an unsubscribe to call.
+        if (closed) return detach()
+        unsubscribe = detach
+        heartbeat = setInterval(() => current.localFrame(options.heartbeat.frame), options.heartbeat.intervalMs)
+        if (options.signal?.aborted) return current.close()
+        options.signal?.addEventListener("abort", abort, { once: true })
+      },
+      cancel() {
+        connection?.abandon()
+      },
+    })
   }
 
   export const HEADERS = {

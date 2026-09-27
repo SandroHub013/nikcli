@@ -48,9 +48,9 @@ function fakeDb() {
 function env(overrides: Partial<Env> = {}): Env {
   const send = async (_message: EmailMessage | Parameters<SendEmail["send"]>[0]) => ({ messageId: "test-message" })
   return {
-    ISSUER: "https://auth.nikcli.store",
+    ISSUER: "https://auth.nikcli-ai.dev",
     AUDIENCE: "nikcli-api",
-    EMAIL_SENDER: "auth@nikcli.store",
+    EMAIL_SENDER: "auth@nikcli-ai.dev",
     GITHUB_CLIENT_ID: "test-client",
     GITHUB_CLIENT_SECRET: "test-secret",
     STATE: fakeState(),
@@ -63,7 +63,7 @@ function env(overrides: Partial<Env> = {}): Env {
 describe("identity contracts", () => {
   test("publishes OAuth and nikcli discovery", async () => {
     const oauth = await app.fetch(
-      new Request("https://auth.nikcli.store/.well-known/oauth-authorization-server"),
+      new Request("https://auth.nikcli-ai.dev/.well-known/oauth-authorization-server"),
       env(),
     )
     expect(oauth.status).toBe(200)
@@ -71,10 +71,10 @@ describe("identity contracts", () => {
       issuer: string
       code_challenge_methods_supported: string[]
     }
-    expect(metadata.issuer).toBe("https://auth.nikcli.store")
+    expect(metadata.issuer).toBe("https://auth.nikcli-ai.dev")
     expect(metadata.code_challenge_methods_supported).toEqual(["S256"])
 
-    const nikcli = await app.fetch(new Request("https://auth.nikcli.store/.well-known/nikcli"), env())
+    const nikcli = await app.fetch(new Request("https://auth.nikcli-ai.dev/.well-known/nikcli"), env())
     const discovery = (await nikcli.json()) as {
       auth: { command: string[]; env: string }
     }
@@ -85,18 +85,18 @@ describe("identity contracts", () => {
   test("requires PKCE S256 and registered redirects", async () => {
     const invalid = await app.fetch(
       new Request(
-        "https://auth.nikcli.store/authorize?response_type=code&client_id=nikcli-studio&redirect_uri=https%3A%2F%2Fattacker.test%2Fcallback&state=s&code_challenge=x&code_challenge_method=plain",
+        "https://auth.nikcli-ai.dev/authorize?response_type=code&client_id=nikcli-studio&redirect_uri=https%3A%2F%2Fattacker.test%2Fcallback&state=s&code_challenge=x&code_challenge_method=plain",
       ),
       env(),
     )
     expect(invalid.status).toBe(400)
 
     const verifier = "a".repeat(43)
-    const validUrl = new URL("https://auth.nikcli.store/authorize")
+    const validUrl = new URL("https://auth.nikcli-ai.dev/authorize")
     validUrl.search = new URLSearchParams({
       response_type: "code",
       client_id: "nikcli-studio",
-      redirect_uri: "https://nikcli.store/dashboard/callback",
+      redirect_uri: "https://nikcli-ai.dev/dashboard/callback",
       state: "opaque-state",
       code_challenge: verifier,
       code_challenge_method: "S256",
@@ -111,7 +111,7 @@ describe("identity contracts", () => {
 
   test("returns the shipped CLI device-code response shape", async () => {
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/oauth/device/code", {
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -125,11 +125,45 @@ describe("identity contracts", () => {
     const body = (await response.json()) as Record<string, unknown>
     expect(typeof body.device_code).toBe("string")
     expect(body.user_code).toMatch(/^\d{4}-\d{4}$/)
-    expect(body.verification_url).toBe("https://auth.nikcli.store/device")
+    expect(body.verification_url).toBe("https://auth.nikcli-ai.dev/device")
+    // The name RFC 8628 defines, alongside the one nikcli's own clients read.
+    expect(body.verification_uri).toBe("https://auth.nikcli-ai.dev/device")
     expect(body.interval).toBe(5)
     // The window has to outlast a github.com round trip with 2FA plus the
     // passkey offer, not just typing the code.
     expect(body.expires_in).toBe(1200)
+  })
+
+  // The metadata document advertises this route as `device_authorization_endpoint`,
+  // and RFC 8628 specifies that request as form-encoded. Reading JSON only
+  // answered a conformant client with a bare 415.
+  test("accepts a form-encoded device authorization request", async () => {
+    const response = await app.fetch(
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: "nikcli" }),
+      }),
+      env(),
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body.user_code).toMatch(/^\d{4}-\d{4}$/)
+    expect(body.verification_uri).toBe("https://auth.nikcli-ai.dev/device")
+  })
+
+  test("still rejects an unknown client on a form-encoded request", async () => {
+    const response = await app.fetch(
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: "not-a-nikcli-client" }),
+      }),
+      env(),
+    )
+
+    expect(response.status).toBe(400)
   })
 
   test("redraws the user code when the generated one is already taken", async () => {
@@ -157,7 +191,7 @@ describe("identity contracts", () => {
     } as unknown as D1Database
 
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/oauth/device/code", {
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: "nikcli" }),
@@ -188,7 +222,7 @@ describe("identity contracts", () => {
     } as unknown as D1Database
 
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/oauth/device/code", {
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: "nikcli" }),
@@ -233,7 +267,7 @@ describe("identity contracts", () => {
     } as unknown as D1Database
 
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/device", {
+      new Request("https://auth.nikcli-ai.dev/device", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ user_code: "1234-5678", decision: "approve" }).toString(),
@@ -276,11 +310,38 @@ describe("Content Security Policy", () => {
   // `connect-src 'self'` lets the challenge round-trip its solved token back
   // to the issuer origin via `fetch` — without it, Cloudflare's challenge
   // POSTs hit "Refused to connect".
+  // WebAuthn reports "you dismissed the prompt" and "this device holds no
+  // passkey for us" as the same NotAllowedError, on purpose, so a site cannot
+  // probe which credentials exist. Returning early on it left a phone whose
+  // passkey lives in another vendor's keychain — an iCloud passkey opened on
+  // Android — with a button that did nothing and said nothing.
+  test("the sign-in page answers a NotAllowedError instead of swallowing it", async () => {
+    const authUrl =
+      "https://auth.nikcli-ai.dev/authorize?response_type=code" +
+      "&client_id=nikcli-studio" +
+      "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
+      "&state=opaque&code_challenge=" +
+      "a".repeat(43) +
+      "&code_challenge_method=S256"
+    const html = await (await app.fetch(new Request(authUrl), env())).text()
+
+    // The old shape: NotAllowedError shared AbortError's bare `return`.
+    expect(html).not.toMatch(/NotAllowedError"\s*\|\|\s*name === "AbortError"\) return/)
+    expect(html).toMatch(/name === "NotAllowedError"/)
+    // Whatever it says must name the two ways forward the page still offers.
+    const branch = html.slice(html.indexOf('name === "NotAllowedError"'))
+    expect(branch.slice(0, 700)).toMatch(/GitHub/)
+    expect(branch.slice(0, 700)).toMatch(/email code/)
+    // ...and must not be dressed as a failure: `.notice` alone renders red.
+    expect(html).toMatch(/notice hint/)
+    expect(html).toMatch(/\.notice\.hint\{/)
+  })
+
   test("HTML pages carry a strict CSP that allows inline scripts, the issuer origin, and self-fetch", async () => {
     const authUrl =
-      "https://auth.nikcli.store/authorize?response_type=code" +
+      "https://auth.nikcli-ai.dev/authorize?response_type=code" +
       "&client_id=nikcli-studio" +
-      "&redirect_uri=https%3A%2F%2Fnikcli.store%2Fdashboard%2Fcallback" +
+      "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
       "&state=opaque&code_challenge=" +
       "a".repeat(43) +
       "&code_challenge_method=S256"
@@ -288,7 +349,7 @@ describe("Content Security Policy", () => {
     expect(response.status).toBe(200)
     const csp = response.headers.get("Content-Security-Policy") ?? ""
     expect(csp).toMatch(/default-src 'none'/)
-    expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/auth\.nikcli\.store/)
+    expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/auth\.nikcli-ai\.dev/)
     expect(csp).toMatch(/style-src 'nonce-/)
     expect(csp).toMatch(/connect-src 'self'/)
     expect(csp).toMatch(/form-action 'self'/)
@@ -304,12 +365,12 @@ describe("Content Security Policy", () => {
     const stub = stubFetch(() => new Response("boom", { status: 503 }))
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(502)
       const csp = response.headers.get("Content-Security-Policy") ?? ""
-      expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/auth\.nikcli\.store/)
+      expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/auth\.nikcli-ai\.dev/)
       expect(csp).toMatch(/connect-src 'self'/)
       expect(csp).toMatch(/default-src 'none'/)
     } finally {
@@ -320,46 +381,48 @@ describe("Content Security Policy", () => {
   test("Staging uses its own origin in the CSP allowlist", async () => {
     const response = await app.fetch(
       new Request(
-        "https://dev.auth.nikcli.store/authorize?response_type=code" +
+        "https://dev.auth.nikcli-ai.dev/authorize?response_type=code" +
           "&client_id=nikcli-studio" +
-          "&redirect_uri=https%3A%2F%2Fnikcli.store%2Fdashboard%2Fcallback" +
+          "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
           "&state=opaque&code_challenge=" +
           "a".repeat(43) +
           "&code_challenge_method=S256",
       ),
-      env({ ISSUER: "https://dev.auth.nikcli.store" }),
+      env({ ISSUER: "https://dev.auth.nikcli-ai.dev" }),
     )
     expect(response.status).toBe(200)
     const csp = response.headers.get("Content-Security-Policy") ?? ""
-    expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/dev\.auth\.nikcli\.store/)
+    expect(csp).toMatch(/script-src 'unsafe-inline' https:\/\/dev\.auth\.nikcli-ai\.dev/)
     expect(csp).toMatch(/connect-src 'self'/)
   })
 })
 
 describe("GitHub OAuth redirect_uri", () => {
   test("defaults to ${ISSUER}/callback/github for every environment", () => {
-    expect(githubRedirectURI({ ISSUER: "https://auth.nikcli.store" })).toBe("https://auth.nikcli.store/callback/github")
-    expect(githubRedirectURI({ ISSUER: "https://dev.auth.nikcli.store" })).toBe(
-      "https://dev.auth.nikcli.store/callback/github",
+    expect(githubRedirectURI({ ISSUER: "https://auth.nikcli-ai.dev" })).toBe(
+      "https://auth.nikcli-ai.dev/callback/github",
+    )
+    expect(githubRedirectURI({ ISSUER: "https://dev.auth.nikcli-ai.dev" })).toBe(
+      "https://dev.auth.nikcli-ai.dev/callback/github",
     )
   })
 
   test("honors GITHUB_REDIRECT_URI when an operator pins a different registered callback", () => {
     expect(
       githubRedirectURI({
-        ISSUER: "https://auth.nikcli.store",
-        GITHUB_REDIRECT_URI: "https://nikcli.store/api/auth/callback/github",
+        ISSUER: "https://auth.nikcli-ai.dev",
+        GITHUB_REDIRECT_URI: "https://nikcli-ai.dev/api/auth/callback/github",
       }),
-    ).toBe("https://nikcli.store/api/auth/callback/github")
+    ).toBe("https://nikcli-ai.dev/api/auth/callback/github")
   })
 
   test("falls back to the computed default when GITHUB_REDIRECT_URI is blank", () => {
     expect(
       githubRedirectURI({
-        ISSUER: "https://auth.nikcli.store",
+        ISSUER: "https://auth.nikcli-ai.dev",
         GITHUB_REDIRECT_URI: "   ",
       }),
-    ).toBe("https://auth.nikcli.store/callback/github")
+    ).toBe("https://auth.nikcli-ai.dev/callback/github")
   })
 
   test("/login/github redirects to GitHub with the exact same redirect_uri it will send back", async () => {
@@ -367,8 +430,8 @@ describe("GitHub OAuth redirect_uri", () => {
     const shared = env()
     const init = await app.fetch(
       new Request(
-        "https://auth.nikcli.store/authorize?response_type=code&client_id=nikcli-studio" +
-          "&redirect_uri=https%3A%2F%2Fnikcli.store%2Fdashboard%2Fcallback" +
+        "https://auth.nikcli-ai.dev/authorize?response_type=code&client_id=nikcli-studio" +
+          "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
           "&state=opaque&code_challenge=" +
           "a".repeat(43) +
           "&code_challenge_method=S256",
@@ -380,7 +443,7 @@ describe("GitHub OAuth redirect_uri", () => {
     expect(loginState).not.toBe("")
 
     const start = await app.fetch(
-      new Request(`https://auth.nikcli.store/login/github?login_state=${encodeURIComponent(loginState)}`),
+      new Request(`https://auth.nikcli-ai.dev/login/github?login_state=${encodeURIComponent(loginState)}`),
       shared,
     )
     expect(start.status).toBe(302)
@@ -389,19 +452,19 @@ describe("GitHub OAuth redirect_uri", () => {
     expect(redirected.origin).toBe("https://github.com")
     expect(redirected.pathname).toBe("/login/oauth/authorize")
     expect(redirected.searchParams.get("client_id")).toBe("test-client")
-    expect(redirected.searchParams.get("redirect_uri")).toBe("https://auth.nikcli.store/callback/github")
+    expect(redirected.searchParams.get("redirect_uri")).toBe("https://auth.nikcli-ai.dev/callback/github")
     expect(redirected.searchParams.get("scope")).toBe("read:user user:email")
     expect(redirected.searchParams.get("state")).toBe(loginState)
   })
 
   test("/login/github uses GITHUB_REDIRECT_URI when the operator pins the GitHub OAuth app's callback", async () => {
     const shared = env({
-      GITHUB_REDIRECT_URI: "https://nikcli.store/api/auth/callback/github",
+      GITHUB_REDIRECT_URI: "https://nikcli-ai.dev/api/auth/callback/github",
     })
     const init = await app.fetch(
       new Request(
-        "https://auth.nikcli.store/authorize?response_type=code&client_id=nikcli-studio" +
-          "&redirect_uri=https%3A%2F%2Fnikcli.store%2Fdashboard%2Fcallback" +
+        "https://auth.nikcli-ai.dev/authorize?response_type=code&client_id=nikcli-studio" +
+          "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
           "&state=opaque&code_challenge=" +
           "a".repeat(43) +
           "&code_challenge_method=S256",
@@ -413,12 +476,12 @@ describe("GitHub OAuth redirect_uri", () => {
     expect(loginState).not.toBe("")
 
     const start = await app.fetch(
-      new Request(`https://auth.nikcli.store/login/github?login_state=${encodeURIComponent(loginState)}`),
+      new Request(`https://auth.nikcli-ai.dev/login/github?login_state=${encodeURIComponent(loginState)}`),
       shared,
     )
     expect(start.status).toBe(302)
     const location = start.headers.get("location") ?? ""
-    expect(new URL(location).searchParams.get("redirect_uri")).toBe("https://nikcli.store/api/auth/callback/github")
+    expect(new URL(location).searchParams.get("redirect_uri")).toBe("https://nikcli-ai.dev/api/auth/callback/github")
   })
 })
 
@@ -580,8 +643,8 @@ function permissiveDb(): D1Database {
 async function bootstrapLoginState(target: Env): Promise<string> {
   const init = await app.fetch(
     new Request(
-      "https://auth.nikcli.store/authorize?response_type=code&client_id=nikcli-studio" +
-        "&redirect_uri=https%3A%2F%2Fnikcli.store%2Fdashboard%2Fcallback" +
+      "https://auth.nikcli-ai.dev/authorize?response_type=code&client_id=nikcli-studio" +
+        "&redirect_uri=https%3A%2F%2Fnikcli-ai.dev%2Fdashboard%2Fcallback" +
         "&state=opaque&code_challenge=" +
         "a".repeat(43) +
         "&code_challenge_method=S256",
@@ -636,7 +699,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
       DB: permissiveDb(),
     })
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/callback/github?code=abc&state=anything"),
+      new Request("https://auth.nikcli-ai.dev/callback/github?code=abc&state=anything"),
       target,
     )
     expect(response.status).toBe(503)
@@ -652,7 +715,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
       DB: permissiveDb(),
     })
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/callback/github?code=abc&state=anything"),
+      new Request("https://auth.nikcli-ai.dev/callback/github?code=abc&state=anything"),
       target,
     )
     expect(response.status).toBe(503)
@@ -663,7 +726,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
   test("returns 400 'Sign-in failed' when the callback state has no matching login intent", async () => {
     const target = env({ DB: permissiveDb() })
     const response = await app.fetch(
-      new Request("https://auth.nikcli.store/callback/github?code=abc&state=never-issued"),
+      new Request("https://auth.nikcli-ai.dev/callback/github?code=abc&state=never-issued"),
       target,
     )
     expect(response.status).toBe(400)
@@ -678,7 +741,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     const stub = stubFetch(() => new Response("boom", { status: 503 }))
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(502)
@@ -709,13 +772,60 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     )
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(502)
       const body = await response.text()
       expect(body).toContain("GitHub did not issue an access token")
       expect(body).toContain("code expired")
+    } finally {
+      stub.restore()
+    }
+  })
+
+  test("identifies itself and retries a throttled token exchange once", async () => {
+    const target = env({ DB: permissiveDb() })
+    const loginState = await bootstrapLoginState(target)
+    let exchanges = 0
+    const stub = stubFetch((call) => {
+      if (call.url === "https://github.com/login/oauth/access_token") {
+        exchanges++
+        if (exchanges === 1) return new Response("", { status: 429, headers: { "retry-after": "1" } })
+        return new Response(JSON.stringify({ access_token: "gho_test" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+      return new Response("forbidden", { status: 403 })
+    })
+    try {
+      await app.fetch(
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        target,
+      )
+      const exchangeCalls = stub.calls.filter((call) => call.url === "https://github.com/login/oauth/access_token")
+      expect(exchangeCalls).toHaveLength(2)
+      expect(new Headers(exchangeCalls[0].init?.headers).get("user-agent")).toBe("nikcli-identity")
+      // Past the exchange: the retry's token reached the profile calls.
+      expect(stub.calls.map((c) => c.url)).toContain("https://api.github.com/user")
+    } finally {
+      stub.restore()
+    }
+  })
+
+  test("reports a token exchange that stays throttled", async () => {
+    const target = env({ DB: permissiveDb() })
+    const loginState = await bootstrapLoginState(target)
+    const stub = stubFetch(() => new Response("", { status: 429, headers: { "retry-after": "1" } }))
+    try {
+      const response = await app.fetch(
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        target,
+      )
+      expect(response.status).toBe(502)
+      expect(await response.text()).toContain("GitHub rejected the authorization code (429)")
+      expect(stub.calls).toHaveLength(2)
     } finally {
       stub.restore()
     }
@@ -735,7 +845,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     })
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(502)
@@ -779,7 +889,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     })
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(400)
@@ -813,7 +923,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     })
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(502)
@@ -847,14 +957,14 @@ describe("GitHub OAuth callback (/callback/github)", () => {
     })
     try {
       const response = await app.fetch(
-        new Request(`https://auth.nikcli.store/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
+        new Request(`https://auth.nikcli-ai.dev/callback/github?code=abc&state=${encodeURIComponent(loginState)}`),
         target,
       )
       expect(response.status).toBe(200)
       expect(await response.text()).toContain("Save a passkey")
 
       const skipped = await app.fetch(
-        new Request("https://auth.nikcli.store/login/passkey/skip", {
+        new Request("https://auth.nikcli-ai.dev/login/passkey/skip", {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ login_state: loginState }).toString(),
@@ -864,7 +974,7 @@ describe("GitHub OAuth callback (/callback/github)", () => {
       expect(skipped.status).toBe(302)
       const location = skipped.headers.get("location") ?? ""
       const redirected = new URL(location)
-      expect(redirected.origin + redirected.pathname).toBe("https://nikcli.store/dashboard/callback")
+      expect(redirected.origin + redirected.pathname).toBe("https://nikcli-ai.dev/dashboard/callback")
       expect(redirected.searchParams.get("state")).toBe("opaque")
       const code = redirected.searchParams.get("code") ?? ""
       expect(code).toMatch(/^[A-Za-z0-9_-]{20,}$/)

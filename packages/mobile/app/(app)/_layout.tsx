@@ -1,4 +1,4 @@
-import { View } from "react-native"
+import { Platform, View } from "react-native"
 import { useSegments } from "expo-router"
 import { NativeTabs } from "expo-router/unstable-native-tabs"
 import { NetworkBanner } from "@/components/NetworkBanner"
@@ -20,9 +20,9 @@ export default function AppLayout() {
         disableTransparentOnScrollEdge
         tintColor={palette.accent}
         iconColor={{ default: palette.textMuted, selected: palette.accent }}
-        // Terminal manages its own keyboard inset (dock paddingBottom). Leaving
-        // this on can double-pad the terminal viewport on iOS when the keybar is open.
-        tabBarRespectsIMEInsets={false}
+        // Android must lift the tab bar with the IME. iOS terminal already pads
+        // its own dock by keyboard height, so leaving this on double-pads that viewport.
+        tabBarRespectsIMEInsets={Platform.OS === "android"}
       >
         <NativeTabs.Trigger name="sessions">
           <NativeTabs.Trigger.Icon sf={{ default: "terminal", selected: "terminal.fill" }} md="terminal" />
@@ -42,7 +42,10 @@ export default function AppLayout() {
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="more">
           <NativeTabs.Trigger.Icon
-            sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }}
+            sf={{
+              default: "square.grid.2x2",
+              selected: "square.grid.2x2.fill",
+            }}
             md="dashboard"
           />
           <NativeTabs.Trigger.Label>Tools</NativeTabs.Trigger.Label>

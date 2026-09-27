@@ -12,7 +12,19 @@
  */
 import { FooterHint, FooterHintGroup } from "@tui/ui/footer-hints"
 import { useScrollAcceleration } from "@tui/util/scroll"
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute } from "@tui/context/route"
@@ -20,6 +32,7 @@ import { useSync } from "@tui/context/sync"
 import { useProject } from "@tui/context/project"
 import { SplitBorder } from "@tui/component/border"
 import { SessionTaskCard } from "@tui/component/session-task-card"
+import { DISCLOSURE, LESS, more, summaryLine } from "@tui/component/disclosure"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme, selectedForeground, tint } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, TextAttributes, RGBA } from "@opentui/core"
@@ -40,6 +53,7 @@ import {
   type ComputerShape,
   type Diagnostic,
   type EditShape,
+  type PluginShape,
   type GlobShape,
   type GrepShape,
   type ListShape,
@@ -221,7 +235,11 @@ export function ToolPartView(props: { last: boolean; streaming: boolean; entry: 
           <Match when={toolName() === "write"}>
             <Write {...toolprops} />
           </Match>
-          <Match when={toolName() === "edit"}>
+          {/* `multiedit` publishes the same metadata as `edit` — a `filePath`
+              and a unified `diff` — and had no case at all, so every multi-edit
+              fell through to the generic view and its diff was simply never
+              drawn. */}
+          <Match when={toolName() === "edit" || toolName() === "multiedit"}>
             <Edit {...toolprops} />
           </Match>
           <Match when={toolName() === "task"}>
@@ -250,6 +268,9 @@ export function ToolPartView(props: { last: boolean; streaming: boolean; entry: 
           </Match>
           <Match when={toolName() === "artifact"}>
             <ArtifactView {...toolprops} />
+          </Match>
+          <Match when={toolName() === "plugin"}>
+            <PluginView {...toolprops} />
           </Match>
           <Match when={true}>
             <GenericTool {...toolprops} />
@@ -419,11 +440,24 @@ function InlineTool(props: {
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
 
+  // Auto mode denials name the rule that fired, the way Claude Code shows
+  // "denied by auto mode · [Rule]" under the call; the full reason is for the
+  // agent and stays in the transcript.
+  const autoBlocked = createMemo(() => {
+    const text = error()
+    if (!text) return undefined
+    const match = text.match(/denied by the auto mode classifier\. \[([^\]]+)\]/)
+    if (match) return `denied by auto mode · [${match[1]}]`
+    if (text.includes("Auto mode could not determine the safety")) return "auto mode could not review this action"
+    return undefined
+  })
+
   const denied = createMemo(
     () =>
       error()?.includes("rejected permission") ||
       error()?.includes("specified a rule") ||
-      error()?.includes("user dismissed"),
+      error()?.includes("user dismissed") ||
+      autoBlocked() !== undefined,
   )
 
   return (
@@ -461,6 +495,11 @@ function InlineTool(props: {
       <Show when={error() && !denied()}>
         <text fg={theme.status.error.fg}>{error()}</text>
       </Show>
+      <Show when={autoBlocked()}>
+        <text paddingLeft={3} fg={theme.status.warning.fg}>
+          {autoBlocked()}
+        </text>
+      </Show>
     </box>
   )
 }
@@ -471,6 +510,14 @@ function BlockTool(props: {
   accentColor?: RGBA
   children: JSX.Element
   onClick?: () => void
+  /**
+   * Whether the click opens something rather than unfolding this block.
+   *
+   * Decides the mark, and the mark is the whole point of having one: `→` is a
+   * promise that something else comes up. Bash and code mode use their click to
+   * expand in place and draw their own `▸`, so they say nothing here.
+   */
+  opens?: boolean
   part?: ToolEntry
   /** Skip the accent background tint — keep accent only on border/title. */
   transparent?: boolean
@@ -519,6 +566,13 @@ function BlockTool(props: {
     >
       <text paddingLeft={3} fg={props.titleColor ?? theme.foreground.muted}>
         {props.title}
+        {/* The mark every clickable surface draws. It lives here so a block
+            tool stops having to spend a row saying "view monitor output" —
+            hover was the only other signal, and hover is not a signal on a
+            surface you have not moved the mouse to yet. */}
+        <Show when={props.onClick && props.opens}>
+          <span style={{ fg: theme.foreground.subtle }}> {DISCLOSURE.follow}</span>
+        </Show>
       </text>
       {props.children}
       <Show when={error()}>
@@ -595,7 +649,12 @@ function Bash(props: ToolProps<BashShape>) {
               <text fg={theme.foreground.default}>{limited()}</text>
             </Show>
             <Show when={overflow()}>
-              <text fg={theme.foreground.muted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              {/* The mark, not a sentence. `BlockTool` already says the surface
+                  is clickable; this says what is behind it. */}
+              <text fg={theme.foreground.subtle} wrapMode="none">
+                {expanded() ? DISCLOSURE.open : DISCLOSURE.closed}{" "}
+                {expanded() ? LESS : more(lines().length - 10, "lines")}
+              </text>
             </Show>
           </box>
         </BlockTool>
@@ -674,10 +733,31 @@ function ExecCode(props: ToolProps<any>) {
     return `# ${label}${ms} ${icon}`
   })
 
+  /**
+   * The one line of code worth showing before anything is asked for.
+   *
+   * This memo already existed and nothing read it, which is the shape of an
+   * intention someone did not finish: the block opened with twenty rows of
+   * syntax-highlighted source, the least useful thing about a run that has
+   * already finished. What it *did* and what it *printed* are the answers; the
+   * source is the method, and the method waits.
+   */
   const firstLine = createMemo(() => {
-    const first = code().split("\n")[0] ?? ""
-    return first.length > 60 ? first.slice(0, 60) + "…" : first
+    const first = codeLines().find((line) => line.trim().length > 0) ?? ""
+    const trimmed = first.trim()
+    return trimmed.length > 72 ? trimmed.slice(0, 72) + "…" : trimmed
   })
+
+  /** The last line that printed, which is normally the result. */
+  const lastOutput = createMemo(() => {
+    const line = [...outputLines()].reverse().find((entry) => entry.trim().length > 0)
+    if (!line) return ""
+    const trimmed = line.trim()
+    return trimmed.length > 72 ? trimmed.slice(0, 72) + "…" : trimmed
+  })
+
+  /** Anything at all behind the fold — not just the old overflow thresholds. */
+  const hasDetail = createMemo(() => codeLines().length > 1 || toolCalls().length > 0 || output().length > 0)
 
   return (
     <Switch>
@@ -687,27 +767,57 @@ function ExecCode(props: ToolProps<any>) {
           titleColor={accent()}
           accentColor={accent()}
           part={props.part}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+          onClick={hasDetail() ? () => setExpanded((prev) => !prev) : undefined}
         >
-          <box gap={1}>
-            <line_number fg={theme.foreground.muted} minWidth={3} paddingRight={1}>
-              <code
-                conceal={false}
-                fg={theme.foreground.default}
-                filetype="typescript"
-                syntaxStyle={syntax()}
-                content={limitedCode()}
-              />
-            </line_number>
-            <CodeModeToolCalls calls={visibleToolCalls()} />
-            <Show when={output().length > 0}>
-              <text fg={theme.foreground.muted}>── output ──</text>
-              <text fg={success() ? theme.foreground.default : theme.status.error.fg}>{limitedOutput()}</text>
-            </Show>
-            <Show when={overflow()}>
-              <text fg={theme.foreground.muted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-            </Show>
-          </box>
+          <Show
+            when={expanded()}
+            fallback={
+              <box overflow="hidden">
+                {/* Two rows: what it ran, and what came out. The title above
+                    already carries the verdict and the duration. */}
+                <text wrapMode="none" fg={theme.foreground.muted}>
+                  <span style={{ fg: theme.foreground.default }}>{firstLine()}</span>
+                  <Show when={toolCalls().length > 0}>
+                    {" · "}
+                    {toolCalls().length} tool {toolCalls().length === 1 ? "call" : "calls"}
+                  </Show>
+                </text>
+                <Show when={lastOutput()}>
+                  <text wrapMode="none" fg={success() ? theme.foreground.default : theme.status.error.fg}>
+                    └ {lastOutput()}
+                  </text>
+                </Show>
+                <Show when={hasDetail()}>
+                  <text fg={theme.foreground.subtle} wrapMode="none">
+                    {"  "}
+                    {DISCLOSURE.closed} {more(codeLines().length, "lines")}
+                    <Show when={outputLines().length > 1}>, {outputLines().length} of output</Show>
+                  </text>
+                </Show>
+              </box>
+            }
+          >
+            <box gap={1}>
+              <line_number fg={theme.foreground.muted} minWidth={3} paddingRight={1}>
+                <code
+                  conceal={false}
+                  fg={theme.foreground.default}
+                  filetype="typescript"
+                  syntaxStyle={syntax()}
+                  content={limitedCode()}
+                />
+              </line_number>
+              <CodeModeToolCalls calls={visibleToolCalls()} />
+              <Show when={output().length > 0}>
+                <text fg={theme.foreground.muted}>── output ──</text>
+                <text fg={success() ? theme.foreground.default : theme.status.error.fg}>{limitedOutput()}</text>
+              </Show>
+              <text fg={theme.foreground.subtle} wrapMode="none">
+                {"  "}
+                {DISCLOSURE.open} {LESS}
+              </text>
+            </box>
+          </Show>
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -894,6 +1004,7 @@ function WebFetch(props: ToolProps<any>) {
           accentColor={theme.accent.fg}
           titleColor={theme.accent.fg}
           onClick={openPreview}
+          opens
           part={props.part}
         >
           <box gap={0}>
@@ -901,9 +1012,7 @@ function WebFetch(props: ToolProps<any>) {
               <text fg={theme.accent.fg} wrapMode="char" flexGrow={1}>
                 {url()}
               </text>
-              <text fg={theme.foreground.muted}>open preview</text>
             </box>
-            <text fg={theme.foreground.muted}>Click to view this {format()} page in Web Preview</text>
           </box>
         </BlockTool>
       </Match>
@@ -980,6 +1089,7 @@ function OpenTUIViz(props: ToolProps<any>) {
           accentColor={theme.accent.alt}
           titleColor={theme.accent.alt}
           onClick={openViz}
+          opens
           part={props.part}
           transparent
         >
@@ -994,8 +1104,8 @@ function OpenTUIViz(props: ToolProps<any>) {
               <text fg={theme.foreground.muted}>{String(spec()?.subtitle)}</text>
             </Show>
             <VizRenderer spec={spec()} />
-            <text fg={theme.foreground.muted}>
-              {count()} component{count() === 1 ? "" : "s"} · Click to expand in TUI
+            <text fg={theme.foreground.muted} wrapMode="none">
+              {count()} component{count() === 1 ? "" : "s"}
             </text>
           </box>
         </BlockTool>
@@ -1091,29 +1201,30 @@ function WebSearch(props: ToolProps<any>) {
           accentColor={theme.accent.fg}
           titleColor={theme.accent.fg}
           onClick={choosePreview}
+          opens
           part={props.part}
         >
-          <box gap={0}>
-            <text fg={theme.foreground.muted}>
-              {results().length} previewable result
-              {results().length === 1 ? "" : "s"} found
-            </text>
-            <text fg={theme.accent.fg} wrapMode="char">
-              {results()[0]!.host}
-            </text>
-            <text fg={theme.foreground.muted}>
-              Click to {results().length === 1 ? "open the result" : "choose a result"} in Web Preview
+          {/* One row. The host is the result, the count is how many more there
+              are, and the title's `→` is the invitation — which used to be a
+              third row spelling out what the mark now says. */}
+          <box overflow="hidden">
+            <text wrapMode="none">
+              <span style={{ fg: theme.accent.fg }}>{results()[0]!.host}</span>
+              <Show when={results().length > 1}>
+                <span style={{ fg: theme.foreground.muted }}> · {results().length - 1} more</span>
+              </Show>
             </text>
           </box>
         </BlockTool>
       </Match>
       <Match when={output()}>
         <BlockTool title={`# Web search: ${input.query}`} accentColor={theme.accent.fg} part={props.part}>
-          <box gap={1}>
-            <text fg={theme.foreground.muted}>Search completed, but no previewable URLs were extracted.</text>
-            <text fg={theme.foreground.default} wrapMode="word">
-              {output().slice(0, 400)}
-              {output().length > 400 ? "..." : ""}
+          <box overflow="hidden">
+            {/* Clipped to a row rather than four hundred wrapped characters: a
+                search that found nothing to preview should not cost more of the
+                transcript than one that did. */}
+            <text fg={theme.foreground.muted} wrapMode="none">
+              no previewable URLs · {summaryLine(output())}
             </text>
           </box>
         </BlockTool>
@@ -1560,6 +1671,9 @@ function Task(props: ToolProps<any>) {
     return undefined
   })
   const isBackground = createMemo(() => Boolean(meta().background))
+  // Only set when the caller overrode the model, so the line doubles as the
+  // signal that this subagent is not running on the session's own model.
+  const modelOverride = createMemo(() => (typeof meta().model === "string" ? meta().model.trim() : ""))
   const kind = createMemo(() => (typeof meta().kind === "string" ? meta().kind : undefined))
   const question = createMemo(() => (typeof meta().question === "string" ? meta().question.trim() : ""))
   const backgroundJob = createMemo(() => {
@@ -1634,6 +1748,67 @@ function Task(props: ToolProps<any>) {
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
 
+  /**
+   * What the card says under its title, in order, one row each.
+   *
+   * Eleven `<Show>` blocks before this, each with its own condition and its own
+   * copy of the same `└ muted text` row. The order they appeared in was the
+   * order they happened to be written, no reader could see the whole set, and
+   * every card paid for eleven conditional blocks to show two or three lines.
+   * A list states the priority, the row shape exists once, and the card
+   * rebuilds it only when the list changes.
+   *
+   * The "open nested session" line is gone: the card draws a `→` when it can be
+   * opened, so the sentence was the marker again in words.
+   */
+  const statusLines = createMemo(() => {
+    const lines: { text: string; tone?: "error" | "strong" }[] = []
+    const push = (text: string | undefined | false, tone?: "error" | "strong") => {
+      const value = typeof text === "string" ? text.trim() : ""
+      if (value) lines.push({ text: value, tone })
+    }
+
+    // Ordered by what a reader needs first, because the first is all they get
+    // until they ask for the rest. What went wrong, then what it is doing now,
+    // then what it has produced — and only after that the bookkeeping, which
+    // answers a question nobody has while the task is still running.
+    push(error(), "error")
+
+    const running = current()
+    if (running) {
+      const title = running.state.status === "completed" ? (running.state.title ?? "") : ""
+      push(`${Locale.titlecase(running.tool)} ${title}`.trim(), running.state.status === "error" ? "error" : undefined)
+    }
+
+    if (isBackground()) push(childStatusLabel() || "starting background task")
+    else push(childStatusLabel())
+
+    push(displaySummary(), "strong")
+    const progress = backgroundJob()?.progressSummary
+    if (progress && progress !== displaySummary()) push(progress)
+    if (kind() === "research") push(question())
+
+    push(modelOverride())
+    const summaryCount = meta().summary?.length
+    if (summaryCount) push(`${summaryCount} toolcalls`)
+    if (isBackground() && meta().reused) push("reused existing background research")
+    if (isBackground() && rootDelegationID()) push(`job ${rootDelegationID()}`)
+
+    return lines
+  })
+
+  /**
+   * The status list follows the same disclosure rule as everything else: the
+   * line that matters, and a mark for the rest.
+   *
+   * Its own state rather than the card's, because the card's click is already
+   * spoken for — it opens the run, which is the better answer and the reason
+   * `→` is there. Two different things to reveal, two places to click.
+   */
+  const [statusOpen, setStatusOpen] = createSignal(false)
+  const visibleStatus = createMemo(() => (statusOpen() ? statusLines() : statusLines().slice(0, 1)))
+  const hiddenStatus = createMemo(() => Math.max(0, statusLines().length - 1))
+
   return (
     <box paddingLeft={3} flexShrink={0}>
       <SessionTaskCard
@@ -1653,50 +1828,46 @@ function Task(props: ToolProps<any>) {
             : undefined
         }
       >
-        <Show when={meta().summary?.length}>
-          <text style={{ fg: theme.foreground.muted }}>({meta().summary?.length} toolcalls)</text>
-        </Show>
-        <Show when={kind() === "research" && question()}>
-          <text style={{ fg: theme.foreground.muted }}>└ {question()}</text>
-        </Show>
-        <Show when={current()}>
+        {/* `Index`, not `For`: the memo builds new line objects on every run, and
+            `For` reconciles by reference — so a task that is actually running
+            tore down and rebuilt its whole status list on every tool call.
+            Keyed by position, the rows stay mounted and only their text
+            changes, which is what a short positional list wants. */}
+        <Index each={visibleStatus()}>
+          {(line) => (
+            // One row each, clipped rather than wrapped: a long progress summary
+            // used to reflow the card to three rows and push the next tool call
+            // off the screen.
+            <text
+              wrapMode="none"
+              style={{
+                fg:
+                  line().tone === "error"
+                    ? theme.status.error.fg
+                    : line().tone === "strong"
+                      ? theme.foreground.default
+                      : theme.foreground.muted,
+              }}
+            >
+              └ {line().text}
+            </text>
+          )}
+        </Index>
+        <Show when={hiddenStatus() > 0}>
           <text
-            style={{
-              fg: current()!.state.status === "error" ? theme.status.error.fg : theme.foreground.muted,
+            wrapMode="none"
+            style={{ fg: theme.foreground.subtle }}
+            // `onMouseUp`, matching the card's own handler: stopping a
+            // mousedown does nothing to the mouseup that follows it, so this
+            // mark used to expand the list and then navigate away from it.
+            onMouseUp={(event) => {
+              event.stopPropagation()
+              setStatusOpen((value) => !value)
             }}
           >
-            └ {Locale.titlecase(current()!.tool)}{" "}
-            {current()!.state.status === "completed" ? current()!.state.title : ""}
+            {"  "}
+            {statusOpen() ? DISCLOSURE.open : DISCLOSURE.closed} {statusOpen() ? LESS : more(hiddenStatus())}
           </text>
-        </Show>
-        <Show when={displaySummary()}>
-          <text style={{ fg: theme.foreground.default }}>└ {displaySummary()}</text>
-        </Show>
-        <Show when={isBackground()}>
-          <Show
-            when={childStatusLabel()}
-            fallback={<text style={{ fg: theme.foreground.muted }}>└ starting background task</text>}
-          >
-            <text style={{ fg: theme.foreground.muted }}>└ {childStatusLabel()}</text>
-          </Show>
-        </Show>
-        <Show when={!isBackground() && childStatusLabel()}>
-          <text style={{ fg: theme.foreground.muted }}>└ {childStatusLabel()}</text>
-        </Show>
-        <Show when={backgroundJob()?.progressSummary && backgroundJob()?.progressSummary !== displaySummary()}>
-          <text style={{ fg: theme.foreground.muted }}>└ {backgroundJob()!.progressSummary}</text>
-        </Show>
-        <Show when={rootDelegationID() && isBackground()}>
-          <text style={{ fg: theme.foreground.muted }}>└ job {rootDelegationID()}</text>
-        </Show>
-        <Show when={meta().reused && isBackground()}>
-          <text style={{ fg: theme.foreground.muted }}>└ reused existing background research</text>
-        </Show>
-        <Show when={error()}>
-          <text fg={theme.status.error.fg}>{error()}</text>
-        </Show>
-        <Show when={sessionID()}>
-          <text fg={theme.foreground.muted}>{isBackground() ? "open parallel session" : "open nested session"}</text>
         </Show>
       </SessionTaskCard>
     </box>
@@ -1745,27 +1916,57 @@ function Monitor(props: ToolProps<any>) {
     )
   }
 
+  /** Same shape as the task card's: ordered by need, collapsed to the first. */
+  const monitorStatus = createMemo(() => {
+    const lines: { text: string; tone?: "status" }[] = []
+    const push = (text: string | undefined, tone?: "status") => {
+      const value = text?.trim()
+      if (value) lines.push({ text: value, tone })
+    }
+    push(monitorStatusLabel(status(), exitCode()), "status")
+    push(recentOutput())
+    if (meta.wake === true) push("wakes the session on completion")
+    push(logPath() ? normalizePath(logPath()) : undefined)
+    return lines
+  })
+  const [monitorOpen, setMonitorOpen] = createSignal(false)
+  const visibleMonitorStatus = createMemo(() => (monitorOpen() ? monitorStatus() : monitorStatus().slice(0, 1)))
+  const hiddenMonitorStatus = createMemo(() => Math.max(0, monitorStatus().length - 1))
+
   return (
     <Switch>
       <Match when={monitorID()}>
-        <BlockTool title={`# Monitor ${title()}`} part={props.part} onClick={openMonitor}>
-          <box>
-            <text style={{ fg: theme.foreground.muted }}>{props.input.command}</text>
-            <text style={{ fg: statusColor() }}>└ {monitorStatusLabel(status(), exitCode())}</text>
-            <Show when={recentOutput()}>
-              <text style={{ fg: theme.foreground.default }}>└ {recentOutput()}</text>
-            </Show>
-            <Show when={logPath()}>
-              <text style={{ fg: theme.foreground.muted }}>└ {normalizePath(logPath())}</text>
-            </Show>
-            <Show when={meta.wake === true}>
-              <text style={{ fg: theme.foreground.muted }}>└ wakes the session on completion</text>
+        <BlockTool title={`# Monitor ${title()}`} part={props.part} onClick={openMonitor} opens>
+          <box overflow="hidden">
+            {/* The command is the monitor's description, and a shell one-liner
+                with a `while` loop in it wrapped to five rows. Clipped, like
+                every other description in the transcript: the whole of it is in
+                the log the title opens. */}
+            <text style={{ fg: theme.foreground.muted }} wrapMode="none">
+              {props.input.command}
+            </text>
+            <Index each={visibleMonitorStatus()}>
+              {(line) => (
+                <text wrapMode="none" style={{ fg: line().tone === "status" ? statusColor() : theme.foreground.muted }}>
+                  └ {line().text}
+                </text>
+              )}
+            </Index>
+            <Show when={hiddenMonitorStatus() > 0}>
+              <text
+                wrapMode="none"
+                style={{ fg: theme.foreground.subtle }}
+                onMouseUp={(event) => {
+                  event.stopPropagation()
+                  setMonitorOpen((value) => !value)
+                }}
+              >
+                {"  "}
+                {monitorOpen() ? DISCLOSURE.open : DISCLOSURE.closed}{" "}
+                {monitorOpen() ? LESS : more(hiddenMonitorStatus())}
+              </text>
             </Show>
           </box>
-          <text fg={theme.foreground.default}>
-            follow logs
-            <span style={{ fg: theme.foreground.muted }}> view monitor output</span>
-          </text>
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -1776,6 +1977,84 @@ function Monitor(props: ToolProps<any>) {
           part={props.part}
         >
           Monitor {title()}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+/**
+ * `plugin` writes code nikcli then runs, so the transcript shows the code (as
+ * a diff of the entry file) and whether it actually loaded — not the source
+ * flattened into one line of arguments, which is what the generic view drew.
+ */
+function PluginView(props: ToolProps<PluginShape>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const action = createMemo(() => props.metadata.action ?? props.input.action ?? "")
+  const name = createMemo(() => props.metadata.name ?? props.input.name ?? "")
+  const view = createMemo(() => {
+    if (ctx.sync.data.config.tui?.diff_style === "stacked") return "unified"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+  const title = createMemo(() => {
+    const verb = action() === "update" ? "Updated" : "Created"
+    const state = props.metadata.loaded ? "loaded" : "not loaded"
+    return `⚙ ${verb} plugin ${name()} · ${state}`
+  })
+  const loadError = createMemo(() => {
+    if (props.metadata.loaded !== false) return undefined
+    return props.metadata.plugins?.find((plugin) => plugin.name === name())?.error ?? "The plugin was not picked up."
+  })
+  const summary = createMemo(() => {
+    const plugins = props.metadata.plugins ?? []
+    const failed = plugins.filter((plugin) => plugin.error).length
+    return `${plugins.length} plugin${plugins.length === 1 ? "" : "s"}` + (failed > 0 ? ` · ${failed} failed` : "")
+  })
+
+  return (
+    <Switch>
+      <Match when={props.metadata.diff !== undefined}>
+        <BlockTool title={title()} part={props.part}>
+          <box paddingLeft={1}>
+            <diff
+              diff={props.metadata.diff!}
+              view={view()}
+              filetype={filetype(props.metadata.filepath)}
+              syntaxStyle={syntax()}
+              showLineNumbers={true}
+              width="100%"
+              wrapMode={ctx.diffWrapMode()}
+              fg={theme.foreground.default}
+              addedBg={theme.diff.addedBg}
+              removedBg={theme.diff.removedBg}
+              contextBg={theme.diff.contextBg}
+              addedSignColor={theme.diff.highlightAdded}
+              removedSignColor={theme.diff.highlightRemoved}
+              lineNumberFg={theme.diff.lineNumber}
+              lineNumberBg={theme.diff.contextBg}
+              addedLineNumberBg={theme.diff.addedLineNumberBg}
+              removedLineNumberBg={theme.diff.removedLineNumberBg}
+            />
+          </box>
+          <Show when={loadError()}>
+            <text fg={theme.status.error.fg}>{loadError()}</text>
+          </Show>
+        </BlockTool>
+      </Match>
+      <Match when={action() === "remove"}>
+        <InlineTool icon="✕" pending="Removing plugin..." complete={props.metadata.folder} part={props.part}>
+          Removed plugin {name()}
+        </InlineTool>
+      </Match>
+      <Match when={action() === "list" || action() === "reload"}>
+        <InlineTool icon="⚙" pending="Reading plugins..." complete={props.metadata.plugins} part={props.part}>
+          {action() === "reload" ? "Reloaded" : "Listed"} plugins · {summary()}
+        </InlineTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="⚙" pending="Writing plugin..." complete={props.metadata.action} part={props.part}>
+          Plugin {name()} {input({ action: action(), scope: props.input.scope })}
         </InlineTool>
       </Match>
     </Switch>
@@ -1797,6 +2076,20 @@ function Edit(props: ToolProps<EditShape>) {
 
   const diffContent = createMemo(() => props.metadata.diff)
 
+  /**
+   * One view, two tools, so the title has to say which.
+   *
+   * `multiedit` carries an `edits` array; counting it is the only thing that
+   * distinguishes the two once the diff is rendered, and the count is the part
+   * a reader wants — a diff of one change reads differently from a diff of six.
+   */
+  const editTitle = createMemo(() => {
+    const file = normalizePath(props.input.filePath!)
+    const edits = (props.input as { edits?: unknown[] }).edits
+    if (Array.isArray(edits)) return `← Edit ${file} · ${edits.length} ${edits.length === 1 ? "change" : "changes"}`
+    return `← Edit ${file}`
+  })
+
   const diagnostics = createMemo(() => {
     const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
     const arr = props.metadata.diagnostics?.[filePath] ?? []
@@ -1806,7 +2099,7 @@ function Edit(props: ToolProps<EditShape>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={editTitle()} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}

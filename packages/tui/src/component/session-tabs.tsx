@@ -7,9 +7,10 @@ import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useSessionTabs, type SessionTabState } from "@tui/context/session-tabs"
 import { useTheme } from "@tui/context/theme"
+import { tabRows } from "@tui/context/component-tokens"
 import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "@tui/component/logo"
-import { SplitBorder } from "@tui/component/border"
+import { borderCharsFor, SplitBorder } from "@tui/component/border"
 import { DialogSessionLink } from "@tui/component/dialog-session-link"
 import { sessionLinkOf } from "@tui/util/session-link"
 import { bunUtils } from "@nikcli-ai/util/bun-utils"
@@ -74,7 +75,7 @@ export function SessionTabs() {
   const sync = useSync()
   const kv = useKV()
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { theme, component } = useTheme()
   const dimensions = useTerminalDimensions()
   const tabs = useSessionTabs()
   const keybind = useKeybind()
@@ -84,6 +85,12 @@ export function SessionTabs() {
   }
 
   const activeID = tabs.active
+  const style = () => component("session.tabs")
+  // Height is derived from the strip's own padding rather than chosen beside
+  // it, so a theme that tightens the strip cannot leave the row taller than
+  // what it holds — the gap that reads as a misaligned tab bar.
+  const contentHeight = createMemo(() => tabRows(style().box))
+  const bordered = createMemo(() => style().box.borderSides.length > 0)
   const byID = createMemo(() => new Map(tabs.list().map((tab) => [tab.id, tab])))
   const layout = createMemo(() => layoutSessionTabs(tabs.ids(), activeID(), dimensions().width))
 
@@ -115,19 +122,28 @@ export function SessionTabs() {
   return (
     <box
       flexShrink={0}
-      height={4}
+      height={contentHeight() + (bordered() ? 1 : 0)}
       width="100%"
       flexDirection="row"
       alignItems="center"
-      backgroundColor={theme.surface.panel}
-      border={["bottom"]}
-      borderColor={theme.border.subtle}
+      backgroundColor={style().colors.background}
+      border={[...style().box.borderSides]}
+      customBorderChars={borderCharsFor(style().box.borderCharset)}
+      borderColor={style().colors.border}
       overflow="hidden"
     >
-      <box width={9} height={3} flexShrink={0} paddingTop={1} paddingBottom={1} paddingLeft={1} flexDirection="column">
+      <box
+        width={9}
+        height={contentHeight()}
+        flexShrink={0}
+        paddingTop={style().box.paddingTop}
+        paddingBottom={style().box.paddingBottom}
+        paddingLeft={1}
+        flexDirection="column"
+      >
         <Logo compact idle={false} />
       </box>
-      <box flexDirection="row" flexGrow={1} minWidth={0} height={3} gap={TAB_GAP} overflow="hidden">
+      <box flexDirection="row" flexGrow={1} minWidth={0} height={contentHeight()} gap={TAB_GAP} overflow="hidden">
         <For each={layout().ids}>
           {(id) => {
             const state = createMemo<SessionTabState | undefined>(() => byID().get(id))
@@ -154,15 +170,15 @@ export function SessionTabs() {
                 width={layout().width}
                 minWidth={TAB_MIN_WIDTH}
                 flexShrink={0}
-                height={3}
+                height={contentHeight()}
                 flexDirection="row"
-                paddingTop={1}
-                paddingBottom={1}
+                paddingTop={style().box.paddingTop}
+                paddingBottom={style().box.paddingBottom}
                 overflow="hidden"
                 onMouseDown={() => tabs.open(id)}
-                backgroundColor={selected() ? theme.surface.offset : undefined}
-                border={selected() ? ["left"] : undefined}
-                borderColor={selected() ? theme.accent.fg : undefined}
+                backgroundColor={selected() ? style().colors.activeBackground : undefined}
+                border={selected() && bordered() ? ["left"] : undefined}
+                borderColor={selected() ? style().colors.activeBorder : undefined}
                 customBorderChars={selected() ? SplitBorder.customBorderChars : undefined}
               >
                 <text fg={marker().color} wrapMode="none">
@@ -217,7 +233,14 @@ export function SessionTabs() {
           }}
         </For>
         <Show when={layout().hidden > 0}>
-          <box width={6} height={3} flexShrink={0} paddingTop={1} paddingBottom={1} flexDirection="column">
+          <box
+            width={6}
+            height={contentHeight()}
+            flexShrink={0}
+            paddingTop={style().box.paddingTop}
+            paddingBottom={style().box.paddingBottom}
+            flexDirection="column"
+          >
             <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
               {` ·· +${layout().hidden}`}
             </text>
@@ -228,7 +251,13 @@ export function SessionTabs() {
         Stacked, one row each, so the close-all action costs no horizontal cells: the strip's
         reserved chrome stays exactly the width of `+ new` and the tabs keep every column they had.
       */}
-      <box width={CHROME_BUTTON_WIDTH} height={3} flexShrink={0} flexDirection="column" justifyContent="center">
+      <box
+        width={CHROME_BUTTON_WIDTH}
+        height={contentHeight()}
+        flexShrink={0}
+        flexDirection="column"
+        justifyContent="center"
+      >
         <box
           height={1}
           flexDirection="row"

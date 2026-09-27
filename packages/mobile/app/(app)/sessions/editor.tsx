@@ -871,7 +871,7 @@ export default function EditorScreen() {
             </ScrollView>
           </ScrollView>
         ) : (
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 80 }}>
               <ScrollView horizontal={!wordWrap} scrollEnabled={!wordWrap} showsHorizontalScrollIndicator={!wordWrap}>
                 <View style={{ flexDirection: "row", minWidth: "100%" }}>

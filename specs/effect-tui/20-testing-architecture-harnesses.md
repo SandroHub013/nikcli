@@ -123,3 +123,59 @@ Phase by layer. Unit patterns land first (testEffect, schema assertions, fixture
 documentation/test-helper change; existing tests migrate incrementally. Roll back by removing the new helper, not by
 reverting the test that uses it. Tests are not weakened to satisfy new patterns; if a pattern is wrong, the pattern is
 fixed, not the test.
+
+## Discipline Addendum — 2026-09-18
+
+Three concrete rules pin what a Slice-1 EOT-20 delivery looks like in this codebase. They do not change the spec above;
+they codify the helpers and patterns that already exist so a code reviewer does not have to re-derive them every PR.
+
+1. **No `sleep` for racing.** When a test needs to coordinate with concurrent work, it uses the barrier helpers in
+   `packages/nikcli/test/helpers/barrier.ts` (`barrier(count)`, `deferred()`, `withTimeout`, `waitFor`). A test that
+   uses `await new Promise(r => setTimeout(r, N))` to wait for an event is a test that loses under CI load. The fix is
+   to subscribe to the event itself (`bus.on`, `fiber.addObserver`, a deferred resolve), not to wait longer.
+2. **Isolated database per test.** Tests that touch `nikcli.db` use `withIsolatedDatabase` (`test/helpers/sqlite.ts`) or
+   the new `withFixture` (`test/helpers/fixture.ts`). A test that mutates the shared database is a flake waiting to
+   happen. The sharded CI runner (`script/test-ci.ts`) uses `--isolate`, so this is not optional.
+3. **Shared fixture loader for new feature tests.** New tests under `test/{plugin,cli,mobile}/` default to
+   `withFixture` (`test/helpers/fixture.ts`). It composes `withIsolatedDatabase` + `preserveTestEnv` + `barrier`.
+   A case that declares a count — `withFixture({ barrier: 2 }, ...)` — is held to it: arrivals still pending when the
+   body returns fail the case, because a barrier that opened for fewer arrivals than the test declared opened for a
+   reason the test did not intend. The check is skipped when the body itself threw, so a real failure is never
+   replaced by a complaint about bookkeeping. Everything `withFixture` does happens inline, inside the calling case —
+   it registers no `beforeEach`/`afterEach`, which from inside a running case would attach hooks to the _following_
+   cases and leave this one unguarded. Existing tests are not required to migrate; new tests are expected to.
+
+4. **"Passes alone, fails in the suite" is a claim to be bisected, not a flake to be retried.** A flaky test fails
+   _some_ runs of the same command. A test that fails deterministically under one command and passes under another is
+   reporting a real difference, and the difference is usually shared process state: `bun test` runs every file in one
+   module registry, so whichever file loads a module first decides what that module captured. Bisect it — halve the
+   file list, then bisect within the half, then run each candidate against the failing file. Two findings came out of
+   doing that here: eight `test/server/local-account-session.test.ts` failures that were `Flag` constants capturing
+   `process.env` at import (EOT-12), and one `mobile-pairing-listener` timeout that was an unbounded `npx` on a
+   request path (EOT-19). Neither was a test problem. Before concluding a failure is pre-existing, prove it: restore
+   the HEAD version of the files your change touched and re-run.
+5. **A gate with an empty list still needs a test that makes it fail.** An allowlist that has never been shown to bite
+   is indistinguishable from a check that does nothing. `check-open-payloads.ts` and `check-account-required.ts` both
+   take `--src` / `--dir` / `--allowlist` / `--privileged` overrides so their tests drive the real script against a
+   synthetic tree, in both directions. A test that re-declares the script's own regexes and asserts against the copies
+   passes whatever the script does.
+
+6. **TUI tests live in `packages/nikcli/test/tui/`, not in `packages/tui`.** 55 files, and the
+   evidence table in `ROADMAP.md` names that directory for TUI work. A second test directory was
+   created in `packages/tui` during the EOT-03 audit on the belief that none existed, duplicating
+   coverage that was already there; it has been removed. Before concluding a surface is untested,
+   grep for its tests by _subject_ rather than by the package you happen to be editing —
+   `packages/tui/src/util/lifecycle.ts` is tested two packages away.
+
+7. **A string literal holding a whole `import … from "…"` is rewritten before the assertion
+   runs.** `test/tui/onboarding-auth.test.ts` asserted that `app.tsx` imports its dialogs
+   statically by comparing against literals of that shape, and the module transform
+   resolved the specifier inside them: the expected value arrived as
+   `file:///…/dialog-onboarding.tsx`, so the test compared the file against a path and
+   failed. It surfaced only in a full-directory run, which made it read as a flake for the
+   third time in this catalogue. Assemble such a literal from parts — nothing asserting on
+   source should spell an import statement out in one piece.
+
+The lifecycle counters from EOT-01 (`packages/nikcli/src/effect/lifecycle-counters.ts`) are observable from any test via
+`snapshot()` so a test can assert `scope.completed === 1` or `runtime.bridge.failure === 0` after a behavior assertion
+without having to instrument the production code. Use this when the assertion would otherwise be a magic `sleep`.

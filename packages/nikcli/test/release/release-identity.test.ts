@@ -148,6 +148,11 @@ describe("release identity wiring", () => {
     expect(dockerfile).toContain('NIKCLI_REVISION="$(cat .nikcli-revision 2>/dev/null || true)"')
   })
 
+  it("stubs the TUI storybook workspace required by the nikcli manifest", async () => {
+    const dockerfile = await read("Dockerfile.serve")
+    expect(dockerfile).toContain('"packages/tui-storybook:@nikcli-ai/tui-storybook"')
+  })
+
   it("writes the expected identity into the upload context after the source sync", async () => {
     const deploy = await read("script/railway-deploy.sh")
     const rsyncIndex = deploy.indexOf('rsync "${RSYNC_OPTS[@]}"')

@@ -15,6 +15,17 @@ export namespace Flag {
     return truthy("NIKCLI_AUTO_APPROVE")
   }
 
+  /**
+   * The permission mode forced for this process by `--permission-mode`, or
+   * `undefined` to use the configured one. Read on every access for the same
+   * reason as `autoApprove`.
+   */
+  export function permissionMode(): "default" | "auto" | undefined {
+    const value = process.env["NIKCLI_PERMISSION_MODE"]?.toLowerCase()
+    if (value === "auto" || value === "default") return value
+    return undefined
+  }
+
   export const NIKCLI_AUTO_SHARE = truthy("NIKCLI_AUTO_SHARE")
   export const NIKCLI_GIT_BASH_PATH = process.env["NIKCLI_GIT_BASH_PATH"]
   export const NIKCLI_CONFIG = process.env["NIKCLI_CONFIG"]
@@ -65,7 +76,10 @@ export namespace Flag {
     const value = process.env["NIKCLI_REMOTE_AUTOSTART"]?.toLowerCase()
     return value !== "false" && value !== "0"
   })()
-  export const NIKCLI_DISABLE_MODELS_FETCH = truthy("NIKCLI_DISABLE_MODELS_FETCH")
+  /** Read on every access: tests set it at their own module scope, after this module is imported. */
+  export function disableModelsFetch() {
+    return truthy("NIKCLI_DISABLE_MODELS_FETCH")
+  }
   export const NIKCLI_DISABLE_CLAUDE_CODE = truthy("NIKCLI_DISABLE_CLAUDE_CODE")
   export const NIKCLI_DISABLE_CLAUDE_CODE_PROMPT =
     NIKCLI_DISABLE_CLAUDE_CODE || truthy("NIKCLI_DISABLE_CLAUDE_CODE_PROMPT")
@@ -85,12 +99,47 @@ export namespace Flag {
     : undefined
   export const NIKCLI_SERVER_TAILSCALE_AUTH = truthy("NIKCLI_SERVER_TAILSCALE_AUTH")
   export const NIKCLI_SERVER_TAILSCALE_USERS = process.env["NIKCLI_SERVER_TAILSCALE_USERS"]
-  export const NIKCLI_AUTH_ISSUER = process.env["NIKCLI_AUTH_ISSUER"]
-  export const NIKCLI_AUTH_JWKS_URL = process.env["NIKCLI_AUTH_JWKS_URL"]
-  export const NIKCLI_AUTH_AUDIENCE = process.env["NIKCLI_AUTH_AUDIENCE"] ?? "nikcli-api"
-  export const NIKCLI_AUTH_JWT_SECRET = process.env["NIKCLI_AUTH_JWT_SECRET"]
-  export const NIKCLI_REQUIRE_OAUTH = truthy("NIKCLI_REQUIRE_OAUTH")
-  export const NIKCLI_LEGACY_LOGIN = truthy("NIKCLI_LEGACY_LOGIN")
+  /**
+   * Identity-plane verifier inputs, read on every access for the same reason
+   * as `autoApprove`: the value can be set after this module is first
+   * imported. Captured as constants, the first importer decided them for the
+   * whole process — which under `bun test` is whichever file happened to load
+   * a server module first, so a test that exports its own issuer and HS256
+   * secret before importing anything still got the defaults, and every token
+   * it signed verified as 401.
+   */
+  export function authIssuer() {
+    return process.env["NIKCLI_AUTH_ISSUER"]
+  }
+  export function authJwksUrl() {
+    return process.env["NIKCLI_AUTH_JWKS_URL"]
+  }
+  export function authAudience() {
+    return process.env["NIKCLI_AUTH_AUDIENCE"] ?? "nikcli-api"
+  }
+  export function authJwtSecret() {
+    return process.env["NIKCLI_AUTH_JWT_SECRET"]
+  }
+  /**
+   * The legacy-credential gate, read on every access.
+   *
+   * Together these two decide whether the server still accepts `nku_`
+   * sessions, Basic and Tailscale. Captured as constants they were fixed by
+   * whichever module in the process touched a flag first, which under
+   * `bun test` is not the file that set them — `test/server/unified-auth.fixture.ts`
+   * exports `NIKCLI_REQUIRE_OAUTH=1` at its own module scope and would still
+   * have run against the process default. A security test that passes because
+   * the gate it meant to close was never open is worse than one that fails.
+   *
+   * They move together on purpose: every call site reads both, and a pair
+   * where one side is live and the other is a snapshot can disagree.
+   */
+  export function requireOauth() {
+    return truthy("NIKCLI_REQUIRE_OAUTH")
+  }
+  export function legacyLogin() {
+    return truthy("NIKCLI_LEGACY_LOGIN")
+  }
 
   // OpenTelemetry (OTLP) — standard env vars. Setting an endpoint enables export.
   export const OTEL_EXPORTER_OTLP_ENDPOINT = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
@@ -109,9 +158,34 @@ export namespace Flag {
   export const NIKCLI_FIGMA_TOKEN = process.env["NIKCLI_FIGMA_TOKEN"]
   export const NIKCLI_SLACK_BOT_TOKEN = process.env["NIKCLI_SLACK_BOT_TOKEN"]
   export const NIKCLI_GITHUB_TOKEN = process.env["NIKCLI_GITHUB_TOKEN"]
-  /** Public OAuth App client ID (not a secret). Users only approve their GitHub account. */
-  export const NIKCLI_GITHUB_OAUTH_CLIENT_ID_DEFAULT = "Iv23liviwaSQK4HZ0qkl"
-  // `||` so empty-string env vars do not win over the nikcli GitHub App default.
+  /**
+   * The GitHub client every host falls back to. Public, not a secret: users
+   * only approve their own GitHub account against it.
+   *
+   * This must be an **OAuth App**, not a GitHub App. A GitHub App issues user
+   * tokens that expire in 8 hours and can only be refreshed by presenting the
+   * app's client secret — which a CLI and a phone, both public clients, cannot
+   * hold. GitHub answers `incorrect_client_credentials` and the connection
+   * dies with no way back (see `refreshGithubToken` in
+   * `server/mobile/helpers.ts`). An OAuth App's tokens do not expire, so that
+   * failure cannot happen. A GitHub App also ignores the requested `scope` and
+   * grants repo access per installation instead, which is where the 404s on
+   * repositories came from.
+   *
+   * Single source of truth: the host resolves env var → `nikcli.json`
+   * connector → this value, and nothing else ships a copy.
+   */
+  export const NIKCLI_GITHUB_OAUTH_CLIENT_ID_DEFAULT = "Ov23liIrum4YVdDu8Ogr"
+  /**
+   * The same lookup with the built-in default folded in, so this is never
+   * empty. Kept for callers that just want "whatever client ID applies", but
+   * do NOT use it to decide precedence: it cannot tell an operator's env var
+   * apart from the default, and doing so is what made `nikcli.json` unable to
+   * override the client ID. `githubOAuthClientID` in `server/mobile/helpers.ts`
+   * owns that decision.
+   *
+   * `||` so empty-string env vars do not win over the default.
+   */
   export const NIKCLI_GITHUB_OAUTH_CLIENT_ID =
     process.env["NIKCLI_GITHUB_OAUTH_CLIENT_ID"]?.trim() ||
     process.env["GITHUB_CLIENT_ID_CONSOLE"]?.trim() ||
@@ -139,7 +213,10 @@ export namespace Flag {
   // Experimental
   export const NIKCLI_EXPERIMENTAL = truthy("NIKCLI_EXPERIMENTAL")
   export const NIKCLI_EXPERIMENTAL_FILEWATCHER = true
-  export const NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER = truthy("NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER")
+  /** Read on every access: tests set it at their own module scope, after this module is imported. */
+  export function disableFilewatcher() {
+    return truthy("NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER")
+  }
   export const NIKCLI_EXPERIMENTAL_ICON_DISCOVERY = NIKCLI_EXPERIMENTAL || truthy("NIKCLI_EXPERIMENTAL_ICON_DISCOVERY")
   export const NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const NIKCLI_ENABLE_EXA =

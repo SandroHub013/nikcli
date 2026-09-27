@@ -151,6 +151,8 @@ export function DialogProfile() {
     const meta = TEXT_FIELDS[field]
     const current = (profile()?.[field] as string | undefined) ?? ""
     const result = await DialogPrompt.show(dialog, meta.title, {
+      // `reopen` has been here all along; this is what makes it visible.
+      back: reopen,
       placeholder: meta.placeholder,
       value: current,
       // An empty submit is swallowed by the prompt itself, so clearing a field
@@ -301,6 +303,7 @@ export function DialogProfile() {
       category: "Communication",
       onSelect: async () => {
         const result = await DialogPrompt.show(dialog, "Reply language", {
+          back: reopen,
           placeholder: "e.g. Italian",
           value: info?.communication?.language ?? "",
           description: () => (
@@ -398,6 +401,8 @@ function DialogProfileList(props: { field: ListField }) {
       category: "Actions",
       onSelect: async () => {
         const result = await DialogPrompt.show(dialog, `Add to ${meta.title.toLowerCase()}`, {
+          // The list, not the profile root: this prompt was opened from here.
+          back: () => dialog.replace(() => <DialogProfileList field={props.field} />),
           placeholder: meta.placeholder,
           description: () => <text fg={theme.foreground.muted}>{meta.hint}</text>,
         })

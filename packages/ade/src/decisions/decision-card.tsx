@@ -46,7 +46,13 @@ export function DecisionCard(props: {
         <h3 data-slot="decision-title">{props.decision.title}</h3>
       </header>
       <div data-slot="decision-meta">
-        {[props.decision.spec, t("decisions.from", props.decision.raisedBy), formatDay(props.decision.openedAt, props.now)].filter(Boolean).join(" · ")}
+        {[
+          props.decision.spec,
+          t("decisions.from", props.decision.raisedBy),
+          formatDay(props.decision.openedAt, props.now),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </div>
       <Show when={props.decision.multi}>
         <div data-slot="decision-multi">{t("decisions.multi")}</div>
@@ -70,7 +76,9 @@ export function DecisionCard(props: {
                 data-on={isPicked(props.picked, index()) ? "true" : undefined}
                 onClick={() => props.onPick(index())}
               >
-                <span data-slot="decision-option-key" aria-hidden="true">{index() + 1}</span>
+                <span data-slot="decision-option-key" aria-hidden="true">
+                  {index() + 1}
+                </span>
                 <span data-slot="decision-option-text">
                   <b>{option.label}</b>
                   <Show when={option.detail}>
@@ -94,7 +102,9 @@ export function DecisionCard(props: {
       />
 
       <Show when={props.problem}>
-        <div data-slot="decision-problem" role="alert">{props.problem}</div>
+        <div data-slot="decision-problem" role="alert">
+          {props.problem}
+        </div>
       </Show>
 
       <div data-slot="decision-actions">
@@ -142,7 +152,12 @@ export function DecisionCard(props: {
           <span data-slot="decision-hint">{t("decisions.defer.back")}</span>
           <For each={deferPresets(props.now)}>
             {(preset) => (
-              <button type="button" data-slot="decision-chip" disabled={props.busy} onClick={() => props.onDefer(preset.until)}>
+              <button
+                type="button"
+                data-slot="decision-chip"
+                disabled={props.busy}
+                onClick={() => props.onDefer(preset.until)}
+              >
                 {preset.label}
               </button>
             )}

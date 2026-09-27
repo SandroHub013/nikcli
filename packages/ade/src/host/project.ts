@@ -32,10 +32,7 @@ export interface Project {
  * has `git: false` and uses `startDir` as root — ADE must open on any folder,
  * just without worktree isolation.
  */
-export async function discoverProject(
-  host: Host,
-  startDir: string,
-): Promise<Project> {
+export async function discoverProject(host: Host, startDir: string): Promise<Project> {
   /*
    * A remote Space is known by its root alone. Nothing local is asked about
    * it — no git, no write root — and every place a project is opened from
@@ -110,9 +107,7 @@ export async function rootMissing(host: Pick<Host, "exists">, root: string): Pro
  * Lets the user pick a directory, then discovers the project rooted there.
  * Returns `undefined` when the user cancels the dialog.
  */
-export async function openProject(
-  host: Host,
-): Promise<Project | undefined> {
+export async function openProject(host: Host): Promise<Project | undefined> {
   if (!host.pickDirectory) return undefined
   const dir = await host.pickDirectory("Apri progetto")
   if (!dir) return undefined

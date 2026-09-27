@@ -19,6 +19,7 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_DELEGATION from "./prompt/delegation.txt"
 import PROMPT_DELEGATOR from "./prompt/delegator.txt"
 import PROMPT_ULTRAREVIEW_REVIEWER from "./prompt/ultrareview-reviewer.txt"
+import PROMPT_AUTO_MODE from "./prompt/auto-mode.txt"
 import { Context, Effect, Layer, Schema } from "effect"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { type DeepMutable, zodObject } from "@nikcli-ai/util/effect-zod"
@@ -83,6 +84,8 @@ export namespace Agent {
     temperature: Schema.optional(Schema.Number),
     color: Schema.optional(Schema.String),
     permission: Schema.mutable(Schema.Array(PermissionNext.RuleSchema)),
+    // `auto` hands `ask` decisions to the auto mode classifier; absent means `default`.
+    permissionMode: Schema.optional(Schema.Literals(["default", "auto"])),
     model: Schema.optional(ModelRefSchema),
     advisor: Schema.optional(
       Schema.Struct({
@@ -158,6 +161,8 @@ export namespace Agent {
       browser_control: "ask",
       computer: "ask",
       doom_loop: "ask",
+      // Plugin code runs in-process with the user's privileges once loaded.
+      plugin: "ask",
       external_directory: {
         "*": "ask",
         [Truncate.DIR]: "allow",
@@ -225,6 +230,7 @@ You have access to subagents that can be launched as background tasks.${PRIMARY_
           PermissionNext.fromConfig({
             question: "allow",
             plan_exit: "allow",
+            plugin: "deny",
             external_directory: {
               [path.join(Global.Path.data, "plans", "*")]: "allow",
             },
@@ -634,6 +640,24 @@ Apply small, safe refactors and verify results.`,
         ),
         prompt: PROMPT_TITLE,
       },
+      // The auto mode classifier. It never runs tools: it reads a transcript
+      // and a pending action and answers allow or block (`session/auto-mode.ts`).
+      "auto-mode": {
+        name: "auto-mode",
+        mode: "primary",
+        options: {},
+        native: true,
+        hidden: true,
+        temperature: 0,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+          }),
+          user,
+        ),
+        prompt: PROMPT_AUTO_MODE,
+      },
       support: {
         name: "support",
         description:
@@ -678,7 +702,7 @@ Help users understand and use nikcli effectively. Answer questions about:
 - Be concise. Aim for 5-15 lines per answer unless the user asks for detail.
 - When mentioning a command, flag, keybind, or config key, format it as \`code\`.
 - For multi-step answers, use a short bulleted list.
-- Always cite the source: either a file path you read, or \`https://nikcli.store/docs/...\`.
+- Always cite the source: either a file path you read, or \`https://nikcli-ai.dev/docs/...\`.
 - If you're not sure, say so and suggest where to look. Never invent API endpoints, flags, or config keys.
 - If the user asks something outside nikcli's scope, say so politely and offer to help with a related nikcli question.
 
@@ -858,6 +882,14 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
       if (value.order !== undefined) item.order = value.order
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+    }
+
+    // Permission mode: the agent's own setting wins over the top-level one.
+    // Assigned only when set, so the agent list never carries a present
+    // `undefined` into the HTTP encoder.
+    for (const name in result) {
+      const mode = cfg.agent?.[name]?.permission_mode ?? cfg.permission_mode
+      if (mode) result[name].permissionMode = mode
     }
 
     for (const name in result) {

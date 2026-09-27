@@ -10,8 +10,10 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@nikcli-ai/util/iife"
 import { defer } from "@nikcli-ai/util/defer"
 import { Config } from "../config/config"
+import { Provider } from "../provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Delegation } from "@/delegation/manager"
+import { BackgroundRun } from "@/background/run"
 import { Instance } from "../project/instance"
 import { Log } from "@nikcli-ai/util/log"
 import { Effect } from "effect"
@@ -36,6 +38,12 @@ const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  model: z
+    .string()
+    .describe(
+      "Optional model for the subagent, taken from the user's own words: pass whatever they called it, or a full \"providerID/modelID\" when you have one. It is matched against the models this instance can actually reach; a name that fits none, or that fits several variants, comes back with those models listed so you can call again with an exact one. Omit it unless the user asked for a specific model; it then defaults to the agent's own model, else this session's.",
+    )
+    .optional(),
   background: z.boolean().describe("Run the subagent in background and return immediately").optional().default(true),
   session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
@@ -72,6 +80,8 @@ type ToolSummaryItem = {
 type TaskMetadata = {
   summary?: ToolSummaryItem[]
   sessionId: string
+  /** Set only when the caller overrode the model, as "providerID/modelID". */
+  model?: string
   jobId?: string
   rootDelegationId?: string
   delegationId?: string
@@ -137,6 +147,173 @@ function agentList() {
       }),
     ),
   )
+}
+
+function providerList() {
+  return runPromiseWithLayer(
+    Provider.defaultLayer,
+    withCurrentInstance(
+      Effect.gen(function* () {
+        const provider = yield* Provider.Service
+        return yield* provider.list()
+      }),
+    ),
+  )
+}
+
+/** An id and its display name collapse to the same haystack: case, spaces,
+ * dots and dashes all drop out. */
+function normalizeModelQuery(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+export type ModelCandidate = {
+  providerID: string
+  modelID: string
+  name: string
+  releaseDate: string
+}
+
+/** Alphanumeric runs of a query, the units a catalog entry can share with it. */
+function modelQueryTokens(value: string) {
+  return value.toLowerCase().match(/[a-z0-9]+/g) ?? []
+}
+
+/**
+ * The failure a caller can act on: a catalog of a few hundred models truncated
+ * to its first entries teaches nothing, so lead with the ones that share the
+ * most with what was asked for, and say how many were left out.
+ */
+function unmatchedModelError(raw: string, candidates: ModelCandidate[], needle: string) {
+  const SHOWN = 20
+  const tokens = modelQueryTokens(raw)
+  const ranked = candidates
+    .map((candidate) => {
+      const haystack = normalizeModelQuery(`${candidate.providerID}/${candidate.modelID} ${candidate.name}`)
+      const score = tokens.filter((token) => haystack.includes(token)).length + (haystack.includes(needle) ? 1 : 0)
+      return { ref: `${candidate.providerID}/${candidate.modelID}`, score }
+    })
+    .sort((a, b) => b.score - a.score || a.ref.localeCompare(b.ref))
+  const closest = ranked.some((entry) => entry.score > 0)
+    ? ranked.filter((entry) => entry.score > 0).slice(0, SHOWN)
+    : ranked.slice(0, SHOWN)
+  const rest = candidates.length - closest.length
+  return new Error(
+    `No model matches "${raw}". Closest of ${candidates.length} available: ${closest
+      .map((entry) => entry.ref)
+      .join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`,
+  )
+}
+
+/**
+ * Pick the model a free-form `model` parameter refers to, or throw with the
+ * models it could have meant.
+ *
+ * Nothing about any model is known here: the vocabulary is whatever the
+ * instance's provider catalog contains. The caller is a model relaying what
+ * the user wrote — an exact `"providerID/modelID"`, or just the words they
+ * used — so match on id and display name alike.
+ *
+ * What it will not do is guess between near-identical variants. Catalogs
+ * routinely carry a dozen entries per family, and several of them stamp every
+ * model with the same placeholder release date, so "newest wins" quietly
+ * degrades into "alphabetically first wins". When a fragment still fits more
+ * than one model, the error lists them and the caller picks; a wrong model
+ * costs more than a second tool call.
+ *
+ * Exported for tests; production callers go through `resolveSubagentModel`.
+ */
+export function selectSubagentModel(candidates: ModelCandidate[], raw: string, preferProviderID: string) {
+  const query = raw.trim()
+  if (!query) throw new Error("model must not be empty")
+
+  const parsed = query.includes("/") ? Provider.parseModel(query) : undefined
+  if (parsed) {
+    const exact = candidates.find((c) => c.providerID === parsed.providerID && c.modelID === parsed.modelID)
+    if (exact) return ref(exact)
+  }
+
+  // A "<provider>/<words>" query narrows the search to that provider; a
+  // fragment on its own searches everything.
+  const needle = normalizeModelQuery(parsed ? parsed.modelID : query)
+  const scoped = parsed ? candidates.filter((c) => c.providerID === parsed.providerID) : candidates
+  const match = (pool: ModelCandidate[]) =>
+    pool.filter(
+      (c) =>
+        normalizeModelQuery(c.modelID) === needle ||
+        normalizeModelQuery(`${c.providerID}/${c.modelID} ${c.name}`).includes(needle),
+    )
+  const matches = iife(() => {
+    const inScope = match(scoped)
+    return inScope.length > 0 || !parsed ? inScope : match(candidates)
+  })
+  if (matches.length === 0) throw unmatchedModelError(raw, candidates, needle)
+
+  // The query naming a model outright settles it, even where a longer variant
+  // also contains those words.
+  const named = matches.filter(
+    (c) => normalizeModelQuery(c.modelID) === needle || normalizeModelQuery(c.name) === needle,
+  )
+  return decide(named.length > 0 ? named : matches, raw, preferProviderID)
+}
+
+function ref(candidate: ModelCandidate) {
+  return { providerID: candidate.providerID, modelID: candidate.modelID }
+}
+
+/**
+ * One model, or the question of which. The session's own provider breaks a tie
+ * across providers — staying where the session already is beats moving it —
+ * but within one provider there is no honest tie-break, so the caller chooses.
+ */
+function decide(matches: ModelCandidate[], raw: string, preferProviderID: string) {
+  if (matches.length === 1) return ref(matches[0])
+  const preferred = matches.filter((c) => c.providerID === preferProviderID)
+  if (preferred.length === 1) return ref(preferred[0])
+  throw ambiguousModelError(raw, preferred.length > 1 ? preferred : matches)
+}
+
+/**
+ * Newest first, then plainest first.
+ *
+ * The list is truncated, so what it shows has to be representative: within a
+ * release date, the shortest ids are the base models and the long ones are
+ * their tier and thinking variants, and sorting by length keeps a whole family
+ * from eating the list and hiding another one entirely.
+ */
+function byRecency(a: ModelCandidate, b: ModelCandidate) {
+  if (a.releaseDate !== b.releaseDate) return a.releaseDate < b.releaseDate ? 1 : -1
+  if (a.modelID.length !== b.modelID.length) return a.modelID.length - b.modelID.length
+  return a.modelID.localeCompare(b.modelID)
+}
+
+function ambiguousModelError(raw: string, matches: ModelCandidate[]) {
+  const SHOWN = 25
+  const shown = [...matches].sort(byRecency).slice(0, SHOWN)
+  const rest = matches.length - shown.length
+  return new Error(
+    `"${raw}" matches ${matches.length} models: ${shown
+      .map((c) => `${c.providerID}/${c.modelID}`)
+      .join(", ")}${rest > 0 ? `, and ${rest} more` : ""}. Pass one of them as "providerID/modelID".`,
+  )
+}
+
+/** `selectSubagentModel` over the models this instance can actually reach. */
+async function resolveSubagentModel(raw: string, preferProviderID: string) {
+  const providers = await providerList()
+  // A subagent is an agent loop: a model that cannot call tools is never a
+  // valid answer here, however well its name matches.
+  const candidates = Object.values(providers).flatMap((provider) =>
+    Object.values(provider.models)
+      .filter((model) => model.capabilities.toolcall)
+      .map((model) => ({
+        providerID: provider.id,
+        modelID: model.id,
+        name: model.name,
+        releaseDate: model.release_date,
+      })),
+  )
+  return selectSubagentModel(candidates, raw, preferProviderID)
 }
 
 function extractQuestion(prompt: string) {
@@ -319,6 +496,19 @@ async function summarizeSubtaskSession(sessionID: string, result?: MessageV2.Wit
     text,
     assistant: assistant?.info.role === "assistant" ? assistant.info : undefined,
   }
+}
+
+/**
+ * Auto mode's return check: before the parent reads a subagent's report, the
+ * classifier reviews the subagent's work and the report itself. A subagent
+ * that was benign at delegation can be steered mid-run by content it read, so
+ * a flagged report arrives with a security warning in front of it.
+ */
+async function reviewSubagentReport(ctx: Tool.Context, childSessionID: string, text: string) {
+  const { SessionAutoMode } = await import("@/session/auto-mode")
+  const active = await SessionAutoMode.active({ sessionID: ctx.sessionID, agent: ctx.agent }).catch(() => false)
+  if (!active || !text.trim()) return text
+  return SessionAutoMode.reviewReport({ sessionID: childSessionID, report: text, abort: ctx.abort })
 }
 
 function formatTaskOutput(text: string, sessionID: string, delegationID?: string) {
@@ -546,6 +736,90 @@ async function runBackgroundDelegation(params: {
   }
 }
 
+/**
+ * What a resumed subagent is told. It keeps its own session, so everything it
+ * already did is still in context: the instruction it needs is "carry on", not
+ * the original task restated.
+ */
+const RESUME_PROMPT =
+  "Your previous run was interrupted before it finished. Review what you already did in this session, then continue from where you stopped — do not start the task over. When the work is done, report the result."
+
+/** The model the run was actually using, which its own session already records. */
+async function resolveResumeModel(sessionID: string, agent: Agent.Info) {
+  const summary = await BackgroundRun.summarizeSession(sessionID).catch(() => undefined)
+  const assistant = summary?.assistant
+  if (assistant) return { modelID: assistant.modelID, providerID: assistant.providerID }
+  if (agent.model) return { modelID: agent.model.modelID, providerID: agent.model.providerID }
+  return undefined
+}
+
+/**
+ * Restarts a delegation that stopped without an answer, reusing its session so
+ * the agent resumes instead of repeating itself. False means the run cannot be
+ * resumed: wrong status, attempts exhausted, or the session is gone.
+ */
+export async function resumeBackgroundDelegation(delegationID: string): Promise<boolean> {
+  const record = await Delegation.getDurable(delegationID).catch(() => undefined)
+  const sessionID = record?.sessionID
+  if (!record || !sessionID) return false
+  if (!BackgroundRun.isResumable(record.status)) return false
+
+  const agent = await agentGet(record.agent).catch(() => undefined)
+  if (!agent) return false
+
+  const session = await runSession(
+    Effect.gen(function* () {
+      const service = yield* Session.Service
+      return yield* service.get(sessionID)
+    }),
+  ).catch(() => undefined)
+  if (!session) return false
+
+  const model = await resolveResumeModel(sessionID, agent)
+  if (!model) return false
+
+  // Reopened last: every step above can fail, and a run left `running` with
+  // nobody driving it is worse than one still marked with how it died.
+  const reopened = await BackgroundRun.reopen(delegationID).catch(() => undefined)
+  if (!reopened) return false
+  Delegation.reattach(reopened)
+
+  const config = await configGet()
+  log.info("resuming delegation", {
+    delegationID,
+    agent: agent.name,
+    attempt: reopened.resumeCount,
+  })
+  await runBackgroundDelegation({
+    session,
+    prompt: RESUME_PROMPT,
+    agentName: agent.name,
+    model,
+    hasTaskPermission: agent.permission.some((rule) => rule.permission === "task"),
+    primaryTools: config.experimental?.primary_tools,
+    delegationID,
+  })
+  return true
+}
+
+/**
+ * Restarts at startup what a crash left behind. The runs are launched, not
+ * awaited, and take the same semaphore as any other background agent, so a
+ * machine that just came back up is not asked to run all of them at once.
+ */
+export async function resumeInterruptedDelegations(): Promise<number> {
+  const candidates = await BackgroundRun.listAutoResumable().catch(() => [])
+  for (const record of candidates) {
+    void resumeBackgroundDelegation(record.id).catch((error) => {
+      log.warn("failed to resume interrupted delegation", {
+        delegationID: record.id,
+        error: String(error),
+      })
+    })
+  }
+  return candidates.length
+}
+
 function subscribeDelegationProgress(sessionID: string, delegationID: string) {
   let lastSummary: string | undefined = "Starting background task"
   void Delegation.updateProgress(delegationID, lastSummary)
@@ -643,6 +917,15 @@ async function launchBackgroundSubtask(params: {
   agent: Agent.Info
   session: Session.Info
   model: {
+    modelID: string
+    providerID: string
+  }
+  /**
+   * Model for the delegator's synthesis rounds. Kept separate from `model` so
+   * that pointing a worker at an expensive model doesn't also move nikcli's
+   * own bookkeeping loop onto it.
+   */
+  delegatorModel: {
     modelID: string
     providerID: string
   }
@@ -746,7 +1029,7 @@ async function launchBackgroundSubtask(params: {
               return yield* sessionPrompt.prompt({
                 messageID: Identifier.ascending("message"),
                 sessionID: delegatorSession.id,
-                model: params.model,
+                model: params.delegatorModel,
                 agent: "delegator",
                 tools: {
                   todowrite: false,
@@ -916,7 +1199,10 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
   )
   const researchMetadata = buildResearchMetadata(agent.name, params.prompt)
 
-  if (params.background && agent.name === RESEARCH_AGENT) {
+  // A running research job is reused rather than duplicated — unless this call
+  // names a model, which makes it a request for a different run, not the one
+  // already in flight on the old model.
+  if (params.background && agent.name === RESEARCH_AGENT && !params.model) {
     const existing = await Delegation.findRunningForParent(ctx.sessionID, agent.name)
     if (existing) {
       const metadata: TaskMetadata = {
@@ -952,6 +1238,23 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
     }
   }
 
+  const msg = await MessageV2.get({
+    sessionID: ctx.sessionID,
+    messageID: ctx.messageID,
+  })
+  if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+  const inheritedModel = {
+    modelID: msg.info.modelID,
+    providerID: msg.info.providerID,
+  }
+  // An explicit `model` outranks the agent's own pin: the user naming a model
+  // for this particular piece of work is the more specific instruction.
+  const overrideModel = params.model ? await resolveSubagentModel(params.model, inheritedModel.providerID) : undefined
+  const defaultModel = agent.model ?? inheritedModel
+  const model = overrideModel ?? defaultModel
+  const overrideRef = overrideModel ? `${overrideModel.providerID}/${overrideModel.modelID}` : undefined
+
   const session = await iife(async () => {
     if (params.session_id) {
       const found = await validateReusableSession({
@@ -975,12 +1278,6 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
     )
   })
 
-  const msg = await MessageV2.get({
-    sessionID: ctx.sessionID,
-    messageID: ctx.messageID,
-  })
-  if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
-
   await ctx.progress({
     structured: {
       sessionID: session.id,
@@ -992,15 +1289,11 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
     title: params.description,
     metadata: {
       sessionId: session.id,
+      model: overrideRef,
       kind: researchMetadata?.kind,
       question: researchMetadata?.question,
     },
   })
-
-  const model = agent.model ?? {
-    modelID: msg.info.modelID,
-    providerID: msg.info.providerID,
-  }
 
   if (params.background) {
     const backgroundTask = await launchBackgroundSubtask({
@@ -1015,6 +1308,10 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
         modelID: model.modelID,
         providerID: model.providerID,
       },
+      delegatorModel: {
+        modelID: defaultModel.modelID,
+        providerID: defaultModel.providerID,
+      },
       hasTaskPermission,
       primaryTools: config.experimental?.primary_tools,
       metadata: researchMetadata,
@@ -1024,6 +1321,7 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
       title: params.description,
       metadata: {
         background: true,
+        model: overrideRef,
         jobId: backgroundTask.jobId,
         rootDelegationId: backgroundTask.rootDelegationId,
         delegationId: backgroundTask.delegationId,
@@ -1043,6 +1341,7 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
       title: params.description,
       metadata: {
         background: true,
+        model: overrideRef,
         jobId: backgroundTask.jobId,
         rootDelegationId: backgroundTask.rootDelegationId,
         delegationId: backgroundTask.delegationId,
@@ -1057,7 +1356,7 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
         reused: backgroundTask.reused,
       },
       output: formatTaskOutput(
-        `Background task started for @${agent.name}. Delegator will synthesize results.\nDelegator: ${backgroundTask.delegatorDelegationId}`,
+        `Background task started for @${agent.name}${overrideRef ? ` on ${overrideRef}` : ""}. Delegator will synthesize results.\nDelegator: ${backgroundTask.delegatorDelegationId}`,
         backgroundTask.sessionId,
         backgroundTask.delegationId,
       ),
@@ -1084,6 +1383,7 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
       metadata: {
         summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
         sessionId: session.id,
+        model: overrideRef,
         liveSummary,
         kind: researchMetadata?.kind,
         question: researchMetadata?.question,
@@ -1137,13 +1437,14 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
       metadata: {
         summary: summary.summary,
         sessionId: session.id,
+        model: overrideRef,
         liveSummary: summarizeLiveText(summary.text),
         kind: researchMetadata?.kind,
         question: researchMetadata?.question,
         sourceCount: agent.name === RESEARCH_AGENT ? extractSourceCount(summary.text) : undefined,
         confidence: agent.name === RESEARCH_AGENT ? extractConfidence(summary.text) : undefined,
       },
-      output: formatTaskOutput(summary.text, session.id),
+      output: formatTaskOutput(await reviewSubagentReport(ctx, session.id, summary.text), session.id),
     }
   } finally {
     foregroundMetadata.flush()

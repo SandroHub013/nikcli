@@ -93,3 +93,43 @@ Characterize one producer-to-TUI flow, fix its boundary and explicit error handl
 then expand by domain. Maintain an inventory of intentional open payloads and existing compatibility names. Roll back
 internal adapters behind the same contract or retain additive fields; do not break old SDK consumers or relax security,
 validation, or CI client-drift checks to recover from a failed release.
+
+## Discipline Addendum — 2026-09-20
+
+`script/check-open-payloads.ts` is in CI (commit `644a8f28`), backed by `packages/nikcli/specs/httpapi-open-payloads.json`: 49 `Schema.Unknown` sites across `src/server/httpapi/`, 41 justified entries.
+
+1. **The allowlist is keyed by file plus the declaring line's text, never by line number.** A line number makes every unrelated edit above a listed site fail the gate, and the repair — renumbering the allowlist — is a diff that looks like review and contains none. The snippet is also what a reviewer needs to read next to the justification. `count` covers a file that declares the same shape more than once, so a _second_ copy of an already justified declaration is still a new open payload and still needs review.
+2. **`Schema.Record(Schema.String, Schema.Unknown)` is tracked but is not a violation.** The codegen emits `{ [k: string]: unknown }`, a typed record, not an `any`. It is listed so the policy stays explicit and CI does not block on it alone.
+3. **A missing entry fails; a stale entry warns.** An allowlisted declaration that has disappeared is a cleanup, not a breach, and failing CI for it teaches people to delete entries to get green.
+4. **The gate is driven by its own test.** `test/script/check-open-payloads.test.ts` runs the real script against a synthetic tree through `--dir` / `--allowlist`: unlisted fails, listed passes, a line shift still passes, a duplicate fails, a vanished entry warns without failing. An earlier version of that test re-declared the script's regexes and asserted against the copies, which passes whatever the script does.
+
+## Fresh-Install Route Sweep — 2026-09-20
+
+The two shipped 400s this spec inherited — `mission.ts` `featureMutate` and `config/tui.ts`
+`plugin_meta` — were both already fixed. What was missing was anything that stops the
+third.
+
+Both had the same shape and the same victim. A handler wrote `undefined` into a field the
+response schema declared with `Schema.optionalKey`; the encoder rejects a _present_
+`undefined`; the route answered an empty 400 — to exactly the users whose state was empty.
+`GET /tui/config` did it for every user with no plugins, and the TUI read the empty body as
+a config with no keybinds, with nothing logged. Neither a type nor a schema catches it: the
+schema is right and the handler type-checks. It only shows on the wire, on an instance with
+nothing in it, which is the one state a fixture rarely bothers to build.
+
+`test/server/empty-instance-routes.test.ts` builds it and calls every parameterless GET the
+contract declares — 89 of them. **The sweep found no encoder failures**, so the class is
+currently clean; the test is what keeps it that way.
+
+Three details are load-bearing:
+
+- **Streaming routes are excluded by pattern**, not by timeout. `/event`, `/sync/stream`
+  and `/tui/control/next` never answer, or answer only when something happens elsewhere.
+  The first version of this probe hung on them.
+- **Routes with required query parameters are listed with their reason.** A 400 from an
+  incomplete _request_ is indistinguishable from an encoder failure at this level — both
+  arrive as an empty 400 — so each exemption names the parameter it is missing. Twelve
+  routes, including `/find`, `/file/content` and `/sync/outbox`.
+- **The exemption lists are checked for staleness**, and the route count is asserted to
+  exceed 80. The way a sweep like this dies is an inventory query that stops matching,
+  leaving a test that passes because it looked at nothing.

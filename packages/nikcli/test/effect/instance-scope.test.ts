@@ -4,6 +4,7 @@ import { Cause, Effect, Exit, Fiber, Schema } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { barrier, deferred } from "../helpers/barrier"
 
 const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-effect-instance-home-"))
 process.env.NIKCLI_TEST_HOME = testHome
@@ -35,6 +36,67 @@ async function makeProjectDir() {
 }
 
 describe("InstanceScope", () => {
+  it("waits for acquisition and releases exactly once when cancellation races with acquisition", async () => {
+    const directory = await makeProjectDir()
+    const acquiring = barrier()
+    const acquired = deferred()
+    const finalizing = barrier()
+    const release = deferred()
+    const events: string[] = []
+    const fiber = Effect.runFork(
+      InstanceScope.with(
+        { directory },
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* Effect.acquireRelease(
+              Effect.gen(function* () {
+                acquiring.arrive()
+                yield* Effect.promise(() => acquired.promise)
+                events.push("acquired")
+                return "resource"
+              }),
+              (resource, exit) =>
+                Effect.gen(function* () {
+                  expect(resource).toBe("resource")
+                  expect(Exit.isFailure(exit)).toBe(true)
+                  if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+                  finalizing.arrive()
+                  yield* Effect.promise(() => release.promise)
+                  events.push("released")
+                }),
+            )
+            events.push("used")
+          }),
+        ),
+      ),
+    )
+    let settled = false
+    try {
+      await acquiring.wait()
+      // interruptUnsafe delivers the request synchronously before acquisition is released.
+      fiber.interruptUnsafe()
+      const completion = Effect.runPromise(Fiber.await(fiber)).then((exit) => {
+        settled = true
+        return exit
+      })
+      expect(settled).toBe(false)
+      acquired.resolve()
+      await finalizing.wait()
+      expect(events).toEqual(["acquired"])
+      expect(settled).toBe(false)
+      release.resolve()
+      const exit = await completion
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      expect(events).toEqual(["acquired", "released"])
+    } finally {
+      acquired.resolve()
+      release.resolve()
+      await Effect.runPromise(Fiber.interrupt(fiber))
+    }
+    expect(events).toEqual(["acquired", "released"])
+  })
+
   it("provides InstanceRef and InstanceState context inside an Effect boundary", async () => {
     const directory = await makeProjectDir()
     const result = await Effect.runPromise(

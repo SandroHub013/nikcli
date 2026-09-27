@@ -44,10 +44,8 @@ describe("discoverProject", () => {
   it("returns a git project when rev-parse succeeds", async () => {
     const host = fakeHost({
       run: async (_cmd, args) => {
-        if (args.includes("--show-toplevel"))
-          return { code: 0, stdout: "C:\\Users\\nik\\repo\n", stderr: "" }
-        if (args.includes("--abbrev-ref"))
-          return { code: 0, stdout: "main\n", stderr: "" }
+        if (args.includes("--show-toplevel")) return { code: 0, stdout: "C:\\Users\\nik\\repo\n", stderr: "" }
+        if (args.includes("--abbrev-ref")) return { code: 0, stdout: "main\n", stderr: "" }
         return { code: 1, stdout: "", stderr: "" }
       },
     })
@@ -61,10 +59,8 @@ describe("discoverProject", () => {
   it("handles detached HEAD", async () => {
     const host = fakeHost({
       run: async (_cmd, args) => {
-        if (args.includes("--show-toplevel"))
-          return { code: 0, stdout: "C:/repo\n", stderr: "" }
-        if (args.includes("--abbrev-ref"))
-          return { code: 0, stdout: "HEAD\n", stderr: "" }
+        if (args.includes("--show-toplevel")) return { code: 0, stdout: "C:/repo\n", stderr: "" }
+        if (args.includes("--abbrev-ref")) return { code: 0, stdout: "HEAD\n", stderr: "" }
         return { code: 1, stdout: "", stderr: "" }
       },
     })
@@ -93,10 +89,8 @@ describe("openProject", () => {
     const host = fakeHost({
       pickDirectory: async () => "C:/Users/nik/picked",
       run: async (_cmd, args) => {
-        if (args.includes("--show-toplevel"))
-          return { code: 0, stdout: "C:/Users/nik/picked\n", stderr: "" }
-        if (args.includes("--abbrev-ref"))
-          return { code: 0, stdout: "dev\n", stderr: "" }
+        if (args.includes("--show-toplevel")) return { code: 0, stdout: "C:/Users/nik/picked\n", stderr: "" }
+        if (args.includes("--abbrev-ref")) return { code: 0, stdout: "dev\n", stderr: "" }
         return { code: 1, stdout: "", stderr: "" }
       },
     })

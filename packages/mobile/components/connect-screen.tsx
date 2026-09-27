@@ -51,7 +51,13 @@ function HowToStep({ index, title, detail }: { index: number; title: string; det
           justifyContent: "center",
         }}
       >
-        <Text style={{ color: palette.ink, fontVariant: ["tabular-nums"], ...typeStyle(13, { weight: "700" }) }}>
+        <Text
+          style={{
+            color: palette.ink,
+            fontVariant: ["tabular-nums"],
+            ...typeStyle(13, { weight: "700" }),
+          }}
+        >
           {index}
         </Text>
       </View>
@@ -103,11 +109,30 @@ function PairingScanner({ onClose, onScanned }: { onClose(): void; onScanned(pay
             }}
           />
         ) : (
-          <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 28, gap: 16 }}>
-            <Text style={{ color: "#fff", textAlign: "center", ...typeStyle(22, { weight: "700" }) }}>
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              paddingHorizontal: 28,
+              gap: 16,
+            }}
+          >
+            <Text
+              style={{
+                color: "#fff",
+                textAlign: "center",
+                ...typeStyle(22, { weight: "700" }),
+              }}
+            >
               Camera access
             </Text>
-            <Text style={{ color: "rgba(255,255,255,0.72)", textAlign: "center", ...typeStyle(15) }}>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.72)",
+                textAlign: "center",
+                ...typeStyle(15),
+              }}
+            >
               Allow the camera so this phone can read the pairing QR shown by nikcli on your computer.
             </Text>
             <ActionButton
@@ -379,7 +404,14 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
 
   if (loading && !config && !isEditor) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: palette.background }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: palette.background,
+        }}
+      >
         <ActivityIndicator color={palette.accent} />
       </View>
     )
@@ -389,7 +421,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: palette.background }}
     >
       <ScrollView
@@ -415,7 +447,13 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
                 </IconCircleButton>
               }
             />
-            <Text style={{ color: palette.muted, paddingHorizontal: 4, ...typeStyle(15) }}>
+            <Text
+              style={{
+                color: palette.muted,
+                paddingHorizontal: 4,
+                ...typeStyle(15),
+              }}
+            >
               {isAddDevice
                 ? "Scan a QR or type the host. Nothing is saved until you continue."
                 : "Scan the QR nikcli shows on your computer, then confirm the details."}
@@ -424,7 +462,13 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
         ) : (
           <View style={{ gap: 10, paddingHorizontal: 4, paddingTop: 4 }}>
             <BrandMark />
-            <Text accessibilityRole="header" style={{ color: palette.ink, ...typeStyle(34, { weight: "700" }) }}>
+            <Text
+              accessibilityRole="header"
+              style={{
+                color: palette.ink,
+                ...typeStyle(34, { weight: "700" }),
+              }}
+            >
               Connect
             </Text>
             <Text style={{ color: palette.muted, ...typeStyle(16) }}>
@@ -537,7 +581,14 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
           />
         )}
 
-        <Text selectable style={{ color: palette.muted, textAlign: "center", ...typeStyle(12) }}>
+        <Text
+          selectable
+          style={{
+            color: palette.muted,
+            textAlign: "center",
+            ...typeStyle(12),
+          }}
+        >
           For a local pair, this phone and the computer must share a network. A hosted URL works from anywhere.
         </Text>
       </ScrollView>

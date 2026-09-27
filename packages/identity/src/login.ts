@@ -11,6 +11,7 @@ import {
   EMAIL_CODE_IP_WINDOW_SECONDS,
   EMAIL_CODE_MAX_ATTEMPTS,
   EMAIL_CODE_TTL_SECONDS,
+  legacyIssuerHost,
   LOGIN_STATE_TTL_SECONDS,
 } from "./constants"
 import { randomDigits, randomToken, secureEqual, sha256 } from "./crypto"
@@ -284,16 +285,51 @@ export async function completeLogin(
 }
 
 /**
+ * Whether the account holds a passkey this issuer's own host can use. One
+ * saved under the legacy host does not count: it only works where the browser
+ * supports Related Origin Requests, so its owner still gets the offer.
+ */
+export async function hasCurrentPasskey(env: Env, accountID: string): Promise<boolean> {
+  const rpID = new URL(env.ISSUER).hostname
+  return (await countPasskeys(env.DB, accountID, rpID, !legacyIssuerHost(env.ISSUER))) > 0
+}
+
+/** Park the finished first factor on the offer until the user saves or skips. */
+export async function storePasskeyOffer(
+  env: Env,
+  loginState: string,
+  accountID: string,
+): Promise<LoginIntent | undefined> {
+  const intent = (await loadLoginIntent(env, loginState)) ?? undefined
+  const offer: PasskeyOffer = { accountID, ...(intent ? { intent } : {}) }
+  await env.STATE.put(passkeyOfferKey(loginState), JSON.stringify(offer), {
+    expirationTtl: LOGIN_STATE_TTL_SECONDS,
+  })
+  return intent
+}
+
+/**
  * First-time accounts get a chance to save a platform passkey before the
  * login intent is consumed. Accounts that already have one complete as usual.
  */
 async function completeOrOfferPasskey(c: AppContext, loginState: string, accountID: string): Promise<Response> {
-  if ((await countPasskeys(c.env.DB, accountID)) > 0) return completeLogin(c, loginState, accountID)
-  const intent = await loadLoginIntent(c.env, loginState)
-  const offer: PasskeyOffer = { accountID, ...(intent ? { intent } : {}) }
-  await c.env.STATE.put(passkeyOfferKey(loginState), JSON.stringify(offer), {
-    expirationTtl: LOGIN_STATE_TTL_SECONDS,
-  })
+  if (await hasCurrentPasskey(c.env, accountID)) return completeLogin(c, loginState, accountID)
+  return renderPasskeyOffer(c, loginState, await storePasskeyOffer(c.env, loginState, accountID))
+}
+
+/**
+ * `GET /login/passkey/offer` — where a sign-in with a legacy-host passkey lands
+ * so it can save one for the current host. Without an offer this is a replay or
+ * a stale page, which `completeLogin` already answers.
+ */
+export async function passkeyOfferRoute(c: AppContext): Promise<Response> {
+  const loginState = c.req.query("login_state") ?? ""
+  const offer = await c.env.STATE.get<PasskeyOffer>(passkeyOfferKey(loginState), "json")
+  if (!offer) return completeLogin(c, loginState, "")
+  return renderPasskeyOffer(c, loginState, offer.intent)
+}
+
+function renderPasskeyOffer(c: AppContext, loginState: string, intent: LoginIntent | undefined): Response {
   // This page is the last thing standing between a device sign-in and the
   // approval, and it looks entirely optional — "Save a passkey", with a "Not
   // now" beside it. Abandoning it is a reasonable thing to do and it silently
@@ -343,20 +379,42 @@ export async function finishGitHub(c: AppContext): Promise<Response> {
   }
 
   const callback = githubRedirectURI(c.env)
-  const exchange = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      client_id: c.env.GITHUB_CLIENT_ID,
-      client_secret: c.env.GITHUB_CLIENT_SECRET,
-      code,
-      redirect_uri: callback,
-    }),
-  })
+  const exchangeCode = () =>
+    fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        // github.com throttles anonymous clients on shared egress (every Worker
+        // leaves from Cloudflare's addresses) far harder than identified ones,
+        // and answered the exchange with a bare 429.
+        "User-Agent": "nikcli-identity",
+      },
+      body: new URLSearchParams({
+        client_id: c.env.GITHUB_CLIENT_ID,
+        client_secret: c.env.GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri: callback,
+      }),
+    })
+  let exchange = await exchangeCode()
+  if (exchange.status === 429) {
+    // A throttled exchange never consumed the code, so one retry is safe and
+    // saves the user a whole new round trip through github.com.
+    const retryAfter = Number(exchange.headers.get("retry-after"))
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 3) : 1
+    await new Promise((resolve) => setTimeout(resolve, wait * 1000))
+    exchange = await exchangeCode()
+  }
   if (!exchange.ok) {
+    console.error(
+      JSON.stringify({
+        message: "github token exchange failed",
+        path: c.req.path,
+        status: exchange.status,
+        retryAfter: exchange.headers.get("retry-after"),
+      }),
+    )
     return resultPage(
       c,
       "Sign-in failed",

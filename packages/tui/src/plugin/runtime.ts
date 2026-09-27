@@ -82,7 +82,8 @@ type Api = HostPluginApi
 type PluginScope = {
   lifecycle: TuiPluginApi["lifecycle"]
   track: (fn: (() => void) | undefined) => () => void
-  dispose: () => Promise<void>
+  /** `deadline` is an epoch-ms budget shared across scopes disposed together. */
+  dispose: (deadline?: number) => Promise<void>
 }
 
 type PluginEntry = {
@@ -122,6 +123,19 @@ type RuntimeState = {
 
 const log = Log.create({ service: "tui.plugin" })
 const DISPOSE_TIMEOUT_MS = 5000
+
+/**
+ * How long shutting the runtime down may wait on plugin cleanups, in total.
+ *
+ * `DISPOSE_TIMEOUT_MS` bounds one plugin. Plugins are disposed one after the
+ * other, so on its own that made exit wait up to five seconds *per* wedged
+ * plugin. `specs/effect-tui/08-host-plugins-startup.md` requirement 7 asks for an
+ * aggregate budget as well; this is its candidate value. Once it is spent the
+ * remaining plugins are still disposed — every cleanup is still invoked, and the
+ * synchronous host deregistrations still complete — they are only no longer
+ * waited on. Timed-out cleanups are reported, never claimed as terminated.
+ */
+const SHUTDOWN_BUDGET_MS = 5000
 const KV_KEY = "plugin_enabled"
 
 function fail(message: string, data: Record<string, unknown>) {
@@ -186,7 +200,11 @@ function createThemeInstaller(meta: PluginConfigMeta, root: string, spec: string
     if (hasTheme(theme)) return
 
     const text = await Filesystem.readText(src).catch((error) => {
-      log.warn("failed to read tui plugin theme", { path: spec, theme: src, error })
+      log.warn("failed to read tui plugin theme", {
+        path: spec,
+        theme: src,
+        error,
+      })
       return
     })
     if (text === undefined) return
@@ -195,7 +213,11 @@ function createThemeInstaller(meta: PluginConfigMeta, root: string, spec: string
     const data = await Promise.resolve(text)
       .then((x) => JSON.parse(x))
       .catch((error) => {
-        log.warn("failed to parse tui plugin theme", { path: spec, theme: src, error })
+        log.warn("failed to parse tui plugin theme", {
+          path: spec,
+          theme: src,
+          error,
+        })
         return fail
       })
     if (data === fail) return
@@ -214,7 +236,12 @@ function createThemeInstaller(meta: PluginConfigMeta, root: string, spec: string
     const dest = path.join(dest_dir, `${theme}.json`)
     if (!(await Filesystem.exists(dest))) {
       await Filesystem.write(dest, text).catch((error) => {
-        log.warn("failed to persist tui plugin theme", { path: spec, theme: src, dest, error })
+        log.warn("failed to persist tui plugin theme", {
+          path: spec,
+          theme: src,
+          dest,
+          error,
+        })
       })
     }
 
@@ -269,7 +296,12 @@ async function loadExternalPlugin(
   const root = resolveRoot(source === "file" ? spec : target)
   const install_theme = createThemeInstaller(meta, root, spec)
   const entry = await resolvePluginEntrypoint(spec, target, "tui").catch((error) => {
-    fail("failed to resolve tui plugin entry", { path: spec, target, retry, error })
+    fail("failed to resolve tui plugin entry", {
+      path: spec,
+      target,
+      retry,
+      error,
+    })
     hooks?.onFail?.(error)
     return
   })
@@ -289,7 +321,12 @@ async function loadExternalPlugin(
       return (readV1Plugin(value, spec, "tui", "detect") as TuiPluginModule | undefined) ?? readV2TuiPlugin(value, spec)
     })
     .catch((error) => {
-      fail("failed to load tui plugin", { path: spec, target: entry, retry, error })
+      fail("failed to load tui plugin", {
+        path: spec,
+        target: entry,
+        retry,
+        error,
+      })
       hooks?.onFail?.(error)
       return
     })
@@ -421,13 +458,18 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
     onDispose,
   }
 
-  const dispose = async () => {
+  /**
+   * `deadline` (epoch ms) is a budget shared with other scopes being disposed in
+   * the same pass: this scope waits no longer than its own `timeoutMs`, and no
+   * later than the deadline.
+   */
+  const dispose = async (deadline?: number) => {
     if (done) return
     done = true
     ctrl.abort()
     const queue = [...list].reverse()
     list = []
-    const until = Date.now() + timeoutMs
+    const until = Math.min(Date.now() + timeoutMs, deadline ?? Number.POSITIVE_INFINITY)
     // The queue holds the host's own deregistrations (commands, routes, event
     // listeners, the plugin host entry) alongside the plugin's callbacks, and
     // it is walked newest-first — so stopping at the first hung or throwing
@@ -521,13 +563,18 @@ function listPluginStatus(state: RuntimeState): TuiPluginStatus[] {
   return tuiPlugins
 }
 
-async function deactivatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
+export async function deactivatePluginEntry(
+  state: RuntimeState,
+  plugin: PluginEntry,
+  persist: boolean,
+  deadline?: number,
+) {
   plugin.enabled = false
   if (persist) writePluginEnabledState(state.api, plugin.id, false)
   if (!plugin.scope) return true
   const scope = plugin.scope
   plugin.scope = undefined
-  await scope.dispose()
+  await scope.dispose(deadline)
   return true
 }
 
@@ -570,13 +617,16 @@ async function activateWithBudget(state: RuntimeState, plugin: PluginEntry) {
       void activation.catch((error) => log.error("tui plugin activation failed", { id: plugin.id, error }))
       return
     }
-    log.debug("activated tui plugin", { id: plugin.id, ms: Date.now() - started })
+    log.debug("activated tui plugin", {
+      id: plugin.id,
+      ms: Date.now() - started,
+    })
   } finally {
     if (timer) clearTimeout(timer)
   }
 }
 
-async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
+export async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = true
   if (persist) writePluginEnabledState(state.api, plugin.id, true)
   if (plugin.scope) return true
@@ -953,7 +1003,11 @@ async function reconcileConfiguredPlugins(state: RuntimeState) {
       const options = pluginOptions(item)
       if (sameOptions(existing.options, options)) continue
       log.info("tui plugin options changed", { path: spec, id: existing.id })
-      await reloadPluginEntry(state, existing, { item, meta: meta(spec), force: true })
+      await reloadPluginEntry(state, existing, {
+        item,
+        meta: meta(spec),
+        force: true,
+      })
       continue
     }
 
@@ -1007,12 +1061,19 @@ async function reloadLocalPlugins(state: RuntimeState) {
   // No instance wrapper: every host call below takes its own directory.
   {
     await reconcileConfiguredPlugins(state).catch((error) => {
-      fail("failed to reconcile configured tui plugins", { directory: state.directory, error })
+      fail("failed to reconcile configured tui plugins", {
+        directory: state.directory,
+        error,
+      })
     })
 
     for (const plugin of state.plugins.filter((item) => item.load.source === "file" && item.load.item)) {
       await reloadPluginEntry(state, plugin).catch((error) => {
-        fail("failed to hot reload tui plugin", { path: plugin.load.spec, id: plugin.id, error })
+        fail("failed to hot reload tui plugin", {
+          path: plugin.load.spec,
+          id: plugin.id,
+          error,
+        })
       })
     }
   }
@@ -1383,8 +1444,14 @@ export namespace TuiPluginRuntime {
     state.watcher = undefined
     await reloading.catch(() => undefined)
     const queue = [...state.plugins].reverse()
+    const deadline = Date.now() + SHUTDOWN_BUDGET_MS
     for (const plugin of queue) {
-      await deactivatePluginEntry(state, plugin, false)
+      await deactivatePluginEntry(state, plugin, false, deadline)
+    }
+    if (Date.now() > deadline) {
+      log.warn("tui plugin shutdown exceeded its budget; remaining cleanups were not waited on", {
+        budget: SHUTDOWN_BUDGET_MS,
+      })
     }
   }
 
@@ -1393,7 +1460,10 @@ export namespace TuiPluginRuntime {
     // Observe failures immediately: a plugin cleanup that throws would otherwise
     // surface as an unhandled rejection until the next watch event.
     void reloading.catch((error) => {
-      fail("failed to reload tui plugins", { directory: state.directory, error })
+      fail("failed to reload tui plugins", {
+        directory: state.directory,
+        error,
+      })
     })
     return reloading
   }
@@ -1421,7 +1491,9 @@ export namespace TuiPluginRuntime {
         const config = await pluginHost().get(cwd)
         const plugins = Flag.NIKCLI_PURE ? [] : (config.plugin ?? [])
         if (Flag.NIKCLI_PURE && config.plugin?.length) {
-          log.info("skipping external tui plugins in pure mode", { count: config.plugin.length })
+          log.info("skipping external tui plugins in pure mode", {
+            count: config.plugin.length,
+          })
         }
 
         dbg("runtime: internal plugins", INTERNAL_TUI_PLUGINS.map((x) => x.id).join(","))

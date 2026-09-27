@@ -32,7 +32,7 @@ function filetype(input?: string) {
   return language
 }
 
-function EditBody(props: { request: PermissionRequest }) {
+function EditBody(props: { request: PermissionRequest; label?: string }) {
   const themeState = useTheme()
   const scrollAcceleration = useScrollAcceleration()
   const theme = themeState.theme
@@ -40,12 +40,17 @@ function EditBody(props: { request: PermissionRequest }) {
   const sync = useSync()
   const dimensions = useTerminalDimensions()
 
-  const files = createMemo(
-    () =>
+  // The tools send `Snapshot.FileDiff` entries (`file` + `patch`); the
+  // `filePath` + `diff` spelling is kept for requests built elsewhere.
+  const files = createMemo(() =>
+    (
       (props.request.metadata?.files as Array<{
-        filePath: string
-        diff: string
-      }>) ?? [],
+        file?: string
+        patch?: string
+        filePath?: string
+        diff?: string
+      }>) ?? []
+    ).map((entry) => ({ filePath: entry.file ?? entry.filePath ?? "", diff: entry.patch ?? entry.diff ?? "" })),
   )
   const singleFile = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const singleDiff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
@@ -72,7 +77,7 @@ function EditBody(props: { request: PermissionRequest }) {
     <box flexDirection="column" gap={1}>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <text fg={theme.foreground.muted}>{"→"}</text>
-        <text fg={theme.foreground.muted}>Edit {normalizePath(filepath())}</text>
+        <text fg={theme.foreground.muted}>{props.label ?? `Edit ${normalizePath(filepath())}`}</text>
         <Show when={files().length > 1}>
           <text fg={theme.foreground.muted}>(+{files().length - 1} more)</text>
         </Show>
@@ -127,6 +132,16 @@ function TextBody(props: { title: string; description?: string; icon?: string })
       </Show>
     </>
   )
+}
+
+/**
+ * Auto mode hands a decision back to the user after repeated blocks; the
+ * prompt says so, with the rule that blocked it, instead of a generic title.
+ */
+function autoModeTitle(metadata: PermissionRequest["metadata"] | undefined) {
+  const auto = metadata?.["auto_mode"] as { rule?: string; reason?: string } | undefined
+  if (!auto) return undefined
+  return `Auto mode paused after repeated blocks · [${auto.rule ?? "Blocked"}] ${auto.reason ?? ""}`.trim()
 }
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
@@ -213,7 +228,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         {(() => {
           const body = (
             <Prompt
-              title="Permission required"
+              title={autoModeTitle(props.request.metadata) ?? "Permission required"}
               body={
                 <Switch>
                   <Match when={props.request.permission === "edit"}>
@@ -271,6 +286,25 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                       const dir = normalizePath(raw)
 
                       return <TextBody icon="←" title={`Access external directory ` + dir} />
+                    })()}
+                  </Match>
+                  <Match when={props.request.permission === "plugin"}>
+                    {(() => {
+                      // The code is what the user is approving: once written, nikcli
+                      // loads it in-process. Show it as a diff, not as a tool name.
+                      const meta = props.request.metadata ?? {}
+                      const action = typeof meta["action"] === "string" ? meta["action"] : "create"
+                      const name = typeof meta["name"] === "string" ? meta["name"] : (props.request.patterns?.[0] ?? "")
+                      const scope = typeof meta["scope"] === "string" ? meta["scope"] : "global"
+                      const folder = typeof meta["folder"] === "string" ? normalizePath(meta["folder"]) : ""
+                      if (action === "remove") {
+                        return <TextBody icon="✕" title={`Remove plugin ${name} (${scope})`} description={folder} />
+                      }
+                      const deps = Object.keys((meta["dependencies"] as Record<string, string> | undefined) ?? {})
+                      const label =
+                        `${Locale.titlecase(action)} plugin ${name} (${scope})` +
+                        (deps.length > 0 ? ` · installs ${deps.join(", ")}` : "")
+                      return <EditBody request={props.request} label={label} />
                     })()}
                   </Match>
                   <Match when={props.request.permission === "doom_loop"}>

@@ -12,11 +12,22 @@ import { Effect, Schema } from "effect"
 import { type DeepMutable, zod, zodObject } from "@nikcli-ai/util/effect-zod"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { BackgroundRunRepo } from "./repo"
+import { LOOP_RUN_LEASE_MS } from "@/loop/schema"
 
 export namespace BackgroundRun {
   const log = Log.create({ service: "background.run" })
-  const OWNER_ID = `${process.pid}-${Date.now()}`
-  export const LEASE_TIMEOUT_MS = 15_000
+  /** This process as a lease owner. The start stamp survives PID reuse, so a restart never inherits its predecessor's claim. */
+  export const OWNER_ID = `${process.pid}-${Date.now()}`
+  /**
+   * EOT-09 lease source of truth.
+   *
+   * Loops and missions both lease an in-flight run to a process via the same
+   * predicate. The single canonical value lives in `@/loop/schema` as
+   * `LOOP_RUN_LEASE_MS`; BackgroundRun re-exports it so a future drift
+   * cannot orphan one side and not the other. `Mission` already imports
+   * `LOOP_RUN_LEASE_MS` directly per its own schema docblock.
+   */
+  export const LEASE_TIMEOUT_MS = LOOP_RUN_LEASE_MS
   type Metadata = { [key: string]: unknown }
 
   const StatusSchema = Schema.Literals(["running", "complete", "error", "timeout", "cancelled", "orphaned"])
@@ -51,6 +62,23 @@ export namespace BackgroundRun {
     if (isTerminal(from)) return false
     return from !== to
   }
+
+  /**
+   * Terminal statuses that mean "stopped without an answer", so restarting the
+   * run is a repair rather than a second opinion. `cancelled` is absent by
+   * design: the user stopping a task *is* its outcome.
+   */
+  export const RESUMABLE_STATUSES: ReadonlySet<Status> = new Set<Status>(["orphaned", "error", "timeout"])
+
+  export function isResumable(status: Status): boolean {
+    return RESUMABLE_STATUSES.has(status)
+  }
+
+  /** A run that takes nikcli down with it would otherwise restart forever. */
+  export const MAX_RESUME_ATTEMPTS = 3
+
+  /** Past this, an unattended restart stops being a recovery and becomes a surprise. */
+  export const RESUME_WINDOW_MS = 60 * 60_000
 
   const SourceSchema = Schema.Literals([
     "task",
@@ -104,6 +132,7 @@ export namespace BackgroundRun {
     rootDelegationID: Schema.optional(Schema.String),
     parentDelegationID: Schema.optional(Schema.String),
     role: Schema.optional(RoleSchema),
+    resumeCount: Schema.optional(Schema.Number),
   })
   export const Record = zodObject(RecordSchema)
   export type Record = DeepMutable<Schema.Schema.Type<typeof RecordSchema>>
@@ -436,7 +465,9 @@ ${result}
   // project invalidated the cache of all of them. Every caller below already
   // stands in an instance scope: each is preceded by a repo call keyed on
   // `projectID()`.
-  const listCache = Instance.state(() => ({ value: undefined as { records: Record[]; expiresAt: number } | undefined }))
+  const listCache = Instance.state(() => ({
+    value: undefined as { records: Record[]; expiresAt: number } | undefined,
+  }))
   const LIST_CACHE_TTL_MS = 2_000
 
   async function listAll(): Promise<Record[]> {
@@ -560,9 +591,54 @@ ${result}
     return Boolean(finalized)
   }
 
+  /**
+   * Puts a run that stopped without an answer back under this process's lease so
+   * its session can be driven again. The session is untouched, so the agent
+   * resumes with its own prior work in context instead of starting over.
+   */
+  export async function reopen(id: string) {
+    const record = await get(id)
+    if (!isResumable(record.status)) return undefined
+    if ((record.resumeCount ?? 0) >= MAX_RESUME_ATTEMPTS) return undefined
+    const reopened = mutate(id, (draft) => {
+      draft.status = "running"
+      draft.resumeCount = (draft.resumeCount ?? 0) + 1
+      draft.completedAt = undefined
+      draft.error = undefined
+      draft.ownerID = OWNER_ID
+      draft.ownerPID = process.pid
+      draft.heartbeatAt = Date.now()
+      draft.lastActivityAt = Date.now()
+      draft.updatedAt = Date.now()
+    })
+    invalidateListCache()
+    return reopened
+  }
+
+  /**
+   * Runs a fresh process may restart unattended: killed by a crash rather than
+   * finished, recent enough to still be wanted, and not already retried to the
+   * cap. Failures stay out — those are the user's call to retry.
+   */
+  export async function listAutoResumable(now = Date.now()): Promise<Record[]> {
+    return filtered(
+      (record) =>
+        record.status === "orphaned" &&
+        Boolean(record.sessionID) &&
+        (record.resumeCount ?? 0) < MAX_RESUME_ATTEMPTS &&
+        now - (record.completedAt ?? record.updatedAt) < RESUME_WINDOW_MS,
+    )
+  }
+
   export function leaseExpired(record: Pick<Record, "status" | "heartbeatAt" | "ownerID">, now = Date.now()) {
     if (record.status !== "running") return false
     if (!record.ownerID || !record.heartbeatAt) return true
+    // The lease asks whether the owning process is gone, and for our own rows the
+    // answer is no: this code is running. A heartbeat past the timeout then means
+    // the interval was starved (CPU load, blocked event loop, machine suspended),
+    // not that the work died. A run of ours that genuinely stops producing output
+    // is the delegation stall watchdog's job, which settles it as `timeout`.
+    if (record.ownerID === OWNER_ID) return false
     return now - record.heartbeatAt > LEASE_TIMEOUT_MS
   }
 

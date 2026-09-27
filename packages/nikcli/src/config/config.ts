@@ -106,7 +106,7 @@ export namespace Config {
         }
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://nikcli.store/config.json"
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://nikcli-ai.dev/config.json"
         result = mergeConfigConcatArrays(
           result,
           await load(
@@ -163,11 +163,8 @@ export namespace Config {
         result.plugin ??= []
       }
 
-      // Only install when deps are missing. Running `bun install` when
-      // node_modules already exists (e.g. a worktree whose node_modules is
-      // symlinked to the main checkout) fails with EEXIST while linking
-      // packages — noise that previously also corrupted the TUI.
-      if (!existsSync(path.join(dir, "node_modules"))) await installDependencies(dir)
+      // Only install when deps are missing or stale; see `needsInstall`.
+      if (await needsInstall(dir)) await installDependencies(dir)
 
       // The directory may not exist yet (e.g. when the plugin-install bootstrap
       // that creates it is skipped). Nothing to load from a missing dir, and the
@@ -249,6 +246,35 @@ export namespace Config {
       // the new agents/commands/permissions without a process restart.
       { reloadable: true },
     )
+  }
+
+  /** Config dirs a reinstall was already attempted for in this process. */
+  const reinstalled = new Set<string>()
+
+  /**
+   * Whether a config dir needs `installDependencies`: its node_modules is
+   * missing, or the `@nikcli-ai/plugin` it pins is not this release's. As in
+   * opencode's `needsInstall` — without that version check a config dir keeps
+   * the package it got on first run forever, including a broken one.
+   *
+   * Not for a symlinked node_modules (a worktree sharing the main checkout's,
+   * where `bun install` fails with EEXIST), not for local builds (they install
+   * `latest`, which has no version to compare), and at most once per process
+   * per dir, so an offline start or a hot reload does not retry on every load.
+   */
+  export async function needsInstall(dir: string): Promise<boolean> {
+    const modules = path.join(dir, "node_modules")
+    if (!existsSync(modules)) return true
+    if (Installation.isLocal() || reinstalled.has(dir)) return false
+    const stat = await fs.lstat(modules).catch(() => undefined)
+    if (!stat || stat.isSymbolicLink()) return false
+    const pkg = await Bun.file(path.join(dir, "package.json"))
+      .json()
+      .catch(() => undefined)
+    const pinned = pkg?.dependencies?.["@nikcli-ai/plugin"]
+    if (pinned === Installation.VERSION) return false
+    reinstalled.add(dir)
+    return true
   }
 
   export async function installDependencies(dir: string) {
@@ -416,28 +442,77 @@ export namespace Config {
   }
 
   const PLUGIN_GLOB = new Bun.Glob("{plugin,plugins}/*.{ts,js}")
+  const PLUGIN_FOLDER_GLOB = new Bun.Glob("{plugin,plugins}/*/{package.json,index.ts,index.js}")
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
     for await (const item of safeScan(PLUGIN_GLOB, dir)) {
       plugins.push(pathToFileURL(item).href)
     }
+
+    // Folder plugins: `plugins/<name>/` with its own package.json and
+    // dependencies — the shape the `plugin` tool writes. Sorted so the load
+    // order does not depend on the order the filesystem lists entries in.
+    const folders = new Set<string>()
+    for await (const item of safeScan(PLUGIN_FOLDER_GLOB, dir)) folders.add(path.dirname(item))
+    for (const folder of [...folders].sort()) {
+      const entry = await pluginFolderEntry(folder)
+      if (entry) plugins.push(pathToFileURL(entry).href)
+    }
     return plugins
   }
 
   /**
+   * Folder names under `plugin/` / `plugins/` that are not server plugins:
+   * `tui` holds TUI plugin files (see `TuiConfig.pluginDirectories`), and the
+   * others are tooling, never a plugin someone wrote.
+   */
+  const PLUGIN_FOLDER_RESERVED = new Set(["tui", "node_modules"])
+
+  /**
+   * The entry file of a folder plugin: package.json `main` when it names a file
+   * inside the folder, else `index.ts`, else `index.js`. `undefined` for a
+   * reserved or hidden folder, or one with no entry on disk.
+   */
+  export async function pluginFolderEntry(folder: string): Promise<string | undefined> {
+    const name = path.basename(folder)
+    if (name.startsWith(".") || PLUGIN_FOLDER_RESERVED.has(name)) return
+    const pkg = await Bun.file(path.join(folder, "package.json"))
+      .json()
+      .catch(() => undefined)
+    const main = pkg && typeof pkg.main === "string" ? pkg.main.trim() : ""
+    const candidates = [
+      ...(main ? [path.resolve(folder, main)] : []),
+      path.join(folder, "index.ts"),
+      path.join(folder, "index.js"),
+    ]
+    for (const candidate of candidates) {
+      // A `main` that escapes the folder is ignored rather than followed.
+      if (candidate !== folder && !candidate.startsWith(folder + path.sep)) continue
+      if (existsSync(candidate)) return candidate
+    }
+  }
+
+  /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
+   * - For file:// URLs: extracts filename without extension, or the folder
+   *   name for a folder plugin (`plugins/<name>/index.ts`), whose entry file
+   *   is usually called `index` and would otherwise collide in dedup
    * - For npm packages: extracts package name without version
    *
    * @example
    * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("file:///path/to/plugins/notify/index.ts") // "notify"
    * getPluginName("oh-my-nikcli@2.4.3") // "oh-my-nikcli"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const pathname = new URL(plugin).pathname
+      const segments = pathname.split("/")
+      const root = segments.findLastIndex((segment) => segment === "plugin" || segment === "plugins")
+      if (root >= 0 && root <= segments.length - 3) return segments[root + 1]!
+      return path.parse(pathname).name
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
@@ -759,6 +834,55 @@ export namespace Config {
     }),
   )
 
+  /**
+   * The permission mode a session starts in. `default` prompts for `ask`
+   * decisions; `auto` sends them to the auto mode classifier instead (see
+   * `permission/auto.ts`). The ruleset itself is the same in both.
+   */
+  export const PermissionMode = z.enum(["default", "auto"]).meta({
+    ref: "PermissionModeConfig",
+  })
+  export type PermissionMode = z.infer<typeof PermissionMode>
+
+  /**
+   * Auto mode classifier settings. Read from the global config only: a
+   * project's `nikcli.json` is checked into the repo it describes, and a repo
+   * must not be able to widen what the classifier lets through.
+   */
+  export const AutoMode = z
+    .object({
+      environment: z
+        .array(z.string())
+        .optional()
+        .describe('Trusted infrastructure, as prose. Include "$defaults" to keep the built-in entries.'),
+      allow: z
+        .array(z.string())
+        .optional()
+        .describe('Exceptions to soft_deny rules, as prose. Include "$defaults" to keep the built-in rules.'),
+      soft_deny: z
+        .array(z.string())
+        .optional()
+        .describe('Block rules that explicit user intent can clear. Include "$defaults" to keep the built-in rules.'),
+      hard_deny: z
+        .array(z.string())
+        .optional()
+        .describe('Unconditional block rules. Include "$defaults" to keep the built-in rules.'),
+      classify_all_shell: z
+        .boolean()
+        .optional()
+        .describe("Suspend every shell allow rule in auto mode, so the classifier reviews every command"),
+      model: z
+        .string()
+        .optional()
+        .describe("Classifier model in provider/model format. Defaults to the session's model"),
+      disable: z.boolean().optional().describe("Turn auto mode off: sessions set to auto run in default mode"),
+    })
+    .strict()
+    .meta({
+      ref: "AutoModeConfig",
+    })
+  export type AutoMode = z.infer<typeof AutoMode>
+
   export const Command = z.object({
     template: z.string().optional(),
     description: z.string().optional(),
@@ -832,6 +956,9 @@ export namespace Config {
       order: z.number().int().optional().describe("Sorting priority for agent cycling. Lower = earlier."),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      permission_mode: PermissionMode.optional().describe(
+        "Permission mode for this agent; overrides the top-level one",
+      ),
       advisor: z
         .string()
         .optional()
@@ -862,6 +989,7 @@ export namespace Config {
         "maxSteps",
         "options",
         "permission",
+        "permission_mode",
         "disable",
         "tools",
         "advisor",
@@ -1494,7 +1622,7 @@ export namespace Config {
       command: z
         .record(z.string(), Command)
         .optional()
-        .describe("Command configuration, see https://nikcli.store/docs/commands"),
+        .describe("Command configuration, see https://nikcli-ai.dev/docs/commands"),
       reference: z
         .record(z.string(), Reference)
         .optional()
@@ -1511,7 +1639,7 @@ export namespace Config {
           url: z
             .string()
             .optional()
-            .describe("Remote sync hub URL, e.g. https://s.nikcli.store. NIKCLI_REMOTE_URL overrides this."),
+            .describe("Remote sync hub URL, e.g. https://s.nikcli-ai.dev. NIKCLI_REMOTE_URL overrides this."),
           token: z
             .string()
             .optional()
@@ -1532,7 +1660,7 @@ export namespace Config {
             .boolean()
             .optional()
             .describe(
-              "Contribute anonymous per-day model totals to the public stats at nikcli.store/data. On by default; set false to opt out, or set DO_NOT_TRACK=1 / NIKCLI_DISABLE_ANALYTICS=1. Only day, provider, model, session count, message count, token count and cost are sent, under a random identifier — never prompts, paths, repositories, session titles or account.",
+              "Contribute anonymous per-day model totals to the public stats at nikcli-ai.dev/data. On by default; set false to opt out, or set DO_NOT_TRACK=1 / NIKCLI_DISABLE_ANALYTICS=1. Only day, provider, model, session count, message count, token count and cost are sent, under a random identifier — never prompts, paths, repositories, session titles or account.",
             ),
           endpoint: z
             .string()
@@ -1602,7 +1730,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://nikcli.store/docs/agents"),
+        .describe("Agent configuration, see https://nikcli-ai.dev/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1655,6 +1783,8 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      permission_mode: PermissionMode.optional().describe("Permission mode sessions start in (default: default)"),
+      auto_mode: AutoMode.optional().describe("Auto mode classifier settings (read from the global config only)"),
       tools: z.record(z.string(), z.boolean()).optional(),
       /**
        * Custom tool-file load policy for `{tool,tools}/*.{js,ts}` under
@@ -2080,9 +2210,9 @@ export namespace Config {
     const parsed = Info.safeParse(data)
     if (parsed.success) {
       if (!parsed.data.$schema) {
-        parsed.data.$schema = "https://nikcli.store/config.json"
+        parsed.data.$schema = "https://nikcli-ai.dev/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://nikcli.store/config.json",')
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://nikcli-ai.dev/config.json",')
         let tmp: string | undefined
         try {
           const target = await fs.realpath(configFilepath).catch(() => configFilepath)

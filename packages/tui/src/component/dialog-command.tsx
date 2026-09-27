@@ -19,6 +19,26 @@ import { settingsCommandOptions } from "./dialog-settings"
 
 const globalCommands: Accessor<CommandOption[]>[] = []
 
+/**
+ * The live registry, readable without the context.
+ *
+ * `DialogProvider` sits *above* `CommandProvider` in `app.tsx`, and a dialog is
+ * rendered inside the provider's own subtree rather than inside `children` — so
+ * `useCommandDialog()` throws in any dialog that calls it. That is not a bug to
+ * fix by reordering: the dialog layer draws over everything and cannot depend
+ * on what it draws over.
+ *
+ * `DialogCommand` solves it by taking its options as props, which works because
+ * the caller is inside the provider. A dialog opened from another dialog has no
+ * such caller, so the registry is published here instead.
+ */
+let liveEntries: Accessor<CommandOption[]> = () => []
+
+/** Every registered command, for callers that cannot reach the context. */
+export function allCommands(): CommandOption[] {
+  return liveEntries()
+}
+
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
 
@@ -60,6 +80,8 @@ function init() {
       footer: x.keybind ? keybind.print(x.keybind) : undefined,
     }))
   })
+
+  liveEntries = entries
 
   const isEnabled = (option: CommandOption) => option.enabled !== false
   const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
@@ -128,6 +150,14 @@ function init() {
       setSuspendCount((count) => count + (enabled ? -1 : 1))
     },
     suspended,
+    /**
+     * Every registered command, enabled or not.
+     *
+     * The palette shows what you can *run*; this is for asking a different
+     * question of the same knowledge — the keybinding sheet needs the ones with
+     * a binding, including any the palette hides.
+     */
+    all: entries,
     show() {
       dialog.replace(() => <DialogCommand options={visibleOptions()} suggestedOptions={suggestedOptions()} />)
     },

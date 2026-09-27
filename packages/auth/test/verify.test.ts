@@ -72,4 +72,23 @@ describe("verifyAccessToken", () => {
       }),
     ).rejects.toThrow()
   })
+
+  test("only accepts the configured nikcli-ai.dev issuer", async () => {
+    const result = await verifyAccessToken(await token({ iss: "https://auth.nikcli-ai.dev" }), {
+      issuer: "https://auth.nikcli-ai.dev",
+      audience,
+      jwtSecret: secret,
+    })
+    expect(result.accountID).toBe("acc_test")
+
+    for (const minted of ["https://auth.nikcli.store", "https://dev.auth.nikcli-ai.dev"]) {
+      await expect(
+        verifyAccessToken(await token({ iss: minted }), {
+          issuer: "https://auth.nikcli-ai.dev",
+          audience,
+          jwtSecret: secret,
+        }),
+      ).rejects.toThrow()
+    }
+  })
 })

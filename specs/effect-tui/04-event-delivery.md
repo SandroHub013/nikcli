@@ -97,3 +97,79 @@ First classify events and instrument queue depth/bytes; next add overflow behavi
 batching and consider Effect queue primitives on backend-owned paths. Keep existing server fan-out until parity is proven.
 Rollback the admission implementation behind the same interface, preserving boundedness and stale-state reporting. Never
 restore an unbounded queue as the permanent fix for an overflow test failure.
+
+## Discipline Addendum — 2026-09-19
+
+Slice 3 promotes `BYTE_BUDGET` from a candidate ceiling (`src/server/httpapi/event-feed.ts:79`) to an enforced one and pins the Promise publish contract. These do not change the spec above; they codify what the code does today so a code reviewer does not have to re-derive it.
+
+1. **`BYTE_BUDGET = 8 MiB` is enforced per frame.** `Connection.offer()` evicts with `ByteBudgetExceededError` when _one_ broadcast frame exceeds the ceiling. It is deliberately not a lifetime budget: `Connection.written` only grows, so `written + frame > BYTE_BUDGET` would evict every healthy reader that had been sent eight megabytes of ordinary events — which a TUI session reaches well inside an hour — and would report it as the client's fault. Per frame the question needs no producer inventory to answer: an event that large is a producer bug, and forwarding it puts the same megabytes into the client. Local frames (greeting, heartbeat, close reason) bypass the check entirely — they exist to hold the connection open and to state why it is being dropped. A lifetime or windowed budget remains possible later; `Connection.cost.bytes` is the measurement it would be ratified against.
+2. **Promise publish is best-effort by design.** `Bus.publish` in `packages/nikcli/src/bus/index.ts:173` swallows rejections — the spec wording was "best-effort" because changing it globally would change compatibility semantics for every existing caller. Tests assert _no exception escapes_; recovery from a dropped publish happens at the next event, not via redelivery.
+3. **The two budgets answer different questions.** Frame-count eviction (`SubscriberOverflowError`, `LAG_BUDGET = 4096`) catches a reader that cannot keep up. Frame-size eviction (`ByteBudgetExceededError`) catches a producer emitting a single event nobody should have to receive. Neither subsumes the other, and both write their reason into the close frame so a client knows which one tripped.
+
+Tests in `packages/nikcli/test/server/event-feed.test.ts` exercise all of it: a reader handed more than `BYTE_BUDGET` _in total_ stays attached, a single oversized broadcast evicts with `ByteBudgetExceededError` and is itself never delivered, and local frames bypass the check. A future change that introduces a new eviction reason must add a matching test in the same describe block before merge.
+
+## No Silent Loss — 2026-09-20
+
+The gate's third clause — _recovery verified, no silent loss_ — needed the invariant
+rather than another case.
+
+Each eviction already had a test asserting its own reason. What none of them said is that
+a connection cannot leave **without** one. A fourth eviction path added later that calls
+`close()` instead of `fail()` passes every one of those tests and drops a client with no way
+to tell a server eviction from a network failure — and that difference is exactly what the
+client's recovery turns on. `/event` frames carry no sequence numbers, so a reconnecting
+client cannot resume into a gap; it refetches, and the close reason is what tells it to.
+(`detectSequenceGap` in `src/sync/gap.ts` serves the sync path, which does carry sequence
+numbers. It is not reusable here and does not need to be.)
+
+So the eviction table is now driven as a table: every trigger is provoked, and each is
+asserted to put a named `server.error` on the wire, with a message, before the stream
+closes. Breaking one path to close silently fails three cases.
+
+### The three evictions have different radius
+
+Writing this the first time assumed all three were per-connection. Two are not, and the
+difference is worth stating because it looks like an inconsistency until you see why:
+
+- **Overflow is per connection.** Only the reader that fell behind is dropped.
+- **The byte budget is per frame.** One frame over the ceiling is over it for every reader
+  it was offered to, so they all go — which is the correct reading of a producer bug:
+  nobody should receive it.
+- **An encoding failure drops every current connection**, deliberately. The event cannot be
+  serialised at all, so every attached client would otherwise carry a gap it has no way to
+  learn about. The feed stays usable for whoever connects next.
+
+The names are asserted to be distinct, because backing off is the right response to
+overflow and the wrong one to an oversized producer. One shared name would make them
+indistinguishable at the client.
+
+`abandon` is the single silent exit and has to be: the controller is already dead, so
+writing a reason would throw on the way out. That it does not throw is pinned.
+
+## Reconnect Pacing — 2026-09-24
+
+Recovery step 1 says an EOF must not create a tight reconnect loop. It did. The TUI's HTTP stream loop in
+`packages/tui/src/context/sdk.tsx` backed off only when the subscribe **threw**; when the server accepted the stream
+and then closed it cleanly — an eviction, a proxy with a short idle timeout — the loop re-subscribed at once. Upstream
+opencode waits after every stream exit, clean or not; nikcli had dropped that half.
+
+Measured with a server that closes every stream immediately: **270 subscribes in 400 ms**. With a fetch that resolves
+on microtasks alone, the loop never yields to a timer at all and starves the process — the first run of the test hung
+rather than failed, which is the same symptom a user would see as a frozen TUI.
+
+What changed, and what did not:
+
+- Every exit from a stream waits `reconnectDelay(failures)` (`packages/tui/src/util/reconnect.ts`) before the next
+  attempt: 250 ms base, 5 s cap as this spec fixes, with equal jitter — half the step fixed, so no retry is immediate,
+  half random, so clients that lost the same server do not return in lockstep. `failures` still resets on every
+  successful subscribe, exactly as the old `backoff = 250` did, so a healthy reconnect is no slower than before beyond
+  that first floor of 125-250 ms.
+- The wait is `sleepUnlessAborted`, not `Bun.sleep`: closing the provider ends it immediately instead of leaving the
+  loop alive for up to five seconds after cleanup.
+- Not changed: the client batch is still uncapped (its own comment records why — overload has to be observable before a
+  cap is safe, and the queue meter is that observation), auth and schema failures are still retried rather than
+  classified non-retryable, and there is still no restoration barrier. Those remain open under this spec.
+
+`packages/nikcli/test/tui/reconnect-gate.test.ts` mounts the real `SDKProvider` against that server and bounds the
+subscribes in a 400 ms window to three. Removing the post-EOF wait fails it (270 against a limit of 3). Its fake
+`fetch` yields one macrotask per subscribe on purpose: without it the unfixed loop hangs the test instead of failing it.

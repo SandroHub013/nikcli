@@ -1,17 +1,17 @@
 # V2 Config Review
 
-| Field   | Value                                                                                                                                                             |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | **Proposed** — a decision ledger, not a contract. No field below has been renamed or removed yet                                                                  |
-| Scope   | `src/config/config.ts` (`Config.Info`), `src/config/paths.ts`, `src/config/tui-schema.ts`                                                                         |
-| Missing | A per-field migration test asserting that each `redesign` row's legacy key still loads and maps to its new key. Until that exists this document stays `Proposed`. |
+| Field   | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status  | **Proposed** — a decision ledger, not a contract. No field below has been renamed or removed yet                                                                                                                                                                                                                                                                                                                                                                      |
+| Scope   | `src/config/config.ts` (`Config.Info`), `src/config/paths.ts`, `src/config/tui-schema.ts`                                                                                                                                                                                                                                                                                                                                                                             |
+| Missing | Nothing testable. The test this row asked for landed 2026-09-21 — `test/config/legacy-keys.test.ts` (pure mappings) and `test/config/legacy-keys-loader.test.ts` (the three that need a document on disk) cover **all six** mappings the loader performs today. This document stays `Proposed` because it is a ledger and **no field below has been renamed yet**, not because coverage is missing. It is promoted by executing a group, not by writing another test. |
 
 This document breaks nikcli's configuration schema into review groups. Work through one group at a
 time and decide whether each field is ported as-is, removed, or redesigned.
 
 `nikcli.json` is the one schema in the codebase that is authored in **zod** and converted to Effect
 Schema (`util/zod-effect.ts`) rather than the other way round. That is deliberate — the JSON Schema
-published at `https://nikcli.store/config.json` is the user-facing contract — and it means every
+published at `https://nikcli-ai.dev/config.json` is the user-facing contract — and it means every
 decision here is a zod edit, not a Schema edit.
 
 ## Status Labels
@@ -48,20 +48,20 @@ that is a discovery change, listed as an open question below rather than decided
 
 ## Group 2: Process, Server, And Client Settings
 
-| Field           | Current Purpose                                | Status   | Notes                                                                                                                                                                                                                                                                                          |
-| --------------- | ---------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `logLevel`      | Logging level                                  | remove   | No config consumer. `Log.init` in `src/cli/main-effect.ts` takes the level from the `--log-level` CLI option, falling back to `DEBUG` for local installs and `INFO` otherwise.                                                                                                                 |
-| `server`        | Host, port, mDNS, and CORS for `serve` / `web` | remove   | No reader found in `src`. `Server.listen` takes its options from the CLI (`src/cli/network.ts`), and `corsWhitelist` is a `ServerRouter` option, not a config read. Same conclusion upstream reached, for the same reason.                                                                     |
-| `remote`        | Remote Control defaults                        | keep     | Consumed: onboarding writes it (`dialog-onboarding.tsx`) and `dialog-remote.tsx` reads it back through the synced config.                                                                                                                                                                      |
-| `teleport`      | Default remote server for `/teleport`          | pending  | No reader found in `src` or `packages/tui`. Either wire it into the teleport command or drop it; do not leave it published in the JSON Schema unread.                                                                                                                                          |
-| `autoupdate`    | `true` / `false` / `"notify"`                  | keep     | Global-only user preference.                                                                                                                                                                                                                                                                   |
-| `theme`         | TUI theme name                                 | remove   | **Already migrated out.** `migrateTuiConfig` moves `theme`, `keybinds`, and `tui` from every `nikcli.json` into a sibling `tui.json` (schema `https://nikcli.store/tui.json`), skipping locations that already have one. The fields remain in `Config.Info` only so old documents still parse. |
-| `keybinds`      | Keybind overrides                              | remove   | Same migration. Note the loader still fills in parsed defaults when absent, so removal has to check that path.                                                                                                                                                                                 |
-| `tui`           | TUI-specific settings                          | remove   | Same migration. `src/config/tui.ts` reads `tui.json`, and flattens a nested `tui` key so documents written in the old shape still apply.                                                                                                                                                       |
-| `locale`        | BCP-47 primary subtag for UI and replies       | keep     | Affects model output, not only presentation, so it is not purely a client concern and should not follow `theme` into `tui.json`.                                                                                                                                                               |
-| `ads`           | User-defined tips shown in the TUI tips area   | redesign | Move into `tui.json` the same way. Consumed only by `src/cli/handlers/ads/`.                                                                                                                                                                                                                   |
-| `notifications` | Todo notification toggle                       | redesign | Same move.                                                                                                                                                                                                                                                                                     |
-| `layout`        | Deprecated layout selection                    | remove   | Already documented as `@deprecated`; stretch layout is always used.                                                                                                                                                                                                                            |
+| Field           | Current Purpose                                | Status   | Notes                                                                                                                                                                                                                                                                                           |
+| --------------- | ---------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `logLevel`      | Logging level                                  | remove   | No config consumer. `Log.init` in `src/cli/main-effect.ts` takes the level from the `--log-level` CLI option, falling back to `DEBUG` for local installs and `INFO` otherwise.                                                                                                                  |
+| `server`        | Host, port, mDNS, and CORS for `serve` / `web` | remove   | No reader found in `src`. `Server.listen` takes its options from the CLI (`src/cli/network.ts`), and `corsWhitelist` is a `ServerRouter` option, not a config read. Same conclusion upstream reached, for the same reason.                                                                      |
+| `remote`        | Remote Control defaults                        | keep     | Consumed: onboarding writes it (`dialog-onboarding.tsx`) and `dialog-remote.tsx` reads it back through the synced config.                                                                                                                                                                       |
+| `teleport`      | Default remote server for `/teleport`          | pending  | No reader found in `src` or `packages/tui`. Either wire it into the teleport command or drop it; do not leave it published in the JSON Schema unread.                                                                                                                                           |
+| `autoupdate`    | `true` / `false` / `"notify"`                  | keep     | Global-only user preference.                                                                                                                                                                                                                                                                    |
+| `theme`         | TUI theme name                                 | remove   | **Already migrated out.** `migrateTuiConfig` moves `theme`, `keybinds`, and `tui` from every `nikcli.json` into a sibling `tui.json` (schema `https://nikcli-ai.dev/tui.json`), skipping locations that already have one. The fields remain in `Config.Info` only so old documents still parse. |
+| `keybinds`      | Keybind overrides                              | remove   | Same migration. Note the loader still fills in parsed defaults when absent, so removal has to check that path.                                                                                                                                                                                  |
+| `tui`           | TUI-specific settings                          | remove   | Same migration. `src/config/tui.ts` reads `tui.json`, and flattens a nested `tui` key so documents written in the old shape still apply.                                                                                                                                                        |
+| `locale`        | BCP-47 primary subtag for UI and replies       | keep     | Affects model output, not only presentation, so it is not purely a client concern and should not follow `theme` into `tui.json`.                                                                                                                                                                |
+| `ads`           | User-defined tips shown in the TUI tips area   | redesign | Move into `tui.json` the same way. Consumed only by `src/cli/handlers/ads/`.                                                                                                                                                                                                                    |
+| `notifications` | Todo notification toggle                       | redesign | Same move.                                                                                                                                                                                                                                                                                      |
+| `layout`        | Deprecated layout selection                    | remove   | Already documented as `@deprecated`; stretch layout is always used.                                                                                                                                                                                                                             |
 
 There is no `shell` field. If a configurable default shell is wanted, it belongs in this group.
 
@@ -226,3 +226,44 @@ top-level shape that groups 2 and 3 are being reviewed against.
 - `tui.json` already exists and `migrateTuiConfig` already populates it. What is the deprecation
   window after which `theme`, `keybinds`, and `tui` can be deleted from `Config.Info` outright —
   and does `ads` / `notifications` / `experimental.tui` ride the same migration or a second one?
+
+## The Two Precedents Do Not Disagree — 2026-09-21
+
+[todo.md](./todo.md) presents the migration mechanism as an open choice between two precedents that
+conflict, and asks that one be picked "before the first rename lands, not after the third". Counted
+against the source, they are not in conflict. They answer different questions, and the ledger's
+renames only ever ask one of them.
+
+| Mechanism                      | Times used | What it is for                              |
+| ------------------------------ | ---------- | ------------------------------------------- |
+| Accept both keys in the loader | **6**      | a rename **within** the same document       |
+| Rewrite the file               | **1**      | moving fields into a **different** document |
+
+The six: `autoshare` → `share`, `mode` → `agent`, top-level `tools` → `permission`, agent-level
+`tools` → `permission`, agent-level `maxSteps` → `steps`, and `enabled_providers` /
+`disabled_providers` → policy statements. The one: `migrateTuiConfig`, which moves `theme`,
+`keybinds` and `tui` into a sibling `tui.json` — a _different_ published schema, which is precisely
+what loader mapping cannot do.
+
+Every rename this ledger proposes (`plugin` → `plugins`, `agent` → `agents`, `permission` →
+`permissions`, `provider` → `providers`, `snapshot` → `snapshots`, `attachment` → `attachments`)
+stays inside `nikcli.json`. So the file rewrite is not a candidate for them, and the choice the todo
+describes is not one.
+
+This is an argument, not a ratification: the decision belongs to whoever owns the published schema at
+`https://nikcli-ai.dev/config.json`, and nothing here has been renamed.
+
+### Execute the three statuses separately — they are not one job
+
+The ledger's 68 fields split into three groups with incomparable risk, and running them as one pass
+is how a breaking change reaches users behind a cleanup.
+
+- **17 `remove` is two jobs, not one.** The fields with _no reader at all_ — `logLevel`, `server`,
+  `teleport`, verified 2026-09-21 as having zero readers in `src` and `packages/tui` — can leave the
+  published schema without changing any behaviour, because nothing observes them. The fields that are
+  _read but superseded_ — `theme`, `keybinds`, `tui`, already migrated into `tui.json` — must keep
+  parsing so old documents still load; those get hidden from the published schema, not deleted from
+  `Config.Info`.
+- **16 `redesign` is the part with the public contract.** One PR per group, with the mapping in the
+  loader and a case added to `test/config/legacy-keys.test.ts` in the same change.
+- **5 `pending` are decisions**, not work. They cost a line each and block nothing until answered.

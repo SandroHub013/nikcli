@@ -82,10 +82,27 @@ describe("ci-validate.ts step order", () => {
     const stepsMatch = src.match(/const steps:\s*ValidationStep\[\]\s*=\s*\[([\s\S]*?)\n\]/)
     expect(stepsMatch).toBeTruthy()
     const stepNames = Array.from(stepsMatch![1].matchAll(/name:\s*"([^"]+)"/g)).map((m) => m[1])
+    // The ten gates between route coverage and the codegen drift check were
+    // added to `ci-validate.ts` without this list being updated, so it pinned
+    // a twelve-step sequence that had not existed for some time — the drift
+    // this test exists to catch, in the test itself. The placement is
+    // deliberate and worth keeping: cheap static gates run after the typecheck
+    // that makes them meaningful and before the expensive codegen, formatting
+    // and deploy-context checks.
     expect(stepNames).toEqual([
       "Install dependencies",
       "Typecheck",
       "Route coverage gate",
+      "Open-payload allowlist gate",
+      "Account-required guard gate",
+      "Observability schema gate",
+      "Plugin v2 contract gate",
+      "Workspace isolation gate",
+      "Network egress accounting gate",
+      "Flag capture-at-import gate",
+      "Perf baseline gate",
+      "Spec file-reference gate",
+      "Spec commit-reference gate",
       "Generated HTTP client drift",
       "Formatting",
       "Lint",
@@ -351,7 +368,7 @@ describe("railway-deploy job specifics", () => {
     expect(block).toContain("needs: publish")
     expect(block).toContain("needs.publish.result == 'success'")
     expect(block).toContain("github.ref == 'refs/heads/live-main'")
-    expect(block).toContain("github.repository == 'nikomatt69/nikcli'")
+    expect(block).toContain("github.repository == 'nikcli/nikcli'")
   })
 
   it("fails when RAILWAY_TOKEN is unset instead of reporting a skipped deploy as successful", async () => {

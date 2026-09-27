@@ -3,6 +3,8 @@ import { Effect } from "effect"
 import { companionResponse } from "../../src/server/companion"
 import { ServerRouter } from "../../src/server/server-router"
 import { Server } from "../../src/server/server"
+import { Auth } from "../../src/server/httpapi/auth"
+import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { SessionError } from "@/session/error"
@@ -91,6 +93,72 @@ describe("framework-neutral server router", () => {
     expect(fallbackCalled).toBe(false)
   })
 
+  it("matches loopback and tailnet origins by hostname, not by prefix", async () => {
+    const handle = ServerRouter.make({ fallback: async () => new Response("fallback") })
+    const allowedOrigin = async (origin: string) =>
+      (
+        await handle(new Request("http://nikcli.local/session", { method: "OPTIONS", headers: { origin } }))
+      ).headers.get("access-control-allow-origin")
+
+    for (const origin of [
+      "http://localhost",
+      "http://localhost:3000",
+      "http://127.0.0.1:4096",
+      "http://tailscale",
+      "http://tailscale-box:8080",
+      "tauri://localhost",
+    ]) {
+      expect(await allowedOrigin(origin)).toBe(origin)
+    }
+    // Every one of these used to pass a `startsWith` check.
+    for (const origin of [
+      "http://localhost.evil.com",
+      "http://localhost.evil.com:3000",
+      "http://127.0.0.1.nip.io",
+      "http://tailscale.evil.com",
+    ]) {
+      expect(await allowedOrigin(origin)).toBeNull()
+    }
+  })
+
+  it("serves SDK clients in-process through Server.localFetch", async () => {
+    // Plugins get exactly this client. Passing `fetch(url, init)` straight to
+    // `Server.fetch` used to drop `init`, and every call failed in transport.
+    await withIsolatedDatabase(async ({ home }) => {
+      try {
+        const client = createNikcliClient({
+          baseUrl: "http://localhost:4096",
+          directory: home,
+          fetch: Server.localFetch,
+        })
+        const result = await client.path.get()
+        expect(result.error).toBeUndefined()
+        expect(result.data?.directory).toBe(await fs.realpath(home))
+      } finally {
+        await Instance.disposeAll()
+      }
+    })
+  })
+
+  it("holds every caller to the service password, and in-process clients present it", async () => {
+    await withIsolatedDatabase(async ({ home }) => {
+      const url = `http://nikcli.local/path?directory=${encodeURIComponent(home)}`
+      Auth.useServicePassword("service-secret")
+      try {
+        expect((await Server.fetch(new Request(url))).status).toBe(401)
+        expect((await Server.fetch(new Request("http://nikcli.local/global/health"))).status).toBe(200)
+        const basic = `Basic ${btoa("nikcli:service-secret")}`
+        expect((await Server.fetch(new Request(url, { headers: { authorization: basic } }))).status).toBe(200)
+        expect((await Server.localFetch(url)).status).toBe(200)
+      } finally {
+        Auth.useServicePassword("")
+        await Instance.disposeAll()
+      }
+      expect((await Server.fetch(new Request(url))).status).toBe(200)
+      await Instance.disposeAll()
+    })
+  })
+
   it("maps framework errors to the existing redacted shape", async () => {
     const response = ServerRouter.mapError(new Error("boom"))
     expect(response.status).toBe(500)
@@ -98,19 +166,6 @@ describe("framework-neutral server router", () => {
       name: "Unknown",
       data: { message: "boom" },
     })
-  })
-
-  it("serves the framework-neutral facade through BunHttpServer", async () => {
-    const server = await Server.listenEffect({
-      port: 0,
-      hostname: "127.0.0.1",
-    })
-    try {
-      const response = await fetch(new URL("/global/health", server.url))
-      expect(response.status).toBe(200)
-    } finally {
-      await server.stop()
-    }
   })
 })
 

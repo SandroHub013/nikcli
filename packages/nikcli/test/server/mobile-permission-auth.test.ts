@@ -219,6 +219,56 @@ describe("mobile bearer authentication", () => {
     })
   })
 
+  it("refuses a guarded path the token's scope does not carry, with 403 and not 401", async () => {
+    // The enforcement half of EOT-19 requirement 9. Until 2026-09-21
+    // `MobileAuth.can` had no production call site, so a `cli-sync` token —
+    // a journal transport — could open a pty.
+    //
+    // 403 rather than 401 is the point: the token is valid and the caller is
+    // who they say. Answering 401 tells a paired device to re-authenticate,
+    // which cannot help, and is how a capability refusal turns into "the host
+    // is broken".
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const sync = await MobileAuth.create({ name: "sync transport", scope: "cli-sync" })
+        const phone = await MobileAuth.create({ name: "paired phone" })
+
+        const attempt = (token: string, pathname: string) =>
+          Auth.authenticate(
+            new Request(`http://nikcli.local${pathname}`, {
+              headers: { authorization: `Bearer ${token}` },
+            }),
+            { mobileAuthRequired: true },
+          )
+
+        const denied = await attempt(sync.token, "/mobile/pty")
+        expect(denied.ok).toBe(false)
+        expect(denied.ok === false && denied.response.status).toBe(403)
+        expect(denied.ok === false && (await denied.response.text())).toContain("pty")
+
+        // The same token on its own transport route is still fine: the guard
+        // refuses an operation, it does not revoke the token.
+        const allowed = await attempt(sync.token, "/sync/outbox")
+        expect(allowed.ok).toBe(true)
+
+        // Off the transport's routes a sync token reaches nothing — it used to
+        // reach `/mobile/session` and every other route no capability guarded.
+        for (const pathname of ["/mobile/session", "/config", "/sync/connect"]) {
+          const outside = await attempt(sync.token, pathname)
+          expect(outside.ok === false && outside.response.status).toBe(403)
+          expect(outside.ok === false && (await outside.response.text())).toContain("does not reach this route")
+        }
+
+        // And the device the capability was written for is not locked out.
+        for (const pathname of ["/mobile/pty", "/mobile/teleport", "/mobile/git/status"]) {
+          const ok = await attempt(phone.token, pathname)
+          expect(ok.ok).toBe(true)
+        }
+      },
+    })
+  })
+
   it("reads the bearer scheme case-insensitively and ignores anything else", () => {
     const bearer = (headers: Record<string, string>) =>
       MobileAuth.bearer(new Request("http://nikcli.local/mobile/session", { headers }))

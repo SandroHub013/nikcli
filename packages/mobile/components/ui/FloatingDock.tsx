@@ -1,5 +1,15 @@
-import { useState } from "react"
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View } from "react-native"
+import { useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  Animated,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Plus, Search } from "lucide-react-native"
 import { AdaptiveBlur } from "@/components/GlassView"
@@ -36,6 +46,26 @@ export function FloatingDock({
   const insets = useSafeAreaInsets()
   const press = usePressAnimation()
   const [focused, setFocused] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide"
+    const show = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height)
+    })
+    const hide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0)
+    })
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+
+  // The dock is absolute, so Android's window resize never moves it. Lift it by
+  // the keyboard height and drop the tab-bar / home-indicator gap while typing.
+  const lifted = keyboardHeight > 0
 
   return (
     <View
@@ -44,9 +74,9 @@ export function FloatingDock({
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: 0,
+        bottom: lifted ? keyboardHeight : 0,
         paddingHorizontal: 16,
-        paddingBottom: Math.max(insets.bottom, 12) + bottomInset,
+        paddingBottom: lifted ? 8 : Math.max(insets.bottom, 12) + bottomInset,
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -75,7 +105,15 @@ export function FloatingDock({
             opaqueFallbackColor={palette.surfaceRaised}
             pointerEvents="none"
           />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, minHeight: 52 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              paddingHorizontal: 16,
+              minHeight: 52,
+            }}
+          >
             <Search size={18} color={palette.muted} strokeWidth={2} />
             <TextInput
               value={searchValue}
@@ -90,7 +128,12 @@ export function FloatingDock({
               accessibilityLabel={searchPlaceholder}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              style={{ flex: 1, color: palette.ink, paddingVertical: 14, ...typeStyle(16) }}
+              style={{
+                flex: 1,
+                color: palette.ink,
+                paddingVertical: 14,
+                ...typeStyle(16),
+              }}
             />
           </View>
         </View>
@@ -132,7 +175,12 @@ export function FloatingDock({
               ) : (
                 <Plus size={18} color={contrastOn(palette.accent)} strokeWidth={2.4} />
               )}
-              <Text style={{ color: contrastOn(palette.accent), ...typeStyle(16, { weight: "600" }) }}>
+              <Text
+                style={{
+                  color: contrastOn(palette.accent),
+                  ...typeStyle(16, { weight: "600" }),
+                }}
+              >
                 {actionLabel}
               </Text>
             </View>

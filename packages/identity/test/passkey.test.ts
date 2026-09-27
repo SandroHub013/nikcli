@@ -25,9 +25,9 @@ function harness() {
   const sent: SentEmail[] = []
   const db = memoryD1()
   const env = {
-    ISSUER: "https://auth.nikcli.store",
+    ISSUER: "https://auth.nikcli-ai.dev",
     AUDIENCE: "nikcli-api",
-    EMAIL_SENDER: "auth@nikcli.store",
+    EMAIL_SENDER: "auth@nikcli-ai.dev",
     GITHUB_CLIENT_ID: "test-client",
     GITHUB_CLIENT_SECRET: "test-secret",
     STATE: fakeState(),
@@ -44,7 +44,7 @@ function harness() {
 
   const postForm = (path: string, form: Record<string, string>) =>
     fetch(
-      new Request(`https://auth.nikcli.store${path}`, {
+      new Request(`https://auth.nikcli-ai.dev${path}`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "cf-connecting-ip": "203.0.113.7" },
         body: new URLSearchParams(form).toString(),
@@ -53,18 +53,18 @@ function harness() {
 
   const postJSON = (path: string, body: Record<string, unknown>) =>
     fetch(
-      new Request(`https://auth.nikcli.store${path}`, {
+      new Request(`https://auth.nikcli-ai.dev${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.7" },
         body: JSON.stringify(body),
       }),
     )
 
-  const get = (path: string) => fetch(new Request(`https://auth.nikcli.store${path}`))
+  const get = (path: string) => fetch(new Request(`https://auth.nikcli-ai.dev${path}`))
 
   async function startDevice() {
     const response = await fetch(
-      new Request("https://auth.nikcli.store/oauth/device/code", {
+      new Request("https://auth.nikcli-ai.dev/oauth/device/code", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: "nikcli", scope: "openid profile email offline_access" }),
@@ -89,7 +89,7 @@ function codeOf(email: SentEmail): string {
 const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 
 function authorizePath() {
-  const url = new URL("https://auth.nikcli.store/authorize")
+  const url = new URL("https://auth.nikcli-ai.dev/authorize")
   url.searchParams.set("client_id", "nikcli-mobile")
   url.searchParams.set("redirect_uri", "nikcli://auth/callback")
   url.searchParams.set("response_type", "code")
@@ -152,7 +152,57 @@ describe("passkey authentication options", () => {
     const body = (await response.json()) as { challenge?: unknown; rpId?: unknown }
     expect(typeof body.challenge).toBe("string")
     expect((body.challenge as string).length).toBeGreaterThan(8)
-    expect(body.rpId).toBe("auth.nikcli.store")
+    expect(body.rpId).toBe("auth.nikcli-ai.dev")
+  })
+
+  test("asks for a passkey bound to the legacy issuer host on request", async () => {
+    const kit = fixture()
+    const page = await kit.get(authorizePath()).then((r) => r.text())
+    expect(page).toContain('id="passkey-legacy-btn" hidden')
+    const response = await kit.postJSON("/login/passkey/authentication/options", {
+      login_state: loginStateOf(page),
+      legacy: true,
+    })
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { rpId?: unknown }).rpId).toBe("auth.nikcli.store")
+  })
+})
+
+describe("legacy issuer host", () => {
+  test("names the current origin as related for WebAuthn", async () => {
+    const kit = fixture()
+    const served = await app.fetch(new Request("https://auth.nikcli.store/.well-known/webauthn"), kit.env)
+    expect(served.status).toBe(200)
+    expect((await served.json()) as unknown).toEqual({ origins: ["https://auth.nikcli-ai.dev"] })
+  })
+
+  test("sends browser pages to the current issuer host", async () => {
+    const kit = fixture()
+    const response = await app.fetch(new Request(`https://auth.nikcli.store${authorizePath()}`), kit.env)
+    expect(response.status).toBe(308)
+    expect(response.headers.get("location")).toBe(`https://auth.nikcli-ai.dev${authorizePath()}`)
+  })
+
+  test("keeps serving the endpoints installed clients call directly", async () => {
+    const kit = fixture()
+    const discovery = await app.fetch(
+      new Request("https://auth.nikcli.store/.well-known/oauth-authorization-server"),
+      kit.env,
+    )
+    expect(discovery.status).toBe(200)
+    expect(((await discovery.json()) as { issuer: string }).issuer).toBe("https://auth.nikcli-ai.dev")
+
+    const refresh = await app.fetch(
+      new Request("https://auth.nikcli.store/oauth/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "unknown", client_id: "nikcli" }),
+      }),
+      kit.env,
+    )
+    // Reaches the token endpoint (rejects the unknown token) instead of redirecting.
+    expect(refresh.status).toBe(400)
+    expect(((await refresh.json()) as { error: string }).error).toBe("invalid_grant")
   })
 })
 
@@ -287,6 +337,66 @@ describe("passkey enrollment edge cases", () => {
     const options = await kit.postJSON("/login/passkey/registration/options", { login_state: loginState })
     expect(options.status).toBe(400)
     expect(((await options.json()) as { error_description?: string }).error_description).toMatch(/not available/i)
+  })
+})
+
+describe("passkey offer across the issuer move", () => {
+  async function emailSignIn(kit: ReturnType<typeof fixture>) {
+    const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+    await kit.postForm("/login/email/request", { login_state: loginState, email: "user@example.com" })
+    const response = await kit.postForm("/login/email/verify", {
+      login_state: loginState,
+      code: codeOf(kit.sent.at(-1)!),
+    })
+    return { loginState, response }
+  }
+
+  async function savePasskey(kit: ReturnType<typeof fixture>, credentialID: string, rpID: string | null) {
+    const account = await kit.db
+      .prepare("SELECT id FROM accounts WHERE email = ?")
+      .bind("user@example.com")
+      .first<{ id: string }>()
+    await kit.db
+      .prepare(
+        "INSERT INTO passkeys (id, account_id, credential_id, public_key, user_handle, created_at, rp_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(`pk_${credentialID}`, account!.id, credentialID, "key", account!.id, Date.now(), rpID)
+      .run()
+  }
+
+  test("still offers a passkey to an account that only has one from the legacy host", async () => {
+    const kit = fixture()
+    const first = await emailSignIn(kit)
+    expect(await first.response.text()).toContain("Save a passkey")
+    await kit.postForm("/login/passkey/skip", { login_state: first.loginState })
+
+    await savePasskey(kit, "legacy-cred", null)
+    const second = await emailSignIn(kit)
+    expect(second.response.status).toBe(200)
+    expect(await second.response.text()).toContain("Save a passkey")
+  })
+
+  test("completes without an offer once the account has a passkey for the current host", async () => {
+    const kit = fixture()
+    const first = await emailSignIn(kit)
+    await kit.postForm("/login/passkey/skip", { login_state: first.loginState })
+
+    await savePasskey(kit, "current-cred", "auth.nikcli-ai.dev")
+    const second = await emailSignIn(kit)
+    expect(second.response.status).toBe(302)
+    expect(second.response.headers.get("location")).toStartWith("nikcli://auth/callback?")
+  })
+
+  test("serves a stored offer and answers a missing one like a stale sign-in", async () => {
+    const kit = fixture()
+    const { loginState } = await emailSignIn(kit)
+    const offered = await kit.get(`/login/passkey/offer?login_state=${encodeURIComponent(loginState)}`)
+    expect(offered.status).toBe(200)
+    expect(await offered.text()).toContain("Save a passkey")
+
+    const missing = await kit.get("/login/passkey/offer?login_state=never-issued")
+    expect(missing.status).toBe(400)
+    expect(await missing.text()).toContain("Session expired")
   })
 })
 

@@ -5,9 +5,7 @@ import { bunUtils, onMemoryPressure } from "@/bun"
 import { Installation } from "@/installation"
 import { Project } from "@/project/project"
 import { Workspace } from "@/workspace"
-import { BunHttpServer } from "@effect/platform-bun"
-import { Effect, Layer, ManagedRuntime } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Effect } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
 import { Log } from "@nikcli-ai/util/log"
 import { HttpApiBridge } from "./httpapi/bridge"
@@ -16,6 +14,8 @@ import { PublicApi } from "./httpapi/public"
 import { MDNS } from "./mdns"
 import { PublicRoutes } from "./public"
 import { ServerRouter } from "./server-router"
+import { Auth } from "./httpapi/auth"
+import { BackgroundService } from "@/service/service"
 import { ServerWebSocket, type WebSocketData } from "./websocket"
 
 // @ts-ignore This global prevents ai-sdk warnings from corrupting stdout.
@@ -27,6 +27,13 @@ export namespace Server {
   let memoryPressureBound = false
 
   let _url: URL | undefined
+  /**
+   * The LAN pairing listener's default port, one above the engine's 4096 so the
+   * two never contend. Fixed on purpose: it is the port that ends up in the
+   * pairing QR and in the firewall rule the user writes for it.
+   */
+  export const MOBILE_PORT = 4097
+
   let _corsWhitelist: string[] = []
   let _listenHostname: string | undefined
   let _mobileAuthRequired = false
@@ -63,6 +70,29 @@ export namespace Server {
   export function fetch(request: Request): Promise<Response> {
     return pipeline()(request)
   }
+
+  /**
+   * `fetch(input, init)` served in-process, for SDK clients inside this process.
+   *
+   * The SDK calls `fetch(url, init)`; `fetch` above takes one Request, and
+   * passing the arguments straight through dropped `init` and handed the router
+   * a bare URL. The request still crosses the router, so it presents the
+   * credentials this server requires, by the same rule as every other client
+   * (`BackgroundService.withCredentials`).
+   */
+  export const localFetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init)
+      const authorization = Auth.authorizationHeader()
+      if (!authorization) return pipeline()(request)
+      const target = new URL(request.url)
+      BackgroundService.withCredentials(target, request.headers, authorization)
+      // Rebuilt only when a bearer moved into `?token=`; copying the request
+      // keeps its body and its abort signal.
+      return pipeline()(target.href === request.url ? request : new Request(target, request))
+    },
+    { preconnect: () => undefined },
+  )
 
   export function openapi() {
     return Promise.resolve(OpenApi.fromApi(PublicApi))
@@ -221,14 +251,32 @@ export namespace Server {
       listenHostname: hostname,
       mobileAuthRequired: true,
     })
-    const server = Bun.serve<WebSocketData>({
+    const args = {
       hostname,
-      port: opts.port ?? 0,
       idleTimeout: 0,
       maxRequestBodySize: Flag.NIKCLI_SERVER_MAX_BODY ?? 2 * 1024 * 1024 * 1024,
       fetch: (request: Request, bound: Bun.Server<WebSocketData>) => handler(request, bound),
       websocket: ServerWebSocket.handlers,
-    })
+    }
+    const tryServe = (candidate: number) => {
+      try {
+        return Bun.serve<WebSocketData>({ ...args, port: candidate })
+      } catch {
+        return undefined
+      }
+    }
+    // An ephemeral port meant the pairing QR carried a different port on every
+    // restart, so the firewall rule the user had just written for it stopped
+    // matching and the saved server URL in the app went stale. Prefer a fixed
+    // one — and still fall back rather than fail, because a listener on an
+    // unexpected port can at least be paired with, while none cannot.
+    const wanted = opts.port ?? MOBILE_PORT
+    let server = tryServe(wanted)
+    if (!server) {
+      log.warn(`port ${wanted} is in use; the pairing link will carry an ephemeral port`, { hostname })
+      server = tryServe(0)
+    }
+    if (!server) throw new Error(`Failed to start the mobile listener on port ${wanted}`)
     const port = server.port
     if (!port) {
       void server.stop(true)
@@ -242,44 +290,6 @@ export namespace Server {
     mobileListener = listener
     log.info("mobile listener started", listener)
     return listener
-  }
-
-  export async function listenEffect(opts: {
-    port: number
-    hostname: string
-    cors?: string[]
-    mobileAuthRequired?: boolean
-  }) {
-    _corsWhitelist = opts.cors ?? []
-    _listenHostname = opts.hostname
-    _mobileAuthRequired = opts.mobileAuthRequired ?? false
-    requestHandler = undefined
-
-    const serverLayer = BunHttpServer.layer({
-      hostname: opts.hostname,
-      port: opts.port,
-      idleTimeout: 0,
-      maxRequestBodySize: Flag.NIKCLI_SERVER_MAX_BODY ?? 2 * 1024 * 1024 * 1024,
-      gracefulShutdownTimeout: STOP_DRAIN_MS,
-    })
-    const app = Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest
-      return HttpServerResponse.fromWeb(yield* Effect.promise(() => fetch(request.source as Request)))
-    })
-    const runtime = ManagedRuntime.make(HttpServer.serve(app).pipe(Layer.provideMerge(serverLayer)))
-    const server = await runtime.runPromise(
-      Effect.gen(function* () {
-        return yield* HttpServer.HttpServer
-      }),
-    )
-    if (server.address._tag !== "TcpAddress") throw new Error("BunHttpServer did not bind a TCP address")
-    _url = new URL(`http://${server.address.hostname}:${server.address.port}`)
-    return {
-      hostname: server.address.hostname,
-      port: server.address.port,
-      url: _url,
-      stop: async () => runtime.dispose(),
-    }
   }
 
   export async function ready(server: ReturnType<typeof listen>, timeoutMs = 5000) {

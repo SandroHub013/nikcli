@@ -50,7 +50,10 @@ function parseResults(matches: SearchMatch[]): SearchResult[] {
         file: currentFile,
         line: m.data.line_number,
         text: m.data.lines.text.replace(/\n$/, ""),
-        submatches: (m.data.submatches ?? []).map((s) => ({ start: s.start, end: s.end })),
+        submatches: (m.data.submatches ?? []).map((s) => ({
+          start: s.start,
+          end: s.end,
+        })),
       })
     }
   }
@@ -72,7 +75,12 @@ function HighlightedLine({ result, color, matchColor }: { result: SearchResult; 
     return (
       <Text
         numberOfLines={2}
-        style={{ fontSize: 12, lineHeight: 18, color, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" }}
+        style={{
+          fontSize: 12,
+          lineHeight: 18,
+          color,
+          fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+        }}
       >
         {result.text.trimStart()}
       </Text>
@@ -82,8 +90,15 @@ function HighlightedLine({ result, color, matchColor }: { result: SearchResult; 
   const segments: Array<{ text: string; matched: boolean }> = []
   let cursor = 0
   for (const match of result.submatches) {
-    if (match.start > cursor) segments.push({ text: result.text.slice(cursor, match.start), matched: false })
-    segments.push({ text: result.text.slice(match.start, match.end), matched: true })
+    if (match.start > cursor)
+      segments.push({
+        text: result.text.slice(cursor, match.start),
+        matched: false,
+      })
+    segments.push({
+      text: result.text.slice(match.start, match.end),
+      matched: true,
+    })
     cursor = match.end
   }
   if (cursor < result.text.length) segments.push({ text: result.text.slice(cursor), matched: false })
@@ -91,14 +106,23 @@ function HighlightedLine({ result, color, matchColor }: { result: SearchResult; 
   return (
     <Text
       numberOfLines={2}
-      style={{ fontSize: 12, lineHeight: 18, color, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" }}
+      style={{
+        fontSize: 12,
+        lineHeight: 18,
+        color,
+        fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      }}
     >
       {segments.map((segment, index) => (
         <Text
           key={`${index}:${segment.text}`}
           style={
             segment.matched
-              ? { color: matchColor, fontWeight: "800", backgroundColor: "rgba(20,20,19,0.14)" }
+              ? {
+                  color: matchColor,
+                  fontWeight: "800",
+                  backgroundColor: "rgba(20,20,19,0.14)",
+                }
               : undefined
           }
         >
@@ -139,8 +163,16 @@ function AnimatedResult({ index, children }: { index: number; children: React.Re
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(opacity, { toValue: 1, ...SPRING_CONFIG, delay: index * 30 }),
-      Animated.spring(translateY, { toValue: 0, ...SPRING_CONFIG, delay: index * 30 }),
+      Animated.spring(opacity, {
+        toValue: 1,
+        ...SPRING_CONFIG,
+        delay: index * 30,
+      }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        ...SPRING_CONFIG,
+        delay: index * 30,
+      }),
     ]).start()
   }, [index, opacity, translateY])
 
@@ -192,12 +224,28 @@ function SearchResultRow({
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: palette.ink, fontWeight: "700" }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  color: palette.ink,
+                  fontWeight: "700",
+                }}
+              >
                 {fileName(result.file)}
               </Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                 <Hash size={10} color={palette.muted} strokeWidth={2.2} />
-                <Text style={{ fontSize: 11, color: palette.muted, fontWeight: "700" }}>{result.line}</Text>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: palette.muted,
+                    fontWeight: "700",
+                  }}
+                >
+                  {result.line}
+                </Text>
               </View>
             </View>
             <Text numberOfLines={1} style={{ fontSize: 11, color: palette.muted }}>
@@ -247,7 +295,11 @@ export function FileSearchSheet(props: {
         sheetScale.setValue(1)
       } else {
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 180,
+            useNativeDriver: true,
+          }),
           Animated.spring(translateY, { toValue: 0, ...SPRING_SETTLE }),
           Animated.spring(sheetScale, { toValue: 1, ...SPRING_SETTLE }),
         ]).start()
@@ -352,13 +404,18 @@ export function FileSearchSheet(props: {
   return (
     <Modal visible transparent animationType="none" onRequestClose={props.onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1, justifyContent: "flex-end" }}
       >
         {/* Animated backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={props.onClose}>
-            <View style={{ flex: 1, backgroundColor: isDark ? "rgba(0,0,0,0.65)" : "rgba(20,20,19,0.20)" }} />
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: isDark ? "rgba(0,0,0,0.65)" : "rgba(20,20,19,0.20)",
+              }}
+            />
           </Pressable>
         </Animated.View>
 
@@ -393,7 +450,12 @@ export function FileSearchSheet(props: {
                 fallbackColor={hexToRgba(palette.surface, isDark ? 0.85 : 0.82)}
               />
               <View
-                style={[StyleSheet.absoluteFill, { backgroundColor: hexToRgba(palette.surface, isDark ? 0.58 : 0.52) }]}
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: hexToRgba(palette.surface, isDark ? 0.58 : 0.52),
+                  },
+                ]}
               />
             </View>
 
@@ -409,10 +471,31 @@ export function FileSearchSheet(props: {
               />
             </View>
 
-            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <View
+              style={{
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                paddingBottom: 10,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontSize: 17, fontWeight: "700", color: palette.ink }}>Search workspace</Text>
+                  <Text
+                    style={{
+                      fontSize: 17,
+                      fontWeight: "700",
+                      color: palette.ink,
+                    }}
+                  >
+                    Search workspace
+                  </Text>
                   <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 12, color: palette.soft }}>
                     Jump to a matching file and line in the active host workspace.
                   </Text>
@@ -557,7 +640,15 @@ export function FileSearchSheet(props: {
                     Recent searches
                   </Text>
                   <Pressable onPress={clearRecent} hitSlop={8} style={{ marginLeft: "auto" }}>
-                    <Text style={{ fontSize: 12, color: palette.accentLight, fontWeight: "500" }}>Clear</Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: palette.accentLight,
+                        fontWeight: "500",
+                      }}
+                    >
+                      Clear
+                    </Text>
                   </Pressable>
                 </View>
                 {recentSearches.map((search, index) => (

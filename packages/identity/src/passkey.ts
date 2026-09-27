@@ -11,11 +11,16 @@ import type {
 } from "@simplewebauthn/server"
 import { isoBase64URL } from "@simplewebauthn/server/helpers"
 import type { Context } from "hono"
-import { PASSKEY_AUTH_LIMIT, PASSKEY_AUTH_WINDOW_SECONDS, PASSKEY_CHALLENGE_TTL_SECONDS } from "./constants"
+import {
+  legacyIssuerHost,
+  PASSKEY_AUTH_LIMIT,
+  PASSKEY_AUTH_WINDOW_SECONDS,
+  PASSKEY_CHALLENGE_TTL_SECONDS,
+} from "./constants"
 import { createID } from "./crypto"
 import { getAccount, getPasskeyByCredentialID, insertPasskey, listPasskeys, updatePasskeyCounter } from "./database"
 import { HttpError, readForm, readJson, requestIP } from "./http"
-import { completeLogin, finalizeLogin, loadLoginIntent } from "./login"
+import { completeLogin, finalizeLogin, hasCurrentPasskey, loadLoginIntent, storePasskeyOffer } from "./login"
 import { consumeRateLimit } from "./rate-limit"
 import type { PasskeyOffer, PasskeyRow } from "./types"
 
@@ -43,10 +48,14 @@ function offerKey(loginState: string): string {
   return `passkey-offer:${loginState}`
 }
 
-function relyingParty(env: Env): { rpID: string; rpName: string; expectedOrigin: string } {
+function relyingParty(env: Env): { rpID: string; legacyRPID?: string; rpName: string; expectedOrigin: string } {
   const issuer = new URL(env.ISSUER)
   return {
     rpID: issuer.hostname,
+    // Passkeys created before the issuer moved hosts. New ones are always
+    // registered under `rpID`; these can only be asserted, via Related Origin
+    // Requests (`/.well-known/webauthn` on the legacy host).
+    legacyRPID: legacyIssuerHost(env.ISSUER),
     rpName: "nikcli",
     expectedOrigin: issuer.origin,
   }
@@ -125,11 +134,13 @@ function webAuthnCredential(row: PasskeyRow) {
 
 export async function passkeyAuthenticationOptions(c: AppContext): Promise<Response> {
   await consumePasskeyAuthLimit(c)
-  const loginState = requireLoginState(await readJson(c.req.raw))
+  const body = await readJson(c.req.raw)
+  const loginState = requireLoginState(body)
   await requireIntent(c, loginState)
-  const { rpID } = relyingParty(c.env)
+  const { rpID, legacyRPID } = relyingParty(c.env)
+  if (body.legacy === true && !legacyRPID) throw new HttpError(400, "No legacy passkey domain")
   const options = await generateAuthenticationOptions({
-    rpID,
+    rpID: body.legacy === true ? legacyRPID! : rpID,
     userVerification: "preferred",
     allowCredentials: [],
   })
@@ -152,20 +163,22 @@ export async function passkeyAuthenticationVerify(c: AppContext): Promise<Respon
   const passkey = await getPasskeyByCredentialID(c.env.DB, response.id)
   if (!passkey) throw new HttpError(400, "Unknown passkey")
 
-  const { rpID, expectedOrigin } = relyingParty(c.env)
+  const { rpID, legacyRPID, expectedOrigin } = relyingParty(c.env)
   let verified = false
   let newCounter = passkey.sign_count
+  let assertedRPID = rpID
   try {
     const result = await verifyAuthenticationResponse({
       response,
       expectedChallenge: challenge,
       expectedOrigin,
-      expectedRPID: rpID,
+      expectedRPID: legacyRPID ? [rpID, legacyRPID] : rpID,
       credential: webAuthnCredential(passkey),
       requireUserVerification: false,
     })
     verified = result.verified
     newCounter = result.authenticationInfo.newCounter
+    assertedRPID = result.authenticationInfo.rpID
   } catch {
     throw new HttpError(400, "Passkey verification failed")
   }
@@ -179,6 +192,13 @@ export async function passkeyAuthenticationVerify(c: AppContext): Promise<Respon
   if (!owner || owner.disabled_at !== null) throw new HttpError(400, "Passkey verification failed")
 
   await updatePasskeyCounter(c.env.DB, passkey.credential_id, newCounter, Date.now())
+  // Signed in with a passkey bound to the legacy host: offer one for this host
+  // before finishing, so the account stops depending on Related Origin Requests
+  // (and on the old host staying attached) the next time.
+  if (legacyRPID && assertedRPID === legacyRPID && !(await hasCurrentPasskey(c.env, passkey.account_id))) {
+    await storePasskeyOffer(c.env, loginState, passkey.account_id)
+    return c.json({ offer: true })
+  }
   return loginResultJson(c, await finalizeLogin(c, loginState, passkey.account_id))
 }
 
@@ -262,6 +282,7 @@ export async function passkeyRegistrationVerify(c: AppContext): Promise<Response
       user_handle: offer.accountID,
       created_at: now,
       last_used_at: null,
+      rp_id: rpID,
     })
     // Already registered to somebody else. Signing in here would hand this
     // session a passkey that authenticates as a different account, so the

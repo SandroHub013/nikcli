@@ -93,6 +93,7 @@ export namespace PublicHttpApi {
   const PermissionHandlersLive = HttpApiBuilder.group(Api, "permission", (handlers) =>
     handlers
       .handle("list", () => PermissionHttpApi.handlers.list())
+      .handle("blocked", () => PermissionHttpApi.handlers.blocked())
       .handle("reply", (request) => PermissionHttpApi.handlers.reply(request)),
   )
 
@@ -365,6 +366,7 @@ export namespace PublicHttpApi {
       .handle("backgroundInspect", (request) => SessionHttpApi.handlers.backgroundInspect(request))
       .handle("backgroundRead", (request) => SessionHttpApi.handlers.backgroundRead(request))
       .handle("backgroundCancel", (request) => SessionHttpApi.handlers.backgroundCancel(request))
+      .handle("backgroundResume", (request) => SessionHttpApi.handlers.backgroundResume(request))
       .handle("monitor", (request) => SessionHttpApi.handlers.monitor(request))
       .handle("monitorLog", (request) => SessionHttpApi.handlers.monitorLog(request))
       .handle("monitorCancel", (request) => SessionHttpApi.handlers.monitorCancel(request)),

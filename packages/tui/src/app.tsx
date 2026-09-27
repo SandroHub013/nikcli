@@ -300,7 +300,7 @@ export function tui(input: {
 }
 
 function LegacyRedirect(props: {
-  tab: "tree" | "changes" | "graph" | "github"
+  tab: "tree" | "changes" | "graph" | "github" | "actions"
   sessionID?: string
   workspaceID?: string
 }) {
@@ -512,21 +512,25 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
     void (async () => {
       // Drive instances use an injected local provider and must not depend on
       // interactive account/onboarding state from the host machine.
+      //
+      // The session is asked for now, alongside `hasUsers`, and nothing before
+      // the plugins waits for it: onboarding never read it. Answering it can
+      // mean renewing and verifying the issuer token over the network — a
+      // second or more on every launch after the token's quarter hour — and a
+      // returning user's plugins, config and prompt have no use for the answer.
+      // What it decides (the sign-in dialog) is applied once they are up.
+      let returningAccount: Promise<Awaited<ReturnType<typeof UserApi.session>>> | undefined
       if (!process.env.NIKCLI_DRIVE) {
         // Account state comes from `/user/*` — the transport is up by now, as
         // the `sdk.client.tui.config` call a few lines below has always relied on.
+        const accountRequest = UserApi.session(sdk)
+        // A first run never awaits it; a returning one does, below, and sees any failure there.
+        accountRequest.catch(() => {})
 
         // `null` means the question could not be asked. Treating that as "no
         // users" would restart onboarding for someone who already has an
         // account, so only an explicit `false` counts as first run.
         const isFirstRun = (await UserApi.hasUsers(sdk)) === false
-
-        // Three answers, and only one of them is a reason to interrupt. The
-        // server is asked whether this machine holds a session; while it is
-        // still booting — or being restarted by an auto-update — it cannot
-        // answer, and reading that silence as "signed out" is what put the
-        // sign-in dialog in front of someone who had never signed out.
-        const account = await UserApi.session(sdk)
 
         if (isFirstRun && !kv.get("onboarding_complete", false)) {
           // First-time user: unified onboarding handles account creation + provider setup
@@ -561,13 +565,8 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
               variant: "error",
             })
           }
-        } else if (account.status === "signed-out") {
-          // Returning user with no active session: standard login
-          await DialogLogin.run(dialog, sdk)
-        } else if (account.status === "unknown") {
-          log.warn("could not read the account session at startup; not prompting", {
-            service: "tui.account",
-          })
+        } else {
+          returningAccount = accountRequest
         }
       }
 
@@ -620,6 +619,21 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
         bindings: [{ key: "sync_view", cmd: "sync.open" }],
       })
       setPluginsReady(true)
+
+      // Three answers, and only one of them is a reason to interrupt. The
+      // server is asked whether this machine holds a session; while it is
+      // still booting — or being restarted by an auto-update — it cannot
+      // answer, and reading that silence as "signed out" is what put the
+      // sign-in dialog in front of someone who had never signed out.
+      const account = await returningAccount
+      if (account?.status === "signed-out") {
+        // Returning user with no active session: standard login
+        await DialogLogin.run(dialog, sdk)
+      } else if (account?.status === "unknown") {
+        log.warn("could not read the account session at startup; not prompting", {
+          service: "tui.account",
+        })
+      }
     })().catch((error) => {
       dbgApp("init chain error", String(error))
       setOnboardingActive(false)
@@ -801,7 +815,7 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       category: "Support",
       slash: { name: "docs" },
       onSelect: () => {
-        openExternal("https://nikcli.store/docs")
+        openExternal("https://nikcli-ai.dev/docs")
       },
     },
     {
@@ -883,7 +897,7 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       },
     },
     {
-      title: "Workspace panel (sessions · changes · graph · github)",
+      title: "Workspace panel (sessions · changes · graph · github · actions)",
       value: "workspace.open",
       category: "Git",
       suggested: true,
@@ -975,6 +989,25 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
         route.navigate({
           type: "workspace",
           tab: "github",
+          sessionID,
+          workspaceID: sessionID
+            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            : route.data.workspaceID,
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Open CI actions tab",
+      value: "workspace.tab.actions",
+      category: "Git",
+      hidden: true,
+      slash: { name: "actions", aliases: ["ci", "workflows"] },
+      onSelect: () => {
+        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        route.navigate({
+          type: "workspace",
+          tab: "actions",
           sessionID,
           workspaceID: sessionID
             ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
@@ -1377,7 +1410,7 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://nikcli.store/docs").catch(() => {})
+        open("https://nikcli-ai.dev/docs").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -1476,7 +1509,7 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
             DialogAlert.show(
               dialog,
               "Warning",
-              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Nikcli Zen\nhttps://nikcli.ai/zen",
+              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Nikcli Zen\nhttps://nikcli-ai.dev/zen",
             ).then(() => kv.set("openrouter_warning", true))
           })
         }
@@ -1565,6 +1598,13 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
           duration: 5000,
         })
       }),
+      sdk.event.on("permission.blocked", (evt) => {
+        toast.show({
+          message: `${evt.properties.permission} denied by auto mode · [${evt.properties.rule}] · ${keybind.print("permission_mode")} to review`,
+          variant: "warning",
+          duration: 5000,
+        })
+      }),
       sdk.event.on("permission.asked", () => {
         const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
         if (tuiCfg?.sound === false) return
@@ -1638,6 +1678,9 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
           </Match>
           <Match when={route.data.type === "github" && route.data}>
             {(data) => <LegacyRedirect tab="github" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+          </Match>
+          <Match when={route.data.type === "actions" && route.data}>
+            {(data) => <LegacyRedirect tab="actions" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
           </Match>
           <Match when={route.data.type === "workspace"}>
             <Workspace />

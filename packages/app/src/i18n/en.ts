@@ -144,7 +144,7 @@ export const dict = {
   "provider.connect.nikcliZen.line2":
     "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
   "provider.connect.nikcliZen.visit.prefix": "Visit ",
-  "provider.connect.nikcliZen.visit.link": "nikcli.ai/zen",
+  "provider.connect.nikcliZen.visit.link": "nikcli-ai.dev/zen",
   "provider.connect.nikcliZen.visit.suffix": " to collect your API key.",
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
@@ -299,6 +299,9 @@ export const dict = {
   "prompt.permissions.approveForMe.title": "Approve for me",
   "prompt.permissions.approveForMe.description":
     "Ask for shell commands, internet access, external files, and sensitive reads.",
+  "prompt.permissions.auto.title": "Auto",
+  "prompt.permissions.auto.description":
+    "A classifier reviews risky actions instead of asking you. Denials and explicit asks still apply.",
   "prompt.permissions.fullAccess.title": "Full access",
   "prompt.permissions.fullAccess.description": "Allow tool actions without approval prompts.",
   "prompt.permissions.custom.title": "Custom",

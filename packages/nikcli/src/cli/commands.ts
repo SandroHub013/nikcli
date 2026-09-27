@@ -91,6 +91,36 @@ const SpecMcp = Spec.make("mcp", {
   commands: [SpecMcpAdd, SpecMcpList, SpecMcpAuth, SpecMcpLogout, SpecMcpDebug],
 })
 
+const SpecAutoModeDefaults = Spec.make("defaults", {
+  description: "print the built-in auto mode classifier rules as JSON",
+  params: {
+    label: Flag.string("label").pipe(
+      Flag.withDescription("only print rules whose label starts with this (case-insensitive)"),
+      Flag.optional,
+    ),
+  },
+})
+
+const SpecAutoModeConfig = Spec.make("config", {
+  description: "print the classifier rules auto mode actually uses, with your settings applied",
+})
+
+const SpecAutoModeCritique = Spec.make("critique", {
+  description: "get AI feedback on your custom auto mode rules",
+})
+
+const SpecAutoModeReset = Spec.make("reset", {
+  description: "remove your auto mode settings and return to the built-in rules",
+  params: {
+    yes: Flag.boolean("yes").pipe(Flag.withDescription("skip the confirmation"), Flag.withDefault(false)),
+  },
+})
+
+const SpecAutoMode = Spec.make("auto-mode", {
+  description: "inspect and manage the auto mode classifier rules",
+  commands: [SpecAutoModeDefaults, SpecAutoModeConfig, SpecAutoModeCritique, SpecAutoModeReset],
+})
+
 const SpecAdsCreate = Spec.make("create", {
   description: "create a new ad",
   params: {
@@ -535,7 +565,7 @@ const SpecArtifactList = Spec.make("list", {
 })
 
 const SpecArtifact = Spec.make("artifact", {
-  description: "manage published artifacts (nikcli.store/artifact)",
+  description: "manage published artifacts (nikcli-ai.dev/artifact)",
   commands: [SpecArtifactLogin, SpecArtifactLogout, SpecArtifactList],
 })
 
@@ -705,6 +735,13 @@ const SpecServiceUnset = Spec.make("unset", {
   },
 })
 
+const SpecServicePassword = Spec.make("password", {
+  description: "print the service password (username nikcli), or replace it and stop the running service",
+  params: {
+    value: Argument.string("value").pipe(Argument.withDescription("the new password"), Argument.optional),
+  },
+})
+
 const SpecService = Spec.make("service", {
   description: "manage the shared background nikcli service",
   commands: [
@@ -715,6 +752,7 @@ const SpecService = Spec.make("service", {
     SpecServiceGet,
     SpecServiceSet,
     SpecServiceUnset,
+    SpecServicePassword,
   ],
 })
 
@@ -1417,7 +1455,7 @@ const SpecSyncToken = Spec.make("token", {
 })
 
 const SpecSync = Spec.make("sync", {
-  description: "manage optional remote hub sync (e.g. https://s.nikcli.store)",
+  description: "manage optional remote hub sync (e.g. https://s.nikcli-ai.dev)",
   commands: [SpecSyncStatus, SpecSyncConnect, SpecSyncDisconnect, SpecSyncToken],
 })
 
@@ -1523,6 +1561,7 @@ export const Commands = Spec.make("nikcli", {
     SpecGenerate,
     SpecAcp,
     SpecMcp,
+    SpecAutoMode,
     SpecAds,
     SpecRun,
     SpecGoal,

@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -173,6 +174,7 @@ export function SessionComposer({
   const showModelControl = windowWidth >= 375
   const inputRef = useRef<TextInput>(null)
   const [isFocused, setIsFocused] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [drawerVisible, setDrawerVisible] = useState(false)
   const [activeTab, setActiveTab] = useState<ComposerTab>("tools")
 
@@ -398,11 +400,31 @@ export function SessionComposer({
     [],
   )
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return
+    const show = Keyboard.addListener("keyboardDidShow", (event) => {
+      setKeyboardHeight(event.endCoordinates.height)
+    })
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0)
+    })
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+
+  // Edge-to-edge Android does not shrink the JS window for the IME, and this
+  // screen opts KeyboardAvoidingView out on Android. Lift the composer and drop
+  // the gesture-nav inset so the caret is not left in the dead band under the keyboard.
+  const keyboardOpen = Platform.OS === "android" && keyboardHeight > 0
+
   return (
     <View
       style={{
         backgroundColor: isDark ? palette.surface : palette.background,
-        paddingBottom: Math.max(insets.bottom, 10),
+        paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 10),
+        marginBottom: keyboardOpen ? keyboardHeight : 0,
       }}
     >
       {/* Top hairline separator — intentionally transparent */}

@@ -190,7 +190,7 @@ export async function createMenu(trigger: (id: string) => void) {
         text: t("desktop.menu.help"),
         items: [
           await MenuItem.new({
-            action: () => openUrl("https://nikcli.ai/docs"),
+            action: () => openUrl("https://nikcli-ai.dev/docs"),
             text: t("desktop.menu.documentation"),
           }),
           await MenuItem.new({
@@ -201,11 +201,11 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Separator",
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/nikomatt69/nikcli/issues/new?template=feature_request.yml"),
+            action: () => openUrl("https://github.com/nikcli/nikcli/issues/new?template=feature_request.yml"),
             text: t("desktop.menu.shareFeedback"),
           }),
           await MenuItem.new({
-            action: () => openUrl("https://github.com/nikomatt69/nikcli/issues/new?template=bug_report.yml"),
+            action: () => openUrl("https://github.com/nikcli/nikcli/issues/new?template=bug_report.yml"),
             text: t("desktop.menu.reportBug"),
           }),
         ],

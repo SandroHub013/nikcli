@@ -68,8 +68,8 @@ function shouldSkip(): { skip: boolean; reason: string } {
     return { skip: true, reason: "Missing MINIMAX_API_KEY secret" }
   }
 
-  // Only run on nikomatt69/nikcli
-  if (REPO !== "nikomatt69/nikcli") {
+  // Only run on the nikcli repo (moved from nikomatt69/nikcli to nikcli/nikcli)
+  if (REPO !== "nikomatt69/nikcli" && REPO !== "nikcli/nikcli") {
     return { skip: true, reason: `Wrong repository: ${REPO}` }
   }
 
@@ -114,7 +114,7 @@ async function main() {
 
   // Step 2: Install nikcli
   console.log("▸ Installing nikcli...")
-  const installProc = Bun.spawn(["bash", "-c", "curl -fsSL https://nikcli.store/install | bash"], {
+  const installProc = Bun.spawn(["bash", "-c", "curl -fsSL https://nikcli-ai.dev/install | bash"], {
     stdout: "pipe",
     stderr: "pipe",
     env: { ...process.env, TERM: "dumb" },
