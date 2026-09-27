@@ -304,6 +304,32 @@ describe("the gateways' controller", () => {
     expect(none.sent[0]!.text).toBe(t("gateway.noProject"))
   })
 
+  test("/nuova during a turn is not undone when the turn ends (review area 2)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const sessions = memorySessionStore()
+    const data = new Map<string, string>()
+    const threads = createGatewayThreads({
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => void data.set(key, value),
+      removeItem: (key) => void data.delete(key),
+    })
+    const key = sessionKey(BOT.path, "telegram", "c42")
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions, threads })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    b.emit("/nuova")
+    await until("nuova conversazione", () => b.sent.some((sent) => sent.text === t("gateway.fresh")))
+    turns.started[0]!.finish({
+      text: "ecco",
+      sessionId: "s-vecchia",
+      talk: { ...emptyTalk(), messages: [{ id: "m1", role: "assistant", text: "ecco", at: 1 }], sessionId: "s-vecchia" },
+    })
+    await until("la risposta", () => b.sent.some((sent) => sent.text === "ecco"))
+    expect(sessions.get(key)).toBeUndefined()
+    expect(data.has(gatewayThreadKey(BOT.path, "telegram", "c42"))).toBe(false)
+  })
+
   test("a conversation saved in another project, or on another CLI, is not continued", async () => {
     const key = sessionKey(BOT.path, "telegram", "c42")
     for (const saved of [
