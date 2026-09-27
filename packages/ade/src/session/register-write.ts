@@ -37,6 +37,10 @@ export interface RegisterWriteDeps {
   now: () => Date
   /** The sender pane's title: the event's `by`. */
   sender: string
+  /** The sender pane's id: the answer goes back to it. */
+  fromPane?: string
+  /** The sender pane's agent (`claude-code`, `agy`…). */
+  agent?: string
 }
 
 export interface RegisterMessage {
@@ -56,10 +60,12 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
   }
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) return "errore: il json non è un oggetto"
   const record: Record<string, unknown> = { ...(fields as Record<string, unknown>) }
-  // ADE says when and who: whatever the JSON says about it is ignored.
+  // ADE says when and who, and from which pane: whatever the JSON says about it is ignored.
   delete record.at
   delete record.by
   delete record.type
+  delete record.fromPane
+  delete record.agent
 
   const before = await readText(deps)
   if (typeof before !== "string") return before.error
@@ -68,7 +74,14 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
   if (record.k === undefined && message.op === "aperta") record.k = book.nextKey(before, deps.now())
   if (typeof record.k !== "string" || !record.k.trim()) return "errore: manca la chiave k"
 
-  const event = { ...record, type: message.op, at: deps.now().toISOString(), by: deps.sender }
+  const event = {
+    ...record,
+    type: message.op,
+    at: deps.now().toISOString(),
+    by: deps.sender,
+    fromPane: deps.fromPane,
+    agent: deps.agent,
+  }
   let line: string
   try {
     line = book.serialize(event)

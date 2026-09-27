@@ -165,7 +165,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                     : undefined)
                 }
                 control={submitControl({
-                  recipient: props.hub.recipient(),
+                  recipient: props.hub.recipientFor(decision()),
                   sessions: props.hub.sessions(),
                   inline: props.hub.inlineRecipient(),
                   busy: props.hub.busy(k),
@@ -173,7 +173,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                 })}
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
-                recipientHint={recipientHint(props.hub.recipient())}
+                recipientHint={recipientHint(props.hub.recipientFor(decision()))}
                 now={props.hub.register.now()}
                 onPick={(index) => pick(k, index, Boolean(decision().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}

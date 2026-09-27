@@ -40,7 +40,7 @@ export function DesignPane(props: {
       busy={props.hub.busy(proposal.k)}
       problem={props.hub.problem(proposal.k)}
       control={submitControl({
-        recipient: props.hub.recipient(),
+        recipient: props.hub.recipientFor(proposal),
         sessions: props.hub.sessions(),
         inline: props.hub.inlineRecipient(),
         busy: props.hub.busy(proposal.k),
@@ -49,7 +49,7 @@ export function DesignPane(props: {
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(proposal, "record")}
       onAgain={() => void props.hub.again(proposal)}
-      recipientHint={recipientHint(props.hub.recipient())}
+      recipientHint={recipientHint(props.hub.recipientFor(proposal))}
       now={now()}
       projectRoot={root()}
       onPick={(index) => props.hub.pick(proposal, index)}

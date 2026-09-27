@@ -52,6 +52,10 @@ export interface Decision {
   readonly order?: number
   /** Who opened it, and when. */
   readonly raisedBy: string
+  /** The pane that asked, when ADE wrote the event: the answer goes back there. */
+  readonly raisedFrom?: string
+  /** Its agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly raisedAgent?: string
   readonly openedAt: string
   readonly status: DecisionStatus
   /** The answer standing now; the previous ones are in `history`. */
@@ -132,6 +136,8 @@ export function foldDecisions(
         spec: event.spec,
         order: event.order,
         raisedBy: event.by,
+        raisedFrom: event.fromPane,
+        raisedAgent: event.agent,
         openedAt: event.at,
         status: "aperta",
         history: [event],

@@ -154,7 +154,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 busy={props.hub.busy(k)}
                 problem={props.hub.problem(k) ?? (needChoice() === k ? t("design.sheet.needChoice") : undefined)}
                 control={submitControl({
-                  recipient: props.hub.recipient(),
+                  recipient: props.hub.recipientFor(proposal()),
                   sessions: props.hub.sessions(),
                   inline: props.hub.inlineRecipient(),
                   busy: props.hub.busy(k),
@@ -163,7 +163,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
                 onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
-                recipientHint={recipientHint(props.hub.recipient())}
+                recipientHint={recipientHint(props.hub.recipientFor(proposal()))}
                 now={new Date()}
                 projectRoot={root()}
                 onPick={(index) => pick(k, index, Boolean(proposal().multi))}

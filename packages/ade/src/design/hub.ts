@@ -6,6 +6,7 @@ import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
 import { waitsForRecipient } from "../decisions/card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
+import { recipientFor } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
 import type { DesignProposal } from "./state"
@@ -25,6 +26,8 @@ export interface DesignHub {
   readonly register: DesignRegister
   projectRoot?: () => string | undefined
   recipient: () => RecipientStatus
+  /** Who receives this one: the pane that asked while it runs, else the chosen session. */
+  recipientFor: (proposal: DesignProposal) => RecipientStatus
   sessions: () => readonly DeliveryCandidate[]
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
@@ -151,6 +154,7 @@ export function createDesignHub(deps: {
     register: deps.register,
     projectRoot: deps.projectRoot,
     recipient: deps.recipient,
+    recipientFor: (proposal) => recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
     sessions: deps.sessions,
     choose: deps.choose,
     delivery: deps.delivery,
@@ -179,7 +183,7 @@ export function createDesignHub(deps: {
     },
     submit: (proposal, press) => {
       const control = submitControl({
-        recipient: deps.recipient(),
+        recipient: recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(proposal.k),
@@ -202,7 +206,7 @@ export function createDesignHub(deps: {
       const event = againEvent(proposal, draft(proposal.k).note, new Date())
       if (typeof event === "string") return record(proposal, event)
       const control = submitControl({
-        recipient: deps.recipient(),
+        recipient: recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(proposal.k),

@@ -54,6 +54,10 @@ interface EventBase {
   readonly at: string
   /** Who wrote it: a session title, "fable", "utente", "Master". */
   readonly by: string
+  /** The pane that wrote it, when ADE wrote it: the answer goes back there. */
+  readonly fromPane?: string
+  /** That pane's agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly agent?: string
 }
 
 export interface OpenedDesignEvent extends EventBase {
@@ -169,7 +173,7 @@ export function toEvent(value: unknown): DesignEvent | string {
   if (!at || Number.isNaN(Date.parse(at))) return t("design.log.date")
   const by = text(record.by)
   if (!by) return t("design.log.author")
-  const base = { k, at, by }
+  const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
 
   switch (type as DesignEventType) {
     case "aperta": {

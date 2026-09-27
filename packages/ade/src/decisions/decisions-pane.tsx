@@ -45,7 +45,7 @@ export function DecisionsPane(props: {
       busy={props.hub.busy(decision.k)}
       problem={props.hub.problem(decision.k)}
       control={submitControl({
-        recipient: props.hub.recipient(),
+        recipient: props.hub.recipientFor(decision),
         sessions: props.hub.sessions(),
         inline: props.hub.inlineRecipient(),
         busy: props.hub.busy(decision.k),
@@ -53,7 +53,7 @@ export function DecisionsPane(props: {
       })}
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(decision, "record")}
-      recipientHint={recipientHint(props.hub.recipient())}
+      recipientHint={recipientHint(props.hub.recipientFor(decision))}
       now={now()}
       onPick={(index) => {
         const draft = props.hub.draft(decision.k)

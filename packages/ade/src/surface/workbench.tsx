@@ -421,6 +421,7 @@ import { DecisionsSheet } from "../decisions/decisions-sheet"
 import {
   deliveryLine,
   deliveryState,
+  answerItem,
   enqueue,
   markDelivered,
   OUTBOX_KEY,
@@ -448,6 +449,7 @@ import {
   chooseRecipient as chooseDesignRecipient,
   deliveryLine as designDeliveryLine,
   deliveryState as designDeliveryState,
+  answerItem as designAnswerItem,
   enqueue as enqueueDesign,
   markDelivered as markDesignDelivered,
   parseOutbox as parseDesignOutbox,
@@ -1453,7 +1455,8 @@ export function Workbench() {
       const path = decisionsRegister.path()
       if (!path) return
       saveDecisionsOutbox(
-        enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }),
+        // To the pane that asked, when the event says which (`answerItem`).
+        enqueue(decisionsOutbox(), answerItem(path, decision, event.at, Date.now())),
       )
       void deliverDecisions()
     },
@@ -1602,9 +1605,7 @@ export function Workbench() {
     onAnswered: (proposal, event) => {
       const path = designRegister.path()
       if (!path) return
-      saveDesignOutbox(
-        enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }),
-      )
+      saveDesignOutbox(enqueueDesign(designOutbox(), designAnswerItem(path, proposal, event.at, Date.now())))
       void deliverDesign()
     },
     onReopened: (proposal, deliveredTo, deliveredToId) => {
@@ -3669,6 +3670,9 @@ export function Workbench() {
                 : "scrittura non disponibile",
           now: () => new Date(),
           sender: registerAuthor(sender?.title, message.from),
+          // Verified by the token above: the answer goes back to this pane.
+          fromPane: sender ? message.from : undefined,
+          agent: wb().panes.find((pane) => pane.id === message.from)?.agent,
         },
         message,
       )

@@ -34,6 +34,10 @@ export interface DesignProposal {
   readonly multi?: true
   readonly order?: number
   readonly raisedBy: string
+  /** The pane that asked, when ADE wrote the event: the answer goes back there. */
+  readonly raisedFrom?: string
+  /** Its agent (`claude-code`, `agy`…), when ADE knew it. */
+  readonly raisedAgent?: string
   readonly openedAt: string
   readonly status: DesignStatus
   readonly answer?: DesignAnswer
@@ -102,6 +106,8 @@ export function foldProposals(
         ...(event.multi ? { multi: true as const } : {}),
         order: event.order,
         raisedBy: event.by,
+        raisedFrom: event.fromPane,
+        raisedAgent: event.agent,
         openedAt: event.at,
         status: "aperta",
         history: [event],
