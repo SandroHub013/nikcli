@@ -17,7 +17,7 @@ if (typeof document === "undefined") GlobalRegistrator.register()
 compileSolidJsx()
 
 const { createComponent, render } = await import("solid-js/web")
-const { VoiceSettingsPanel } = await import("../../../voice/src/ui/voice-settings-panel")
+const { VoiceSettingsPanel } = await import("@nikcli-ai/voice")
 const { DEFAULT_VOICE_SETTINGS } = await import("@nikcli-ai/voice/core")
 
 const engine = {
