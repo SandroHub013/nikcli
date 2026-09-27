@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { fitScale, frameProps, VARIANT_SANDBOX, VIEW_MARGIN, watchInView } from "./design-preview"
+import { fitScale, frameProps, VARIANT_SANDBOX, VIEW_MARGIN, watchInView } from "./preview-plan"
 
 /*
  * notifiche-design, the one sheet of a proposal. Apart from ui.test.ts, which
