@@ -144,7 +144,7 @@
 
 [data-component="voice-settings-panel"][data-status="live"] [data-slot="header-mark"],
 [data-component="voice-settings-panel"][data-status="ready"] [data-slot="header-mark"] {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   color: var(--ade-accent);
 }
 
@@ -767,11 +767,11 @@
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow:
     inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent),
-    0 0 0 5px var(--ade-accent-glow);
+    0 0 0 1px var(--ade-text-weak),
+    0 0 0 5px color-mix(in srgb, var(--ade-text-weak) 25%, transparent);
 }
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"]:focus-visible {
@@ -882,8 +882,8 @@
 
 [data-component="voice-settings-panel"] [data-slot="sub-choice-item"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent);
+  border-color: var(--ade-text-weak);
+  box-shadow: 0 0 0 1px var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="sub-choice-item"]:focus-visible {
@@ -939,8 +939,8 @@
 
 [data-component="voice-settings-panel"] [data-slot="activation-item"][aria-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent);
+  border-color: var(--ade-text-weak);
+  box-shadow: 0 0 0 1px var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="activation-item"]:focus-visible {
@@ -1062,7 +1062,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="input"]:focus,
 [data-component="voice-settings-panel"] [data-slot="select"]:focus {
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow: var(--ade-focus-ring);
 }
 
@@ -1133,7 +1133,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="shortcut-recorder-btn"]:hover {
   background: var(--ade-hover);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="shortcut-recorder-btn"]:focus-visible {
@@ -1222,10 +1222,10 @@
 
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-checked="true"] {
   background: var(--ade-raised);
-  border-color: var(--ade-accent);
+  border-color: var(--ade-text-weak);
   box-shadow:
     inset 0 1px 0 0 var(--ade-highlight),
-    0 0 0 1px var(--ade-accent);
+    0 0 0 1px var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-unusable="true"]:not([data-checked="true"]) {

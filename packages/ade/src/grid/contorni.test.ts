@@ -288,10 +288,18 @@ describe("lint: no accent outline, in any sheet of packages/ade", () => {
   test("lint: an accent border, outline or shadow only sits on an accent fill", () => {
     // Every sheet, not the panes' three: the rule is the user's, and it is not a
     // per-file habit. On the parsed sheet, so a reformat cannot hide one.
+    // The voice panel's sheets too: in ADE they are drawn inside its settings,
+    // and the selected cards there still wore a teal border (contorni-terzo, 5).
+    const voice = join(src, "..", "..", "voice", "src");
+    const files = [
+      ...Array.from(new Bun.Glob("**/*.css").scanSync(src)).map((entry) => ({ path: join(src, entry), file: entry })),
+      ...Array.from(new Bun.Glob("**/*.css").scanSync(voice)).map((entry) => ({ path: join(voice, entry), file: `voice/${entry}` })),
+    ];
+    expect(files.some((f) => f.file.startsWith("voice/"))).toBe(true);
     const offenders: string[] = [];
-    for (const entry of Array.from(new Bun.Glob("**/*.css").scanSync(src))) {
-      const file = entry.replace(/\\/g, "/");
-      sheet(file).walkRules((rule) => {
+    for (const { path, file: raw } of files) {
+      const file = raw.replace(/\\/g, "/");
+      postcss.parse(readFileSync(path, "utf-8")).walkRules((rule) => {
         const decls = new Map<string, string>();
         for (const node of rule.nodes) {
           if (node.type === "decl") decls.set(node.prop, node.value.trim());
