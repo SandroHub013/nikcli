@@ -74,6 +74,17 @@ describe("typedAfter", () => {
     expect(typedAfter(undefined, "\u001b[200~\u001b[201~", 5)).toBeUndefined()
   })
 
+  /*
+   * Review area 2: an undeclared paste of `a\rb` sends `a` and leaves `b` in
+   * the line. The count said nothing was there, and the next delivery's Enter
+   * ran `b` with it.
+   */
+  test("an Enter in the middle of a chunk leaves what came after it pending", () => {
+    expect(pending(typedAfter({ pending: 3, at: 1 }, "a\rb", 5))).toBe(1)
+    expect(pending(typedAfter(undefined, "uno\r\ndue", 5))).toBe(3)
+    expect(typedAfter({ pending: 3, at: 1 }, "a\r", 5)).toBeUndefined()
+  })
+
   test("nothing typed, nothing changes", () => {
     const line = { pending: 2, at: 1 }
     expect(typedAfter(line, "", 5)).toBe(line)
