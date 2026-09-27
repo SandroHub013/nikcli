@@ -1,23 +1,39 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, Text, View } from "react-native"
-import * as WebBrowser from "expo-web-browser"
-import { Link, useFocusEffect, type Href } from "expo-router"
-import { SettingsGroup, SettingsNavCard } from "@/components/settings/SettingsNavCard"
-import { useColorScheme } from "nativewind"
-import { ActionButton } from "@/components/ui/ActionButton"
-import { ErrorBanner } from "@/components/ui/ErrorBanner"
-import { InfoChip, optionChipStyle, optionChipTextColor } from "@/components/ui/InfoChip"
-import { SurfaceCard } from "@/components/ui/SurfaceCard"
-import { TextField } from "@/components/ui/TextField"
-import { CenteredScreenHeader } from "@/components/layout/CenteredScreenHeader"
-import { SectionHeader } from "@/components/ui/SectionHeader"
-import { useGithubDeviceAuth } from "@/hooks/use-github-device-auth"
-import { useServer } from "@/lib/server-context"
-import { setAppPreferencesWith } from "@/lib/storage"
-import { ensureNotificationPermissions } from "@/lib/notifications"
-import { useUIStore } from "@/lib/store"
-import { hexToRgba, useAppTheme, useTheme, THEME_LIST } from "@/lib/theme"
-import { type as typeStyle } from "@/lib/typography"
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import { Link, useFocusEffect, type Href } from "expo-router";
+import {
+  SettingsGroup,
+  SettingsNavCard,
+} from "@/components/settings/SettingsNavCard";
+import { useColorScheme } from "nativewind";
+import { ActionButton } from "@/components/ui/ActionButton";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import {
+  InfoChip,
+  optionChipStyle,
+  optionChipTextColor,
+} from "@/components/ui/InfoChip";
+import { SurfaceCard } from "@/components/ui/SurfaceCard";
+import { TextField } from "@/components/ui/TextField";
+import { CenteredScreenHeader } from "@/components/layout/CenteredScreenHeader";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { useGithubDeviceAuth } from "@/hooks/use-github-device-auth";
+import { useServer, userMe } from "@/lib/server-context";
+import { loginWithOAuth } from "@/lib/oauth";
+import { setAppPreferencesWith } from "@/lib/storage";
+import { ensureNotificationPermissions } from "@/lib/notifications";
+import { useUIStore } from "@/lib/store";
+import { hexToRgba, useAppTheme, useTheme, THEME_LIST } from "@/lib/theme";
+import { type as typeStyle } from "@/lib/typography";
 import {
   type HostConfigSnapshot,
   type HostMcpConfig,
@@ -29,54 +45,74 @@ import {
   type ThemeMode,
   type MobileExecutionTarget,
   type ProviderCatalog,
-} from "@/lib/types"
+} from "@/lib/types";
 
-const EMPTY_ROWS: never[] = []
+const EMPTY_ROWS: never[] = [];
 
 function maybeHandle(message: string | null) {
-  return message ? <ErrorBanner message={message} /> : null
+  return message ? <ErrorBanner message={message} /> : null;
 }
 
 function providerFallback(catalog: ProviderCatalog | null) {
-  if (!catalog?.all.length) return MOBILE_DEFAULT_PROVIDER_ID
-  if (catalog.all.some((provider) => provider.id === MOBILE_DEFAULT_PROVIDER_ID)) {
-    return MOBILE_DEFAULT_PROVIDER_ID
+  if (!catalog?.all.length) return MOBILE_DEFAULT_PROVIDER_ID;
+  if (
+    catalog.all.some((provider) => provider.id === MOBILE_DEFAULT_PROVIDER_ID)
+  ) {
+    return MOBILE_DEFAULT_PROVIDER_ID;
   }
-  return [...catalog.all].sort((left, right) => left.name.localeCompare(right.name)).at(0)?.id
+  return [...catalog.all]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .at(0)?.id;
 }
 
 function modelFallback(catalog: ProviderCatalog | null, providerID: string) {
-  const provider = catalog?.all.find((item) => item.id === providerID)
-  if (!provider) return providerID === MOBILE_DEFAULT_PROVIDER_ID ? MOBILE_DEFAULT_MODEL_ID : undefined
-  if (provider.models[MOBILE_DEFAULT_MODEL_ID] && providerID === MOBILE_DEFAULT_PROVIDER_ID)
-    return MOBILE_DEFAULT_MODEL_ID
-  if (catalog?.default[providerID] && provider.models[catalog.default[providerID]]) return catalog.default[providerID]
+  const provider = catalog?.all.find((item) => item.id === providerID);
+  if (!provider)
+    return providerID === MOBILE_DEFAULT_PROVIDER_ID
+      ? MOBILE_DEFAULT_MODEL_ID
+      : undefined;
+  if (
+    provider.models[MOBILE_DEFAULT_MODEL_ID] &&
+    providerID === MOBILE_DEFAULT_PROVIDER_ID
+  )
+    return MOBILE_DEFAULT_MODEL_ID;
+  if (
+    catalog?.default[providerID] &&
+    provider.models[catalog.default[providerID]]
+  )
+    return catalog.default[providerID];
   return Object.values(provider.models)
     .sort((left, right) => left.name.localeCompare(right.name))
-    .at(0)?.id
+    .at(0)?.id;
 }
 
-function mcpTone(status?: HostMcpStatus): "accent" | "good" | "warn" | "neutral" {
-  if (!status) return "neutral"
-  if (status.status === "connected") return "good"
-  if (status.status === "needs_auth" || status.status === "failed" || status.status === "needs_client_registration")
-    return "warn"
-  return "neutral"
+function mcpTone(
+  status?: HostMcpStatus,
+): "accent" | "good" | "warn" | "neutral" {
+  if (!status) return "neutral";
+  if (status.status === "connected") return "good";
+  if (
+    status.status === "needs_auth" ||
+    status.status === "failed" ||
+    status.status === "needs_client_registration"
+  )
+    return "warn";
+  return "neutral";
 }
 
 function mcpLabel(status?: HostMcpStatus) {
-  if (!status) return "Unknown"
+  if (!status) return "Unknown";
   switch (status.status) {
     case "connected":
-      return "Connected"
+      return "Connected";
     case "disabled":
-      return "Disabled"
+      return "Disabled";
     case "needs_auth":
-      return "Needs auth"
+      return "Needs auth";
     case "needs_client_registration":
-      return "Needs registration"
+      return "Needs registration";
     case "failed":
-      return "Failed"
+      return "Failed";
   }
 }
 
@@ -97,137 +133,177 @@ const SETTINGS_SECTIONS: Array<{ id: SettingsSectionID; label: string }> = [
   { id: "permissions", label: "Permissions" },
   { id: "plugins", label: "Plugins" },
   { id: "advanced", label: "Advanced" },
-]
+];
 
 function githubConnectorKey(snapshot: HostConfigSnapshot | null) {
-  const entries = Object.entries(snapshot?.connectors ?? {})
-  const existing = entries.find(([, value]) => value?.type === "github")
-  return existing?.[0] ?? "github"
+  const entries = Object.entries(snapshot?.connectors ?? {});
+  const existing = entries.find(([, value]) => value?.type === "github");
+  return existing?.[0] ?? "github";
 }
 
 export default function SettingsScreen() {
-  const { client, config, bootstrap, bootstrapLoading, refreshBootstrap, save, clear, currentUser, signOut } =
-    useServer()
-  const { palette, colorScheme } = useAppTheme()
-  const { themeId, themeName, setTheme } = useTheme()
-  const { setColorScheme } = useColorScheme()
-  const [themePickerOpen, setThemePickerOpen] = useState(false)
-  const themeMode = useUIStore((state) => state.themeMode)
-  const setThemeMode = useUIStore((state) => state.setThemeMode)
-  const visibleSettingsSections = useUIStore((state) => state.visibleSettingsSections)
-  const setSettingsSectionVisible = useUIStore((state) => state.setSettingsSectionVisible)
-  const notifications = useUIStore((state) => state.notifications)
-  const haptics = useUIStore((state) => state.haptics)
-  const gestures = useUIStore((state) => state.gestures)
-  const composer = useUIStore((state) => state.composer)
-  const promptPresets = useUIStore((state) => state.promptPresets)
-  const setNotificationPreference = useUIStore((state) => state.setNotificationPreference)
-  const setHapticPreference = useUIStore((state) => state.setHapticPreference)
-  const setGesturePreference = useUIStore((state) => state.setGesturePreference)
-  const [url, setUrl] = useState(config?.url ?? "")
-  const [token, setToken] = useState(config?.token ?? "")
-  const [directory, setDirectory] = useState(config?.directory ?? "")
-  const [selectedExecutionTarget, setSelectedExecutionTarget] = useState<MobileExecutionTarget>(
-    config?.executionTarget ?? "local",
-  )
-  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null)
-  const [providerSearch, setProviderSearch] = useState("")
-  const [modelSearch, setModelSearch] = useState("")
-  const [selectedProviderID, setSelectedProviderID] = useState(config?.modelProviderID ?? MOBILE_DEFAULT_PROVIDER_ID)
-  const [selectedModelID, setSelectedModelID] = useState(config?.modelID ?? MOBILE_DEFAULT_MODEL_ID)
-  const [providerKey, setProviderKey] = useState("")
-  const [githubToken, setGithubToken] = useState("")
-  const [hostConfig, setHostConfig] = useState<HostConfigSnapshot | null>(null)
-  const [mcpStatus, setMcpStatus] = useState<Record<string, HostMcpStatus>>({})
-  const [skills, setSkills] = useState<SkillInfo[]>([])
-  const [skillsSearch, setSkillsSearch] = useState("")
-  const [mcpName, setMcpName] = useState("")
-  const [mcpType, setMcpType] = useState<HostMcpConfig["type"]>("remote")
-  const [mcpUrl, setMcpUrl] = useState("")
-  const [mcpCommand, setMcpCommand] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [providerLoading, setProviderLoading] = useState(false)
-  const [providerSaving, setProviderSaving] = useState(false)
-  const [defaultsSaving, setDefaultsSaving] = useState(false)
-  const [mcpBusy, setMcpBusy] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const {
+    client,
+    config,
+    bootstrap,
+    bootstrapLoading,
+    refreshBootstrap,
+    save,
+    clear,
+    currentUser,
+    signOut,
+    setOAuthSession,
+  } = useServer();
+  const { palette, colorScheme } = useAppTheme();
+  const { themeId, themeName, setTheme } = useTheme();
+  const { setColorScheme } = useColorScheme();
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const themeMode = useUIStore((state) => state.themeMode);
+  const setThemeMode = useUIStore((state) => state.setThemeMode);
+  const visibleSettingsSections = useUIStore(
+    (state) => state.visibleSettingsSections,
+  );
+  const setSettingsSectionVisible = useUIStore(
+    (state) => state.setSettingsSectionVisible,
+  );
+  const notifications = useUIStore((state) => state.notifications);
+  const haptics = useUIStore((state) => state.haptics);
+  const gestures = useUIStore((state) => state.gestures);
+  const composer = useUIStore((state) => state.composer);
+  const promptPresets = useUIStore((state) => state.promptPresets);
+  const setNotificationPreference = useUIStore(
+    (state) => state.setNotificationPreference,
+  );
+  const setHapticPreference = useUIStore((state) => state.setHapticPreference);
+  const setGesturePreference = useUIStore(
+    (state) => state.setGesturePreference,
+  );
+  const [url, setUrl] = useState(config?.url ?? "");
+  const [token, setToken] = useState(config?.token ?? "");
+  const [directory, setDirectory] = useState(config?.directory ?? "");
+  const [selectedExecutionTarget, setSelectedExecutionTarget] =
+    useState<MobileExecutionTarget>(config?.executionTarget ?? "local");
+  const [providerCatalog, setProviderCatalog] =
+    useState<ProviderCatalog | null>(null);
+  const [providerSearch, setProviderSearch] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
+  const [selectedProviderID, setSelectedProviderID] = useState(
+    config?.modelProviderID ?? MOBILE_DEFAULT_PROVIDER_ID,
+  );
+  const [selectedModelID, setSelectedModelID] = useState(
+    config?.modelID ?? MOBILE_DEFAULT_MODEL_ID,
+  );
+  const [providerKey, setProviderKey] = useState("");
+  const [githubToken, setGithubToken] = useState("");
+  const [hostConfig, setHostConfig] = useState<HostConfigSnapshot | null>(null);
+  const [mcpStatus, setMcpStatus] = useState<Record<string, HostMcpStatus>>({});
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [skillsSearch, setSkillsSearch] = useState("");
+  const [mcpName, setMcpName] = useState("");
+  const [mcpType, setMcpType] = useState<HostMcpConfig["type"]>("remote");
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpCommand, setMcpCommand] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [accountOauthLoading, setAccountOauthLoading] = useState(false);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [defaultsSaving, setDefaultsSaving] = useState(false);
+  const [mcpBusy, setMcpBusy] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const [prevConfig, setPrevConfig] = useState(config)
+  const [prevConfig, setPrevConfig] = useState(config);
   if (config !== prevConfig) {
-    setPrevConfig(config)
-    setUrl(config?.url ?? "")
-    setToken(config?.token ?? "")
-    setDirectory(config?.directory ?? "")
-    setSelectedExecutionTarget(config?.executionTarget ?? "local")
-    setSelectedProviderID(config?.modelProviderID ?? MOBILE_DEFAULT_PROVIDER_ID)
-    setSelectedModelID(config?.modelID ?? MOBILE_DEFAULT_MODEL_ID)
+    setPrevConfig(config);
+    setUrl(config?.url ?? "");
+    setToken(config?.token ?? "");
+    setDirectory(config?.directory ?? "");
+    setSelectedExecutionTarget(config?.executionTarget ?? "local");
+    setSelectedProviderID(
+      config?.modelProviderID ?? MOBILE_DEFAULT_PROVIDER_ID,
+    );
+    setSelectedModelID(config?.modelID ?? MOBILE_DEFAULT_MODEL_ID);
   }
 
   const githubOauthClientID = useMemo(() => {
     if (typeof hostConfig?.connectors?.github?.oauthClientId === "string") {
-      return hostConfig.connectors.github.oauthClientId
+      return hostConfig.connectors.github.oauthClientId;
     }
     if (typeof hostConfig?.connectors?.github?.clientId === "string") {
-      return hostConfig.connectors.github.clientId
+      return hostConfig.connectors.github.clientId;
     }
-    return ""
-  }, [hostConfig])
-  const [githubOauthClientIDDraft, setGithubOauthClientID] = useState(githubOauthClientID)
+    return "";
+  }, [hostConfig]);
+  const [githubOauthClientIDDraft, setGithubOauthClientID] =
+    useState(githubOauthClientID);
 
   useEffect(() => {
-    setGithubOauthClientID(githubOauthClientID)
-  }, [githubOauthClientID])
+    setGithubOauthClientID(githubOauthClientID);
+  }, [githubOauthClientID]);
 
   useEffect(() => {
-    setColorScheme(themeMode)
-  }, [setColorScheme, themeMode])
+    setColorScheme(themeMode);
+  }, [setColorScheme, themeMode]);
 
   const loadProviderData = useCallback(async () => {
     if (!client) {
-      setProviderCatalog(null)
-      return
+      setProviderCatalog(null);
+      return;
     }
 
     try {
-      setProviderLoading(true)
-      const catalog = await client.listProviders()
-      setProviderCatalog(catalog)
+      setProviderLoading(true);
+      const catalog = await client.listProviders();
+      setProviderCatalog(catalog);
 
       const nextProvider = (() => {
-        if (config?.modelProviderID && catalog.all.some((item) => item.id === config.modelProviderID)) {
-          return config.modelProviderID
+        if (
+          config?.modelProviderID &&
+          catalog.all.some((item) => item.id === config.modelProviderID)
+        ) {
+          return config.modelProviderID;
         }
-        if (catalog.all.some((item) => item.id === selectedProviderID)) return selectedProviderID
-        return providerFallback(catalog)
-      })()
+        if (catalog.all.some((item) => item.id === selectedProviderID))
+          return selectedProviderID;
+        return providerFallback(catalog);
+      })();
 
       if (nextProvider) {
-        setSelectedProviderID(nextProvider)
+        setSelectedProviderID(nextProvider);
         const nextModel = (() => {
-          const provider = catalog.all.find((item) => item.id === nextProvider)
-          if (!provider) return undefined
-          if (config?.modelProviderID === nextProvider && config?.modelID && provider.models[config.modelID]) {
-            return config.modelID
+          const provider = catalog.all.find((item) => item.id === nextProvider);
+          if (!provider) return undefined;
+          if (
+            config?.modelProviderID === nextProvider &&
+            config?.modelID &&
+            provider.models[config.modelID]
+          ) {
+            return config.modelID;
           }
-          if (provider.models[selectedModelID]) return selectedModelID
-          return modelFallback(catalog, nextProvider)
-        })()
-        if (nextModel) setSelectedModelID(nextModel)
+          if (provider.models[selectedModelID]) return selectedModelID;
+          return modelFallback(catalog, nextProvider);
+        })();
+        if (nextModel) setSelectedModelID(nextModel);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setProviderLoading(false)
+      setProviderLoading(false);
     }
-  }, [client, config?.modelID, config?.modelProviderID, selectedModelID, selectedProviderID])
+  }, [
+    client,
+    config?.modelID,
+    config?.modelProviderID,
+    selectedModelID,
+    selectedProviderID,
+  ]);
 
   const loadAutomationData = useCallback(async () => {
     if (!client) {
-      setHostConfig(null)
-      setMcpStatus({})
-      setSkills([])
-      return
+      setHostConfig(null);
+      setMcpStatus({});
+      setSkills([]);
+      return;
     }
 
     try {
@@ -235,42 +311,45 @@ export default function SettingsScreen() {
         client.getConfig(),
         client.listMcpStatus(),
         client.listSkills(),
-      ])
-      setHostConfig(nextConfig)
-      setMcpStatus(nextMcpStatus)
-      setSkills(nextSkills)
+      ]);
+      setHostConfig(nextConfig);
+      setMcpStatus(nextMcpStatus);
+      setSkills(nextSkills);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [client])
+  }, [client]);
 
   useFocusEffect(
     useCallback(() => {
-      setMessage(null)
-      void loadProviderData()
-      void loadAutomationData()
+      setMessage(null);
+      void loadProviderData();
+      void loadAutomationData();
     }, [loadAutomationData, loadProviderData]),
-  )
+  );
 
   async function saveConnection() {
-    const nextUrl = url.trim()
+    const nextUrl = url.trim();
     if (!nextUrl) {
-      setMessage("Server URL is required")
-      return
+      setMessage("Server URL is required");
+      return;
     }
     if (!token.trim()) {
-      setMessage("Mobile pairing token is required")
-      return
+      setMessage("Mobile pairing token is required");
+      return;
     }
 
-    if (selectedExecutionTarget === "container" && !bootstrap?.execution?.container?.available) {
-      setMessage("Container sandbox requires Docker or Podman on the server")
-      return
+    if (
+      selectedExecutionTarget === "container" &&
+      !bootstrap?.execution?.container?.available
+    ) {
+      setMessage("Container sandbox requires Docker or Podman on the server");
+      return;
     }
 
     try {
-      setSaving(true)
-      setMessage(null)
+      setSaving(true);
+      setMessage(null);
       await save({
         ...config,
         url: nextUrl,
@@ -279,26 +358,51 @@ export default function SettingsScreen() {
         modelProviderID: selectedProviderID,
         modelID: selectedModelID,
         executionTarget: selectedExecutionTarget,
-      })
-      setMessage("Server connection updated")
+      });
+      setMessage("Server connection updated");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setSaving(false)
+      setSaving(false);
+    }
+  }
+
+  async function signInWithAccount() {
+    if (!config) {
+      setMessage("Save a host first, then sign in.");
+      return;
+    }
+    setAccountOauthLoading(true);
+    setMessage(null);
+    try {
+      const tokens = await loginWithOAuth(config.authIssuer);
+      const user = await userMe(config.url, tokens.access);
+      await setOAuthSession(tokens, user);
+      setMessage(`Signed in as ${user.display_name || user.username}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Sign in failed");
+    } finally {
+      setAccountOauthLoading(false);
     }
   }
 
   async function syncBootstrap(messageText?: string) {
-    await refreshBootstrap().catch(() => null)
-    await loadAutomationData().catch(() => null)
-    if (messageText) setMessage(messageText)
+    await refreshBootstrap().catch(() => null);
+    await loadAutomationData().catch(() => null);
+    if (messageText) setMessage(messageText);
   }
 
-  const { oauthBusy, oauthFlow, startGithubOAuth, checkGithubApproval, cancelGithubOAuth } = useGithubDeviceAuth({
+  const {
+    oauthBusy,
+    oauthFlow,
+    startGithubOAuth,
+    checkGithubApproval,
+    cancelGithubOAuth,
+  } = useGithubDeviceAuth({
     client,
     onApproved: (login) => syncBootstrap(`GitHub connected as @${login}`),
     onMessage: (text) => setMessage(text || null),
-  })
+  });
 
   // persistPreferences is intentionally defined here because each field's
   // type is derived from the component's local useState (via `typeof`).
@@ -308,13 +412,13 @@ export default function SettingsScreen() {
   // rebuilding it per render is negligible compared to the type churn.
   // oxlint-disable-next-line react-doctor/prefer-module-scope-pure-function
   function persistPreferences(next: {
-    themeMode?: ThemeMode
-    visibleSettingsSections?: Record<SettingsSectionID, boolean>
-    notifications?: typeof notifications
-    haptics?: typeof haptics
-    gestures?: typeof gestures
-    composer?: typeof composer
-    promptPresets?: typeof promptPresets
+    themeMode?: ThemeMode;
+    visibleSettingsSections?: Record<SettingsSectionID, boolean>;
+    notifications?: typeof notifications;
+    haptics?: typeof haptics;
+    gestures?: typeof gestures;
+    composer?: typeof composer;
+    promptPresets?: typeof promptPresets;
   }) {
     // Routes through setAppPreferencesWith so two quick toggles serialize:
     // the merger reads the latest stored document, applies the delta, and
@@ -323,7 +427,8 @@ export default function SettingsScreen() {
     // touched by the other.
     return setAppPreferencesWith((current) => ({
       themeMode: next.themeMode ?? current.themeMode,
-      visibleSettingsSections: next.visibleSettingsSections ?? current.visibleSettingsSections,
+      visibleSettingsSections:
+        next.visibleSettingsSections ?? current.visibleSettingsSections,
       notifications: next.notifications ?? current.notifications,
       haptics: next.haptics ?? current.haptics,
       gestures: next.gestures ?? current.gestures,
@@ -333,11 +438,11 @@ export default function SettingsScreen() {
       security: current.security,
       tipsHidden: current.tipsHidden,
       mathEnabled: current.mathEnabled,
-    }))
+    }));
   }
 
   async function applyThemeMode(nextMode: ThemeMode) {
-    setThemeMode(nextMode)
+    setThemeMode(nextMode);
     await persistPreferences({
       themeMode: nextMode,
       visibleSettingsSections,
@@ -346,16 +451,16 @@ export default function SettingsScreen() {
       gestures,
       composer,
       promptPresets,
-    })
+    });
   }
 
   async function toggleSettingsSection(section: SettingsSectionID) {
-    const nextVisible = !visibleSettingsSections[section]
+    const nextVisible = !visibleSettingsSections[section];
     const nextSections = {
       ...visibleSettingsSections,
       [section]: nextVisible,
-    }
-    setSettingsSectionVisible(section, nextVisible)
+    };
+    setSettingsSectionVisible(section, nextVisible);
     await persistPreferences({
       themeMode,
       visibleSettingsSections: nextSections,
@@ -364,25 +469,24 @@ export default function SettingsScreen() {
       gestures,
       composer,
       promptPresets,
-    })
+    });
   }
 
-  async function updateNotificationPreference<K extends keyof typeof notifications>(
-    key: K,
-    value: (typeof notifications)[K],
-  ) {
+  async function updateNotificationPreference<
+    K extends keyof typeof notifications,
+  >(key: K, value: (typeof notifications)[K]) {
     if (key === "enabled" && value === true) {
-      const granted = await ensureNotificationPermissions(true)
+      const granted = await ensureNotificationPermissions(true);
       if (!granted) {
-        setMessage("Notification permission was not granted on this device")
-        return
+        setMessage("Notification permission was not granted on this device");
+        return;
       }
     }
     const next = {
       ...notifications,
       [key]: value,
-    }
-    setNotificationPreference(key, value)
+    };
+    setNotificationPreference(key, value);
     await persistPreferences({
       themeMode,
       visibleSettingsSections,
@@ -391,15 +495,18 @@ export default function SettingsScreen() {
       gestures,
       composer,
       promptPresets,
-    })
+    });
   }
 
-  async function updateHapticPreference<K extends keyof typeof haptics>(key: K, value: (typeof haptics)[K]) {
+  async function updateHapticPreference<K extends keyof typeof haptics>(
+    key: K,
+    value: (typeof haptics)[K],
+  ) {
     const next = {
       ...haptics,
       [key]: value,
-    }
-    setHapticPreference(key, value)
+    };
+    setHapticPreference(key, value);
     await persistPreferences({
       themeMode,
       visibleSettingsSections,
@@ -408,15 +515,18 @@ export default function SettingsScreen() {
       gestures,
       composer,
       promptPresets,
-    })
+    });
   }
 
-  async function updateGesturePreference<K extends keyof typeof gestures>(key: K, value: (typeof gestures)[K]) {
+  async function updateGesturePreference<K extends keyof typeof gestures>(
+    key: K,
+    value: (typeof gestures)[K],
+  ) {
     const next = {
       ...gestures,
       [key]: value,
-    }
-    setGesturePreference(key, value)
+    };
+    setGesturePreference(key, value);
     await persistPreferences({
       themeMode,
       visibleSettingsSections,
@@ -425,93 +535,93 @@ export default function SettingsScreen() {
       gestures: next,
       composer,
       promptPresets,
-    })
+    });
   }
 
   async function persistGithubOAuthClientID() {
-    if (!client) return
-    const value = githubOauthClientID.trim()
+    if (!client) return;
+    const value = githubOauthClientID.trim();
     if (!value) {
-      setMessage("GitHub OAuth client ID is required")
-      return null
+      setMessage("GitHub OAuth client ID is required");
+      return null;
     }
 
     try {
-      setSaving(true)
-      setMessage(null)
-      const nextConfig = await client.saveGithubOAuthClientID(value)
-      setHostConfig(nextConfig)
-      await syncBootstrap("GitHub OAuth client ID saved globally on host")
-      return nextConfig
+      setSaving(true);
+      setMessage(null);
+      const nextConfig = await client.saveGithubOAuthClientID(value);
+      setHostConfig(nextConfig);
+      await syncBootstrap("GitHub OAuth client ID saved globally on host");
+      return nextConfig;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
-      return null
+      setMessage(error instanceof Error ? error.message : String(error));
+      return null;
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function saveGithubOAuthClientID() {
-    await persistGithubOAuthClientID()
+    await persistGithubOAuthClientID();
   }
 
   async function addMcpServer() {
-    if (!client) return
-    const name = mcpName.trim()
+    if (!client) return;
+    const name = mcpName.trim();
     if (!name) {
-      setMessage("MCP server name is required")
-      return
+      setMessage("MCP server name is required");
+      return;
     }
     if (mcpType === "remote" && !mcpUrl.trim()) {
-      setMessage("Remote MCP URL is required")
-      return
+      setMessage("Remote MCP URL is required");
+      return;
     }
     if (mcpType === "local" && !mcpCommand.trim()) {
-      setMessage("Local MCP command is required")
-      return
+      setMessage("Local MCP command is required");
+      return;
     }
 
     try {
-      setMcpBusy(true)
-      setMessage(null)
-      const snapshot = hostConfig ?? (await client.getConfig())
-      const nextMcp = { ...(snapshot.mcp ?? {}) }
+      setMcpBusy(true);
+      setMessage(null);
+      const snapshot = hostConfig ?? (await client.getConfig());
+      const nextMcp = { ...(snapshot.mcp ?? {}) };
 
       if (mcpType === "remote") {
         nextMcp[name] = {
           type: "remote",
           url: mcpUrl.trim(),
           enabled: true,
-        }
+        };
       } else {
         nextMcp[name] = {
           type: "local",
           command: mcpCommand.trim().split(/\s+/),
           enabled: true,
-        }
+        };
       }
 
       const nextConfig = await client.updateConfig({
         ...snapshot,
         mcp: nextMcp,
-      })
-      setHostConfig(nextConfig)
-      setMcpName("")
-      setMcpUrl("")
-      setMcpCommand("")
-      await loadAutomationData()
-      setMessage(`Saved MCP server ${name}`)
+      });
+      setHostConfig(nextConfig);
+      setMcpName("");
+      setMcpUrl("");
+      setMcpCommand("");
+      await loadAutomationData();
+      setMessage(`Saved MCP server ${name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function toggleMcpEnabled(name: string, enabled: boolean) {
-    if (!client || !hostConfig?.mcp?.[name]) return
+    if (!client || !hostConfig?.mcp?.[name]) return;
     try {
-      setMcpBusy(true)
+      setMcpBusy(true);
       const nextConfig = await client.updateConfig({
         ...hostConfig,
         mcp: {
@@ -521,230 +631,268 @@ export default function SettingsScreen() {
             enabled,
           },
         },
-      })
-      setHostConfig(nextConfig)
-      await loadAutomationData()
+      });
+      setHostConfig(nextConfig);
+      await loadAutomationData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function connectMcp(name: string) {
-    if (!client) return
+    if (!client) return;
     try {
-      setMcpBusy(true)
-      await client.connectMcp(name)
-      await loadAutomationData()
+      setMcpBusy(true);
+      await client.connectMcp(name);
+      await loadAutomationData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function disconnectMcp(name: string) {
-    if (!client) return
+    if (!client) return;
     try {
-      setMcpBusy(true)
-      await client.disconnectMcp(name)
-      await loadAutomationData()
+      setMcpBusy(true);
+      await client.disconnectMcp(name);
+      await loadAutomationData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function authenticateMcp(name: string) {
-    if (!client) return
+    if (!client) return;
     try {
-      setMcpBusy(true)
-      const result = await client.startMcpAuth(name)
-      await WebBrowser.openBrowserAsync(result.authorizationUrl)
-      setMessage(`MCP auth opened for ${name}`)
+      setMcpBusy(true);
+      const result = await client.startMcpAuth(name);
+      await WebBrowser.openBrowserAsync(result.authorizationUrl);
+      setMessage(`MCP auth opened for ${name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function clearMcpAuth(name: string) {
-    if (!client) return
+    if (!client) return;
     try {
-      setMcpBusy(true)
-      await client.removeMcpAuth(name)
-      await loadAutomationData()
-      setMessage(`Removed MCP auth for ${name}`)
+      setMcpBusy(true);
+      await client.removeMcpAuth(name);
+      await loadAutomationData();
+      setMessage(`Removed MCP auth for ${name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setMcpBusy(false)
+      setMcpBusy(false);
     }
   }
 
   async function connectGithubWithToken() {
-    if (!client || !githubToken.trim()) return
+    if (!client || !githubToken.trim()) return;
     try {
-      setSaving(true)
-      await client.setGithubToken(githubToken.trim())
-      setGithubToken("")
-      await syncBootstrap("GitHub token saved on host")
+      setSaving(true);
+      await client.setGithubToken(githubToken.trim());
+      setGithubToken("");
+      await syncBootstrap("GitHub token saved on host");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function disconnectGithub() {
-    if (!client) return
+    if (!client) return;
     try {
-      setSaving(true)
-      cancelGithubOAuth()
-      await client.clearGithubToken()
-      await syncBootstrap("GitHub access removed from host")
+      setSaving(true);
+      cancelGithubOAuth();
+      await client.clearGithubToken();
+      await syncBootstrap("GitHub access removed from host");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  const githubConnected = Boolean(bootstrap?.github?.connected)
-  const containerReady = Boolean(bootstrap?.execution?.container?.available)
-  const containerRuntime = bootstrap?.execution?.container?.runtime
-  const workspaceLabel = bootstrap?.currentProject?.name || bootstrap?.currentProject?.id || "No workspace"
-  const oauthConfigured = Boolean(bootstrap?.github?.oauthDeviceConfigured)
-  const githubTokenAvailable = Boolean(bootstrap?.github?.tokenAvailable)
-  const currentToken = bootstrap?.auth.currentToken
-  const mcpEntries = useMemo(() => Object.entries(hostConfig?.mcp ?? {}), [hostConfig?.mcp])
+  const githubConnected = Boolean(bootstrap?.github?.connected);
+  const containerReady = Boolean(bootstrap?.execution?.container?.available);
+  const containerRuntime = bootstrap?.execution?.container?.runtime;
+  const workspaceLabel =
+    bootstrap?.currentProject?.name ||
+    bootstrap?.currentProject?.id ||
+    "No workspace";
+  const oauthConfigured = Boolean(bootstrap?.github?.oauthDeviceConfigured);
+  const githubTokenAvailable = Boolean(bootstrap?.github?.tokenAvailable);
+  const currentToken = bootstrap?.auth.currentToken;
+  const mcpEntries = useMemo(
+    () => Object.entries(hostConfig?.mcp ?? {}),
+    [hostConfig?.mcp],
+  );
   const visibleSkills = useMemo(() => {
-    const term = skillsSearch.trim().toLowerCase()
-    if (!term) return skills
+    const term = skillsSearch.trim().toLowerCase();
+    if (!term) return skills;
     return skills.filter((skill) =>
-      [skill.name, skill.description, skill.category ?? "", ...(skill.tags ?? [])].some((value) =>
-        value.toLowerCase().includes(term),
-      ),
-    )
-  }, [skills, skillsSearch])
+      [
+        skill.name,
+        skill.description,
+        skill.category ?? "",
+        ...(skill.tags ?? []),
+      ].some((value) => value.toLowerCase().includes(term)),
+    );
+  }, [skills, skillsSearch]);
 
   async function forgetHost() {
-    cancelGithubOAuth()
-    await clear()
-    setMessage("Host configuration removed from this device")
+    cancelGithubOAuth();
+    await clear();
+    setMessage("Host configuration removed from this device");
   }
 
-  const connectedProviders = useMemo(() => new Set(providerCatalog?.connected ?? []), [providerCatalog])
+  const connectedProviders = useMemo(
+    () => new Set(providerCatalog?.connected ?? []),
+    [providerCatalog],
+  );
 
   const visibleProviders = useMemo(() => {
-    const providers = [...(providerCatalog?.all ?? [])]
+    const providers = [...(providerCatalog?.all ?? [])];
     providers.sort((left, right) => {
-      const leftScore = left.id === MOBILE_DEFAULT_PROVIDER_ID ? 3 : connectedProviders.has(left.id) ? 2 : 1
-      const rightScore = right.id === MOBILE_DEFAULT_PROVIDER_ID ? 3 : connectedProviders.has(right.id) ? 2 : 1
-      if (leftScore !== rightScore) return rightScore - leftScore
-      return left.name.localeCompare(right.name)
-    })
+      const leftScore =
+        left.id === MOBILE_DEFAULT_PROVIDER_ID
+          ? 3
+          : connectedProviders.has(left.id)
+            ? 2
+            : 1;
+      const rightScore =
+        right.id === MOBILE_DEFAULT_PROVIDER_ID
+          ? 3
+          : connectedProviders.has(right.id)
+            ? 2
+            : 1;
+      if (leftScore !== rightScore) return rightScore - leftScore;
+      return left.name.localeCompare(right.name);
+    });
 
-    const term = providerSearch.trim().toLowerCase()
-    if (!term) return providers
+    const term = providerSearch.trim().toLowerCase();
+    if (!term) return providers;
     return providers.filter((provider) =>
-      [provider.name, provider.id, ...provider.env].some((value) => value.toLowerCase().includes(term)),
-    )
-  }, [connectedProviders, providerCatalog, providerSearch])
+      [provider.name, provider.id, ...provider.env].some((value) =>
+        value.toLowerCase().includes(term),
+      ),
+    );
+  }, [connectedProviders, providerCatalog, providerSearch]);
 
   const selectedProvider = useMemo(
-    () => providerCatalog?.all.find((provider) => provider.id === selectedProviderID) ?? null,
+    () =>
+      providerCatalog?.all.find(
+        (provider) => provider.id === selectedProviderID,
+      ) ?? null,
     [providerCatalog, selectedProviderID],
-  )
+  );
 
   const visibleModels = useMemo(() => {
-    if (!selectedProvider) return []
-    const models = Object.values(selectedProvider.models)
-    const defaultModelID = providerCatalog?.default[selectedProvider.id]
+    if (!selectedProvider) return [];
+    const models = Object.values(selectedProvider.models);
+    const defaultModelID = providerCatalog?.default[selectedProvider.id];
     models.sort((left, right) => {
-      const leftDefault = left.id === defaultModelID ? 1 : 0
-      const rightDefault = right.id === defaultModelID ? 1 : 0
-      if (leftDefault !== rightDefault) return rightDefault - leftDefault
-      return left.name.localeCompare(right.name)
-    })
-    const term = modelSearch.trim().toLowerCase()
+      const leftDefault = left.id === defaultModelID ? 1 : 0;
+      const rightDefault = right.id === defaultModelID ? 1 : 0;
+      if (leftDefault !== rightDefault) return rightDefault - leftDefault;
+      return left.name.localeCompare(right.name);
+    });
+    const term = modelSearch.trim().toLowerCase();
     const filtered = !term
       ? models
       : models.filter((model) =>
-          [model.name, model.id, model.status].some((value) => value.toLowerCase().includes(term)),
-        )
-    return filtered.slice(0, 24)
-  }, [modelSearch, providerCatalog, selectedProvider])
+          [model.name, model.id, model.status].some((value) =>
+            value.toLowerCase().includes(term),
+          ),
+        );
+    return filtered.slice(0, 24);
+  }, [modelSearch, providerCatalog, selectedProvider]);
 
-  const providerConnected = selectedProvider ? connectedProviders.has(selectedProvider.id) : false
+  const providerConnected = selectedProvider
+    ? connectedProviders.has(selectedProvider.id)
+    : false;
 
   async function saveSessionDefaults() {
     if (!config) {
-      setMessage("Link a host before saving mobile session defaults")
-      return
+      setMessage("Link a host before saving mobile session defaults");
+      return;
     }
 
     try {
-      setDefaultsSaving(true)
-      setMessage(null)
+      setDefaultsSaving(true);
+      setMessage(null);
       await save({
         ...config,
         modelProviderID: selectedProviderID,
         modelID: selectedModelID,
-      })
-      setMessage(`New mobile sessions now start with ${selectedModelID}`)
+      });
+      setMessage(`New mobile sessions now start with ${selectedModelID}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setDefaultsSaving(false)
+      setDefaultsSaving(false);
     }
   }
 
   async function saveProviderKey() {
-    if (!client || !selectedProviderID || !providerKey.trim()) return
+    if (!client || !selectedProviderID || !providerKey.trim()) return;
 
     try {
-      setProviderSaving(true)
-      setMessage(null)
-      await client.setProviderApiKey(selectedProviderID, providerKey.trim())
-      setProviderKey("")
-      await loadProviderData()
-      setMessage(`${selectedProvider?.name ?? selectedProviderID} API key saved on host`)
+      setProviderSaving(true);
+      setMessage(null);
+      await client.setProviderApiKey(selectedProviderID, providerKey.trim());
+      setProviderKey("");
+      await loadProviderData();
+      setMessage(
+        `${selectedProvider?.name ?? selectedProviderID} API key saved on host`,
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setProviderSaving(false)
+      setProviderSaving(false);
     }
   }
 
   async function removeProviderKey() {
-    if (!client || !selectedProviderID) return
+    if (!client || !selectedProviderID) return;
 
     try {
-      setProviderSaving(true)
-      setMessage(null)
-      await client.removeProviderAuth(selectedProviderID)
-      await loadProviderData()
-      setMessage(`${selectedProvider?.name ?? selectedProviderID} credentials removed from host`)
+      setProviderSaving(true);
+      setMessage(null);
+      await client.removeProviderAuth(selectedProviderID);
+      await loadProviderData();
+      setMessage(
+        `${selectedProvider?.name ?? selectedProviderID} credentials removed from host`,
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setProviderSaving(false)
+      setProviderSaving(false);
     }
   }
 
   function chooseProvider(providerID: string) {
-    setSelectedProviderID(providerID)
-    setModelSearch("")
-    const nextModel = modelFallback(providerCatalog, providerID)
-    if (nextModel) setSelectedModelID(nextModel)
+    setSelectedProviderID(providerID);
+    setModelSearch("");
+    const nextModel = modelFallback(providerCatalog, providerID);
+    if (nextModel) setSelectedModelID(nextModel);
   }
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+    <View
+      className="flex-1 bg-background"
+      style={{ paddingHorizontal: 16, paddingTop: 16 }}
+    >
       <FlatList
         contentInsetAdjustmentBehavior="automatic"
         data={EMPTY_ROWS}
@@ -755,12 +903,26 @@ export default function SettingsScreen() {
           <View style={{ gap: 16 }}>
             <CenteredScreenHeader title="Settings" />
             <View className="flex-row flex-wrap gap-2">
-              <InfoChip label={config ? "Host linked" : "Host offline"} tone={config ? "good" : "warn"} />
               <InfoChip
-                label={githubConnected ? `GitHub @${bootstrap?.github?.user?.login || "connected"}` : "GitHub offline"}
+                label={config ? "Host linked" : "Host offline"}
+                tone={config ? "good" : "warn"}
+              />
+              <InfoChip
+                label={
+                  githubConnected
+                    ? `GitHub @${bootstrap?.github?.user?.login || "connected"}`
+                    : "GitHub offline"
+                }
                 tone={githubConnected ? "good" : "warn"}
               />
-              <InfoChip label={selectedExecutionTarget === "container" ? "Container" : "Local"} tone="accent" />
+              <InfoChip
+                label={
+                  selectedExecutionTarget === "container"
+                    ? "Container"
+                    : "Local"
+                }
+                tone="accent"
+              />
               {bootstrapLoading ? <InfoChip label="Refreshing" /> : null}
             </View>
 
@@ -808,7 +970,10 @@ export default function SettingsScreen() {
                       eyebrow="Models"
                       title="Providers and default models"
                       description="Focus provider auth, model selection, and default session model behavior in a dedicated control screen."
-                      badges={[selectedProviderID || "No provider", selectedModelID || "No model"]}
+                      badges={[
+                        selectedProviderID || "No provider",
+                        selectedModelID || "No model",
+                      ]}
                     />
                   </Link>
                 ) : null}
@@ -819,9 +984,15 @@ export default function SettingsScreen() {
                       title="OAuth and account trust"
                       description="Manage device sign-in, fallback token access, and the host GitHub identity posture from one enterprise screen."
                       badges={[
-                        githubConnected ? "Connected" : oauthConfigured ? "Approve account" : "Needs client ID",
+                        githubConnected
+                          ? "Connected"
+                          : oauthConfigured
+                            ? "Approve account"
+                            : "Needs client ID",
                         oauthConfigured ? "OAuth ready" : "Needs client ID",
-                        githubTokenAvailable ? "GH token stored" : "No GH token",
+                        githubTokenAvailable
+                          ? "GH token stored"
+                          : "No GH token",
                       ]}
                     />
                   </Link>
@@ -832,7 +1003,10 @@ export default function SettingsScreen() {
                       eyebrow="MCP"
                       title="Automation endpoints"
                       description="Manage Model Context Protocol servers, auth, enablement, and live capability health."
-                      badges={[`${mcpEntries.length} configured`, `${Object.keys(mcpStatus).length} live`]}
+                      badges={[
+                        `${mcpEntries.length} configured`,
+                        `${Object.keys(mcpStatus).length} live`,
+                      ]}
                     />
                   </Link>
                 ) : null}
@@ -915,21 +1089,140 @@ export default function SettingsScreen() {
               >
                 <View className="flex-row flex-wrap gap-2">
                   <InfoChip
-                    label={bootstrap?.version ? `Nikcli ${bootstrap.version}` : "Nikcli unknown"}
+                    label={
+                      bootstrap?.version
+                        ? `Nikcli ${bootstrap.version}`
+                        : "Nikcli unknown"
+                    }
                     tone="accent"
                   />
-                  <InfoChip label={config?.url ? config.url.replace(/^https?:\/\//, "") : "No server"} />
-                  <InfoChip label={themeMode === "system" ? `Theme: ${colorScheme}` : `Theme: ${themeMode}`} />
                   <InfoChip
-                    label={bootstrap?.projects?.length ? `${bootstrap.projects.length} projects` : "No projects"}
+                    label={
+                      config?.url
+                        ? config.url.replace(/^https?:\/\//, "")
+                        : "No server"
+                    }
+                  />
+                  <InfoChip
+                    label={
+                      themeMode === "system"
+                        ? `Theme: ${colorScheme}`
+                        : `Theme: ${themeMode}`
+                    }
+                  />
+                  <InfoChip
+                    label={
+                      bootstrap?.projects?.length
+                        ? `${bootstrap.projects.length} projects`
+                        : "No projects"
+                    }
                   />
                 </View>
 
                 <View className="mt-4 gap-3">
+                  <View className="gap-2">
+                    {currentUser ? (
+                      <ActionButton
+                        label={`Sign out (${currentUser.display_name || currentUser.username})`}
+                        variant="secondary"
+                        disabled={accountOauthLoading || oauthBusy}
+                        onPress={() => {
+                          void signOut().then(() => setMessage("Signed out"));
+                        }}
+                      />
+                    ) : (
+                      <ActionButton
+                        label="Sign in with Nikcli"
+                        loading={accountOauthLoading}
+                        disabled={!config || oauthBusy}
+                        onPress={() => void signInWithAccount()}
+                      />
+                    )}
+                    <ActionButton
+                      label={
+                        githubConnected
+                          ? "Reconnect GitHub"
+                          : "Sign in with GitHub"
+                      }
+                      variant={currentUser ? "primary" : "secondary"}
+                      loading={oauthBusy}
+                      disabled={!config || accountOauthLoading}
+                      onPress={() => void startGithubOAuth()}
+                    />
+                  </View>
+
+                  {oauthFlow ? (
+                    <View
+                      style={{
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: hexToRgba(palette.ink, 0.08),
+                        backgroundColor: hexToRgba(palette.background, 0.6),
+                        padding: 16,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: palette.muted,
+                          ...typeStyle(12, { weight: "500" }),
+                        }}
+                      >
+                        GitHub authorization in progress
+                      </Text>
+                      <Text
+                        style={{
+                          marginTop: 8,
+                          color: palette.soft,
+                          ...typeStyle(14),
+                        }}
+                      >
+                        Enter this code in GitHub if the browser page asks for
+                        it.
+                      </Text>
+                      <Text
+                        selectable
+                        style={{
+                          marginTop: 12,
+                          textAlign: "center",
+                          color: palette.ink,
+                          letterSpacing: 6,
+                          ...typeStyle(28, { weight: "600" }),
+                        }}
+                      >
+                        {oauthFlow.userCode}
+                      </Text>
+                      <View className="mt-3 flex-row gap-2">
+                        <View className="flex-1">
+                          <ActionButton
+                            label="Open GitHub"
+                            onPress={() =>
+                              void WebBrowser.openBrowserAsync(
+                                oauthFlow.verificationUriComplete ||
+                                  oauthFlow.verificationUri,
+                              )
+                            }
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <ActionButton
+                            label="Check approval"
+                            variant="secondary"
+                            loading={oauthBusy}
+                            onPress={() => void checkGithubApproval()}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+
                   <SurfaceCard
                     tone="background"
                     eyebrow="GitHub profile"
-                    title={bootstrap?.github?.user?.login ? `@${bootstrap.github.user.login}` : "Not connected"}
+                    title={
+                      bootstrap?.github?.user?.login
+                        ? `@${bootstrap.github.user.login}`
+                        : "Not connected"
+                    }
                     description={
                       bootstrap?.github?.user?.name
                         ? `${bootstrap.github.user.name} · OAuth ${oauthConfigured ? "Nikcli GitHub App · approve your account" : "not configured yet"}`
@@ -961,8 +1254,18 @@ export default function SettingsScreen() {
                   label={`Theme ${themeMode === "system" ? `system (${colorScheme})` : themeMode}`}
                   tone="accent"
                 />
-                <InfoChip label={visibleSettingsSections.mcp ? "MCP visible" : "MCP hidden"} />
-                <InfoChip label={visibleSettingsSections.skills ? "Skills visible" : "Skills hidden"} />
+                <InfoChip
+                  label={
+                    visibleSettingsSections.mcp ? "MCP visible" : "MCP hidden"
+                  }
+                />
+                <InfoChip
+                  label={
+                    visibleSettingsSections.skills
+                      ? "Skills visible"
+                      : "Skills hidden"
+                  }
+                />
               </View>
 
               <View
@@ -975,21 +1278,54 @@ export default function SettingsScreen() {
                   padding: 16,
                 }}
               >
-                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Color theme</Text>
+                <Text
+                  style={{
+                    color: palette.muted,
+                    ...typeStyle(12, { weight: "500" }),
+                  }}
+                >
+                  Color theme
+                </Text>
                 <Pressable
                   onPress={() => setThemePickerOpen(true)}
                   accessibilityRole="button"
                   accessibilityLabel={`Current theme ${themeName}`}
                   style={[
                     optionChipStyle(palette, true),
-                    { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+                    {
+                      marginTop: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    },
                   ]}
                 >
                   <View>
-                    <Text style={{ color: palette.ink, ...typeStyle(14, { weight: "600" }) }}>{themeName}</Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>Tap to change theme</Text>
+                    <Text
+                      style={{
+                        color: palette.ink,
+                        ...typeStyle(14, { weight: "600" }),
+                      }}
+                    >
+                      {themeName}
+                    </Text>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
+                      Tap to change theme
+                    </Text>
                   </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     <View
                       style={{
                         width: 24,
@@ -1000,14 +1336,16 @@ export default function SettingsScreen() {
                         backgroundColor: palette.accent,
                       }}
                     />
-                    <Text style={{ color: palette.ink, ...typeStyle(14) }}>▼</Text>
+                    <Text style={{ color: palette.ink, ...typeStyle(14) }}>
+                      ▼
+                    </Text>
                   </View>
                 </Pressable>
               </View>
 
               <View className="mt-4 flex-row gap-2">
                 {(["system", "light", "dark"] as ThemeMode[]).map((mode) => {
-                  const active = themeMode === mode
+                  const active = themeMode === mode;
                   return (
                     <Pressable
                       key={mode}
@@ -1026,7 +1364,13 @@ export default function SettingsScreen() {
                       >
                         {mode}
                       </Text>
-                      <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
+                      <Text
+                        style={{
+                          marginTop: 4,
+                          color: palette.soft,
+                          ...typeStyle(12),
+                        }}
+                      >
                         {mode === "system"
                           ? "Follow the device appearance automatically."
                           : mode === "light"
@@ -1034,7 +1378,7 @@ export default function SettingsScreen() {
                             : "Dark, focused operator mode."}
                       </Text>
                     </Pressable>
-                  )
+                  );
                 })}
               </View>
 
@@ -1058,12 +1402,24 @@ export default function SettingsScreen() {
                   padding: 16,
                 }}
               >
-                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>
+                <Text
+                  style={{
+                    color: palette.muted,
+                    ...typeStyle(12, { weight: "500" }),
+                  }}
+                >
                   Visible settings sections
                 </Text>
-                <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <View
+                  style={{
+                    marginTop: 12,
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
                   {SETTINGS_SECTIONS.map((section) => {
-                    const active = visibleSettingsSections[section.id]
+                    const active = visibleSettingsSections[section.id];
                     return (
                       <Pressable
                         key={section.id}
@@ -1071,15 +1427,24 @@ export default function SettingsScreen() {
                         style={optionChipStyle(palette, active)}
                       >
                         <Text
-                          style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                          style={{
+                            color: optionChipTextColor(palette, active),
+                            ...typeStyle(12, { weight: "600" }),
+                          }}
                         >
                           {section.label}
                         </Text>
-                        <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            color: palette.soft,
+                            ...typeStyle(11),
+                          }}
+                        >
                           {active ? "Visible" : "Hidden"}
                         </Text>
                       </Pressable>
-                    )
+                    );
                   })}
                 </View>
               </View>
@@ -1093,7 +1458,11 @@ export default function SettingsScreen() {
               >
                 <View className="flex-row flex-wrap gap-2">
                   <InfoChip
-                    label={notifications.enabled ? "Notifications on" : "Notifications off"}
+                    label={
+                      notifications.enabled
+                        ? "Notifications on"
+                        : "Notifications off"
+                    }
                     tone={notifications.enabled ? "good" : "neutral"}
                   />
                   <InfoChip
@@ -1101,7 +1470,11 @@ export default function SettingsScreen() {
                     tone={haptics.enabled ? "good" : "neutral"}
                   />
                   <InfoChip
-                    label={gestures.bubbleSwipeActions ? "Swipe actions on" : "Swipe actions off"}
+                    label={
+                      gestures.bubbleSwipeActions
+                        ? "Swipe actions on"
+                        : "Swipe actions off"
+                    }
                     tone={gestures.bubbleSwipeActions ? "accent" : "neutral"}
                   />
                 </View>
@@ -1153,14 +1526,37 @@ export default function SettingsScreen() {
                         padding: 16,
                       }}
                     >
-                      <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>{title}</Text>
-                      <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      <Text
+                        style={{
+                          color: palette.muted,
+                          ...typeStyle(12, { weight: "500" }),
+                        }}
+                      >
+                        {title}
+                      </Text>
+                      <View
+                        style={{
+                          marginTop: 12,
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
+                      >
                         {rows.map(([key, label]) => {
-                          const active = Boolean(values[key as keyof typeof values])
+                          const active = Boolean(
+                            values[key as keyof typeof values],
+                          );
                           return (
                             <Pressable
                               key={key}
-                              onPress={() => void (update as (nextKey: string, next: boolean) => unknown)(key, !active)}
+                              onPress={() =>
+                                void (
+                                  update as (
+                                    nextKey: string,
+                                    next: boolean,
+                                  ) => unknown
+                                )(key, !active)
+                              }
                               style={optionChipStyle(palette, active)}
                             >
                               <Text
@@ -1171,11 +1567,17 @@ export default function SettingsScreen() {
                               >
                                 {label}
                               </Text>
-                              <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
+                              <Text
+                                style={{
+                                  marginTop: 4,
+                                  color: palette.soft,
+                                  ...typeStyle(11),
+                                }}
+                              >
                                 {active ? "On" : "Off"}
                               </Text>
                             </Pressable>
-                          )
+                          );
                         })}
                       </View>
                     </View>
@@ -1215,7 +1617,11 @@ export default function SettingsScreen() {
                   />
                   <View className="flex-row gap-2">
                     <View className="flex-1">
-                      <ActionButton label="Save connection" loading={saving} onPress={() => void saveConnection()} />
+                      <ActionButton
+                        label="Save connection"
+                        loading={saving}
+                        onPress={() => void saveConnection()}
+                      />
                     </View>
                     <View className="flex-1">
                       <ActionButton
@@ -1233,13 +1639,34 @@ export default function SettingsScreen() {
                           disabled={saving}
                           onPress={() => {
                             void signOut().then(() => {
-                              const { router } = require("expo-router")
-                              router.replace("/login")
-                            })
+                              const { router } = require("expo-router");
+                              router.replace("/login");
+                            });
                           }}
                         />
                       </View>
                     ) : null}
+                  </View>
+                  <View className="gap-2">
+                    {currentUser ? null : (
+                      <ActionButton
+                        label="Sign in with Nikcli"
+                        loading={accountOauthLoading}
+                        disabled={!config?.url || oauthBusy}
+                        onPress={() => void signInWithAccount()}
+                      />
+                    )}
+                    <ActionButton
+                      label={
+                        githubConnected
+                          ? "Reconnect GitHub"
+                          : "Sign in with GitHub"
+                      }
+                      variant="secondary"
+                      loading={oauthBusy}
+                      disabled={!config?.url || accountOauthLoading}
+                      onPress={() => void startGithubOAuth()}
+                    />
                   </View>
                 </View>
               </SurfaceCard>
@@ -1261,7 +1688,11 @@ export default function SettingsScreen() {
                     tone={containerReady ? "good" : "warn"}
                   />
                   <InfoChip
-                    label={selectedExecutionTarget === "container" ? "Container sandbox" : "Local worktree"}
+                    label={
+                      selectedExecutionTarget === "container"
+                        ? "Container sandbox"
+                        : "Local worktree"
+                    }
                     tone="accent"
                   />
                 </View>
@@ -1270,49 +1701,87 @@ export default function SettingsScreen() {
                   <Pressable
                     onPress={() => setSelectedExecutionTarget("local")}
                     style={[
-                      optionChipStyle(palette, selectedExecutionTarget === "local"),
+                      optionChipStyle(
+                        palette,
+                        selectedExecutionTarget === "local",
+                      ),
                       { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 },
                     ]}
                   >
                     <Text
                       style={{
-                        color: optionChipTextColor(palette, selectedExecutionTarget === "local"),
+                        color: optionChipTextColor(
+                          palette,
+                          selectedExecutionTarget === "local",
+                        ),
                         ...typeStyle(14, { weight: "600" }),
                       }}
                     >
                       Local worktree
                     </Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
-                      Same behavior as now: server repo, server git, fastest path to publish.
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
+                      Same behavior as now: server repo, server git, fastest
+                      path to publish.
                     </Text>
                   </Pressable>
 
                   <Pressable
                     onPress={() => {
-                      if (containerReady) setSelectedExecutionTarget("container")
+                      if (containerReady)
+                        setSelectedExecutionTarget("container");
                     }}
                     disabled={!containerReady}
                     style={[
-                      optionChipStyle(palette, selectedExecutionTarget === "container"),
-                      { flex: 1, minWidth: 0, borderRadius: 18, padding: 12, opacity: containerReady ? 1 : 0.5 },
+                      optionChipStyle(
+                        palette,
+                        selectedExecutionTarget === "container",
+                      ),
+                      {
+                        flex: 1,
+                        minWidth: 0,
+                        borderRadius: 18,
+                        padding: 12,
+                        opacity: containerReady ? 1 : 0.5,
+                      },
                     ]}
                   >
                     <Text
                       style={{
-                        color: optionChipTextColor(palette, selectedExecutionTarget === "container"),
+                        color: optionChipTextColor(
+                          palette,
+                          selectedExecutionTarget === "container",
+                        ),
                         ...typeStyle(14, { weight: "600" }),
                       }}
                     >
                       Container sandbox
                     </Text>
-                    <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
-                      Runs GitHub session execution inside a same-server container while keeping the worktree publish
-                      flow.
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        color: palette.soft,
+                        ...typeStyle(12),
+                      }}
+                    >
+                      Runs GitHub session execution inside a same-server
+                      container while keeping the worktree publish flow.
                     </Text>
                   </Pressable>
                 </View>
 
-                <Text style={{ marginTop: 12, color: palette.soft, ...typeStyle(12) }}>
+                <Text
+                  style={{
+                    marginTop: 12,
+                    color: palette.soft,
+                    ...typeStyle(12),
+                  }}
+                >
                   {containerReady
                     ? "Recommended when you want stronger execution isolation without changing how PRs and cleanup work."
                     : "Install Docker or Podman on the server to unlock container-backed GitHub sessions."}
@@ -1328,12 +1797,19 @@ export default function SettingsScreen() {
                 tone="panel"
               >
                 <View className="flex-row flex-wrap gap-2">
-                  <InfoChip label={advancedOpen ? "Expanded" : "Hidden"} tone={advancedOpen ? "accent" : "neutral"} />
+                  <InfoChip
+                    label={advancedOpen ? "Expanded" : "Hidden"}
+                    tone={advancedOpen ? "accent" : "neutral"}
+                  />
                   <InfoChip label="Stored on host" />
                 </View>
                 <View className="mt-4">
                   <ActionButton
-                    label={advancedOpen ? "Hide manual token form" : "Show manual token form"}
+                    label={
+                      advancedOpen
+                        ? "Hide manual token form"
+                        : "Show manual token form"
+                    }
                     variant="secondary"
                     onPress={() => setAdvancedOpen((value) => !value)}
                   />
@@ -1372,7 +1848,13 @@ export default function SettingsScreen() {
                 }}
               >
                 <ActivityIndicator color={palette.accent} />
-                <Text style={{ marginTop: 12, color: palette.soft, ...typeStyle(14) }}>
+                <Text
+                  style={{
+                    marginTop: 12,
+                    color: palette.soft,
+                    ...typeStyle(14),
+                  }}
+                >
                   Refreshing host and GitHub posture…
                 </Text>
               </View>
@@ -1384,7 +1866,13 @@ export default function SettingsScreen() {
               animationType="slide"
               onRequestClose={() => setThemePickerOpen(false)}
             >
-              <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: hexToRgba(palette.ink, 0.46) }}>
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "flex-end",
+                  backgroundColor: hexToRgba(palette.ink, 0.46),
+                }}
+              >
                 <Pressable
                   style={{ flex: 1 }}
                   onPress={() => setThemePickerOpen(false)}
@@ -1429,13 +1917,13 @@ export default function SettingsScreen() {
                     contentContainerStyle={{ paddingBottom: 20 }}
                   >
                     {THEME_LIST.map((theme) => {
-                      const isSelected = theme.id === themeId
+                      const isSelected = theme.id === themeId;
                       return (
                         <Pressable
                           key={theme.id}
                           onPress={() => {
-                            setTheme(theme.id)
-                            setThemePickerOpen(false)
+                            setTheme(theme.id);
+                            setThemePickerOpen(false);
                           }}
                           accessibilityRole="button"
                           accessibilityState={{ selected: isSelected }}
@@ -1449,20 +1937,30 @@ export default function SettingsScreen() {
                             borderRadius: 12,
                             paddingHorizontal: 16,
                             paddingVertical: 12,
-                            backgroundColor: isSelected ? hexToRgba(palette.accent, 0.12) : "transparent",
+                            backgroundColor: isSelected
+                              ? hexToRgba(palette.accent, 0.12)
+                              : "transparent",
                           }}
                         >
                           <View>
                             <Text
                               style={{
-                                color: isSelected ? palette.accent : palette.ink,
+                                color: isSelected
+                                  ? palette.accent
+                                  : palette.ink,
                                 ...typeStyle(14, { weight: "600" }),
                               }}
                             >
                               {theme.name}
                             </Text>
                             {theme.author ? (
-                              <Text style={{ marginTop: 4, color: palette.muted, ...typeStyle(12) }}>
+                              <Text
+                                style={{
+                                  marginTop: 4,
+                                  color: palette.muted,
+                                  ...typeStyle(12),
+                                }}
+                              >
                                 by {theme.author}
                               </Text>
                             ) : null}
@@ -1475,14 +1973,24 @@ export default function SettingsScreen() {
                                 alignItems: "center",
                                 justifyContent: "center",
                                 borderRadius: 12,
-                                backgroundColor: hexToRgba(palette.accent, 0.19),
+                                backgroundColor: hexToRgba(
+                                  palette.accent,
+                                  0.19,
+                                ),
                               }}
                             >
-                              <Text style={{ color: palette.accent, fontWeight: "700" }}>✓</Text>
+                              <Text
+                                style={{
+                                  color: palette.accent,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                ✓
+                              </Text>
                             </View>
                           ) : null}
                         </Pressable>
-                      )
+                      );
                     })}
                   </ScrollView>
                 </View>
@@ -1492,5 +2000,5 @@ export default function SettingsScreen() {
         }
       />
     </View>
-  )
+  );
 }
