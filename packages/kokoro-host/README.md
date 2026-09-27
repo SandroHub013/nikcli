@@ -44,12 +44,12 @@ kokoro-host.exe ^
 `--dll`, `--model`, `--voices`, `--tokens` and `--espeak-data` are required;
 the rest are not.
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--lang` | `en-us` | The language used when a request names none. `en-us` and `en` are the only values: `en-gb` has no voice. |
-| `--threads` | `8` | Inference threads. Eight was the fastest measured; 16 bought almost nothing and 2 or 4 fell under the gate. |
-| `--lexicon` | none | An optional sherpa lexicon, if one is ever measured. |
-| `--dict-dir` | none | An optional sherpa dictionary directory. |
+| Flag         | Default | Meaning                                                                                                     |
+| ------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `--lang`     | `en-us` | The language used when a request names none. `en-us` and `en` are the only values: `en-gb` has no voice.    |
+| `--threads`  | `8`     | Inference threads. Eight was the fastest measured; 16 bought almost nothing and 2 or 4 fell under the gate. |
+| `--lexicon`  | none    | An optional sherpa lexicon, if one is ever measured.                                                        |
+| `--dict-dir` | none    | An optional sherpa dictionary directory.                                                                    |
 
 A startup that fails writes one line and leaves with status 2. A startup that
 works stays until stdin closes, then leaves with status 0.
@@ -59,7 +59,7 @@ works stays until stdin closes, then leaves with status 0.
 The first line out is always:
 
 ```json
-{"v":1,"ready":true,"loadMs":842,"sampleRate":24000,"pid":1234,"mem":{}}
+{ "v": 1, "ready": true, "loadMs": 842, "sampleRate": 24000, "pid": 1234, "mem": {} }
 ```
 
 If the model could not be loaded it is `{"v":1,"ready":false,"loadMs":…,"error":"…"}`,
@@ -88,13 +88,13 @@ synthesis at a time:
 A request that will not be spoken answers on its own line instead, with `ok`
 false and one of these codes, and the loop carries on:
 
-| Code | Meaning |
-| --- | --- |
-| `bad-line` | The line is not one JSON object. |
-| `bad-request` | A required field is missing, empty, or the wrong type. |
-| `bad-lang` | A language with no voice behind it. |
-| `synth-failed` | sherpa returned no audio. |
-| `empty-audio` | sherpa returned no samples, so no file was written. |
+| Code           | Meaning                                                 |
+| -------------- | ------------------------------------------------------- |
+| `bad-line`     | The line is not one JSON object.                        |
+| `bad-request`  | A required field is missing, empty, or the wrong type.  |
+| `bad-lang`     | A language with no voice behind it.                     |
+| `synth-failed` | sherpa returned no audio.                               |
+| `empty-audio`  | sherpa returned no samples, so no file was written.     |
 | `write-failed` | The WAV could not be written where the request pointed. |
 
 ## What must not be logged

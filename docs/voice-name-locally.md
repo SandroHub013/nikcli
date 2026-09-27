@@ -6,20 +6,20 @@ cambia una delle cose elencate in fondo.
 
 ## Cosa costa, oggi
 
-Il rilevatore locale decide solo *se qualcuno sta parlando*, non *cosa dice*.
+Il rilevatore locale decide solo _se qualcuno sta parlando_, non _cosa dice_.
 Per sapere se la frase comincia col nome bisogna trascriverla, e la
 trascrizione è nel cloud: 1,5 s di audio per ogni frase sentita.
 
 Misurato il 2026-09-17 con chiamate vere a OpenRouter
 (`microsoft/mai-transcribe-2`):
 
-| Voce | Valore |
-|---|---|
-| Prezzo | 0,0000278 $ al secondo di audio |
-| Minimo fatturato | 2 s, quindi 0,0000556 $ a controllo del nome |
-| Stanza silenziosa | 0 chiamate all'ora: senza voce non parte niente |
-| Televisione o parlato | circa 332 chiamate all'ora, cioè 0,018 $/h |
-| Lavoro normale | circa 21 chiamate all'ora, cioè 0,0012 $/h |
+| Voce                  | Valore                                          |
+| --------------------- | ----------------------------------------------- |
+| Prezzo                | 0,0000278 $ al secondo di audio                 |
+| Minimo fatturato      | 2 s, quindi 0,0000556 $ a controllo del nome    |
+| Stanza silenziosa     | 0 chiamate all'ora: senza voce non parte niente |
+| Televisione o parlato | circa 332 chiamate all'ora, cioè 0,018 $/h      |
+| Lavoro normale        | circa 21 chiamate all'ora, cioè 0,0012 $/h      |
 
 Le chiamate all'ora vengono da un'ora simulata con il rilevatore vero
 (`packages/voice/src/audio/level.ts`), non da una stanza registrata: servono a
@@ -52,7 +52,7 @@ Il costo non è il modello, è dove lo si fa girare.
 
 Con l'ascolto continuo spento di serie (S48), la spesa in sottofondo è zero
 finché l'utente non la chiede: il problema urgente è risolto senza toccare il
-riconoscimento. Il riconoscimento locale serve a chi *vuole* l'ascolto sempre
+riconoscimento. Il riconoscimento locale serve a chi _vuole_ l'ascolto sempre
 attivo e non vuole pagarlo, ed è una cosa sola con lo spostare la cattura audio
 fuori dalla webview.
 

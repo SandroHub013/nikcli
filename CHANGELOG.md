@@ -3,6 +3,10 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.402.0 (September 2026)
+
+- No notable changes
+
 ## v1.401.0 (September 2026)
 
 ## Mobile
