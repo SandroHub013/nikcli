@@ -1389,6 +1389,22 @@ mod tests {
         assert_eq!(commands, 2, "i due comandi asincroni di Kokoro: install e speak");
     }
 
+    /// Review area 1, MEDIO 9: l'install di Kokoro girava su un worker async, e
+    /// ogni clic su «Installa» ne teneva uno per minuti. Il comando vuole un
+    /// `AppHandle` e non si chiama da un test: si legge, come quello sopra.
+    #[test]
+    fn i_comandi_lunghi_di_kokoro_girano_sul_pool_bloccante() {
+        let source = include_str!("../tts.rs");
+        for name in ["install", "speak"] {
+            let chunk = source
+                .split(&format!("pub async fn tts_local_{name}("))
+                .nth(1)
+                .unwrap_or_else(|| panic!("tts_local_{name} non trovato"));
+            let body = &chunk[..chunk.find("\n}\n").unwrap_or(chunk.len())];
+            assert!(body.contains("spawn_blocking("), "tts_local_{name} blocca un worker async");
+        }
+    }
+
     #[test]
     fn la_prima_riga_si_legge_come_l_host_la_scrive() {
         // Le due righe che K4a ha misurato: il caricamento e il rifiuto, che

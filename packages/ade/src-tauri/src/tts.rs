@@ -235,6 +235,11 @@ impl Default for KokoroState {
     }
 }
 
+/// Installs Kokoro, on Tauri's blocking pool like Piper's install.
+///
+/// The lock, curl, tar and certutil block for minutes; on an async worker each
+/// click on «Installa» held one of the workers every other command needs, and a
+/// second click queued on the lock held another.
 #[tauri::command]
 pub async fn tts_local_install(
     app: tauri::AppHandle,
@@ -243,20 +248,24 @@ pub async fn tts_local_install(
     if provider != kokoro::KOKORO {
         return Err(format!("{provider} non è un provider locale."));
     }
-    let state = app.state::<Piper>();
     let root = kokoro_root(&app)?;
-    let slot = state.installer.slot(kokoro::KOKORO);
-    let _one = state.installer.hold(&slot);
-    let install = state.installer.begin(
-        &slot,
-        kokoro::STEPS,
-        None,
-        Instant::now() + state.installer.deadline(),
-    );
-    let mut closed = Closed { install: &install, closed: false };
-    let outcome = kokoro::install_locked(&install, &root, &Curl, &Certutil);
-    closed.report(&outcome);
-    outcome
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Piper>();
+        let slot = state.installer.slot(kokoro::KOKORO);
+        let _one = state.installer.hold(&slot);
+        let install = state.installer.begin(
+            &slot,
+            kokoro::STEPS,
+            None,
+            Instant::now() + state.installer.deadline(),
+        );
+        let mut closed = Closed { install: &install, closed: false };
+        let outcome = kokoro::install_locked(&install, &root, &Curl, &Certutil);
+        closed.report(&outcome);
+        outcome
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// The digest of some bytes, in the spelling a manifest pins.
