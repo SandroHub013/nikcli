@@ -180,7 +180,10 @@ export function DesignSheet(props: {
                 })}
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
-                onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
+                onAgain={() => {
+                  const asked = proposal()
+                  void props.hub.again(asked).then((done) => done && surface?.focus())
+                }}
                 recipientHint={recipientHint(props.hub.recipientFor(proposal()))}
                 askedBy={askerName(proposal(), props.hub.sessions())}
                 now={new Date()}
@@ -194,16 +197,20 @@ export function DesignSheet(props: {
                   if (!proposal().multi) void submit()
                 }}
                 onOpenUrl={() => void openExternally(proposal().url!)}
-                onSheetChosen={() =>
-                  void props.hub.sheetChosen(proposal()).then((done) => {
-                    if (done)
-                      showStatus(
-                        answeredStatus(proposal().k, t("design.url.words"), props.hub.recipientFor(proposal())),
-                      )
-                    if (done) setAnswered(true)
-                    if (done) surface?.focus()
+                onSheetChosen={() => {
+                  /*
+                   * Taken before the write: once it is in the register the proposal leaves
+                   * the list, and `proposal()` is the next one or nothing (ultimi, the
+                   * TypeError that kept the sheet open and the toast away).
+                   */
+                  const chosen = proposal()
+                  void props.hub.sheetChosen(chosen).then((done) => {
+                    if (!done) return
+                    showStatus(answeredStatus(chosen.k, t("design.url.words"), props.hub.recipientFor(chosen)))
+                    setAnswered(true)
+                    surface?.focus()
                   })
-                }
+                }}
                 noteRef={(element) => (note = element)}
               />
             )

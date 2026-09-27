@@ -195,13 +195,16 @@ export function DecisionsSheet(props: {
                 onPick={(index) => pick(k, index, Boolean(decision().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                 onSubmit={() => void submit()}
-                onDefer={(until) =>
-                  void props.hub.defer(decision(), until).then((done) => {
-                    if (done) showStatus(deferredStatus(decision().k, until, props.hub.register.now()))
-                    if (done) setAnswered(true)
-                    if (done) surface?.focus()
+                onDefer={(until) => {
+                  // Taken before the write: once deferred, the decision leaves the list (see the design sheet).
+                  const deferred = decision()
+                  void props.hub.defer(deferred, until).then((done) => {
+                    if (!done) return
+                    showStatus(deferredStatus(deferred.k, until, props.hub.register.now()))
+                    setAnswered(true)
+                    surface?.focus()
                   })
-                }
+                }}
                 noteRef={(element) => (note = element)}
               />
             )

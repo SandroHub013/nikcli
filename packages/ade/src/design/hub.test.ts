@@ -860,3 +860,66 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
     host.remove()
   })
 })
+
+/*
+ * ultimi (Verifiche, rifiniture-2): «Ho scelto sul foglio» on the last proposal
+ * left the sheet open and empty, and no toast. The write puts the answer in the
+ * register, which is read again before the promise resolves: the proposal has
+ * left the list, and the handler read `proposal().k` of nothing (TypeError).
+ */
+describe("«Ho scelto sul foglio» on the last proposal (ultimi)", () => {
+  test("the sheet leaves and hands on its status, though the proposal left the list first", async () => {
+    const line = `${JSON.stringify({
+      type: "aperta",
+      k: "DS1",
+      at: "2026-09-27T10:00:00.000Z",
+      by: "fable",
+      title: "T DS1",
+      url: "https://claude.ai/artifact/prova",
+      variants: [
+        { name: "A", description: "Alpha" },
+        { name: "B", description: "Beta" },
+      ],
+    })}\n`
+    const { io } = memory(line)
+    const host = document.createElement("div")
+    document.body.append(host)
+    const done: [string, string | undefined][] = []
+    let register!: DesignRegister
+    let unrender!: () => void
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      const hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      unrender = render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+            waiting: () => 0,
+            onDone: (next, said) => void done.push([next, said]),
+          }),
+        host,
+      )
+      return dispose
+    })
+    await register.refresh()
+
+    const chosen = document.querySelector<HTMLButtonElement>('[data-action="sheet-chosen"]')
+    expect(chosen).not.toBeNull()
+    chosen!.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(done).toEqual([["close", "DS1: scelta sul foglio claude.ai, a Master"]])
+    unrender()
+    dispose()
+    host.remove()
+  })
+})
