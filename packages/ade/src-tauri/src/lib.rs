@@ -159,14 +159,22 @@ fn is_git_executable_path(path: &Path) -> bool {
         if name != ".git" {
             return false;
         }
-        let rest = &names[i + 1..];
-        // `.git/worktrees/<name>/config.worktree` is the same file for a worktree.
-        let rest = match rest {
-            [w, _, tail @ ..] if w == "worktrees" => tail,
-            other => other,
-        };
-        matches!(rest.first().map(String::as_str), Some("hooks"))
-            || matches!(rest, [f] if f == "config" || f == "config.worktree")
+        let mut rest = &names[i + 1..];
+        // `.git/worktrees/<name>/config.worktree` is the same file for a worktree,
+        // and `.git/modules/<name>/…` is a submodule's own `.git`, nested as deep
+        // as the submodules are (review area 1, MEDIO 3).
+        while let [dir, _, tail @ ..] = rest {
+            if dir != "worktrees" && dir != "modules" {
+                break;
+            }
+            rest = tail;
+        }
+        // `.git` itself: a file there is a `gitdir:` pointer, which sends git
+        // to read its config (and hooks) from wherever it names. `commondir`
+        // does the same for a worktree.
+        rest.is_empty()
+            || matches!(rest.first().map(String::as_str), Some("hooks"))
+            || matches!(rest, [f] if f == "config" || f == "config.worktree" || f == "commondir")
     })
 }
 
@@ -2723,6 +2731,12 @@ mod tests {
             dir.join(".git").join("hooks").join("pre-commit"),
             dir.join(".git").join("config"),
             dir.join(".git").join("worktrees").join("w").join("config.worktree"),
+            // Review area 1, MEDIO 3: where git also reads a config or a hook from.
+            dir.join(".git").join("worktrees").join("w").join("commondir"),
+            dir.join(".git").join("modules").join("sub").join("config"),
+            dir.join(".git").join("modules").join("sub").join("hooks").join("pre-commit"),
+            dir.join(".git").join("modules").join("a").join("modules").join("b").join("config"),
+            dir.join("sub").join(".git"),
         ] {
             let error = within_roots(&roots, &bad.to_string_lossy()).expect_err("refused");
             assert!(error.contains("git"), "{error}");
