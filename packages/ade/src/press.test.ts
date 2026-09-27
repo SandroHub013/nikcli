@@ -91,3 +91,42 @@ describe("the press nik's restyle gave a button", () => {
     })
   }
 })
+
+/*
+ * The other half of the restyle: fields, rows and links that changed ground,
+ * border or colour in a snap. They ease now, with what nik eased, minus the
+ * transform on rows (they do not move here) and the filter on the sidebar pill
+ * and space badge (we hover with the ground, not brightness).
+ */
+const EASED: Record<string, string[]> = {
+  '[data-slot="browser-edit-field"] input': ["border-color", "box-shadow"],
+  '[data-slot="decision-option"]': ["background", "border-color"],
+  '[data-slot="decision-note"]': ["border-color", "box-shadow"],
+  '[data-slot="decision-row"]': ["border-color", "background"],
+  '[data-slot="ext-search"]': ["border-color", "background"],
+  '[data-slot="ext-card"]': ["border-color", "box-shadow"],
+  '[data-slot="ext-link"]': ["color"],
+  '[data-slot="drop-zone-label"]': ["background"],
+  '[data-component="remote-space"] input': ["border-color", "background", "box-shadow"],
+  '[data-component="remote-space"] [data-slot="host"]': ["background"],
+  '[data-slot="keys-row"]': ["background"],
+  '[data-slot="keys-field"] input': ["border-color", "background", "box-shadow"],
+  '[data-slot="session-mark-wrap"]': ["background"],
+  '[data-slot="session-title"]': ["color"],
+  '[data-slot="active-agent-title"]': ["color"],
+  '[data-component="ade-sidebar"] [data-slot="session-row"]': ["background"],
+  '[data-component="ade-sidebar"] [data-slot="active-agent-card"]': ["background"],
+  '[data-slot="sidebar-stat"]': ["color"],
+  '[data-slot="sidebar-stat-icon"]': ["color"],
+  '[data-slot="sim-url"]': ["border-color"],
+  '[data-slot="sim-device"]': ["border-color"],
+}
+
+describe("what nik's restyle eased", () => {
+  for (const [selector, props] of Object.entries(EASED)) {
+    test(`${selector} eases ${props.join(", ")} on the shared timing`, () => {
+      const last = declared(selector, "transition").at(-1) ?? ""
+      for (const prop of props) expect(last).toContain(`${prop} var(--ade-dur-fast)`)
+    })
+  }
+})

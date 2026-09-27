@@ -750,6 +750,9 @@
   color: var(--ade-text);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease-out);
 }
 
 [data-slot="browser-edit-field"] input:focus {

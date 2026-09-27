@@ -732,6 +732,7 @@ body,
      accent pill was the one green left in a grey zone (contorni-terzo, 3). */
   color: var(--ade-bg);
   background: var(--ade-text);
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* A corner grip, visible when the tile is hovered or focused, so resting

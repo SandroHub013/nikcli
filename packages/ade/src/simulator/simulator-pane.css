@@ -68,6 +68,7 @@
   color: var(--ade-text);
   font: inherit;
   font-size: var(--ade-font-xs);
+  transition: border-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="sim-device"] {
@@ -80,6 +81,7 @@
   color: var(--ade-text);
   font: inherit;
   font-size: var(--ade-font-xs);
+  transition: border-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="sim-size"] {

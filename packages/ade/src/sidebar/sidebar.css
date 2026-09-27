@@ -1048,6 +1048,7 @@
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="session-main"] {
@@ -1136,6 +1137,7 @@
   flex: 1 1 auto;
   min-width: 0;
   line-height: 1.25;
+  transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* ── Status Dot Only ── */
@@ -1570,6 +1572,7 @@ aside[data-component="ade-sidebar"] {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="active-agents-list"] {
@@ -1799,11 +1802,13 @@ aside[data-component="ade-sidebar"] {
   align-items: center;
   gap: var(--ade-space-1);
   cursor: default;
+  transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="sidebar-stat-icon"] {
   flex: 0 0 auto;
   color: var(--ade-text-weak);
+  transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="sidebar-stat"][data-load="busy"],
