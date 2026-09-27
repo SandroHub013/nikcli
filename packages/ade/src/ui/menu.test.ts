@@ -72,3 +72,35 @@ test("lint: both menus of the bar are bound", () => {
   expect(source).toContain("bindMenu(menu, { close: () => setNewPaneOpen(false), anchor: newPaneButton })")
   expect(source).toContain("bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton })")
 })
+
+/*
+ * Verifiche, medi-restyle: in ADE the click outside did not close and
+ * ArrowDown stayed on the first item. Solid clones the menu from a template
+ * and runs the ref before inserting it, so the node still belongs to the
+ * template's inert document: the page's presses and focus were read there.
+ */
+test("bound as Solid binds it, before it is in the page: the arrows and a press outside still work", async () => {
+  const inert = document.implementation.createHTMLDocument("")
+  const menu = inert.createElement("div")
+  menu.setAttribute("role", "menu")
+  for (const name of ["uno", "due"]) {
+    const item = inert.createElement("button")
+    item.textContent = name
+    menu.append(item)
+  }
+  const outside = document.createElement("p")
+  document.body.append(outside)
+  let closed = 0
+  const unbind = bindMenu(menu as HTMLElement, { close: () => closed++ })
+  document.body.append(document.adoptNode(menu))
+  await Promise.resolve()
+  expect(document.activeElement?.textContent).toBe("uno")
+  document.activeElement!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+  )
+  expect(document.activeElement?.textContent).toBe("due")
+  outside.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+  expect(closed).toBe(1)
+  unbind()
+  document.body.innerHTML = ""
+})
