@@ -286,7 +286,28 @@ export function selectionText(terminal: Terminal): string {
 }
 
 /** What `copyOnRelease` needs from a terminal: little enough to fake in a test. */
-export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "clearSelection" | "refresh" | "rows">
+export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "select">
+
+/**
+ * Takes a copied selection away for good, which `clearSelection` does not do in
+ * xterm 6 (read in node_modules/@xterm/xterm/src/browser):
+ *
+ * - `DomRenderer.handleSelectionChanged` empties `.xterm-selection` for an empty
+ *   selection but returns before it updates `_selectionRenderModel`, and
+ *   `handleResize` redraws from that model: the teal block came back on a resize.
+ *   `refresh` only redraws rows, never the selection layer.
+ * - `SelectionService.clearSelection` fires `onSelectionChange` without recording
+ *   it in `_oldSelectionStart/_oldSelectionEnd`, so dragging over the same cells
+ *   again compared equal and fired nothing: no copy, and the teal stayed.
+ *
+ * `select(0, 0, 0)` goes through `setSelection` instead: the renderer is handed a
+ * defined, empty range, which clears its model (`SelectionRenderModel.update`),
+ * and the service records it as the last selection. It selects nothing, so
+ * `hasSelection` is false and Ctrl+C still interrupts.
+ */
+export function forgetSelection(terminal: Pick<Terminal, "select">): void {
+  terminal.select(0, 0, 0)
+}
 
 /**
  * Copies a selection the moment the button that made it comes up.
@@ -333,11 +354,8 @@ export function copyOnRelease(
        */
       if (changed && terminal.hasSelection()) {
         copy()
-        terminal.clearSelection()
-        /* xterm keeps the highlight after a clear and draws it again on the next fit,
-         * so the teal block came back over different text on a resize. Repainting
-         * the viewport is the public way to make it go: no patch, just the API. */
-        terminal.refresh(0, terminal.rows - 1)
+        // Not `clearSelection`: see `forgetSelection` for what it leaves behind.
+        forgetSelection(terminal)
       }
     }, 0)
   }
