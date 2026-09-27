@@ -19,6 +19,23 @@ export interface AgentOption {
   label: string
   /** Executable name, resolved on PATH. */
   command: string
+  /**
+   * Arguments every start of this CLI needs, before any of ADE's own.
+   *
+   * Cline is the case: bare, with a task, it runs the task headless in act
+   * mode with every step approved; its terminal interface is `--tui` (`cline
+   * --help`, the CLI reference). A pane is the interface, so it asks for it.
+   */
+  args?: readonly string[]
+  /**
+   * `app`: not an agent but a program with a web interface of its own, run in
+   * the pane as a server. No task is typed into it, and it is not something an
+   * agent can be asked to spawn. T3 Code is the case: `t3` starts its server
+   * and opens its app in the system browser, and that app drives the agents
+   * listed above; when the server prints its local address, ADE offers to open
+   * it in a web pane too (`browser/dev-server.ts`).
+   */
+  kind?: "app"
 }
 
 /*
@@ -42,6 +59,17 @@ export const AGENTS: AgentOption[] = [
   { id: "pi", label: "pi", command: "pi" },
   { id: "ohmypi", label: "OhMyPi", command: "ohmypi" },
   { id: "hermes", label: "Hermes", command: "hermes" },
+  /*
+   * From `ade-team/results/agenti-mancanti.md` (2026-09-27). Each is looked up
+   * on PATH like the rest, so one that is not installed shows as absent.
+   */
+  { id: "freebuff", label: "Freebuff", command: "freebuff" },
+  { id: "cline", label: "Cline", command: "cline", args: ["--tui"] },
+  { id: "crush", label: "Crush", command: "crush" },
+  { id: "kilo", label: "Kilo", command: "kilo" },
+  { id: "goose", label: "goose", command: "goose" },
+  { id: "copilot", label: "Copilot", command: "copilot" },
+  { id: "t3", label: "T3 Code", command: "t3", kind: "app" },
   {
     id: "terminal",
     label: "Terminal",
@@ -75,6 +103,11 @@ export function systemShell(): string {
 
 export function agentById(id: string): AgentOption | undefined {
   return AGENTS.find((agent) => agent.id === id)
+}
+
+/** Whether this is an app run as a server (`kind: "app"`) rather than an agent a task is typed into. */
+export function isApp(id: string): boolean {
+  return agentById(id)?.kind === "app"
 }
 
 export function agentLabel(id: string): string {

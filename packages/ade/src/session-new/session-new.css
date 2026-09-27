@@ -279,7 +279,14 @@
 [data-agent-id="prime"],
 [data-agent-id="pi"],
 [data-agent-id="hermes"],
-[data-agent-id="grok"] {
+[data-agent-id="grok"],
+[data-agent-id="copilot"],
+[data-agent-id="cline"],
+[data-agent-id="goose"],
+[data-agent-id="kilo"],
+[data-agent-id="crush"],
+[data-agent-id="freebuff"],
+[data-agent-id="t3"] {
   --cli-color: light-dark(#000000, #ffffff);
   --cli-tint: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
   --cli-border: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.3));

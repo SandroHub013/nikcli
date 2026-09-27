@@ -413,6 +413,14 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("hermes") || t.includes("nous")) return "hermes"
   if (t.includes("kimi") || t.includes("moonshot")) return "kimi"
   if (t.includes("prime")) return "prime"
+  // Before "pi": «copilot» holds it.
+  if (t.includes("copilot")) return "copilot"
+  if (t.includes("freebuff") || t.includes("codebuff")) return "freebuff"
+  if (t.includes("cline")) return "cline"
+  if (t.includes("crush")) return "crush"
+  if (t.includes("kilo")) return "kilo"
+  if (t.includes("goose")) return "goose"
+  if (/\bt3\b/.test(t)) return "t3"
   if (t.includes("ohmypi")) return "ohmypi"
   if (t.includes("pi")) return "pi"
   if (t.includes("shell") || t.includes("term") || t.includes("bash") || t.includes("zsh") || t.includes("powershell"))

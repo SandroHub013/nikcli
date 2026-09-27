@@ -642,8 +642,8 @@ describe("createAdeVoiceHost, spoken planning", () => {
   test("startSession refuses an agent that does not exist, and opens nothing", async () => {
     const { deps, started } = planningDeps({ project: () => nikcli })
 
-    await expect(createAdeVoiceHost(deps).startSession!({ agent: "copilot", task: "qualsiasi cosa" })).rejects.toThrow(
-      /Non conosco l'agente «copilot»/,
+    await expect(createAdeVoiceHost(deps).startSession!({ agent: "aider", task: "qualsiasi cosa" })).rejects.toThrow(
+      /Non conosco l'agente «aider»/,
     )
     expect(started).toHaveLength(0)
   })

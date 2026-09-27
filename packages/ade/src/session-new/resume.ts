@@ -398,6 +398,31 @@ export const RESUME: Record<string, ResumeRecipe> = {
     byId: (id) => ["--resume", id],
     last: () => ["--continue"],
   },
+  /*
+   * The agents of 2026-09-27, from their own documentation, not from a binary:
+   * none of them is installed here, so no `--help` was read.
+   *
+   *   kilo     -c, --continue: «the most recent session from this workspace»
+   *            (kilo.ai/docs, CLI). No flag opens one by id, only slash
+   *            commands inside a session.
+   *   copilot  --continue: «the most recent session for the current
+   *            repository» (copilot-cli changelog 1.0.64, 1.0.78). `--resume`
+   *            takes an id ADE has no way to learn.
+   *
+   * And the ones left out on purpose:
+   *   goose    `session --resume` reopens the most recently used session of
+   *            the whole machine, not of this folder: a pane would come back
+   *            inside another project's conversation.
+   *   cline    `--id <session-id>` only, and ADE never learns the id.
+   *   crush, freebuff  no resume flag documented.
+   *   t3       not an agent: its app keeps its own threads.
+   */
+  kilo: {
+    last: () => ["--continue"],
+  },
+  copilot: {
+    last: () => ["--continue"],
+  },
 }
 
 /**

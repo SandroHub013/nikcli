@@ -19,11 +19,15 @@ describe("REAL_MARK_IDS", () => {
   })
 
   /*
-   * Every agent ADE can start is now drawn with its authentic mark.
+   * Every agent ADE can start is drawn with its authentic mark, but for three:
+   * Crush, Freebuff and T3 Code are in neither icon set a mark is copied from,
+   * and get the neutral monogram rather than a logo traced by eye.
    */
-  test("every agent in the catalogue is drawn with its own mark", () => {
+  const MONOGRAMS = ["crush", "freebuff", "t3"]
+
+  test("every agent in the catalogue is drawn with its own mark, but the three with no usable one", () => {
     for (const agent of AGENTS) {
-      expect(hasRealMark(agent.id)).toBe(true)
+      expect([agent.id, hasRealMark(agent.id)]).toEqual([agent.id, !MONOGRAMS.includes(agent.id)])
     }
   })
 

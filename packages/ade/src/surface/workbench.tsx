@@ -2771,7 +2771,8 @@ export function Workbench() {
   /** How long a session that replied with `--close` keeps running, so its own `ade-msg reply` can finish. */
   const AUTO_CLOSE_DELAY_MS = 2500
 
-  const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal")
+  // Nor an app run as a server (T3 Code): an agent asking for help wants another agent.
+  const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal" && agent.kind !== "app")
 
   /*
    * The quota rule for spawn (S9, `session/quota-pick.ts`).
@@ -7229,6 +7230,8 @@ export function Workbench() {
     typeIntoResumed = false,
   ) => {
     const agent = agentById(agentId)
+    // An app's pane is its server's console: a task typed there is a line the server does not read.
+    if (agent?.kind === "app") task = ""
     const host = await getHost()
     /*
      * Its folder gone (a project removed, a worktree cleaned up): not started
