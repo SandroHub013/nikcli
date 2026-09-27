@@ -223,9 +223,9 @@ describe("a copy refused during a take says so (D68, Architect)", () => {
     Object.defineProperty(terminal, "buffer", { value: { active: buffer }, configurable: true })
     terminal.hasSelection = () => true
     terminal.getSelectionPosition = () => ({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 } })
-    let cleared = false
-    terminal.clearSelection = () => {
-      cleared = true
+    let forgot = false
+    terminal.select = () => {
+      forgot = true
     }
     const original = navigator.clipboard
     let written = 0
@@ -235,7 +235,7 @@ describe("a copy refused during a take says so (D68, Architect)", () => {
     try {
       const handled = createTerminalKeyHandler(terminal, () => blocked++)(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }))
       expect(handled).toBe(false)
-      expect([blocked, written, cleared]).toEqual([1, 0, true])
+      expect([blocked, written, forgot]).toEqual([1, 0, true])
     } finally {
       coverTerminals(false)
       Object.defineProperty(navigator, "clipboard", { value: original, configurable: true })

@@ -12,6 +12,117 @@ import {
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
+/*
+ * A model of the xterm 6 pieces copyOnRelease and the Ctrl+C handler meet, written from its source
+ * (node_modules/@xterm/xterm/src/browser), not a fake that fires the listener
+ * by hand: the old test did that on every drag, and so gave itself the very
+ * change it was meant to prove (nik, barra-versione-seguito point 3).
+ *
+ * - SelectionService: `_fireEventIfSelectionChanged` compares with the last
+ *   selection it fired for and says nothing when it is the same;
+ *   `clearSelection` fires without recording that; `setSelection` goes
+ *   through the comparison. The redraw is queued for the next frame.
+ * - DomRenderer: `handleSelectionChanged` empties the layer and returns early
+ *   for an empty selection, without touching its `_selectionRenderModel`;
+ *   `handleResize` redraws from that model; `refresh` redraws rows only.
+ */
+type Cell = [number, number]
+const same = (a?: Cell, b?: Cell) => !!a && !!b && a[0] === b[0] && a[1] === b[1]
+
+function xterm() {
+  const listeners: Array<() => void> = []
+  let start: Cell | undefined
+  let end: Cell | undefined
+  let old: { start?: Cell; end?: Cell; has: boolean } = { has: false }
+  let frame: (() => void) | undefined
+  // DomRenderer's `_selectionRenderModel` and the divs in `.xterm-selection`.
+  let renderModel: { start?: Cell; end?: Cell } = {}
+  let divs = 0
+
+  const has = () => !!start && !!end && !same(start, end)
+  const fire = () => {
+    for (const listener of [...listeners]) listener()
+  }
+  const fireIfChanged = () => {
+    const hasNow = has()
+    if (!hasNow) {
+      if (old.has) {
+        old = { start, end, has: false }
+        fire()
+      }
+      return
+    }
+    if (!old.start || !old.end || !same(start, old.start) || !same(end, old.end)) {
+      old = { start, end, has: true }
+      fire()
+    }
+  }
+  const renderSelection = (s?: Cell, e?: Cell) => {
+    divs = 0
+    if (!s || !e) return // the early return: the model keeps what it had
+    if (same(s, e)) {
+      renderModel = {} // SelectionRenderModel.update → clear()
+      return
+    }
+    renderModel = { start: s, end: e }
+    divs = Math.min(3, e[1] - s[1] + 1)
+  }
+  const refresh = () => {
+    frame ??= () => {
+      frame = undefined
+      renderSelection(start, end)
+    }
+  }
+  const terminal = {
+    rows: 24,
+    hasSelection: has,
+    onSelectionChange: (listener: () => void) => {
+      listeners.push(listener)
+      return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) }
+    },
+    clearSelection: () => {
+      start = end = undefined
+      refresh()
+      fire()
+    },
+    select: (col: number, row: number, length: number) => {
+      start = [col, row]
+      end = [col + length, row]
+      refresh()
+      fireIfChanged()
+    },
+    refresh: (_from: number, _to: number) => {},
+    // What the Ctrl+C handler reads to copy: a normal buffer, so `getSelection`.
+    buffer: { active: { type: "normal" } },
+    getSelection: () => (has() ? "selected output line" : ""),
+    getSelectionPosition: () =>
+      has() ? { start: { x: start![0], y: start![1] }, end: { x: end![0], y: end![1] } } : undefined,
+  }
+  return {
+    terminal,
+    /** The user drags over `from`..`to`; xterm's own mouseup runs after ours (capture). */
+    drag(element: EventTarget, release: EventTarget, from?: Cell, to?: Cell) {
+      element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
+      start = from
+      end = to
+      // The move is drawn frame by frame while the button is down.
+      refresh()
+      frame?.()
+      release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
+      fireIfChanged()
+    },
+    /** The next animation frame, then the decision's turn. */
+    async settle() {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      frame?.()
+    },
+    resize() {
+      renderSelection(renderModel.start, renderModel.end)
+    },
+    divs: () => divs,
+  }
+}
+
 describe("terminal selection & copy (S50)", () => {
   describe("isCopyShortcut", () => {
     it("recognizes Ctrl+C as a copy shortcut", () => {
@@ -68,83 +179,57 @@ describe("terminal selection & copy (S50)", () => {
       expect(session.terminal.options.rightClickSelectsWord).toBe(true)
     })
 
-    it("custom key handler intercepts Ctrl+C when terminal has selection and copies text", async () => {
-      const session = getTerminal(testId)
-      const term = session.terminal
-
-      let copiedText = ""
-      const origClipboard = navigator.clipboard
-      // Define mock clipboard property
-      Object.defineProperty(navigator, "clipboard", {
-        value: {
-          writeText: async (t: string) => {
-            copiedText = t
-          },
-        },
-        configurable: true,
-      })
-
-      try {
-        // Mock selection active
-        let hasSel = true
-        term.hasSelection = () => hasSel
-        term.getSelection = () => "selected output line"
-        term.clearSelection = () => {
-          hasSel = false
-        }
-
-        const customHandler = createTerminalKeyHandler(term)
-        const ctrlC = new KeyboardEvent("keydown", { key: "c", ctrlKey: true })
-        const handled = customHandler(ctrlC)
-
-        // Returns false to prevent xterm from sending ETX (\x03, SIGINT) to the process
-        expect(handled).toBe(false)
-        expect(copiedText).toBe("selected output line")
-        // Selection must be cleared so subsequent keys don't treat it as selected
-        expect(hasSel).toBe(false)
-      } finally {
+    describe("Ctrl+C on a selection, on the xterm model", () => {
+      let written: string[] = []
+      let origClipboard: Clipboard
+      beforeEach(() => {
+        written = []
+        origClipboard = navigator.clipboard
         Object.defineProperty(navigator, "clipboard", {
-          value: origClipboard,
+          value: { writeText: async (t: string) => void written.push(t) },
           configurable: true,
         })
-      }
-    })
-
-    it("second Ctrl+C after copying passes through to interrupt the agent (SIGINT)", async () => {
-      const session = getTerminal(testId)
-      const term = session.terminal
-
-      let hasSel = true
-      term.hasSelection = () => hasSel
-      term.getSelection = () => "selected line"
-      term.clearSelection = () => {
-        hasSel = false
-      }
-
-      const origClipboard = navigator.clipboard
-      Object.defineProperty(navigator, "clipboard", {
-        value: {
-          writeText: async () => {},
-        },
-        configurable: true,
+      })
+      afterEach(() => {
+        Object.defineProperty(navigator, "clipboard", { value: origClipboard, configurable: true })
       })
 
-      try {
-        const customHandler = createTerminalKeyHandler(term)
-        const ctrlC = new KeyboardEvent("keydown", { key: "c", ctrlKey: true })
-
-        // First Ctrl+C: intercepted to copy, selection is cleared
-        expect(customHandler(ctrlC)).toBe(false)
-        expect(hasSel).toBe(false)
-
-        // Second Ctrl+C on the same spot: selection is gone, passes through (returns true) for SIGINT
-        expect(customHandler(ctrlC)).toBe(true)
-      } finally {
-        Object.defineProperty(navigator, "clipboard", {
-          value: origClipboard,
-          configurable: true,
-        })
+      /** The user drags over `from`..`to` (no copy on release here), then presses Ctrl+C. */
+      const selectThenCtrlC = async (model: ReturnType<typeof xterm>, from: Cell, to: Cell) => {
+        model.drag(new EventTarget(), new EventTarget(), from, to)
+        await model.settle()
+        const handled = createTerminalKeyHandler(model.terminal as any)(
+          new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
+        )
+        await model.settle()
+        return handled
       }
+
+      it("copies the selection and keeps Ctrl+C from the program", async () => {
+        const model = xterm()
+        expect(await selectThenCtrlC(model, [2, 3], [10, 5])).toBe(false)
+        expect(written).toEqual(["selected output line"])
+      })
+
+      it("after the copy a resize draws no teal block", async () => {
+        const model = xterm()
+        await selectThenCtrlC(model, [2, 3], [10, 5])
+        expect(model.divs()).toBe(0)
+        // The fit after a resize: DomRenderer.handleResize redraws from its model.
+        model.resize()
+        expect(model.divs()).toBe(0)
+      })
+
+      it("a second Ctrl+C passes through to interrupt the agent (SIGINT)", async () => {
+        const model = xterm()
+        await selectThenCtrlC(model, [2, 3], [10, 5])
+        expect(model.terminal.hasSelection()).toBe(false)
+        const again = createTerminalKeyHandler(model.terminal as any)(
+          new KeyboardEvent("keydown", { key: "c", ctrlKey: true }),
+        )
+        expect(again).toBe(true)
+        expect(written).toHaveLength(1)
+      })
     })
 
     it("custom key handler passes Ctrl+C through when terminal has no selection", () => {
@@ -244,112 +329,6 @@ describe("terminal selection & copy (S50)", () => {
   })
 
   describe("copyOnRelease (S76)", () => {
-    /*
-     * A model of the xterm 6 pieces copyOnRelease meets, written from its source
-     * (node_modules/@xterm/xterm/src/browser), not a fake that fires the listener
-     * by hand: the old test did that on every drag, and so gave itself the very
-     * change it was meant to prove (nik, barra-versione-seguito point 3).
-     *
-     * - SelectionService: `_fireEventIfSelectionChanged` compares with the last
-     *   selection it fired for and says nothing when it is the same;
-     *   `clearSelection` fires without recording that; `setSelection` goes
-     *   through the comparison. The redraw is queued for the next frame.
-     * - DomRenderer: `handleSelectionChanged` empties the layer and returns early
-     *   for an empty selection, without touching its `_selectionRenderModel`;
-     *   `handleResize` redraws from that model; `refresh` redraws rows only.
-     */
-    type Cell = [number, number]
-    const same = (a?: Cell, b?: Cell) => !!a && !!b && a[0] === b[0] && a[1] === b[1]
-
-    function xterm() {
-      const listeners: Array<() => void> = []
-      let start: Cell | undefined
-      let end: Cell | undefined
-      let old: { start?: Cell; end?: Cell; has: boolean } = { has: false }
-      let frame: (() => void) | undefined
-      // DomRenderer's `_selectionRenderModel` and the divs in `.xterm-selection`.
-      let renderModel: { start?: Cell; end?: Cell } = {}
-      let divs = 0
-
-      const has = () => !!start && !!end && !same(start, end)
-      const fire = () => {
-        for (const listener of [...listeners]) listener()
-      }
-      const fireIfChanged = () => {
-        const hasNow = has()
-        if (!hasNow) {
-          if (old.has) {
-            old = { start, end, has: false }
-            fire()
-          }
-          return
-        }
-        if (!old.start || !old.end || !same(start, old.start) || !same(end, old.end)) {
-          old = { start, end, has: true }
-          fire()
-        }
-      }
-      const renderSelection = (s?: Cell, e?: Cell) => {
-        divs = 0
-        if (!s || !e) return // the early return: the model keeps what it had
-        if (same(s, e)) {
-          renderModel = {} // SelectionRenderModel.update → clear()
-          return
-        }
-        renderModel = { start: s, end: e }
-        divs = Math.min(3, e[1] - s[1] + 1)
-      }
-      const refresh = () => {
-        frame ??= () => {
-          frame = undefined
-          renderSelection(start, end)
-        }
-      }
-      const terminal = {
-        rows: 24,
-        hasSelection: has,
-        onSelectionChange: (listener: () => void) => {
-          listeners.push(listener)
-          return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) }
-        },
-        clearSelection: () => {
-          start = end = undefined
-          refresh()
-          fire()
-        },
-        select: (col: number, row: number, length: number) => {
-          start = [col, row]
-          end = [col + length, row]
-          refresh()
-          fireIfChanged()
-        },
-        refresh: (_from: number, _to: number) => {},
-      }
-      return {
-        terminal,
-        /** The user drags over `from`..`to`; xterm's own mouseup runs after ours (capture). */
-        drag(element: EventTarget, release: EventTarget, from?: Cell, to?: Cell) {
-          element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
-          start = from
-          end = to
-          // The move is drawn frame by frame while the button is down.
-          refresh()
-          frame?.()
-          release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
-          fireIfChanged()
-        },
-        /** The next animation frame, then the decision's turn. */
-        async settle() {
-          await new Promise((resolve) => setTimeout(resolve, 0))
-          frame?.()
-        },
-        resize() {
-          renderSelection(renderModel.start, renderModel.end)
-        },
-        divs: () => divs,
-      }
-    }
-
     const setup = () => {
       const model = xterm()
       const element = new EventTarget()
