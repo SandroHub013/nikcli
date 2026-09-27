@@ -7,6 +7,7 @@ import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
 import { Brief } from "../choices/brief"
+import { isRecommended } from "../choices/list"
 
 export function DesignCard(props: {
   proposal: DesignProposal
@@ -16,6 +17,8 @@ export function DesignCard(props: {
   problem?: string
   recipientHint: string
   now: Date
+  /** Who asked, told apart from a pane of the same title (`askerName`); the register's title without it. */
+  askedBy?: string
   projectRoot?: string
   onPick: (index: number) => void
   onNote: (note: string) => void
@@ -50,7 +53,7 @@ export function DesignCard(props: {
       <div data-slot="design-meta">
         {[
           props.proposal.spec,
-          t("decisions.from", props.proposal.raisedBy),
+          t("decisions.from", props.askedBy ?? props.proposal.raisedBy),
           formatDay(props.proposal.openedAt, props.now),
         ]
           .filter(Boolean)
@@ -110,7 +113,11 @@ export function DesignCard(props: {
           {(variant, index) => {
             const variantName = () => withoutNumber(variant.name, index() + 1).trim() || variant.name
             return (
-              <div data-slot="design-variant-item" data-selected={isPicked(props.picked, index()) ? "true" : undefined}>
+              <div
+                data-slot="design-variant-item"
+                data-selected={isPicked(props.picked, index()) ? "true" : undefined}
+                data-recommended={isRecommended(props.proposal.recommend, variant.name) ? "true" : undefined}
+              >
                 <div data-slot="variant-head">
                   <button
                     type="button"
@@ -125,6 +132,10 @@ export function DesignCard(props: {
                     </span>
                     <b data-slot="variant-name">{variantName()}</b>
                   </button>
+                  {/* The one the writer recommends, on its own card too, not only in the head (rifiniture 3). */}
+                  <Show when={isRecommended(props.proposal.recommend, variant.name)}>
+                    <span data-slot="choice-recommended">{t("choices.recommended")}</span>
+                  </Show>
                 </div>
 
                 <Show when={variant.description}>

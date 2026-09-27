@@ -1,10 +1,10 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
 import { enterReady, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { answeredStatus, type RecipientStatus } from "./delivery"
-import { afterAnswer } from "../choices/list"
+import { afterAnswer, askerName } from "../choices/list"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, type Decision } from "./state"
 import "./decisions.css"
@@ -26,7 +26,7 @@ export function DecisionsSheet(props: {
   /** How many entries wait in «Da scegliere», this sheet's included. */
   waiting?: () => number
   /** After the last answer here: back to «Da scegliere», or closed (`afterAnswer`). */
-  onDone?: (next: "list" | "close") => void
+  onDone?: (next: "list" | "close", said?: string) => void
 }) {
   const buckets = createMemo(() => bucketDecisions(props.hub.register.state()?.decisions ?? []))
   const open = () => buckets().forYou
@@ -68,7 +68,8 @@ export function DecisionsSheet(props: {
   createEffect(() => {
     if (!answered()) return
     const next = afterAnswer(open().length, props.waiting?.() ?? 0)
-    if (next !== "stay") props.onDone?.(next)
+    // What the footer said goes with the sheet: the caller shows it as a toast (rifiniture 2).
+    if (next !== "stay") props.onDone?.(next, untrack(statusMessage))
   })
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -189,6 +190,7 @@ export function DecisionsSheet(props: {
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
                 recipientHint={recipientHint(props.hub.recipientFor(decision()))}
+                askedBy={askerName(decision(), props.hub.sessions())}
                 now={props.hub.register.now()}
                 onPick={(index) => pick(k, index, Boolean(decision().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}

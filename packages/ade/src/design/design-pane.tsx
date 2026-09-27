@@ -9,6 +9,7 @@ import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, describeProblems, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
+import { askerName } from "../choices/list"
 
 export function DesignPane(props: {
   hub: DesignHub
@@ -51,6 +52,7 @@ export function DesignPane(props: {
       onRecord={() => void props.hub.submit(proposal, "record")}
       onAgain={() => void props.hub.again(proposal)}
       recipientHint={recipientHint(props.hub.recipientFor(proposal))}
+      askedBy={askerName(proposal, props.hub.sessions())}
       now={now()}
       projectRoot={root()}
       onPick={(index) => props.hub.pick(proposal, index)}

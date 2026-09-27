@@ -8,6 +8,7 @@ import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
 import { t } from "../i18n"
+import { askerName } from "../choices/list"
 
 /**
  * The whole register in a grid pane: who receives the answers, what waits for
@@ -54,6 +55,7 @@ export function DecisionsPane(props: {
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(decision, "record")}
       recipientHint={recipientHint(props.hub.recipientFor(decision))}
+      askedBy={askerName(decision, props.hub.sessions())}
       now={now()}
       onPick={(index) => {
         const draft = props.hub.draft(decision.k)

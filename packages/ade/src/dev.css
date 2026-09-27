@@ -1177,3 +1177,24 @@
   border-color: var(--ade-border);
   color: var(--ade-text-weak);
 }
+
+/*
+ * Where a sheet's last answer went, once the sheet is gone (`surface/toast.ts`):
+ * over the sheets (z-index 100) and the list it may go back to, and gone by itself.
+ */
+[data-slot="ade-toast"] {
+  position: fixed;
+  left: 50%;
+  bottom: var(--ade-space-6);
+  transform: translateX(-50%);
+  z-index: 110;
+  max-width: min(90vw, 560px);
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: var(--ade-font-sm);
+  box-shadow: var(--ade-shadow-md);
+  pointer-events: none;
+}

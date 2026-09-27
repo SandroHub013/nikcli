@@ -420,6 +420,7 @@ import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
 import { ChoicesSheet } from "../choices/choices-sheet"
 import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
+import { createToast } from "./toast"
 import {
   deliveryLine,
   deliveryState,
@@ -781,6 +782,8 @@ export function Workbench() {
    * the notice is now the shell's own, rendered above the section.
    */
   const [notice, setNotice] = createSignal<string>()
+  // Where the last answer of a sheet went, once the sheet is gone (`surface/toast.ts`).
+  const toast = createToast()
 
   /*
    * The same messages, kept.
@@ -8828,6 +8831,14 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={toast.text()}>
+        {(text) => (
+          <div data-slot="ade-toast" role="status" aria-live="polite">
+            {text()}
+          </div>
+        )}
+      </Show>
+
       <Show when={choicesOpen()}>
         <ChoicesSheet
           items={choices()}
@@ -8846,9 +8857,10 @@ export function Workbench() {
           hub={decisionsHub}
           start={choiceStart()}
           waiting={() => choices().length}
-          onDone={(next) => {
+          onDone={(next, said) => {
             setDecisionsOpen(false)
             if (next === "list") setChoicesOpen(true)
+            if (said) toast.show(said)
           }}
           onClose={() => setDecisionsOpen(false)}
           onOpenPanel={() => {
@@ -8863,9 +8875,10 @@ export function Workbench() {
           hub={designHub}
           start={choiceStart()}
           waiting={() => choices().length}
-          onDone={(next) => {
+          onDone={(next, said) => {
             setDesignOpen(false)
             if (next === "list") setChoicesOpen(true)
+            if (said) toast.show(said)
           }}
           onClose={() => setDesignOpen(false)}
           onOpenPanel={() => {

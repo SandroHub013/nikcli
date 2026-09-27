@@ -20,6 +20,19 @@
   color: var(--ade-text-soft);
 }
 
+/* «Consigliata» on the recommended variant or option (rifiniture 3). */
+[data-slot="choice-recommended"] {
+  align-self: center;
+  margin-left: var(--ade-space-2);
+  padding: 1px 6px;
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-sm);
+  color: var(--ade-text);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  white-space: nowrap;
+}
+
 [data-slot="brief-why"] b {
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);

@@ -51,6 +51,24 @@ export function choiceItems(
   return items.sort((a, b) => Date.parse(a.openedAt) - Date.parse(b.openedAt))
 }
 
+/**
+ * Who asked, as the lists name the pane: its told-apart name while it is
+ * open (`distinctNames`, through the candidates' titles), the title the
+ * register kept otherwise. The card's «da Sessione 1 — Terminal · oggi» had no
+ * (1)/(2) while the list had (Verifiche, rifiniture 1).
+ */
+export function askerName(
+  item: { readonly raisedBy: string; readonly raisedFrom?: string },
+  panes: readonly { readonly id: string; readonly title: string }[],
+): string {
+  return (item.raisedFrom && panes.find((pane) => pane.id === item.raisedFrom)?.title) || item.raisedBy
+}
+
+/** Whether `name` is the choice the writer recommends: the register checks it is one of them, by name. */
+export function isRecommended(recommend: { readonly option: string } | undefined, name: string): boolean {
+  return recommend !== undefined && recommend.option === name
+}
+
 /** The button's counts: the two registers' added up. */
 export function choiceCounts(decisions: QueueCounts, design: QueueCounts): QueueCounts {
   return {
