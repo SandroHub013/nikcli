@@ -218,6 +218,14 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     resolveEnd(how)
   }
   let answer: ((requestID: string, reply: "once" | "reject") => void) | undefined
+  /*
+   * A call to the server that a stop, the time limit or the spend cap does not
+   * wait for (review area 2): a server that did not answer kept the turn, and
+   * its slot, until it did, while `/ferma` had already said «fermato». The
+   * end wins the race, the turn settles, and the call's late answer is dropped.
+   */
+  const orEnd = <T,>(call: Promise<T>): Promise<{ readonly value: T } | End> =>
+    Promise.race([call.then((value) => ({ value })), ended])
 
   const result = (async (): Promise<TurnResult> => {
     let talk = sendMessage(emptyTalk(), request.message, now())
@@ -273,7 +281,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
 
       let agentModel: { providerID: string; modelID: string } | undefined
       if (bot.identifier) {
-        let agents = await server.agents()
+        const listed = await orEnd(server.agents())
+        if ("kind" in listed) return settled(listed)
+        let agents = listed.value
         let problem = agentProblem(agents, bot)
         /*
          * The server reads the agent files once per folder: a bot made, or
@@ -300,7 +310,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
           )
           if (reloaded === undefined) warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
           if (reloaded) {
-            agents = await server.agents()
+            const again = await orEnd(server.agents())
+            if ("kind" in again) return settled(again)
+            agents = again.value
             problem = agentProblem(agents, bot)
           }
         }
@@ -343,11 +355,15 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         ...(request.approvals ? { approvals: true } : {}),
         shell: !bot.disabledTools.includes("bash"),
       })
-      const previous = request.sessionId ? await server.session(request.sessionId) : undefined
+      const found = request.sessionId ? await orEnd(server.session(request.sessionId)) : { value: undefined }
+      if ("kind" in found) return settled(found)
+      const previous = found.value
       if (request.sessionId && hasBotRules(previous, profile)) sessionId = request.sessionId
       else {
         // The mark first: `hasBotRules` reads the tail, and «here» in a pane reads the mark.
-        sessionId = await server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] })
+        const created = await orEnd(server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] }))
+        if ("kind" in created) return settled(created)
+        sessionId = created.value
         /*
          * A routine's session is its own each run (B11): made read-only, it
          * cannot be the one the panel goes on with, so the thread keeps its own.
@@ -520,13 +536,16 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         change((thread) => appendMessage(thread, { role: "tool", tool: "ade", text: note }, at))
       }
       sent = true
-      await server.prompt({
-        sessionID: session,
-        text,
-        ...(bot.identifier ? { agent: bot.identifier } : {}),
-        ...(model ? { model } : {}),
-        ...(effort.variant ? { variant: effort.variant } : {}),
-      })
+      const prompt = await orEnd(
+        server.prompt({
+          sessionID: session,
+          text,
+          ...(bot.identifier ? { agent: bot.identifier } : {}),
+          ...(model ? { model } : {}),
+          ...(effort.variant ? { variant: effort.variant } : {}),
+        }),
+      )
+      if ("kind" in prompt) return settled(prompt)
       prompted = true
       const how = await ended
       if (how.kind === "done") return failed !== undefined ? finish("error", failed, 1) : finish("done", undefined, 0)
