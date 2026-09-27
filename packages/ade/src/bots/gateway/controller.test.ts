@@ -323,7 +323,7 @@ describe("the gateways' controller", () => {
     turns.started[0]!.finish({
       text: "ecco",
       sessionId: "s-vecchia",
-      talk: { ...emptyTalk(), messages: [{ id: "m1", role: "assistant", text: "ecco", at: 1 }], sessionId: "s-vecchia" },
+      talk: { ...emptyTalk(), messages: [{ id: "m1", role: "bot", text: "ecco", at: 1 }], sessionId: "s-vecchia" },
     })
     await until("la risposta", () => b.sent.some((sent) => sent.text === "ecco"))
     expect(sessions.get(key)).toBeUndefined()
