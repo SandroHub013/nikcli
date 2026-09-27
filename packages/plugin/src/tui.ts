@@ -30,6 +30,8 @@ export type TuiRouteCurrent =
       params: {
         sessionID: string
         initialPrompt?: unknown
+        /** The workspace the session route was opened in, when it names one. */
+        workspaceID?: string
       }
     }
   | {
@@ -54,8 +56,11 @@ export type TuiCommand = {
   slash?: {
     name: string
     aliases?: string[]
+    /** `/name <text>` passes `<text>` to `onArguments` instead of selecting. */
+    arguments?: boolean
   }
   onSelect?: () => void
+  onArguments?: (input: string) => void
 }
 
 export type TuiKeymapCommand = {
@@ -68,10 +73,16 @@ export type TuiKeymapCommand = {
   /** Registers the command as /<slashName>. */
   slashName?: string
   slashAliases?: string[]
+  /**
+   * `/<slashName> <text>` runs the command with `<text>` as `input`, and
+   * autocomplete completes the name instead of running it. The palette and
+   * key bindings still call `run()` with no input.
+   */
+  slashArguments?: boolean
   suggested?: boolean
   hidden?: boolean
   enabled?: boolean
-  run: () => void
+  run: (input?: string) => void
 }
 
 export type TuiKeymapBinding = {

@@ -264,12 +264,12 @@ describe("session lifecycle", () => {
     })
   })
 
-  it("links forked sessions to their parent session", async () => {
+  it("forks into an independent session that carries the conversation", async () => {
     await withProject(async () => {
       const session = await createSession()
       const user = userMessage(session.id)
       const assistant = assistantMessage(session.id, user.id)
-      const { fork, forkMessages } = await runSession(
+      const { fork, forkMessages, forkOfFork, children } = await runSession(
         Effect.gen(function* () {
           const sessionService = yield* Session.Service
           yield* sessionService.updateMessage(user)
@@ -280,11 +280,18 @@ describe("session lifecycle", () => {
           const forkMessages = yield* sessionService.messages({
             sessionID: fork.id,
           })
-          return { fork, forkMessages }
+          const forkOfFork = yield* sessionService.fork({ sessionID: fork.id })
+          const children = yield* sessionService.children(session.id)
+          return { fork, forkMessages, forkOfFork, children }
         }),
       )
 
-      expect(fork.parentID).toBe(session.id)
+      // Upstream's fork: a conversation of its own, not a subagent child. A
+      // `parentID` would make the TUI render it read-only, with no prompt.
+      expect(fork.parentID).toBeUndefined()
+      expect(children).toEqual([])
+      expect(fork.title).toBe("session lifecycle test (fork #1)")
+      expect(forkOfFork.title).toBe("session lifecycle test (fork #2)")
       expect(forkMessages).toHaveLength(2)
       expect(forkMessages[1].info.role).toBe("assistant")
       if (forkMessages[1].info.role === "assistant") {

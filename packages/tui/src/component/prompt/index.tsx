@@ -1392,21 +1392,11 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
-      promptModelWarning()
-      return
-    }
-    const sessionID = props.sessionID
-      ? props.sessionID
-      : await (async () => {
-          const sessionID = await sdk.client.session.create({ workspaceID: props.workspaceID }).then((x) => x.data!.id)
-          return sessionID
-        })()
-    const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
-    // Expand pasted text inline before submitting
+    // Expand pasted text inline before submitting. Done ahead of slash
+    // dispatch so an argument-taking command receives the pasted content, not
+    // the collapsed `[Pasted ...]` placeholder.
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
 
@@ -1421,6 +1411,29 @@ export function Prompt(props: PromptProps) {
         }
       }
     }
+
+    // TUI slash commands that take input (`/btw <question>`) run locally: they
+    // neither create a session nor send the text to the model.
+    if (store.mode === "normal" && command.runSlashArguments(inputText)) {
+      history.append({ ...store.prompt, mode: store.mode })
+      clearComposer()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      return
+    }
+
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
+    const sessionID = props.sessionID
+      ? props.sessionID
+      : await (async () => {
+          const sessionID = await sdk.client.session.create({ workspaceID: props.workspaceID }).then((x) => x.data!.id)
+          return sessionID
+        })()
+    const messageID = Identifier.ascending("message")
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")

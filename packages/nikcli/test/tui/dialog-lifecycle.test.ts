@@ -76,11 +76,7 @@ describe("dialogs that await", () => {
     // awaits the same calls from a command handler, which has no unmount to
     // race, so the assertion starts at the first component.)
     const methods = src.slice(src.indexOf("function AutoMethod"))
-    for (const line of [
-      "await sdk.client.instance.dispose()\n",
-      "await sync.bootstrap()\n",
-      "await sync.refreshProviders()\n",
-    ]) {
+    for (const line of ["await sdk.client.instance.dispose()\n", "await sync.refreshProviders()\n"]) {
       const occurrences = methods.split(line).length - 1
       expect(occurrences).toBeGreaterThan(0)
       const guarded = methods
@@ -89,6 +85,24 @@ describe("dialogs that await", () => {
         .filter((rest) => rest.trimStart().startsWith("if (life.disposed()) return"))
       expect(guarded.length).toBe(occurrences)
     }
+
+    // The third mutation is the refetch, and it lives in a helper now rather
+    // than inlined at each site, so it is checked where it actually is. A
+    // caller checking `disposed()` after the helper returns only guards what
+    // comes *after* the toast — the toast itself is an app mutation that lands
+    // after its own await, so the guard has to sit between the two.
+    const helper = src.slice(src.indexOf("async function refetchAfterConnect"), src.indexOf("function errorMessage"))
+    const refetch = helper.slice(helper.indexOf("await sync.bootstrap("))
+    expect(refetch).toContain("await sync.bootstrap(")
+    const guardAt = refetch.indexOf("if (life.disposed()) return")
+    const toastAt = refetch.indexOf("toast.error(")
+    expect(guardAt).toBeGreaterThan(-1)
+    expect(toastAt).toBeGreaterThan(-1)
+    expect(guardAt).toBeLessThan(toastAt)
+    // And every call site has to hand the helper the guard it now depends on.
+    const sites = methods.split("await refetchAfterConnect(").length - 1
+    expect(sites).toBeGreaterThan(0)
+    expect(src.split("refetchAfterConnect(sync, toast, life)").length - 1).toBe(sites)
   })
 
   test("account sign-in re-guards after save and rejects a null local user", async () => {

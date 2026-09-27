@@ -14,7 +14,7 @@ import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 import { Keybind } from "@tui/util/keybind"
-import { useAbortOnCleanup } from "@tui/util/lifecycle"
+import { useAbortOnCleanup, type AbortOnCleanup } from "@tui/util/lifecycle"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   nikcli: 0,
@@ -127,9 +127,21 @@ export function createDialogProviderOptions() {
  * Reload state once a provider is connected. Not fatal: the user is in the
  * middle of this dialog, and a refetch that fails is reported here instead of
  * exiting nikcli.
+ *
+ * `life` is required rather than optional because the toast below is an app
+ * mutation that lands after the `await`. Every caller checked `disposed()`
+ * after this returned, which guards the steps that follow but not this one: a
+ * dialog dismissed while the refetch was in flight still raised its error toast
+ * over whatever the user had moved on to. The check belongs on the mutation,
+ * so it lives here.
  */
-async function refetchAfterConnect(sync: ReturnType<typeof useSync>, toast: ReturnType<typeof useToast>) {
+async function refetchAfterConnect(
+  sync: ReturnType<typeof useSync>,
+  toast: ReturnType<typeof useToast>,
+  life: AbortOnCleanup,
+) {
   const failure = await sync.bootstrap({ fatal: false })
+  if (life.disposed()) return
   if (failure) toast.error(failure)
 }
 
@@ -347,7 +359,7 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     if (life.disposed()) return
-    await refetchAfterConnect(sync, toast)
+    await refetchAfterConnect(sync, toast, life)
     if (life.disposed()) return
     await sync.refreshProviders()
     if (life.disposed()) return
@@ -401,7 +413,7 @@ function CodeMethod(props: CodeMethodProps) {
         if (!error) {
           await sdk.client.instance.dispose()
           if (life.disposed()) return
-          await refetchAfterConnect(sync, toast)
+          await refetchAfterConnect(sync, toast, life)
           if (life.disposed()) return
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
@@ -436,7 +448,7 @@ function AutoCodeMethod(props: CodeMethodProps) {
     setComplete(true)
     await sdk.client.instance.dispose()
     if (life.disposed()) return
-    await refetchAfterConnect(sync, toast)
+    await refetchAfterConnect(sync, toast, life)
     if (life.disposed()) return
     await sync.refreshProviders()
     if (life.disposed()) return
@@ -534,7 +546,7 @@ function OpenRouterFreeMethod(props: { title: string }) {
         if (life.disposed()) return
         await sdk.client.instance.dispose()
         if (life.disposed()) return
-        await refetchAfterConnect(sync, toast)
+        await refetchAfterConnect(sync, toast, life)
         if (life.disposed()) return
         await sync.refreshProviders()
         if (life.disposed()) return
@@ -595,7 +607,7 @@ function ApiMethod(props: ApiMethodProps) {
         if (life.disposed()) return
         await sdk.client.instance.dispose()
         if (life.disposed()) return
-        await refetchAfterConnect(sync, toast)
+        await refetchAfterConnect(sync, toast, life)
         if (life.disposed()) return
         await sync.refreshProviders()
         if (life.disposed()) return

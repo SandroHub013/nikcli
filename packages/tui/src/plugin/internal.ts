@@ -22,6 +22,7 @@ import Background from "../feature-plugins/background"
 import Herdr from "../feature-plugins/herdr"
 import DevTools from "../feature-plugins/devtools"
 import SessionStudio from "../feature-plugins/session-studio"
+import Btw from "../feature-plugins/btw"
 import { Flag } from "@nikcli-ai/util/flag"
 import { dbg } from "../feature-plugins/background/__debug"
 dbg("internal.ts imported")
@@ -59,6 +60,7 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   Background,
   DevTools,
   SessionStudio,
+  Btw,
   // Herdr TUI plugin is loaded by default. It auto-enables the bridge
   // when running inside a Herdr pane and stays dormant otherwise.
   Herdr,

@@ -106,10 +106,6 @@
     "url": "https://github.com/nikcli/nikcli"
   },
   "license": "MIT",
-  "prettier": {
-    "semi": false,
-    "printWidth": 120
-  },
   "trustedDependencies": [
     "esbuild",
     "protobufjs",

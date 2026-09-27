@@ -220,9 +220,24 @@ export namespace Session {
     .optional()
   export type CreateInput = z.infer<typeof CreateInput>
 
+  /**
+   * A side answer (`/btw`) to carry into the fork as a finished turn: the
+   * question as a user message and the exact answer as the assistant's reply,
+   * so the conversation continues from it without asking the model again.
+   */
+  export const ForkContinuation = z.object({
+    prompt: z.string().min(1),
+    response: z.string().min(1),
+    agent: z.string(),
+    model: z.object({ providerID: z.string(), modelID: z.string() }),
+    finish: z.string().optional(),
+  })
+  export type ForkContinuation = z.infer<typeof ForkContinuation>
+
   export const ForkInput = z.object({
     sessionID: ID,
     messageID: Identifier.schema("message").optional(),
+    continuation: ForkContinuation.optional(),
   })
   export type ForkInput = z.infer<typeof ForkInput>
 
@@ -424,13 +439,23 @@ export namespace Session {
     )
   }
 
+  /** `Title (fork #N)`, counting up when the source is itself a fork — upstream's naming. */
+  export function forkedTitle(title: string) {
+    const match = title.match(/^(.+) \(fork #(\d+)\)$/)
+    if (match) return `${match[1]} (fork #${Number(match[2]) + 1})`
+    return `${title} (fork #1)`
+  }
+
   async function forkImpl(ctx: InstanceContext, input: ForkInput) {
     const original = await getImpl(ctx, input.sessionID)
+    // A fork is a conversation of its own, as upstream has it: no `parentID`.
+    // `parentID` marks a subagent session, which the TUI renders read-only
+    // with no prompt — so a fork linked to its source could not be continued.
     const session = await createNextImpl(ctx, {
-      parentID: original.id,
       directory: original.directory,
       workspaceID: original.workspaceID,
       skills: original.skills,
+      title: forkedTitle(original.title),
     })
     const msgs = await messagesImpl(ctx, { sessionID: input.sessionID })
     const idMap = new Map<string, string>()
@@ -457,8 +482,53 @@ export namespace Session {
         })
       }
     }
+    if (input.continuation) await appendContinuation(ctx, session.id, input.continuation)
     Effect.runSync(InstructionRepo.inherit(original.id, session.id))
     return session
+  }
+
+  async function appendContinuation(ctx: InstanceContext, sessionID: string, continuation: ForkContinuation) {
+    const now = Date.now()
+    const user = await updateMessageImpl(ctx, {
+      id: Identifier.ascending("message"),
+      sessionID,
+      role: "user",
+      time: { created: now },
+      agent: continuation.agent,
+      model: continuation.model,
+    })
+    await updatePartImpl(ctx, {
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID,
+      type: "text",
+      text: continuation.prompt,
+    })
+    // Costs and tokens stay zero: they were paid by the side request, which
+    // bills nothing to the session it read from.
+    const assistant = await updateMessageImpl(ctx, {
+      id: Identifier.ascending("message"),
+      sessionID,
+      role: "assistant",
+      parentID: user.id,
+      agent: continuation.agent,
+      mode: continuation.agent,
+      modelID: continuation.model.modelID,
+      providerID: continuation.model.providerID,
+      path: { cwd: ctx.directory, root: ctx.worktree },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: now, completed: now },
+      finish: continuation.finish ?? "stop",
+    })
+    await updatePartImpl(ctx, {
+      id: Identifier.ascending("part"),
+      messageID: assistant.id,
+      sessionID,
+      type: "text",
+      text: continuation.response,
+      time: { start: now, end: now },
+    })
   }
 
   async function createNextImpl(ctx: InstanceContext, input: CreateNextInput) {

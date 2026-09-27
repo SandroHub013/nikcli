@@ -45,6 +45,7 @@ import { appendInstructionNotice, type InstructionNotice } from "@nikcli-ai/util
 /** Tries a reconnect's refetch gets, and the step of its linear backoff. */
 const REFETCH_ATTEMPTS = 5
 const REFETCH_BACKOFF_MS = 1_000
+const log = Log.create({ service: "tui.sync" })
 
 type BackgroundJob = {
   jobID: string
@@ -802,7 +803,9 @@ export const {
             ? ` (HTTP ${error.cause.status})`
             : ""
         const message = error instanceof Error ? error.message : String(error)
-        throw new Error(`${label} failed: ${message}${status}`, { cause: error })
+        throw new Error(`${label} failed: ${message}${status}`, {
+          cause: error,
+        })
       }
 
       // blocking - include session.list when continuing a session.
@@ -909,7 +912,10 @@ export const {
               name: "GET /provider/auth",
               run: client.provider.auth().then((x) => current() && setStore("provider_auth", reconcile(x.data ?? {}))),
             },
-            { name: "GET /vcs", run: client.vcs.get().then((x) => current() && setStore("vcs", reconcile(x.data))) },
+            {
+              name: "GET /vcs",
+              run: client.vcs.get().then((x) => current() && setStore("vcs", reconcile(x.data))),
+            },
             {
               name: "GET /path",
               run: client.path.get().then((x) => current() && setStore("path", reconcile(x.data!))),
@@ -924,7 +930,11 @@ export const {
                 optional.map((item) => item.name),
                 results,
               )
-              if (failed.length > 0) Log.Default.warn("tui bootstrap optional refresh failed", { failed, errors })
+              if (failed.length > 0)
+                Log.Default.warn("tui bootstrap optional refresh failed", {
+                  failed,
+                  errors,
+                })
               batch(() => {
                 setStore("degraded", reconcile(failed))
                 setStore("status", "complete")
@@ -1026,6 +1036,29 @@ export const {
     // first (MRU) so it can never be a victim; sessions with active work, background jobs, or
     // that parent the active one are pinned. Re-opening an evicted session just re-runs sync().
     const sessionLru = createLru({ maxEntries: 25, ttlMs: 30 * 60_000 })
+
+    /**
+     * Ceiling on retained transcript elements across every session.
+     *
+     * The entry and TTL bounds above are per-session, so they cannot see the
+     * failure they exist to prevent: one long session with ten thousand turns
+     * is a single LRU key and is never a candidate for eviction, however long
+     * it has been idle. Counting messages plus their parts bounds the dimension
+     * that actually grows.
+     *
+     * Elements, not bytes. `JSON.stringify` over every retained transcript on
+     * each reap would be a worse stall than the one being prevented, and a
+     * count is what the eviction decision actually needs — the byte size of a
+     * part is unbounded but its number is not.
+     */
+    const MAX_RETAINED_ELEMENTS = 20_000
+    function retainedElements(sessionID: string) {
+      const messages = store.message[sessionID]
+      if (!messages) return 0
+      let count = messages.length
+      for (const message of messages) count += store.part[message.id]?.length ?? 0
+      return count
+    }
     function reapSessions(activeSessionID: string) {
       if (!features(store.config).tui.cacheEviction) return
 
@@ -1050,6 +1083,33 @@ export const {
       const expired = sessionLru.evictExpired()
       for (const sid of expired) if (pinned.has(sid)) sessionLru.touch(sid)
       const evicted = [...new Set([...expired, ...sessionLru.evictOverflow(pinned)])].filter((sid) => !pinned.has(sid))
+      for (const sid of evicted) sessionLru.forget(sid)
+      // Then the retained-size budget, which is the pass that can actually see
+      // an oversized session. `keys()` is least-recently-used first, so walking
+      // it in order evicts the coldest sessions until the store fits; pinned
+      // sessions are skipped and never counted against the budget, so a
+      // streaming session cannot starve the rest into being dropped.
+      let retained = sessionLru
+        .keys()
+        .filter((sid) => !pinned.has(sid))
+        .reduce((total, sid) => total + retainedElements(sid), 0)
+      if (retained > MAX_RETAINED_ELEMENTS) {
+        for (const sid of sessionLru.keys()) {
+          if (retained <= MAX_RETAINED_ELEMENTS) break
+          if (pinned.has(sid)) continue
+          const size = retainedElements(sid)
+          retained -= size
+          sessionLru.forget(sid)
+          if (!evicted.includes(sid)) evicted.push(sid)
+        }
+        if (retained > MAX_RETAINED_ELEMENTS) {
+          log.warn("retained transcript is over budget with every unpinned session evicted", {
+            budget: MAX_RETAINED_ELEMENTS,
+            retained,
+            pinned: pinned.size,
+          })
+        }
+      }
       if (evicted.length === 0) return
       setStore(
         produce((draft) => {

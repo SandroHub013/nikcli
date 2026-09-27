@@ -376,6 +376,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
       diff: result(raw["session"]["diff"]),
       fork: result(raw["session"]["fork"]),
       get: result(raw["session"]["get"]),
+      generate: result(raw["session"]["generate"]),
       goal: result(raw["session"]["goal"]),
       instructions: result(raw["session"]["instructions"]),
       list: resultAt(raw["session"]["list"]),
