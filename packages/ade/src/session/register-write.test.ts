@@ -61,7 +61,7 @@ describe("ade-msg registro", () => {
   test("a valid aperta: one append, then ok", async () => {
     const { deps, appended, text } = file()
     const reply = await registerWrite(deps, { register: "design", op: "aperta", text: openedDesign })
-    expect(reply).toBe("ok: DS1 aperta, nel tasto Design entro 3 s")
+    expect(reply).toBe("ok: DS1 aperta, nel tasto Da scegliere entro 3 s")
     expect(appended).toHaveLength(1)
     expect(JSON.parse(text())).toMatchObject({ type: "aperta", k: "DS1", by: "fable", at: NOW.toISOString() })
   })
@@ -78,7 +78,7 @@ describe("ade-msg registro", () => {
       op: "aperta",
       text: JSON.stringify({ title: "seconda" }),
     })
-    expect(reply).toBe("ok: D5 aperta, nel tasto Decisioni entro 3 s")
+    expect(reply).toBe("ok: D5 aperta, nel tasto Da scegliere entro 3 s")
   })
 
   test("a design aperta with two variants on the same preview: nothing appended", async () => {
@@ -126,10 +126,10 @@ describe("ade-msg registro", () => {
         op: "risposta",
         text: JSON.stringify({ k: "DS1", words: "meno vetro", again: true }),
       }),
-    ).toBe("ok: DS1 giro, nel tasto Design entro 3 s")
+    ).toBe("ok: DS1 giro, nel tasto Da scegliere entro 3 s")
     const next = JSON.stringify({ k: "DS1", variants: [{ name: "C", preview: ".ade/design/DS1/3.html" }] })
     expect(await registerWrite(deps, { register: "design", op: "riaperta", text: next })).toBe(
-      "ok: DS1 aperta, nel tasto Design entro 3 s",
+      "ok: DS1 aperta, nel tasto Da scegliere entro 3 s",
     )
   })
 
@@ -187,7 +187,7 @@ describe("the check after the write looks for this very event (audit 0.7.7, MEDI
 })
 
 describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () => {
-  const ok = "ok: D3 aperta, nel tasto Decisioni entro 3 s"
+  const ok = "ok: D3 aperta, nel tasto Da scegliere entro 3 s"
   const nikcli = { name: "nikcli", root: "C:/lavoro/nikcli" }
   const sito = { name: "sito", root: "C:/lavoro/sito" }
   const pane = (project: { name: string; root: string }) => ({ workspaceId: project.name, projectRoot: project.root })
@@ -201,7 +201,9 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
   test("another project: the button does not show it, and the reply says where to look", () => {
     const reply = withPlace(ok, "decisioni", { written: sito, shown: nikcli, asked: pane(sito) })
     expect(reply).not.toContain("entro 3 s")
-    expect(reply).toBe("ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra nikcli, lo vedi aprendo sito")
+    expect(reply).toBe(
+      "ok: D3 aperta, nel progetto sito: il tasto Da scegliere ora mostra nikcli, lo vedi aprendo sito",
+    )
   })
 
   test("a session whose project is not among the recents: the fallback is said, not silent", () => {
@@ -216,7 +218,7 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
     const reply = withPlace(ok, "decisioni", { written: other, shown: mine, asked: pane(other) })
     expect(reply).not.toContain("entro 3 s")
     expect(reply).toBe(
-      "ok: D3 aperta, nel progetto app (D:/clienti/app): il tasto Decisioni ora mostra app (C:/lavoro/app), lo vedi aprendo app (D:/clienti/app)",
+      "ok: D3 aperta, nel progetto app (D:/clienti/app): il tasto Da scegliere ora mostra app (C:/lavoro/app), lo vedi aprendo app (D:/clienti/app)",
     )
     // The sender's app is the other folder: its register was not written.
     expect(withPlace(ok, "decisioni", { written: mine, shown: mine, asked: pane(other) })).toBe(

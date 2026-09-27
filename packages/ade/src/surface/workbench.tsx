@@ -418,6 +418,8 @@ import {
 } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
+import { ChoicesSheet } from "../choices/choices-sheet"
+import { choiceCounts, choiceItems, type ChoiceItem } from "../choices/list"
 import {
   deliveryLine,
   deliveryState,
@@ -1638,6 +1640,13 @@ export function Workbench() {
     onCleanup(() => window.removeEventListener("languagechange", refreshSystemLocale))
   })
 
+  /*
+   * «Da scegliere»: one button and one list for what waits for the user,
+   * decisions and design alike (notifiche-design). An entry opens its own
+   * window at that entry.
+   */
+  const [choicesOpen, setChoicesOpen] = createSignal(false)
+  const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(
     () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "aperta").length ?? 0,
@@ -1673,6 +1682,22 @@ export function Workbench() {
             designHub.delivery(proposal).state === "in coda",
         ).length ?? 0,
   )
+  const choicesCounts = createMemo(() =>
+    choiceCounts(
+      { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
+      { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
+    ),
+  )
+  const choices = createMemo(() =>
+    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? []),
+  )
+  /** An entry of «Da scegliere» opens its own window, at that entry. */
+  const pickChoice = (item: ChoiceItem) => {
+    setChoicesOpen(false)
+    setChoiceStart(item.k)
+    if (item.kind === "decision") setDecisionsOpen(true)
+    else setDesignOpen(true)
+  }
 
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
@@ -4623,6 +4648,7 @@ export function Workbench() {
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
   const sheetOpen = () =>
+    choicesOpen() ||
     decisionsOpen() ||
     designOpen() ||
     voiceSettingsOpen() ||
@@ -6024,12 +6050,11 @@ export function Workbench() {
       )
     } else if (id === "update.check") {
       void checkForUpdates()
-    } else if (id === "decisions.open") {
-      setDecisionsOpen(true)
+    } else if (id === "decisions.open" || id === "design.open") {
+      // Both open the one list; the voice's «apri le decisioni» comes here too.
+      setChoicesOpen(true)
     } else if (id === "decisions.pane") {
       openDecisionsPane()
-    } else if (id === "design.open") {
-      setDesignOpen(true)
     } else if (id === "design.pane") {
       openDesignPane()
     } else if (id === "model.new") {
@@ -8176,30 +8201,15 @@ export function Workbench() {
             </svg>
           </button>
           {/* Decisions and design proposals waiting for the user: one button
-            each, the same component (DS-polish). Hidden at zero; each opens
-            its panel only when pressed, and says whether it is open. */}
-          <Show
-            when={queueShown({
-              waiting: decisionsWaiting(),
-              queued: decisionsQueued(),
-              discarded: decisionsDiscarded(),
-            })}
-          >
+            for both, «Da scegliere» (notifiche-design; it was one each).
+            Hidden at zero; it opens its list only when pressed. */}
+          <Show when={queueShown(choicesCounts())}>
             <BarQueueButton
-              family="decisions"
-              counts={{ waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() }}
-              open={decisionsOpen()}
+              family="choices"
+              counts={choicesCounts()}
+              open={choicesOpen() || decisionsOpen() || designOpen()}
               theme={theme()}
-              onOpen={() => setDecisionsOpen(true)}
-            />
-          </Show>
-          <Show when={queueShown({ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() })}>
-            <BarQueueButton
-              family="design"
-              counts={{ waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() }}
-              open={designOpen()}
-              theme={theme()}
-              onOpen={() => setDesignOpen(true)}
+              onOpen={() => setChoicesOpen(true)}
             />
           </Show>
         </div>
@@ -8854,9 +8864,23 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={choicesOpen()}>
+        <ChoicesSheet
+          items={choices()}
+          onPick={pickChoice}
+          onClose={() => setChoicesOpen(false)}
+          onOpenPanels={() => {
+            setChoicesOpen(false)
+            openDecisionsPane()
+            openDesignPane()
+          }}
+        />
+      </Show>
+
       <Show when={decisionsOpen()}>
         <DecisionsSheet
           hub={decisionsHub}
+          start={choiceStart()}
           onClose={() => setDecisionsOpen(false)}
           onOpenPanel={() => {
             setDecisionsOpen(false)
@@ -8868,6 +8892,7 @@ export function Workbench() {
       <Show when={designOpen()}>
         <DesignSheet
           hub={designHub}
+          start={choiceStart()}
           onClose={() => setDesignOpen(false)}
           onOpenPanel={() => {
             setDesignOpen(false)

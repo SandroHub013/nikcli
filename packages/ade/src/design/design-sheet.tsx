@@ -10,14 +10,22 @@ import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
 
-export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpenPanel: () => void }) {
+export function DesignSheet(props: {
+  hub: DesignHub
+  onClose: () => void
+  onOpenPanel: () => void
+  /** The key to open at: the entry picked in «Da scegliere». */
+  start?: string
+}) {
   const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
     [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda")
       .length
-  const [index, setIndex] = createSignal(0)
+  const [index, setIndex] = createSignal(
+    Math.max(0, props.start ? open().findIndex((item) => item.k === props.start) : 0),
+  )
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
   let surface: HTMLDivElement | undefined

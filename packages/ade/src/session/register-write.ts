@@ -125,7 +125,7 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
    */
   const own = book.own(after, { k, type: message.op, at: event.at, by: event.by }, deps.now())
   if (own !== true) return `errore: scritta ma non conta: ${own}`
-  return `ok: ${k} ${expected.word}, nel tasto ${message.register === "design" ? "Design" : "Decisioni"} entro 3 s`
+  return `ok: ${k} ${expected.word}, nel tasto Da scegliere entro 3 s`
 }
 
 async function readText(deps: RegisterWriteDeps): Promise<string | { error: string }> {
@@ -257,7 +257,7 @@ export interface RegisterPlace {
  */
 export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
   if (!reply.startsWith("ok")) return reply
-  const button = register === "design" ? "Design" : "Decisioni"
+  const button = "Da scegliere"
   const written = place.written
   const shown = place.shown
   // Two projects of one name are told apart by their folders.

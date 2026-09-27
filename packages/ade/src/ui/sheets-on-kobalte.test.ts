@@ -14,6 +14,8 @@ const SHEETS = [
   ["design/design-sheet.tsx", "design-sheet"],
   ["record/consent-dialog.tsx", "record-consent"],
   ["secrets/keys-section.tsx", "key-request"],
+  // notifiche-design: the one list of «Da scegliere».
+  ["choices/choices-sheet.tsx", "choices-sheet"],
   // Review area 2, MEDIO: Tab walked out of these two into the terminals behind.
   ["remote/remote-dialog.tsx", "remote-space"],
 ] as const
@@ -59,10 +61,10 @@ describe("lint: the sheets are Kobalte dialogs", () => {
     // Each sheet is rendered under its own <Show when={x()}>: every x() must be in sheetOpen.
     const shown = [
       ...workbench.matchAll(
-        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:DecisionsSheet|DesignSheet|Sheet)\b/g,
+        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:ChoicesSheet|DecisionsSheet|DesignSheet|Sheet)\b/g,
       ),
     ].map((match) => match[1]!)
-    expect(shown.length).toBe(3)
+    expect(shown.length).toBe(4)
     for (const signal of shown) expect([signal, open.includes(`${signal}()`)]).toEqual([signal, true])
     // The agents' questions (M2), which are sheets too and open by themselves.
     expect(open.includes("recordAsk()")).toBe(true)

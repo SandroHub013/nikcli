@@ -16,11 +16,19 @@ import { t } from "../i18n"
  * the next; Esc closes and leaves the rest open. The digits pick, Enter
  * records, the arrows move without answering.
  */
-export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; onOpenPanel: () => void }) {
+export function DecisionsSheet(props: {
+  hub: DecisionsHub
+  onClose: () => void
+  onOpenPanel: () => void
+  /** The key to open at: the entry picked in «Da scegliere». */
+  start?: string
+}) {
   const buckets = createMemo(() => bucketDecisions(props.hub.register.state()?.decisions ?? []))
   const open = () => buckets().forYou
   const queued = () => buckets().answered.filter((decision) => props.hub.delivery(decision).state === "in coda").length
-  const [index, setIndex] = createSignal(0)
+  const [index, setIndex] = createSignal(
+    Math.max(0, props.start ? open().findIndex((item) => item.k === props.start) : 0),
+  )
   // An answered decision leaves the list and the next one takes its place.
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
