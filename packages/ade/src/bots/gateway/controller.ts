@@ -148,6 +148,12 @@ interface ChatState {
   times: number[]
   /** The limit was already said in this chat: said once, then silence. */
   limited: boolean
+  /**
+   * How many times `/nuova` was said. A turn that was running when it came
+   * must not write its session and thread back at its end: the next message
+   * went on with the conversation the user had just dropped (review area 2).
+   */
+  fresh: number
 }
 
 const TYPING_EVERY_MS = 4_000
@@ -215,7 +221,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
     if (!state) {
-      state = { queue: [], starting: false, cancelled: false, times: [], limited: false }
+      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0 }
       chats.set(key, state)
     }
     return state
@@ -235,6 +241,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const state = stateOf(key)
     const running = state.turn !== undefined || state.starting
     if (which === "new") {
+      state.fresh += 1
       deps.sessions.forget(key)
       deps.threads?.forget(gatewayThreadKey(message.bot, message.platform, message.chat))
       return reply(message, t("gateway.fresh"))
@@ -260,6 +267,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (!message) return
     state.starting = true
     state.cancelled = false
+    const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
     const ended = new AbortController()
     try {
@@ -315,10 +323,11 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const result = await turn.result
       clearInterval(typing)
       typing = undefined
-      if (result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
+      const kept = state.fresh === fresh
+      if (kept && result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
       const said = settleChatMemory(message.bot, result.talk, sent, framed)
       const text = said.found ? takeMemoryOps(result.text).text : result.text
-      if (deps.threads && result.talk) {
+      if (kept && deps.threads && result.talk) {
         const stored = gatewayThreadKey(message.bot, message.platform, message.chat)
         deps.threads.save(stored, keptThread(deps.threads.read(stored), said.talk))
       }

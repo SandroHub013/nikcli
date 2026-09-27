@@ -167,6 +167,8 @@ export const it = {
   "sidebar.addSpace": "Aggiungi space",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
   "sidebar.noSpaces": "Nessuno space aperto.",
+  /** The status dot, `mapAgentStatus`: its word is the Italian one, and the data attribute keeps it. */
+  "sidebar.agentStatus": (status: string) => `Stato: ${status}`,
   "sidebar.agents": "Agenti attivi",
   "sidebar.newAgentSession": "Nuova sessione agente",
   "sidebar.noAgents": "Nessun agente attivo.",

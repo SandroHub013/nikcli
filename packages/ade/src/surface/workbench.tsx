@@ -43,6 +43,7 @@ import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../sess
 import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
+import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
@@ -382,6 +383,8 @@ import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
 import { closeAfterSaving } from "./close-window"
+import { createInFlight } from "../session/in-flight"
+import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
@@ -572,6 +575,9 @@ function isHandledCommand(id: string): boolean {
  * them a single xterm. A counter makes the case impossible.
  */
 let paneSequence = 0
+
+/** A new pane id for panes that are not sessions: browser, video, design, diff, file (review area 2). */
+const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
 
 /**
  * How much of a session's output a pane keeps in memory.
@@ -783,6 +789,9 @@ export function Workbench() {
   const [notices, setNotices] = createSignal<Notice[]>([])
   const [noticesOpen, setNoticesOpen] = createSignal(false)
   const [newPaneOpen, setNewPaneOpen] = createSignal(false)
+  // The buttons the two menus give the focus back to on Esc (`bindMenu`).
+  let newPaneButton: HTMLButtonElement | undefined
+  let noticesButton: HTMLButtonElement | undefined
 
   /** Says it once, in both places: the strip now, the bell afterwards. */
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
@@ -896,7 +905,7 @@ export function Workbench() {
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
   const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
     const pane: Pane = {
-      id: `b${Date.now()}`,
+      id: newPaneId("b"),
       title: "Browser",
       status: "working",
       model: "—",
@@ -1250,7 +1259,7 @@ export function Workbench() {
     }
     setWb((w) =>
       addPane(w, {
-        id: `m${Date.now()}`,
+        id: newPaneId("m"),
         title: path ? (path.split(/[\\/]/).pop() ?? t("newPane.model")) : t("newPane.model"),
         status: "working",
         model: "—",
@@ -1271,7 +1280,7 @@ export function Workbench() {
     }
     setWb((w) =>
       addPane(w, {
-        id: `v${Date.now()}`,
+        id: newPaneId("v"),
         title: path.split(/[\\/]/).pop() ?? t("pane.video.title"),
         status: "working",
         model: "—",
@@ -1693,7 +1702,7 @@ export function Workbench() {
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: `des${Date.now()}`,
+        id: newPaneId("des"),
         title: "Design",
         status: "working",
         model: "—",
@@ -1739,7 +1748,7 @@ export function Workbench() {
       }))
       return undefined
     }
-    const newId = `bd${Date.now()}`
+    const newId = newPaneId("bd")
     setWb((w) => ({
       ...addPane(w, {
         id: newId,
@@ -1767,7 +1776,7 @@ export function Workbench() {
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: `d${Date.now()}`,
+        id: newPaneId("d"),
         title: "Decisioni",
         status: "working",
         model: "—",
@@ -2045,6 +2054,9 @@ export function Workbench() {
     options: { unlessBusy?: boolean } = {},
   ): Promise<boolean> => lineGiven(await typeLineOutcome(session, text, options))
 
+  /** The lines queued or being typed, per pane: `freeNow` reads it first. */
+  const linesInFlight = createInFlight()
+
   const typeLineOutcome = (
     session: SpawnedSession,
     text: string,
@@ -2063,7 +2075,7 @@ export function Workbench() {
         return "not-typed"
       return typeLineNow(session, text)
     }
-    return paneId === undefined ? job() : lineQueue(paneId, job)
+    return paneId === undefined ? job() : linesInFlight.track(paneId, lineQueue(paneId, job))
   }
 
   const typeLineNow = async (session: SpawnedSession, text: string): Promise<LineOutcome> => {
@@ -2400,6 +2412,8 @@ export function Workbench() {
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
+    // A line on its way is a turn about to start (`createInFlight`).
+    if (linesInFlight.has(paneId)) return false
     const isHooked = hooked(paneId)
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
@@ -5602,6 +5616,8 @@ export function Workbench() {
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
       if (isTerminal && resolution.type === "ade") return
+      // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
+      if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
@@ -5984,7 +6000,7 @@ export function Workbench() {
        */
       setWb((w) =>
         addPane(w, {
-          id: `v${Date.now()}`,
+          id: newPaneId("v"),
           title: t("pane.video.title"),
           status: "working",
           model: "—",
@@ -6015,7 +6031,7 @@ export function Workbench() {
        */
       setWb((w) =>
         addPane(w, {
-          id: `a${Date.now()}`,
+          id: newPaneId("a"),
           title: "Simulatore",
           status: "working",
           model: "—",
@@ -6026,7 +6042,7 @@ export function Workbench() {
         }),
       )
     } else if (id === "browser.new") {
-      const newId = `b${Date.now()}`
+      const newId = newPaneId("b")
       setWb((w) =>
         addPane(w, {
           id: newId,
@@ -6544,7 +6560,7 @@ export function Workbench() {
     const host = await getHost()
     if (!host?.readTextFile) return
 
-    const id = `f${Date.now()}`
+    const id = newPaneId("f")
     setWb((w) =>
       addPane(w, {
         id,
@@ -7986,7 +8002,7 @@ export function Workbench() {
     setVoiceSettingsOpen(false)
     setWb((w) => ({
       ...addPane(w, {
-        id: `b${Date.now()}`,
+        id: newPaneId("b"),
         title: "Guida MCP",
         status: "working",
         model: "—",
@@ -8225,6 +8241,7 @@ export function Workbench() {
               data-open={newPaneOpen() ? "true" : undefined}
               aria-haspopup="menu"
               aria-expanded={newPaneOpen()}
+              ref={newPaneButton}
               onClick={() => setNewPaneOpen((open) => !open)}
               aria-label={t("bar.newPane")}
               title={t("bar.newPane")}
@@ -8247,7 +8264,12 @@ export function Workbench() {
             </button>
 
             <Show when={newPaneOpen() && showsNewPane(wb().view)}>
-              <div data-slot="ade-menu" role="menu" aria-label={t("bar.newPane")}>
+              <div
+                data-slot="ade-menu"
+                role="menu"
+                aria-label={t("bar.newPane")}
+                ref={(menu) => onCleanup(bindMenu(menu, { close: () => setNewPaneOpen(false), anchor: newPaneButton }))}
+              >
                 <For each={NEW_PANE_ITEMS}>
                   {(item) => (
                     <button
@@ -8537,6 +8559,7 @@ export function Workbench() {
                   type="button"
                   data-slot="ade-icon"
                   data-action="notifications"
+                  ref={noticesButton}
                   data-tone={bellTone(notices())}
                   aria-haspopup="menu"
                   aria-expanded={noticesOpen()}
@@ -8572,7 +8595,15 @@ export function Workbench() {
                 </button>
 
                 <Show when={noticesOpen()}>
-                  <div data-slot="ade-menu" data-wide="true" role="menu" aria-label={t("bell.title")}>
+                  <div
+                    data-slot="ade-menu"
+                    data-wide="true"
+                    role="menu"
+                    aria-label={t("bell.title")}
+                    ref={(menu) =>
+                      onCleanup(bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton }))
+                    }
+                  >
                     {/* The bell is where a release shows up, so it is also where
                         asking for one belongs: the answer lands in this list,
                         "nothing new" included. */}

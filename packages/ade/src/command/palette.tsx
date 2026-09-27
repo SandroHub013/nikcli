@@ -4,6 +4,7 @@ import { groupHits, type GroupedHits } from "./group-hits"
 import { Overlay, Surface } from "../ui/layout"
 import "./palette.css"
 import { t } from "../i18n"
+import { paletteStep } from "./palette-keys"
 
 export type { GroupedHits }
 
@@ -87,10 +88,10 @@ export function CommandPalette(props: CommandPaletteProps) {
 
     const list = hits()
 
-    if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
+    if (e.key === "ArrowDown" || paletteStep(e) === 1) {
       e.preventDefault()
       setSelectedIndex((prev) => moveSelection(list, prev, 1))
-    } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
+    } else if (e.key === "ArrowUp" || paletteStep(e) === -1) {
       e.preventDefault()
       setSelectedIndex((prev) => moveSelection(list, prev, -1))
     } else if (e.key === "Home") {

@@ -111,13 +111,14 @@ function count(path: string): number {
     if (ts.isJsxText(node)) {
       if (isText(node.getText().replace(/\s+/g, " ").trim())) found++
     } else if (ts.isJsxAttribute(node) && node.initializer && UI_ATTRIBUTES.has(node.name.getText())) {
+      // A literal, a template's fixed words, either side of a ternary: only
+      // the literal was seen, so `title={`Stato: ${x}`}` had a baseline of 0
+      // (review area 2, MEDIO).
       const init = node.initializer
-      const literal = ts.isStringLiteral(init)
-        ? init.text
-        : ts.isJsxExpression(init) && init.expression && ts.isStringLiteral(init.expression)
-          ? init.expression.text
-          : undefined
-      if (literal !== undefined && isText(literal.trim())) found++
+      const texts: string[] = []
+      if (ts.isStringLiteral(init)) texts.push(init.text)
+      else if (ts.isJsxExpression(init) && init.expression) sinkTexts(init.expression, texts)
+      found += texts.filter((text) => isText(text.trim())).length
     } else if (ts.isCallExpression(node) && SINKS.has(calleeName(node) ?? "")) {
       const texts: string[] = []
       for (const argument of node.arguments) sinkTexts(argument, texts)
@@ -158,6 +159,25 @@ describe("fixed text in JSX", () => {
    * waits for the antivirus. Loading is not timed per test.
    */
   const now = measure()
+
+  test("an attribute's template and ternary count, not only its literal", () => {
+    const dir = join(require("node:os").tmpdir(), `ade-hardcoded-${process.pid}`)
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    const fixture = join(dir, "fixture.tsx")
+    writeFileSync(
+      fixture,
+      [
+        "export const A = (x: string) => <span title={`Stato: ${x}`} />",
+        'export const B = (x: boolean) => <b aria-label={x ? "Apri" : "Chiudi"} />',
+        "export const C = (x: string) => <i title={`${x} · ${x}`} aria-label={t(x)} />",
+      ].join("\n"),
+    )
+    try {
+      expect(count(fixture)).toBe(3)
+    } finally {
+      require("node:fs").rmSync(dir, { recursive: true, force: true })
+    }
+  })
 
   test("does not grow, and the baseline follows it down", () => {
     if (process.env.ADE_I18N_BASELINE === "write") {

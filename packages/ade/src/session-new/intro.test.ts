@@ -17,8 +17,21 @@ describe("introArgs", () => {
     }
   })
 
-  test("the text survives cmd.exe: none of its metacharacters", () => {
-    expect(INTRO_TEXT).not.toMatch(/["&|<>^%]/)
+  /*
+   * The set is the one `unsafe_for_cmd` refuses, read from pty.rs: this list
+   * had left out `!`, `(` and `)`, and the notice's parentheses made every
+   * launch through a `.cmd` shim that is not npm's fail (review area 2).
+   */
+  test("the text survives cmd.exe: none of the characters pty.rs refuses", () => {
+    const pty = require("node:fs").readFileSync(
+      require("node:path").join(import.meta.dir, "../../src-tauri/src/pty.rs"),
+      "utf8",
+    )
+    const refused = `"%!^&|<>()`
+    expect(pty).toContain(`"\\"%!^&|<>()".contains(*c)`)
+    for (const text of [INTRO_TEXT, ...MODEL_LINES.map((model) => model.line)]) {
+      expect([...text].filter((c) => refused.includes(c))).toEqual([])
+    }
     expect(INTRO_TEXT).toContain("ade-msg send")
   })
 })
