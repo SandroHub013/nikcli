@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { detectPermission, isResolved, permissionSpeechLabel, type PermissionRequest } from "./permission"
+import {
+  detectPermission,
+  followPermission,
+  isResolved,
+  permissionSpeechLabel,
+  type PermissionRequest,
+} from "./permission"
 
 describe("permissionSpeechLabel", () => {
   test("names only the safe request type in either locale", () => {
@@ -329,4 +335,41 @@ describe("isResolved", () => {
       expect(resolved(["Vuoi sovrascrivere src/app.ts? [y/N]"])).toBe(true)
     })
   })
+})
+
+/*
+ * Verifiche, medi-restyle: a three-option menu showed two buttons and no «No».
+ * The window grows a line at a time, the question is found at «2.», and the
+ * pending request was then only checked for an answer, never read again.
+ */
+describe("followPermission", () => {
+  const menu = ["Do you want to run this command?", "  1. Yes", "  2. Yes, and don't ask again", "  3. No"]
+
+  test("a menu read a line at a time keeps the answers that come after it was found", () => {
+    const window: string[] = []
+    let pending: PermissionRequest | undefined
+    let foundAt = -1
+    for (const [index, line] of menu.entries()) {
+      window.push(line)
+      if (pending) pending = followPermission(pending, window, "claude-code")
+      else if ((pending = detectPermission(window, "claude-code"))) foundAt = index
+    }
+    expect(foundAt).toBeLessThan(menu.length - 1)
+    expect(pending?.answers.map((answer) => answer.send)).toEqual(["1", "2", "3"])
+    expect(pending?.answers.at(-1)?.label).toBe("No")
+  })
+
+  test("the same request while the menu is redrawn, none once the agent moved on", () => {
+    const request = detectPermission(menu, "claude-code")!
+    expect(followPermission(request, [...menu, ...menu], "claude-code")).toBe(request)
+    expect(followPermission(request, ["Running the command…", "done"], "claude-code")).toBeUndefined()
+  })
+})
+
+test("lint: the pane follows a pending request with followPermission", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
+    "utf8",
+  )
+  expect(source).toContain("const still = followPermission(pending, recent, agent)")
 })

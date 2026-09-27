@@ -538,3 +538,24 @@ export function isResolved(request: PermissionRequest, recentLines: string[], ag
 
   return true
 }
+
+/**
+ * What a pending request becomes after the lines that arrived since.
+ *
+ * `undefined` when the agent moved on (`isResolved`); the request as read now
+ * when the same question has more answers than it had; the same request
+ * otherwise. The window grows a line at a time, so a menu is found as soon as
+ * it has two options: «1. Yes / 2. Yes, allow all edits» was the request, and
+ * the «3. No» that came next never reached the buttons (Verifiche,
+ * medi-restyle).
+ */
+export function followPermission(
+  request: PermissionRequest,
+  recentLines: string[],
+  agentId: string,
+): PermissionRequest | undefined {
+  const now = detectPermission(recentLines, agentId)
+  if (now && stripAnsi(now.what).trim() === stripAnsi(request.what).trim())
+    return now.answers.length > request.answers.length ? now : request
+  return isResolved(request, recentLines, agentId) ? undefined : request
+}
