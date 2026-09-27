@@ -327,3 +327,15 @@ export function answerItem(
   // Only the id: a title can be another pane's too, and a closed asker falls back to the chosen session.
   return asked.raisedFrom ? { ...item, toId: asked.raisedFrom } : item
 }
+
+/**
+ * What the sheet says once an answer is written, about the session it goes
+ * to: `recipient` is the answer's own (`recipientFor`), not «Risposte a».
+ * It said «in coda (nessuna sessione scelta)» for an answer already on its
+ * way to the pane that asked (Verifiche, da-scegliere, problem 2).
+ */
+export function answeredStatus(k: string, label: string, recipient: RecipientStatus): string {
+  if (recipient.state === "pronta") return t("decisions.sheet.status.sent", k, label, recipient.title)
+  if (recipient.state === "non attiva") return t("decisions.sheet.status.idle", k, label, recipient.title)
+  return t("decisions.sheet.status.none", k, label)
+}

@@ -41,6 +41,11 @@ export interface RegisterWriteDeps {
   fromPane?: string
   /** The sender pane's agent (`claude-code`, `agy`…). */
   agent?: string
+  /**
+   * Keeps, where no agent writes, that ADE opened question `k` at `at` for
+   * `fromPane`: a `fromPane` in a line written by hand is not trusted (`asker-ledger`).
+   */
+  remember?: (k: string, at: string) => void
 }
 
 export interface RegisterMessage {
@@ -108,6 +113,7 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
     failure = error instanceof Error ? error.message : String(error)
   }
   if (failure) return `errore: ${failure}`
+  if (message.op === "aperta" && deps.fromPane) deps.remember?.(k, event.at)
 
   const after = await readText(deps)
   const expected = expectedState(message.op, parsed.again === true)

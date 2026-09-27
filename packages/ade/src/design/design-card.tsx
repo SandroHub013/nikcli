@@ -5,6 +5,7 @@ import { DesignPreview, resolvePreviewPath, sharedPreview, shortenPath } from ".
 import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
+import { Brief } from "../choices/brief"
 
 export function DesignCard(props: {
   proposal: DesignProposal
@@ -54,6 +55,8 @@ export function DesignCard(props: {
           .filter(Boolean)
           .join(" · ")}
       </div>
+
+      <Brief fields={props.proposal} />
 
       <Show when={props.proposal.keeps && props.proposal.keeps.length > 0}>
         <div data-slot="design-keeps">

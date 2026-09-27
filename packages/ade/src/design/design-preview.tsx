@@ -178,6 +178,17 @@ export function fitScale(size: PreviewSize, columnWidth: number): FittedPage {
 }
 
 /**
+ * The width a page may take: the whole row of variants, less its card's
+ * padding and border (Verifiche, da-scegliere, problem 1). Each page measured
+ * its own column, and the columns were 420 px whatever the pages said: a page
+ * of 640 was shown at 64% on a wide screen. Now a page is 1:1 unless it is
+ * wider than the whole row, and the cards wrap when they do not fit side by side.
+ */
+export function roomFor(rowWidth: number, cardWidth: number, ownWidth: number): number {
+  return Math.max(0, rowWidth - Math.max(0, cardWidth - ownWidth))
+}
+
+/**
  * Scripts and forms, not the same origin: the page runs as it would in a
  * browser, at an opaque origin that cannot reach ADE (the modes the browser
  * pane's Design mode gave it, which the one sheet replaces).
@@ -194,6 +205,36 @@ export function frameProps(plan: { src: string }, size: PreviewSize, title: stri
     loading: "lazy" as const,
     title,
   }
+}
+
+/** How far outside the sheet's view a variant is already running, so a scroll does not wait for it. */
+export const VIEW_MARGIN = "300px 0px"
+
+/**
+ * Calls `onChange` with whether `element` is in view, or near it; returns the
+ * stop (notifiche-design review, BASSO 2). Every variant used to run at once,
+ * scripts, WebGL and animations, with four heavy pages in one sheet: a frame
+ * now runs only while it can be seen. With no `IntersectionObserver` the
+ * page is always in view, as before (`null` says so in a test, where happy-dom has one that never calls back).
+ */
+export function watchInView(
+  element: Element,
+  onChange: (inView: boolean) => void,
+  Observer: typeof IntersectionObserver | null | undefined = globalThis.IntersectionObserver,
+): () => void {
+  if (!Observer) {
+    onChange(true)
+    return () => {}
+  }
+  const observer = new Observer(
+    (entries) => {
+      const entry = entries[entries.length - 1]
+      if (entry) onChange(entry.isIntersecting)
+    },
+    { rootMargin: VIEW_MARGIN },
+  )
+  observer.observe(element)
+  return () => observer.disconnect()
 }
 
 /** «Non si carica: <percorso> — <errore>». The host's message often starts with the path again: said once. */
@@ -229,6 +270,8 @@ export function DesignPreview(props: {
   const [failure, setFailure] = createSignal<string>()
   let containerRef: HTMLDivElement | undefined
   const [measuredWidth, setMeasuredWidth] = createSignal<number>(props.containerWidth ?? 330)
+  // Whether the page may run: only while it is in view, or near it (`watchInView`).
+  const [inView, setInView] = createSignal(false)
 
   createEffect(() => {
     if (props.containerWidth !== undefined && props.containerWidth > 0) {
@@ -237,18 +280,28 @@ export function DesignPreview(props: {
   })
 
   onMount(() => {
+    if (containerRef) onCleanup(watchInView(containerRef, setInView))
+  })
+
+  onMount(() => {
     if (props.containerWidth !== undefined) return
     const el = containerRef
     if (!el) return
-    const initial = el.getBoundingClientRect().width || el.clientWidth
-    if (initial > 0) setMeasuredWidth(Math.round(initial))
+    // The row of variants, when the preview is in one (`roomFor`); its own box otherwise.
+    const row = el.closest<HTMLElement>('[data-slot="design-variants"]')
+    const card = el.closest<HTMLElement>('[data-slot="design-variant-item"]')
+    const measure = () => {
+      const own = el.getBoundingClientRect().width || el.clientWidth
+      const width =
+        row && card
+          ? roomFor(row.getBoundingClientRect().width || row.clientWidth, card.getBoundingClientRect().width, own)
+          : own
+      if (width > 0) setMeasuredWidth(Math.round(width))
+    }
+    measure()
     if (typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(([entry]) => {
-      if (!entry) return
-      const w = entry.contentRect.width || el.clientWidth
-      if (w > 0) setMeasuredWidth(Math.round(w))
-    })
-    observer.observe(el)
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(row ?? el)
     onCleanup(() => observer.disconnect())
   })
 
@@ -339,17 +392,20 @@ export function DesignPreview(props: {
                         IPC stub in the frame refuses `invoke`. At its own size, smaller
                         only when the column is (`fitScale`), and live.
                       */}
-                      <iframe
-                        data-slot="preview-frame"
-                        {...frameProps(current, measured(), title())}
-                        style={{
-                          width: `${fit().frameWidth}px`,
-                          height: `${fit().frameHeight}px`,
-                          transform: `scale(${fit().scale})`,
-                          "transform-origin": "top left",
-                          border: "0",
-                        }}
-                      />
+                      {/* Out of view the frame is gone, and its scripts with it; the box keeps its size. */}
+                      <Show when={inView()} fallback={<div data-slot="preview-asleep" aria-hidden="true" />}>
+                        <iframe
+                          data-slot="preview-frame"
+                          {...frameProps(current, measured(), title())}
+                          style={{
+                            width: `${fit().frameWidth}px`,
+                            height: `${fit().frameHeight}px`,
+                            transform: `scale(${fit().scale})`,
+                            "transform-origin": "top left",
+                            border: "0",
+                          }}
+                        />
+                      </Show>
                     </div>
                   )
                 }}

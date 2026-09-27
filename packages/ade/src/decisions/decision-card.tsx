@@ -3,6 +3,7 @@ import { deferFromInput, deferPresets, formatDay, isPicked, localDay, type Picke
 import type { Decision } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
+import { Brief } from "../choices/brief"
 
 /**
  * One open decision, answerable: context, the options as numbered choices, a
@@ -54,6 +55,7 @@ export function DecisionCard(props: {
           .filter(Boolean)
           .join(" · ")}
       </div>
+      <Brief fields={props.decision} />
       <Show when={props.decision.multi}>
         <div data-slot="decision-multi">{t("decisions.multi")}</div>
       </Show>

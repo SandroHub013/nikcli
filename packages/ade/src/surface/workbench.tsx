@@ -419,7 +419,7 @@ import {
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
 import { ChoicesSheet } from "../choices/choices-sheet"
-import { choiceCounts, choiceItems, type ChoiceItem } from "../choices/list"
+import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
 import {
   deliveryLine,
   deliveryState,
@@ -441,6 +441,7 @@ import {
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
+import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
 import { DesignSheet } from "../design/design-sheet"
@@ -1329,7 +1330,10 @@ export function Workbench() {
    * Master session as a `risolta` line, when that session is running and
    * between turns; until then it waits in an outbox that survives a restart.
    */
+  // Which pane asked, as ADE wrote it: a `fromPane` written by hand in a register is not trusted.
+  const askers = askerLedger(() => (typeof localStorage === "undefined" ? undefined : localStorage))
   const decisionsRegister = createDecisionsRegister({
+    vouch: askers.vouch,
     path: () => {
       const root = project()?.root
       return root ? decisionsPath(root) : undefined
@@ -1378,8 +1382,15 @@ export function Workbench() {
       }
     })(),
   )
+  // Two panes of the same title are told apart in «Risposte a», «→» and «chiesta da» (`distinctNames`).
+  const paneNames = () => distinctNames(mailPanes())
   const decisionCandidates = () =>
-    mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: isRunning(pane.id) }))
+    mailPanes().map((pane) => ({
+      id: pane.id,
+      title: paneNames().get(pane.id) ?? pane.title,
+      project: pane.project,
+      running: isRunning(pane.id),
+    }))
   const decisionRecipient = () => {
     const path = decisionsRegister.path()
     return resolveRecipient(decisionCandidates(), path ? decisionsRecipients()[path] : undefined)
@@ -1486,6 +1497,7 @@ export function Workbench() {
    * time, and the panel with all of them. See `design/`.
    */
   const designRegister = createDesignRegister({
+    vouch: askers.vouch,
     path: () => {
       const root = project()?.root
       return root ? designPath(root) : undefined
@@ -1530,7 +1542,12 @@ export function Workbench() {
     })(),
   )
   const designCandidates = () =>
-    mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: isRunning(pane.id) }))
+    mailPanes().map((pane) => ({
+      id: pane.id,
+      title: paneNames().get(pane.id) ?? pane.title,
+      project: pane.project,
+      running: isRunning(pane.id),
+    }))
   const designRecipient = () => {
     const path = designRegister.path()
     return resolveDesignRecipient(designCandidates(), path ? designRecipients()[path] : undefined)
@@ -1686,9 +1703,9 @@ export function Workbench() {
       { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
     ),
   )
-  const choices = createMemo(() =>
-    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? []),
-  )
+  // Not a memo: it reads the panes (`mailPanes`), defined further down, and a memo runs at once.
+  const choices = () =>
+    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? [], paneNames())
   /** An entry of «Da scegliere» opens its own window, at that entry. */
   const pickChoice = (item: ChoiceItem) => {
     setChoicesOpen(false)
@@ -3643,6 +3660,7 @@ export function Workbench() {
           // Verified by the token above: the answer goes back to this pane.
           fromPane: sender ? message.from : undefined,
           agent: wb().panes.find((pane) => pane.id === message.from)?.agent,
+          remember: (k, at) => (sender ? askers.remember(path, k, at, message.from) : undefined),
         },
         message,
       )
@@ -8827,6 +8845,11 @@ export function Workbench() {
         <DecisionsSheet
           hub={decisionsHub}
           start={choiceStart()}
+          waiting={() => choices().length}
+          onDone={(next) => {
+            setDecisionsOpen(false)
+            if (next === "list") setChoicesOpen(true)
+          }}
           onClose={() => setDecisionsOpen(false)}
           onOpenPanel={() => {
             setDecisionsOpen(false)
@@ -8839,6 +8862,11 @@ export function Workbench() {
         <DesignSheet
           hub={designHub}
           start={choiceStart()}
+          waiting={() => choices().length}
+          onDone={(next) => {
+            setDesignOpen(false)
+            if (next === "list") setChoicesOpen(true)
+          }}
           onClose={() => setDesignOpen(false)}
           onOpenPanel={() => {
             setDesignOpen(false)

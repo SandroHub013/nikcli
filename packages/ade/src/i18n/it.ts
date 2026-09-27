@@ -480,6 +480,10 @@ export const it = {
   "choices.kind.decision": "Decisione",
   "choices.kind.design": "Design",
   "choices.asked": (by: string, age: string) => `chiesta da ${by}, ${age}`,
+  "choices.samePane": (title: string, place: number) => `${title} (${place})`,
+  "choices.brief.why": "Perché",
+  "choices.brief.recommend": (option: string, because?: string) =>
+    because ? `Consigliata: ${option}, perché ${because}` : `Consigliata: ${option}`,
   "choices.age.now": "adesso",
   "choices.age.minutes": (count: number) => `${count} min fa`,
   "choices.age.hours": (count: number) => `${count} h fa`,
