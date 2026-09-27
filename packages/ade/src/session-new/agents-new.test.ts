@@ -25,6 +25,7 @@ const NEW: Record<string, string> = {
   goose: "goose",
   copilot: "copilot",
   t3: "t3",
+  cursor: "cursor-agent",
 }
 
 function markOf(id: string, colored = true): SVGElement {
@@ -58,10 +59,16 @@ describe("the new agents", () => {
   })
 })
 
+test("Cursor starts as cursor-agent: `agent` is also Grok Build's name on this PATH", () => {
+  expect(agentById("cursor")?.command).toBe("cursor-agent")
+  expect(AGENTS.some((agent) => agent.command === "agent")).toBe(false)
+})
+
 describe("coming back after a restart", () => {
   test("Kilo and Copilot reopen this folder's latest conversation", () => {
     expect(RESUME.kilo?.last?.()).toEqual(["--continue"])
     expect(RESUME.copilot?.last?.()).toEqual(["--continue"])
+    expect(RESUME.cursor?.last?.()).toEqual(["--continue"])
     expect(resumePromise({ agentId: "kilo" })).toBe("last")
   })
 
@@ -87,12 +94,14 @@ describe("a pane's agent, read back from its title", () => {
     expect(normalizeAgentId("goose")).toBe("goose")
     expect(normalizeAgentId("Freebuff")).toBe("freebuff")
     expect(normalizeAgentId("Sessione 1 — T3 Code")).toBe("t3")
+    expect(normalizeAgentId("Sessione 3 — Cursor")).toBe("cursor")
   })
 })
 
 describe("the marks", () => {
   test("the four with a published mark draw it", () => {
-    for (const id of ["copilot", "cline", "goose", "kilo"]) expect(markOf(id).getAttribute("data-mark")).toBe(id)
+    for (const id of ["copilot", "cline", "goose", "kilo", "cursor"])
+      expect(markOf(id).getAttribute("data-mark")).toBe(id)
   })
 
   test("the three without one get a neutral monogram, never the red it used to be", () => {

@@ -56,6 +56,7 @@ export function normalizeAgentId(raw?: string): string {
   if (s.includes("crush")) return "crush"
   if (s.includes("kilo")) return "kilo"
   if (s.includes("goose")) return "goose"
+  if (s.includes("cursor")) return "cursor"
   if (/\bt3\b/.test(s)) return "t3"
   if (s.includes("ohmypi")) return "ohmypi"
   if (s.includes("pi")) return "pi"

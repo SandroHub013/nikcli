@@ -40,6 +40,7 @@ export const REAL_MARK_IDS: readonly string[] = [
   "cline",
   "goose",
   "kilo",
+  "cursor",
   "terminal",
 ]
 

@@ -46,6 +46,7 @@
  *   cline        simple-icons `cline.svg`, kept in `vendor-paths.ts`
  *   goose        `@lobehub/icons-static-svg` `goose.svg`, kept in `vendor-paths.ts`
  *   kilo         `@lobehub/icons-static-svg` `kilocode.svg`, kept in `vendor-paths.ts`
+ *   cursor       simple-icons `cursor.svg`, kept in `vendor-paths.ts`
  *   crush, freebuff, t3   in neither set: the neutral monogram, not a guess
  *
  * simple-icons normalises a vendor's mark onto a 24×24 grid and releases the
@@ -79,6 +80,7 @@ import {
   CODEX_GRADIENT,
   CODEX_PATH,
   COPILOT_PATH,
+  CURSOR_PATH,
   GOOSE_PATH,
   GROK_PATH,
   KILO_PATH,
@@ -380,6 +382,7 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
   cline: (size, colored) => inkMark("cline", CLINE_PATH, size, colored),
   goose: (size, colored) => inkMark("goose", GOOSE_PATH, size, colored),
   kilo: (size, colored) => inkMark("kilo", KILO_PATH, size, colored),
+  cursor: (size, colored) => inkMark("cursor", CURSOR_PATH, size, colored),
 
   grok: (size, colored) => (
     <svg
