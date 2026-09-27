@@ -335,6 +335,7 @@ import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
 import { closeAfterSaving } from "./close-window"
+import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
@@ -718,6 +719,9 @@ export function Workbench() {
   const [notices, setNotices] = createSignal<Notice[]>([])
   const [noticesOpen, setNoticesOpen] = createSignal(false)
   const [newPaneOpen, setNewPaneOpen] = createSignal(false)
+  // The buttons the two menus give the focus back to on Esc (`bindMenu`).
+  let newPaneButton: HTMLButtonElement | undefined
+  let noticesButton: HTMLButtonElement | undefined
 
   /** Says it once, in both places: the strip now, the bell afterwards. */
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
@@ -7559,6 +7563,7 @@ export function Workbench() {
               data-open={newPaneOpen() ? "true" : undefined}
               aria-haspopup="menu"
               aria-expanded={newPaneOpen()}
+              ref={newPaneButton}
               onClick={() => setNewPaneOpen((open) => !open)}
               aria-label={t("bar.newPane")}
               title={t("bar.newPane")}
@@ -7573,7 +7578,12 @@ export function Workbench() {
             </button>
 
             <Show when={newPaneOpen() && showsNewPane(wb().view)}>
-              <div data-slot="ade-menu" role="menu" aria-label={t("bar.newPane")}>
+              <div
+                data-slot="ade-menu"
+                role="menu"
+                aria-label={t("bar.newPane")}
+                ref={(menu) => onCleanup(bindMenu(menu, { close: () => setNewPaneOpen(false), anchor: newPaneButton }))}
+              >
                 <For each={NEW_PANE_ITEMS}>
                   {(item) => (
                     <button
@@ -7804,6 +7814,7 @@ export function Workbench() {
                   type="button"
                   data-slot="ade-icon"
                   data-action="notifications"
+                  ref={noticesButton}
                   data-tone={bellTone(notices())}
                   aria-haspopup="menu"
                   aria-expanded={noticesOpen()}
@@ -7830,7 +7841,13 @@ export function Workbench() {
                 </button>
 
                 <Show when={noticesOpen()}>
-                  <div data-slot="ade-menu" data-wide="true" role="menu" aria-label={t("bell.title")}>
+                  <div
+                    data-slot="ade-menu"
+                    data-wide="true"
+                    role="menu"
+                    aria-label={t("bell.title")}
+                    ref={(menu) => onCleanup(bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton }))}
+                  >
                     {/* The bell is where a release shows up, so it is also where
                         asking for one belongs: the answer lands in this list,
                         "nothing new" included. */}
