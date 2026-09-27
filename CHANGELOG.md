@@ -3,6 +3,20 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.403.0 (September 2026)
+
+## Core
+
+- /restart reloads the backend in place, the TUI stays up (@nikomatt69)
+- Implement relaunchSelf and BackgroundService.restart for improved process management (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(cli): implement relaunchSelf and BackgroundService.restart for improved process management
+  - fix(flag): read NIKCLI_CONFIG_CONTENT on every access
+  - feat(tui): /restart reloads the backend in place, the TUI stays up
+
 ## v1.402.0 (September 2026)
 
 - No notable changes
