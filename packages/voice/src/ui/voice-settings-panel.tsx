@@ -1060,7 +1060,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           */}
         <button
           type="button"
-          data-slot="reset-voice"
+          data-slot="ghost-btn"
           data-armed={resetArmed() ? "true" : undefined}
           onClick={restoreDefaults}
           onBlur={() => setResetArmed(false)}

@@ -16,8 +16,11 @@ import { it } from "../i18n/it";
  * «per nome», and this test holds it to that.
  */
 test("lint: the project search says it looks at names, in both languages", () => {
-  expect(it["sidebar.search.project"]).toContain("per nome");
-  expect(en["sidebar.search.project"]).toContain("by name");
+  // «Per nome…» / «By name…»: the sidebar's search box is narrow, and the longer
+  // «Cerca nel progetto, per nome…» was cut to «per r». The words that say it
+  // searches names are still the first thing read.
+  expect(it["sidebar.search.project"]).toBe("Per nome…");
+  expect(en["sidebar.search.project"]).toBe("By name…");
 });
 
 test("lint: the content search is not wired, so the box must not promise one", () => {

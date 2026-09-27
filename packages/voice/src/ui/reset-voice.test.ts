@@ -23,7 +23,11 @@ test("lint: the reset button is in the panel's header, not in the settings rail"
     rail.length,
     false,
   ]);
-  expect(panel).toContain('data-slot="reset-voice"');
+  // It wears `ghost-btn`, a class the panel's stylesheet already draws, rather
+  // than a slot of its own: the button was showing as a bare Arial control with
+  // an outset border, because nothing styled `reset-voice`.
+  expect(panel).toContain('data-slot="ghost-btn"');
+  expect(panel).not.toContain('data-slot="reset-voice"');
   expect(panel).toContain("onClick={restoreDefaults}");
 });
 
