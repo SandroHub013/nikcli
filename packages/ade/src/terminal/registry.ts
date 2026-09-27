@@ -286,7 +286,7 @@ export function selectionText(terminal: Terminal): string {
 }
 
 /** What `copyOnRelease` needs from a terminal: little enough to fake in a test. */
-export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "clearSelection">
+export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "clearSelection" | "refresh" | "rows">
 
 /**
  * Copies a selection the moment the button that made it comes up.
@@ -334,6 +334,10 @@ export function copyOnRelease(
       if (changed && terminal.hasSelection()) {
         copy()
         terminal.clearSelection()
+        /* xterm keeps the highlight after a clear and draws it again on the next fit,
+         * so the teal block came back over different text on a resize. Repainting
+         * the viewport is the public way to make it go: no patch, just the API. */
+        terminal.refresh(0, terminal.rows - 1)
       }
     }, 0)
   }

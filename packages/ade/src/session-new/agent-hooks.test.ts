@@ -726,6 +726,62 @@ describe("an earlier ADE's hook script", () => {
     expect((await readHookStatus(host, claude)).outdated).toBeUndefined()
   })
 
+  /*
+   * The race behind «versione precedente» on a test build
+   * (barra-versione-seguito, MEDIO). Two facts, and together they are the bug:
+   *
+   *   1. `dev.tsx` rendered the surface synchronously and only afterwards
+   *      awaited `getIdentifier()` before setting `data-ade-build="test"`.
+   *   2. `workbench.tsx` calls `refreshHooks()` once, on mount, and not again
+   *      until something in the settings panel changes.
+   *
+   * So the first, and on a plain start the only, read of the hook status ran
+   * before the mark existed, and `describeScriptAge` answered `outdated` where it
+   * should answer `foreign`. Codex read right because its entry has no digest to
+   * compare, so its status is the same on both paths.
+   */
+  test("the same hook reads two ways, and the mark is the only difference", async () => {
+    // A disk with the hook installed, and on it the official ADE's script: the
+    // digest is not this build's, so it counts as another ADE's.
+    const foreign = () => {
+      const made = disk(CLAUDE, undefined)
+      return setHook(made.host, claude, true).then(() => {
+        made.state.digest = sha("# lo script dell'ADE ufficiale")
+        return made.host
+      })
+    }
+    // The order dev.tsx produced: the surface mounts, the status is read, the
+    // mark arrives afterwards.
+    delete document.documentElement.dataset.adeBuild
+    const early = await readHookStatus(await foreign(), claude)
+    document.documentElement.dataset.adeBuild = "test"
+    const late = await readHookStatus(await foreign(), claude)
+    delete document.documentElement.dataset.adeBuild
+
+    expect([early.outdated, early.foreign]).toEqual([true, undefined])
+    expect([late.outdated, late.foreign]).toEqual([undefined, true])
+  })
+
+  test("and with the mark settled the read is right, on a test build and on a release one", async () => {
+    const foreign = () => {
+      const made = disk(CLAUDE, undefined)
+      return setHook(made.host, claude, true).then(() => {
+        made.state.digest = sha("# lo script dell'ADE ufficiale")
+        return made.host
+      })
+    }
+    document.documentElement.dataset.adeBuild = "test"
+    const onTest = await readHookStatus(await foreign(), claude)
+    delete document.documentElement.dataset.adeBuild
+    // On a real build the same hook is this one's to update, unchanged.
+    const onRelease = await readHookStatus(await foreign(), claude)
+
+    expect(onTest).toMatchObject({ installed: true, foreign: true })
+    expect(onTest.outdated).toBeUndefined()
+    expect(onRelease).toMatchObject({ installed: true, outdated: true })
+    expect(onRelease.foreign).toBeUndefined()
+  })
+
   test("on a test build the script is the official ADE's: said to be foreign, and left alone", async () => {
     const { state, host } = disk(CLAUDE, undefined)
     await setHook(host, claude, true)

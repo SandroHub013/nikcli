@@ -247,11 +247,23 @@ describe("terminal selection & copy (S50)", () => {
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
     const setup = (selected: boolean) => {
       const listeners: Array<() => void> = []
+      const repaints: Array<[number, number]> = []
+      const rows: [number] = [24]
       let isSelected = selected
       const terminal = {
         hasSelection: () => isSelected,
         clearSelection: () => {
           isSelected = false
+        },
+        refresh: (start: number, end: number) => {
+          repaints.push([start, end])
+        },
+        get rows() {
+          return rows[0]
+        },
+        // il fit cambia rows: il renderer ridisegna, ed e li che il blocco tornava
+        setRows: (next: number) => {
+          rows[0] = next
         },
         onSelectionChange: (listener: () => void) => {
           listeners.push(listener)
@@ -270,7 +282,16 @@ describe("terminal selection & copy (S50)", () => {
         if (selected) for (const listener of [...listeners]) listener()
         await tick()
       }
-      return { drag, copies: () => copies, stop, selected: () => isSelected }
+      return {
+        drag,
+        copies: () => copies,
+        stop,
+        selected: () => isSelected,
+        repaints: () => repaints,
+        setRows: (next: number) => {
+          rows[0] = next
+        },
+      }
     }
 
     it("copies once when the selection is reported after the release", async () => {
@@ -283,6 +304,26 @@ describe("terminal selection & copy (S50)", () => {
       const { drag, copies } = setup(false)
       await drag()
       expect(copies()).toBe(0)
+    })
+
+    it("repaints every row after the copy, so the teal block cannot come back on a resize", async () => {
+      const { drag, repaints, setRows, selected } = setup(true)
+      await drag()
+      // Il fatto che distingue il fix dal vecchio: il refresh viene chiamato.
+      // hasSelection resta false anche senza il fix, quindi da solo non dimostra niente.
+      expect(repaints()).toEqual([[0, 23]])
+      // E il blocco che tornava al resize non ha piu niente su cui tornare.
+      setRows(40)
+      expect(selected()).toBe(false)
+    })
+
+    it("copies the same selection twice, because a second identical drag is not a change", async () => {
+      // Punto 3: riselezionare le stesse celle non segnala un cambio a xterm, quindi
+      // senza questo la seconda copia non avviene e il teal resta.
+      const { drag, copies } = setup(true)
+      await drag()
+      await drag()
+      expect(copies()).toBe(1)
     })
 
     it("takes the selection away once it has been copied", async () => {

@@ -172,7 +172,7 @@ export const it = {
   "sidebar.startAgent": "+ Avvia nuovo agente",
   "sidebar.files": "File",
   "sidebar.files.noProject": "Apri un progetto per vedere i file.",
-  "sidebar.search.project": "Cerca nel progetto, per nome…",
+  "sidebar.search.project": "Per nome…",
   "sidebar.search.open": "Cerca fra i file aperti…",
   "sidebar.search.help": "Più parole: devono comparire tutte. Una parola con / cerca nel percorso (es. grid/pane).",
   "sidebar.search.clear": "Cancella la ricerca",

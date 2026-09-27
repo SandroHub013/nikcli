@@ -167,7 +167,7 @@ export const en: Messages = {
   "sidebar.startAgent": "+ Start a new agent",
   "sidebar.files": "Files",
   "sidebar.files.noProject": "Open a project to see its files.",
-  "sidebar.search.project": "Search the project, by name…",
+  "sidebar.search.project": "By name…",
   "sidebar.search.open": "Search open files…",
   "sidebar.search.help": "Several words must all match. A word with / searches the path (e.g. grid/pane).",
   "sidebar.search.clear": "Clear search",
