@@ -159,7 +159,6 @@ export const it = {
   "restore.note.rerun": "Il processo non è sopravvissuto alla chiusura: riprendo il compito.",
 
   // Sidebar
-  "sidebar.active": "attivo",
   "sidebar.project": "progetto",
   "sidebar.elapsed": "Tempo trascorso",
   "sidebar.spaces": "Spaces",

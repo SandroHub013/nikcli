@@ -243,6 +243,33 @@ function mountRow(props: {
   }
 }
 
+/*
+ * The open project used to carry an «ATTIVO» badge beside its name. The row's
+ * ground already says it, and the badge took the width the name needed: a
+ * project in a narrow column read «n…». The badge is gone; a screen reader
+ * still hears which project is open.
+ */
+describe("the open project's row", () => {
+  const wsRow = flattenWorkspaces(WORKSPACES_FIXTURE, new Set())[0]!
+
+  test("is marked by its ground and for screen readers, with no badge beside the name", () => {
+    const { host, cleanup } = mountRow({ row: wsRow, isActiveSpace: true })
+    const header = host.querySelector('[data-slot="workspace-header"]') as HTMLElement
+    expect(header.getAttribute("data-active")).toBe("true")
+    expect(header.getAttribute("aria-current")).toBe("true")
+    expect(header.querySelector('[data-slot="space-badge"]')).toBeNull()
+    cleanup()
+  })
+
+  test("another project is not current", () => {
+    const { host, cleanup } = mountRow({ row: wsRow, isActiveSpace: false })
+    const header = host.querySelector('[data-slot="workspace-header"]') as HTMLElement
+    expect(header.hasAttribute("aria-current")).toBe(false)
+    expect(header.hasAttribute("data-active")).toBe(false)
+    cleanup()
+  })
+})
+
 describe("WorkspaceTreeRow interactions", () => {
   test("clicking project row calls onToggleWorkspace and does NOT call onSelectProject", () => {
     const toggleCalls: string[] = []
