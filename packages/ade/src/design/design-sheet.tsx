@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
 import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
@@ -6,7 +6,7 @@ import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { openExternally } from "../browser/host-bridge"
 import { answeredStatus, type RecipientStatus } from "./delivery"
-import { afterAnswer } from "../choices/list"
+import { afterAnswer, askerName } from "../choices/list"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
@@ -21,7 +21,7 @@ export function DesignSheet(props: {
   /** How many entries wait in «Da scegliere», this sheet's included. */
   waiting?: () => number
   /** After the last answer here: back to «Da scegliere», or closed (`afterAnswer`). */
-  onDone?: (next: "list" | "close") => void
+  onDone?: (next: "list" | "close", said?: string) => void
 }) {
   const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
@@ -65,7 +65,8 @@ export function DesignSheet(props: {
   createEffect(() => {
     if (!answered()) return
     const next = afterAnswer(open().length, props.waiting?.() ?? 0)
-    if (next !== "stay") props.onDone?.(next)
+    // What the footer said goes with the sheet: the caller shows it as a toast (rifiniture 2).
+    if (next !== "stay") props.onDone?.(next, untrack(statusMessage))
   })
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -181,6 +182,7 @@ export function DesignSheet(props: {
                 onRecord={() => void submit("record")}
                 onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
                 recipientHint={recipientHint(props.hub.recipientFor(proposal()))}
+                askedBy={askerName(proposal(), props.hub.sessions())}
                 now={new Date()}
                 projectRoot={root()}
                 onPick={(index) => pick(k, index, Boolean(proposal().multi))}

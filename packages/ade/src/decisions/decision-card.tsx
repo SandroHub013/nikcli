@@ -4,6 +4,7 @@ import type { Decision } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
 import { Brief } from "../choices/brief"
+import { isRecommended } from "../choices/list"
 
 /**
  * One open decision, answerable: context, the options as numbered choices, a
@@ -23,6 +24,8 @@ export function DecisionCard(props: {
   /** Who the answer goes to, said under the buttons. */
   recipientHint: string
   now: Date
+  /** Who asked, told apart from a pane of the same title (`askerName`); the register's title without it. */
+  askedBy?: string
   onPick: (index: number) => void
   onNote: (note: string) => void
   /** The answer buttons, from `submitControl`. */
@@ -49,7 +52,7 @@ export function DecisionCard(props: {
       <div data-slot="decision-meta">
         {[
           props.decision.spec,
-          t("decisions.from", props.decision.raisedBy),
+          t("decisions.from", props.askedBy ?? props.decision.raisedBy),
           formatDay(props.decision.openedAt, props.now),
         ]
           .filter(Boolean)
@@ -86,7 +89,13 @@ export function DecisionCard(props: {
                   {index() + 1}
                 </span>
                 <span data-slot="decision-option-text">
-                  <b>{option.label}</b>
+                  <b>
+                    {option.label}
+                    {/* The one the writer recommends, on its own option too (rifiniture 3). */}
+                    <Show when={isRecommended(props.decision.recommend, option.label)}>
+                      <span data-slot="choice-recommended">{t("choices.recommended")}</span>
+                    </Show>
+                  </b>
                   <Show when={option.detail}>
                     <small>{option.detail}</small>
                   </Show>
