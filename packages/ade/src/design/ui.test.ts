@@ -24,7 +24,6 @@ import {
   type OutboxItem,
 } from "./delivery"
 import {
-  DesignPreview,
   frameProps,
   isHtmlPreview,
   isImagePreview,
@@ -36,7 +35,7 @@ import {
   sharedPreview,
   shortenPath,
   VARIANT_SANDBOX,
-} from "./design-preview"
+} from "./preview-plan"
 import { mediaUrl } from "../video/video"
 import { foldProposals, type DesignProposal } from "./state"
 import type { DesignEvent } from "./log"

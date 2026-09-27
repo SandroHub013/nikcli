@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { pruneOutbox, submitGate } from "./delivery"
-import { previewSize } from "./design-preview"
+import { previewSize } from "./preview-plan"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
 import { bucketProposals, describeProblems, foldProposals, nextDesignKey, resolvedMessage } from "./state"
 import { appendDesignEvent, designPath, loadDesign, type DesignIo } from "./store"

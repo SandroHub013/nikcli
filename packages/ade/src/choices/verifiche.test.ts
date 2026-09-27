@@ -10,7 +10,7 @@ import { submitControl as designControl } from "../design/card"
 import { answeredStatus as designAnsweredStatus, recipientFor as designRecipientFor } from "../design/delivery"
 import { parseDesignLog } from "../design/log"
 import { foldProposals } from "../design/state"
-import { fitScale, roomFor } from "../design/design-preview"
+import { fitScale, roomFor } from "../design/preview-plan"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { afterAnswer, choiceItems, distinctNames } from "./list"
 
@@ -246,4 +246,55 @@ describe("Verifiche, da-scegliere, 5: the head of the question on the cards", ()
     )
     expect(host.querySelector('[data-slot="choice-brief"]')).toBeNull()
   })
+
+  /*
+   * notifiche-bassi in integra: this file imported the preview's helpers
+   * from `design-preview.tsx` before `compileSolidJsx()` ran, bun compiled
+   * the component as React's JSX and kept it, and the hub test's sheet failed
+   * with «React is not defined». The helpers are in `preview-plan.ts` now:
+   * a card with a page of its own draws the preview in the same process.
+   */
+  test("a variant with a page draws its preview, in a file that imports the preview's helpers", () => {
+    const base = proposal()
+    const withPages = {
+      ...base,
+      variants: base.variants.map((variant, index) => ({ ...variant, preview: `.ade/design/DS1/${index + 1}.html` })),
+    }
+    const host = mount(() =>
+      createComponent(DesignCard, {
+        ...common,
+        proposal: withPages,
+        projectRoot: "C:/p",
+        onAgain: () => {},
+        control: designControl({
+          recipient: { state: "non scelta" },
+          sessions: [],
+          inline: undefined,
+          busy: false,
+          label: "Invia",
+        }),
+      }),
+    )
+    const previews = host.querySelectorAll('[data-component="design-preview"]')
+    expect(previews).toHaveLength(2)
+    expect(previews[0]!.getAttribute("data-type")).toBe("html")
+  })
+})
+
+test("lint: no test imports design-preview.tsx before compileSolidJsx() can run", () => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs")
+  const wrong: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) walk(path)
+      else if (
+        entry.name.endsWith(".test.ts") &&
+        /^import [^\n]*from "[^"]*design-preview"/m.test(readFileSync(path, "utf8"))
+      )
+        wrong.push(entry.name)
+    }
+  }
+  walk(src)
+  expect(wrong).toEqual([])
 })
