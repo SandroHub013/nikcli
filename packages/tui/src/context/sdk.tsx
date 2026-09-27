@@ -46,6 +46,17 @@ export type EventSource = {
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
 /**
+ * Where the TUI's requests and events go. A host that restarts its backend in
+ * place (`/restart`) hands a new one to `reconnect`: a restarted service may
+ * listen on another port, and an embedded worker is a different RPC peer.
+ */
+export type Transport = {
+  url: string
+  fetch?: typeof fetch
+  events?: EventSource
+}
+
+/**
  * Runs the update check once the TUI is actually up, and hands back what it
  * found so the caller can open the dialog. The result is returned rather than
  * awaited for an event: the check runs in the CLI process, not in the server
@@ -59,16 +70,29 @@ export async function checkUpgradeWhenSubscriptionReady<T>(
   return checkUpgrade?.()
 }
 
+/**
+ * Drain one `/global/event` stream.
+ *
+ * `onConnected` fires on the first frame the stream delivers — the server's
+ * `server.connected` greeting in practice — and not when the request is made:
+ * the generated client resolves before anything has answered, so a stream to a
+ * server that is down used to report "connected" on every retry, and each of
+ * those triggered a refetch against nothing.
+ */
 export async function consumeGlobalEventStream(input: {
   stream: AsyncIterable<GlobalEnvelope>
   signal: AbortSignal
   onConnected: () => void
   onEnvelope: (envelope: GlobalEnvelope) => void
 }) {
+  let connected = false
   for await (const envelope of input.stream) {
     if (input.signal.aborted) break
     try {
-      if (envelope?.payload?.type === "server.connected") input.onConnected()
+      if (!connected) {
+        connected = true
+        input.onConnected()
+      }
       input.onEnvelope(envelope)
     } catch (error) {
       console.error("[sse]", "handleEnvelope threw", error)
@@ -81,13 +105,14 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
     let sse: AbortController | undefined
+    let transport: Transport = { url: props.url, fetch: props.fetch, events: props.events }
 
     function createSDK() {
       return createNikcliClient({
-        baseUrl: props.url,
+        baseUrl: transport.url,
         signal: abort.signal,
         directory: props.directory,
-        fetch: props.fetch,
+        fetch: transport.fetch,
       })
     }
 
@@ -116,6 +141,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const [connectionAttempt, setConnectionAttempt] = createSignal(0)
     const [connectionError, setConnectionError] = createSignal<string | undefined>(undefined)
 
+    // Resolved by the next successful subscribe; `reconnect` hands it out so a
+    // caller can wait for events to flow before refetching.
+    let connectedWaiters: (() => void)[] = []
+
     const markConnected = () => {
       batch(() => {
         setConnectionStatus("connected")
@@ -123,6 +152,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         setConnectionError(undefined)
       })
       markSubscriptionReady()
+      const waiters = connectedWaiters
+      connectedWaiters = []
+      for (const resolve of waiters) resolve()
     }
 
     const markReconnecting = (error: unknown) => {
@@ -246,14 +278,15 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
               const events = await sdk.global.event({
                 signal: ctrl.signal,
               })
-              // successful connect → reset backoff
-              failures = 0
-              markConnected()
 
               await consumeGlobalEventStream({
                 stream: events.stream as AsyncIterable<GlobalEnvelope>,
                 signal: ctrl.signal,
-                onConnected: markConnected,
+                // The server answered → reset backoff.
+                onConnected: () => {
+                  failures = 0
+                  markConnected()
+                },
                 onEnvelope: handleEnvelope,
               })
 
@@ -288,47 +321,78 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       })()
     }
 
-    onMount(() => {
-      if (props.events) {
-        let active = true
-        let unsubscribe: (() => void) | undefined
-        onCleanup(() => {
-          active = false
-          unsubscribe?.()
-        })
+    // The event subscription of an embedded (worker) transport, if one is live.
+    let unsubscribeEvents: (() => void) | undefined
+    let eventsGeneration = 0
 
-        let subscription: Promise<() => void>
-        try {
-          subscription = props.events.subscribe(props.directory, handleEnvelope)
-        } catch (error) {
-          console.error("[events]", "subscribe failed", error)
-          markReconnecting(error)
-          return
-        }
-        void subscription
-          .then((unsub) => {
-            if (!active) {
-              unsub()
-              return
-            }
-            unsubscribe = unsub
-            markConnected()
-            markSubscriptionReady()
-          })
-          .catch((error) => {
-            if (!active) return
-            console.error("[events]", "subscribe failed", error)
-            markReconnecting(error)
-          })
+    function startEvents(events: EventSource) {
+      const generation = ++eventsGeneration
+      const active = () => generation === eventsGeneration && !abort.signal.aborted
+      let subscription: Promise<() => void>
+      try {
+        subscription = events.subscribe(props.directory, handleEnvelope)
+      } catch (error) {
+        console.error("[events]", "subscribe failed", error)
+        markReconnecting(error)
         return
       }
+      void subscription
+        .then((unsub) => {
+          if (!active()) {
+            unsub()
+            return
+          }
+          unsubscribeEvents = unsub
+          markConnected()
+        })
+        .catch((error) => {
+          if (!active()) return
+          console.error("[events]", "subscribe failed", error)
+          markReconnecting(error)
+        })
+    }
 
+    function stopEvents() {
+      eventsGeneration++
+      unsubscribeEvents?.()
+      unsubscribeEvents = undefined
+    }
+
+    function subscribe() {
+      if (transport.events) {
+        startEvents(transport.events)
+        return
+      }
       startSSE()
-    })
+    }
+
+    onMount(subscribe)
+
+    /**
+     * Point this terminal at a new backend without leaving the process.
+     *
+     * Every request made after this goes to `next`: `client`, `url` and `fetch`
+     * are read through getters, and the old stream (SSE or worker events) is
+     * torn down before the new one starts. Resolves on the first successful
+     * subscribe; state the old stream never delivered is the caller's to
+     * refetch, as after any reconnect.
+     */
+    function reconnect(next: Transport): Promise<void> {
+      const connected = new Promise<void>((resolve) => connectedWaiters.push(resolve))
+      sse?.abort()
+      sse = undefined
+      stopEvents()
+      transport = next
+      sdk = createSDK()
+      setConnectionStatus("connecting")
+      subscribe()
+      return connected
+    }
 
     onCleanup(() => {
       abort.abort()
       sse?.abort()
+      stopEvents()
       if (timer) clearTimeout(timer)
       envelopeHandlers.clear()
     })
@@ -347,8 +411,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           envelopeHandlers.delete(handler)
         }
       },
-      fetch: props.fetch ?? fetch,
-      url: props.url,
+      get fetch() {
+        return transport.fetch ?? fetch
+      },
+      get url() {
+        return transport.url
+      },
+      reconnect,
       subscriptionReady,
       connection: {
         status: connectionStatus,

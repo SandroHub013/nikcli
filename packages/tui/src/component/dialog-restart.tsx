@@ -8,8 +8,7 @@ import { Spinner } from "@tui/component/spinner"
  * The work is the part that takes time — SIGTERM to the service, then a health
  * poll for the one that replaces it — and it is why this dialog exists rather
  * than a toast: a restart that shows nothing for three seconds reads as a hung
- * terminal, and the terminal is about to be handed to a process that is not
- * running yet.
+ * terminal. The terminal itself stays up and reconnects when the backend is back.
  *
  * It is deliberately not dismissible. There is nothing to cancel: the sequence
  * is stop, start, reconnect, and interrupting it half way would leave the
@@ -26,7 +25,8 @@ export function DialogRestart(props: { target: string }) {
       <DialogHeader title="Restarting nikcli" />
       <Spinner color={theme.foreground.muted}>{`Restarting the ${props.target}…`}</Spinner>
       <text fg={theme.foreground.muted} wrapMode="word">
-        This terminal reconnects on its own. Live sessions are suspended and resumed by the service that comes back.
+        This terminal stays open and reconnects on its own. Live sessions are suspended and resumed by the service that
+        comes back.
       </text>
     </box>
   )

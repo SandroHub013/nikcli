@@ -42,6 +42,10 @@ import type { Path } from "@nikcli-ai/sdk/httpapi"
 import { features } from "@nikcli-ai/util/features"
 import { appendInstructionNotice, type InstructionNotice } from "@nikcli-ai/util/instruction-delta"
 
+/** Tries a reconnect's refetch gets, and the step of its linear backoff. */
+const REFETCH_ATTEMPTS = 5
+const REFETCH_BACKOFF_MS = 1_000
+
 type BackgroundJob = {
   jobID: string
   rootDelegationID: string
@@ -729,7 +733,7 @@ export const {
       setStore("vcs", { branch: payload.properties.branch })
     })
 
-    const { exit } = useExit()
+    const { exit, restarting } = useExit()
     const args = useArgs()
 
     async function refreshProviders() {
@@ -750,7 +754,17 @@ export const {
 
     let bootstrapVersion = 0
 
-    async function bootstrap() {
+    /**
+     * Load everything the stores hold, from scratch.
+     *
+     * `fatal` (the default) exits the TUI when an essential request fails: at
+     * startup there is nothing on screen worth keeping. A refetch after the
+     * backend went away and came back passes `fatal: false` and gets the error
+     * back instead — the terminal is up, and a backend in the middle of a
+     * restart is a reason to try again, not to quit.
+     */
+    async function bootstrap(options: { fatal?: boolean } = {}): Promise<unknown> {
+      const fatal = options.fatal ?? true
       const version = ++bootstrapVersion
       const current = () => version === bootstrapVersion
       syncedSessions.clear()
@@ -839,7 +853,7 @@ export const {
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
-      await Promise.all(blockingRequests)
+      return await Promise.all(blockingRequests)
         .then(() => {
           if (!current()) return
           if (store.status !== "complete") setStore("status", "partial")
@@ -926,6 +940,12 @@ export const {
         })
         .catch(async (e) => {
           if (!current()) return
+          if (!fatal) {
+            Log.Default.warn("tui refetch failed; keeping the terminal up", {
+              error: e instanceof Error ? e.message : String(e),
+            })
+            return e
+          }
           Log.Default.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,
@@ -964,11 +984,40 @@ export const {
         () => sdk.connection.status(),
         (status) => {
           if (!reconnectGate.observe(status)) return
+          // Mid-`/restart` the reconnect may reach the server that is stopping,
+          // and wiping the stores for it would only blank the screen under the
+          // restart dialog. `/restart` refetches once the new backend is up.
+          if (restarting()) return
           Log.Default.info("tui reconnected; refetching state the live stream cannot replay")
-          bootstrap()
+          void refetchAfterReconnect()
         },
       ),
     )
+
+    /**
+     * The refetch a reconnect owes, which must never exit the TUI.
+     *
+     * A shared background service restarted by *another* client (its
+     * `/restart`, `nikcli service restart`) looks like this from here: the
+     * stream drops, "reconnects" — possibly to the process that is still
+     * shutting down — and the refetch finds nothing listening. That used to be
+     * fatal, and every other terminal open on the service died with it. Retried
+     * while the stream stays up; a stream that drops again triggers its own
+     * refetch when it comes back, and a newer bootstrap supersedes this one.
+     */
+    async function refetchAfterReconnect() {
+      for (let attempt = 1; attempt <= REFETCH_ATTEMPTS; attempt++) {
+        const failure = await bootstrap({ fatal: false })
+        if (!failure) return
+        const failed = bootstrapVersion
+        await new Promise((resolve) => setTimeout(resolve, attempt * REFETCH_BACKOFF_MS))
+        if (bootstrapVersion !== failed) return
+        if (sdk.connection.status() !== "connected") return
+      }
+      Log.Default.error("tui refetch after reconnect kept failing; waiting for the next reconnect", {
+        attempts: REFETCH_ATTEMPTS,
+      })
+    }
 
     const syncedSessions = new Map<string, "partial" | "full">()
 

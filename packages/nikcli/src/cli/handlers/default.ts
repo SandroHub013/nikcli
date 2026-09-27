@@ -132,32 +132,6 @@ export async function shutdownWorker(input: {
 }
 
 /**
- * Re-exec this process with the same arguments, then exit.
- *
- * How a `/restart` reconnects: the client is a thin HTTP consumer of the
- * background service, so replacing it costs a process start, not a second
- * engine graph. Whatever the host had to restart underneath (the service, the
- * worker) is already up by the time this is called, and the new client
- * rediscovers it — which is also what re-reads the channel password and
- * re-checks version skew, both of which a same-process reconnect would keep
- * stale.
- *
- * `detached` puts the child outside this process group so the exit below does
- * not take it down, and the stdio streams are inherited so the terminal belongs
- * to the new process alone.
- */
-export function relaunchSelf(): never {
-  process.exitCode = 0
-  Bun.spawn([process.execPath, ...process.argv.slice(1)], {
-    windowsHide: true,
-    stdio: ["inherit", "inherit", "inherit"],
-    env: process.env,
-    detached: true,
-  })
-  process.exit(0)
-}
-
-/**
  * How long the server worker may take to start listening before the TUI gives
  * up on it. A safety net, not a budget: a normal start is a few seconds, and
  * this only turns "waits forever on a worker that will never answer" into an
@@ -385,17 +359,20 @@ export default Runtime.handler(Commands, async (input) => {
         },
         // `/restart` in the TUI. The service is the thing being restarted here:
         // a separate process, whose live sessions are suspended on SIGTERM and
-        // resumed by the engine that comes back. `prepare` is the slow half and
-        // runs while the terminal is still ours, so the restart dialog is on
-        // screen for the seconds it actually takes.
-        onRestartPrepare: async () => {
+        // resumed by the engine that comes back. The terminal stays up and
+        // reconnects to what this returns — rediscovered, not assumed: the new
+        // service may have taken another port, and the credential is re-read.
+        onRestart: async () => {
           const next = await BackgroundService.restart()
           Log.Default.info("restarted background service", { url: next.url, pid: next.pid })
+          return {
+            url: next.url,
+            fetch: BackgroundService.authorizedFetch(
+              next.url,
+              BackgroundService.authorization(await BackgroundService.password()),
+            ),
+          }
         },
-        // The reconnect. The TUI's transport is a URL plus a `fetch` bound to
-        // the credential of the process that just died, and the new service may
-        // have taken an ephemeral port, so only a fresh client has both true.
-        onRestart: relaunchSelf,
         restartTarget: "background service",
       })
       return
@@ -556,11 +533,16 @@ export default Runtime.handler(Commands, async (input) => {
         prompt,
       },
       onExit: stop,
-      // `/restart` with no service to restart: the worker *is* the server, so
-      // stopping it is the slow half and the relaunch is the reconnect. `stop` is
-      // idempotent, so `onExit` running it again during teardown costs nothing.
-      onRestartPrepare: stop,
-      onRestart: relaunchSelf,
+      // `/restart` with no service to restart: the worker *is* the server, and
+      // its engine is restarted inside it — every instance (config, providers,
+      // plugins, LSP, MCP) disposed and rebuilt on the next request. The thread
+      // itself is kept: terminating a worker that loaded native modules and
+      // spawning another crashes Bun (SIGSEGV in 1.4.2), and the transport it
+      // hands back is the one the terminal already has.
+      onRestart: async () => {
+        await client.call("reload", undefined)
+        return { url, fetch: customFetch, events }
+      },
       restartTarget: "server",
       checkUpgrade: async () => {
         return client.call("checkUpgrade", { directory: cwd }).catch((error) => {

@@ -13,52 +13,96 @@ import { source, stripComments, tuiSource } from "./tui-source"
  * the same trade).
  */
 describe("restart command", () => {
-  it("is a slash command that goes through the exit context's restart", async () => {
+  it("is a slash command that hands the host's restart to runRestart", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
     expect(app).toContain('value: "nikcli.restart"')
     expect(app).toContain('name: "restart"')
-    expect(app).toContain("void runRestart()")
-    // Not `exit()`: a restart must reach the host's `onRestart`, and the
-    // process-level relaunch is the host's decision, not this component's.
-    expect(app).toContain("await restart()")
+    expect(app).toContain("void runRestart(restartBackend)")
   })
 
-  it("shows the dialog, then paints it, then does the host's slow work, then tears down", async () => {
+  it("keeps the terminal: no exit, no relaunch, a reconnect in place", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
-    const dialog = app.indexOf("dialog.replace(() => <DialogRestart")
-    const paint = app.indexOf("await afterPaint(renderer)")
-    const prepare = app.indexOf("await props.onRestartPrepare?.()")
-    const teardown = app.indexOf("await restart()")
-    expect(dialog).toBeGreaterThan(-1)
-    // The order *is* the feature: the seconds the service takes to come back
-    // have to happen in front of a user who can see them.
-    expect(paint).toBeGreaterThan(dialog)
-    expect(prepare).toBeGreaterThan(paint)
-    expect(teardown).toBeGreaterThan(prepare)
+    const run = app.slice(app.indexOf("async function runRestart"), app.indexOf("const connected = useConnected()"))
+    expect(run).not.toContain("exit(")
+    expect(run).not.toContain("restart()")
+    const exit = stripComments(await tuiSource("context/exit.tsx"))
+    expect(exit).not.toContain("onRestart")
   })
 
-  it("keeps the terminal when the host could not restart, rather than tearing it down", async () => {
+  it("shows the dialog, paints it, restarts the backend, reconnects, refetches, reloads plugins", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
-    const failure = app.indexOf("restart failed before the terminal was released")
-    expect(failure).toBeGreaterThan(-1)
-    const after = app.slice(failure, app.indexOf("await restart()", failure))
-    expect(after).toContain("dialog.clear()")
-    expect(after).toContain("return")
+    const run = app.slice(app.indexOf("async function runRestart"))
+    const order = [
+      "dialog.replace(() => <DialogRestart",
+      "await afterPaint(renderer)",
+      "beginRestart()",
+      "await restartBackend()",
+      "sdk.reconnect(next)",
+      "await sync.bootstrap({ fatal: false })",
+      "await TuiPluginRuntime.reload()",
+    ].map((step) => run.indexOf(step))
+    for (const index of order) expect(index).toBeGreaterThan(-1)
+    // The order *is* the feature: the seconds the backend takes to come back
+    // happen in front of a user who can see them, and plugins bound to the old
+    // client are reloaded only once the new one answers.
+    expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
-  it("hands the whole restart contract down to the component that owns the command", async () => {
-    // Three props, and the call site once forwarded only the first: the command
-    // then had a `restart` to call and nothing to run before it, so the dialog
-    // flashed and the slow half happened behind a destroyed renderer.
+  it("stays up and says why when the host could not restart", async () => {
+    const app = stripComments(await tuiSource("app.tsx"))
+    const run = app.slice(app.indexOf("async function runRestart"), app.indexOf("const connected = useConnected()"))
+    const failure = run.slice(run.indexOf('log.error("restart failed"'))
+    expect(failure).toContain("toast.error(error)")
+    // A backend that is down must not turn the refetch into an exit.
+    expect(failure).toContain("await sync.bootstrap({ fatal: false })")
+    expect(failure.indexOf("await sync.bootstrap({ fatal: false })")).toBeLessThan(failure.indexOf("endRestart()"))
+    expect(failure).toContain("dialog.clear()")
+  })
+
+  it("never exits on a refetch after the backend went away, in this terminal or any other", async () => {
+    // The event stream drops and "reconnects" while the service stops; the
+    // refetch that followed hit a server on its way out and `exit(e)` killed the
+    // client with status 1 — this one, and every other TUI open on the same
+    // shared service when *they* were the ones restarting it.
+    const sync = stripComments(await tuiSource("context/sync.tsx"))
+    const guard = sync.indexOf("if (!fatal)")
+    expect(guard).toBeGreaterThan(-1)
+    expect(guard).toBeLessThan(sync.indexOf("await exit(e)"))
+    // Startup keeps its fatal default; the reconnect path opts out.
+    expect(sync).toContain("const fatal = options.fatal ?? true")
+    const reconnect = sync.slice(sync.indexOf("reconnectGate.observe(status)"))
+    expect(reconnect.indexOf("if (restarting()) return")).toBeLessThan(reconnect.indexOf("refetchAfterReconnect()"))
+    const refetch = sync.slice(sync.indexOf("async function refetchAfterReconnect()"))
+    expect(refetch).toContain("bootstrap({ fatal: false })")
+    expect(refetch).not.toContain("exit(")
+
+    const app = stripComments(await tuiSource("app.tsx"))
+    const run = app.slice(app.indexOf("async function runRestart"), app.indexOf("const connected = useConnected()"))
+    expect(run).not.toMatch(/sync\.bootstrap\(\)/)
+  })
+
+  it("swaps the SDK transport behind getters, so every later request reaches the new backend", async () => {
+    const sdk = stripComments(await tuiSource("context/sdk.tsx"))
+    expect(sdk).toContain("function reconnect(next: Transport)")
+    expect(sdk).toContain("get client()")
+    expect(sdk).toContain("get url()")
+    expect(sdk).toContain("get fetch()")
+    const reconnect = sdk.slice(sdk.indexOf("function reconnect(next: Transport)"))
+    // The old stream goes before the new one starts, or both deliver events.
+    expect(reconnect.indexOf("sse?.abort()")).toBeLessThan(reconnect.indexOf("subscribe()"))
+    expect(reconnect.indexOf("stopEvents()")).toBeLessThan(reconnect.indexOf("subscribe()"))
+    expect(reconnect.indexOf("sdk = createSDK()")).toBeLessThan(reconnect.indexOf("subscribe()"))
+  })
+
+  it("hands the restart contract down to the component that owns the command", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
     expect(app).toContain("onRestart={input.onRestart}")
-    expect(app).toContain("onRestartPrepare={input.onRestartPrepare}")
     expect(app).toContain("restartTarget={input.restartTarget}")
   })
 
   it("says a host with no backend cannot restart, instead of doing nothing", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
-    expect(app).toContain("if (!props.onRestart)")
+    expect(app).toContain("if (!restartBackend)")
     expect(app).toContain("This host cannot restart the server it is attached to.")
   })
 })
@@ -90,15 +134,29 @@ describe("restart dialog", () => {
 })
 
 describe("host wiring", () => {
-  it("restarts the background service and relaunches, naming it in the dialog", async () => {
+  it("restarts the background service and returns where the new one listens", async () => {
     const host = stripComments(await source("cli/handlers/default.ts"))
     expect(host).toContain("await BackgroundService.restart()")
-    expect(host).toContain("onRestart: relaunchSelf")
     expect(host).toContain('restartTarget: "background service"')
-    // The private path has no service: its worker is the server, and stopping it
-    // is the slow half.
-    expect(host).toContain("onRestartPrepare: stop,")
+    const service = host.slice(host.indexOf("onRestart: async () => {"))
+    // Rediscovered, not assumed: a new port, and the credential re-read.
+    expect(service.slice(0, service.indexOf("restartTarget"))).toContain("url: next.url")
+    expect(service.slice(0, service.indexOf("restartTarget"))).toContain("BackgroundService.password()")
+  })
+
+  it("restarts the embedded engine inside its worker instead of relaunching the process", async () => {
+    const host = stripComments(await source("cli/handlers/default.ts"))
+    expect(host).not.toContain("relaunchSelf")
+    expect(host).not.toContain("onRestartPrepare")
     expect(host).toContain('restartTarget: "server"')
+    const worker = host.slice(host.lastIndexOf("onRestart: async () => {"))
+    const body = worker.slice(0, worker.indexOf('restartTarget: "server"'))
+    // Disposes and rebuilds every instance in the same thread: terminating a
+    // worker that loaded native modules and spawning another crashed Bun.
+    expect(body).toContain('await client.call("reload", undefined)')
+    expect(body).not.toContain("new Worker")
+    expect(body).not.toContain("terminate")
+    expect(body).toContain("return { url, fetch: customFetch, events }")
   })
 
   it("gives the CLI and the TUI one restart sequence", async () => {

@@ -230,6 +230,25 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(sequence).toEqual(["ready", "server.connected", "installation.update-available"])
   })
 
+  it("does not report a stream connected before the server has sent anything", async () => {
+    // The generated client resolves `global.event()` before connecting, so a
+    // stream to a server that is down fails on first read. Reporting that as
+    // "connected" made every retry refetch against nothing — fatally, for a TUI
+    // whose shared service another client was restarting.
+    let connected = 0
+    await consumeGlobalEventStream({
+      stream: {
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(new Error("Unable to connect")),
+        }),
+      },
+      signal: new AbortController().signal,
+      onConnected: () => connected++,
+      onEnvelope: () => {},
+    }).catch(() => {})
+    expect(connected).toBe(0)
+  })
+
   it("mounts SDK provider children without treating subscription readiness as provider readiness", () => {
     let mounted = false
     let dispose = () => {}
