@@ -161,6 +161,8 @@ export const en: Messages = {
   "sidebar.addSpace": "Add a space",
   "sidebar.addRemote": "Add a remote environment (ssh)",
   "sidebar.noSpaces": "No spaces open.",
+  "sidebar.agentStatus": (status) =>
+    `Status: ${({ disponibile: "available", "a lavoro": "working", "in attesa di input": "waiting for input", "task completata": "task done", errore: "error", sospesa: "suspended" } as Record<string, string>)[status] ?? status}`,
   "sidebar.agents": "Active agents",
   "sidebar.newAgentSession": "New agent session",
   "sidebar.noAgents": "No active agents.",

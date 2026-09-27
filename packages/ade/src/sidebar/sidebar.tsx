@@ -329,8 +329,8 @@ function SessionChildRow(props: {
             data-slot="agent-status-dot"
             data-status={props.row.session.status}
             data-agent-status={displayStatus()}
-            title={`Stato: ${displayStatus()}`}
-            aria-label={`Stato: ${displayStatus()}`}
+            title={t("sidebar.agentStatus", displayStatus())}
+            aria-label={t("sidebar.agentStatus", displayStatus())}
           />
         </div>
         <div data-slot="session-meta">
@@ -404,8 +404,8 @@ function ActiveAgentRow(props: {
             data-slot="agent-status-dot"
             data-status={props.session.status}
             data-agent-status={displayStatus()}
-            title={`Stato: ${displayStatus()}`}
-            aria-label={`Stato: ${displayStatus()}`}
+            title={t("sidebar.agentStatus", displayStatus())}
+            aria-label={t("sidebar.agentStatus", displayStatus())}
           />
         </div>
         <div data-slot="active-agent-meta">
