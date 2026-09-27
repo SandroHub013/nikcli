@@ -5241,6 +5241,7 @@ export function Workbench() {
       now: () => Date.now(),
       isLocked: isScreenLocked,
       isHidden: () => hiddenInTray,
+      isDictating: () => voiceEngine.activeMode() === "transcription",
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
