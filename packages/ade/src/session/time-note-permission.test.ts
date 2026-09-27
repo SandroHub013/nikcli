@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createLineQueue } from "./line-queue"
 import { isQuestionOpen, lineIsTaken, timeNoteFor, type OpenRequest } from "./mailbox"
 import { enterAgain, lineGiven, pressEnter, ringAgain, typeThenEnter, type LineOutcome } from "./enter"
+import { submitCheck } from "./typing"
 
 /*
  * Audit 0.7.7, B1: the time note was typed over an open permission prompt,
@@ -146,18 +147,36 @@ describe("a prompt only the hook knows about holds every Enter (P1)", () => {
 })
 
 describe("the Enter is pressed only when no prompt is open at that moment (B1 bis)", () => {
+  /*
+   * With the pieces confirmSubmitted runs, not a copy of them (review area 2):
+   * `submitCheck` decides the resend from the CLI's record, and `enterAgain`
+   * presses it. The check used to be the literal "resend", so a fault in
+   * `submitCheck` left this test green.
+   */
   test("confirmSubmitted's second Enter: a prompt opened during the read is not answered", async () => {
     const written: string[] = []
     let prompt = false
-    // confirmSubmitted's round: checked, then an await on the CLI's record, then the Enter.
+    const typedAt = 1_000
     const round = async () => {
       if (prompt) return "stopped"
-      await new Promise((resolve) => setTimeout(resolve, 5)).then(() => {
-        prompt = true // the agent asked for a permission while its record was read
+      // The CLI's record, read while the agent asks for a permission: nothing since the line.
+      const activity = await new Promise<{ state: "idle"; at: number }>((resolve) =>
+        setTimeout(() => {
+          prompt = true
+          resolve({ state: "idle", at: typedAt - 1 })
+        }, 5),
+      )
+      const check = submitCheck({ typedAt, activity, now: typedAt + 60_000, deadline: typedAt + 30_000 })
+      if (check !== "resend") return check
+      const pressed = await enterAgain({
+        queue: createLineQueue(),
+        key: "p1",
+        write: (data) => written.push(data),
+        alive: () => true,
+        typing: () => false,
+        permissionOpen: () => prompt,
       })
-      const check = "resend"
-      if (check === "resend" && !pressEnter((data) => written.push(data), () => prompt)) return "held"
-      return "resent"
+      return pressed ? "resent" : "held"
     }
     expect(await round()).toBe("held")
     expect(written).toEqual([])
