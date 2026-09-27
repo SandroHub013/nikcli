@@ -441,6 +441,7 @@ import {
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
+import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
 import { DesignSheet } from "../design/design-sheet"
@@ -1329,7 +1330,10 @@ export function Workbench() {
    * Master session as a `risolta` line, when that session is running and
    * between turns; until then it waits in an outbox that survives a restart.
    */
+  // Which pane asked, as ADE wrote it: a `fromPane` written by hand in a register is not trusted.
+  const askers = askerLedger(() => (typeof localStorage === "undefined" ? undefined : localStorage))
   const decisionsRegister = createDecisionsRegister({
+    vouch: askers.vouch,
     path: () => {
       const root = project()?.root
       return root ? decisionsPath(root) : undefined
@@ -1486,6 +1490,7 @@ export function Workbench() {
    * time, and the panel with all of them. See `design/`.
    */
   const designRegister = createDesignRegister({
+    vouch: askers.vouch,
     path: () => {
       const root = project()?.root
       return root ? designPath(root) : undefined
@@ -3643,6 +3648,7 @@ export function Workbench() {
           // Verified by the token above: the answer goes back to this pane.
           fromPane: sender ? message.from : undefined,
           agent: wb().panes.find((pane) => pane.id === message.from)?.agent,
+          remember: (k, at) => (sender ? askers.remember(path, k, at, message.from) : undefined),
         },
         message,
       )

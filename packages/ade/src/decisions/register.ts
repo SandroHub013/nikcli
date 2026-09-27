@@ -26,6 +26,8 @@ export interface DecisionsRegisterDeps {
   /** The register's path for the open project; undefined with no project. */
   path: Accessor<string | undefined>
   io: () => Promise<(DecisionsIo & { readDir?: (path: string) => Promise<DirEntry[]> }) | undefined>
+  /** Drops a `fromPane` ADE did not write (`asker-ledger`). */
+  vouch?: <E extends DecisionEvent>(path: string, events: readonly E[]) => E[]
 }
 
 export interface DecisionsRegister {
@@ -54,11 +56,13 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
   const [error, setError] = createSignal<string>()
   const [now, setNow] = createSignal(new Date())
+  let loadedPath: string | undefined
   const state = createMemo<DecisionsState | undefined>((prev) => {
     const register = loaded()
-    return register ? foldDecisions(register.events, now(), prev) : undefined
+    if (!register) return undefined
+    const events = deps.vouch && loadedPath ? deps.vouch(loadedPath, register.events) : register.events
+    return foldDecisions(events, now(), prev)
   })
-  let loadedPath: string | undefined
   let stamp: string | undefined
 
   const stampOf = async (path: string, listing?: ReadDir): Promise<string | undefined> => {

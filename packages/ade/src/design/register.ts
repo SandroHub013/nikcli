@@ -12,6 +12,8 @@ export const REGISTER_WATCH_MS = 2500
 export interface DesignRegisterDeps {
   path: Accessor<string | undefined>
   io: () => Promise<(DesignIo & { readDir?: (path: string) => Promise<DirEntry[]> }) | undefined>
+  /** Drops a `fromPane` ADE did not write (`asker-ledger`). */
+  vouch?: <E extends DesignEvent>(path: string, events: readonly E[]) => E[]
 }
 
 export interface DesignRegister {
@@ -29,11 +31,13 @@ export interface DesignRegister {
 export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
   const [error, setError] = createSignal<string>()
+  let loadedPath: string | undefined
   const state = createMemo<DesignState | undefined>((prev) => {
     const register = loaded()
-    return register ? foldProposals(register.events, prev) : undefined
+    if (!register) return undefined
+    const events = deps.vouch && loadedPath ? deps.vouch(loadedPath, register.events) : register.events
+    return foldProposals(events, prev)
   })
-  let loadedPath: string | undefined
   let stamp: string | undefined
 
   const stampOf = async (path: string, listing?: ReadDir): Promise<string | undefined> => {
