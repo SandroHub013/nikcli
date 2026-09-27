@@ -264,49 +264,106 @@ pub(crate) fn forwarded(headers: Vec<(String, String)>) -> Vec<(String, String)>
 /// environment it was read from.
 const PROVIDER_SECRETS: &[&str] = &["key", "options", "env"];
 
-/// Where each answer that lists providers keeps them: `GET /config` under
-/// `provider`, a map by id; `GET /config/providers` under `providers` and
-/// `GET /provider` under `all`, both lists.
-const PROVIDER_LISTS: &[(&str, &str)] = &[("config", "provider"), ("config/providers", "providers"), ("provider", "all")];
+/// The same for each of a provider's models: nikcli can send a key in their
+/// `headers` (Ollama's `Authorization`), and their `options` are the SDK's.
+const MODEL_SECRETS: &[&str] = &["headers", "options"];
 
-/// The field that holds the providers in the answer to `url`, when `url` is
-/// one of `PROVIDER_LISTS` read the way `fenced` reads it.
-fn provider_list(method: &Method, url: &Url) -> Option<&'static str> {
+/// The only fields of `GET /config` the page reads. The rest of it is the
+/// user's whole configuration, `{env:VAR}` already replaced by its value, so a
+/// secret can be anywhere in it: the providers' options, `mcp.*.environment`,
+/// `mcp.*.headers`, `mcp.*.oauth`, the LSP's and formatters' `env`, the hooks'
+/// `environment`. Taking those out one by one would leave the next one in.
+const CONFIG_READ: &[&str] = &["model", "small_model"];
+
+/// The answers the proxy reads whole and cleans before the page gets them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Scrub {
+    /// `GET /config`: only `CONFIG_READ`.
+    Config,
+    /// `GET /config/providers` and `GET /provider`: a list of providers under
+    /// this field, each without `PROVIDER_SECRETS`, its models without
+    /// `MODEL_SECRETS`.
+    Providers(&'static str),
+    /// `GET /agent`: a list of agents, without the `options` they take from
+    /// the configuration and pass to the provider.
+    Agents,
+}
+
+/// How the answer to `url` is cleaned, if it is one of those, read the way
+/// `fenced` reads it.
+fn scrub_of(method: &Method, url: &Url) -> Option<Scrub> {
     if *method != Method::GET && *method != Method::HEAD {
         return None;
     }
     let path = url.path().to_ascii_lowercase();
-    let path = path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
-    PROVIDER_LISTS.iter().find(|(route, _)| *route == path).map(|(_, field)| *field)
+    match path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/").as_str() {
+        "config" => Some(Scrub::Config),
+        "config/providers" => Some(Scrub::Providers("providers")),
+        "provider" => Some(Scrub::Providers("all")),
+        "agent" => Some(Scrub::Agents),
+        _ => None,
+    }
 }
 
-/// `body` without `PROVIDER_SECRETS` in the providers under `field`; a body
-/// that is not JSON is returned as it is.
-fn without_provider_secrets(body: Vec<u8>, field: &str) -> Vec<u8> {
-    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        return body;
-    };
-    let providers: Vec<&mut serde_json::Value> = match value.get_mut(field) {
-        Some(serde_json::Value::Object(map)) => map.values_mut().collect(),
-        Some(serde_json::Value::Array(list)) => list.iter_mut().collect(),
-        _ => return body,
-    };
-    for provider in providers {
-        if let Some(provider) = provider.as_object_mut() {
-            for secret in PROVIDER_SECRETS {
-                provider.remove(*secret);
+fn without(value: &mut serde_json::Value, fields: &[&str]) -> Result<(), ()> {
+    let object = value.as_object_mut().ok_or(())?;
+    for field in fields {
+        object.remove(*field);
+    }
+    Ok(())
+}
+
+/// `body` cleaned as `scrub` says, or `Err` when it is not the shape that says
+/// where the secrets are: not JSON, the list missing, an entry that is not an
+/// object. Such a body is not passed on (fail closed).
+fn scrubbed(body: &[u8], scrub: Scrub) -> Result<Vec<u8>, ()> {
+    use serde_json::Value;
+    let mut value: Value = serde_json::from_slice(body).map_err(|_| ())?;
+    match scrub {
+        Scrub::Config => {
+            let config = value.as_object().ok_or(())?;
+            let kept: serde_json::Map<String, Value> = config
+                .iter()
+                .filter(|(name, _)| CONFIG_READ.contains(&name.as_str()))
+                .map(|(name, field)| (name.clone(), field.clone()))
+                .collect();
+            value = Value::Object(kept);
+        }
+        Scrub::Providers(field) => {
+            let Some(Value::Array(providers)) = value.get_mut(field) else {
+                return Err(());
+            };
+            for provider in providers {
+                without(provider, PROVIDER_SECRETS)?;
+                match provider.get_mut("models") {
+                    None => {}
+                    Some(Value::Object(models)) => {
+                        for model in models.values_mut() {
+                            without(model, MODEL_SECRETS)?;
+                        }
+                    }
+                    Some(_) => return Err(()),
+                }
+            }
+        }
+        Scrub::Agents => {
+            let Value::Array(agents) = &mut value else {
+                return Err(());
+            };
+            for agent in agents {
+                without(agent, &["options"])?;
             }
         }
     }
-    serde_json::to_vec(&value).unwrap_or(body)
+    serde_json::to_vec(&value).map_err(|_| ())
 }
 
 /// Makes the call and reports it to `sink`, which returns false once nobody
 /// is listening. Returns true when the server could not be reached at all.
 ///
-/// An answer that lists providers (`provider_list`) is read whole and sent
-/// as one chunk without their secrets: nikcli puts the user's API keys in
-/// it, and the page only needs names and models.
+/// An answer `scrub_of` names is read whole and sent as one chunk, cleaned
+/// (`scrubbed`): nikcli puts the user's API keys in it, and the page only
+/// needs names and models. One that cannot be cleaned is an error.
 pub(crate) async fn relay(
     client: &Client,
     url: Url,
@@ -316,7 +373,8 @@ pub(crate) async fn relay(
     auth: Option<(String, String)>,
     mut sink: impl FnMut(ProxyEvent) -> bool,
 ) -> bool {
-    let scrub = provider_list(&method, &url);
+    let scrub = scrub_of(&method, &url);
+    let head_only = method == Method::HEAD;
     let mut request = client.request(method, url);
     for (name, value) in headers {
         // A compressed body could not be read to take the keys out of it.
@@ -352,19 +410,25 @@ pub(crate) async fn relay(
         .filter_map(|(name, value)| Some((name.as_str().to_string(), value.to_str().ok()?.to_string())))
         .collect();
 
-    if let Some(field) = scrub {
+    if let Some(scrub) = scrub {
+        const REFUSED: &str = "il server di nikcli ha dato una risposta che non so ripulire dalle chiavi: non la passo alla chat";
         let encoded = headers
             .iter()
             .any(|(name, value)| name == "content-encoding" && !value.eq_ignore_ascii_case("identity"));
         if encoded {
-            sink(ProxyEvent::Error {
-                message: "il server di nikcli ha compresso l'elenco dei provider: non lo passo alla chat".into(),
-            });
+            sink(ProxyEvent::Error { message: REFUSED.into() });
             return false;
         }
         let status = response.status().as_u16();
         let body = match response.bytes().await {
-            Ok(bytes) => without_provider_secrets(bytes.to_vec(), field),
+            Ok(bytes) if head_only && bytes.is_empty() => Vec::new(),
+            Ok(bytes) => match scrubbed(&bytes, scrub) {
+                Ok(body) => body,
+                Err(()) => {
+                    sink(ProxyEvent::Error { message: REFUSED.into() });
+                    return false;
+                }
+            },
             Err(error) => {
                 sink(ProxyEvent::Error {
                     message: format!("risposta del server di nikcli interrotta: {error}"),
@@ -678,7 +742,7 @@ mod tests {
 
     #[test]
     fn the_password_is_added_here_and_the_pages_own_is_dropped() {
-        let (url, requests) = serve(vec![plain("200 OK", "{\"ok\":true}")]);
+        let (url, requests) = serve(vec![plain("200 OK", "{\"all\":[]}")]);
         let (_, events) = run(
             &url,
             "/provider",
@@ -745,18 +809,22 @@ mod tests {
             "env": ["OPENROUTER_API_KEY"],
             "key": "sk-finta-0000",
             "options": { "apiKey": "sk-finta-0000", "headers": { "x-finta": "sk-finta-0000" } },
-            "models": { "free-model": { "id": "free-model", "name": "Free" } }
+            "models": { "free-model": {
+                "id": "free-model",
+                "name": "Free",
+                "variants": { "high": {} },
+                "headers": { "Authorization": "Bearer sk-finta-0000" },
+                "options": { "apiKey": "sk-finta-0000" }
+            } }
         })
     }
 
     #[test]
     fn no_answer_that_lists_providers_hands_the_page_their_keys() {
         let list = serde_json::json!([provider()]);
-        let map = serde_json::json!({ "openrouter": provider() });
         let cases = [
             ("/config/providers", serde_json::json!({ "providers": list, "default": { "openrouter": "free-model" } })),
             ("/provider?directory=C%3A", serde_json::json!({ "all": list, "default": {}, "connected": ["openrouter"] })),
-            ("/config", serde_json::json!({ "provider": map, "model": "openrouter/free-model" })),
             // The fence reads the path without case and without empty segments.
             ("/CONFIG/providers/", serde_json::json!({ "providers": list, "default": {} })),
         ];
@@ -775,7 +843,80 @@ mod tests {
             assert!(!text.contains("OPENROUTER_API_KEY"), "{path}: {text}");
             // What the page reads is all still there.
             assert!(text.contains(r#""name":"OpenRouter""#), "{path}: {text}");
-            assert!(text.contains(r#""free-model":{"id":"free-model","name":"Free"}"#), "{path}: {text}");
+            assert!(text.contains(r#""free-model":{"id":"free-model","name":"Free","variants":{"high":{}}}"#), "{path}: {text}");
+        }
+    }
+
+    fn answer_to(path: &str, body: &str) -> Vec<ProxyEvent> {
+        let (url, _) = serve(vec![plain("200 OK", body)]);
+        run(&url, path, Vec::new(), None).1
+    }
+
+    #[test]
+    fn the_configuration_reaches_the_page_as_the_model_it_names_and_nothing_else() {
+        // nikcli's config with `{env:VAR}` already replaced: a secret can be in
+        // any of these, and in the next field nikcli adds.
+        let config = serde_json::json!({
+            "model": "openrouter/free-model",
+            "small_model": "openrouter/free-model",
+            "provider": { "openrouter": provider() },
+            "mcp": {
+                "locale": { "type": "local", "command": ["srv"], "environment": { "TOKEN": "sk-finta-0000" } },
+                "remoto": {
+                    "type": "remote",
+                    "url": "https://mcp.example",
+                    "headers": { "Authorization": "Bearer sk-finta-0000" },
+                    "oauth": { "clientId": "id", "clientSecret": "sk-finta-0000" }
+                }
+            },
+            "lsp": { "ts": { "command": ["tsls"], "env": { "KEY": "sk-finta-0000" } } },
+            "formatter": { "fmt": { "command": ["fmt"], "environment": { "KEY": "sk-finta-0000" } } },
+            "experimental": { "hook": { "session_completed": [{ "command": ["x"], "environment": { "KEY": "sk-finta-0000" } }] } }
+        });
+        for path in ["/config", "/Config/"] {
+            let events = answer_to(path, &config.to_string());
+            assert_eq!(events.last(), Some(&ProxyEvent::End), "{path}: {events:?}");
+            assert_eq!(
+                body_of(&events),
+                serde_json::json!({ "model": "openrouter/free-model", "small_model": "openrouter/free-model" }),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_agents_reach_the_page_without_the_options_they_pass_to_the_provider() {
+        let agents = serde_json::json!([
+            { "name": "build", "mode": "primary", "permission": [], "options": { "apiKey": "sk-finta-0000" } },
+            { "name": "plan", "mode": "primary", "permission": [], "options": {} }
+        ]);
+        let events = answer_to("/agent", &agents.to_string());
+        assert_eq!(
+            body_of(&events),
+            serde_json::json!([
+                { "name": "build", "mode": "primary", "permission": [] },
+                { "name": "plan", "mode": "primary", "permission": [] }
+            ])
+        );
+    }
+
+    #[test]
+    fn an_answer_that_cannot_be_cleaned_is_not_passed_on() {
+        let provider = provider().to_string();
+        for (path, body) in [
+            ("/config/providers", "sk-finta-0000 non è JSON".to_string()),
+            ("/config/providers", String::new()),
+            // The list under another name: nikcli changed its shape.
+            ("/config/providers", format!(r#"{{"providerList":[{provider}]}}"#)),
+            ("/provider", format!(r#"{{"providers":[{provider}]}}"#)),
+            ("/provider", format!(r#"{{"all":{{"openrouter":{provider}}}}}"#)),
+            ("/provider", r#"{"all":["sk-finta-0000"]}"#.to_string()),
+            ("/provider", r#"{"all":[{"id":"x","models":["sk-finta-0000"]}]}"#.to_string()),
+            ("/config", r#"["sk-finta-0000"]"#.to_string()),
+            ("/agent", r#"{"build":{"options":{"apiKey":"sk-finta-0000"}}}"#.to_string()),
+        ] {
+            let events = answer_to(path, &body);
+            assert!(matches!(events.as_slice(), [ProxyEvent::Error { .. }]), "{path} {body}: {events:?}");
         }
     }
 
