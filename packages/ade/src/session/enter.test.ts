@@ -35,6 +35,31 @@ describe("no text over a permission prompt (audit 0.7.7, MEDIO 1)", () => {
   })
 })
 
+describe("no Enter over what the user started writing during the wait (review area 2)", () => {
+  test("a key in the wait holds the Enter; the text stays in the box", async () => {
+    const written: string[] = []
+    let typed = false
+    const outcome = await typeThenEnter({
+      text: "[Messaggio da A]: ciao",
+      write: (data) => written.push(data),
+      wait: async () => {
+        typed = true
+      },
+      alive: () => true,
+      permissionOpen: () => false,
+      typedDuring: () => typed,
+    })
+    expect(outcome).toBe("typed-no-enter")
+    expect(written).toEqual(["[Messaggio da A]: ciao"])
+  })
+
+  test("lint: the workbench says when the user typed during the wait", () => {
+    const source = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const call = source.slice(source.indexOf("const outcome = await typeThenEnter({"))
+    expect(call.slice(0, 1_200)).toContain("typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt")
+  })
+})
+
 describe("deliveryResult", () => {
   test("not typed on a live session is held for a later round, not a closed session", () => {
     expect(deliveryResult("not-typed", true)).toBe("held")

@@ -1914,6 +1914,8 @@ export function Workbench() {
       },
       alive,
       permissionOpen: () => paneId !== undefined && questionOpen(paneId),
+      // A key of the user's since the text went in: not a draft from before.
+      typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt,
     })
     if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
