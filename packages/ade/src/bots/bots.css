@@ -197,6 +197,11 @@
   font-size: var(--ade-font-lg);
   line-height: 1;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="bots-new"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="bots-new"]:hover {

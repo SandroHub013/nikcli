@@ -440,7 +440,13 @@
   color: var(--ade-text-weak);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    opacity var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="section-add"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="section-header-row"]:hover [data-slot="section-add"],
@@ -918,7 +924,11 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+[data-slot="sidebar-settings"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="sidebar-settings"] svg {
@@ -1379,7 +1389,13 @@
   color: var(--ade-text);
   border: 1px solid var(--ade-border);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="empty-action-btn"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="empty-action-btn"]:hover {
@@ -1627,6 +1643,11 @@ aside[data-component="ade-sidebar"] {
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="search-clear"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="search-clear"]:hover {
@@ -1653,7 +1674,12 @@ aside[data-component="ade-sidebar"] {
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="search-kind"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="search-kind"]:hover {

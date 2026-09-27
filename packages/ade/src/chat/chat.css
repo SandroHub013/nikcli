@@ -76,7 +76,12 @@
   cursor: pointer;
   transition:
     border-color var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chat-action"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="chat-action"]:hover {
@@ -415,7 +420,12 @@
   cursor: pointer;
   transition:
     color var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease);
+    background var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chat-copy"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="chat-copy"]:hover {

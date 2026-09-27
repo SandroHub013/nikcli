@@ -32,6 +32,15 @@
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="ext-filter"]:active {
+  transform: var(--ade-press);
+}
+
+[data-slot="ext-tab"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="ext-tab"]:hover,

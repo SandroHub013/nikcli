@@ -111,7 +111,12 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="new-close"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="new-close"]:hover {
@@ -137,6 +142,11 @@
   font-family: inherit;
   font-size: var(--ade-font-md);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="new-cancel"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="new-cancel"]:hover {
@@ -344,7 +354,12 @@
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
     border-color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease);
+    box-shadow var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="new-agent"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="new-agent"]:hover:not(:disabled):not([data-active]) {
@@ -484,7 +499,11 @@
   cursor: pointer;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+[data-slot="new-count"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="new-count"]:first-of-type {
@@ -688,7 +707,13 @@
   font: inherit;
   font-size: var(--ade-font-xs);
   cursor: pointer;
-  transition: background 120ms ease;
+  transition:
+    background 120ms ease,
+    transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="hook-action"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="hook-action"]:hover:not(:disabled) {

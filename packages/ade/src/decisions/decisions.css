@@ -51,6 +51,11 @@
   background: transparent;
   color: var(--ade-text-weak);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="sheet-close"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="sheet-count"] + [data-slot="sheet-close"],
@@ -245,6 +250,11 @@
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-submit"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-ghost"],
@@ -253,11 +263,21 @@
   background: transparent;
   color: var(--ade-text-soft);
   font-weight: 500;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-ghost"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-chip"] {
   height: 22px;
   padding: 0 8px;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="decision-chip"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="decision-ghost"]:hover:not(:disabled),

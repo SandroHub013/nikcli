@@ -83,12 +83,22 @@
   border: 1px solid var(--ade-border);
   background: transparent;
   color: var(--ade-text);
+  transition: var(--ade-btn-transition);
+}
+
+[data-component="remote-space"] [data-slot="secondary"]:active {
+  transform: var(--ade-press);
 }
 
 [data-component="remote-space"] [data-slot="primary"] {
   background: var(--ade-accent);
   border-color: transparent;
   color: var(--ade-accent-fg);
+  transition: var(--ade-btn-transition);
+}
+
+[data-component="remote-space"] [data-slot="primary"]:active {
+  transform: var(--ade-press);
 }
 
 [data-component="remote-space"] [data-slot="primary"]:disabled {

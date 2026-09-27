@@ -1210,6 +1210,10 @@ body,
   font-size: 11px;
   letter-spacing: 0.08em;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+[data-slot="ade-rec"]:active {
+  transform: var(--ade-press);
 }
 
 [data-slot="ade-rec-dot"] {
