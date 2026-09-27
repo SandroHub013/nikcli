@@ -504,6 +504,9 @@ function isHandledCommand(id: string): boolean {
  */
 let paneSequence = 0
 
+/** A new pane id for panes that are not sessions: browser, video, design, diff, file (review area 2). */
+const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
+
 /**
  * How much of a session's output a pane keeps in memory.
  *
@@ -817,7 +820,7 @@ export function Workbench() {
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
   const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
     const pane: Pane = {
-      id: `b${Date.now()}`,
+      id: newPaneId("b"),
       title: "Browser",
       status: "working",
       model: "—",
@@ -1157,7 +1160,7 @@ export function Workbench() {
       return
     }
     setWb((w) => addPane(w, {
-      id: `m${Date.now()}`,
+      id: newPaneId("m"),
       title: path ? (path.split(/[\\/]/).pop() ?? t("newPane.model")) : t("newPane.model"),
       status: "working",
       model: "—",
@@ -1176,7 +1179,7 @@ export function Workbench() {
       return
     }
     setWb((w) => addPane(w, {
-      id: `v${Date.now()}`,
+      id: newPaneId("v"),
       title: path.split(/[\\/]/).pop() ?? t("pane.video.title"),
       status: "working",
       model: "—",
@@ -1529,7 +1532,7 @@ export function Workbench() {
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: `des${Date.now()}`,
+        id: newPaneId("des"),
         title: "Design",
         status: "working",
         model: "—",
@@ -1564,7 +1567,7 @@ export function Workbench() {
       setWb((w) => ({ ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }), view: "code", focusedId: existing.id }))
       return undefined
     }
-    const newId = `bd${Date.now()}`
+    const newId = newPaneId("bd")
     setWb((w) => ({
       ...addPane(w, {
         id: newId,
@@ -1592,7 +1595,7 @@ export function Workbench() {
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: `d${Date.now()}`,
+        id: newPaneId("d"),
         title: "Decisioni",
         status: "working",
         model: "—",
@@ -5438,7 +5441,7 @@ export function Workbench() {
        * `@ade video open <percorso>`.
        */
       setWb(w => addPane(w, {
-        id: `v${Date.now()}`,
+        id: newPaneId("v"),
         title: t("pane.video.title"),
         status: "working",
         model: "—",
@@ -5467,7 +5470,7 @@ export function Workbench() {
        * the time — or ADE's own Vite server.
        */
       setWb(w => addPane(w, {
-        id: `a${Date.now()}`,
+        id: newPaneId("a"),
         title: "Simulatore",
         status: "working",
         model: "—",
@@ -5477,7 +5480,7 @@ export function Workbench() {
         lines: []
       }))
     } else if (id === "browser.new") {
-      const newId = `b${Date.now()}`
+      const newId = newPaneId("b")
       setWb(w => addPane(w, {
         id: newId,
         title: "Browser",
@@ -5966,7 +5969,7 @@ export function Workbench() {
     const host = await getHost()
     if (!host?.readTextFile) return
 
-    const id = `f${Date.now()}`
+    const id = newPaneId("f")
     setWb((w) =>
       addPane(w, {
         id,
@@ -7333,7 +7336,7 @@ export function Workbench() {
     setVoiceSettingsOpen(false)
     setWb((w) => ({
       ...addPane(w, {
-        id: `b${Date.now()}`,
+        id: newPaneId("b"),
         title: "Guida MCP",
         status: "working",
         model: "—",
