@@ -138,9 +138,10 @@ fn kokoro_status(root: &std::path::Path) -> LocalStatus {
 /// model back.
 ///
 /// Both locks are held for the whole removal, and that is the point of the two
-/// lines below. Checking `install_running` and then removing is a check-then-act:
+/// lines below. Checking `running` and then removing is a check-then-act:
 /// «Installa» followed at once by «Rimuovi» would delete the folder under the
-/// installer that is writing into it. And the child lock is taken *before* the
+/// installer that is writing into it; and waiting for the lock froze the window,
+/// then deleted the install that had just finished (`hold_for_removal`). And the child lock is taken *before* the
 /// host is stopped and kept until the folder is gone, so a synthesis that arrives
 /// in between cannot start a new host with the model half deleted — which is a
 /// DLL locked on Windows and a cancellation that removes half of it.
@@ -152,10 +153,7 @@ pub fn tts_local_delete(app: tauri::AppHandle, state: tauri::State<'_, KokoroSta
     // Il lock dell'installer, e da subito il lock del figlio: in quest'ordine,
     // cosi' nessuno dei due può essere messo in mezzo fra il controllo e la
     // cancellazione.
-    let _install = installer.installer.hold(&slot);
-    if installer.installer.install_running(kokoro::KOKORO) {
-        return Err("C'è un'installazione di Kokoro in corso: fermala prima di cancellare.".into());
-    }
+    let _install = installer.installer.hold_for_removal(&slot)?;
     let mut child = state.0.lock();
     if let Some(host) = child.as_mut() {
         host.stop();
@@ -1179,12 +1177,6 @@ impl Installer {
 
     /// What is known about this provider's install. Never fails: a provider
     /// nobody has installed yet has simply not started.
-    /// Whether this provider has an install in flight, which is what makes a
-    /// delete refuse: the installer is writing into the folder being removed.
-    pub fn install_running(&self, provider: &str) -> bool {
-        self.progress_of(provider).running
-    }
-
     fn progress_of(&self, provider: &str) -> InstallProgress {
         self.slot(provider).progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
@@ -1216,6 +1208,24 @@ impl Installer {
     /// panic leaves half written: the staging file is never its destination.
     fn hold<'a>(&'a self, slot: &'a Arc<ProviderSlot>) -> MutexGuard<'a, ()> {
         slot.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The provider's lock for a removal, or a refusal at once if an install
+    /// holds it.
+    ///
+    /// Never a wait. The delete command is synchronous, so it runs on the
+    /// window's thread: waiting on `hold` froze ADE for as long as the install
+    /// had left, up to its 30 minutes, and then went on to delete what had just
+    /// been installed, because by then `running` was false. Holding the lock is
+    /// the proof no install is going; `running` is not needed.
+    fn hold_for_removal<'a>(&'a self, slot: &'a Arc<ProviderSlot>) -> Result<MutexGuard<'a, ()>, String> {
+        match slot.lock.try_lock() {
+            Ok(guard) => Ok(guard),
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                Err("C'è un'installazione in corso: fermala prima di cancellare.".into())
+            }
+        }
     }
 
     /// How long an install has, counted from the moment it holds the lock. An
@@ -1626,6 +1636,34 @@ mod tests {
         assert!(piper.resident.try_lock().is_err(), "the lock is poisoned after the panic");
         drop(piper.lock_resident());
         assert!(!piper.stop_resident().busy, "a poisoned lock read as a sentence in corso wedges the voice");
+    }
+
+    #[test]
+    fn a_removal_during_an_install_is_refused_at_once_and_not_after_it() {
+        // Review area 1, MEDIO 8: «Rimuovi» during a Kokoro install waited on the
+        // lock on the window's thread, then deleted what had just been installed.
+        let installer = Installer::default();
+        let slot = installer.slot("kokoro");
+        let (held_tx, held_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let (installer_ref, slot_ref) = (&installer, &slot);
+        std::thread::scope(|scope| {
+            scope.spawn(move || {
+                let _install = installer_ref.hold(slot_ref);
+                held_tx.send(()).unwrap();
+                let _ = done_rx.recv_timeout(std::time::Duration::from_secs(2));
+            });
+            held_rx.recv().unwrap();
+            let started = Instant::now();
+            let refused = installer.hold_for_removal(&slot).is_err();
+            let waited = started.elapsed();
+            // The install may have given up waiting already, if the removal waited.
+            let _ = done_tx.send(());
+            assert!(refused, "a removal went ahead while an install held the lock");
+            assert!(waited < std::time::Duration::from_millis(500), "the removal waited {waited:?}");
+        });
+        // The install is over: now the removal goes ahead.
+        assert!(installer.hold_for_removal(&slot).is_ok());
     }
 
     #[test]
