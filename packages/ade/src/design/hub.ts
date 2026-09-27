@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js"
 import { againEvent, answerEvent, reopenEvent, sheetAnswerEvent, togglePick } from "./answer"
-import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
@@ -45,8 +44,6 @@ export interface DesignHub {
    * finds without this mark is cleared (D2 review, MEDIO).
    */
   chosen: (k: string) => boolean
-  /** Adds `line` to the note of `k` on a line of its own, leaving what is written (D2, «Aggiungi alla nota»). */
-  addNoteLine: (k: string, line: string) => void
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
@@ -67,12 +64,6 @@ export interface DesignHub {
   again: (proposal: DesignProposal) => Promise<boolean>
   /** «Ho scelto sul foglio»: the choice was made on the claude.ai page; the answer says to read it there. */
   sheetChosen: (proposal: DesignProposal) => Promise<boolean>
-  /**
-   * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
-   * or the pane already showing this proposal. Resolves to why it could
-   * not, or nothing when it opened.
-   */
-  openVariant: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
   reopen: (proposal: DesignProposal) => Promise<boolean>
 }
 
@@ -85,7 +76,6 @@ export function createDesignHub(deps: {
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
   onReopened?: (proposal: DesignProposal, deliveredTo?: string, deliveredToId?: string) => void
-  openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
   const [chosenKeys, setChosenKeys] = createSignal<ReadonlySet<string>>(new Set())
@@ -168,10 +158,6 @@ export function createDesignHub(deps: {
       setChosenKeys((keys) => new Set(keys).add(proposal.k))
     },
     chosen: (k) => chosenKeys().has(k),
-    addNoteLine: (k, line) => {
-      const current = draft(k)
-      setDraft(k, { ...current, note: appendNoteLine(current.note, line) })
-    },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
     answer,
@@ -224,13 +210,6 @@ export function createDesignHub(deps: {
         setInline(undefined)
       }
       return record(proposal, event)
-    },
-    openVariant: async (proposal, variant) => {
-      const result = await (deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")))
-      if (result) {
-        setProblem(proposal.k, result)
-      }
-      return result
     },
     reopen: (proposal) =>
       write(proposal.k, async () => {

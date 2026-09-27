@@ -101,59 +101,6 @@ describe("the design register and the hub", () => {
     expect(queued.length).toBe(1)
     expect(hub.draft("DS1")).toEqual({ note: "" })
   })
-
-  test("variant opens via hub openVariant", async () => {
-    const register: DesignRegister = {
-      path: () => "C:\\project\\.ade\\design.jsonl",
-      loaded: () => undefined,
-      state: () => undefined,
-      error: () => undefined,
-      refresh: async () => {},
-      append: async () => {},
-      tick: async () => {},
-      watch: () => () => {},
-    }
-
-    const openedVariants: { k: string; variant: number }[] = []
-    const hubWithOpen = createDesignHub({
-      register,
-      recipient: () => ({ state: "non scelta" }),
-      sessions: () => [],
-      choose: () => {},
-      delivery: () => ({ state: "in coda" }),
-      onAnswered: () => {},
-      openVariant: async (p, v) => {
-        openedVariants.push({ k: p.k, variant: v })
-        return undefined
-      },
-    })
-
-    const p: DesignProposal = {
-      k: "DS1",
-      title: "Settings",
-      variants: [{ name: "A", description: "desc", preview: "a.html" }],
-      raisedBy: "fable",
-      openedAt: new Date().toISOString(),
-      status: "aperta",
-      history: [],
-    }
-    await hubWithOpen.openVariant(p, 1)
-    expect(openedVariants).toEqual([{ k: "DS1", variant: 1 }])
-    expect(hubWithOpen.problem("DS1")).toBeUndefined()
-
-    const hubWithError = createDesignHub({
-      register,
-      recipient: () => ({ state: "non scelta" }),
-      sessions: () => [],
-      choose: () => {},
-      delivery: () => ({ state: "in coda" }),
-      onAnswered: () => {},
-      openVariant: async () => "Non si carica",
-    })
-    const err = await hubWithError.openVariant(p, 1)
-    expect(err).toBe("Non si carica")
-    expect(hubWithError.problem("DS1")).toBe("Non si carica")
-  })
 })
 
 describe("«Altro giro» in the hub", () => {

@@ -27,20 +27,6 @@ function hub() {
 }
 
 describe("the pane writes into the card's draft", () => {
-  test("a line is added below a note already written, which stays as it was", () => {
-    const h = hub()
-    h.setDraft("DS-A", { note: "La 2 mi piace.", picked: 1 })
-    h.addNoteLine("DS-A", "Variante 2 «Vetro» · h1 «Titolo»: più grande")
-    expect(h.draft("DS-A")).toEqual({ note: "La 2 mi piace.\nVariante 2 «Vetro» · h1 «Titolo»: più grande", picked: 1 })
-  })
-
-  test("two lines in a row do not merge", () => {
-    const h = hub()
-    h.addNoteLine("DS-A", "uno")
-    h.addNoteLine("DS-A", "due")
-    expect(h.draft("DS-A").note.split("\n")).toEqual(["uno", "due"])
-  })
-
   test("«Scelgo questa» and the card give the same picked, single and multi", () => {
     for (const multi of [false, true]) {
       const h = hub()

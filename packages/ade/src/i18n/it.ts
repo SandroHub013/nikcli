@@ -801,22 +801,7 @@ export const it = {
   "gateway.panel.cancel": "Annulla",
   "gateway.panel.remoteConfirm": "Accendi i comandi",
   "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di nikcli.",
-  "browser.design.label": (k: string, title: string, variant: number) =>
-    title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`,
-  "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
-  "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",
-  "browser.design.refused": "Non è una pagina di .ade/design di un progetto aperto: non la apro.",
-  "browser.design.addToNote": "Aggiungi alla nota",
-  "browser.design.added": "Aggiunta alla nota della proposta.",
-  "browser.design.prompt": "Cosa cambiare qui? (facoltativo)",
-  "browser.design.pick": "Scelgo questa",
-  "browser.design.picked": "Scelta",
-  "browser.design.previous": "Variante precedente",
-  "browser.design.next": "Variante successiva",
-  "design.variant.cannotOpen": "Qui non si può aprire la variante in un pannello.",
   "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
-  "design.variant.notDesign": (k: string) =>
-    `La pagina di questa variante non è in .ade/design/${k}/ di un progetto aperto.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
   "browser.forget.done.all": (cookies: number) =>
