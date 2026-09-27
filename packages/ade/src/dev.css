@@ -1124,6 +1124,13 @@
   overflow: hidden;
 }
 
+/* Hidden from the top bar (`sidebar-toggle.tsx`): kept mounted, so it comes back
+   as it was left. The grid takes the width, and each terminal refits through
+   its own ResizeObserver (`applyFit`), statusline rows included. */
+[data-slot="ade-body"][data-sidebar-hidden] > [data-component="ade-sidebar"] {
+  display: none;
+}
+
 [data-slot="ade-main"] {
   flex: 1;
   min-width: 0;

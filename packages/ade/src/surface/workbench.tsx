@@ -40,7 +40,7 @@ import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
-import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
+import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
@@ -142,6 +142,7 @@ import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
+import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
 import { BarQueueButton } from "./bar-queue-button"
 import { queueShown } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
@@ -558,6 +559,7 @@ const HANDLED_COMMANDS = new Set([
   "pane.rename",
   "view.toggle",
   "theme.toggle",
+  "sidebar.toggle",
   "browser.new",
   "process.kill",
   "voice.toggle",
@@ -606,6 +608,21 @@ const SPLASH_FLOOR_MS = 7000
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
   const bindings = resolveDefaultBindings(platform)
+
+  // The sidebar, shown or hidden from the top bar, the palette or Ctrl+Shift+B (`sidebar-toggle.tsx`).
+  const sidebarStorage = (() => {
+    try {
+      return window.localStorage
+    } catch {
+      return undefined
+    }
+  })()
+  const [sidebarHidden, setSidebarHidden] = createSignal(readSidebarHidden(sidebarStorage))
+  const toggleSidebar = () => {
+    const hidden = !sidebarHidden()
+    setSidebarHidden(hidden)
+    writeSidebarHidden(sidebarStorage, hidden)
+  }
 
   /*
    * The workbench is a store, and `wb()` hands back the store itself.
@@ -5623,7 +5640,7 @@ export function Workbench() {
        * daily occurrence.
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
-      if (isTerminal && resolution.type === "ade") return
+      if (isTerminal && resolution.type === "ade" && !FROM_TERMINALS.has(resolution.commandId ?? "")) return
       // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
       if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
@@ -5995,6 +6012,8 @@ export function Workbench() {
       if (target) setWb((w) => ({ ...w, view: target }))
     } else if (id === "theme.set.light" || id === "theme.set.dark" || id === "theme.set.glass") {
       themeState.set(id === "theme.set.light" ? "light" : id === "theme.set.dark" ? "dark" : "glass")
+    } else if (id === "sidebar.toggle") {
+      toggleSidebar()
     } else if (id === "theme.toggle") {
       // The attribute goes on ADE's own root, not the document's: ADE is mounted
       // inside another application and must not restyle its host.
@@ -6197,6 +6216,7 @@ export function Workbench() {
         })),
       hasHost: hasHost(),
       running: new Set(running.keys()),
+      sidebarHidden: sidebarHidden(),
       platform,
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
@@ -8123,6 +8143,11 @@ export function Workbench() {
             nikcliVersion={nikcliVersion()}
             sessions={barSessionCount(wb().panes, project(), chatStore)}
           />
+          <SidebarToggle
+            hidden={sidebarHidden()}
+            onToggle={toggleSidebar}
+            shortcut={formatChord(parseChord("mod+shift+b", platform), platform)}
+          />
         </div>
 
         <div data-slot="ade-bar-center">
@@ -8436,7 +8461,7 @@ export function Workbench() {
         </div>
       </Show>
 
-      <div data-slot="ade-body">
+      <div data-slot="ade-body" data-sidebar-hidden={sidebarHidden() ? "true" : undefined}>
         <Sidebar
           workspaces={workspaces()}
           selectedSessionId={wb().focusedId}

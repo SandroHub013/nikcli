@@ -52,6 +52,8 @@ export interface CommandContext {
   views?: readonly AdeView[]
   /** Whether the focused pane can be suspended now (`canSuspend`); absent when it is not a Claude session. */
   suspendCheck?: SuspendCheck
+  /** Whether the sidebar is hidden, so the palette says what the command will do. */
+  sidebarHidden?: boolean
   /** The design proposals still open, with their variants' names: «Design: apri la variante…» (D1). */
   designVariants?: readonly { k: string; title: string; variants: readonly string[] }[]
 }
@@ -213,6 +215,13 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: workbench.view !== view,
       disabledReason: workbench.view === view ? t("palette.view.here") : undefined,
     })),
+    {
+      id: "sidebar.toggle",
+      title: ctx.sidebarHidden ? t("bar.sidebar.show") : t("bar.sidebar.hide"),
+      group: t("palette.group.view"),
+      keywords: ["barra laterale", "colonna", "schermo intero", "sidebar", "full screen", "panel"],
+      shortcut: shortcutFor("sidebar.toggle", platform),
+    },
     {
       id: "theme.toggle",
       title: t("palette.theme.toggle"),
