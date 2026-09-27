@@ -39,6 +39,10 @@ export function pressEnter(write: (data: string) => void, permissionOpen: () => 
  * would get the text in its answer box. Then nothing is written and the line
  * is `not-typed` (audit 0.7.7, B1 bis, MEDIO 1). `alive` is asked after the
  * wait: a session gone meanwhile gets no Enter.
+ *
+ * `typedDuring` too, after the wait: the user who starts writing in the 2.5 to
+ * 8 s between ADE's text and its Enter would have their half line sent with
+ * it (review area 2). The Enter is held, as for a prompt, and the text stays.
  */
 export async function typeThenEnter(input: {
   text: string
@@ -46,11 +50,13 @@ export async function typeThenEnter(input: {
   wait: () => Promise<void>
   alive: () => boolean
   permissionOpen: () => boolean
+  typedDuring?: () => boolean
 }): Promise<LineOutcome> {
   if (input.permissionOpen()) return "not-typed"
   input.write(input.text)
   await input.wait()
   if (!input.alive()) return "not-typed"
+  if (input.typedDuring?.()) return "typed-no-enter"
   return pressEnter(input.write, input.permissionOpen) ? "sent" : "typed-no-enter"
 }
 

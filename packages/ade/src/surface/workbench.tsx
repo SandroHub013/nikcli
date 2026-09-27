@@ -333,6 +333,7 @@ import { displayArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
+import { closeAfterSaving } from "./close-window"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
@@ -1913,6 +1914,8 @@ export function Workbench() {
       },
       alive,
       permissionOpen: () => paneId !== undefined && questionOpen(paneId),
+      // A key of the user's since the text went in: not a draft from before.
+      typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt,
     })
     if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
@@ -5118,38 +5121,40 @@ export function Workbench() {
           const requestId = event.payload?.requestId
           if (isHandlingClose) return
           isHandlingClose = true
+          const closeForGood = () =>
+            closeAfterSaving({
+              flush: () => autosave.flush(),
+              close: async () => {
+                try {
+                  const { invoke } = await import("@tauri-apps/api/core")
+                  await invoke("ade_confirm_close", { requestId })
+                } catch {
+                  const { getCurrentWindow } = await import("@tauri-apps/api/window")
+                  await getCurrentWindow().close()
+                }
+              },
+            })
 
           try {
-            const working = countWorkingSessions(wb().panes, running)
-            if (!shouldConfirmWindowClose({ working })) {
-              closingConfirmed = true
-              try {
-                const { invoke } = await import("@tauri-apps/api/core")
-                await invoke("ade_confirm_close", { requestId })
-              } catch {
-                const { getCurrentWindow } = await import("@tauri-apps/api/window")
-                await getCurrentWindow().close()
-              }
-              return
-            }
-
-            // Acknowledge receipt to Rust to disarm the safety timeout while prompting the user
+            // Acknowledge receipt to Rust to disarm the safety timeout while
+            // prompting the user, or while the workbench reaches the disk.
             try {
               const { invoke } = await import("@tauri-apps/api/core")
               await invoke("ade_close_ack", { requestId })
             } catch {}
 
+            const working = countWorkingSessions(wb().panes, running)
+            if (!shouldConfirmWindowClose({ working })) {
+              closingConfirmed = true
+              await closeForGood()
+              return
+            }
+
             const message = closeConfirmationMessage(working)
             const allowed = await askCloseConfirmation(message)
             if (allowed) {
               closingConfirmed = true
-              try {
-                const { invoke } = await import("@tauri-apps/api/core")
-                await invoke("ade_confirm_close", { requestId })
-              } catch {
-                const { getCurrentWindow } = await import("@tauri-apps/api/window")
-                await getCurrentWindow().close()
-              }
+              await closeForGood()
             } else {
               try {
                 const { invoke } = await import("@tauri-apps/api/core")
@@ -6868,7 +6873,7 @@ export function Workbench() {
         const home = await host.homeDir().catch(() => "")
         const readLatest = async () =>
           home
-            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", p.root)
+            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", workDir)
             : undefined
         const before = await readLatest()
         const poll = setInterval(async () => {

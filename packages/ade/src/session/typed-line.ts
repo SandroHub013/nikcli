@@ -79,7 +79,15 @@ export function typedAfter(line: TypedLine | undefined, data: string, now: numbe
     return data === `${ESC}\r` || data === `${ESC}\n` ? { pending: pending + 1, at: now } : keep(line, now)
   }
 
-  if (SUBMIT.test(data)) return undefined
+  /*
+   * An Enter sends what was before it, not what comes after: an undeclared
+   * paste of `a\rb` submits `a` and leaves `b` in the line. Counting nothing
+   * there put the next delivery on top of `b`, and its Enter ran `b` with it.
+   */
+  if (SUBMIT.test(data)) {
+    const rest = data.slice(Math.max(data.lastIndexOf("\r"), data.lastIndexOf("\n")) + 1)
+    return rest.length === 0 ? undefined : typedAfter(undefined, rest, now)
+  }
 
   let count = pending
   for (const char of data) {
