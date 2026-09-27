@@ -3,6 +3,19 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.405.0 (September 2026)
+
+## Core
+
+- Only the startup bootstrap may exit nikcli (@nikomatt69)
+- A plugin calling process.exit while loading no longer kills nikcli (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(plugin): a plugin calling process.exit while loading no longer kills nikcli
+  - fix(tui): only the startup bootstrap may exit nikcli
+
 ## v1.404.0 (September 2026)
 
 ## Core
