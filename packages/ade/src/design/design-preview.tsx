@@ -196,6 +196,36 @@ export function frameProps(plan: { src: string }, size: PreviewSize, title: stri
   }
 }
 
+/** How far outside the sheet's view a variant is already running, so a scroll does not wait for it. */
+export const VIEW_MARGIN = "300px 0px"
+
+/**
+ * Calls `onChange` with whether `element` is in view, or near it; returns the
+ * stop (notifiche-design review, BASSO 2). Every variant used to run at once,
+ * scripts, WebGL and animations, with four heavy pages in one sheet: a frame
+ * now runs only while it can be seen. With no `IntersectionObserver` the
+ * page is always in view, as before (`null` says so in a test, where happy-dom has one that never calls back).
+ */
+export function watchInView(
+  element: Element,
+  onChange: (inView: boolean) => void,
+  Observer: typeof IntersectionObserver | null | undefined = globalThis.IntersectionObserver,
+): () => void {
+  if (!Observer) {
+    onChange(true)
+    return () => {}
+  }
+  const observer = new Observer(
+    (entries) => {
+      const entry = entries[entries.length - 1]
+      if (entry) onChange(entry.isIntersecting)
+    },
+    { rootMargin: VIEW_MARGIN },
+  )
+  observer.observe(element)
+  return () => observer.disconnect()
+}
+
 /** «Non si carica: <percorso> — <errore>». The host's message often starts with the path again: said once. */
 export function loadFailure(path: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
@@ -229,11 +259,17 @@ export function DesignPreview(props: {
   const [failure, setFailure] = createSignal<string>()
   let containerRef: HTMLDivElement | undefined
   const [measuredWidth, setMeasuredWidth] = createSignal<number>(props.containerWidth ?? 330)
+  // Whether the page may run: only while it is in view, or near it (`watchInView`).
+  const [inView, setInView] = createSignal(false)
 
   createEffect(() => {
     if (props.containerWidth !== undefined && props.containerWidth > 0) {
       setMeasuredWidth(props.containerWidth)
     }
+  })
+
+  onMount(() => {
+    if (containerRef) onCleanup(watchInView(containerRef, setInView))
   })
 
   onMount(() => {
@@ -339,17 +375,20 @@ export function DesignPreview(props: {
                         IPC stub in the frame refuses `invoke`. At its own size, smaller
                         only when the column is (`fitScale`), and live.
                       */}
-                      <iframe
-                        data-slot="preview-frame"
-                        {...frameProps(current, measured(), title())}
-                        style={{
-                          width: `${fit().frameWidth}px`,
-                          height: `${fit().frameHeight}px`,
-                          transform: `scale(${fit().scale})`,
-                          "transform-origin": "top left",
-                          border: "0",
-                        }}
-                      />
+                      {/* Out of view the frame is gone, and its scripts with it; the box keeps its size. */}
+                      <Show when={inView()} fallback={<div data-slot="preview-asleep" aria-hidden="true" />}>
+                        <iframe
+                          data-slot="preview-frame"
+                          {...frameProps(current, measured(), title())}
+                          style={{
+                            width: `${fit().frameWidth}px`,
+                            height: `${fit().frameHeight}px`,
+                            transform: `scale(${fit().scale})`,
+                            "transform-origin": "top left",
+                            border: "0",
+                          }}
+                        />
+                      </Show>
                     </div>
                   )
                 }}
