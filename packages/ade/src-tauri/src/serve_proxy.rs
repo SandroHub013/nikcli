@@ -259,8 +259,54 @@ pub(crate) fn forwarded(headers: Vec<(String, String)>) -> Vec<(String, String)>
         .collect()
 }
 
+/// The fields of a provider the page never reads and must not hold: the key
+/// itself, the options it may be copied into (`apiKey`, headers), and the
+/// environment it was read from.
+const PROVIDER_SECRETS: &[&str] = &["key", "options", "env"];
+
+/// Where each answer that lists providers keeps them: `GET /config` under
+/// `provider`, a map by id; `GET /config/providers` under `providers` and
+/// `GET /provider` under `all`, both lists.
+const PROVIDER_LISTS: &[(&str, &str)] = &[("config", "provider"), ("config/providers", "providers"), ("provider", "all")];
+
+/// The field that holds the providers in the answer to `url`, when `url` is
+/// one of `PROVIDER_LISTS` read the way `fenced` reads it.
+fn provider_list(method: &Method, url: &Url) -> Option<&'static str> {
+    if *method != Method::GET && *method != Method::HEAD {
+        return None;
+    }
+    let path = url.path().to_ascii_lowercase();
+    let path = path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("/");
+    PROVIDER_LISTS.iter().find(|(route, _)| *route == path).map(|(_, field)| *field)
+}
+
+/// `body` without `PROVIDER_SECRETS` in the providers under `field`; a body
+/// that is not JSON is returned as it is.
+fn without_provider_secrets(body: Vec<u8>, field: &str) -> Vec<u8> {
+    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return body;
+    };
+    let providers: Vec<&mut serde_json::Value> = match value.get_mut(field) {
+        Some(serde_json::Value::Object(map)) => map.values_mut().collect(),
+        Some(serde_json::Value::Array(list)) => list.iter_mut().collect(),
+        _ => return body,
+    };
+    for provider in providers {
+        if let Some(provider) = provider.as_object_mut() {
+            for secret in PROVIDER_SECRETS {
+                provider.remove(*secret);
+            }
+        }
+    }
+    serde_json::to_vec(&value).unwrap_or(body)
+}
+
 /// Makes the call and reports it to `sink`, which returns false once nobody
 /// is listening. Returns true when the server could not be reached at all.
+///
+/// An answer that lists providers (`provider_list`) is read whole and sent
+/// as one chunk without their secrets: nikcli puts the user's API keys in
+/// it, and the page only needs names and models.
 pub(crate) async fn relay(
     client: &Client,
     url: Url,
@@ -270,9 +316,17 @@ pub(crate) async fn relay(
     auth: Option<(String, String)>,
     mut sink: impl FnMut(ProxyEvent) -> bool,
 ) -> bool {
+    let scrub = provider_list(&method, &url);
     let mut request = client.request(method, url);
     for (name, value) in headers {
+        // A compressed body could not be read to take the keys out of it.
+        if scrub.is_some() && name.eq_ignore_ascii_case("accept-encoding") {
+            continue;
+        }
         request = request.header(name, value);
+    }
+    if scrub.is_some() {
+        request = request.header("accept-encoding", "identity");
     }
     if let Some((user, password)) = auth {
         request = request.basic_auth(user, Some(password));
@@ -291,12 +345,40 @@ pub(crate) async fn relay(
         }
     };
 
-    let headers = response
+    let headers: Vec<(String, String)> = response
         .headers()
         .iter()
         .filter(|(name, _)| name.as_str() != "set-cookie")
         .filter_map(|(name, value)| Some((name.as_str().to_string(), value.to_str().ok()?.to_string())))
         .collect();
+
+    if let Some(field) = scrub {
+        let encoded = headers
+            .iter()
+            .any(|(name, value)| name == "content-encoding" && !value.eq_ignore_ascii_case("identity"));
+        if encoded {
+            sink(ProxyEvent::Error {
+                message: "il server di nikcli ha compresso l'elenco dei provider: non lo passo alla chat".into(),
+            });
+            return false;
+        }
+        let status = response.status().as_u16();
+        let body = match response.bytes().await {
+            Ok(bytes) => without_provider_secrets(bytes.to_vec(), field),
+            Err(error) => {
+                sink(ProxyEvent::Error {
+                    message: format!("risposta del server di nikcli interrotta: {error}"),
+                });
+                return false;
+            }
+        };
+        let headers = headers.into_iter().filter(|(name, _)| name != "content-length").collect();
+        let _ = sink(ProxyEvent::Head { status, headers })
+            && (body.is_empty() || sink(ProxyEvent::Chunk { bytes: body }))
+            && sink(ProxyEvent::End);
+        return false;
+    }
+
     if !sink(ProxyEvent::Head {
         status: response.status().as_u16(),
         headers,
@@ -639,6 +721,88 @@ mod tests {
         let text: Vec<u8> = chunks.into_iter().flatten().copied().collect();
         assert_eq!(String::from_utf8(text).unwrap(), "data: uno\n\ndata: due\n\n");
         assert_eq!(events.last(), Some(&ProxyEvent::End));
+    }
+
+    fn body_of(events: &[ProxyEvent]) -> serde_json::Value {
+        let bytes: Vec<u8> = events
+            .iter()
+            .filter_map(|event| match event {
+                ProxyEvent::Chunk { bytes } => Some(bytes.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| panic!("non JSON: {events:?}"))
+    }
+
+    /// A provider as nikcli describes it, with a made-up key in each place
+    /// nikcli may put one.
+    fn provider() -> serde_json::Value {
+        serde_json::json!({
+            "id": "openrouter",
+            "name": "OpenRouter",
+            "source": "api",
+            "env": ["OPENROUTER_API_KEY"],
+            "key": "sk-finta-0000",
+            "options": { "apiKey": "sk-finta-0000", "headers": { "x-finta": "sk-finta-0000" } },
+            "models": { "free-model": { "id": "free-model", "name": "Free" } }
+        })
+    }
+
+    #[test]
+    fn no_answer_that_lists_providers_hands_the_page_their_keys() {
+        let list = serde_json::json!([provider()]);
+        let map = serde_json::json!({ "openrouter": provider() });
+        let cases = [
+            ("/config/providers", serde_json::json!({ "providers": list, "default": { "openrouter": "free-model" } })),
+            ("/provider?directory=C%3A", serde_json::json!({ "all": list, "default": {}, "connected": ["openrouter"] })),
+            ("/config", serde_json::json!({ "provider": map, "model": "openrouter/free-model" })),
+            // The fence reads the path without case and without empty segments.
+            ("/CONFIG/providers/", serde_json::json!({ "providers": list, "default": {} })),
+        ];
+        for (path, answer) in cases {
+            let (url, _) = serve(vec![plain("200 OK", &answer.to_string())]);
+            let (_, events) = run(&url, path, Vec::new(), None);
+            let Some(ProxyEvent::Head { status: 200, headers }) = events.first() else {
+                panic!("{path}: {events:?}")
+            };
+            // The body is shorter now: the server's length would be a lie.
+            assert!(!headers.iter().any(|(name, _)| name == "content-length"), "{path}: {headers:?}");
+            assert_eq!(events.last(), Some(&ProxyEvent::End), "{path}");
+            let body = body_of(&events);
+            let text = body.to_string();
+            assert!(!text.contains("sk-finta"), "{path}: {text}");
+            assert!(!text.contains("OPENROUTER_API_KEY"), "{path}: {text}");
+            // What the page reads is all still there.
+            assert!(text.contains(r#""name":"OpenRouter""#), "{path}: {text}");
+            assert!(text.contains(r#""free-model":{"id":"free-model","name":"Free"}"#), "{path}: {text}");
+        }
+    }
+
+    #[test]
+    fn the_provider_list_is_asked_for_uncompressed_and_refused_compressed() {
+        let answer = serde_json::json!({ "providers": [provider()] }).to_string();
+        let gzipped = vec![format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-encoding: gzip\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+            answer.len()
+        )
+        .into_bytes()];
+        let (url, requests) = serve(vec![gzipped]);
+        let (_, events) = run(&url, "/config/providers", vec![("Accept-Encoding".into(), "gzip, br".into())], None);
+        let head = requests.recv_timeout(Duration::from_secs(5)).unwrap().to_ascii_lowercase();
+        assert!(head.contains("accept-encoding: identity"), "{head}");
+        assert!(!head.contains("gzip"), "{head}");
+        assert!(matches!(events.as_slice(), [ProxyEvent::Error { .. }]), "{events:?}");
+    }
+
+    #[test]
+    fn any_other_answer_passes_as_it_came() {
+        let answer = r#"{"id":"ses_1","key":"resta","options":{"a":1}}"#;
+        let (url, requests) = serve(vec![plain("200 OK", answer)]);
+        let (_, events) = run(&url, "/session/ses_1", vec![("accept-encoding".into(), "gzip".into())], None);
+        let head = requests.recv_timeout(Duration::from_secs(5)).unwrap().to_ascii_lowercase();
+        assert!(head.contains("accept-encoding: gzip"), "{head}");
+        assert_eq!(body_of(&events).to_string(), answer);
     }
 
     #[test]
