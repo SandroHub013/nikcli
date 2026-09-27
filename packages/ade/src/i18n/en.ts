@@ -918,6 +918,7 @@ export const en: Messages = {
     `${count === 1 ? "1 answer" : `${count} answers`} queued: the chosen session isn't running`,
   "decisions.sheet.status.sent": (key, choice, recipient) => `${key}: ${choice}, to ${recipient}`,
   "decisions.sheet.status.idle": (key, choice, recipient) => `${key}: ${choice}, queued (${recipient} is not running)`,
+  "decisions.sheet.status.deferred": (key, day) => `${key}: deferred · ${day}`,
   "decisions.sheet.status.none": (key, choice) => `${key}: ${choice}, queued (no session chosen)`,
   "decisions.sheet.full": "Full view",
   "decisions.hint.ready": (title) => `→ ${title}, as a message`,

@@ -196,6 +196,10 @@ export function DesignSheet(props: {
                 onOpenUrl={() => void openExternally(proposal().url!)}
                 onSheetChosen={() =>
                   void props.hub.sheetChosen(proposal()).then((done) => {
+                    if (done)
+                      showStatus(
+                        answeredStatus(proposal().k, t("design.url.words"), props.hub.recipientFor(proposal())),
+                      )
                     if (done) setAnswered(true)
                     if (done) surface?.focus()
                   })
