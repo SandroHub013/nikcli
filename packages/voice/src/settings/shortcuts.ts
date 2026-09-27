@@ -63,6 +63,7 @@ const ADE_COMMAND_LABELS: Record<string, () => string> = {
   "pane.rename": () => t("vui.command.paneRename"),
   "view.toggle": () => t("vui.command.viewToggle"),
   "theme.toggle": () => t("vui.command.themeToggle"),
+  "sidebar.toggle": () => t("vui.command.sidebarToggle"),
 }
 
 /**

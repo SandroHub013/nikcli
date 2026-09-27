@@ -396,6 +396,7 @@ export const voiceIt = {
   "vui.command.paneRename": "Rinomina pannello",
   "vui.command.viewToggle": "Cambia vista",
   "vui.command.themeToggle": "Cambia tema",
+  "vui.command.sidebarToggle": "Mostra o nascondi la barra laterale",
   "vui.command.agent": "Modalità agente",
   "vui.command.transcription": "Modalità trascrizione",
   "vui.clash.taken": (label: string, chord: string, winner: string) =>

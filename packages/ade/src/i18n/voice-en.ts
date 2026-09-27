@@ -388,6 +388,7 @@ export const voiceEn: VoiceMessages = {
   "vui.command.paneRename": "Rename panel",
   "vui.command.viewToggle": "Switch view",
   "vui.command.themeToggle": "Switch theme",
+  "vui.command.sidebarToggle": "Show or hide the sidebar",
   "vui.command.agent": "Agent mode",
   "vui.command.transcription": "Dictation mode",
   "vui.clash.taken": (label, chord, winner) =>
