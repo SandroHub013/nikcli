@@ -718,11 +718,12 @@ fn terminate_child_tree(
 fn run_bounded_output(
     mut command: std::process::Command,
     timeout: Duration,
+    label: &str,
 ) -> Result<ShellOutput, String> {
     use std::process::Stdio;
 
     let mut tree_guard = Some(ChildTreeGuard::new().map_err(|error| {
-        format!("Impossibile creare il job Windows che protegge nikcli: {error}. Riavvia ADE e riprova.")
+        format!("Impossibile creare il job Windows che protegge {label}: {error}. Riavvia ADE e riprova.")
     })?);
     #[cfg(unix)]
     {
@@ -739,13 +740,13 @@ fn run_bounded_output(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| format!("nikcli non eseguibile: {error}"))?;
+        .map_err(|error| format!("{label} non eseguibile: {error}"))?;
     let pid = child.id();
     let job_assigned = if cfg!(windows) {
         let Some(guard) = tree_guard.as_ref() else {
             terminate_child_tree(&mut child, pid, &mut tree_guard, false);
             return Err(
-                "Impossibile proteggere nikcli con il job Windows. Riavvia ADE e riprova.".into(),
+                format!("Impossibile proteggere {label} con il job Windows. Riavvia ADE e riprova."),
             );
         };
         match guard.assign_pid(pid) {
@@ -753,7 +754,7 @@ fn run_bounded_output(
             Err(error) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard, false);
                 return Err(format!(
-                    "Impossibile assegnare nikcli al job Windows: {error}. Riavvia ADE e riprova."
+                    "Impossibile assegnare {label} al job Windows: {error}. Riavvia ADE e riprova."
                 ));
             }
         }
@@ -769,11 +770,11 @@ fn run_bounded_output(
     }
     let Some(mut stdout) = child.stdout.take() else {
         terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
-        return Err("nikcli non ha uno stdout leggibile".into());
+        return Err(format!("{label} non ha uno stdout leggibile"));
     };
     let Some(mut stderr) = child.stderr.take() else {
         terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
-        return Err("nikcli non ha uno stderr leggibile".into());
+        return Err(format!("{label} non ha uno stderr leggibile"));
     };
     let out_reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
@@ -794,13 +795,13 @@ fn run_bounded_output(
             Ok(None) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
                 return Err(format!(
-                    "nikcli non ha risposto entro {} secondi ed è stato fermato.",
+                    "{label} non ha risposto entro {} secondi ed è stato fermato.",
                     timeout.as_secs()
                 ));
             }
             Err(error) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
-                return Err(format!("nikcli non eseguibile: {error}"));
+                return Err(format!("{label} non eseguibile: {error}"));
             }
         }
     };
@@ -814,10 +815,10 @@ fn run_bounded_output(
     }
     let stdout = out_reader
         .join()
-        .map_err(|_| "lettura dell'output di nikcli fallita")?;
+        .map_err(|_| format!("lettura dell'output di {label} fallita"))?;
     let stderr = err_reader
         .join()
-        .map_err(|_| "lettura degli errori di nikcli fallita")?;
+        .map_err(|_| format!("lettura degli errori di {label} fallita"))?;
     Ok(ShellOutput {
         code: status.code(),
         stdout: String::from_utf8_lossy(&stdout).into_owned(),
@@ -845,7 +846,7 @@ async fn nikcli_bot(
         command.creation_flags(0x0800_0000);
     }
     let timeout = nikcli_timeout(&args);
-    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout))
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "nikcli"))
         .await
         .map_err(|_| "avvio di nikcli interrotto".to_string())?
 }
@@ -862,21 +863,25 @@ async fn nikcli_bot(
 async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
     let program = pty::which_on_path("claude").ok_or("claude non trovato nel PATH")?;
     let mut command = std::process::Command::new(program);
-    command.args(["agents", "--json"]).stdin(std::process::Stdio::null());
+    command.args(["agents", "--json"]);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000);
-    }
-    let output = command.output().map_err(|e| format!("claude non eseguibile: {e}"))?;
-    Ok(ShellOutput {
-        code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    tauri::async_runtime::spawn_blocking(move || list_claude_agents(command, CLAUDE_AGENTS_TIMEOUT))
+        .await
+        .map_err(|_| "elenco degli agenti di claude interrotto".to_string())?
+}
+
+/// How long `claude agents` has. The page asks every 5 s, so a listing that
+/// takes longer than this is one the next call would have replaced anyway.
+const CLAUDE_AGENTS_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Off the async runtime and on a clock, like `claude_version` and `nikcli_bot`:
+/// a bare `output()` inside the async command held a Tauri worker, and left the
+/// child hanging, for as long as a stuck `claude` did not answer — once per call,
+/// every 5 s, until the app's async commands stopped.
+fn list_claude_agents(command: std::process::Command, timeout: Duration) -> Result<ShellOutput, String> {
+    run_bounded_output(command, timeout, "claude")
 }
 
 /// Runs `claude --version` and hands back its first line, or None.
@@ -2380,6 +2385,16 @@ mod tests {
     }
 
     #[test]
+    fn an_agents_listing_that_never_answers_is_stopped_on_time() {
+        use std::time::{Duration, Instant};
+
+        let started = Instant::now();
+        let problem = list_claude_agents(sleeper(), Duration::from_millis(300)).expect_err("must time out");
+        assert!(started.elapsed() < Duration::from_secs(5), "took {:?}", started.elapsed());
+        assert!(problem.starts_with("claude non ha risposto"), "{problem}");
+    }
+
+    #[test]
     fn a_version_that_never_answers_is_none_and_leaves_no_child() {
         use std::process::Stdio;
         use std::time::{Duration, Instant};
@@ -2542,7 +2557,7 @@ mod tests {
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
         let error =
-            run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
+            run_bounded_output(sleeper(), Duration::from_millis(100), "nikcli").expect_err("must time out");
         assert!(error.contains("ed è stato fermato"), "{error}");
         assert!(
             started.elapsed() < Duration::from_secs(2),
@@ -2569,7 +2584,7 @@ mod tests {
         command.args(["-NoProfile", "-Command", &script]);
         let started = Instant::now();
         let output =
-            run_bounded_output(command, Duration::from_secs(5)).expect("root output must survive");
+            run_bounded_output(command, Duration::from_secs(5), "nikcli").expect("root output must survive");
         let returned = started.elapsed();
         assert_eq!(output.code, Some(0));
         assert!(output.stdout.contains("root-output"), "{}", output.stdout);
