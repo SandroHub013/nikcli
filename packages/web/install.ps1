@@ -260,15 +260,35 @@ try {
   $found = Get-ChildItem -Path $extract -Filter "$App.exe" -Recurse -File | Select-Object -First 1
   if (-not $found) { Fail "$App.exe not found inside $filename" }
 
+  $installedInPlace = $true
+  $writeError = ""
   try {
     Copy-Item -Path $found.FullName -Destination $targetExe -Force
   } catch {
+    $installedInPlace = $false
+    $writeError = $_.Exception.Message
+    # Windows locks a running executable against writes but lets it be renamed.
+    # Move the running binary aside and put the new one in its place right away,
+    # so a background service restarted after an upgrade (auto-update) already
+    # starts the new version. The leftover is swept by the next installer run.
+    $aside = $targetExe + ".old." + [System.Guid]::NewGuid().ToString("N")
+    try {
+      Move-Item -LiteralPath $targetExe -Destination $aside -Force -ErrorAction Stop
+      try {
+        Copy-Item -Path $found.FullName -Destination $targetExe -Force -ErrorAction Stop
+        $installedInPlace = $true
+      } catch {
+        Move-Item -LiteralPath $aside -Destination $targetExe -Force -ErrorAction SilentlyContinue
+      }
+    } catch { }
+  }
+  if (-not $installedInPlace) {
     $upgradePid = 0
     if ($env:NIKCLI_UPGRADE_PID) {
       [void][int]::TryParse($env:NIKCLI_UPGRADE_PID, [ref]$upgradePid)
     }
     if ($upgradePid -le 0) {
-      Fail "Could not write $targetExe - close any running nikcli process and retry. ($($_.Exception.Message))"
+      Fail "Could not write $targetExe - close any running nikcli process and retry. ($writeError)"
     }
 
     # Windows locks a running executable. Stage the replacement beside it and

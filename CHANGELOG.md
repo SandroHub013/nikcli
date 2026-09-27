@@ -3,6 +3,48 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.405.0 (September 2026)
+
+## Core
+
+- Only the startup bootstrap may exit nikcli (@nikomatt69)
+- A plugin calling process.exit while loading no longer kills nikcli (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(plugin): a plugin calling process.exit while loading no longer kills nikcli
+  - fix(tui): only the startup bootstrap may exit nikcli
+
+## v1.404.0 (September 2026)
+
+## Core
+
+- Enhance restart mechanism and improve event handling (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(cli): enhance restart mechanism and improve event handling
+
+## v1.403.0 (September 2026)
+
+## Core
+
+- /restart reloads the backend in place, the TUI stays up (@nikomatt69)
+- Implement relaunchSelf and BackgroundService.restart for improved process management (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(cli): implement relaunchSelf and BackgroundService.restart for improved process management
+  - fix(flag): read NIKCLI_CONFIG_CONTENT on every access
+  - feat(tui): /restart reloads the backend in place, the TUI stays up
+
+## v1.402.0 (September 2026)
+
+- No notable changes
+
 ## v1.401.0 (September 2026)
 
 ## Mobile

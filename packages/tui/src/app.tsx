@@ -1,5 +1,5 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createCliRenderer, type CliRendererConfig } from "@opentui/core"
+import { CliRenderEvents, createCliRenderer, type CliRenderer, type CliRendererConfig } from "@opentui/core"
 import { Clipboard } from "@tui/util/clipboard"
 import * as Sound from "@tui/util/sound"
 import { UserApi } from "@tui/util/user-api"
@@ -82,6 +82,7 @@ import { PluginRouteMissing } from "./component/plugin-route-missing"
 import { PluginRouteBoundary } from "./component/plugin-route-boundary"
 import { Reconnecting } from "./component/reconnecting"
 import { StartupLoading } from "./component/startup-loading"
+import { DialogRestart } from "./component/dialog-restart"
 import { SessionTabs } from "./component/session-tabs"
 import { DialogOnboarding } from "@tui/component/dialog-onboarding"
 import { DialogLogin } from "@tui/component/dialog-login"
@@ -121,8 +122,9 @@ function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
   }
 }
 
-import type { EventSource } from "./context/sdk"
+import type { EventSource, Transport } from "./context/sdk"
 import { Log } from "@nikcli-ai/util/log"
+import { errorMessage } from "@nikcli-ai/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
 
@@ -138,6 +140,8 @@ export type UpdateAvailable = {
   version: string
   method?: InstallMethod
   current: string
+  /** Install without asking: the user chose "Auto-update" (`autoupdate: true`). */
+  auto?: boolean
 }
 
 const log = Log.create({ service: "tui.app" })
@@ -149,9 +153,30 @@ export function tui(input: {
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
-  onRestart?: () => Promise<void>
+  /**
+   * What `/restart` asks of the host: replace the backend, and say where the
+   * replacement is.
+   *
+   * The terminal stays up throughout — same process, same renderer, same
+   * screen. The host stops its backend and starts a new one (the shared
+   * background service, or the embedded worker), and the transport it returns
+   * is what this terminal reconnects to: a restarted service may take another
+   * port, and a new worker is a different RPC peer. Undefined for a client
+   * attached to somebody else's server, which has nothing it may restart.
+   */
+  onRestart?: () => Promise<Transport>
+  /**
+   * What this host calls the process `/restart` replaces — "background service"
+   * for the shared daemon, "server" for the in-process worker. It is the word
+   * the restart dialog uses, so a client that has no backend says neither.
+   */
+  restartTarget?: string
   checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   upgradeNow?: (method: string, version: string) => Promise<void>
+  /** Persist "Auto-update" (`autoupdate: true` in the global config). */
+  enableAutoUpdate?: () => Promise<void>
+  /** See `UpgradeProvider`'s `onUpgraded`. */
+  onUpgraded?: () => Promise<Transport | undefined>
   startServer?: (options?: StartServerOptions) => Promise<string>
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
@@ -226,11 +251,7 @@ export function tui(input: {
               fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
             >
               <ArgsProvider {...input.args}>
-                <ExitProvider
-                  onExit={onExit}
-                  onBeforeExit={() => TuiPluginRuntime.dispose()}
-                  onRestart={input.onRestart}
-                >
+                <ExitProvider onExit={onExit} onBeforeExit={() => TuiPluginRuntime.dispose()}>
                   <ServerProvider startServer={input.startServer}>
                     <KVProvider>
                       <ToastProvider>
@@ -258,10 +279,18 @@ export function tui(input: {
                                                         <FrecencyProvider>
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
-                                                              <UpgradeProvider upgradeNow={input.upgradeNow}>
+                                                              <UpgradeProvider
+                                                                upgradeNow={input.upgradeNow}
+                                                                enableAutoUpdate={input.enableAutoUpdate}
+                                                                onUpgraded={input.onUpgraded}
+                                                              >
                                                                 <AttentionProvider renderer={renderer}>
                                                                   <SessionTabsProvider>
-                                                                    <App checkUpgrade={input.checkUpgrade} />
+                                                                    <App
+                                                                      checkUpgrade={input.checkUpgrade}
+                                                                      onRestart={input.onRestart}
+                                                                      restartTarget={input.restartTarget}
+                                                                    />
                                                                   </SessionTabsProvider>
                                                                 </AttentionProvider>
                                                               </UpgradeProvider>
@@ -335,7 +364,61 @@ function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
   return "sessionID" in route ? route.sessionID : undefined
 }
 
-function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> }) {
+/**
+ * Resolve once the next frame has been painted, or after `timeoutMs`.
+ *
+ * `/restart` opens a dialog and then blocks on the host for seconds, so the
+ * dialog has to be *on screen* before that starts — a promise tick is not a
+ * frame, and the dialog would appear only once the wait was already over. The timeout is the point of the helper being more than a
+ * `requestRender()`: a frame that never comes (a renderer that was torn down
+ * first, a terminal that stopped reading) must not leave the restart waiting
+ * forever, and the work it guards is worth doing either way.
+ */
+function afterPaint(renderer: CliRenderer, timeoutMs = 250) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      renderer.off(CliRenderEvents.FRAME, done)
+      resolve()
+    }
+    const timer = setTimeout(done, timeoutMs)
+    timer.unref?.()
+    renderer.on(CliRenderEvents.FRAME, done)
+    renderer.requestRender()
+  })
+}
+
+/**
+ * How long `/restart` waits for the replacement backend's event stream before
+ * closing its dialog anyway. The stream keeps retrying past it; this only keeps
+ * a slow stream from holding the terminal behind a modal.
+ */
+const RESTART_CONNECT_TIMEOUT_MS = 15_000
+
+function waitAtMost(promise: Promise<void>, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no event stream after ${timeoutMs}ms`)), timeoutMs)
+      timer.unref?.()
+    }),
+  ]).finally(() => clearTimeout(timer))
+}
+
+function App(props: {
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
+  /**
+   * What "restart" means for the host this terminal is attached to.
+   *
+   * Optional because not every host owns a backend: the standalone client
+   * (`startStandaloneTui`) is attached to somebody else's server and must not
+   * claim it can restart it. Undefined is surfaced by `/restart` rather than
+   * quietly doing nothing.
+   */
+  onRestart?: () => Promise<Transport>
+  restartTarget?: string
+}) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -351,41 +434,54 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
   const { theme, mode, setMode } = themeCtx
   const sync = useSync()
   const tabs = useSessionTabs()
-  const { exit, setSummary } = useExit()
+  const { exit, beginRestart, endRestart, setSummary } = useExit()
   const promptRef = usePromptRef()
   const attention = useAttention()
   const keybind = useKeybind()
 
   /**
-   * Offer the update the check found, and install it if the user agrees.
+   * Offer the update the check found, and install it if the user agrees — or
+   * without asking, once they chose "Auto-update".
    *
    * Driven by `checkUpgrade`'s return value rather than by the `installation.update-available`
    * event: that event is published on the Bus of whichever process ran the check, and since the
    * background service became the default that process is this CLI — not the server the event
    * stream comes from, so the TUI never saw it. See `UpdateAvailable`.
+   *
+   * After installing, the background service is moved onto the new version and this terminal
+   * reconnects to it in place, as `/restart` does. The terminal itself keeps running the code it
+   * started with; the new interface loads on the next launch.
    */
   async function offerUpdate(available: UpdateAvailable) {
     const { version, method } = available
     const currentVersion = available.current || VERSION
 
-    // Skip version already dismissed by the user
-    const skipped = kv.get("skipped_version")
-    if (skipped && version === skipped) return
+    if (!available.auto) {
+      // Skip version already dismissed by the user
+      const skipped = kv.get("skipped_version")
+      if (skipped && version === skipped) return
 
-    const hint = method ? ` via ${method}` : ""
-    const choice = await DialogConfirm.show(
-      dialog,
-      `Update Available`,
-      `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
-      "confirm",
-    )
+      const hint = method ? ` via ${method}` : ""
+      const choice = await DialogConfirm.choose(dialog, {
+        title: "Update Available",
+        message: `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now? Auto-update installs this and every later release without asking.`,
+        labels: { cancel: "Skip", extra: "Auto-update", confirm: "Update" },
+        defaultFocus: "confirm",
+      })
 
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
+      if (choice === "cancel") {
+        kv.set("skipped_version", version)
+        return
+      }
+
+      if (choice === "extra") {
+        // Saved before installing: the preference stands even if this install fails.
+        await upgradeCtx.enableAutoUpdate?.().catch((error) => {
+          log.error("enabling auto-update failed", { error: errorMessage(error) })
+          toast.error(error)
+        })
+      }
     }
-
-    if (!choice) return
 
     // No detected installation method (e.g. running from source / unknown
     // package manager). The TUI still shows the dialog so the user is
@@ -430,13 +526,19 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       return
     }
 
-    await DialogAlert.show(
-      dialog,
-      "Update Complete",
-      `Successfully updated to v${version}. Please restart the application.`,
-    )
-
-    await exit()
+    const onUpgraded = upgradeCtx.onUpgraded
+    const restarted = onUpgraded
+      ? await runRestart(onUpgraded, { success: `Updated to v${version}` })
+      : ("skipped" as const)
+    if (restarted === "failed") return
+    if (restarted === "skipped") {
+      toast.show({
+        variant: "success",
+        title: `Updated to v${version}`,
+        message: "Restart nikcli to use the new version.",
+        duration: 10_000,
+      })
+    }
   }
 
   // Plugin routes — mutable map + reactive stamp for re-renders
@@ -769,6 +871,85 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
       },
     ),
   )
+
+  /**
+   * `/reload`: re-read configuration in place, on both sides of the wire.
+   *
+   * The server half is `POST /config/reload`, which is the same
+   * `InstanceReload.reload` the file watcher runs — providers, agents, commands,
+   * MCP servers and server-side plugins rebuild from what is on disk while live
+   * sessions keep running. The client half is the plugin runtime's reconcile
+   * pass, which re-reads the merged TUI config: that is what picks up a plugin
+   * added since the last pass, and it is the only half a server reload cannot
+   * do for us.
+   *
+   * A second `/reload` while one is in flight is not a second pass: the runtime
+   * serialises them, and a reload is idempotent.
+   */
+  async function reloadAll() {
+    toast.show({
+      variant: "info",
+      message: "Reloading configuration…",
+      duration: 2000,
+    })
+    try {
+      await sdk.client.config.reload({ throwOnError: true })
+      await TuiPluginRuntime.reload()
+      toast.show({ variant: "success", message: "Configuration reloaded" })
+    } catch (error) {
+      log.error("reload failed", { error: errorMessage(error) })
+      toast.error(error)
+    }
+  }
+
+  /**
+   * `/restart`: replace the backend underneath a terminal that stays open.
+   *
+   * Dialog first and painted, so the seconds the host needs are visible. The
+   * host stops its backend and starts the replacement; this terminal then
+   * points its client and event stream at it, refetches what the stream could
+   * not replay, and reloads its plugins, whose API handles were bound to the
+   * old client. A host that fails leaves the terminal on whatever it had, with
+   * the reason on screen.
+   */
+  async function runRestart(
+    restartBackend: () => Promise<Transport | undefined>,
+    options: { success?: string } = {},
+  ): Promise<"restarted" | "skipped" | "failed"> {
+    const target = props.restartTarget ?? "nikcli server"
+    dialog.replace(() => <DialogRestart target={target} />)
+    await afterPaint(renderer)
+    // The event stream drops while the backend is down, and the refetch its
+    // reconnect triggers can land on a server that is shutting down. Marked
+    // first so neither is mistaken for a fatal bootstrap.
+    beginRestart()
+    try {
+      const next = await restartBackend()
+      // The host had nothing to restart onto (see `onUpgraded`).
+      if (!next) return "skipped"
+      await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch((error) => {
+        // The backend registered but its stream has not answered yet. Requests
+        // already go to it; the stream keeps retrying on its own.
+        log.warn("restarted backend has not streamed events yet", { error: errorMessage(error) })
+      })
+      const failure = await sync.bootstrap({ fatal: false })
+      if (failure) throw failure
+      await TuiPluginRuntime.reload()
+      toast.show({ variant: "success", message: options.success ?? `Restarted the ${target}` })
+      return "restarted"
+    } catch (error) {
+      log.error("restart failed", { error: errorMessage(error) })
+      toast.error(error)
+      // The stream may have dropped events meanwhile. Not fatal: a backend that
+      // is down must not turn this refetch into an exit, and the stream's own
+      // reconnect refetches again once it is back.
+      await sync.bootstrap({ fatal: false })
+      return "failed"
+    } finally {
+      endRestart()
+      dialog.clear()
+    }
+  }
 
   const connected = useConnected()
   command.register(() => [
@@ -1423,6 +1604,42 @@ function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> 
         dialog.clear()
       },
       category: "System",
+    },
+    {
+      title: "Reload configuration",
+      value: "nikcli.reload",
+      category: "System",
+      slash: {
+        name: "reload",
+      },
+      onSelect: (dialog) => {
+        // No dialog: the work is a request, and a modal that reported nothing
+        // would be a second thing to keep in sync with the toasts.
+        dialog.clear()
+        void reloadAll()
+      },
+    },
+    {
+      title: "Restart nikcli",
+      value: "nikcli.restart",
+      category: "System",
+      slash: {
+        name: "restart",
+      },
+      onSelect: () => {
+        // The host is the only layer that knows what there is to restart: the
+        // background service, the embedded worker, or nothing at all.
+        const restartBackend = props.onRestart
+        if (!restartBackend) {
+          toast.show({
+            variant: "warning",
+            message: "This host cannot restart the server it is attached to.",
+            duration: 5000,
+          })
+          return
+        }
+        void runRestart(restartBackend)
+      },
     },
     {
       title: "Exit the app",

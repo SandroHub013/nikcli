@@ -72,6 +72,28 @@ export type UpdateAvailable = {
   version: string
   method?: InstallationMethod
   current: string
+  /**
+   * Install without asking: the user chose "Auto-update" (`autoupdate: true`
+   * in the global config) and this build can be upgraded unattended.
+   */
+  auto: boolean
+}
+
+/**
+ * Whether an available update may be installed without asking.
+ *
+ * Only on an explicit `autoupdate: true` — unset and `"notify"` keep the
+ * dialog — and only for a release build whose install method is known: a
+ * local or preview build would otherwise be replaced by the stable release,
+ * and an undetected method would fall back to the curl installer.
+ */
+export function shouldAutoInstall(input: {
+  autoupdate: boolean | "notify" | undefined
+  method: InstallationMethod
+  local: boolean
+  preview: boolean
+}): boolean {
+  return input.autoupdate === true && input.method !== "unknown" && !input.local && !input.preview
 }
 
 /**
@@ -157,6 +179,12 @@ export async function upgrade(): Promise<UpdateAvailable | undefined> {
     version: latest,
     method: method === "unknown" ? undefined : method,
     current: Installation.VERSION,
+    auto: shouldAutoInstall({
+      autoupdate: config.autoupdate,
+      method,
+      local: Installation.isLocal(),
+      preview: Installation.isPreview(),
+    }),
   }
 
   // Still published for the clients that only have the event stream (desktop,
@@ -183,4 +211,38 @@ export async function upgradeNow(method: InstallationMethod, version: string): P
 
   log.info("Upgrade completed", { version })
   await Bus.publish(Installation.Event.Updated, { version })
+}
+
+/**
+ * Remember "Auto-update": later checks install new versions without asking.
+ * Written to the global config, which is what `upgrade()` reads.
+ */
+export async function enableAutoUpdate(): Promise<void> {
+  await runConfig(
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.updateGlobal({ autoupdate: true })
+    }),
+  )
+  log.info("auto-update enabled")
+}
+
+/**
+ * Move the background service onto the version an upgrade just installed.
+ *
+ * The service is a long-lived copy of the old binary, so without this it keeps
+ * serving the old engine until some later client notices the version skew.
+ * Started from `Installation.installedExecutable()`, not from this process's
+ * own path. `"pending"` when the Windows installer deferred the swap (the new
+ * binary is not in place yet, so a restart would come back on the old one);
+ * `undefined` for `"if-running"` when no service was running.
+ */
+export async function restartServiceAfterUpgrade(mode: "always" | "if-running") {
+  if (await Installation.upgradePending()) return "pending" as const
+  const { BackgroundService } = await import("@/service/service")
+  const options = { executable: Installation.installedExecutable() }
+  const registration =
+    mode === "always" ? await BackgroundService.restart(options) : await BackgroundService.restartIfRunning(options)
+  if (registration) log.info("background service restarted after upgrade", { version: registration.version })
+  return registration
 }

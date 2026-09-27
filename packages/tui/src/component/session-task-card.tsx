@@ -62,7 +62,17 @@ export function sessionTaskChrome(kind: SessionTaskKind) {
  */
 export function SessionTaskCard(props: {
   kind: SessionTaskKind
-  /** Agent colour; the session route reads it from `useLocal().agent.color(...)`. */
+  /**
+   * The agent's colour, and the card's accent for both kinds.
+   *
+   * Background jobs used to be painted `theme.status.info.fg` instead, on the
+   * theory that a run happening beside the turn should read as system activity.
+   * It cost the thing the card is *for*: with a dozen delegations in a turn,
+   * "which agent is this" was answered for subtasks and not for the background
+   * ones, so the parallel half of the work was the half you could not place.
+   * The distinction the kinds need is already carried by the rail, the glyph and
+   * the badge, so the colour can be the agent's on both.
+   */
   color: RGBA
   agent: string
   title: string
@@ -76,7 +86,7 @@ export function SessionTaskCard(props: {
   const style = () => component("session.task-card")
   const [expanded, setExpanded] = createSignal(false)
   const chrome = createMemo(() => sessionTaskChrome(props.kind))
-  const accent = createMemo(() => (props.kind === "background" ? theme.status.info.fg : props.color))
+  const accent = createMemo(() => props.color)
   /**
    * The description, unless it is the title again.
    *

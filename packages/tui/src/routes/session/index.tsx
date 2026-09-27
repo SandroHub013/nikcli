@@ -319,9 +319,9 @@ export function Session() {
     const previousWorkspace = untrack(() => project.workspace.current())
     if (workspaceID !== previousWorkspace) {
       project.workspace.set(workspaceID)
-      try {
-        await sync.bootstrap()
-      } catch {}
+      // Not fatal: a worktree instance that does not answer must not exit
+      // nikcli; the session sync below still runs.
+      await sync.bootstrap({ fatal: false })
     }
     if (route.sessionID !== sessionID) return
     await sync.session

@@ -40,9 +40,9 @@ const toc = [
       clients.
     </p>
     <DocCallout type="info" title="Experimental feature flag">
-      Brain is enabled by default but is part of the <code>experimental</code> config
-      group. Disable it globally with <code>experimental.brain = false</code>, or turn off
-      just the memory write with <code>experimental.memory = false</code>.
+      Brain is disabled by default. Enable it by setting <code>experimental.brain</code>
+      to <code>true</code> in <code>nikcli.json</code>, or turn on <strong>Enable Brain</strong>
+      in Brain Settings.
     </DocCallout>
   </section>
 
@@ -147,7 +147,7 @@ const toc = [
     <h2>Configuration</h2>
     <p>
       All Brain knobs live under <code>experimental</code> in
-      <code>nikcli.json</code>:
+      <code>nikcli.json</code>. This example enables Brain:
     </p>
     <DocCode language="json" title="nikcli.json">{`{
   "experimental": {
@@ -169,7 +169,7 @@ const toc = [
       <tbody>
         <tr>
           <td><code>experimental.brain</code></td>
-          <td><code>true</code></td>
+          <td><code>false</code></td>
           <td>Master switch for the Brain subsystem. When <code>false</code>, neither the scheduler nor a manual trigger will fire.</td>
         </tr>
         <tr>

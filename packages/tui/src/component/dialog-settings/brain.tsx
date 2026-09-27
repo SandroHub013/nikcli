@@ -14,7 +14,7 @@ export function DialogSettingsBrain() {
   const sync = useSync()
   const sdk = useSDK()
 
-  const [brainEnabled, setBrainEnabled] = createSignal(true)
+  const [brainEnabled, setBrainEnabled] = createSignal(false)
   const [memoryEnabled, setMemoryEnabled] = createSignal(true)
   const [minHours, setMinHours] = createSignal(24)
   const [minSessions, setMinSessions] = createSignal(5)

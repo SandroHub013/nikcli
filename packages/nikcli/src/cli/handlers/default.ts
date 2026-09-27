@@ -357,6 +357,45 @@ export default Runtime.handler(Commands, async (input) => {
             await upgradeNow(method as import("@/installation").Installation.Method, version)
           })
         },
+        enableAutoUpdate: async () => {
+          await withUpgradeInstance(async () => {
+            const { enableAutoUpdate } = await import("@/cli/upgrade")
+            await enableAutoUpdate()
+          })
+        },
+        // After an upgrade: move the service onto the binary just installed and
+        // hand the terminal the new transport, as `/restart` does. `undefined`
+        // while a Windows swap is still pending — the service would come back
+        // on the old binary, and the next start moves it on its own.
+        onUpgraded: async () => {
+          const { restartServiceAfterUpgrade } = await import("@/cli/upgrade")
+          const next = await restartServiceAfterUpgrade("always")
+          if (!next || next === "pending") return undefined
+          return {
+            url: next.url,
+            fetch: BackgroundService.authorizedFetch(
+              next.url,
+              BackgroundService.authorization(await BackgroundService.password()),
+            ),
+          }
+        },
+        // `/restart` in the TUI. The service is the thing being restarted here:
+        // a separate process, whose live sessions are suspended on SIGTERM and
+        // resumed by the engine that comes back. The terminal stays up and
+        // reconnects to what this returns — rediscovered, not assumed: the new
+        // service may have taken another port, and the credential is re-read.
+        onRestart: async () => {
+          const next = await BackgroundService.restart()
+          Log.Default.info("restarted background service", { url: next.url, pid: next.pid })
+          return {
+            url: next.url,
+            fetch: BackgroundService.authorizedFetch(
+              next.url,
+              BackgroundService.authorization(await BackgroundService.password()),
+            ),
+          }
+        },
+        restartTarget: "background service",
       })
       return
     }
@@ -449,19 +488,6 @@ export default Runtime.handler(Commands, async (input) => {
     simulation?.backend.stop()
   }
 
-  const restart = async () => {
-    await stop()
-    process.exitCode = 0
-    // Re-exec the current process with the same arguments
-    Bun.spawn([process.execPath, ...process.argv.slice(1)], {
-      windowsHide: true,
-      stdio: ["inherit", "inherit", "inherit"],
-      env: process.env,
-      detached: true,
-    })
-    process.exit(0)
-  }
-
   // Mobile (and any nikcli-managed PTY) sets NIKCLI_TERMINAL=1 in env. Bun can still report
   // `stdin.isTTY === false` in that PTY, which would incorrectly take the "piped stdin" path
   // below and block forever on `Bun.stdin.text()` — so the OpenTUI renderer never starts.
@@ -529,7 +555,17 @@ export default Runtime.handler(Commands, async (input) => {
         prompt,
       },
       onExit: stop,
-      onRestart: restart,
+      // `/restart` with no service to restart: the worker *is* the server, and
+      // its engine is restarted inside it — every instance (config, providers,
+      // plugins, LSP, MCP) disposed and rebuilt on the next request. The thread
+      // itself is kept: terminating a worker that loaded native modules and
+      // spawning another crashes Bun (SIGSEGV in 1.4.2), and the transport it
+      // hands back is the one the terminal already has.
+      onRestart: async () => {
+        await client.call("reload", undefined)
+        return { url, fetch: customFetch, events }
+      },
+      restartTarget: "server",
       checkUpgrade: async () => {
         return client.call("checkUpgrade", { directory: cwd }).catch((error) => {
           Log.Default.warn("upgrade check failed", {
@@ -552,6 +588,11 @@ export default Runtime.handler(Commands, async (input) => {
           })
           throw error
         })
+      },
+      // No `onUpgraded`: the server is this process's own worker, running the
+      // binary the upgrade just replaced, so only a new launch picks it up.
+      enableAutoUpdate: async () => {
+        await client.call("enableAutoUpdate", undefined)
       },
       startServer: !shouldStartServer
         ? async (options = {}) => {

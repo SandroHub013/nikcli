@@ -115,7 +115,7 @@ export type BrainConfig = {
 const DEFAULTS: BrainConfig = {
   minHours: 24,
   minSessions: 5,
-  enabled: true,
+  enabled: false,
   memoryEnabled: true,
 }
 
@@ -143,7 +143,12 @@ function memoryPath(instance: InstanceContext): string {
 function habitsPath(instance: InstanceContext): string {
   // Same root the system prompt reads from, so a Brain pass never writes a file
   // the next session cannot find.
-  return Profile.habitsFile(Profile.projectRoot({ directory: instance.directory, worktree: instance.worktree }))
+  return Profile.habitsFile(
+    Profile.projectRoot({
+      directory: instance.directory,
+      worktree: instance.worktree,
+    }),
+  )
 }
 
 const HABITS_HEADER = [

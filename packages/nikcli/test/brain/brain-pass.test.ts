@@ -22,6 +22,9 @@ const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-brain-pass-home
 process.env.NIKCLI_TEST_HOME = testHome
 process.env.NIKCLI_TEST_MODE = "1"
 process.env.NIKCLI_DISABLE_PROJECT_CONFIG = "1"
+process.env.NIKCLI_CONFIG_CONTENT = JSON.stringify({
+  experimental: { brain: true },
+})
 process.env.XDG_DATA_HOME = path.join(testHome, "data")
 process.env.XDG_CACHE_HOME = path.join(testHome, "cache")
 process.env.XDG_CONFIG_HOME = path.join(testHome, "config")
@@ -31,6 +34,7 @@ preserveTestEnv([
   "NIKCLI_TEST_HOME",
   "NIKCLI_TEST_MODE",
   "NIKCLI_DISABLE_PROJECT_CONFIG",
+  "NIKCLI_CONFIG_CONTENT",
   "XDG_DATA_HOME",
   "XDG_CACHE_HOME",
   "XDG_CONFIG_HOME",
@@ -125,7 +129,11 @@ describe("Brain pass · what it is allowed to do", () => {
   const action = (permission: string) => PermissionNext.evaluate(permission, "anything", ruleset).action
 
   it("denies by default", () => {
-    expect(ruleset[0]).toEqual({ permission: "*", pattern: "*", action: "deny" })
+    expect(ruleset[0]).toEqual({
+      permission: "*",
+      pattern: "*",
+      action: "deny",
+    })
     expect(action("bash")).toBe("deny")
     expect(action("webfetch")).toBe("deny")
   })

@@ -5,13 +5,13 @@ import { restoreTerminalState } from "@nikcli-ai/util/win32"
 
 export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   name: "Exit",
-  init: (input: {
-    onExit?: () => Promise<void>
-    onBeforeExit?: () => Promise<void>
-    onRestart?: () => Promise<void>
-  }) => {
+  init: (input: { onExit?: () => Promise<void>; onBeforeExit?: () => Promise<void> }) => {
     const renderer = useRenderer()
     let exiting = false
+    // True while `/restart` has the host's backend down and this terminal is
+    // being pointed at the one that replaces it. While it holds, a lost
+    // connection is the restart itself, not a reason to exit.
+    let restarting = false
     let summary: (() => string | undefined) | undefined
 
     const writeSummary = () => {
@@ -61,36 +61,15 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       process.exit(exitCode)
     }
 
-    const restart = async () => {
-      if (exiting) return
-      exiting = true
-
-      try {
-        await input.onBeforeExit?.()
-      } catch {
-        // best effort
-      }
-
-      try {
-        renderer.setTerminalTitle("")
-        renderer.destroy()
-        restoreTerminalState()
-      } catch {
-        // best effort
-      }
-
-      try {
-        await input.onExit?.()
-      } catch {
-        // best effort
-      }
-
-      await input.onRestart?.()
-    }
-
     return {
       exit,
-      restart,
+      beginRestart() {
+        restarting = true
+      },
+      endRestart() {
+        restarting = false
+      },
+      restarting: () => restarting,
       setSummary(fn: (() => string | undefined) | undefined) {
         summary = fn
       },

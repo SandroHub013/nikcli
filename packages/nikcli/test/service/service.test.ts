@@ -303,6 +303,49 @@ describe("BackgroundService.start", () => {
   })
 })
 
+describe("BackgroundService after an upgrade", () => {
+  // The service is spawned from the binary the upgrade installed, which a
+  // Homebrew or Scoop install keeps somewhere other than `process.execPath`.
+  async function spawnedCommand(options: Parameters<typeof BackgroundService.start>[0], standalone: boolean) {
+    let command: string[] | undefined
+    const isStandalone = spyOn(Installation, "isStandaloneExecutable").mockReturnValue(standalone)
+    const spawn = spyOn(Bun, "spawn").mockImplementation(((cmd: string[]) => {
+      command = cmd
+      throw new Error("captured")
+    }) as unknown as typeof Bun.spawn)
+    try {
+      await expect(BackgroundService.start(options)).rejects.toThrow("captured")
+    } finally {
+      spawn.mockRestore()
+      isStandalone.mockRestore()
+    }
+    return command
+  }
+
+  it("starts a standalone service from the executable it is given", async () => {
+    const command = await spawnedCommand({ executable: "/opt/homebrew/bin/nikcli" }, true)
+    expect(command?.[0]).toBe("/opt/homebrew/bin/nikcli")
+    expect(command?.slice(1, 3)).toEqual(["serve", "--service"])
+  })
+
+  it("keeps this build's own command when no executable is given", async () => {
+    const command = await spawnedCommand({}, true)
+    expect(command?.[0]).toBe(process.execPath)
+  })
+
+  it("does not restart a service that is not running", async () => {
+    const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
+      throw new Error("restartIfRunning() started a service")
+    })
+    try {
+      expect(await BackgroundService.restartIfRunning({ executable: "/usr/local/bin/nikcli" })).toBeUndefined()
+      expect(spawn).not.toHaveBeenCalled()
+    } finally {
+      spawn.mockRestore()
+    }
+  })
+})
+
 describe("BackgroundService.register", () => {
   it("writes an owned registration and cleans it up through the disposer", async () => {
     const release = await BackgroundService.register("http://127.0.0.1:4096")
@@ -559,6 +602,49 @@ describe("BackgroundService.health", () => {
 
   it("returns undefined instead of throwing when nothing answers", async () => {
     expect(await BackgroundService.health(DEAD_URL, 250)).toBeUndefined()
+  })
+})
+
+describe("BackgroundService.restart", () => {
+  const next = { id: "next", pid: 4242, url: "http://127.0.0.1:5000", version: "9.9.9", startedAt: 2 }
+
+  it("stops before it starts, and hands back the new registration", async () => {
+    // Spied, not real: `start()` spawns a `serve --service` process, and what
+    // this sequence owes its callers — `nikcli service restart` and the TUI's
+    // `/restart` — is the order (the port has to be free before the new engine
+    // takes it) and the registration the client connects to next.
+    const order: string[] = []
+    const stop = spyOn(BackgroundService, "stop").mockImplementation(async () => {
+      order.push("stop")
+      return true
+    })
+    const start = spyOn(BackgroundService, "start").mockImplementation(async () => {
+      order.push("start")
+      return next
+    })
+    try {
+      expect(await BackgroundService.restart()).toEqual(next)
+      expect(order).toEqual(["stop", "start"])
+    } finally {
+      stop.mockRestore()
+      start.mockRestore()
+    }
+  })
+
+  it("propagates a stop that failed instead of starting a second engine on top of it", async () => {
+    const stop = spyOn(BackgroundService, "stop").mockImplementation(async () => {
+      throw new Error("service is wedged")
+    })
+    const start = spyOn(BackgroundService, "start").mockImplementation(async () => {
+      throw new Error("start must not run")
+    })
+    try {
+      await expect(BackgroundService.restart()).rejects.toThrow("service is wedged")
+      expect(start).not.toHaveBeenCalled()
+    } finally {
+      stop.mockRestore()
+      start.mockRestore()
+    }
   })
 })
 

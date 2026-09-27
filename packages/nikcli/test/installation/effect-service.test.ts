@@ -188,7 +188,7 @@ describe("Update dialog wiring (cross-platform)", () => {
 
   it("the TUI drives the confirm dialog off the check result, not the event stream", async () => {
     const source = await readSrc("packages/tui/src/app.tsx")
-    expect(source).toContain("DialogConfirm.show(")
+    expect(source).toContain("DialogConfirm.choose(dialog, {")
     expect(source).toContain("Update Available")
     // The dialog must hang off `checkUpgrade`'s return value. Subscribing to
     // the event instead is the regression this test exists for: the check runs
@@ -203,6 +203,33 @@ describe("Update dialog wiring (cross-platform)", () => {
   it("the TUI dialog passes the detected install method to upgradeNow", async () => {
     const source = await readSrc("packages/tui/src/app.tsx")
     expect(source).toContain("upgradeNow?.(method")
+  })
+
+  it("offers Auto-update, remembers it before installing, and skips the dialog once chosen", async () => {
+    const source = await readSrc("packages/tui/src/app.tsx")
+    const offer = source.slice(source.indexOf("async function offerUpdate"), source.indexOf("// Plugin routes"))
+    expect(offer).toContain('labels: { cancel: "Skip", extra: "Auto-update", confirm: "Update" }')
+    // The dialog only when the user has not opted in.
+    expect(offer.indexOf("if (!available.auto) {")).toBeLessThan(offer.indexOf("DialogConfirm.choose("))
+    // Saved before the install, so it stands even if this install fails.
+    expect(offer.indexOf("enableAutoUpdate?.()")).toBeLessThan(offer.indexOf("upgradeNow?.(method"))
+  })
+
+  it("after installing, moves the backend onto the new version instead of exiting", async () => {
+    const source = await readSrc("packages/tui/src/app.tsx")
+    const offer = source.slice(source.indexOf("async function offerUpdate"), source.indexOf("// Plugin routes"))
+    expect(offer.indexOf("runRestart(onUpgraded")).toBeGreaterThan(offer.indexOf("upgradeNow?.(method"))
+    expect(offer).not.toContain("exit()")
+    expect(offer).toContain("Restart nikcli to use the new version.")
+    const host = await readSrc("packages/nikcli/src/cli/handlers/default.ts")
+    expect(host).toContain('restartServiceAfterUpgrade("always")')
+    expect(host).toContain("enableAutoUpdate: async () => {")
+  })
+
+  it("persists Auto-update to the global config the check reads", async () => {
+    const upgrade = await readSrc("packages/nikcli/src/cli/upgrade.ts")
+    expect(upgrade).toContain("service.updateGlobal({ autoupdate: true })")
+    expect(upgrade).toContain("return yield* service.getGlobal()")
   })
 
   it("establishes HTTP readiness from server.connected and continues consuming events", async () => {
@@ -228,6 +255,25 @@ describe("Update dialog wiring (cross-platform)", () => {
     })
 
     expect(sequence).toEqual(["ready", "server.connected", "installation.update-available"])
+  })
+
+  it("does not report a stream connected before the server has sent anything", async () => {
+    // The generated client resolves `global.event()` before connecting, so a
+    // stream to a server that is down fails on first read. Reporting that as
+    // "connected" made every retry refetch against nothing — fatally, for a TUI
+    // whose shared service another client was restarting.
+    let connected = 0
+    await consumeGlobalEventStream({
+      stream: {
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(new Error("Unable to connect")),
+        }),
+      },
+      signal: new AbortController().signal,
+      onConnected: () => connected++,
+      onEnvelope: () => {},
+    }).catch(() => {})
+    expect(connected).toBe(0)
   })
 
   it("mounts SDK provider children without treating subscription readiness as provider readiness", () => {

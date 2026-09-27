@@ -123,6 +123,16 @@ export function createDialogProviderOptions() {
   return options
 }
 
+/**
+ * Reload state once a provider is connected. Not fatal: the user is in the
+ * middle of this dialog, and a refetch that fails is reported here instead of
+ * exiting nikcli.
+ */
+async function refetchAfterConnect(sync: ReturnType<typeof useSync>, toast: ReturnType<typeof useToast>) {
+  const failure = await sync.bootstrap({ fatal: false })
+  if (failure) toast.error(failure)
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
@@ -337,7 +347,7 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     if (life.disposed()) return
-    await sync.bootstrap()
+    await refetchAfterConnect(sync, toast)
     if (life.disposed()) return
     await sync.refreshProviders()
     if (life.disposed()) return
@@ -370,6 +380,7 @@ function CodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const toast = useToast()
   const [error, setError] = createSignal(false)
   const life = useAbortOnCleanup()
 
@@ -390,7 +401,7 @@ function CodeMethod(props: CodeMethodProps) {
         if (!error) {
           await sdk.client.instance.dispose()
           if (life.disposed()) return
-          await sync.bootstrap()
+          await refetchAfterConnect(sync, toast)
           if (life.disposed()) return
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
@@ -415,6 +426,7 @@ function AutoCodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const toast = useToast()
   const [error, setError] = createSignal(false)
   const [complete, setComplete] = createSignal(false)
   const life = useAbortOnCleanup()
@@ -424,7 +436,7 @@ function AutoCodeMethod(props: CodeMethodProps) {
     setComplete(true)
     await sdk.client.instance.dispose()
     if (life.disposed()) return
-    await sync.bootstrap()
+    await refetchAfterConnect(sync, toast)
     if (life.disposed()) return
     await sync.refreshProviders()
     if (life.disposed()) return
@@ -522,7 +534,7 @@ function OpenRouterFreeMethod(props: { title: string }) {
         if (life.disposed()) return
         await sdk.client.instance.dispose()
         if (life.disposed()) return
-        await sync.bootstrap()
+        await refetchAfterConnect(sync, toast)
         if (life.disposed()) return
         await sync.refreshProviders()
         if (life.disposed()) return
@@ -583,7 +595,7 @@ function ApiMethod(props: ApiMethodProps) {
         if (life.disposed()) return
         await sdk.client.instance.dispose()
         if (life.disposed()) return
-        await sync.bootstrap()
+        await refetchAfterConnect(sync, toast)
         if (life.disposed()) return
         await sync.refreshProviders()
         if (life.disposed()) return
