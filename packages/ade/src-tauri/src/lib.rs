@@ -1112,6 +1112,74 @@ struct ShellOutput {
     stderr: String,
 }
 
+/// Where a git call would write outside the index and the work tree it runs
+/// in: a `worktree add` or `move` destination, and a `GIT_INDEX_FILE`. Each
+/// must be a place ADE may write, inside a project, or the
+/// `<project>-worktrees` folder beside one, where ADE puts its own checkouts
+/// (`worktreePlan`).
+///
+/// Only the flags were checked: a commit holding a PowerShell profile,
+/// then `worktree add` into the profile's folder, wrote outside every root and
+/// ran at the next PowerShell start (review area 1, MEDIO 2).
+fn check_git_destinations(
+    roots: &WriteRoots,
+    args: &[String],
+    cwd: Option<&str>,
+    env: &std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    let base = match cwd.filter(|dir| !dir.is_empty()) {
+        Some(dir) => PathBuf::from(dir),
+        None => std::env::current_dir().map_err(|e| e.to_string())?,
+    };
+    let place = |raw: &str| -> Result<(), String> {
+        let resolved = resolve_for_check(&base.join(raw))?;
+        let allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
+        let beside = |root: &PathBuf| match (root.parent(), root.file_name()) {
+            (Some(parent), Some(name)) => {
+                let mut container = name.to_os_string();
+                container.push("-worktrees");
+                resolved.parent() == Some(parent.join(container).as_path())
+            }
+            _ => false,
+        };
+        if allowed.iter().any(|root| resolved.starts_with(root) || beside(root)) && !is_git_executable_path(&resolved) {
+            Ok(())
+        } else {
+            Err(format!("git scriverebbe fuori dal progetto: {raw}"))
+        }
+    };
+    if args.first().map(String::as_str) == Some("worktree") {
+        let sub = args.get(1).map(String::as_str);
+        if matches!(sub, Some("add" | "move")) {
+            // The positionals, past the options and the values some of them take.
+            let mut positionals = Vec::new();
+            let mut rest = args[2..].iter();
+            while let Some(arg) = rest.next() {
+                if arg == "-b" || arg == "-B" || arg == "--reason" {
+                    rest.next();
+                } else if !arg.starts_with('-') {
+                    positionals.push(arg.as_str());
+                }
+            }
+            let destination = if sub == Some("add") { positionals.first() } else { positionals.get(1) };
+            place(destination.ok_or("git worktree senza cartella di destinazione")?)?;
+        }
+    }
+    if let Some(index) = env.get("GIT_INDEX_FILE") {
+        // The review's own index is in the repository's git dir, which for a
+        // project that is itself a worktree is the main repository's, outside
+        // every root: that one name, under a `.git`, is allowed wherever it is.
+        let resolved = resolve_for_check(&base.join(index))?;
+        let review_index = resolved.file_name() == Some(std::ffi::OsStr::new("ade-review-index"))
+            && resolved.components().any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+            && !is_git_executable_path(&resolved);
+        if !review_index {
+            place(index)?;
+        }
+    }
+    Ok(())
+}
+
 fn check_git_args(args: &[String]) -> Result<(), String> {
     let Some(subcommand) = args.first() else {
         return Err("git senza sottocomando".to_string());
@@ -1144,18 +1212,21 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
 /// Runs one git command and hands back what it printed.
 #[tauri::command]
 async fn git_run(
+    roots: tauri::State<'_, WriteRoots>,
     args: Vec<String>,
     cwd: Option<String>,
     env: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ShellOutput, String> {
     check_git_args(&args)?;
+    let env = env.unwrap_or_default();
+    check_git_destinations(&roots, &args, cwd.as_deref(), &env)?;
 
     let mut command = std::process::Command::new("git");
     command.args(&args);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
-    for (key, value) in env.unwrap_or_default() {
+    for (key, value) in env {
         if !GIT_ENV_KEYS.contains(&key.as_str()) {
             return Err(format!("variabile non consentita: {key}"));
         }
@@ -2853,6 +2924,45 @@ mod tests {
         ] {
             assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
         }
+    }
+
+    /// Review area 1, MEDIO 2: `worktree add` and `GIT_INDEX_FILE` wrote wherever they were pointed.
+    #[test]
+    fn git_writes_only_inside_a_project_or_beside_it_for_worktrees() {
+        let project = TempDir::new("gitdest");
+        let roots = project.roots();
+        let root = project.0.canonicalize().expect("canonical");
+        let cwd = root.to_string_lossy().to_string();
+        let none = std::collections::HashMap::new();
+        let check = |list: &[&str], env: &std::collections::HashMap<String, String>| {
+            let args = list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+            check_git_destinations(&roots, &args, Some(&cwd), env)
+        };
+        let beside = format!("{}-worktrees", root.to_string_lossy());
+        let elsewhere = root.parent().expect("parent").join("Documents").join("WindowsPowerShell");
+        let elsewhere = elsewhere.to_string_lossy();
+
+        // ADE's own: a branch, in the folder beside the project.
+        assert_eq!(check(&["worktree", "add", "-b", "ade/x", &format!("{beside}/x"), "main"], &none), Ok(()));
+        assert_eq!(check(&["worktree", "add", "inside"], &none), Ok(()));
+        // Anywhere else, refused, however it is spelled.
+        for bad in [
+            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-b", "ade/x", &elsewhere, "main"],
+            vec!["worktree", "add", "../elsewhere"],
+            vec!["worktree", "move", "inside", &elsewhere],
+            vec!["worktree", "add", ".git/hooks"],
+        ] {
+            assert!(check(&bad, &none).is_err(), "{bad:?}");
+        }
+        // The review's index: in the repository's .git, as `rev-parse --git-path` names it.
+        let index = |value: &str| std::collections::HashMap::from([("GIT_INDEX_FILE".to_string(), value.to_string())]);
+        assert_eq!(check(&["add", "-A"], &index(".git/ade-review-index")), Ok(()));
+        // A project that is a worktree: its git dir is the main repository's.
+        let main = root.parent().expect("parent").join("main").join(".git").join("worktrees").join("w");
+        assert_eq!(check(&["add", "-A"], &index(&main.join("ade-review-index").to_string_lossy())), Ok(()));
+        assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/profile.ps1"))).is_err());
+        assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/ade-review-index"))).is_err());
     }
 
     #[test]
