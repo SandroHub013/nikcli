@@ -198,15 +198,25 @@ describe("rifiniture 2, the other ways out: «Ho scelto sul foglio» and Rimanda
     expect(deferredStatus("D1", "2026-09-28", now)).toBe("D1: rimandata · domani")
   })
 
-  test("lint: both write the sheet's status before the sheet leaves", () => {
+  /*
+   * The entry is taken when pressed, not read after the write: by then it has
+   * left the list (ultimi). The rendered proof is in the two hub tests, which
+   * need Kobalte: «… on the last proposal (ultimi)», «Rimanda on the last decision (ultimi)».
+   */
+  test("lint: both write the sheet's status, from the entry taken before the write, before the sheet leaves", () => {
     const design = read("design/design-sheet.tsx")
-    const chosen = design.slice(design.indexOf("props.hub.sheetChosen(proposal())"))
-    expect(chosen.indexOf('answeredStatus(proposal().k, t("design.url.words")')).toBeGreaterThan(-1)
+    const chosen = design.slice(design.indexOf("const chosen = proposal()"))
+    expect(chosen.indexOf("props.hub.sheetChosen(chosen)")).toBeGreaterThan(-1)
+    expect(chosen.indexOf('answeredStatus(chosen.k, t("design.url.words")')).toBeGreaterThan(-1)
     expect(chosen.indexOf("showStatus(")).toBeLessThan(chosen.indexOf("setAnswered(true)"))
     const decisions = read("decisions/decisions-sheet.tsx")
-    const deferred = decisions.slice(decisions.indexOf("props.hub.defer(decision(), until)"))
-    expect(deferred.indexOf("showStatus(deferredStatus(decision().k, until")).toBeGreaterThan(-1)
+    const deferred = decisions.slice(decisions.indexOf("const deferred = decision()"))
+    expect(deferred.indexOf("props.hub.defer(deferred, until)")).toBeGreaterThan(-1)
+    expect(deferred.indexOf("showStatus(deferredStatus(deferred.k, until")).toBeGreaterThan(-1)
     expect(deferred.indexOf("showStatus(")).toBeLessThan(deferred.indexOf("setAnswered(true)"))
+    // Nothing in a `.then` of either sheet reads the current entry again.
+    for (const sheet of [design, decisions])
+      expect(sheet).not.toMatch(/\.then\([^)]*\)\s*=>\s*\{[^}]*(proposal|decision)\(\)/)
   })
 })
 

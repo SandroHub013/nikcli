@@ -510,3 +510,60 @@ describe("sheet status line on submit (MEDIO 6)", () => {
     host.remove()
   })
 })
+
+/*
+ * ultimi (Verifiche, rifiniture-2): Rimanda on the last decision left the sheet
+ * open and empty, and no toast: the deferral is read back before the promise
+ * resolves, the decision has left the list, and `decision().k` threw.
+ */
+describe("Rimanda on the last decision (ultimi)", () => {
+  test("the sheet leaves and hands on its status, though the decision left the list first", async () => {
+    const { io } = memory(opened("D1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+    const done: [string, string | undefined][] = []
+    let register!: ReturnType<typeof createDecisionsRegister>
+    let unrender!: () => void
+    const dispose = createRoot((dispose) => {
+      register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      const hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      unrender = render(
+        () =>
+          createComponent(DecisionsSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+            waiting: () => 0,
+            onDone: (next, said) => void done.push([next, said]),
+          }),
+        host,
+      )
+      return dispose
+    })
+    await register.refresh()
+
+    const open = [...document.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find(
+      (button) => button.textContent === t("decisions.defer.open"),
+    )
+    expect(open).toBeDefined()
+    open!.click()
+    const preset = document.querySelector<HTMLButtonElement>('[data-slot="decision-chip"]')
+    expect(preset).not.toBeNull()
+    preset!.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(done).toHaveLength(1)
+    expect(done[0]![0]).toBe("close")
+    expect(done[0]![1]).toStartWith("D1: rimandata · ")
+    unrender()
+    dispose()
+    host.remove()
+  })
+})
