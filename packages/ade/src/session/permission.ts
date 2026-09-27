@@ -239,6 +239,18 @@ export interface PermissionSchema {
 }
 
 const NUMBERED_OPTION_RE = /^\s*(?:\[?(\d+)\]?[.)\s])\s*(.+)$/
+
+/*
+ * A menu line as the eye reads it. Claude Code, codex and gemini draw their
+ * menus with Ink or ratatui: the options sit inside a box (`│ … │`, closed by
+ * `╰───╯`) and the selected one carries a cursor (`❯ 1. Yes`). Those are
+ * drawing, not text, and read as text they hid the menu: no request was seen,
+ * and after the quiet a delivery's Enter confirmed whatever was selected.
+ */
+const FRAME_RE = /^\s*[│┃║]\s?|\s?[│┃║]\s*$/g
+const CURSOR_RE = /^(\s*)[❯›▶➤>]\s?/
+const BOX_EDGE_RE = /^[\s╭╮╰╯┌┐└┘─━═]*$/
+const unframe = (line: string) => line.replace(FRAME_RE, "").replace(CURSOR_RE, "$1")
 const YN_PATTERN_RE = /(?:\[|\()([yYnN](?:\s*\/\s*[yYnN](?:\s*\/\s*[aAcCdD])?)?)(?:\]|\))\s*[:?]?\s*$/
 
 export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
@@ -247,8 +259,12 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
     id: "numbered-choices",
     name: "Numbered Choices",
     priority: 100,
-    match: (lines: string[]): PermissionRequest | undefined => {
+    match: (drawn: string[]): PermissionRequest | undefined => {
+      const lines = drawn.map(unframe)
       let endIndex = lines.length - 1
+      // The bottom of the box, and the blank lines inside it.
+      while (endIndex >= 0 && BOX_EDGE_RE.test(lines[endIndex])) endIndex--
+      if (endIndex < 1) return undefined
 
       // Skip trailing prompt input indicator if present (e.g. "Select an option [1-3]:" or "> ")
       const lastLine = lines[endIndex].trim()

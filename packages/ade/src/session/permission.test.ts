@@ -51,6 +51,29 @@ describe("detectPermission - Numbered Choices", () => {
     })
   })
 
+  test("a menu with a cursor on the selected option is still a menu (review area 2)", () => {
+    // What Claude Code and codex draw: without this, no request was seen, and
+    // after the quiet a delivery's Enter confirmed the selected option.
+    const req = detectPermission(["Do you want to proceed?", "❯ 1. Yes", "  2. No"], "codex")
+    expect(req?.what).toBe("Do you want to proceed?")
+    expect(req?.answers.map((a) => a.send)).toEqual(["1", "2"])
+  })
+
+  test("a menu drawn inside a box is read through its frame", () => {
+    const lines = [
+      "╭──────────────────────────────────────────╮",
+      "│ Do you want to make this edit to a.ts?   │",
+      "│ › 1. Yes                                 │",
+      "│   2. Yes, allow all edits                │",
+      "│   3. No                                  │",
+      "│                                          │",
+      "╰──────────────────────────────────────────╯",
+    ]
+    const req = detectPermission(lines, "agy")
+    expect(req?.what).toBe("Do you want to make this edit to a.ts?")
+    expect(req?.answers.map((a) => a.send)).toEqual(["1", "2", "3"])
+  })
+
   test("detects shell command context with numbered choices and trailing prompt", () => {
     const lines = [
       "$ rm -rf dist/",
