@@ -61,7 +61,9 @@ export function partView(part: Part): PartView | undefined {
       return { kind: "reasoning", id: raw.id, text: raw.text.trimEnd() }
     case "tool": {
       const state = (raw.state ?? {}) as Record<string, any>
-      const status: ToolStatus = ["pending", "running", "completed", "error"].includes(state.status) ? state.status : "pending"
+      const status: ToolStatus = ["pending", "running", "completed", "error"].includes(state.status)
+        ? state.status
+        : "pending"
       const output = typeof state.output === "string" ? state.output : undefined
       const cut = output !== undefined && output.length > OUTPUT_LIMIT
       return {
@@ -139,7 +141,9 @@ export function diffLines(diff: string): DiffLine[] {
  */
 export function permissionView(request: PermissionRequest, parts: readonly Part[] = []): PermissionView {
   const raw = request as unknown as Record<string, any>
-  const patterns = Array.isArray(raw.patterns) ? raw.patterns.filter((p: unknown): p is string => typeof p === "string") : []
+  const patterns = Array.isArray(raw.patterns)
+    ? raw.patterns.filter((p: unknown): p is string => typeof p === "string")
+    : []
   const callID = raw.tool?.callID
   const part = callID
     ? (parts.find((item) => {
@@ -156,7 +160,8 @@ export function permissionView(request: PermissionRequest, parts: readonly Part[
         input: patterns.includes(input) ? "" : input,
       }
     : undefined
-  const diff = typeof raw.metadata?.diff === "string" && raw.metadata.diff.trim() ? diffLines(raw.metadata.diff) : undefined
+  const diff =
+    typeof raw.metadata?.diff === "string" && raw.metadata.diff.trim() ? diffLines(raw.metadata.diff) : undefined
   return {
     id: raw.id,
     permission: String(raw.permission ?? "?"),

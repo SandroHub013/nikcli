@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { createLineQueue } from "./line-queue"
 
 /** A typeLine as the workbench does it: the text, a wait, then the Enter. */
-const typer = (written: string[]) => (text: string, wait = 5) => async () => {
-  written.push(text)
-  await new Promise((resolve) => setTimeout(resolve, wait))
-  written.push("\\r")
-  return true
-}
+const typer =
+  (written: string[]) =>
+  (text: string, wait = 5) =>
+  async () => {
+    written.push(text)
+    await new Promise((resolve) => setTimeout(resolve, wait))
+    written.push("\\r")
+    return true
+  }
 
 describe("one line at a time per session (D73, third round)", () => {
   test("two lines on one session give A, Enter, B, Enter, never A, B, Enter, Enter", async () => {

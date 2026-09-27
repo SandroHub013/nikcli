@@ -222,7 +222,11 @@ export function linksOnRow(
 }
 
 /** Registers ADE's link provider on a terminal; returns what removes it. */
-export function registerLinks(terminal: Terminal, element: HTMLElement, onLink: (request: LinkRequest) => void): () => void {
+export function registerLinks(
+  terminal: Terminal,
+  element: HTMLElement,
+  onLink: (request: LinkRequest) => void,
+): () => void {
   const setTitle = (title: string | undefined) => {
     if (title) element.title = title
     else element.removeAttribute("title")

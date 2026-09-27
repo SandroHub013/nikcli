@@ -1,208 +1,208 @@
 [
- {
-  "info": {
-   "id": "msg_0da1e50ce001x8xjuvBrvPHqT9",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "user",
-   "time": {
-    "created": 1790365815002
-   },
-   "summary": {
-    "diffs": []
-   },
-   "agent": "build",
-   "model": {
-    "providerID": "openrouter",
-    "modelID": "qwen/qwen3.8-27b:free"
-   }
+  {
+    "info": {
+      "id": "msg_0da1e50ce001x8xjuvBrvPHqT9",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "user",
+      "time": {
+        "created": 1790365815002
+      },
+      "summary": {
+        "diffs": []
+      },
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "qwen/qwen3.8-27b:free"
+      }
+    },
+    "parts": [
+      {
+        "id": "prt_0da1e50de001AJkv5eJiUnr7I7",
+        "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+        "messageID": "msg_0da1e50ce001x8xjuvBrvPHqT9",
+        "type": "text",
+        "text": "Leggi il file nota.txt con lo strumento read e dimmi la parola segreta, in una frase."
+      }
+    ]
   },
-  "parts": [
-   {
-    "id": "prt_0da1e50de001AJkv5eJiUnr7I7",
-    "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-    "messageID": "msg_0da1e50ce001x8xjuvBrvPHqT9",
-    "type": "text",
-    "text": "Leggi il file nota.txt con lo strumento read e dimmi la parola segreta, in una frase."
-   }
-  ]
- },
- {
-  "info": {
-   "id": "msg_0da1e527a0012CtWnog4lFKC6t",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "assistant",
-   "time": {
-    "created": 1790365815418,
-    "completed": 1790365879829
-   },
-   "error": {
-    "name": "APIError",
-    "data": {
-     "message": "Provider returned error",
-     "statusCode": 429,
-     "isRetryable": true,
-     "responseBody": "{\"error\":{\"message\":\"Provider returned error\",\"code\":429,\"metadata\":{\"raw\":\"qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations\",\"provider_name\":\"ModelRun\",\"is_byok\":false,\"provider_error_code\":\"429\",\"limit_source\":\"upstream_provider_shared_pool\",\"remedy_hint\":\"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing\"}},\"user_id\":\"user_anonimo\"}",
-     "metadata": {
-      "url": "https://openrouter.ai/api/v1/chat/completions"
-     }
-    }
-   },
-   "parentID": "msg_0da1e50ce001x8xjuvBrvPHqT9",
-   "modelID": "qwen/qwen3.8-27b:free",
-   "providerID": "openrouter",
-   "mode": "build",
-   "agent": "build",
-   "path": {
-    "cwd": "C:\\progetto",
-    "root": "C:\\Users\\utente"
-   },
-   "cost": 0,
-   "tokens": {
-    "input": 0,
-    "output": 0,
-    "reasoning": 0,
-    "cache": {
-     "read": 0,
-     "write": 0
-    }
-   }
+  {
+    "info": {
+      "id": "msg_0da1e527a0012CtWnog4lFKC6t",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "assistant",
+      "time": {
+        "created": 1790365815418,
+        "completed": 1790365879829
+      },
+      "error": {
+        "name": "APIError",
+        "data": {
+          "message": "Provider returned error",
+          "statusCode": 429,
+          "isRetryable": true,
+          "responseBody": "{\"error\":{\"message\":\"Provider returned error\",\"code\":429,\"metadata\":{\"raw\":\"qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations\",\"provider_name\":\"ModelRun\",\"is_byok\":false,\"provider_error_code\":\"429\",\"limit_source\":\"upstream_provider_shared_pool\",\"remedy_hint\":\"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing\"}},\"user_id\":\"user_anonimo\"}",
+          "metadata": {
+            "url": "https://openrouter.ai/api/v1/chat/completions"
+          }
+        }
+      },
+      "parentID": "msg_0da1e50ce001x8xjuvBrvPHqT9",
+      "modelID": "qwen/qwen3.8-27b:free",
+      "providerID": "openrouter",
+      "mode": "build",
+      "agent": "build",
+      "path": {
+        "cwd": "C:\\progetto",
+        "root": "C:\\Users\\utente"
+      },
+      "cost": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    "parts": []
   },
-  "parts": []
- },
- {
-  "info": {
-   "id": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "user",
-   "time": {
-    "created": 1790365880065
-   },
-   "summary": {
-    "title": "Esecuzione comando echo ciao",
-    "diffs": []
-   },
-   "agent": "build",
-   "model": {
-    "providerID": "openrouter",
-    "modelID": "qwen/qwen3.8-27b:free"
-   }
+  {
+    "info": {
+      "id": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "user",
+      "time": {
+        "created": 1790365880065
+      },
+      "summary": {
+        "title": "Esecuzione comando echo ciao",
+        "diffs": []
+      },
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "qwen/qwen3.8-27b:free"
+      }
+    },
+    "parts": [
+      {
+        "id": "prt_0da1f4f02001E2Yg3YyPCYuzNO",
+        "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+        "messageID": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
+        "type": "text",
+        "text": "Esegui nella shell il comando: echo ciao. Usa lo strumento bash."
+      }
+    ]
   },
-  "parts": [
-   {
-    "id": "prt_0da1f4f02001E2Yg3YyPCYuzNO",
-    "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-    "messageID": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
-    "type": "text",
-    "text": "Esegui nella shell il comando: echo ciao. Usa lo strumento bash."
-   }
-  ]
- },
- {
-  "info": {
-   "id": "msg_0da1f4f1c0011aS3WeL7LpyWFP",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "assistant",
-   "time": {
-    "created": 1790365880092,
-    "completed": 1790365942955
-   },
-   "error": {
-    "name": "APIError",
-    "data": {
-     "message": "Provider returned error",
-     "statusCode": 429,
-     "isRetryable": true,
-     "responseBody": "{\"error\":{\"message\":\"Provider returned error\",\"code\":429,\"metadata\":{\"raw\":\"qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations\",\"provider_name\":\"ModelRun\",\"is_byok\":false,\"provider_error_code\":\"429\",\"limit_source\":\"upstream_provider_shared_pool\",\"remedy_hint\":\"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing\"}},\"user_id\":\"user_anonimo\"}",
-     "metadata": {
-      "url": "https://openrouter.ai/api/v1/chat/completions"
-     }
-    }
-   },
-   "parentID": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
-   "modelID": "qwen/qwen3.8-27b:free",
-   "providerID": "openrouter",
-   "mode": "build",
-   "agent": "build",
-   "path": {
-    "cwd": "C:\\progetto",
-    "root": "C:\\Users\\utente"
-   },
-   "cost": 0,
-   "tokens": {
-    "input": 0,
-    "output": 0,
-    "reasoning": 0,
-    "cache": {
-     "read": 0,
-     "write": 0
-    }
-   }
+  {
+    "info": {
+      "id": "msg_0da1f4f1c0011aS3WeL7LpyWFP",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "assistant",
+      "time": {
+        "created": 1790365880092,
+        "completed": 1790365942955
+      },
+      "error": {
+        "name": "APIError",
+        "data": {
+          "message": "Provider returned error",
+          "statusCode": 429,
+          "isRetryable": true,
+          "responseBody": "{\"error\":{\"message\":\"Provider returned error\",\"code\":429,\"metadata\":{\"raw\":\"qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations\",\"provider_name\":\"ModelRun\",\"is_byok\":false,\"provider_error_code\":\"429\",\"limit_source\":\"upstream_provider_shared_pool\",\"remedy_hint\":\"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing\"}},\"user_id\":\"user_anonimo\"}",
+          "metadata": {
+            "url": "https://openrouter.ai/api/v1/chat/completions"
+          }
+        }
+      },
+      "parentID": "msg_0da1f4ef9001LiM7MeA4Ny6PXj",
+      "modelID": "qwen/qwen3.8-27b:free",
+      "providerID": "openrouter",
+      "mode": "build",
+      "agent": "build",
+      "path": {
+        "cwd": "C:\\progetto",
+        "root": "C:\\Users\\utente"
+      },
+      "cost": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    "parts": []
   },
-  "parts": []
- },
- {
-  "info": {
-   "id": "msg_0da20452f001b2aUYNcscXVvDu",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "user",
-   "time": {
-    "created": 1790365943091
-   },
-   "summary": {
-    "title": "Poesia sul mare d'inverno",
-    "diffs": []
-   },
-   "agent": "build",
-   "model": {
-    "providerID": "openrouter",
-    "modelID": "qwen/qwen3.8-27b:free"
-   }
+  {
+    "info": {
+      "id": "msg_0da20452f001b2aUYNcscXVvDu",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "user",
+      "time": {
+        "created": 1790365943091
+      },
+      "summary": {
+        "title": "Poesia sul mare d'inverno",
+        "diffs": []
+      },
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "qwen/qwen3.8-27b:free"
+      }
+    },
+    "parts": [
+      {
+        "id": "prt_0da204533001DB3wihF3iVZRJd",
+        "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+        "messageID": "msg_0da20452f001b2aUYNcscXVvDu",
+        "type": "text",
+        "text": "Scrivi una poesia lunga, di almeno quaranta versi, sul mare d'inverno."
+      }
+    ]
   },
-  "parts": [
-   {
-    "id": "prt_0da204533001DB3wihF3iVZRJd",
-    "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-    "messageID": "msg_0da20452f001b2aUYNcscXVvDu",
-    "type": "text",
-    "text": "Scrivi una poesia lunga, di almeno quaranta versi, sul mare d'inverno."
-   }
-  ]
- },
- {
-  "info": {
-   "id": "msg_0da20455e001RTZH3wC30AKbTv",
-   "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
-   "role": "assistant",
-   "time": {
-    "created": 1790365943134,
-    "completed": 1790365944870
-   },
-   "error": {
-    "name": "MessageAbortedError",
-    "data": {
-     "message": "Interrupted by user"
-    }
-   },
-   "parentID": "msg_0da20452f001b2aUYNcscXVvDu",
-   "modelID": "qwen/qwen3.8-27b:free",
-   "providerID": "openrouter",
-   "mode": "build",
-   "agent": "build",
-   "path": {
-    "cwd": "C:\\progetto",
-    "root": "C:\\Users\\utente"
-   },
-   "cost": 0,
-   "tokens": {
-    "input": 0,
-    "output": 0,
-    "reasoning": 0,
-    "cache": {
-     "read": 0,
-     "write": 0
-    }
-   }
-  },
-  "parts": []
- }
+  {
+    "info": {
+      "id": "msg_0da20455e001RTZH3wC30AKbTv",
+      "sessionID": "ses_f25e1af5bffenEAxVXkYQs6N7L",
+      "role": "assistant",
+      "time": {
+        "created": 1790365943134,
+        "completed": 1790365944870
+      },
+      "error": {
+        "name": "MessageAbortedError",
+        "data": {
+          "message": "Interrupted by user"
+        }
+      },
+      "parentID": "msg_0da20452f001b2aUYNcscXVvDu",
+      "modelID": "qwen/qwen3.8-27b:free",
+      "providerID": "openrouter",
+      "mode": "build",
+      "agent": "build",
+      "path": {
+        "cwd": "C:\\progetto",
+        "root": "C:\\Users\\utente"
+      },
+      "cost": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    "parts": []
+  }
 ]

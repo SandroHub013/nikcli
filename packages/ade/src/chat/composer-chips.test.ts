@@ -23,7 +23,8 @@ describe("the Chat's composer", () => {
     const head = slice('<header data-slot="chat-head">', "</header>")
     expect(head).not.toContain("<select")
     const row = slice('<div data-slot="chat-composer-row">', '<span data-slot="chat-composer-gap" />')
-    for (const piece of ['kind="agent"', "<ModelPicker", "<EffortPicker", 'data-slot="chat-attach"']) expect(row).toContain(piece)
+    for (const piece of ['kind="agent"', "<ModelPicker", "<EffortPicker", 'data-slot="chat-attach"'])
+      expect(row).toContain(piece)
     // The field comes first, the chips under it.
     expect(view.indexOf('data-slot="chat-input"')).toBeLessThan(view.indexOf('data-slot="chat-composer-row"'))
   })

@@ -67,7 +67,11 @@ test("a plan limit is recognised in what the CLIs say", () => {
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
     const path = join(dir, name)
-    return statSync(path).isDirectory() ? walk(path) : /\.(ts|tsx|rs)$/.test(name) && !/\.test\.ts$/.test(name) ? [path] : []
+    return statSync(path).isDirectory()
+      ? walk(path)
+      : /\.(ts|tsx|rs)$/.test(name) && !/\.test\.ts$/.test(name)
+        ? [path]
+        : []
   })
 const root = join(import.meta.dir, "..", "..")
 const sources = [...walk(join(root, "src")), ...walk(join(root, "src-tauri", "src"))].map(

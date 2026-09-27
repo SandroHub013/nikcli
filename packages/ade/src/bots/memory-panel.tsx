@@ -68,7 +68,12 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
                     <button type="button" data-slot="bots-link" onClick={() => answer(proposal.id, true)}>
                       {t("bots.memory.confirm")}
                     </button>
-                    <button type="button" data-slot="bots-link" data-tone="danger" onClick={() => answer(proposal.id, false)}>
+                    <button
+                      type="button"
+                      data-slot="bots-link"
+                      data-tone="danger"
+                      onClick={() => answer(proposal.id, false)}
+                    >
                       {t("bots.memory.discard")}
                     </button>
                   </span>

@@ -11,9 +11,7 @@ import postcss from "postcss"
  * radius the other settings rings use.
  */
 
-const sheet = postcss.parse(
-  readFileSync(join(import.meta.dir, "../../../voice/src/ui/voice-settings.css"), "utf-8"),
-)
+const sheet = postcss.parse(readFileSync(join(import.meta.dir, "../../../voice/src/ui/voice-settings.css"), "utf-8"))
 const TITLE = '[data-component="voice-settings-panel"] [data-slot="section-title"]'
 
 function decls(selector: string) {
@@ -31,9 +29,7 @@ test("the focused section heading keeps a gap between its ring and its text", ()
   const base = decls(TITLE)
   const [block, inline] = (base.padding ?? "0").split(/\s+/)
   expect(inline ?? block).not.toBe("0")
-  expect(base.margin).toBe(
-    `calc(-1 * ${block}) calc(-1 * ${inline ?? block})`,
-  )
+  expect(base.margin).toBe(`calc(-1 * ${block}) calc(-1 * ${inline ?? block})`)
 })
 
 test("its ring is the shared one, with the settings controls' radius", () => {

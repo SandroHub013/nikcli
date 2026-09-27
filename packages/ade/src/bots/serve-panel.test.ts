@@ -78,7 +78,10 @@ function server() {
   }
 }
 
-const status = (type: string): ChatEvent => ({ type: "session.status", properties: { sessionID: SESSION, status: { type } } })
+const status = (type: string): ChatEvent => ({
+  type: "session.status",
+  properties: { sessionID: SESSION, status: { type } },
+})
 const asked = (id: string, command: string, permission = "bash"): ChatEvent => ({
   type: "permission.asked",
   properties: { id, sessionID: SESSION, permission, patterns: [command], metadata: {}, always: [] },
@@ -125,7 +128,9 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     fake.push(status("busy"), asked("per_1", "rm -rf ~"))
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_1", "reject"])
-    expect(view.talk().messages.some((message) => message.role === "error" && message.text.includes("rm -rf ~"))).toBe(true)
+    expect(view.talk().messages.some((message) => message.role === "error" && message.text.includes("rm -rf ~"))).toBe(
+      true,
+    )
 
     fake.push(asked("per_2", "git status"))
     await until(() => fake.replies.length === 2)
@@ -164,7 +169,10 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_n", "reject"])
     expect(view.talk().permission).toBeUndefined()
-    expect(view.talk().messages.at(-1)).toMatchObject({ role: "error", text: t("bots.approval.denied", "git push --force") })
+    expect(view.talk().messages.at(-1)).toMatchObject({
+      role: "error",
+      text: t("bots.approval.denied", "git push --force"),
+    })
     view.turns.stop(BOT)
   })
 
@@ -201,7 +209,10 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
 
   test("the panel runs nikcli on the server, the other runners as before", async () => {
     const fake = server()
-    const nikcli = runBotTurn({ runner: "nikcli", bot: BOT, message: "ciao", cwd: "C:/progetto", approvals: true }, () => fake.deps)
+    const nikcli = runBotTurn(
+      { runner: "nikcli", bot: BOT, message: "ciao", cwd: "C:/progetto", approvals: true },
+      () => fake.deps,
+    )
     await until(() => fake.prompts.length === 1)
     nikcli.stop()
     await nikcli.result
@@ -360,7 +371,10 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
  * or a phone's «Sì» given to the first must not approve the second.
  */
 describe("B8d: an answer is for its own question only", () => {
-  const replied = (id: string): ChatEvent => ({ type: "permission.replied", properties: { sessionID: SESSION, requestID: id, reply: "reject" } })
+  const replied = (id: string): ChatEvent => ({
+    type: "permission.replied",
+    properties: { sessionID: SESSION, requestID: id, reply: "reject" },
+  })
 
   for (const where of ["panel", "room"] as const) {
     test(`${where === "panel" ? "the panel" : "a room"}: a click on the card of a question settled meanwhile does not answer the next one`, async () => {
@@ -445,7 +459,9 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     fake.push(status("busy"), asked("per_r", "ls"))
     await until(() => fake.replies.length === 1)
     expect(fake.replies[0]).toEqual(["per_r", "reject"])
-    expect(talks[BOT.path]!.messages.some((message) => message.text === t("bots.routine.refused", "bash", "ls"))).toBe(true)
+    expect(talks[BOT.path]!.messages.some((message) => message.text === t("bots.routine.refused", "bash", "ls"))).toBe(
+      true,
+    )
     fake.push(status("idle"))
     await until(() => !turns.running(BOT.path))
     expect(talks[BOT.path]!.sessionId).toBe("ses_panel")
@@ -485,7 +501,10 @@ describe("B8d: the project admitted on every turn, asked about once", () => {
     const kept = trust()
     let dialogs = 0
     const deps = appServeTurnDeps(
-      () => ({ bridge, admit: (directory) => admitProject(directory, { ...kept.of(), confirm: () => (dialogs++, true) }) }),
+      () => ({
+        bridge,
+        admit: (directory) => admitProject(directory, { ...kept.of(), confirm: () => (dialogs++, true) }),
+      }),
       kept.of,
     )
     for (let turn = 0; turn < 3; turn++) expect((await deps.connect("C:/progetto", true)).ok).toBe(true)
@@ -499,7 +518,10 @@ describe("B8d: the project admitted on every turn, asked about once", () => {
     const kept = trust()
     let dialogs = 0
     const deps = appServeTurnDeps(
-      () => ({ bridge, admit: (directory) => admitProject(directory, { ...kept.of(), confirm: () => (dialogs++, true) }) }),
+      () => ({
+        bridge,
+        admit: (directory) => admitProject(directory, { ...kept.of(), confirm: () => (dialogs++, true) }),
+      }),
       kept.of,
     )
     const refused = await deps.connect("C:/progetto", false)
@@ -515,7 +537,10 @@ describe("B8d: the panel says what the rules do not cover", () => {
   const bots = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
   test("lint: the Bot section's turns go through runBotTurn, and a nikcli bot's thread carries the Chat's line on «always»", () => {
     expect(bots).toContain("runTurn: (request) => runBotTurn(request)")
-    const thread = bots.slice(bots.indexOf('<div data-slot="bots-thread">'), bots.indexOf('<div data-slot="bots-messages"'))
+    const thread = bots.slice(
+      bots.indexOf('<div data-slot="bots-thread">'),
+      bots.indexOf('<div data-slot="bots-messages"'),
+    )
     expect(thread).toContain('runnerById(props.bot.runner).id === "nikcli"')
     expect(thread).toContain('t("bots.serve.rulesNote")')
   })

@@ -408,7 +408,13 @@ function fencedRanges(text: string): Array<readonly [number, number]> {
   for (const line of text.split("\n")) {
     const fence = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1]
     if (fence && !open) open = { at, fence }
-    else if (fence && open && fence[0] === open.fence[0] && fence.length >= open.fence.length && line.trim() === fence) {
+    else if (
+      fence &&
+      open &&
+      fence[0] === open.fence[0] &&
+      fence.length >= open.fence.length &&
+      line.trim() === fence
+    ) {
       ranges.push([open.at, at + line.length])
       open = undefined
     }
@@ -503,8 +509,7 @@ export function memorySnapshot(memory: BotMemory): string {
 export function memoryPreface(memory: BotMemory, conversationStarts: boolean): string {
   const parts: string[] = []
   if (conversationStarts) parts.push(memorySnapshot(memory))
-  if (memory.pending && memory.pending.length > 0)
-    parts.push(MEMORY_PROMPT.pending(memory.pending.join("\n")))
+  if (memory.pending && memory.pending.length > 0) parts.push(MEMORY_PROMPT.pending(memory.pending.join("\n")))
   return parts.join("\n\n")
 }
 
@@ -537,15 +542,17 @@ export function parseMemory(value: unknown): BotMemory {
     if (!Array.isArray(entry["before"]) || !Array.isArray(entry["after"])) return []
     return [{ id: entry["id"], block: kind, before: strings(entry["before"]), after: strings(entry["after"]) }]
   })
-  const proposals = (Array.isArray(record["proposals"]) ? record["proposals"] : []).flatMap((value): MemoryProposal[] => {
-    if (!value || typeof value !== "object") return []
-    const entry = value as Record<string, unknown>
-    const op = parseOp(entry["op"])
-    const from = entry["from"]
-    if (typeof entry["id"] !== "string" || !op || typeof entry["at"] !== "number") return []
-    if (from !== "panel" && from !== "routine" && from !== "gateway" && from !== "room") return []
-    return [{ id: entry["id"], op, from, at: entry["at"] }]
-  })
+  const proposals = (Array.isArray(record["proposals"]) ? record["proposals"] : []).flatMap(
+    (value): MemoryProposal[] => {
+      if (!value || typeof value !== "object") return []
+      const entry = value as Record<string, unknown>
+      const op = parseOp(entry["op"])
+      const from = entry["from"]
+      if (typeof entry["id"] !== "string" || !op || typeof entry["at"] !== "number") return []
+      if (from !== "panel" && from !== "routine" && from !== "gateway" && from !== "room") return []
+      return [{ id: entry["id"], op, from, at: entry["at"] }]
+    },
+  )
   return {
     notes: block("notes"),
     user: block("user"),

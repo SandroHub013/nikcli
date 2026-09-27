@@ -295,7 +295,17 @@ export const DANGEROUS: readonly CommandRule[] = [
     pattern: re(
       String.raw`\b(?:cmd(?:\.exe)?\s+\/[ck]|(?:ba|z|da|k|fi)?sh(?:\.exe)?\s+(?:-\w+\s+)*-\w*c|(?:pwsh|powershell)(?:\.exe)?\s+(?:-\w+\s+)*?-(?:c|command))\b`,
     ),
-    prefixes: ["bash -c", "sh -c", "zsh -c", "cmd /c", "cmd.exe /c", "powershell -Command", "powershell -c", "pwsh -Command", "pwsh -c"],
+    prefixes: [
+      "bash -c",
+      "sh -c",
+      "zsh -c",
+      "cmd /c",
+      "cmd.exe /c",
+      "powershell -Command",
+      "powershell -c",
+      "pwsh -Command",
+      "pwsh -c",
+    ],
   },
   {
     /* What runs cannot be read at all: encoded, from a variable, decoded into a shell. */

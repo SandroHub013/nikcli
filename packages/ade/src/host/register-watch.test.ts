@@ -17,7 +17,15 @@ function project() {
     calls.readDir++
     return Object.keys(files)
       .filter((path) => path.startsWith(`${dir}/`))
-      .map((path): DirEntry => ({ name: path.slice(dir.length + 1), path, is_dir: false, size: files[path]!.length, modified_ms: 1 }))
+      .map(
+        (path): DirEntry => ({
+          name: path.slice(dir.length + 1),
+          path,
+          is_dir: false,
+          size: files[path]!.length,
+          modified_ms: 1,
+        }),
+      )
   }
   const io = async () => ({
     readTextFile: async (path: string) => {

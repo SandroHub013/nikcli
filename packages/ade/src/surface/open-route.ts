@@ -222,7 +222,12 @@ export function resolvePath(target: string, base: string | undefined): string {
  * read as binary, and every link to one used to say «File non trovato»; those
  * go straight to their pane, which says for itself if it cannot draw them.
  */
-export async function openPathLink(target: string, base: string | undefined, line: number | undefined, deps: PathLinkDeps): Promise<boolean> {
+export async function openPathLink(
+  target: string,
+  base: string | undefined,
+  line: number | undefined,
+  deps: PathLinkDeps,
+): Promise<boolean> {
   const path = resolvePath(target, base)
   if (deps.roots) {
     const placement = linkPlacement(path, deps.roots)
@@ -241,7 +246,12 @@ export async function openPathLink(target: string, base: string | undefined, lin
     }
   }
   if (routeForFile(path) === "editor" && readsText(viewKind(path))) {
-    const found = deps.readTextFile ? await deps.readTextFile(path, 1).then(() => true, () => false) : false
+    const found = deps.readTextFile
+      ? await deps.readTextFile(path, 1).then(
+          () => true,
+          () => false,
+        )
+      : false
     if (!found) {
       deps.say(path)
       return false
@@ -269,14 +279,21 @@ export interface MarkdownLinkDeps {
  * a note appended to its lines was never drawn, and a refused link looked like
  * a click that did nothing (audit 0.7.7, D1-2). It shows what this returns.
  */
-export function markdownLinkRefusal(path: string, roots: readonly string[], open: (path: string) => unknown): string | undefined {
+export function markdownLinkRefusal(
+  path: string,
+  roots: readonly string[],
+  open: (path: string) => unknown,
+): string | undefined {
   let note: string | undefined
   openMarkdownFileLink(path, roots, { open, say: (text) => (note = text) })
   return note
 }
 
 /** A file pane's handler for a clicked link: opens it, and flashes the note if it was refused. */
-export function flashRefusal(open: ((path: string) => string | void) | undefined, flash: (note: string) => void): (path: string) => void {
+export function flashRefusal(
+  open: ((path: string) => string | void) | undefined,
+  flash: (note: string) => void,
+): (path: string) => void {
   return (path) => {
     const note = open?.(path)
     if (note) flash(note)

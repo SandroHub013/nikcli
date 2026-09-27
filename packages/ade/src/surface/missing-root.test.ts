@@ -18,10 +18,13 @@ test("the notice names the folder and the one way out", () => {
 })
 
 test("a Space whose folder is gone is marked, and stays in the list", () => {
-  const spaces = deriveWorkspaces([], [
-    { root: "C:/x/nikcli", name: "nikcli" },
-    { root: "C:/x/nikcli-ade-vecchia", name: "nikcli-ade-vecchia", missing: true },
-  ])
+  const spaces = deriveWorkspaces(
+    [],
+    [
+      { root: "C:/x/nikcli", name: "nikcli" },
+      { root: "C:/x/nikcli-ade-vecchia", name: "nikcli-ade-vecchia", missing: true },
+    ],
+  )
   expect(spaces.map((space) => [space.name, space.missing ?? false])).toEqual([
     ["nikcli", false],
     ["nikcli-ade-vecchia", true],
@@ -63,7 +66,14 @@ describe("the gone folders, all at once (the Architect, BASSO)", () => {
     running: new Set<string>(),
     platform: "windows",
   }
-  const pane = (id: string, gone?: string) => ({ id, title: id, status: "error", lines: [], workspaceId: "w", ...(gone ? { gone } : {}) })
+  const pane = (id: string, gone?: string) => ({
+    id,
+    title: id,
+    status: "error",
+    lines: [],
+    workspaceId: "w",
+    ...(gone ? { gone } : {}),
+  })
   const commandsOf = (extra: Record<string, unknown>) =>
     buildCommands({ ...base, workbench: createWorkbench(), ...extra } as unknown as CommandContext)
 
@@ -74,10 +84,21 @@ describe("the gone folders, all at once (the Architect, BASSO)", () => {
   })
 
   test("they say how many: panes whose folder is gone and not running, recents marked gone", () => {
-    const workbench = { ...createWorkbench(), panes: [pane("p1", "C:/x/nikcli-ade-a"), pane("p2", "C:/x/nikcli-ade-b"), pane("p3"), pane("p4", "C:/x/c")] }
-    const commands = commandsOf({ workbench, running: new Set(["p4"]), missingRecent: (root: string) => root.includes("nikcli-ade-") })
-    expect(commands.find((command) => command.id === "panes.closeGone")?.title).toBe("Chiudi i pannelli delle cartelle sparite (2)")
-    expect(commands.find((command) => command.id === "recents.forgetGone")?.title).toBe("Togli dai recenti le cartelle sparite (2)")
+    const workbench = {
+      ...createWorkbench(),
+      panes: [pane("p1", "C:/x/nikcli-ade-a"), pane("p2", "C:/x/nikcli-ade-b"), pane("p3"), pane("p4", "C:/x/c")],
+    }
+    const commands = commandsOf({
+      workbench,
+      running: new Set(["p4"]),
+      missingRecent: (root: string) => root.includes("nikcli-ade-"),
+    })
+    expect(commands.find((command) => command.id === "panes.closeGone")?.title).toBe(
+      "Chiudi i pannelli delle cartelle sparite (2)",
+    )
+    expect(commands.find((command) => command.id === "recents.forgetGone")?.title).toBe(
+      "Togli dai recenti le cartelle sparite (2)",
+    )
   })
 
   test("the confirmation says how many, and the removal leaves the others", () => {

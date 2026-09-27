@@ -20,7 +20,15 @@ import { DICTATION_IN_CLIPBOARD, makeVoiceProgram } from "./program"
 class DictationHost implements VoiceHost {
   inserted: string[] = []
   panes: PaneSummary[] = [
-    { id: "pane-1", title: "Worker", status: "working", index: 1, hasLiveProcess: true, isBrowser: false, isFile: false },
+    {
+      id: "pane-1",
+      title: "Worker",
+      status: "working",
+      index: 1,
+      hasLiveProcess: true,
+      isBrowser: false,
+      isFile: false,
+    },
   ]
 
   constructor(private readonly refusal?: Error) {}
@@ -63,7 +71,11 @@ class DictationHost implements VoiceHost {
 async function dictate(host: DictationHost, kept: boolean) {
   const clipboard: string[] = []
   const visible: string[] = []
-  const layer = Layer.mergeAll(TranscriberFake(createFakeTranscriber()), SpeakerFake(createFakeSpeaker()), VoiceHostLive(host))
+  const layer = Layer.mergeAll(
+    TranscriberFake(createFakeTranscriber()),
+    SpeakerFake(createFakeSpeaker()),
+    VoiceHostLive(host),
+  )
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -93,7 +105,10 @@ describe("a dictated sentence and the clipboard", () => {
   })
 
   test("a sentence the pane refuses goes to the clipboard once, and the line says so", async () => {
-    const { clipboard, visible } = await dictate(new DictationHost(new Error("Il pannello non ha un processo in ascolto.")), true)
+    const { clipboard, visible } = await dictate(
+      new DictationHost(new Error("Il pannello non ha un processo in ascolto.")),
+      true,
+    )
     expect(clipboard).toEqual(["aggiungi un test"])
     expect(visible).toHaveLength(1)
     expect(visible[0]).toContain("Il pannello non ha un processo in ascolto.")
@@ -119,7 +134,11 @@ describe("a dictated sentence and the clipboard", () => {
 describe("the clipboard write", () => {
   test("goes through the host, once, with the text", () => {
     const calls: [string, Record<string, unknown> | undefined][] = []
-    const win = { __TAURI_INTERNALS__: { invoke: async (cmd: string, args?: Record<string, unknown>) => void calls.push([cmd, args]) } }
+    const win = {
+      __TAURI_INTERNALS__: {
+        invoke: async (cmd: string, args?: Record<string, unknown>) => void calls.push([cmd, args]),
+      },
+    }
     expect(writeClipboard("ciao", win)).toBe(true)
     expect(calls).toEqual([["write_clipboard", { text: "ciao" }]])
   })

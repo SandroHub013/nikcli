@@ -63,7 +63,12 @@ export interface ResumeRecipe {
    */
   readonly lastHere?: {
     readonly args: (cwd: string) => string[]
-    readonly read: (output: string, cwd: string, taken: ReadonlySet<string>, marks?: readonly string[]) => string | null | undefined
+    readonly read: (
+      output: string,
+      cwd: string,
+      taken: ReadonlySet<string>,
+      marks?: readonly string[],
+    ) => string | null | undefined
   }
   /**
    * A command that asks the CLI itself for a new conversation, for a CLI that
@@ -346,7 +351,16 @@ export const RESUME: Record<string, ResumeRecipe> = {
        * measured, 781 conversations for `limit: 1`). The folder is the
        * process's own directory, which the command sends by itself.
        */
-      args: () => ["api", "session.list", "--log-level", "warn", "--param", "roots=true", "--param", `limit=${LAST_HERE_LIMIT}`],
+      args: () => [
+        "api",
+        "session.list",
+        "--log-level",
+        "warn",
+        "--param",
+        "roots=true",
+        "--param",
+        `limit=${LAST_HERE_LIMIT}`,
+      ],
       read: lastNikcliHere,
     },
     mint: {
@@ -445,11 +459,7 @@ export function resumePromise(input: {
  * because there was never a conversation to reopen — and the strip announcing a
  * lost one says the opposite of the truth. It showed on every Terminal pane.
  */
-export function lostConversation(
-  agentId: string,
-  promise: "exact" | "last" | "none",
-  resumed: boolean,
-): boolean {
+export function lostConversation(agentId: string, promise: "exact" | "last" | "none", resumed: boolean): boolean {
   return !resumed && promise === "none" && RESUME[agentId] !== undefined
 }
 
@@ -633,7 +643,11 @@ export function startingState(input: { task: string; resumed: boolean; typeIntoR
   }
 }
 
-export function openedConversation(plan: ResumePlan | undefined, minted: string | undefined, saved: string | undefined): string | undefined {
+export function openedConversation(
+  plan: ResumePlan | undefined,
+  minted: string | undefined,
+  saved: string | undefined,
+): string | undefined {
   if (minted) return minted
   return plan?.kind === "resume" && plan.via === "id" ? saved : undefined
 }
@@ -720,7 +734,10 @@ export async function lastHereBesideMints(
   })
   if (!found) return undefined
   if (underWay.length > 0) {
-    const timers = patience.timers ?? { set: (run, ms) => setTimeout(run, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) }
+    const timers = patience.timers ?? {
+      set: (run, ms) => setTimeout(run, ms),
+      clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    }
     let handle: unknown
     await Promise.race([
       Promise.all(underWay),
@@ -744,16 +761,23 @@ export async function lastHereBesideMints(
  * the planned one took `here` too, and the two could open one conversation
  * (lettura di Mimo, F3).
  */
-export function restoreClaims(planned: readonly { session: { agentId: string; cwd: string }; plan: ResumePlan }[]): Set<string> {
+export function restoreClaims(
+  planned: readonly { session: { agentId: string; cwd: string }; plan: ResumePlan }[],
+): Set<string> {
   const claims = new Set<string>()
   for (const { session, plan } of planned) {
-    if (plan.kind === "here" || (plan.kind === "resume" && plan.via === "last")) claims.add(claimKey(session.agentId, session.cwd))
+    if (plan.kind === "here" || (plan.kind === "resume" && plan.via === "last"))
+      claims.add(claimKey(session.agentId, session.cwd))
   }
   return claims
 }
 
 /** Whether a restore already handed out this folder's "most recent conversation" (`restoreClaims`). */
-export function claimedByRestore(claims: ReadonlySet<string> | undefined, agentId: string, cwd: string | undefined): boolean {
+export function claimedByRestore(
+  claims: ReadonlySet<string> | undefined,
+  agentId: string,
+  cwd: string | undefined,
+): boolean {
   return Boolean(claims?.has(claimKey(agentId, cwd)))
 }
 
@@ -781,7 +805,8 @@ export function planRestore<T extends { agentId: string; cwd: string; resumeId?:
     const key = claimKey(session.agentId, session.cwd)
     const held = session.resumeId !== undefined ? holders.get(`${session.agentId}\u0000${session.resumeId}`) : undefined
     if (held) {
-      const plan: ResumePlan = RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
+      const plan: ResumePlan =
+        RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
       if (plan.kind === "here") claimed.add(key)
       return { session, plan, sharedWith: held }
     }

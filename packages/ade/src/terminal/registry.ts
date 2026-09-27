@@ -250,7 +250,8 @@ export function configureTerminalSelection(terminal: Terminal): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
-    sel.shouldForceSelection = (event: MouseEvent) => (event.button === 0 || event.button === undefined) && !event.altKey
+    sel.shouldForceSelection = (event: MouseEvent) =>
+      (event.button === 0 || event.button === undefined) && !event.altKey
   }
 }
 
@@ -376,7 +377,10 @@ export function copyOnRelease(
  * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and forgets the selection
  * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
  */
-export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () => void): (event: KeyboardEvent) => boolean {
+export function createTerminalKeyHandler(
+  terminal: Terminal,
+  onCopyBlocked?: () => void,
+): (event: KeyboardEvent) => boolean {
   return (event: KeyboardEvent) => {
     const isMod = event.ctrlKey || event.metaKey
     if (isMod && event.shiftKey) {
@@ -512,7 +516,9 @@ export function ptySize(id: string): { cols: number; rows: number } | undefined 
   return session ? ptySizeOf(session) : undefined
 }
 
-export function ptySizeOf(session: Pick<SessionTerminal, "element" | "settled">): { cols: number; rows: number } | undefined {
+export function ptySizeOf(
+  session: Pick<SessionTerminal, "element" | "settled">,
+): { cols: number; rows: number } | undefined {
   const size = session.settled
   if (!session.element || !size || size.cols < 2 || size.rows < 1) return undefined
   return { cols: size.cols, rows: size.rows }
@@ -582,7 +588,9 @@ export function placementFor(
  * first render, and then the fit is left as FitAddon made it.
  */
 function cellHeightOf(terminal: Terminal): number | undefined {
-  const core = (terminal as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })._core
+  const core = (
+    terminal as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } }
+  )._core
   const height = core?._renderService?.dimensions?.css?.cell?.height
   return height && height > 0 ? height : undefined
 }
@@ -673,10 +681,14 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
       const proposed = session.fit.proposeDimensions()
       if (proposed && !Number.isNaN(proposed.cols) && !Number.isNaN(proposed.rows)) {
         const cell = cellHeightOf(session.terminal)
-        const rows = cell ? Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell)) : proposed.rows
+        const rows = cell
+          ? Math.min(proposed.rows, rowsInside(terminalBox(getComputedStyle(element)), cell))
+          : proposed.rows
         if (proposed.cols !== session.terminal.cols || rows !== session.terminal.rows) {
           // As FitAddon's fit(): the renderer's layers are cleared before a resize.
-          ;(session.terminal as unknown as { _core?: { _renderService?: { clear?: () => void } } })._core?._renderService?.clear?.()
+          ;(
+            session.terminal as unknown as { _core?: { _renderService?: { clear?: () => void } } }
+          )._core?._renderService?.clear?.()
           session.terminal.resize(proposed.cols, rows)
         }
       }
@@ -688,7 +700,11 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
 
   const observer = new ResizeObserver(() => applyFit())
   // A new scale changes the cell and not the box: the observer above would not hear it (`watchCellSize`).
-  const stopCellWatch = watchCellSize(session.terminal, () => applyFit(), typeof window === "undefined" ? undefined : window)
+  const stopCellWatch = watchCellSize(
+    session.terminal,
+    () => applyFit(),
+    typeof window === "undefined" ? undefined : window,
+  )
   observer.observe(element)
   applyFit()
 

@@ -11,7 +11,13 @@ import { transition, type DialogState } from "./session"
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa")], focusedPaneId: "pA" }
 const stale: DialogState = { status: "idle", pendingSend: { id: "m1", to: "Alfa", text: "cancella dist" } }

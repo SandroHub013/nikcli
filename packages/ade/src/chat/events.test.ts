@@ -88,8 +88,14 @@ describe("the chat's events", () => {
   test("a permission and a question wait until they are answered, rejected included", () => {
     const { store, apply } = chat()
     apply(
-      { type: "permission.asked", properties: { id: "per_2", sessionID: "ses_1", permission: "bash", patterns: ["ls"] } },
-      { type: "permission.asked", properties: { id: "per_1", sessionID: "ses_1", permission: "edit", patterns: ["a.ts"] } },
+      {
+        type: "permission.asked",
+        properties: { id: "per_2", sessionID: "ses_1", permission: "bash", patterns: ["ls"] },
+      },
+      {
+        type: "permission.asked",
+        properties: { id: "per_1", sessionID: "ses_1", permission: "edit", patterns: ["a.ts"] },
+      },
       { type: "question.asked", properties: { id: "que_1", sessionID: "ses_1", questions: [] } },
       { type: "question.asked", properties: { id: "que_2", sessionID: "ses_1", questions: [] } },
     )
@@ -107,7 +113,10 @@ describe("the chat's events", () => {
     const { store, apply } = chat()
     apply(
       { type: "session.status", properties: { sessionID: "ses_1", status: { type: "busy" } } },
-      { type: "todo.updated", properties: { sessionID: "ses_1", todos: [{ id: "t1", content: "uno", status: "pending" }] } },
+      {
+        type: "todo.updated",
+        properties: { sessionID: "ses_1", todos: [{ id: "t1", content: "uno", status: "pending" }] },
+      },
       { type: "session.status", properties: { sessionID: "ses_1", status: { type: "idle" } } },
     )
     expect(store.session_status.ses_1).toEqual({ type: "idle" })

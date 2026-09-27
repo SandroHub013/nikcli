@@ -96,7 +96,9 @@ describe("opening the same variant again", () => {
     const first = openedDesign(found.design, undefined, 1_000)
     const again = openedDesign(found.design, undefined, 2_000)
     expect(first.path).toBe(again.path)
-    expect(designLoadKey("http://ade-media.localhost/x.html", first.opened)).not.toBe(designLoadKey("http://ade-media.localhost/x.html", again.opened))
+    expect(designLoadKey("http://ade-media.localhost/x.html", first.opened)).not.toBe(
+      designLoadKey("http://ade-media.localhost/x.html", again.opened),
+    )
   })
 
   test("keeps the declared size", async () => {

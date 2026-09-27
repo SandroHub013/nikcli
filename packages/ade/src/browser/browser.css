@@ -64,7 +64,9 @@
   background: transparent;
   color: var(--ade-text-weak);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* `hidden` would lose to `display: grid` above: the arrows Design mode hides (D2 review, BASSO 1). */
@@ -223,7 +225,9 @@
   font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
-  transition: color var(--ade-dur-fast) var(--ade-ease), background var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    color var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* Device presets and rotate are icon-only, so they sit square like the
@@ -395,7 +399,9 @@
   background: transparent;
   color: var(--ade-text-weak);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="browser-action"]:hover {
@@ -567,7 +573,9 @@
 
 /* Let's remove the rgba above, use --ade-shadow or just drop it. Let's just drop the rgba shadow and rely on border/overlay background. */
 [data-slot="browser-prompt-popover"] {
-  box-shadow: var(--ade-focus-ring); /* better to use something tokenized if shadow doesn't exist, or just leave it without shadow if we are strictly token-only. Actually, let's just use background: var(--ade-overlay) which might have its own shadow in the host, or border is enough. Let's just remove the box-shadow property here to be strictly safe. */
+  box-shadow: var(
+    --ade-focus-ring
+  ); /* better to use something tokenized if shadow doesn't exist, or just leave it without shadow if we are strictly token-only. Actually, let's just use background: var(--ade-overlay) which might have its own shadow in the host, or border is enough. Let's just remove the box-shadow property here to be strictly safe. */
 }
 
 [data-slot="browser-prompt-popover"] {
@@ -816,7 +824,9 @@
   font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease), opacity var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    opacity var(--ade-dur-fast) var(--ade-ease);
   flex: 0 0 auto;
 }
 
@@ -973,4 +983,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-

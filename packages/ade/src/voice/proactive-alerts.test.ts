@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  createProactiveAlerts,
-  summarizeCompletion,
-  ALERT_COOLDOWN_MS,
-  RESPONSE_WINDOW_MS,
-} from "./proactive-alerts"
+import { createProactiveAlerts, summarizeCompletion, ALERT_COOLDOWN_MS, RESPONSE_WINDOW_MS } from "./proactive-alerts"
 
 describe("proactive-alerts", () => {
   test("summarizeCompletion extracts test counts in words", () => {
@@ -16,7 +11,6 @@ describe("proactive-alerts", () => {
     expect(summarizeCompletion([{ text: "just regular output" }])).toBeUndefined()
     expect(summarizeCompletion([])).toBeUndefined()
   })
-
 
   test("does nothing when proactive alerts are disabled", async () => {
     const spoken: string[] = []
@@ -133,10 +127,7 @@ describe("proactive-alerts", () => {
       },
       openResponseWindow: async () => {},
     })
-    const full = (tail: string) => [
-      ...Array.from({ length: 199 }, (_, i) => ({ text: `riga ${i}` })),
-      { text: tail },
-    ]
+    const full = (tail: string) => [...Array.from({ length: 199 }, (_, i) => ({ text: `riga ${i}` })), { text: tail }]
 
     alerts.notifyCompletion("p1", "Pieno", full("primo turno"))
     await new Promise((r) => setTimeout(r, 20))
@@ -334,7 +325,9 @@ describe("proactive-alerts", () => {
         spoken.push(text)
         // Block first alert so rest stay in queue
         if (spoken.length === 1) {
-          await new Promise<void>((r) => { resolveSpeak = r })
+          await new Promise<void>((r) => {
+            resolveSpeak = r
+          })
         }
       },
       openResponseWindow: async () => {},

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { addSpend, createSpendTally, dayOf, emptyDay, formatSpendCost, readDaySpend, VOICE_SPEND_STORAGE_KEY } from "./spend"
+import {
+  addSpend,
+  createSpendTally,
+  dayOf,
+  emptyDay,
+  formatSpendCost,
+  readDaySpend,
+  VOICE_SPEND_STORAGE_KEY,
+} from "./spend"
 
 const noon = new Date(2026, 8, 17, 12, 0, 0).getTime()
 const nextDay = noon + 24 * 60 * 60_000
@@ -19,10 +27,16 @@ describe("what listening spent today", () => {
   })
 
   test("yesterday's total, or a broken one, is not shown as today's", () => {
-    expect(readDaySpend(JSON.stringify({ day: dayOf(noon), calls: 4, cost: 0.2 }), noon)).toMatchObject({ calls: 4, cost: 0.2 })
+    expect(readDaySpend(JSON.stringify({ day: dayOf(noon), calls: 4, cost: 0.2 }), noon)).toMatchObject({
+      calls: 4,
+      cost: 0.2,
+    })
     expect(readDaySpend(JSON.stringify({ day: dayOf(noon), calls: 4, cost: 0.2 }), nextDay).calls).toBe(0)
     expect(readDaySpend("non è json", noon).calls).toBe(0)
-    expect(readDaySpend(JSON.stringify({ day: dayOf(noon), calls: -2, cost: "tanto" }), noon)).toMatchObject({ calls: 0, cost: 0 })
+    expect(readDaySpend(JSON.stringify({ day: dayOf(noon), calls: -2, cost: "tanto" }), noon)).toMatchObject({
+      calls: 0,
+      cost: 0,
+    })
     expect(readDaySpend(null, noon).day).toBe(dayOf(noon))
   })
 

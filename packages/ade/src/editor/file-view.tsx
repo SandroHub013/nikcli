@@ -49,7 +49,13 @@ export function FileView(props: FileViewProps) {
    * those changes goes in the URL.
    */
   const [version, setVersion] = createSignal(0)
-  createEffect(on(() => props.buffer?.saved, () => setVersion((n) => n + 1), { defer: true }))
+  createEffect(
+    on(
+      () => props.buffer?.saved,
+      () => setVersion((n) => n + 1),
+      { defer: true },
+    ),
+  )
   const src = () => `${mediaUrl(props.path)}${version() ? `?v=${version()}` : ""}`
 
   const editor = () => (
@@ -91,7 +97,12 @@ export function FileView(props: FileViewProps) {
 
 export function SvgView(props: { src: string; path: string }) {
   const [failed, setFailed] = createSignal(false)
-  createEffect(on(() => props.src, () => setFailed(false)))
+  createEffect(
+    on(
+      () => props.src,
+      () => setFailed(false),
+    ),
+  )
   return (
     <div data-slot="file-view" data-kind="svg">
       <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
@@ -104,7 +115,12 @@ export function SvgView(props: { src: string; path: string }) {
 function ImageView(props: { src: string; path: string }) {
   const [size, setSize] = createSignal<string>()
   const [failed, setFailed] = createSignal(false)
-  createEffect(on(() => props.src, () => setFailed(false)))
+  createEffect(
+    on(
+      () => props.src,
+      () => setFailed(false),
+    ),
+  )
   return (
     <div data-slot="file-view" data-kind="image">
       <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
@@ -129,7 +145,10 @@ function MarkdownView(props: FileViewProps) {
     renderMarkdown(props.buffer?.draft ?? "", (relative) => mediaUrl(joinPath(base(), safeDecodeURI(relative)))),
   )
   return (
-    <Show when={props.buffer} fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}>
+    <Show
+      when={props.buffer}
+      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}
+    >
       <div
         data-slot="file-markdown"
         // Cleaned by DOMPurify in `renderMarkdown`: no script, no handler, no frame.

@@ -35,7 +35,11 @@ import type { PermissionRule } from "../chat/rules"
 
 export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none"
 
-const rule = (permission: string, action: PermissionRule["action"], pattern = "*"): PermissionRule => ({ permission, pattern, action })
+const rule = (permission: string, action: PermissionRule["action"], pattern = "*"): PermissionRule => ({
+  permission,
+  pattern,
+  action,
+})
 
 /*
  * The block list (`BLOCKED` in `approval.ts`) as nikcli's own denials, the
@@ -50,7 +54,19 @@ export function blockedBashDenials(): string[] {
   const ROOTS = ["/", "/?", "~", "~/", "~/?", "$HOME", "$HOME/", "${HOME}", "?:", "?:/", "?:\\", "?:/?", "?:\\?"]
   const QUOTES = ["", '"', "'"]
   // An rm with no target nikcli can see: `rm -rf $HOME` reaches it as `rm -rf`.
-  const BARE = ["-r", "-rf", "-fr", "-R", "-Rf", "-fR", "-r -f", "-f -r", "--recursive", "--recursive --force", "--force --recursive"]
+  const BARE = [
+    "-r",
+    "-rf",
+    "-fr",
+    "-R",
+    "-Rf",
+    "-fR",
+    "-r -f",
+    "-f -r",
+    "--recursive",
+    "--recursive --force",
+    "--force --recursive",
+  ]
   const WINDOWS_DELETE = ["Remove-Item", "ri", "rd", "rmdir", "del", "erase"]
   const DRIVES = ["?:", "?:\\", "?:/", "?:\\?", "?:/?"]
   const HOMES = ["~", "~\\", "~/", "$HOME", "$env:USERPROFILE", "${env:USERPROFILE}", "%USERPROFILE%"]
@@ -173,9 +189,24 @@ function casings(word: string): string[] {
 
 /** What each profile says about the tools the spawn flags named, in their order. */
 const PROFILE_RULES: Record<BotProfile, readonly PermissionRule[]> = {
-  ask: [rule("bash", "ask"), rule("external_directory", "ask"), rule("computer", "ask"), rule("browser_control", "ask")],
-  "ask-outside": [rule("bash", "deny"), rule("external_directory", "ask"), rule("computer", "ask"), rule("browser_control", "ask")],
-  "no-shell": [rule("bash", "deny"), rule("external_directory", "deny"), rule("computer", "deny"), rule("browser_control", "deny")],
+  ask: [
+    rule("bash", "ask"),
+    rule("external_directory", "ask"),
+    rule("computer", "ask"),
+    rule("browser_control", "ask"),
+  ],
+  "ask-outside": [
+    rule("bash", "deny"),
+    rule("external_directory", "ask"),
+    rule("computer", "ask"),
+    rule("browser_control", "ask"),
+  ],
+  "no-shell": [
+    rule("bash", "deny"),
+    rule("external_directory", "deny"),
+    rule("computer", "deny"),
+    rule("browser_control", "deny"),
+  ],
   "read-only": [
     rule("bash", "deny"),
     rule("external_directory", "deny"),
@@ -183,12 +214,24 @@ const PROFILE_RULES: Record<BotProfile, readonly PermissionRule[]> = {
     rule("browser_control", "deny"),
     ...["edit", "write", "patch", "repo_clone", "generate_image", "artifact"].map((tool) => rule(tool, "deny")),
   ],
-  "remote-ask": [rule("bash", "ask"), rule("external_directory", "ask"), rule("computer", "deny"), rule("browser_control", "deny")],
-  "remote-none": [rule("bash", "deny"), rule("external_directory", "ask"), rule("computer", "deny"), rule("browser_control", "deny")],
+  "remote-ask": [
+    rule("bash", "ask"),
+    rule("external_directory", "ask"),
+    rule("computer", "deny"),
+    rule("browser_control", "deny"),
+  ],
+  "remote-none": [
+    rule("bash", "deny"),
+    rule("external_directory", "ask"),
+    rule("computer", "deny"),
+    rule("browser_control", "deny"),
+  ],
 }
 
 /** What no bot turn may do, whatever its profile. */
-const NEVER: readonly PermissionRule[] = ["task", "plan_enter", "plan_exit", "question"].map((tool) => rule(tool, "deny"))
+const NEVER: readonly PermissionRule[] = ["task", "plan_enter", "plan_exit", "question"].map((tool) =>
+  rule(tool, "deny"),
+)
 
 /** The profiles whose shell asks: the block list goes after everything, so its denials win. */
 const WITH_BLOCK_LIST = new Set<BotProfile>(["ask", "remote-ask"])
@@ -239,7 +282,9 @@ export const BOT_SESSION_MARK: PermissionRule = rule("ade.bot", "deny")
  * the mark, it ends with one profile's rules, which no one else writes.
  */
 export function isBotSession(session: { readonly permission?: unknown } | undefined): boolean {
-  const rules = Array.isArray(session?.permission) ? (session.permission as { permission?: unknown; pattern?: unknown; action?: unknown }[]) : []
+  const rules = Array.isArray(session?.permission)
+    ? (session.permission as { permission?: unknown; pattern?: unknown; action?: unknown }[])
+    : []
   if (rules.some((found) => found && same(found, BOT_SESSION_MARK))) return true
   return (Object.keys(PROFILE_RULES) as BotProfile[]).some((profile) => hasBotRules(session, profile))
 }

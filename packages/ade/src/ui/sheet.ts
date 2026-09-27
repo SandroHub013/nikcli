@@ -81,7 +81,9 @@ const TABBABLE =
 
 /** Focuses the last control in `panel` that takes the focus; whether one did. */
 function focusLast(panel: HTMLElement): boolean {
-  const candidates = [...panel.querySelectorAll<HTMLElement>(TABBABLE)].filter((element) => !element.hasAttribute("data-focus-trap"))
+  const candidates = [...panel.querySelectorAll<HTMLElement>(TABBABLE)].filter(
+    (element) => !element.hasAttribute("data-focus-trap"),
+  )
   for (const element of candidates.reverse()) {
     element.focus()
     if (document.activeElement === element) return true
@@ -90,7 +92,19 @@ function focusLast(panel: HTMLElement): boolean {
 }
 
 export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
-  const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "surface", "labelledBy", "role", "children"])
+  const [own] = splitProps(props, [
+    "component",
+    "onClose",
+    "size",
+    "place",
+    "ref",
+    "onKeyDown",
+    "mount",
+    "surface",
+    "labelledBy",
+    "role",
+    "children",
+  ])
   // What had the focus before: the button, the palette, the terminal. It gets it back.
   let opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
   let panel: HTMLDivElement | undefined
@@ -99,7 +113,8 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
   // is where it belongs when the sheet goes, not `body`.
   const handedOut = (event: FocusEvent) => {
     const target = event.target
-    if (!panel || !(target instanceof HTMLElement) || panel.contains(target) || target.hasAttribute("data-focus-trap")) return
+    if (!panel || !(target instanceof HTMLElement) || panel.contains(target) || target.hasAttribute("data-focus-trap"))
+      return
     if (target.closest(OTHER_LAYER)) return
     opener = target
   }
@@ -125,7 +140,8 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
     setTimeout(() => {
       if (!panel) return
       const active = document.activeElement
-      if (active instanceof HTMLElement && panel.contains(active)) active.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+      if (active instanceof HTMLElement && panel.contains(active))
+        active.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
       else panel.focus()
     }, 0)
   })

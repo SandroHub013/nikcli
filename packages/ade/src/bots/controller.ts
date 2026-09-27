@@ -192,7 +192,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     deps.update(thread, (talk) => {
       // An offer from the last turn is not for this one.
       const { offer: _stale, ...rest } = talk
-      const marked = routine ? appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.routine.thread") }, Date.now()) : rest
+      const marked = routine
+        ? appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.routine.thread") }, Date.now())
+        : rest
       return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
     const sessionId = deps.talkOf(thread).sessionId
@@ -217,7 +219,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
      * not left waiting until the turn runs out of time.
      */
     const ask = (asked: PendingPermission) => {
-      if (routine) return reply(path, turn, asked, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
+      if (routine)
+        return reply(path, turn, asked, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
       settle(bot, turn, asked)
     }
     const request: TurnRequest = {
@@ -270,7 +273,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     return turn
   }
 
-  const send = (bot: AgentFile, message: string, cwd?: string): boolean => begin(bot, message, cwd, undefined) !== undefined
+  const send = (bot: AgentFile, message: string, cwd?: string): boolean =>
+    begin(bot, message, cwd, undefined) !== undefined
 
   /**
    * The memory tags in what the bot said this turn: taken out of its words,

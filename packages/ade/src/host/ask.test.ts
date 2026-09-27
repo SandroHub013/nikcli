@@ -107,7 +107,9 @@ describe("una domanda sì/no in ADE", () => {
     const d = deps({
       attention: (on) => {
         steps.push(on ? "attenzione" : "basta")
-        return on ? new Promise<void>((resolve) => (started = () => (steps.push("accesa"), resolve()))) : Promise.resolve()
+        return on
+          ? new Promise<void>((resolve) => (started = () => (steps.push("accesa"), resolve())))
+          : Promise.resolve()
       },
       load: async () => ({ ask: async () => (steps.push("domanda"), true) }),
     })
@@ -139,7 +141,9 @@ describe("una domanda sì/no in ADE", () => {
   })
 
   test("lint: the window asks for attention only when it is not focused, and never takes the focus back", () => {
-    const capabilities = JSON.parse(readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8"))
+    const capabilities = JSON.parse(
+      readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8"),
+    )
     expect(capabilities.permissions).toContain("core:window:allow-request-user-attention")
     const source = readFileSync(join(import.meta.dir, "ask.ts"), "utf8")
     expect(source).toContain("if (!(await win.isFocused())) await win.requestUserAttention(UserAttentionType.Critical)")
@@ -148,7 +152,9 @@ describe("una domanda sì/no in ADE", () => {
 
   test("lint: no confirm() left in the workbench: every question goes through askYesNo", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
-    const calls = source.split("\n").filter((line) => /(?<![\w$])(?:window\.)?confirm\s*\(/.test(line) && !/^\s*(?:\/\/|\*)/.test(line))
+    const calls = source
+      .split("\n")
+      .filter((line) => /(?<![\w$])(?:window\.)?confirm\s*\(/.test(line) && !/^\s*(?:\/\/|\*)/.test(line))
     expect(calls).toEqual([])
     expect(source).toContain("askYesNo")
   })

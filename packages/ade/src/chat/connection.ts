@@ -108,7 +108,8 @@ export function isChatRefused(error: unknown): boolean {
   return false
 }
 
-const same = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+const same = (a: string, b: string) =>
+  a.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 
 function named(request: Request): string[] {
   const names: string[] = []
@@ -168,7 +169,10 @@ function trustedFetch(
 export async function openChat(directory: string, deps: ChatConnectionDeps): Promise<ChatConnection> {
   const admitted = await deps.admit(directory)
   if (!admitted.ok) return admitted.problem === undefined ? { ok: false } : { ok: false, problem: admitted.problem }
-  const fetch = boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now), directory)
+  const fetch = boundFetch(
+    trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now),
+    directory,
+  )
   const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch, directory, throwOnError: true })
   return { ok: true, client, directory, fetch }
 }

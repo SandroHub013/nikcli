@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { DESIGN_NO_BRIDGE, designHandshakeReducer, INITIAL_HANDSHAKE_STATE, type HandshakeEvent, type HandshakeState } from "./handshake"
+import {
+  DESIGN_NO_BRIDGE,
+  designHandshakeReducer,
+  INITIAL_HANDSHAKE_STATE,
+  type HandshakeEvent,
+  type HandshakeState,
+} from "./handshake"
 
 /* D1: in Design mode the handshake never ends on the mirror, a `srcdoc` copy that would run as ADE. */
 
-const run = (...events: HandshakeEvent[]): HandshakeState => events.reduce(designHandshakeReducer, INITIAL_HANDSHAKE_STATE)
+const run = (...events: HandshakeEvent[]): HandshakeState =>
+  events.reduce(designHandshakeReducer, INITIAL_HANDSHAKE_STATE)
 
 describe("the Design-mode handshake", () => {
   test("a timeout settles on none, with the reason, never on the mirror", () => {
@@ -26,8 +33,10 @@ describe("the Design-mode handshake", () => {
       { type: "no-bridge" },
       { type: "load-error", error: "x" },
     ]
-    for (const a of events) for (const b of events) for (const c of events) {
-      expect(run(a, b, c).fidelity).not.toBe("mirror")
-    }
+    for (const a of events)
+      for (const b of events)
+        for (const c of events) {
+          expect(run(a, b, c).fidelity).not.toBe("mirror")
+        }
   })
 })

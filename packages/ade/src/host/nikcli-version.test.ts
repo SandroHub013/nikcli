@@ -12,7 +12,9 @@ describe("the nikcli version in the top bar", () => {
   })
 
   test("is not fooled by colour", () => {
-    expect(parseNikcliVersion({ code: 0, stdout: "\u001b[1mnikcli\u001b[0m \u001b[32mv1.384.0\u001b[0m\n", stderr: "" })).toBe("v1.384.0")
+    expect(
+      parseNikcliVersion({ code: 0, stdout: "\u001b[1mnikcli\u001b[0m \u001b[32mv1.384.0\u001b[0m\n", stderr: "" }),
+    ).toBe("v1.384.0")
   })
 
   test("takes the answer from the error stream when the command still succeeded", () => {

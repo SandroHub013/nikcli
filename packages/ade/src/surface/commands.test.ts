@@ -332,11 +332,15 @@ describe("Sospendi la sessione (P1-C6)", () => {
     wb.panes.push(pane({ agent: "claude-code", status: "idle" }))
     wb.focusedId = "p1"
 
-    const ready = buildCommands(context({ workbench: wb, suspendCheck: { ok: true } })).find((c) => c.id === "session.suspend")
+    const ready = buildCommands(context({ workbench: wb, suspendCheck: { ok: true } })).find(
+      (c) => c.id === "session.suspend",
+    )
     expect(ready?.title).toBe("Sospendi la sessione")
     expect(ready?.enabled).toBe(true)
 
-    const busy = buildCommands(context({ workbench: wb, suspendCheck: { ok: false, reason: "working" } })).find((c) => c.id === "session.suspend")
+    const busy = buildCommands(context({ workbench: wb, suspendCheck: { ok: false, reason: "working" } })).find(
+      (c) => c.id === "session.suspend",
+    )
     expect(busy?.enabled).toBe(false)
     expect(busy?.disabledReason).toBe("sta lavorando")
 
@@ -358,6 +362,7 @@ describe("waitsForSheet (kobalte-overlay, M1)", () => {
   })
 
   test("what does not open something to type into still runs behind it", () => {
-    for (const id of ["view.toggle", "theme.toggle", "voice.toggle", "voice.settings", "pane.expand"]) expect([id, waitsForSheet(id)]).toEqual([id, false])
+    for (const id of ["view.toggle", "theme.toggle", "voice.toggle", "voice.settings", "pane.expand"])
+      expect([id, waitsForSheet(id)]).toEqual([id, false])
   })
 })

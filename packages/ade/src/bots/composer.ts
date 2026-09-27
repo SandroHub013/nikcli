@@ -54,7 +54,11 @@ export function effortChange(effort: string): BotChanges {
  * names the runner suggests, and the bot's own when the list lacks it. Their
  * CLIs take a name the list does not know, so the chip keeps it as it is.
  */
-export function runnerModelItems(models: readonly string[], value: string, defaultLabel: string): readonly ChipMenuItem[] {
+export function runnerModelItems(
+  models: readonly string[],
+  value: string,
+  defaultLabel: string,
+): readonly ChipMenuItem[] {
   const own = value.trim()
   return [
     { kind: "option", value: "", label: defaultLabel },

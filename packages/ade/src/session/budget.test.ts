@@ -19,10 +19,12 @@ const ask = (budget: unknown) => JSON.stringify({ kind: "ask", to: "B", text: "p
 describe("the budget on a request (D73)", () => {
   test("parseMessage takes 60, 1200 and 14400 seconds", () => {
     for (const budget of [60, 1200, 14400]) expect(parseMessage(ask(budget))).toMatchObject({ kind: "ask", budget })
-    expect(parseMessage(JSON.stringify({ kind: "spawn", agent: "claude", text: "t", from: "a", budget: 600 }))).toMatchObject({ budget: 600 })
+    expect(
+      parseMessage(JSON.stringify({ kind: "spawn", agent: "claude", text: "t", from: "a", budget: 600 })),
+    ).toMatchObject({ budget: 600 })
   })
 
-  test("parseMessage ignores 59, 14401, \"20m\" and 1.5, and keeps the request", () => {
+  test('parseMessage ignores 59, 14401, "20m" and 1.5, and keeps the request', () => {
     for (const budget of [59, 14401, "20m", 1.5, "1200", null]) {
       const message = parseMessage(ask(budget))
       expect(message).toMatchObject({ kind: "ask", to: "B", text: "prova D73" })
@@ -43,7 +45,9 @@ describe("the budget on a request (D73)", () => {
     const without = formatRequest("171-ab", "trova i test lenti", undefined)
     expect(without).toBe(formatRequest("171-ab", "trova i test lenti", undefined, {}))
     expect(without).not.toContain("budget")
-    expect(without.replace(/^\[Richiesta 171-ab da [^\]]*\]/, "")).toBe(withBudget.replace(/^\[Richiesta 171-ab da [^\]]*\]/, ""))
+    expect(without.replace(/^\[Richiesta 171-ab da [^\]]*\]/, "")).toBe(
+      withBudget.replace(/^\[Richiesta 171-ab da [^\]]*\]/, ""),
+    )
   })
 
   test("formatElapsed counts from deliveredAt if there is one, else from at, in whole seconds", () => {
@@ -74,7 +78,15 @@ describe("the budget on a request (D73)", () => {
 
   test("ade-msg status shows the elapsed time beside a request with a budget, and nothing beside one without", () => {
     const base: OpenRequest = { id: "171-ab", kind: "ask", from: "", to: "", at: 0, brief: "prova" }
-    const table = requestsTable([{ ...base, budget: 1200 }, { ...base, id: "172-cd" }], [], () => "in corso", 125_000)
+    const table = requestsTable(
+      [
+        { ...base, budget: 1200 },
+        { ...base, id: "172-cd" },
+      ],
+      [],
+      () => "in corso",
+      125_000,
+    )
     expect(table).toContain("2m05s (elapsed 125s / 1200s)")
     expect(table.split("\n")[1]).not.toContain("elapsed")
   })
@@ -90,14 +102,24 @@ describe("the budget on a request (D73)", () => {
   })
 
   test("a saved budget that is not one is dropped, never the request", () => {
-    const saved = JSON.stringify([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: "20m", timeNotes: 1 }])
+    const saved = JSON.stringify([
+      { id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: "20m", timeNotes: 1 },
+    ])
     expect(parseOpenRequests(saved)).toEqual([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x" }])
-    const kept = JSON.stringify([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 }])
-    expect(parseOpenRequests(kept)).toEqual([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 }])
+    const kept = JSON.stringify([
+      { id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 },
+    ])
+    expect(parseOpenRequests(kept)).toEqual([
+      { id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 },
+    ])
   })
 
   test("with a draft open the time note does not go and is not given; once the line is empty it goes once", () => {
-    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = {
+      at: 0,
+      deliveredAt: 0,
+      budget: 120,
+    }
     // What the workbench does each round: type and mark only what is due.
     const round = (now: number, typing: boolean) => {
       const due = timeNoteDue(request, now, typing)
@@ -130,7 +152,12 @@ describe("the budget on a request (D73)", () => {
   })
 
   test("only a note from the caller answers a blocked request; a new ask to the same session does not clear it", () => {
-    const blocked = { id: "old", from: "p1", to: "p2", update: { state: "bloccata" as const, text: "serve una chiave", at: 1 } }
+    const blocked = {
+      id: "old",
+      from: "p1",
+      to: "p2",
+      update: { state: "bloccata" as const, text: "serve una chiave", at: 1 },
+    }
     const other = { id: "other", from: "p3", to: "p2", update: { state: "decisione" as const, text: "x", at: 1 } }
     const requests = [blocked, other]
     // What the Architect saw: a later `ask` from the same caller cleared the block, and the old request got reminders.

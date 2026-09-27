@@ -129,7 +129,12 @@ export function foldProposals(
         }
         {
           // The log does not know how the proposal was opened: the fold does.
-          const wrong = choiceProblem(current, event.choice, event.choices, current.variants.map((variant) => variant.name))
+          const wrong = choiceProblem(
+            current,
+            event.choice,
+            event.choices,
+            current.variants.map((variant) => variant.name),
+          )
           if (wrong) {
             reject(event, t(wrong, event.k))
             continue
@@ -212,7 +217,11 @@ export function resolvedMessage(proposal: DesignProposal): string {
   const parts = [`design [k=${proposal.k}] ${proposal.title}`]
   if (answer.again) {
     // Work for the author, not a choice to carry out.
-    parts.push("ALTRO GIRO, non una scelta", `parole: "${answer.words}"`, "rifai le varianti e riapri con: ade-msg registro design riaperta")
+    parts.push(
+      "ALTRO GIRO, non una scelta",
+      `parole: "${answer.words}"`,
+      "rifai le varianti e riapri con: ade-msg registro design riaperta",
+    )
     return asOneLine(parts.join(" — "))
   }
   if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)

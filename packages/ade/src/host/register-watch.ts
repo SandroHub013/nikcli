@@ -19,7 +19,10 @@ export interface WatchedRegister {
 }
 
 /** One pass: each folder listed at most once, whichever registers ask for it. */
-export async function registersPass(registers: readonly WatchedRegister[], readDir: ReadDir | undefined): Promise<void> {
+export async function registersPass(
+  registers: readonly WatchedRegister[],
+  readDir: ReadDir | undefined,
+): Promise<void> {
   const listings = new Map<string, Promise<DirEntry[]>>()
   const shared: ReadDir | undefined =
     readDir &&
@@ -40,5 +43,8 @@ export function watchRegisters(
   readDir: () => Promise<ReadDir | undefined>,
   options?: EveryOptions,
 ): () => void {
-  return every(REGISTERS_WATCH_MS, async () => registersPass(registers, await readDir()), { immediate: true, ...options })
+  return every(REGISTERS_WATCH_MS, async () => registersPass(registers, await readDir()), {
+    immediate: true,
+    ...options,
+  })
 }

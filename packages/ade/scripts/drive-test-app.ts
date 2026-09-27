@@ -91,11 +91,22 @@ if (typeof choice === "string") fail(choice)
 // The knock: a short timeout, because a port nobody listens on can also just swallow the SYN.
 let targets: unknown
 try {
-  const response = await fetch(`http://127.0.0.1:${choice.port}/json/list`, { signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS) })
+  const response = await fetch(`http://127.0.0.1:${choice.port}/json/list`, {
+    signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
+  })
   if (!response.ok) fail(notListening(choice, `HTTP ${response.status}`))
   targets = await response.json()
 } catch (error) {
-  fail(notListening(choice, error instanceof Error ? (error.name === "TimeoutError" ? "nessuna risposta entro 3 s" : error.message) : String(error)))
+  fail(
+    notListening(
+      choice,
+      error instanceof Error
+        ? error.name === "TimeoutError"
+          ? "nessuna risposta entro 3 s"
+          : error.message
+        : String(error),
+    ),
+  )
 }
 const page = pickPage(targets)
 if (typeof page === "string") fail(page)
@@ -126,7 +137,8 @@ const send = (method: string, params: Record<string, unknown> = {}) =>
 
 const evaluate = async (expression: string): Promise<unknown> => {
   const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })
-  if (result?.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? "eccezione nella pagina")
+  if (result?.exceptionDetails)
+    throw new Error(result.exceptionDetails.exception?.description ?? "eccezione nella pagina")
   return result?.result?.value
 }
 
@@ -188,8 +200,21 @@ try {
       if (parsed.rest === "Ctrl+V") {
         // The editing command is what makes the page paste: a bare Ctrl+V key
         // event through CDP types a "v" and reads nothing.
-        await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2, commands: ["paste"] })
-        await send("Input.dispatchKeyEvent", { type: "keyUp", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2 })
+        await send("Input.dispatchKeyEvent", {
+          type: "rawKeyDown",
+          key: "v",
+          code: "KeyV",
+          windowsVirtualKeyCode: 86,
+          modifiers: 2,
+          commands: ["paste"],
+        })
+        await send("Input.dispatchKeyEvent", {
+          type: "keyUp",
+          key: "v",
+          code: "KeyV",
+          windowsVirtualKeyCode: 86,
+          modifiers: 2,
+        })
         console.log(`Ctrl+V nel pannello ${parsed.pane}`)
         break
       }
@@ -197,9 +222,17 @@ try {
       const name = parsed.command === "type" ? "Enter" : parsed.rest
       const key = keys[name]
       if (!key) fail(`tasto non previsto: ${name} (Enter, Escape, Tab)`)
-      await send("Input.dispatchKeyEvent", { type: "keyDown", key: name, code: name, windowsVirtualKeyCode: key[0], text: key[1] })
+      await send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: name,
+        code: name,
+        windowsVirtualKeyCode: key[0],
+        text: key[1],
+      })
       await send("Input.dispatchKeyEvent", { type: "keyUp", key: name, code: name, windowsVirtualKeyCode: key[0] })
-      console.log(parsed.command === "type" ? `digitato nel pannello ${parsed.pane}` : `${name} nel pannello ${parsed.pane}`)
+      console.log(
+        parsed.command === "type" ? `digitato nel pannello ${parsed.pane}` : `${name} nel pannello ${parsed.pane}`,
+      )
       break
     }
     case "drag":
@@ -232,7 +265,9 @@ try {
         }
       }
       await mouse("mouseReleased", end, { button: "left", buttons: 0, clickCount: 1 })
-      console.log(`${parsed.command} nel pannello ${parsed.pane}, riga ${pointer.row}, colonne ${pointer.col}${pointer.toCol === undefined ? "" : `-${pointer.toCol}`}${pointer.modifier ? ` con ${pointer.modifier}` : ""}`)
+      console.log(
+        `${parsed.command} nel pannello ${parsed.pane}, riga ${pointer.row}, colonne ${pointer.col}${pointer.toCol === undefined ? "" : `-${pointer.toCol}`}${pointer.modifier ? ` con ${pointer.modifier}` : ""}`,
+      )
       break
     }
     case "shot": {

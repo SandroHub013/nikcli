@@ -26,7 +26,14 @@ const newFormat = {
   recommend: { option: "B", because: "C cambia il comportamento della squadra: dopo che B ha funzionato." },
   options: [
     { label: "A", title: "Niente", effect: "Le sessioni restano vive come oggi" },
-    { label: "B", title: "Sospendi su richiesta", detail: "Un comando sul pannello.", effect: "Riparte in qualche secondo quando la riapri", cost: "1 consegna, ~1 giorno", risk: "basso" },
+    {
+      label: "B",
+      title: "Sospendi su richiesta",
+      detail: "Un comando sul pannello.",
+      effect: "Riparte in qualche secondo quando la riapri",
+      cost: "1 consegna, ~1 giorno",
+      risk: "basso",
+    },
   ],
   spec: "P1-C6",
 }
@@ -53,7 +60,9 @@ describe("the new format in the decisions register", () => {
   test("a recommendation that is not one of the options refuses the line", () => {
     expect(toEvent({ ...newFormat, recommend: { option: "D" } })).toBe("la raccomandazione «D» non è una delle opzioni")
     // Without options there is nothing to recommend.
-    expect(toEvent({ ...newFormat, options: undefined, recommend: { option: "B" } })).toBe("la raccomandazione «B» non è una delle opzioni")
+    expect(toEvent({ ...newFormat, options: undefined, recommend: { option: "B" } })).toBe(
+      "la raccomandazione «B» non è una delle opzioni",
+    )
     expect(toEvent({ ...newFormat, recommend: "B" })).toBe("recommend vuole { option, because }")
     expect(toEvent({ ...newFormat, recommend: { because: "così" } })).toBe("recommend vuole { option, because }")
   })
@@ -63,14 +72,26 @@ describe("the new format in the decisions register", () => {
       "con i campi nuovi serve anche context: le versioni che non li conoscono mostrano solo quello",
     )
     // A line in the old format keeps its old rule: context was never required there.
-    const plain = { type: "aperta", k: "D91", at: newFormat.at, by: "Master", title: "Senza contesto", options: [{ label: "A" }, { label: "B" }] }
+    const plain = {
+      type: "aperta",
+      k: "D91",
+      at: newFormat.at,
+      by: "Master",
+      title: "Senza contesto",
+      options: [{ label: "A" }, { label: "B" }],
+    }
     expect(typeof toEvent(plain)).toBe("object")
   })
 
   test("facts must be a list of texts; empty fields are dropped", () => {
     expect(toEvent({ ...newFormat, facts: "ADE da sola: ~650 MB" })).toBe("facts non è un elenco di testi")
     expect(toEvent({ ...newFormat, facts: ["uno", ""] })).toBe("facts non è un elenco di testi")
-    const event = toEvent({ ...newFormat, facts: [], question: "  ", recommend: { option: "B", because: " " } }) as OpenedEvent
+    const event = toEvent({
+      ...newFormat,
+      facts: [],
+      question: "  ",
+      recommend: { option: "B", because: " " },
+    }) as OpenedEvent
     expect("facts" in event).toBe(false)
     expect("question" in event).toBe(false)
     expect(event.recommend).toEqual({ option: "B" })

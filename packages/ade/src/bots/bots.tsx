@@ -36,9 +36,25 @@ import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
-import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
+import {
+  COMMON_EFFORTS,
+  OBJECTIVES_HEADING,
+  readAgentFile,
+  splitPrompt,
+  type AgentFile,
+  type AgentScope,
+} from "./nikcli"
 import { ACCOUNT_PLAN, localAccountStore, type BotAccount } from "./account"
-import { generationSpend, runnerAccount, runnerById, RUNNERS, spendKind, spendLine, type Runner, type SpendKind } from "./runners"
+import {
+  generationSpend,
+  runnerAccount,
+  runnerById,
+  RUNNERS,
+  spendKind,
+  spendLine,
+  type Runner,
+  type SpendKind,
+} from "./runners"
 import { PLAN_RUNNERS, routineModeOf } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
@@ -100,7 +116,15 @@ import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, type RoomPay } from "./room"
 import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
-import { createRoomRunner, localRoomStore, memberName, roomThread, type RoomBook, type RoomRecord, type RoomSeat } from "./room-app"
+import {
+  createRoomRunner,
+  localRoomStore,
+  memberName,
+  roomThread,
+  type RoomBook,
+  type RoomRecord,
+  type RoomSeat,
+} from "./room-app"
 import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
 import {
   isAdeTestBuild,
@@ -537,7 +561,9 @@ const roomDeps: RoomPanelDeps = {
     const size = roomProblem(draft.members)
     if (size) return { problem: describeProblem(size) }
     const roster = shared.roster() ?? []
-    const bots = draft.members.map((path) => roster.find((bot) => bot.path === path)).filter((bot): bot is AgentFile => !!bot)
+    const bots = draft.members
+      .map((path) => roster.find((bot) => bot.path === path))
+      .filter((bot): bot is AgentFile => !!bot)
     const pays = await Promise.all(bots.map(async (bot) => ({ name: bot.identifier, pay: await payOf(bot) })))
     const spend = roomSpendProblem(pays, draft.spend, isAdeTestBuild())
     if (spend) return { problem: spend }
@@ -556,7 +582,10 @@ const roomDeps: RoomPanelDeps = {
   remove: async (roomId) => {
     const room = roomStore.get().rooms.find((entry) => entry.id === roomId)
     if (!room) return false
-    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), { ok: t("bots.room.delete"), cancel: t("bots.room.form.cancel") })
+    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), {
+      ok: t("bots.room.delete"),
+      cancel: t("bots.room.form.cancel"),
+    })
     if (!yes) return false
     await roomRunner.stop(roomId)
     writeRooms((book) => ({ rooms: book.rooms.filter((entry) => entry.id !== roomId) }))
@@ -607,23 +636,25 @@ const shared = createRoot(() => {
    * archive of the project just opened; a turn already running keeps
    * writing under the project it started in.
    */
-  createEffect(on(projectRoot, (root) => {
-    const next = root ?? ""
-    // Project bots are recognised from their path, so this runs with no project open too.
-    if (!legacyMoved) {
-      legacyMoved = true
-      migrateTalkKeys(talkDisk, next)
-    }
-    if (next === openProject) return
-    openProject = next
-    setTalks((all) => {
-      const kept: Record<string, Talk> = {}
-      for (const [path, talk] of Object.entries(all)) {
-        if (turns.running(path)) kept[path] = talk
+  createEffect(
+    on(projectRoot, (root) => {
+      const next = root ?? ""
+      // Project bots are recognised from their path, so this runs with no project open too.
+      if (!legacyMoved) {
+        legacyMoved = true
+        migrateTalkKeys(talkDisk, next)
       }
-      return kept
-    })
-  }))
+      if (next === openProject) return
+      openProject = next
+      setTalks((all) => {
+        const kept: Record<string, Talk> = {}
+        for (const [path, talk] of Object.entries(all)) {
+          if (turns.running(path)) kept[path] = talk
+        }
+        return kept
+      })
+    }),
+  )
 
   // The clocks in the roster: "ora" has to become "09:12" on its own. Paused
   // while the window is hidden, like every other timer in ADE.
@@ -669,12 +700,18 @@ const shared = createRoot(() => {
     })
   }
   // Another folder has its own list: the one kept for it, or none until its menu opens.
-  createEffect(on(() => projectRoot() ?? "", (cwd) => {
-    if (cwd === catalogFor) return
-    catalogFor = undefined
-    const kept = botModelSource.kept(cwd)
-    setCatalogState(kept ? { kind: "ready", models: kept } : { kind: "idle" })
-  }, { defer: true }))
+  createEffect(
+    on(
+      () => projectRoot() ?? "",
+      (cwd) => {
+        if (cwd === catalogFor) return
+        catalogFor = undefined
+        const kept = botModelSource.kept(cwd)
+        setCatalogState(kept ? { kind: "ready", models: kept } : { kind: "idle" })
+      },
+      { defer: true },
+    ),
+  )
   const catalog: BotCatalog = {
     state: catalogState,
     open: () => {
@@ -861,7 +898,9 @@ export function BotsRoster(props: BotsRosterProps) {
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
                   <span data-slot="bots-row-text">
                     <span data-slot="bots-row-name">{bot.identifier}</span>
-                    <span data-slot="bots-row-line">{lastLine(talk(), bot.description || t("bots.noDescription"))}</span>
+                    <span data-slot="bots-row-line">
+                      {lastLine(talk(), bot.description || t("bots.noDescription"))}
+                    </span>
                   </span>
                   <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
                 </button>
@@ -937,7 +976,8 @@ export function BotsMain(props: BotsMainProps) {
     return turns.send(verdict.bot, message, props.projectRoot)
   }
 
-  const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => turns.answer(bot, choice, requestID)
+  const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
+    turns.answer(bot, choice, requestID)
 
   // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
   const gateway =
@@ -1163,10 +1203,15 @@ function Thread(props: {
     ),
   )
 
-  createEffect(on(() => props.bot.path, () => {
-    setDraft("")
-    field?.focus()
-  }))
+  createEffect(
+    on(
+      () => props.bot.path,
+      () => {
+        setDraft("")
+        field?.focus()
+      },
+    ),
+  )
 
   const busy = () => props.talk.status === "working" || props.talk.status === "waiting"
 
@@ -1185,12 +1230,27 @@ function Thread(props: {
    */
   const [shown, setShown] = createSignal<{ readonly model: string; readonly effort: string }>()
   const [chipProblem, setChipProblem] = createSignal<string>()
-  createEffect(on(() => [props.bot.path, props.bot.model, props.bot.effort], () => setShown(undefined)))
-  createEffect(on(() => props.bot.path, () => setChipProblem(undefined)))
+  createEffect(
+    on(
+      () => [props.bot.path, props.bot.model, props.bot.effort],
+      () => setShown(undefined),
+    ),
+  )
+  createEffect(
+    on(
+      () => props.bot.path,
+      () => setChipProblem(undefined),
+    ),
+  )
   const runner = createMemo(() => runnerById(props.bot.runner))
   const model = () => shown()?.model ?? props.bot.model ?? ""
   const effort = () => shown()?.effort ?? props.bot.effort ?? ""
-  const efforts = createEfforts(() => ({ runner: props.bot.runner, model: model(), effort: effort(), models: props.models }))
+  const efforts = createEfforts(() => ({
+    runner: props.bot.runner,
+    model: model(),
+    effort: effort(),
+    models: props.models,
+  }))
   const gone = createGone(() => ({ runner: props.bot.runner, model: model() }))
   const change = async (changes: BotChanges) => {
     setShown({
@@ -1224,12 +1284,12 @@ function Thread(props: {
           <div data-slot="bots-thread-empty">
             <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
             <p data-slot="bots-thread-empty-name">{props.bot.identifier}</p>
-            <p data-slot="bots-thread-empty-text">
-              {props.bot.description || t("bots.noDescription")}
-            </p>
+            <p data-slot="bots-thread-empty-text">{props.bot.description || t("bots.noDescription")}</p>
             <Show when={subagent()}>
               <p data-slot="bots-hint">
-                {t("bots.subagent.isA")}<strong>{t("bots.subagent.label")}</strong>{t("bots.subagent.desc")}
+                {t("bots.subagent.isA")}
+                <strong>{t("bots.subagent.label")}</strong>
+                {t("bots.subagent.desc")}
               </p>
             </Show>
           </div>
@@ -1256,7 +1316,9 @@ function Thread(props: {
                   {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
                 </Show>
                 <Show when={asked().expiresAt}>
-                  <span data-slot="bots-permission-why">{t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}</span>
+                  <span data-slot="bots-permission-why">
+                    {t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}
+                  </span>
                 </Show>
               </span>
               <span data-slot="bots-permission-actions">
@@ -1265,11 +1327,20 @@ function Thread(props: {
                 </button>
                 {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
                 <Show when={(asked().always?.length ?? 0) > 0}>
-                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always", asked().requestID)}>
+                  <button
+                    type="button"
+                    data-slot="bots-btn"
+                    onClick={() => props.onAnswer("always", asked().requestID)}
+                  >
                     {t("bots.approval.always")}
                   </button>
                 </Show>
-                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once", asked().requestID)}>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  data-tone="primary"
+                  onClick={() => props.onAnswer("once", asked().requestID)}
+                >
                   {t("bots.permission.allow")}
                 </button>
               </span>
@@ -1409,7 +1480,8 @@ function Thread(props: {
               )}
             </Show>
             <Show when={hasThreadTotals(props.talk)}>
-              {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+              {t("bots.conversation.total")}{" "}
+              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
             </Show>
           </span>
           <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
@@ -1582,12 +1654,17 @@ function BotCard(props: {
   const [problem, setProblem] = createSignal<string>()
   const parts = createMemo(() => splitPrompt(props.bot.prompt))
 
-  createEffect(on(() => props.bot.path, () => {
-    setEditing(false)
-    setConfirming(false)
-    setProblem(undefined)
-    setAccount(accounts.get(props.bot.path))
-  }))
+  createEffect(
+    on(
+      () => props.bot.path,
+      () => {
+        setEditing(false)
+        setConfirming(false)
+        setProblem(undefined)
+        setAccount(accounts.get(props.bot.path))
+      },
+    ),
+  )
 
   const remove = async () => {
     const failure = await deleteBot(props.bot)
@@ -1608,7 +1685,15 @@ function BotCard(props: {
         <span data-slot="bots-card-meta">
           {runnerById(props.bot.runner).label} ·{" "}
           {/* A model the catalog no longer has: its name in words and why, the id in the tooltip (bot-riquadro, a). */}
-          <Show when={modelIsGone()} fallback={<>{props.bot.model ?? t("bots.defaultModel")} · {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}</>}>
+          <Show
+            when={modelIsGone()}
+            fallback={
+              <>
+                {props.bot.model ?? t("bots.defaultModel")} ·{" "}
+                {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
+              </>
+            }
+          >
             <span data-slot="bots-card-gone" title={t("picker.goneTitle", props.bot.model ?? "")}>
               {t("picker.gone", readableModelName(props.bot.model ?? ""))}
             </span>
@@ -1626,11 +1711,7 @@ function BotCard(props: {
               data-slot="bots-btn"
               disabled={props.bot.mode === "subagent"}
               onClick={() => launch()(props.bot)}
-              title={
-                props.bot.mode === "subagent"
-                  ? t("bots.terminal.subagentTip")
-                  : t("bots.terminal.launchTip")
-              }
+              title={props.bot.mode === "subagent" ? t("bots.terminal.subagentTip") : t("bots.terminal.launchTip")}
             >
               {t("bots.terminal.button")}
             </button>
@@ -1643,7 +1724,12 @@ function BotCard(props: {
             </button>
           )}
         </Show>
-        <button type="button" data-slot="bots-btn" data-active={editing() ? "true" : undefined} onClick={() => setEditing((v) => !v)}>
+        <button
+          type="button"
+          data-slot="bots-btn"
+          data-active={editing() ? "true" : undefined}
+          onClick={() => setEditing((v) => !v)}
+        >
           {editing() ? t("bots.edit.close") : t("bots.edit.open")}
         </button>
       </div>
@@ -1666,7 +1752,8 @@ function BotCard(props: {
             {t("bots.card.messages", props.talk.messages.length)}
             <Show when={hasThreadTotals(props.talk)}>
               {" · "}
-              {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+              {t("bots.conversation.total")}{" "}
+              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
             </Show>
           </span>
           <Show when={props.talk.lastTurn}>
@@ -1869,9 +1956,7 @@ function BotForm(props: {
         <span data-slot="bots-hint">
           {/* Said plainly, because the two routes name the bot differently and
               a field that is sometimes ignored is worse than one that says so. */}
-          {generating()
-            ? t("bots.form.hintGenerating")
-            : t("bots.form.hintNamed")}
+          {generating() ? t("bots.form.hintGenerating") : t("bots.form.hintNamed")}
         </span>
       </label>
 
@@ -1987,12 +2072,14 @@ function BotForm(props: {
  * alike. A nikcli model's are its variants: the catalog's, or its provider's
  * for a model the catalog lacks.
  */
-function createEfforts(input: () => {
-  readonly runner: string | undefined
-  readonly model: string
-  readonly effort: string
-  readonly models: readonly ChatModelChoice[]
-}) {
+function createEfforts(
+  input: () => {
+    readonly runner: string | undefined
+    readonly model: string
+    readonly effort: string
+    readonly models: readonly ChatModelChoice[]
+  },
+) {
   const runner = createMemo<Runner>(() => runnerById(input().runner))
   const model = () => input().model
   const listed = createMemo(() =>
@@ -2007,7 +2094,8 @@ function createEfforts(input: () => {
       nikcli: runner().id === "nikcli",
       fixed: runner().efforts,
       // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
-      variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
+      variants:
+        runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
       saved: input().effort,
     }),
   )
@@ -2049,7 +2137,12 @@ function EngineFields(props: {
   onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
-  const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))
+  const efforts = createEfforts(() => ({
+    runner: props.runner,
+    model: props.model,
+    effort: props.effort,
+    models: props.nikcliModels,
+  }))
   const gone = createGone(() => ({ runner: props.runner, model: props.model }))
   createEffect(() => props.onStale?.(efforts().stale))
   const [pickingKey, setPickingKey] = createSignal(false)
@@ -2129,7 +2222,9 @@ function EngineFields(props: {
                 }}
               >
                 <option value="">{t("bots.account.pick")}</option>
-                <For each={names()}>{(row) => <option value={row.name}>{t("bots.account.option", row.name, row.env)}</option>}</For>
+                <For each={names()}>
+                  {(row) => <option value={row.name}>{t("bots.account.option", row.name, row.env)}</option>}
+                </For>
                 <Show when={savedKeyMissing()}>
                   <option value={savedName()}>{savedName()}</option>
                 </Show>
@@ -2199,7 +2294,15 @@ function EngineFields(props: {
           <span data-slot="bots-label">{t("bots.engine.effort")}</span>
           <Show
             when={!efforts().none}
-            fallback={<input data-slot="bots-input" aria-label={t("bots.engine.effort")} value="" placeholder={t("bots.engine.effortNotSupported")} disabled />}
+            fallback={
+              <input
+                data-slot="bots-input"
+                aria-label={t("bots.engine.effort")}
+                value=""
+                placeholder={t("bots.engine.effortNotSupported")}
+                disabled
+              />
+            }
           >
             <EffortPicker
               below
@@ -2253,7 +2356,11 @@ function BotSettings(props: {
   createEffect(
     on(
       () =>
-        props.bot.path + props.bot.prompt + (props.bot.model ?? "") + (props.bot.effort ?? "") + (props.bot.runner ?? ""),
+        props.bot.path +
+        props.bot.prompt +
+        (props.bot.model ?? "") +
+        (props.bot.effort ?? "") +
+        (props.bot.runner ?? ""),
       () => {
         setRunner(runnerById(props.bot.runner).id)
         setDescription(props.bot.description)

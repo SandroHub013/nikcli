@@ -68,7 +68,11 @@ export function recipientOptions(
     options.push({ value: pane.id, label, selected: pane.id === shown })
   }
   if (recipient.state !== "non scelta" && !sessions.some((pane) => pane.id === recipient.id)) {
-    options.push({ value: recipient.id, label: `${recipient.title} ${t("design.recipient.closed")}`, selected: recipient.id === shown })
+    options.push({
+      value: recipient.id,
+      label: `${recipient.title} ${t("design.recipient.closed")}`,
+      selected: recipient.id === shown,
+    })
   }
   return options
 }
@@ -84,13 +88,20 @@ export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
   return recipient.state === "pronta" ? "invia" : "scegli"
 }
 
-export function recipientChange(currentId: string | undefined, nextId: string | undefined, queued: number): "nessuna" | "applica" | "conferma" {
+export function recipientChange(
+  currentId: string | undefined,
+  nextId: string | undefined,
+  queued: number,
+): "nessuna" | "applica" | "conferma" {
   if ((currentId ?? "") === (nextId ?? "")) return "nessuna"
   if (!nextId || queued === 0) return "applica"
   return "conferma"
 }
 
-export function resolveRecipient(candidates: readonly DeliveryCandidate[], choice: RecipientChoice | undefined): RecipientStatus {
+export function resolveRecipient(
+  candidates: readonly DeliveryCandidate[],
+  choice: RecipientChoice | undefined,
+): RecipientStatus {
   if (!choice) return { state: "non scelta" }
   const pane = candidates.find((candidate) => candidate.id === choice.id)
   if (pane?.running) return { state: "pronta", id: pane.id, title: pane.title }
@@ -170,7 +181,10 @@ export function parseOutbox(raw: string | null): OutboxItem[] {
   }
 }
 
-export function enqueue(outbox: readonly OutboxItem[], item: Omit<OutboxItem, "deliveredTo" | "deliveredAt">): OutboxItem[] {
+export function enqueue(
+  outbox: readonly OutboxItem[],
+  item: Omit<OutboxItem, "deliveredTo" | "deliveredAt">,
+): OutboxItem[] {
   return [...outbox.filter((entry) => !(entry.path === item.path && entry.k === item.k)), { ...item }]
 }
 
@@ -187,7 +201,11 @@ export function markDelivered(
   )
 }
 
-export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposals: readonly DesignProposal[]): OutboxItem[] {
+export function pruneOutbox(
+  outbox: readonly OutboxItem[],
+  path: string,
+  proposals: readonly DesignProposal[],
+): OutboxItem[] {
   const byKey = new Map(proposals.map((proposal) => [proposal.k, proposal]))
   return outbox.filter((item) => {
     if (item.path !== path) return true
@@ -201,7 +219,9 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposa
 }
 
 export function pendingFor(outbox: readonly OutboxItem[], path: string): OutboxItem[] {
-  return outbox.filter((item) => item.path === path && item.deliveredAt === undefined).sort((a, b) => a.queuedAt - b.queuedAt)
+  return outbox
+    .filter((item) => item.path === path && item.deliveredAt === undefined)
+    .sort((a, b) => a.queuedAt - b.queuedAt)
 }
 
 export type DeliveryState =
@@ -210,10 +230,17 @@ export type DeliveryState =
   | { readonly state: "fuori da ADE" }
 
 export function deliveryState(outbox: readonly OutboxItem[], path: string, proposal: DesignProposal): DeliveryState {
-  const item = outbox.find((entry) => entry.path === path && entry.k === proposal.k && entry.answeredAt === proposal.answer?.at)
+  const item = outbox.find(
+    (entry) => entry.path === path && entry.k === proposal.k && entry.answeredAt === proposal.answer?.at,
+  )
   if (!item) return { state: "fuori da ADE" }
   if (item.deliveredAt !== undefined && item.deliveredTo) {
-    return { state: "consegnata", to: item.deliveredTo, ...(item.deliveredToId ? { toId: item.deliveredToId } : {}), at: item.deliveredAt }
+    return {
+      state: "consegnata",
+      to: item.deliveredTo,
+      ...(item.deliveredToId ? { toId: item.deliveredToId } : {}),
+      at: item.deliveredAt,
+    }
   }
   return { state: "in coda" }
 }

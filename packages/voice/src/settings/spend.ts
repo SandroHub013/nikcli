@@ -58,7 +58,12 @@ export function addSpend(spend: DaySpend, at: number, cost: number | undefined):
  */
 export function formatSpendCost(cost: number, locale?: string): string {
   const money = (value: number) =>
-    new Intl.NumberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
   return cost > 0 && cost < 0.01 ? `< ${money(0.01)}` : money(cost)
 }
 

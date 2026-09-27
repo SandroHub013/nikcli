@@ -23,7 +23,9 @@ export function EffortPicker(props: EffortPickerProps) {
   const value = () => effortValue(props.value, props.levels)
   const items = createMemo<readonly ChipMenuItem[]>(() => [
     { kind: "option", value: "", label: t("picker.effortDefault") },
-    ...(props.levels ?? []).map((level): ChipMenuItem => ({ kind: "option", value: level, label: effortLabel(level), hint: level })),
+    ...(props.levels ?? []).map(
+      (level): ChipMenuItem => ({ kind: "option", value: level, label: effortLabel(level), hint: level }),
+    ),
   ])
   return (
     <Show when={hasEfforts(props.levels)}>

@@ -76,9 +76,7 @@ describe("while it waits for the name, only the start of a sentence goes to the 
 })
 
 describe("error purpose at the OpenRouter boundary", () => {
-  async function hearEarlySentence(
-    fetch: (...args: Parameters<typeof globalThis.fetch>) => Promise<Response>,
-  ) {
+  async function hearEarlySentence(fetch: (...args: Parameters<typeof globalThis.fetch>) => Promise<Response>) {
     let clock = 10_000
     const purposes: Array<string | undefined> = []
     const accepted: string[] = []
@@ -282,11 +280,14 @@ describe("the start of a long sentence is heard before it ends", () => {
 
 describe("what is left on the key", () => {
   const { openRouterCreditLeft } = require("./openrouter")
-  const answering = (status: number, body: unknown) => (async () =>
-    new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch
+  const answering = (status: number, body: unknown) =>
+    (async () =>
+      new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch
 
   test("the credit left, a refused key, and everything else as not knowing", async () => {
-    expect(await openRouterCreditLeft("k", answering(200, { data: { total_credits: 101, total_usage: 99.79 } }))).toEqual({
+    expect(
+      await openRouterCreditLeft("k", answering(200, { data: { total_credits: 101, total_usage: 99.79 } })),
+    ).toEqual({
       left: 101 - 99.79,
     })
     expect(await openRouterCreditLeft("k", answering(401, { error: "no" }))).toEqual({ refused: true })

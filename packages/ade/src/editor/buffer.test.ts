@@ -54,10 +54,7 @@ describe("editor buffer model", () => {
   })
 
   test("markSaved updates saved baseline and recalculates dirty", () => {
-    const buf = editBuffer(
-      openBuffer({ path: "test.txt", text: "hello", truncated: false }),
-      "hello world",
-    )
+    const buf = editBuffer(openBuffer({ path: "test.txt", text: "hello", truncated: false }), "hello world")
     expect(buf.dirty).toBe(true)
 
     const saved = markSaved(buf, "hello world")
@@ -67,10 +64,7 @@ describe("editor buffer model", () => {
   })
 
   test("revertBuffer discards modifications and restores saved state", () => {
-    const buf = editBuffer(
-      openBuffer({ path: "test.txt", text: "initial", truncated: false }),
-      "modified text",
-    )
+    const buf = editBuffer(openBuffer({ path: "test.txt", text: "initial", truncated: false }), "modified text")
     expect(buf.dirty).toBe(true)
 
     const reverted = revertBuffer(buf)
@@ -104,10 +98,7 @@ describe("editor buffer model", () => {
   })
 
   test("saveBlockedReason: permits save only when dirty and not truncated", () => {
-    const dirtyBuf = editBuffer(
-      openBuffer({ path: "test.txt", text: "clean", truncated: false }),
-      "dirty",
-    )
+    const dirtyBuf = editBuffer(openBuffer({ path: "test.txt", text: "clean", truncated: false }), "dirty")
     expect(saveBlockedReason(dirtyBuf)).toBeUndefined()
   })
 

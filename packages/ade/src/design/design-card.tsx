@@ -68,18 +68,21 @@ export function DesignCard(props: {
       </Show>
 
       <Show when={sharedPreview(props.proposal.variants)}>
-        <div data-slot="design-shared-preview" role="alert">{t("design.preview.shared")}</div>
+        <div data-slot="design-shared-preview" role="alert">
+          {t("design.preview.shared")}
+        </div>
       </Show>
 
-      <div data-slot="design-variants" role={props.proposal.multi ? "group" : "radiogroup"} aria-label={t("design.variants")}>
+      <div
+        data-slot="design-variants"
+        role={props.proposal.multi ? "group" : "radiogroup"}
+        aria-label={t("design.variants")}
+      >
         <For each={props.proposal.variants}>
           {(variant, index) => {
             const variantName = () => withoutNumber(variant.name, index() + 1).trim() || variant.name
             return (
-              <div
-                data-slot="design-variant-item"
-                data-selected={isPicked(props.picked, index()) ? "true" : undefined}
-              >
+              <div data-slot="design-variant-item" data-selected={isPicked(props.picked, index()) ? "true" : undefined}>
                 <div data-slot="variant-head">
                   <button
                     type="button"
@@ -89,7 +92,9 @@ export function DesignCard(props: {
                     data-on={isPicked(props.picked, index()) ? "true" : undefined}
                     onClick={() => props.onPick(index())}
                   >
-                    <span data-slot="variant-key" aria-hidden="true">{index() + 1}</span>
+                    <span data-slot="variant-key" aria-hidden="true">
+                      {index() + 1}
+                    </span>
                     <b data-slot="variant-name">{variantName()}</b>
                   </button>
                 </div>
@@ -145,8 +150,20 @@ export function DesignCard(props: {
                             if (!reason) props.onOpenVariant?.(index() + 1)
                           }}
                         >
-                          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                            <path d="M2 10v4h4M14 6V2h-4M14 2L9 7M2 14l5-5" stroke-linecap="round" stroke-linejoin="round" />
+                          <svg
+                            viewBox="0 0 16 16"
+                            width="12"
+                            height="12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M2 10v4h4M14 6V2h-4M14 2L9 7M2 14l5-5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            />
                           </svg>
                           <span>{t("design.variant.openLarge")}</span>
                         </button>
@@ -171,18 +188,37 @@ export function DesignCard(props: {
       />
 
       <Show when={props.problem}>
-        <div data-slot="design-problem" role="alert">{props.problem}</div>
+        <div data-slot="design-problem" role="alert">
+          {props.problem}
+        </div>
       </Show>
 
       <div data-slot="design-actions">
-        <button type="button" data-slot="design-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
+        <button
+          type="button"
+          data-slot="design-submit"
+          disabled={props.control.disabled}
+          onClick={() => props.onSubmit()}
+        >
           {props.control.label}
         </button>
-        <button type="button" data-slot="design-ghost" data-action="again" disabled={props.control.disabled} onClick={() => props.onAgain()}>
+        <button
+          type="button"
+          data-slot="design-ghost"
+          data-action="again"
+          disabled={props.control.disabled}
+          onClick={() => props.onAgain()}
+        >
           {t("design.again")}
         </button>
         <Show when={props.control.recordOnly}>
-          <button type="button" data-slot="design-ghost" data-action="record" disabled={props.busy} onClick={() => props.onRecord()}>
+          <button
+            type="button"
+            data-slot="design-ghost"
+            data-action="record"
+            disabled={props.busy}
+            onClick={() => props.onRecord()}
+          >
             {t("design.submit.record")}
           </button>
         </Show>
@@ -194,8 +230,13 @@ export function DesignCard(props: {
       <Show when={props.control.options}>
         {(options) => (
           <label data-slot="recipient-inline-wrap">
-            <span data-slot="design-hint" data-tone="warn">{t("design.recipient.inline")}</span>
-            <select data-slot="recipient-inline" onChange={(event) => props.onInline(event.currentTarget.value || undefined)}>
+            <span data-slot="design-hint" data-tone="warn">
+              {t("design.recipient.inline")}
+            </span>
+            <select
+              data-slot="recipient-inline"
+              onChange={(event) => props.onInline(event.currentTarget.value || undefined)}
+            >
               <For each={options()}>
                 {(option) => (
                   <option value={option.value} selected={option.selected}>

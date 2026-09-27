@@ -102,4 +102,3 @@ export function submitCheck(input: {
   if (input.now < input.deadline) return "wait"
   return "resend"
 }
-

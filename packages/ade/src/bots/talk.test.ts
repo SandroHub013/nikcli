@@ -95,7 +95,11 @@ describe("usage and errors, as the events carry them", () => {
 
 describe("permissions", () => {
   test("once answered the turn is working again", () => {
-    const asked: Talk = { ...emptyTalk(), status: "waiting", permission: { requestID: "per_1", permission: "bash", patterns: "x", askedAt: T0 } }
+    const asked: Talk = {
+      ...emptyTalk(),
+      status: "waiting",
+      permission: { requestID: "per_1", permission: "bash", patterns: "x", askedAt: T0 },
+    }
     const answered = permissionAnswered(asked, T0 + 5)
     expect(answered.permission).toBeUndefined()
     expect(answered.status).toBe("working")
@@ -103,7 +107,10 @@ describe("permissions", () => {
 })
 
 /** A turn that ended with the CLI's own error on the thread. */
-const failedWith = (talk: Talk, text: string): Talk => ({ ...appendMessage(talk, { role: "error", text }, T0), status: "error" })
+const failedWith = (talk: Talk, text: string): Talk => ({
+  ...appendMessage(talk, { role: "error", text }, T0),
+  status: "error",
+})
 
 describe("applyExit", () => {
   test("a clean exit ends the turn idle", () => {
@@ -162,7 +169,10 @@ describe("formatWhen", () => {
 describe("mentionIn", () => {
   const bots = ["revisore", "tester"]
   test("finds a bot named after @ and returns the text without it", () => {
-    expect(mentionIn("@tester confermi con un test?", bots)).toEqual({ identifier: "tester", rest: "confermi con un test?" })
+    expect(mentionIn("@tester confermi con un test?", bots)).toEqual({
+      identifier: "tester",
+      rest: "confermi con un test?",
+    })
     expect(mentionIn("guarda tu @Revisore", bots)).toEqual({ identifier: "revisore", rest: "guarda tu" })
   })
   test("ignores names that are not bots and @ inside words", () => {
@@ -172,7 +182,10 @@ describe("mentionIn", () => {
 })
 
 /** A turn that answered, in session `ses_abc`. */
-const answered = (): Talk => ({ ...appendMessage(sendMessage(emptyTalk(), "ciao", T0), { role: "bot", text: "Ciao." }, T0), sessionId: "ses_abc" })
+const answered = (): Talk => ({
+  ...appendMessage(sendMessage(emptyTalk(), "ciao", T0), { role: "bot", text: "Ciao." }, T0),
+  sessionId: "ses_abc",
+})
 
 describe("storage", () => {
   test("round-trips the thread, dropping the running state", () => {
@@ -212,7 +225,11 @@ describe("storage", () => {
   test("the archive stays under its cap by dropping the oldest messages", () => {
     let talk = emptyTalk()
     for (let i = 0; i < 40; i++) {
-      talk = appendMessage(talk, { role: "tool", tool: "bash", text: `cmd ${i}`, output: "y".repeat(TOOL_OUTPUT_MAX) }, T0 + i)
+      talk = appendMessage(
+        talk,
+        { role: "tool", tool: "bash", text: `cmd ${i}`, output: "y".repeat(TOOL_OUTPUT_MAX) },
+        T0 + i,
+      )
     }
     const stored = serializeTalk(talk)
     expect(stored.length).toBeLessThanOrEqual(TALK_ARCHIVE_MAX)

@@ -41,9 +41,7 @@ describe("closing the window (D81, d81-chiusura - option B)", () => {
 describe("counting active working sessions for window close (D81)", () => {
   test("un terminale aperto non chiede niente (non conta come sessione al lavoro)", () => {
     const running = new Set(["term-1"])
-    const panes = [
-      { id: "term-1", title: "cmd", agent: "terminal", status: "working" as const },
-    ]
+    const panes = [{ id: "term-1", title: "cmd", agent: "terminal", status: "working" as const }]
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(0)
     expect(shouldConfirmWindowClose({ working })).toBe(false)
@@ -51,9 +49,7 @@ describe("counting active working sessions for window close (D81)", () => {
 
   test("una sessione ferma non chiede niente", () => {
     const running = new Set(["session-idle"])
-    const panes = [
-      { id: "session-idle", title: "Claude", agent: "claude-code", status: "idle" as const },
-    ]
+    const panes = [{ id: "session-idle", title: "Claude", agent: "claude-code", status: "idle" as const }]
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(0)
     expect(shouldConfirmWindowClose({ working })).toBe(false)
@@ -73,9 +69,7 @@ describe("counting active working sessions for window close (D81)", () => {
 
   test("una sessione al lavoro chiede conferma", () => {
     const running = new Set(["session-working"])
-    const panes = [
-      { id: "session-working", title: "Claude", agent: "claude-code", status: "working" as const },
-    ]
+    const panes = [{ id: "session-working", title: "Claude", agent: "claude-code", status: "working" as const }]
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(1)
     expect(shouldConfirmWindowClose({ working })).toBe(true)
@@ -84,9 +78,7 @@ describe("counting active working sessions for window close (D81)", () => {
 
   test("una sessione con status waiting (permesso aperto a meta' turno) chiede conferma", () => {
     const running = new Set(["session-waiting"])
-    const panes = [
-      { id: "session-waiting", title: "Codex", agent: "codex", status: "waiting" as const },
-    ]
+    const panes = [{ id: "session-waiting", title: "Codex", agent: "codex", status: "waiting" as const }]
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(1)
     expect(shouldConfirmWindowClose({ working })).toBe(true)
@@ -95,9 +87,7 @@ describe("counting active working sessions for window close (D81)", () => {
 
   test("un processo morto o non presente in running non conta come al lavoro", () => {
     const running = new Set<string>() // empty running map
-    const panes = [
-      { id: "session-dead", title: "OpenCode", agent: "opencode", status: "working" as const },
-    ]
+    const panes = [{ id: "session-dead", title: "OpenCode", agent: "opencode", status: "working" as const }]
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(0)
     expect(shouldConfirmWindowClose({ working })).toBe(false)
@@ -120,7 +110,9 @@ describe("counting active working sessions for window close (D81)", () => {
     expect(isWorkingAgentPane({ id: "p2", model: "codex", status: "waiting" }, running)).toBe(true)
     expect(isWorkingAgentPane({ id: "p3", agent: "claude-code", status: "idle" }, running)).toBe(false)
     expect(isWorkingAgentPane({ id: "p4", agent: "terminal", status: "working" }, running)).toBe(false)
-    expect(isWorkingAgentPane({ id: "p5", mode: "browser", browserUrl: "http://test", status: "working" }, running)).toBe(false)
+    expect(
+      isWorkingAgentPane({ id: "p5", mode: "browser", browserUrl: "http://test", status: "working" }, running),
+    ).toBe(false)
     expect(isWorkingAgentPane({ id: "p-missing", agent: "claude-code", status: "working" }, running)).toBe(false)
   })
 

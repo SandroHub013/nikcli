@@ -243,7 +243,7 @@
  */
 [data-agent-id="claude-code"] {
   --cli-color: light-dark(#c25a39, #d97757);
-  --cli-tint: light-dark(rgba(194, 90, 57, 0.10), rgba(217, 119, 87, 0.14));
+  --cli-tint: light-dark(rgba(194, 90, 57, 0.1), rgba(217, 119, 87, 0.14));
   --cli-border: light-dark(rgba(194, 90, 57, 0.28), rgba(217, 119, 87, 0.35));
   --cli-glow: light-dark(rgba(194, 90, 57, 0.18), rgba(217, 119, 87, 0.25));
   --cli-contrast: light-dark(#000000, #131111);
@@ -251,7 +251,7 @@
 
 [data-agent-id="codex"] {
   --cli-color: light-dark(#3941ff, #7a9dff);
-  --cli-tint: light-dark(rgba(57, 65, 255, 0.10), rgba(122, 157, 255, 0.14));
+  --cli-tint: light-dark(rgba(57, 65, 255, 0.1), rgba(122, 157, 255, 0.14));
   --cli-border: light-dark(rgba(57, 65, 255, 0.28), rgba(122, 157, 255, 0.35));
   --cli-glow: light-dark(rgba(57, 65, 255, 0.18), rgba(122, 157, 255, 0.25));
   --cli-contrast: light-dark(#ffffff, #131111);
@@ -259,7 +259,7 @@
 
 [data-agent-id="agy"] {
   --cli-color: light-dark(#1a6fe8, #3186ff);
-  --cli-tint: light-dark(rgba(26, 111, 232, 0.10), rgba(49, 134, 255, 0.14));
+  --cli-tint: light-dark(rgba(26, 111, 232, 0.1), rgba(49, 134, 255, 0.14));
   --cli-border: light-dark(rgba(26, 111, 232, 0.28), rgba(49, 134, 255, 0.35));
   --cli-glow: light-dark(rgba(26, 111, 232, 0.18), rgba(49, 134, 255, 0.25));
   --cli-contrast: light-dark(#ffffff, #131111);
@@ -272,7 +272,7 @@
 [data-agent-id="grok"] {
   --cli-color: light-dark(#000000, #ffffff);
   --cli-tint: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
-  --cli-border: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.30));
+  --cli-border: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.3));
   --cli-glow: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.22));
   --cli-contrast: light-dark(#ffffff, #000000);
 }
@@ -280,22 +280,22 @@
 [data-agent-id="opencode"] {
   --cli-color: light-dark(#18181b, #f1ecec);
   --cli-tint: light-dark(rgba(24, 24, 27, 0.08), rgba(241, 236, 236, 0.12));
-  --cli-border: light-dark(rgba(24, 24, 27, 0.25), rgba(241, 236, 236, 0.30));
+  --cli-border: light-dark(rgba(24, 24, 27, 0.25), rgba(241, 236, 236, 0.3));
   --cli-glow: light-dark(rgba(24, 24, 27, 0.15), rgba(241, 236, 236, 0.22));
   --cli-contrast: light-dark(#ffffff, #121212);
 }
 
 [data-agent-id="nikcli"] {
   --cli-color: light-dark(#2563eb, #3b82f6);
-  --cli-tint: light-dark(rgba(37, 99, 235, 0.10), rgba(59, 130, 246, 0.15));
-  --cli-border: light-dark(rgba(37, 99, 235, 0.30), rgba(59, 130, 246, 0.40));
-  --cli-glow: light-dark(rgba(37, 99, 235, 0.20), rgba(59, 130, 246, 0.30));
+  --cli-tint: light-dark(rgba(37, 99, 235, 0.1), rgba(59, 130, 246, 0.15));
+  --cli-border: light-dark(rgba(37, 99, 235, 0.3), rgba(59, 130, 246, 0.4));
+  --cli-glow: light-dark(rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.3));
   --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 [data-agent-id="kimi"] {
   --cli-color: light-dark(#0266d6, #1783ff);
-  --cli-tint: light-dark(rgba(2, 102, 214, 0.10), rgba(23, 131, 255, 0.14));
+  --cli-tint: light-dark(rgba(2, 102, 214, 0.1), rgba(23, 131, 255, 0.14));
   --cli-border: light-dark(rgba(2, 102, 214, 0.28), rgba(23, 131, 255, 0.35));
   --cli-glow: light-dark(rgba(2, 102, 214, 0.18), rgba(23, 131, 255, 0.25));
   --cli-contrast: light-dark(#ffffff, #131111);
@@ -303,7 +303,7 @@
 
 [data-agent-id="ohmypi"] {
   --cli-color: light-dark(#ea580c, #f97316);
-  --cli-tint: light-dark(rgba(234, 88, 12, 0.10), rgba(249, 115, 22, 0.14));
+  --cli-tint: light-dark(rgba(234, 88, 12, 0.1), rgba(249, 115, 22, 0.14));
   --cli-border: light-dark(rgba(234, 88, 12, 0.28), rgba(249, 115, 22, 0.35));
   --cli-glow: light-dark(rgba(234, 88, 12, 0.18), rgba(249, 115, 22, 0.25));
   --cli-contrast: #131111;
@@ -311,7 +311,7 @@
 
 [data-agent-id="terminal"] {
   --cli-color: light-dark(#15803d, #22c55e);
-  --cli-tint: light-dark(rgba(21, 128, 61, 0.10), rgba(34, 197, 94, 0.14));
+  --cli-tint: light-dark(rgba(21, 128, 61, 0.1), rgba(34, 197, 94, 0.14));
   --cli-border: light-dark(rgba(21, 128, 61, 0.28), rgba(34, 197, 94, 0.35));
   --cli-glow: light-dark(rgba(21, 128, 61, 0.18), rgba(34, 197, 94, 0.25));
   --cli-contrast: light-dark(#ffffff, #131111);
@@ -356,8 +356,7 @@
 [data-slot="new-agent"][data-active] {
   border-color: var(--cli-border, var(--cli-color, var(--ade-border-strong)));
   background:
-    radial-gradient(130% 130% at 0% 50%, var(--cli-tint, var(--ade-accent-soft)) 0%, transparent 80%),
-    var(--ade-raised);
+    radial-gradient(130% 130% at 0% 50%, var(--cli-tint, var(--ade-accent-soft)) 0%, transparent 80%), var(--ade-raised);
   box-shadow:
     0 0 0 1px var(--cli-color, var(--ade-accent)),
     0 3px 12px -3px var(--cli-glow, var(--ade-accent-glow));
@@ -460,8 +459,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-
 
 /* ── count ─────────────────────────────────────────────────────────────────── */
 
@@ -595,7 +592,6 @@
     transition: none;
   }
 }
-
 
 /* ---------------------------------------------------------------------------
    The settings section for the agents' own session reporting.

@@ -187,7 +187,9 @@ export const HISTORY_LINES = 24
 /** The room's log kept at most: older lines go, and every member's place moves with them. */
 export const LOG_KEPT = HISTORY_LINES * 4
 
-export type RoomSpeaker = { readonly kind: "user" } | { readonly kind: "bot"; readonly id: string; readonly name: string }
+export type RoomSpeaker =
+  | { readonly kind: "user" }
+  | { readonly kind: "bot"; readonly id: string; readonly name: string }
 
 export interface RoomEntry {
   readonly id: string
@@ -365,7 +367,10 @@ export function roomSpendProblem(
   // ADE Test spends nothing: only free models (B8b brief).
   const notFree = members.find((member) => member.pay !== "free")
   if (testBuild && notFree) return t("bots.room.testOnlyFree", notFree.name)
-  if (spend && !(Number.isFinite(spend.perRoundUsd) && spend.perRoundUsd > 0 && spend.perRoundUsd <= ROOM_ROUND_MAX_USD))
+  if (
+    spend &&
+    !(Number.isFinite(spend.perRoundUsd) && spend.perRoundUsd > 0 && spend.perRoundUsd <= ROOM_ROUND_MAX_USD)
+  )
     return t("bots.room.spendRange", ROOM_ROUND_MAX_USD)
   if (members.some((member) => member.pay === "paid") && !spend) return t("bots.room.spendRequired")
   return undefined
@@ -447,7 +452,12 @@ export async function runRoom(
         // What it was given is read, whether it spoke or not.
         let log = markSeen(deps.log(), member.id)
         if (!deps.cancelled() && !isPass(speech.text)) {
-          const entry: RoomEntry = { id: newId(), from: { kind: "bot", id: member.id, name: member.name }, text: speech.text!.trim(), at: now() }
+          const entry: RoomEntry = {
+            id: newId(),
+            from: { kind: "bot", id: member.id, name: member.name },
+            text: speech.text!.trim(),
+            at: now(),
+          }
           log = markSeen(appendEntry(log, entry), member.id)
           posted++
           spoke++
@@ -458,7 +468,8 @@ export async function runRoom(
         if (deps.perRoundUsd !== undefined && spentUsd >= deps.perRoundUsd) return { end: "budget", posted, turns }
       }
       if (deps.cancelled()) return { end: "cancelled", posted, turns }
-      if (!continuesAfter({ round, anyoneSpoke: spoke > 0 })) return { end: spoke > 0 ? "rounds" : "settled", posted, turns }
+      if (!continuesAfter({ round, anyoneSpoke: spoke > 0 }))
+        return { end: spoke > 0 ? "rounds" : "settled", posted, turns }
     }
     return { end: "rounds", posted, turns }
   } finally {

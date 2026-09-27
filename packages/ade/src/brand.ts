@@ -62,7 +62,9 @@ export function derived(brand: Brand): { main: Record<string, string>; test: Rec
 export type Json = Record<string, unknown>
 
 export function get(object: Json, path: string): unknown {
-  return path.split(".").reduce<unknown>((node, key) => (node && typeof node === "object" ? (node as Json)[key] : undefined), object)
+  return path
+    .split(".")
+    .reduce<unknown>((node, key) => (node && typeof node === "object" ? (node as Json)[key] : undefined), object)
 }
 
 export function set(object: Json, path: string, value: string): void {

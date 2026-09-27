@@ -56,7 +56,9 @@ describe("host bridge", () => {
     for (const catalog of Object.values(CATALOGS)) {
       for (const input of cases) {
         const line = said(catalog as Record<string, unknown>, input)
-        const claimsStorageGone = /(storage[^.;]*\b(cancellat|gone|cleared)|(cancellat|cleared)[^.;]*storage)/i.test(line)
+        const claimsStorageGone = /(storage[^.;]*\b(cancellat|gone|cleared)|(cancellat|cleared)[^.;]*storage)/i.test(
+          line,
+        )
         expect([JSON.stringify(input), claimsStorageGone]).toEqual([JSON.stringify(input), input.storageCleared])
         if (input.cookiesDeleted === 0) expect(line).not.toMatch(/\b(\d+ cookie|un cookie|one cookie)\b/i)
         else expect(line).toMatch(new RegExp(`\\b(${input.cookiesDeleted}|un|one) cookie`, "i"))

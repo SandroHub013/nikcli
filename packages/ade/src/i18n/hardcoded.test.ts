@@ -138,7 +138,10 @@ function count(path: string): number {
 
 function measure(): Record<string, number> {
   const counts: Record<string, number> = {}
-  for (const [root, prefix] of [[SRC, ""], [VOICE, "voice/"]] as const) {
+  for (const [root, prefix] of [
+    [SRC, ""],
+    [VOICE, "voice/"],
+  ] as const) {
     for (const path of sources(root).sort()) {
       const n = count(path)
       if (n > 0) counts[prefix + relative(root, path).replace(/\\/g, "/")] = n

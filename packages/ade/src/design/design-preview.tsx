@@ -59,7 +59,13 @@ export function shortenPath(fullPath: string, maxLen = 45): string {
 export function isHtmlPreview(preview: string): boolean {
   const trimmed = preview.trim()
   if (/\.html?([?#].*)?$/i.test(trimmed)) return true
-  if (trimmed.startsWith("<!") || trimmed.startsWith("<html") || trimmed.startsWith("<div") || trimmed.startsWith("<head")) return true
+  if (
+    trimmed.startsWith("<!") ||
+    trimmed.startsWith("<html") ||
+    trimmed.startsWith("<div") ||
+    trimmed.startsWith("<head")
+  )
+    return true
   return false
 }
 
@@ -122,7 +128,12 @@ export type PreviewPlan =
   | { readonly kind: "error"; readonly text: string }
 
 /** What a variant's `preview` becomes: a frame, an image, or an error said with the path. */
-export function previewPlan(preview: string, projectRoot: string | undefined, k: string, windows?: boolean): PreviewPlan {
+export function previewPlan(
+  preview: string,
+  projectRoot: string | undefined,
+  k: string,
+  windows?: boolean,
+): PreviewPlan {
   const raw = preview.trim()
   if (!raw) return { kind: "none" }
   // HTML written into the register would be a `srcdoc`: its scripts do not run in the release build.
@@ -130,7 +141,8 @@ export function previewPlan(preview: string, projectRoot: string | undefined, k:
   if (/^(?:https?:|\/\/)/i.test(raw)) return { kind: "none" }
   if (/\.html?([?#].*)?$/i.test(raw)) {
     const path = resolvePreviewPath(raw, projectRoot)
-    if (!projectRoot || !isInsideRoot(path, projectRoot)) return { kind: "error", text: t("design.preview.outside", path, k) }
+    if (!projectRoot || !isInsideRoot(path, projectRoot))
+      return { kind: "error", text: t("design.preview.outside", path, k) }
     return { kind: "html", path, src: mediaUrl(path, windows) }
   }
   if (/^(data:|ade-media:)/.test(raw)) return { kind: "image", path: raw, src: raw }
@@ -252,11 +264,7 @@ export function DesignPreview(props: {
   const title = () => props.name || t("design.preview")
 
   return (
-    <div
-      ref={(el) => (containerRef = el)}
-      data-component="design-preview"
-      data-type={plan().kind}
-    >
+    <div ref={(el) => (containerRef = el)} data-component="design-preview" data-type={plan().kind}>
       {(() => {
         const current = plan()
         if (current.kind === "error") {

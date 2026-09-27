@@ -155,7 +155,9 @@ export function spendLine(input: {
     kind,
     model,
     tokens: input.tokens,
-    ...(!unreported && (kind === "api" || kind === "metered") && input.costUsd > 0 ? { usd: formatUsd(input.costUsd) } : {}),
+    ...(!unreported && (kind === "api" || kind === "metered") && input.costUsd > 0
+      ? { usd: formatUsd(input.costUsd) }
+      : {}),
     ...(unreported ? { unreported: true as const } : {}),
   }
 }
@@ -363,7 +365,10 @@ const notStdin = (prompt: string) => (prompt.trim() === "-" ? " -" : prompt)
  * A missing account is a subscription. Key mode never falls back to that:
  * no name still asks for `account-key`, and Rust refuses the spawn.
  */
-function accountLaunch(account: BotAccount | undefined): { readonly flags: readonly string[]; readonly secrets?: readonly string[] } {
+function accountLaunch(account: BotAccount | undefined): {
+  readonly flags: readonly string[]
+  readonly secrets?: readonly string[]
+} {
   if (account?.mode === "key") {
     return account.key ? { flags: ["account-key"], secrets: [account.key] } : { flags: ["account-key"] }
   }
@@ -423,7 +428,9 @@ export function turnCommand(
       }
       args.push("--permission-mode", canWrite(bot) && !unattended ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
-        .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote || unattended) && tool === "bash"))
+        .filter(
+          ([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote || unattended) && tool === "bash"),
+        )
         .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
         .flatMap(([, names]) => names)
       if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
@@ -469,14 +476,32 @@ export function turnCommand(
         return {
           command: runner.command,
           // `--` first: a message that starts with `-` is a message, not an option.
-          args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, "--", sessionId, notStdin(message)],
+          args: [
+            "exec",
+            "resume",
+            "--json",
+            "--skip-git-repo-check",
+            ...model,
+            ...config,
+            "--",
+            sessionId,
+            notStdin(message),
+          ],
           ...where,
           ...accountLaunch(spec.account),
         }
       }
       return {
         command: runner.command,
-        args: ["exec", "--json", "--skip-git-repo-check", ...model, ...config, "--", notStdin(withInstructions(bot, message))],
+        args: [
+          "exec",
+          "--json",
+          "--skip-git-repo-check",
+          ...model,
+          ...config,
+          "--",
+          notStdin(withInstructions(bot, message)),
+        ],
         ...where,
         ...accountLaunch(spec.account),
       }
@@ -616,7 +641,11 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
         const found = approvalOf(denial)
         if (!found) continue
         if (found.blocked) {
-          next = appendMessage(next, { role: "error", text: t("bots.approval.blocked", found.command, t(found.blocked.reason)) }, at)
+          next = appendMessage(
+            next,
+            { role: "error", text: t("bots.approval.blocked", found.command, t(found.blocked.reason)) },
+            at,
+          )
         } else {
           const reason = found.dangers.map((rule) => t(rule.reason)).join("; ")
           next = appendMessage(next, { role: "error", text: t("bots.approval.refused", found.command, reason) }, at)
@@ -664,11 +693,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
         if (/No conversation found/i.test(errors)) {
           const { sessionId: _gone, ...rest } = next
           return {
-            ...appendMessage(
-              rest,
-              { role: "error", text: t("bots.runner.conversationGone") },
-              at,
-            ),
+            ...appendMessage(rest, { role: "error", text: t("bots.runner.conversationGone") }, at),
             status: "error",
           }
         }
@@ -710,7 +735,12 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
           const output = str(item["aggregated_output"])
           return appendMessage(
             next,
-            { role: "tool", tool: "shell", text: str(item["command"]) ?? t("bots.runner.command"), ...(output?.trim() ? { output } : {}) },
+            {
+              role: "tool",
+              tool: "shell",
+              text: str(item["command"]) ?? t("bots.runner.command"),
+              ...(output?.trim() ? { output } : {}),
+            },
             at,
           )
         }
@@ -726,7 +756,11 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
           return appendMessage(next, { role: "tool", tool, text: describeInput(item["arguments"]) || tool }, at)
         }
         case "web_search":
-          return appendMessage(next, { role: "tool", tool: "web", text: str(item["query"]) ?? t("bots.runner.search") }, at)
+          return appendMessage(
+            next,
+            { role: "tool", tool: "web", text: str(item["query"]) ?? t("bots.runner.search") },
+            at,
+          )
         default:
           return next
       }
@@ -799,7 +833,12 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
           const method = str(parsed["authMethod"])
           return {
             state: "in",
-            detail: method === "claude.ai" ? t("bots.login.claudePlan") : method ? t("bots.login.method", method) : t("bots.login.done"),
+            detail:
+              method === "claude.ai"
+                ? t("bots.login.claudePlan")
+                : method
+                  ? t("bots.login.method", method)
+                  : t("bots.login.done"),
           }
         }
         return { state: "out", detail: t("bots.login.out") }

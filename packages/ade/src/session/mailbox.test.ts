@@ -70,9 +70,16 @@ describe("parseMessage", () => {
 
   test("ask, spawn and reply carry what each needs", () => {
     expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x"}')).toMatchObject({ kind: "ask", to: "2" })
-    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x","via":"typed"}')).toMatchObject({ kind: "ask", via: "typed" })
-    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":true,"text":""}')).toMatchObject({ kind: "delivered", ok: true })
-    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":false,"text":"trattenuto"}')).toMatchObject({ kind: "delivered", ok: false, text: "trattenuto" })
+    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x","via":"typed"}')).toMatchObject({
+      kind: "ask",
+      via: "typed",
+    })
+    expect(
+      parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":true,"text":""}'),
+    ).toMatchObject({ kind: "delivered", ok: true })
+    expect(
+      parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":false,"text":"trattenuto"}'),
+    ).toMatchObject({ kind: "delivered", ok: false, text: "trattenuto" })
     expect(parseMessage('{"kind":"delivered","from":"a","ref":"","ok":true}')).toBeUndefined()
     expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"fai x"}')).toMatchObject({
       kind: "spawn",
@@ -146,7 +153,10 @@ test("unverified acting messages are refused before voice confirmation", () => {
     const message = verifySender(parseMessage(body)!, tokenOf)
     expect(unverifiedSenderRefusal(message)).toBe(refusal)
   }
-  const verified = verifySender(parseMessage('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}')!, tokenOf)
+  const verified = verifySender(
+    parseMessage('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}')!,
+    tokenOf,
+  )
   expect(unverifiedSenderRefusal(verified)).toBeUndefined()
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
 })
@@ -175,7 +185,10 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
 
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
-  const voiceSend = verifySender(parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!, tokenOf)
+  const voiceSend = verifySender(
+    parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!,
+    tokenOf,
+  )
   expect(needsVoiceSendConfirmation(voiceSend)).toBe(true)
 
   const paneSend = verifySender(parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!, tokenOf)
@@ -200,15 +213,23 @@ test("every kind that acts from verified voice waits for a spoken yes", () => {
   ]) {
     expect({ json, held: needsVoiceSendConfirmation(message(json)) }).toEqual({ json, held: true })
   }
-  expect(needsVoiceSendConfirmation(message('{"kind":"ask","from":"n1-0","token":"t","to":"n2-1","text":"x"}'))).toBe(false)
-  expect(needsVoiceSendConfirmation(message('{"kind":"reply","from":"voce","token":"t","ref":"r1","text":"ok"}'))).toBe(false)
+  expect(needsVoiceSendConfirmation(message('{"kind":"ask","from":"n1-0","token":"t","to":"n2-1","text":"x"}'))).toBe(
+    false,
+  )
+  expect(needsVoiceSendConfirmation(message('{"kind":"reply","from":"voce","token":"t","ref":"r1","text":"ok"}'))).toBe(
+    false,
+  )
   expect(needsVoiceSendConfirmation(message('{"kind":"kv","from":"","op":"get","key":"k","text":""}'))).toBe(false)
 })
 
 test("the spoken question says who, what and to whom", () => {
-  const ask = voiceConfirmationFor(parseMessage('{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist"}')!)
+  const ask = voiceConfirmationFor(
+    parseMessage('{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist"}')!,
+  )
   expect(ask).toEqual({ lead: "La voce vuole chiedere a", to: "n2-1", text: "cancella dist" })
-  const spawn = voiceConfirmationFor(parseMessage('{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}')!)
+  const spawn = voiceConfirmationFor(
+    parseMessage('{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}')!,
+  )
   expect(spawn).toEqual({ lead: "La voce vuole avviare una sessione", to: "claude-code", text: "rifai il deploy" })
 })
 
@@ -224,12 +245,19 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
 })
 
 test("who-owns carries the file as its text", () => {
-  expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({ kind: "whoowns", text: "src/a.ts" })
+  expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({
+    kind: "whoowns",
+    text: "src/a.ts",
+  })
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" "}')).toBeUndefined()
 })
 
 test("the activity carries the directory the agent works in", () => {
-  expect(parseActivity('{"state":"busy","sessionId":"s","cwd":"C:\\\\w\\\\tree","at":5}', "s")).toEqual({ state: "busy", at: 5, cwd: "C:\\w\\tree" })
+  expect(parseActivity('{"state":"busy","sessionId":"s","cwd":"C:\\\\w\\\\tree","at":5}', "s")).toEqual({
+    state: "busy",
+    at: 5,
+    cwd: "C:\\w\\tree",
+  })
   expect(parseActivity('{"state":"idle","sessionId":"s","cwd":"","at":5}', "s")).toEqual({ state: "idle", at: 5 })
   expect(sameDir("C:\\Users\\me\\repo\\", "c:/users/me/repo")).toBe(true)
   expect(sameDir("C:/a", "C:/b")).toBe(false)
@@ -257,7 +285,17 @@ describe("when a session can be written to", () => {
   const now = 10_000_000
   test("a hooked session is free unless its turn is running", () => {
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 } }, now)).toBe(true)
-    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 5 }, lastOutputAt: now - 90_000 }, now)).toBe(false)
+    expect(
+      isFree(
+        {
+          hooked: true,
+          permissionPending: false,
+          activity: { state: "busy", at: now - 5 },
+          lastOutputAt: now - 90_000,
+        },
+        now,
+      ),
+    ).toBe(false)
   })
 
   test("a hooked session with no readable activity is held until it has been quiet a while", () => {
@@ -272,15 +310,21 @@ describe("when a session can be written to", () => {
     const idle = { state: "idle" as const, at: now - 60_000 }
     const kept = keptActivity(busy, undefined)
     expect(kept).toEqual(busy)
-    expect(isFree({ hooked: true, permissionPending: false, activity: kept, lastOutputAt: now - 10 * UNKNOWN_FREE_MS }, now)).toBe(false)
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: kept, lastOutputAt: now - 10 * UNKNOWN_FREE_MS }, now),
+    ).toBe(false)
     expect(keptActivity(idle, undefined)).toBeUndefined()
     expect(keptActivity(busy, idle)).toEqual(idle)
   })
 
   test("a busy that never ended, in a silent session, stops holding messages", () => {
     const busy = { state: "busy" as const, at: now - 31 * 60_000 }
-    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 120_000 }, now)).toBe(true)
-    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 1000 }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 120_000 }, now)).toBe(
+      true,
+    )
+    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 1000 }, now)).toBe(
+      false,
+    )
   })
 
   test("without hooks, a few quiet seconds end the turn", () => {
@@ -307,9 +351,13 @@ describe("the permission prompt the hook says", () => {
     const permission = { state: "permission" as const, at: now - 5_000 }
     // A session that is talking — the user is answering it — is the strongest
     // case for waiting.
-    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 500 }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 500 }, now)).toBe(
+      false,
+    )
     // And a silent one is not free either: silence is not an answer.
-    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now)).toBe(false)
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now),
+    ).toBe(false)
   })
 
   test("un prompt senza risposta continua a trattenere, anche dopo ore", () => {
@@ -319,14 +367,22 @@ describe("the permission prompt the hook says", () => {
     // nessuno guarda, e la regola scadeva proprio nel caso per cui esiste, con
     // un Invio che confermava la scelta selezionata.
     const forgotten = { state: "permission" as const, at: now - 6 * 60 * 60_000 }
-    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 6 * 60 * 60_000 }, now)).toBe(false)
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 6 * 60 * 60_000 }, now),
+    ).toBe(false)
     // E non lo cambia il tempo che è passato in nessuna forma: un prompt
     // dimenticato è ancora un prompt, e l'unica cosa che lo cancella è un hook
     // più nuovo, che vuol dire che l'utente ha scritto o che il turno è finito.
-    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now)).toBe(false)
+    expect(
+      isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now),
+    ).toBe(false)
     // Il prompt successivo, o il Stop, risolvono: sono loro che scrivono il file.
-    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(false)
-    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(
+      false,
+    )
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(
+      true,
+    )
   })
 
   test("una lettura fallita non libera un prompt, e un prompt non lascia il pannello disponibile", () => {
@@ -402,9 +458,7 @@ describe("what lands in the terminal", () => {
   })
 
   test("a late reply names the request it answers", () => {
-    expect(formatLateReply("171-ab", "fatto", panes[1])).toBe(
-      '[Risposta a 171-ab da "Sessione 2 — codex"]: fatto',
-    )
+    expect(formatLateReply("171-ab", "fatto", panes[1])).toBe('[Risposta a 171-ab da "Sessione 2 — codex"]: fatto')
   })
 
   test("escape sequences cannot become keystrokes in the other terminal", () => {
@@ -467,11 +521,20 @@ describe("orchestration", () => {
     expect(parseMessage('{"kind":"close","from":"a","to":"3"}')).toMatchObject({ kind: "close", to: "3", text: "" })
     expect(parseMessage('{"kind":"cancel","from":"a","ref":"171-ab"}')).toMatchObject({ kind: "cancel", ref: "171-ab" })
     expect(parseMessage('{"kind":"cancel","from":"a","ref":"../x"}')).toBeUndefined()
-    expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x","close":true}')).toMatchObject({ autoClose: true })
+    expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x","close":true}')).toMatchObject({
+      autoClose: true,
+    })
     expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x"}')).toMatchObject({ autoClose: false })
   })
 
-  const request: OpenRequest = { id: "171-ab", kind: "spawn", from: "n1-0", to: "n2-1", at: 0, brief: "trova i test lenti" }
+  const request: OpenRequest = {
+    id: "171-ab",
+    kind: "spawn",
+    from: "n1-0",
+    to: "n2-1",
+    at: 0,
+    brief: "trova i test lenti",
+  }
 
   test("a request's state says what the caller is actually waiting on", () => {
     expect(requestState(request, { running: false, permissionPending: false }, 5_000)).toBe("in avvio")
@@ -481,8 +544,12 @@ describe("orchestration", () => {
   })
 
   test("a request to a suspended session waits for it, and is not closed (P1-C6)", () => {
-    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 5_000)).toBe("sessione sospesa")
-    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 3_600_000)).toBe("sessione sospesa")
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 5_000)).toBe(
+      "sessione sospesa",
+    )
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 3_600_000)).toBe(
+      "sessione sospesa",
+    )
   })
 
   test("a quiet session with an old request is reminded, at most twice and never over a prompt", () => {
@@ -500,7 +567,9 @@ describe("orchestration", () => {
 
   test("status lists who waits on whom, and how long", () => {
     const table = requestsTable([request], panes, () => "in corso", 125_000)
-    expect(table).toContain("171-ab  spawn  2m05s  in corso  Sessione 1 — claude-code → Sessione 2 — codex  trova i test lenti")
+    expect(table).toContain(
+      "171-ab  spawn  2m05s  in corso  Sessione 1 — claude-code → Sessione 2 — codex  trova i test lenti",
+    )
     expect(requestsTable([], panes, () => "in corso", 0)).toBe("nessuna richiesta in corso\n")
   })
 
@@ -513,14 +582,18 @@ describe("orchestration", () => {
 describe("spawn options, updates and the request contract", () => {
   test("spawn carries name, worktree and model; close carries force", () => {
     expect(
-      parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x","name":"revisore","worktree":true,"model":"gpt-5"}'),
+      parseMessage(
+        '{"kind":"spawn","from":"a","agent":"codex","text":"x","name":"revisore","worktree":true,"model":"gpt-5"}',
+      ),
     ).toMatchObject({ name: "revisore", worktree: true, model: "gpt-5", autoClose: false })
     expect(parseMessage('{"kind":"close","from":"a","to":"3","force":true}')).toMatchObject({ force: true })
     expect(parseMessage('{"kind":"close","from":"a","to":"3"}')).toMatchObject({ force: false })
   })
 
   test("an update names a known state and has a reason", () => {
-    expect(parseMessage('{"kind":"update","from":"b","ref":"171-ab","state":"bloccata","text":"manca la chiave"}')).toMatchObject({
+    expect(
+      parseMessage('{"kind":"update","from":"b","ref":"171-ab","state":"bloccata","text":"manca la chiave"}'),
+    ).toMatchObject({
       kind: "update",
       state: "bloccata",
     })
@@ -554,8 +627,12 @@ describe("spawn options, updates and the request contract", () => {
   test("keeps the sender's line breaks only for the inbox copy", () => {
     const text = "Due cose:\n(1) la prima\r\n(2) la seconda\u0007"
     expect(formatRequest("x", text, undefined)).toContain("Due cose: (1) la prima (2) la seconda —")
-    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda —")
-    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda")
+    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain(
+      "Due cose:\n(1) la prima\n(2) la seconda —",
+    )
+    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain(
+      "Due cose:\n(1) la prima\n(2) la seconda",
+    )
     expect(formatDelivery({ text }, undefined)).not.toContain("\n")
   })
 
@@ -581,7 +658,15 @@ describe("spawn options, updates and the request contract", () => {
   })
 })
 describe("turn activity from the CLI's hooks", () => {
-  const request: OpenRequest = { id: "171-ab", kind: "ask", from: "n1-0", to: "n2-1", at: 1_000, deliveredAt: 1_000, brief: "x" }
+  const request: OpenRequest = {
+    id: "171-ab",
+    kind: "ask",
+    from: "n1-0",
+    to: "n2-1",
+    at: 1_000,
+    deliveredAt: 1_000,
+    brief: "x",
+  }
   const live = { running: true, permissionPending: false, hooked: true }
 
   test("an activity file is believed only about the pane's own conversation", () => {
@@ -597,7 +682,9 @@ describe("turn activity from the CLI's hooks", () => {
     expect(shouldNudge(request, { ...live, activity: { state: "busy", at: 2_000 } }, 900_000)).toBe(false)
     expect(shouldNudge(request, { ...live, activity: { state: "idle", at: 2_000 } }, 10_000)).toBe(false)
     expect(shouldNudge(request, { ...live, activity: { state: "idle", at: 2_000 } }, 30_000)).toBe(true)
-    expect(requestState(request, { ...live, activity: { state: "idle", at: 2_000 } }, 30_000)).toBe("inattiva senza risposta")
+    expect(requestState(request, { ...live, activity: { state: "idle", at: 2_000 } }, 30_000)).toBe(
+      "inattiva senza risposta",
+    )
   })
 
   test("a line that started no turn gets one more Enter, once, and only with hooks", () => {
@@ -622,7 +709,17 @@ describe("turn activity from the CLI's hooks", () => {
 })
 describe("long messages travel through the inbox", () => {
   const sender = { id: "p1", title: "Master", agent: "claude-code" }
-  const entry: InboxEntry = { id: "r1", paneId: "p2", name: inboxName("r1", 5), from: "p1", kind: "ask", chars: 20_000, at: 0, ringAt: 0, rings: 0 }
+  const entry: InboxEntry = {
+    id: "r1",
+    paneId: "p2",
+    name: inboxName("r1", 5),
+    from: "p1",
+    kind: "ask",
+    chars: 20_000,
+    at: 0,
+    ringAt: 0,
+    rings: 0,
+  }
 
   test("only a line too long to type goes to a file, and the bell stays short", () => {
     expect(goesToInbox("x".repeat(INLINE_MAX))).toBe(false)
@@ -666,11 +763,17 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
   const longTurn = { running: true, permissionPending: false, activity: { state: "busy" as const, at: now - WEDGE_MS } }
 
   test("a turn of an hour with no output and no writes may be stuck; one that writes is not", () => {
-    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - WEDGE_MS }, now)).toBe("forse bloccata")
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - WEDGE_MS }, now)).toBe(
+      "forse bloccata",
+    )
     expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS }, now)).toBe("forse bloccata")
-    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - 60_000 }, now)).toBe("in corso")
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - 60_000 }, now)).toBe(
+      "in corso",
+    )
     expect(requestState(request, { ...longTurn, lastOutputAt: now - 1000 }, now)).toBe("in corso")
-    expect(requestState(request, { ...longTurn, activity: { state: "busy", at: now - WEDGE_MS + 1 } }, now)).toBe("in corso")
+    expect(requestState(request, { ...longTurn, activity: { state: "busy", at: now - WEDGE_MS + 1 } }, now)).toBe(
+      "in corso",
+    )
     expect(formatWedged(request, { id: "b", title: "Fabio" }, now)).toContain("ade-msg interrupt b")
   })
 
@@ -684,13 +787,18 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     const target = { id: "p2", title: "Revisore" }
     expect(relaunchRefusal({ from: "p1", note: "" }, target, "p1")).toContain('relaunch richiede --note "')
     expect(relaunchRefusal({ from: "p1", note: "   " }, target, "p1")).toContain("richiede --note")
-    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p9")).toContain('"Revisore" non lo è')
+    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p9")).toContain(
+      '"Revisore" non lo è',
+    )
     expect(relaunchRefusal({ from: "", note: "x" }, target, undefined)).toContain("avviate da questa sessione")
     expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p1")).toBeUndefined()
   })
 
   test("relaunch carries its note and interrupt its target", () => {
-    expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2", note: " rifai i test " }))).toMatchObject({ kind: "relaunch", note: "rifai i test" })
+    expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2", note: " rifai i test " }))).toMatchObject({
+      kind: "relaunch",
+      note: "rifai i test",
+    })
     expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2" }))).toMatchObject({ kind: "relaunch", note: "" })
     expect(parseMessage(JSON.stringify({ kind: "interrupt", to: "2" }))).toMatchObject({ kind: "interrupt", to: "2" })
     expect(parseMessage(JSON.stringify({ kind: "interrupt" }))).toBeUndefined()
@@ -704,7 +812,9 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
       "2026-09-15T16:55 Fabio in-corso S21",
     ].join("\n")
     const open = openDecisions([{ spec: "S25", text: log }])
-    expect(open).toEqual([{ spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" }])
+    expect(open).toEqual([
+      { spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" },
+    ])
     expect(requestsTable([], [], () => "in corso", now, open)).toContain("decisioni aperte:\n  S25 [k=quota]")
   })
 })
@@ -821,14 +931,20 @@ describe("una riga iniziata dall'utente", () => {
     expect(text).toContain("non ti sta ignorando")
     expect(text).not.toContain("non ha letto")
     // A reply held back is named as such: the caller knows its answer exists.
-    expect(formatHeld({ id: "1790000000000-bbbb", kind: "reply" }, undefined)).toContain("la tua risposta alla richiesta 1790000000000-bbbb")
-    expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe('ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera')
+    expect(formatHeld({ id: "1790000000000-bbbb", kind: "reply" }, undefined)).toContain(
+      "la tua risposta alla richiesta 1790000000000-bbbb",
+    )
+    expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe(
+      'ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera',
+    )
   })
 })
 
 describe("ade-msg registro", () => {
   test("parses a known register and operation, with the JSON as text", () => {
-    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":"{\\"title\\":\\"x\\"}"}')).toEqual({
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":"{\\"title\\":\\"x\\"}"}'),
+    ).toEqual({
       kind: "registro",
       from: "a",
       token: undefined,
@@ -836,13 +952,19 @@ describe("ade-msg registro", () => {
       op: "aperta",
       text: '{"title":"x"}',
     })
-    expect(parseMessage('{"kind":"registro","from":"a","register":"decisioni","op":"rimandata","text":"{}"}')).toMatchObject({ op: "rimandata" })
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"decisioni","op":"rimandata","text":"{}"}'),
+    ).toMatchObject({ op: "rimandata" })
   })
 
   test("refuses an unknown register, an unknown operation, rimandata on design and an empty text", () => {
     expect(parseMessage('{"kind":"registro","from":"a","register":"note","op":"aperta","text":"{}"}')).toBeUndefined()
-    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"cancellata","text":"{}"}')).toBeUndefined()
-    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"rimandata","text":"{}"}')).toBeUndefined()
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"cancellata","text":"{}"}'),
+    ).toBeUndefined()
+    expect(
+      parseMessage('{"kind":"registro","from":"a","register":"design","op":"rimandata","text":"{}"}'),
+    ).toBeUndefined()
     expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":" "}')).toBeUndefined()
   })
 })

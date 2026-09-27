@@ -12,7 +12,9 @@ const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
 
 describe("the bot's settings form", () => {
   test("puts model and effort one under the other", () => {
-    const rule = /\[data-slot="bots-form"\]\[data-compact="true"\] \[data-slot="bots-row-fields"\]\s*\{([^}]*)\}/.exec(css)
+    const rule = /\[data-slot="bots-form"\]\[data-compact="true"\] \[data-slot="bots-row-fields"\]\s*\{([^}]*)\}/.exec(
+      css,
+    )
     expect(rule?.[1]).toContain("grid-template-columns: minmax(0, 1fr)")
   })
 

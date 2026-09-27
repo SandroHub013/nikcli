@@ -132,7 +132,9 @@ export function PermissionCard(props: {
         {(call) => (
           <div data-slot="chat-permission-call">
             <p data-slot="chat-permission-call-head">
-              {call().about ? t("chat.permission.callAbout", call().tool, call().about!) : t("chat.permission.call", call().tool)}
+              {call().about
+                ? t("chat.permission.callAbout", call().tool, call().about!)
+                : t("chat.permission.call", call().tool)}
             </p>
             <Show when={call().input}>
               <code data-slot="chat-permission-pattern">{call().input}</code>
@@ -143,12 +145,23 @@ export function PermissionCard(props: {
       <Show when={view().diff}>
         {(diff) => (
           <pre data-slot="chat-permission-diff" aria-label={t("chat.permission.diff")}>
-            <For each={diff()}>{(row) => <span data-slot="chat-diff-line" data-kind={row.kind}>{row.text}</span>}</For>
+            <For each={diff()}>
+              {(row) => (
+                <span data-slot="chat-diff-line" data-kind={row.kind}>
+                  {row.text}
+                </span>
+              )}
+            </For>
           </pre>
         )}
       </Show>
       <div data-slot="chat-permission-actions">
-        <button type="button" data-slot="chat-action" disabled={answer.busy()} onClick={() => void answer.run(() => props.onReply("once"))}>
+        <button
+          type="button"
+          data-slot="chat-action"
+          disabled={answer.busy()}
+          onClick={() => void answer.run(() => props.onReply("once"))}
+        >
           {t("chat.permission.once")}
         </button>
         <button
@@ -222,7 +235,12 @@ export function QuestionCard(props: {
         >
           {t("chat.question.send")}
         </button>
-        <button type="button" data-slot="chat-action" disabled={answer.busy()} onClick={() => void answer.run(props.onReject)}>
+        <button
+          type="button"
+          data-slot="chat-action"
+          disabled={answer.busy()}
+          onClick={() => void answer.run(props.onReject)}
+        >
           {t("chat.question.reject")}
         </button>
       </div>

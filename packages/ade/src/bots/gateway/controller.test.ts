@@ -81,7 +81,8 @@ function fakeTurns() {
     const entry = {
       request,
       stopped: false,
-      finish: (partial: Partial<TurnResult>) => resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: emptyTalk(), ...partial }),
+      finish: (partial: Partial<TurnResult>) =>
+        resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: emptyTalk(), ...partial }),
     }
     started.push(entry)
     return {
@@ -111,7 +112,13 @@ describe("a bot's memory from a chat (B8a review)", () => {
     const turns = fakeTurns()
     const memory = volatileMemoryStore()
     memory.set(BOT.path, { notes: ["Il progetto usa bun."], user: [] })
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), memory })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      memory,
+    })
     b.emit("ciao")
     await until("il turno", () => turns.started.length === 1)
     const first = turns.started[0]!.request
@@ -137,7 +144,12 @@ describe("a bot's memory from a chat (B8a review)", () => {
 describe("the gateways' controller", () => {
   test("it listens before Rust is told to read, and stops listening when stopped", async () => {
     const b = bridge()
-    const controller = await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
     expect(b.calls).toEqual(["listen", "ready"])
     controller.stop()
     expect(b.calls).toEqual(["listen", "ready", "unlisten"])
@@ -147,7 +159,13 @@ describe("the gateways' controller", () => {
     const b = bridge()
     const turns = fakeTurns()
     const sessions = memorySessionStore()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions, typingEveryMs: 5 })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions,
+      typingEveryMs: 5,
+    })
     b.emit("prima domanda")
     await until("il primo turno", () => turns.started.length === 1)
     b.emit("seconda domanda")
@@ -169,7 +187,11 @@ describe("the gateways' controller", () => {
     turns.started[1]!.finish({ status: "error", problem: "rete giù" })
     await until("il motivo", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.failed", "rete giù"))
-    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-1" })
+    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({
+      project: PROJECT,
+      runner: "claude",
+      sessionId: "s-1",
+    })
   })
 
   test("the chat's thread is kept without a secret, and /nuova drops it", async () => {
@@ -214,11 +236,20 @@ describe("the gateways' controller", () => {
     const machine: TurnDeps = {
       host: async () =>
         ({
-          spawn: async () => ({ kill: (options: unknown) => void kills.push(options), write: () => {}, resize: () => {} }),
+          spawn: async () => ({
+            kill: (options: unknown) => void kills.push(options),
+            write: () => {},
+            resize: () => {},
+          }),
         }) as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
     }
     const b = bridge()
-    await startGatewayController({ bridge: b.fake, runTurn: (request) => runTurn(request, machine), loadBot: trusted, sessions: memorySessionStore() })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: (request) => runTurn(request, machine),
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
     const before = turnsRunning("claude")
     b.emit("un lavoro lungo")
     await until("il turno occupa un posto", () => turnsRunning("claude") === before + 1)
@@ -242,7 +273,11 @@ describe("the gateways' controller", () => {
     const machine: TurnDeps = {
       host: async () =>
         ({
-          spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[]; onExit: (code: number | null) => void }) => {
+          spawn: async (options: {
+            flags?: readonly string[]
+            secrets?: readonly string[]
+            onExit: (code: number | null) => void
+          }) => {
             seen.push({
               ...(options.flags ? { flags: options.flags } : {}),
               ...(options.secrets ? { secrets: options.secrets } : {}),
@@ -337,7 +372,12 @@ describe("the gateways' controller", () => {
   test("a message a key was taken out of keeps its place: the one after it does not go first", async () => {
     const b = bridge()
     const turns = fakeTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
     b.emit("la prima, con una chiave", { redacted: true })
     b.emit("la seconda")
     await until("il primo turno", () => turns.started.length === 1)
@@ -349,7 +389,12 @@ describe("the gateways' controller", () => {
   test("a press counts only for a button ADE sent, in that chat, while its question waits, and once", async () => {
     const b = bridge()
     const turns = fakeTurns()
-    const controller = await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
     const target = { bot: BOT.path, platform: "telegram", chat: "c42" }
     const answer = controller.ask(target, "Eseguo `ls`?", [
       { label: "Sì", value: "yes" },
@@ -381,7 +426,12 @@ describe("the gateways' controller", () => {
 
   test("a question nobody answers in time, or still waiting when the controller stops, has no answer", async () => {
     const b = bridge()
-    const controller = await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
     const target = { bot: BOT.path, platform: "telegram", chat: "c42" }
     expect(await controller.ask(target, "Procedo?", [{ label: "Sì", value: "yes" }], 20)).toBeUndefined()
     const late = b.questions[0]!.buttons[0]!.data
@@ -396,7 +446,13 @@ describe("the gateways' controller", () => {
     const b = bridge()
     const turns = fakeTurns()
     let now = 1_000
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => now })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
     b.emit("ok:1", { button: true })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(turns.started).toHaveLength(0)
@@ -425,7 +481,12 @@ describe("the tools of a turn from a chat", () => {
   const on = { commands: true, fingerprint: "f-1" }
 
   /** A question as nikcli's server event gives it (B8d). */
-  const asking = (permission: string, patterns: string): PendingPermission => ({ requestID: `per_${patterns}`, permission, patterns, askedAt: 0 })
+  const asking = (permission: string, patterns: string): PendingPermission => ({
+    requestID: `per_${patterns}`,
+    permission,
+    patterns,
+    askedAt: 0,
+  })
 
   /** Turns that record the answers given to them. */
   function typedTurns() {
@@ -440,7 +501,11 @@ describe("the tools of a turn from a chat", () => {
         finish: () => resolve({ status: "done", text: "Fatto.", tokens: 0, costUsd: 0, talk: emptyTalk() }),
       }
       started.push(entry)
-      return { result, stop: () => entry.finish(), answer: (requestID, reply) => void (entry.keys.push(reply), entry.ids.push(requestID)) }
+      return {
+        result,
+        stop: () => entry.finish(),
+        answer: (requestID, reply) => void (entry.keys.push(reply), entry.ids.push(requestID)),
+      }
     }
     return { started, runTurn }
   }
@@ -464,7 +529,12 @@ describe("the tools of a turn from a chat", () => {
   test("with the commands off nikcli's every question is answered no at once, and the chat is told once", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore() })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+    })
     b.emit("leggi i file fuori")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -491,7 +561,13 @@ describe("the tools of a turn from a chat", () => {
   test("a blocked command is refused before any question, and the chat is told why", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
     b.emit("formatta il disco")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -508,7 +584,13 @@ describe("the tools of a turn from a chat", () => {
   test("a nikcli turn from a chat takes its questions as events", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
     b.emit("elenca i file")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -530,7 +612,13 @@ describe("the tools of a turn from a chat", () => {
   test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -590,7 +678,13 @@ describe("the tools of a turn from a chat", () => {
   test("a question still waiting when the turn ends is dropped: nothing typed, a late yes ignored", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -608,7 +702,13 @@ describe("the tools of a turn from a chat", () => {
     for (const saved of [{ commands: true, fingerprint: "f-vecchia" }, { commands: true }]) {
       const b = bridge()
       const turns = typedTurns()
-      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => saved })
+      await startGatewayController({
+        bridge: b.fake,
+        runTurn: turns.runTurn,
+        loadBot: nikcli,
+        sessions: memorySessionStore(),
+        remote: () => saved,
+      })
       b.emit("pulisci la build")
       await until("il turno", () => turns.started.length === 1)
       expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
@@ -618,7 +718,13 @@ describe("the tools of a turn from a chat", () => {
   test("a Claude bot gets them off even when saved on", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), remote: () => on })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
@@ -652,7 +758,10 @@ describe("the remote commands saved per bot", () => {
     expect(remoteTools(localRemoteStore(key).get("a.md"), "f-2")).toEqual(REMOTE_OFF)
     expect(remoteTools(localRemoteStore(key).get("a.md"), undefined)).toEqual(REMOTE_OFF)
     // Whatever else is found saved counts as off, on for no file included.
-    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes", fingerprint: "f-1" }, "c.md": true, "d.md": { commands: true } }))
+    localStorage.setItem(
+      key,
+      JSON.stringify({ "a.md": { commands: "yes", fingerprint: "f-1" }, "c.md": true, "d.md": { commands: true } }),
+    )
     expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
     expect(localRemoteStore(key).get("c.md")).toEqual(REMOTE_OFF)
     expect(localRemoteStore(key).get("d.md")).toEqual(REMOTE_OFF)

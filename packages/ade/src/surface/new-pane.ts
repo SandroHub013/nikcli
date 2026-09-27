@@ -93,8 +93,12 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
   },
   {
     commandId: "design.pane",
-    get label() { return t("newPane.design") },
-    get hint() { return t("newPane.design.hint") },
+    get label() {
+      return t("newPane.design")
+    },
+    get hint() {
+      return t("newPane.design.hint")
+    },
     glyph: "design",
   },
 ]

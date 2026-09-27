@@ -114,7 +114,10 @@ export function waitsForSheet(commandId: string): boolean {
 }
 
 /** `run`, doing nothing for the commands that `waitsForSheet` while a sheet is open. */
-export function guardedBySheet(sheetOpen: () => boolean, run: (id: string) => Promise<void>): (id: string) => Promise<void> {
+export function guardedBySheet(
+  sheetOpen: () => boolean,
+  run: (id: string) => Promise<void>,
+): (id: string) => Promise<void> {
   return async (id) => {
     if (sheetOpen() && waitsForSheet(id)) return
     await run(id)
@@ -174,7 +177,11 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       group: t("palette.group.session"),
       keywords: ["sospendi", "pausa", "memoria", "libera", "suspend", "pause", "memory", "free"],
       enabled: !!focusedPane && suspend.ok,
-      disabledReason: !focusedPane ? t("palette.noFocusedPane") : suspend.ok ? undefined : t(SUSPEND_REASON[suspend.reason]),
+      disabledReason: !focusedPane
+        ? t("palette.noFocusedPane")
+        : suspend.ok
+          ? undefined
+          : t(SUSPEND_REASON[suspend.reason]),
     },
     {
       id: "pane.rename",

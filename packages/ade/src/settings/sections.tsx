@@ -4,14 +4,7 @@ import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
-import {
-  LOCALE_PREFERENCES,
-  locale,
-  localePreference,
-  setLocalePreference,
-  t,
-  type LocalePreference,
-} from "../i18n"
+import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
 import "./sections.css"
@@ -104,20 +97,12 @@ export function BotSection(props: BotSectionProps) {
         <h3 data-slot="section-title" tabIndex={-1}>
           {t("settings.bots.title")}
         </h3>
-        <p data-slot="section-desc">
-          {t("settings.bots.desc")}
-        </p>
+        <p data-slot="section-desc">{t("settings.bots.desc")}</p>
       </div>
 
       <Show
         when={roster().length > 0}
-        fallback={
-          <p data-slot="settings-empty">
-            {ready()
-              ? t("settings.bots.empty")
-              : t("settings.bots.reading")}
-          </p>
-        }
+        fallback={<p data-slot="settings-empty">{ready() ? t("settings.bots.empty") : t("settings.bots.reading")}</p>}
       >
         <ul data-slot="settings-list">
           <For each={roster()}>
@@ -167,19 +152,10 @@ export function SkillsSection(props: SkillsSectionProps) {
         <h3 data-slot="section-title" tabIndex={-1}>
           {t("settings.skills.title")}
         </h3>
-        <p data-slot="section-desc">
-          {t("settings.skills.desc")}
-        </p>
+        <p data-slot="section-desc">{t("settings.skills.desc")}</p>
       </div>
 
-      <Show
-        when={restricted().length > 0}
-        fallback={
-          <p data-slot="settings-empty">
-            {t("settings.skills.empty")}
-          </p>
-        }
-      >
+      <Show when={restricted().length > 0} fallback={<p data-slot="settings-empty">{t("settings.skills.empty")}</p>}>
         <ul data-slot="settings-list">
           <For each={restricted()}>
             {(bot) => (
@@ -286,10 +262,10 @@ export function ThemeSection(props: ThemeSectionProps) {
             onInput={(e) => props.onOpacityChange?.(Number(e.currentTarget.value))}
           />
           {/*
-            * One line, which changes rather than accumulating: under the
-            * readable minimum it says what the user is trading away, and does
-            * not stop them doing it.
-            */}
+           * One line, which changes rather than accumulating: under the
+           * readable minimum it says what the user is trading away, and does
+           * not stop them doing it.
+           */}
           <p data-slot="settings-slider-desc">
             {isGlassReadable(opacity())
               ? t("settings.theme.opacityDesc", GLASS_READABLE_MIN)
@@ -379,9 +355,7 @@ export function GridSection(props: GridSectionProps) {
         <h3 data-slot="section-title" tabIndex={-1}>
           {t("settings.grid.title")}
         </h3>
-        <p data-slot="section-desc">
-          {t("settings.grid.desc")}
-        </p>
+        <p data-slot="section-desc">{t("settings.grid.desc")}</p>
       </div>
 
       <div data-slot="settings-choices" role="group" aria-label={t("settings.grid.columns")}>
@@ -446,9 +420,7 @@ export function ProviderSection(props: ProviderSectionProps) {
         <h3 data-slot="section-title" tabIndex={-1}>
           {t("settings.providers.title")}
         </h3>
-        <p data-slot="section-desc">
-          {t("settings.providers.desc1")}
-        </p>
+        <p data-slot="section-desc">{t("settings.providers.desc1")}</p>
         <p data-slot="section-desc">
           {t("settings.providers.desc2Before", MAX_PARALLEL_TURNS)}
           <code>{"codex login --with-api-key"}</code>
@@ -472,7 +444,9 @@ export function ProviderSection(props: ProviderSectionProps) {
                       onClick={() => props.onLogin?.(runner)}
                       title={`${runner.command} ${runner.login.join(" ")}`}
                     >
-                      {state()?.login.state === "in" ? t("settings.providers.switchAccount") : t("settings.providers.login")}
+                      {state()?.login.state === "in"
+                        ? t("settings.providers.switchAccount")
+                        : t("settings.providers.login")}
                     </button>
                   </Show>
                 </div>
@@ -497,11 +471,5 @@ export function ProviderSection(props: ProviderSectionProps) {
 
 /** Servers ADE would speak the Model Context Protocol to. */
 export function McpSection() {
-  return (
-    <NotBuiltYet
-      title="MCP"
-      what={t("settings.mcp.desc")}
-      instead={t("settings.mcp.instead")}
-    />
-  )
+  return <NotBuiltYet title="MCP" what={t("settings.mcp.desc")} instead={t("settings.mcp.instead")} />
 }

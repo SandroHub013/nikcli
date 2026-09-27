@@ -44,7 +44,15 @@ const BLOCKED = [
 ]
 const EVERYDAY = ["git status", "ls -la", "rm -rf build", "git push --force origin x", "npm publish"]
 /** The server's configuration, as a tool that writes names it (`configDenials`). */
-const CONFIG = [".nikcli/tool/x.ts", ".NIKCLI\\tool\\x.ts", "C:\\progetto\\.nikcli\\nikcli.json", "sotto/Nikcli.Jsonc", "NIKCLI~1\\tool\\x.ts", "nikcli.json::$DATA", "C:\\progetto\\NIKCLI.JSONC::$data"]
+const CONFIG = [
+  ".nikcli/tool/x.ts",
+  ".NIKCLI\\tool\\x.ts",
+  "C:\\progetto\\.nikcli\\nikcli.json",
+  "sotto/Nikcli.Jsonc",
+  "NIKCLI~1\\tool\\x.ts",
+  "nikcli.json::$DATA",
+  "C:\\progetto\\NIKCLI.JSONC::$data",
+]
 const USERS: Record<string, object> = {
   "nessuna regola": {},
   "bash: allow": { bash: "allow" },
@@ -104,14 +112,20 @@ for (const profile of Object.keys(SHELL) as BotProfile[]) {
     // Nothing is left to the user's rule: an everyday command is asked, where ADE answers, or denied with the shell.
     for (const command of EVERYDAY) {
       const got = action(agent, session, command)
-      check(got === SHELL[profile], `profilo ${profile}, ${user}: «${command}» dà ${got}, doveva dare ${SHELL[profile]}`)
+      check(
+        got === SHELL[profile],
+        `profilo ${profile}, ${user}: «${command}» dà ${got}, doveva dare ${SHELL[profile]}`,
+      )
     }
     // Every rule of the profile for a whole tool holds over the user's and the bot's.
     for (const rule of session) {
       if (rule.pattern !== "*" || rule.permission === "bash") continue
       for (const pattern of ["C:/fuori/progetto", "x"]) {
         const got = action(agent, session, pattern, rule.permission)
-        check(got === rule.action, `profilo ${profile}, ${user}: ${rule.permission} «${pattern}» dà ${got}, doveva dare ${rule.action}`)
+        check(
+          got === rule.action,
+          `profilo ${profile}, ${user}: ${rule.permission} «${pattern}» dà ${got}, doveva dare ${rule.action}`,
+        )
       }
     }
     // No profile writes the server's configuration, and the rest of the project is as the profile has it.
@@ -120,21 +134,31 @@ for (const profile of Object.keys(SHELL) as BotProfile[]) {
       check(got === "deny", `profilo ${profile}, ${user}: scrivere «${path}» dà ${got}, doveva essere negato`)
     }
     const open = action(agent, session, "src/index.ts", "edit")
-    check(open === (profile === "read-only" ? "deny" : "allow"), `profilo ${profile}, ${user}: scrivere src/index.ts dà ${open}`)
+    check(
+      open === (profile === "read-only" ? "deny" : "allow"),
+      `profilo ${profile}, ${user}: scrivere src/index.ts dà ${open}`,
+    )
     for (const tool of ["task", "plan_enter", "plan_exit", "question"]) {
       check(action(agent, session, "*", tool) === "deny", `profilo ${profile}, ${user}: ${tool} non è negato`)
     }
     // A tool denied whole is not shown to the model (`disabled`, ruleset.ts).
     const merged = [...agent, ...session]
     if (SHELL[profile] === "deny") {
-      check(PermissionRuleset.disabled(["bash"], merged).has("bash"), `profilo ${profile}, ${user}: la shell negata resta visibile al modello`)
+      check(
+        PermissionRuleset.disabled(["bash"], merged).has("bash"),
+        `profilo ${profile}, ${user}: la shell negata resta visibile al modello`,
+      )
     }
     // A routine only reads (B11 review): every tool that writes is hidden, by nikcli's own tool names.
     if (profile === "read-only") {
       const writers = ["edit", "write", "multiedit", "apply_patch", "patch", "repo_clone", "generate_image", "artifact"]
       const hidden = PermissionRuleset.disabled(writers, merged)
-      for (const tool of writers) check(hidden.has(tool), `profilo ${profile}, ${user}: ${tool} resta visibile al modello`)
-      check(action(agent, session, "src/index.ts", "read") !== "deny", `profilo ${profile}, ${user}: anche la lettura è negata`)
+      for (const tool of writers)
+        check(hidden.has(tool), `profilo ${profile}, ${user}: ${tool} resta visibile al modello`)
+      check(
+        action(agent, session, "src/index.ts", "read") !== "deny",
+        `profilo ${profile}, ${user}: anche la lettura è negata`,
+      )
     }
   }
 }

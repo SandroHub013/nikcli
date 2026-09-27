@@ -23,7 +23,20 @@ import {
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
-import { DesignPreview, frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath, thumbnailScale } from "./design-preview"
+import {
+  DesignPreview,
+  frameProps,
+  isHtmlPreview,
+  isImagePreview,
+  isInsideRoot,
+  loadFailure,
+  previewPlan,
+  previewSize,
+  resolvePreviewPath,
+  sharedPreview,
+  shortenPath,
+  thumbnailScale,
+} from "./design-preview"
 import { mediaUrl } from "../video/video"
 import { foldProposals, type DesignProposal } from "./state"
 import type { DesignEvent } from "./log"
@@ -146,7 +159,10 @@ describe("who receives design answers", () => {
         by: "fable",
         title: "Impostazioni",
         spec: "S54",
-        variants: [{ name: "A", description: "", preview: "" }, { name: "B", description: "", preview: "" }],
+        variants: [
+          { name: "A", description: "", preview: "" },
+          { name: "B", description: "", preview: "" },
+        ],
       },
       {
         type: "risposta",
@@ -201,7 +217,12 @@ describe("who receives design answers", () => {
       { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
     ]
     // 1. Design DS1 was answered and delivered to Sessione A
-    let outbox = enqueue([], { path: "C:\\p\\.ade\\design.jsonl", k: "DS1", answeredAt: "2026-09-21T11:00:00Z", queuedAt: 1 })
+    let outbox = enqueue([], {
+      path: "C:\\p\\.ade\\design.jsonl",
+      k: "DS1",
+      answeredAt: "2026-09-21T11:00:00Z",
+      queuedAt: 1,
+    })
     outbox = markDelivered(outbox, outbox[0]!, "Sessione A", 99)
 
     // 2. Later, current recipient changes to Sessione B
@@ -249,7 +270,11 @@ describe("who receives design answers", () => {
       current,
     )
     expect(byId).toEqual({ id: "s-2", title: "Master" })
-    const byTitle = resolveDeliveryTarget({ path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master" }, same, current)
+    const byTitle = resolveDeliveryTarget(
+      { path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master" },
+      same,
+      current,
+    )
     expect(byTitle).toEqual({ id: "s-1", title: "Master" })
     let outbox = enqueue([], { path: file, k: "DS1", answeredAt: "t", queuedAt: 1 })
     outbox = markDelivered(outbox, outbox[0]!, { id: "s-2", title: "Master" }, 50)
@@ -279,9 +304,7 @@ describe("preview type security detection and path resolution", () => {
     expect(resolvePreviewPath("./results/preview.html", projectRoot)).toBe(
       "C:/Users/39349/Favorites/nikcli/results/preview.html",
     )
-    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe(
-      "C:/Users/39349/Favorites/nikcli/shots/mockup.png",
-    )
+    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe("C:/Users/39349/Favorites/nikcli/shots/mockup.png")
 
     // Absolute paths preserved as-is
     expect(resolvePreviewPath("C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html", projectRoot)).toBe(
@@ -325,14 +348,14 @@ describe("top bar narrow window layout, and what the eye has to check", () => {
     const devCssPath = join(__dirname, "../dev.css")
     const css = readFileSync(devCssPath, "utf-8")
 
-    expect(css).toContain('@media (max-width: 640px)')
+    expect(css).toContain("@media (max-width: 640px)")
     expect(css).toContain('[data-slot="ade-bar"]')
-    expect(css).toContain('padding: 0 var(--ade-space-3);')
+    expect(css).toContain("padding: 0 var(--ade-space-3);")
     expect(css).toContain('[data-slot="ade-window-controls"]')
-    expect(css).toContain('margin-right: calc(-1 * var(--ade-space-3));')
+    expect(css).toContain("margin-right: calc(-1 * var(--ade-space-3));")
     expect(css).toContain('[data-slot="ade-bar-center"]')
     expect(css).toContain('[data-slot="ade-view-tab"]')
-    expect(css).toContain('padding: 0 var(--ade-space-3);')
+    expect(css).toContain("padding: 0 var(--ade-space-3);")
   })
 
   test("lint: variant-preview-source sits outside variant-preview-wrap, so overflow: hidden cannot clip it", () => {
@@ -381,7 +404,6 @@ describe("top bar narrow window layout, and what the eye has to check", () => {
     expect([padding, margin, padding !== undefined && padding === margin]).toEqual([padding, margin, true])
   })
 })
-
 
 /*
  * The card's answer buttons (S75 point 1). The spec asks for these as UI
@@ -489,12 +511,26 @@ describe("answering with nobody to receive", () => {
  * `togglePick` for the box, `enterReady` for Enter, the hub for the answer.
  */
 describe("a multiple question", () => {
-  const multi = { k: "M1", variants: [{ name: "opzione 1", description: "", preview: "" }, { name: "opzione 2", description: "", preview: "" }, { name: "opzione 3", description: "", preview: "" }], multi: true as const }
+  const multi = {
+    k: "M1",
+    variants: [
+      { name: "opzione 1", description: "", preview: "" },
+      { name: "opzione 2", description: "", preview: "" },
+      { name: "opzione 3", description: "", preview: "" },
+    ],
+    multi: true as const,
+  }
 
   test("answerEvent: boxes 3 and 1 give choices in the options' order, and the words", () => {
     const at = new Date("2026-09-23T10:00:00Z")
-    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({ choices: ["opzione 1", "opzione 3"], words: "opzione 1 + opzione 3" })
-    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({ words: "opzione 1 + opzione 3 — ma piano", note: "ma piano" })
+    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({
+      choices: ["opzione 1", "opzione 3"],
+      words: "opzione 1 + opzione 3",
+    })
+    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({
+      words: "opzione 1 + opzione 3 — ma piano",
+      note: "ma piano",
+    })
     expect(answerEvent(multi, [], "", at)).toBeTypeOf("string")
     expect((answerEvent(multi, [0], "", at) as { choice?: string }).choice).toBeUndefined()
   })
@@ -521,11 +557,19 @@ describe("a multiple question", () => {
       delivery: () => ({ state: "in coda" }),
       onAnswered: () => {},
     })
-    const proposal = { ...multi, title: "Quali", raisedBy: "fable", openedAt: "2026-09-23T10:00:00Z", status: "aperta", history: [] } as never
+    const proposal = {
+      ...multi,
+      title: "Quali",
+      raisedBy: "fable",
+      openedAt: "2026-09-23T10:00:00Z",
+      status: "aperta",
+      history: [],
+    } as never
     const press = (key: string) => {
       const draft = hub.draft("M1")
       const action = sheetKey({ key }, 3, false, enterReady(true, draft.picked, draft.note, true))
-      if (action?.kind === "pick") hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
+      if (action?.kind === "pick")
+        hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
       return action
     }
     press("1")
@@ -561,7 +605,11 @@ describe("a variant's preview", () => {
   const html = previewPlan(".ade/design/DS-PROVA/2.html", root, "DS-PROVA", true)
 
   test("an HTML page is a frame whose src is the ade-media URL, sized from its meta, with no srcdoc", () => {
-    expect(html).toEqual({ kind: "html", path: "C:/p/.ade/design/DS-PROVA/2.html", src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true) })
+    expect(html).toEqual({
+      kind: "html",
+      path: "C:/p/.ade/design/DS-PROVA/2.html",
+      src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true),
+    })
     const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
     expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
     expect(props).toMatchObject({ width: "360", height: "240", sandbox: "", loading: "lazy" })
@@ -571,7 +619,10 @@ describe("a variant's preview", () => {
 
   test("lint: the miniature is a frame loaded by src — no srcdoc, no allow-same-origin, scaled with pointer-events none", () => {
     const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
-    const code = tsx.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\/.*$/gm, "")
+    const code = tsx
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+      .replace(/\/\/.*$/gm, "")
     expect(code).not.toContain("srcdoc")
     expect(code).toContain("{...frameProps(current, measured(), title())}")
     expect(code).toContain("transform: `scale(${thumb().scale})`")

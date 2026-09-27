@@ -17,7 +17,10 @@ function isAbsolute(path: string): boolean {
  * project's root, so it is resolved there, not against wherever the process
  * happens to run. `inside` is whether it stays in the project, `..` included.
  */
-export function dictatedFile(path: string, root: string | undefined): { readonly path: string; readonly inside: boolean } {
+export function dictatedFile(
+  path: string,
+  root: string | undefined,
+): { readonly path: string; readonly inside: boolean } {
   const trimmed = path.trim()
   const resolved = isAbsolute(trimmed) || !root ? trimmed : `${root.replace(/[\\/]+$/, "")}/${trimmed}`
   return { path: resolved, inside: Boolean(root) && linkPlacement(resolved, [root!]) === "inside" }
@@ -27,5 +30,7 @@ export function dictatedFile(path: string, root: string | undefined): { readonly
 export function isRecentRoot(root: string, recents: readonly { readonly root: string }[]): boolean {
   const wanted = root.trim()
   if (!wanted) return false
-  return recents.some((entry) => linkPlacement(wanted, [entry.root]) === "inside" && linkPlacement(entry.root, [wanted]) === "inside")
+  return recents.some(
+    (entry) => linkPlacement(wanted, [entry.root]) === "inside" && linkPlacement(entry.root, [wanted]) === "inside",
+  )
 }

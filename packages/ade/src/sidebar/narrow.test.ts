@@ -16,7 +16,8 @@ const tray = readFileSync(new URL("../shots/tray.css", import.meta.url), "utf8")
 function ruleBody(css: string, selector: string): string {
   // Anchored to the start of a line, or a compound selector that merely ends
   // with this one would be mistaken for the rule itself.
-  const start = css.indexOf(`
+  const start =
+    css.indexOf(`
 ${selector} {`) + 1
   expect(start).toBeGreaterThanOrEqual(0)
   return css.slice(start, css.indexOf("}", start)).replace(/\/\*[\s\S]*?\*\//g, "")

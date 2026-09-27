@@ -176,7 +176,13 @@ describe("nested shells and masked commands", () => {
   })
 
   test("running a script, or a wrapper around an everyday command, is not a question", () => {
-    for (const command of ["bash script.sh", "sh ./build.sh", "time bun test", "env NODE_ENV=test bun test", "nohup bun run dev"]) {
+    for (const command of [
+      "bash script.sh",
+      "sh ./build.sh",
+      "time bun test",
+      "env NODE_ENV=test bun test",
+      "nohup bun run dev",
+    ]) {
       expect([command, kind(command)]).toEqual([command, "ok"])
     }
   })
@@ -276,7 +282,7 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
       "Remove-Item -Recurse -Force ${env:USERPROFILE}",
       "Remove-Item -Recurse -Force $env:USERPROFILE\\*",
       "rd /s /q %USERPROFILE%",
-      "rmdir /s /q \"%USERPROFILE%\\\"",
+      'rmdir /s /q "%USERPROFILE%\\"',
       "Remove-Item C:\\",
       "Remove-Item -Path C:\\ -Recurse",
       "ri -r C:\\",
@@ -307,7 +313,7 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
     for (const command of [
       "Remove-Item -Recurse -Force C:\\Users\\mario",
       "Remove-Item -Recurse -Force C:\\Users\\mario\\",
-      "rd /s /q \"C:\\Users\\mario\"",
+      'rd /s /q "C:\\Users\\mario"',
       "rm -rf C:/Users/mario",
       "rm -rf /home/mario",
       "rm -rf /Users/mario/",

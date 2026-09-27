@@ -62,7 +62,13 @@ export interface GatewayBridge {
   /** Tells Rust the page listens: the gateways may read. */
   ready: () => Promise<void>
   send: (bot: string, platform: string, chat: string, text: string) => Promise<string>
-  sendButtons: (bot: string, platform: string, chat: string, text: string, buttons: readonly { label: string; data: string }[]) => Promise<string>
+  sendButtons: (
+    bot: string,
+    platform: string,
+    chat: string,
+    text: string,
+    buttons: readonly { label: string; data: string }[],
+  ) => Promise<string>
   typing: (bot: string, platform: string, chat: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
@@ -122,7 +128,12 @@ export interface GatewayController {
    * the one pressed; `undefined` when nothing valid was pressed in time, or
    * the question could not be sent.
    */
-  ask: (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs?: number) => Promise<string | undefined>
+  ask: (
+    target: ChatTarget,
+    question: string,
+    choices: readonly Choice[],
+    timeoutMs?: number,
+  ) => Promise<string | undefined>
   /** Chats with a turn running, for tests and the panel. */
   busy: () => string[]
 }
@@ -171,7 +182,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   }
 
   /** `signal`: the question's turn ended, and the question with it. */
-  const ask = (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs = ASK_TIMEOUT_MS, signal?: AbortSignal) =>
+  const ask = (
+    target: ChatTarget,
+    question: string,
+    choices: readonly Choice[],
+    timeoutMs = ASK_TIMEOUT_MS,
+    signal?: AbortSignal,
+  ) =>
     new Promise<string | undefined>((resolve) => {
       if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
       const id = nonce()
@@ -188,7 +205,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), choices, answer })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
-        warn(`ADE: domanda del gateway non mandata (${target.platform}): ${error instanceof Error ? error.message : String(error)}`)
+        warn(
+          `ADE: domanda del gateway non mandata (${target.platform}): ${error instanceof Error ? error.message : String(error)}`,
+        )
         answer(undefined)
       })
     })
@@ -206,7 +225,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     try {
       await deps.bridge.send(message.bot, message.platform, message.chat, text)
     } catch (error) {
-      warn(`ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`)
+      warn(
+        `ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -256,13 +277,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
-      const remote = remoteTools(offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined, loaded.fingerprint)
+      const remote = remoteTools(
+        offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined,
+        loaded.fingerprint,
+      )
       let turn: Turn | undefined
       // nikcli's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
       const onPermission =
         runner === "nikcli"
           ? permissionAnswerer({
-              ask: (question, choices, signal) => ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
+              ask: (question, choices, signal) =>
+                ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
               refuse: !remote.commands,
               answer: (requestID, reply) => {
                 if (requestID !== undefined) turn?.answer?.(requestID, reply)

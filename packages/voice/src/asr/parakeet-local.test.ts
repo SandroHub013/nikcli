@@ -69,7 +69,12 @@ describe("asr/parakeet-local", () => {
     ]
     expect(hasRequiredFiles(keys, required)).toBe(true)
     expect(hasRequiredFiles(keys.slice(1), required)).toBe(false)
-    expect(hasRequiredFiles(["hf-repo-rev-encoder-model.fp16.onnx", "hf-repo-rev-decoder_joint-model.int8.onnx", "hf-repo-rev-vocab.txt"], required)).toBe(false)
+    expect(
+      hasRequiredFiles(
+        ["hf-repo-rev-encoder-model.fp16.onnx", "hf-repo-rev-decoder_joint-model.int8.onnx", "hf-repo-rev-vocab.txt"],
+        required,
+      ),
+    ).toBe(false)
     expect(hasRequiredFiles([keys[0]!, keys[1]!.replace("rev-main", "rev-other"), keys[2]!], required)).toBe(false)
   })
 
@@ -706,7 +711,10 @@ describe("asr/parakeet-local", () => {
         await oldDisposeEntered
         await disposeParakeetModel()
         releaseOld?.()
-        const failure = await starting.then(() => undefined, (error: unknown) => error)
+        const failure = await starting.then(
+          () => undefined,
+          (error: unknown) => error,
+        )
         expect(failure).toBeInstanceOf(Error)
         expect(replacementLoads).toBe(0)
         expect(isParakeetModelWarmedUp()).toBe(false)
@@ -811,7 +819,10 @@ describe("asr/parakeet-local", () => {
       }
       const firstTranscriber = createParakeetTranscriber(options)
       const firstStart = Promise.resolve(firstTranscriber.start())
-      const firstFailure = firstStart.then(() => undefined, (error: unknown) => error)
+      const firstFailure = firstStart.then(
+        () => undefined,
+        (error: unknown) => error,
+      )
       while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
 
       const secondTranscriber = createParakeetTranscriber(options)

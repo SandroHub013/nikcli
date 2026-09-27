@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRule } from "../chat/rules"
 import { BLOCKED as BLOCK_RULES, classifyCommand } from "./approval"
-import { blockedBashDenials, botPermission, configDenials, hasBotRules, profileFor, type BotProfile } from "./serve-rules"
+import {
+  blockedBashDenials,
+  botPermission,
+  configDenials,
+  hasBotRules,
+  profileFor,
+  type BotProfile,
+} from "./serve-rules"
 import { it as itDict } from "../i18n/it"
 import { en as enDict } from "../i18n/en"
 
@@ -14,17 +21,26 @@ import { en as enDict } from "../i18n/en"
  */
 
 function matches(value: string, pattern: string) {
-  let escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
+  let escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
   if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?"
   return new RegExp("^" + escaped + "$", "s").test(value)
 }
 
 function decide(permission: string, pattern: string, ...rulesets: (readonly PermissionRule[])[]) {
-  const match = rulesets.flat().findLast((rule) => matches(permission, rule.permission) && matches(pattern, rule.pattern))
+  const match = rulesets
+    .flat()
+    .findLast((rule) => matches(permission, rule.permission) && matches(pattern, rule.pattern))
   return match?.action ?? "ask"
 }
 
-const rule = (permission: string, pattern: string, action: PermissionRule["action"]): PermissionRule => ({ permission, pattern, action })
+const rule = (permission: string, pattern: string, action: PermissionRule["action"]): PermissionRule => ({
+  permission,
+  pattern,
+  action,
+})
 
 /** A bot file that grants itself everything, after nikcli's defaults and a user config with `bash *: allow`. */
 const HOSTILE: PermissionRule[] = [
@@ -55,14 +71,20 @@ const PROFILES: BotProfile[] = ["ask", "ask-outside", "no-shell", "read-only", "
 describe("B8d: the rules of a bot's session", () => {
   test("the block list is denied where the shell asks, whatever the bot's file grants", () => {
     for (const profile of ["ask", "remote-ask"] as const) {
-      for (const command of BLOCKED) expect([profile, command, decide("bash", command, HOSTILE, botPermission(profile))]).toEqual([profile, command, "deny"])
+      for (const command of BLOCKED)
+        expect([profile, command, decide("bash", command, HOSTILE, botPermission(profile))]).toEqual([
+          profile,
+          command,
+          "deny",
+        ])
       for (const command of EVERYDAY) expect(decide("bash", command, HOSTILE, botPermission(profile))).toBe("ask")
     }
   })
 
   test("no shell where there is none to answer, and nothing written by a routine", () => {
     for (const profile of ["ask-outside", "no-shell", "read-only", "remote-none"] as const) {
-      for (const command of [...BLOCKED, ...EVERYDAY]) expect(decide("bash", command, HOSTILE, botPermission(profile))).toBe("deny")
+      for (const command of [...BLOCKED, ...EVERYDAY])
+        expect(decide("bash", command, HOSTILE, botPermission(profile))).toBe("deny")
     }
     for (const tool of ["edit", "write", "patch", "repo_clone", "generate_image", "artifact"]) {
       expect(decide(tool, "src/a.ts", HOSTILE, botPermission("read-only"))).toBe("deny")
@@ -81,14 +103,17 @@ describe("B8d: the rules of a bot's session", () => {
       "remote-none": ["ask", "deny", "deny"],
     }
     for (const profile of PROFILES) {
-      const got = ["external_directory", "computer", "browser_control"].map((tool) => decide(tool, "*", HOSTILE, botPermission(profile)))
+      const got = ["external_directory", "computer", "browser_control"].map((tool) =>
+        decide(tool, "*", HOSTILE, botPermission(profile)),
+      )
       expect([profile as string, ...got]).toEqual([profile, ...expected[profile]])
     }
   })
 
   test("never a subagent, plan mode or a question, in any profile", () => {
     for (const profile of PROFILES) {
-      for (const tool of ["task", "plan_enter", "plan_exit", "question"]) expect(decide(tool, "*", HOSTILE, botPermission(profile))).toBe("deny")
+      for (const tool of ["task", "plan_enter", "plan_exit", "question"])
+        expect(decide(tool, "*", HOSTILE, botPermission(profile))).toBe("deny")
     }
   })
 
@@ -130,16 +155,26 @@ describe("B8d: the rules of a bot's session", () => {
       "config.json",
     ]
     for (const profile of PROFILES) {
-      for (const path of CONFIG) expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, "deny"])
+      for (const path of CONFIG)
+        expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, "deny"])
       // The rest of the project is as the profile had it: open, or closed to a routine.
       const open = profile === "read-only" ? "deny" : "allow"
-      for (const path of PROJECT) expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, open])
+      for (const path of PROJECT)
+        expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, open])
     }
     // First among the session's, which all come after the bot's file: a routine's
     // `edit` denied whole stays the last, which is what hides the tool (`disabled`).
     const denials = configDenials()
-    expect(botPermission("remote-none").slice(0, denials.length).map((entry) => entry.pattern)).toEqual(denials)
-    expect(botPermission("read-only").findLast((entry) => entry.permission === "edit")).toEqual({ permission: "edit", pattern: "*", action: "deny" })
+    expect(
+      botPermission("remote-none")
+        .slice(0, denials.length)
+        .map((entry) => entry.pattern),
+    ).toEqual(denials)
+    expect(botPermission("read-only").findLast((entry) => entry.permission === "edit")).toEqual({
+      permission: "edit",
+      pattern: "*",
+      action: "deny",
+    })
   })
 
   test("the note on the rules says an «always» for edits opens the configuration too", () => {
@@ -151,7 +186,16 @@ describe("B8d: the rules of a bot's session", () => {
   test("the list: every form, deduplicated", () => {
     const list = blockedBashDenials()
     expect(new Set(list).size).toBe(list.length)
-    for (const pattern of ["rm * ~", "sudo rm * / *", "rm -rf", "Remove-Item * ?:\\", "remove-item * ~", "FORMAT ?:*", "dd *of=/dev/*", "Remove-item * ?:\\"])
+    for (const pattern of [
+      "rm * ~",
+      "sudo rm * / *",
+      "rm -rf",
+      "Remove-Item * ?:\\",
+      "remove-item * ~",
+      "FORMAT ?:*",
+      "dd *of=/dev/*",
+      "Remove-item * ?:\\",
+    ])
       expect(list).toContain(pattern)
     expect(botPermission("ask").at(-1)!.permission).toBe("bash")
     expect(botPermission("ask").at(-1)!.action).toBe("deny")
@@ -160,7 +204,8 @@ describe("B8d: the rules of a bot's session", () => {
   test("a session is the bot's when its rules end with the profile's; another, or none, is not", () => {
     for (const profile of PROFILES) {
       expect(hasBotRules({ permission: [rule("*", "*", "ask"), ...botPermission(profile)] }, profile)).toBe(true)
-      for (const other of PROFILES.filter((p) => p !== profile)) expect(hasBotRules({ permission: [...botPermission(profile)] }, other)).toBe(false)
+      for (const other of PROFILES.filter((p) => p !== profile))
+        expect(hasBotRules({ permission: [...botPermission(profile)] }, other)).toBe(false)
     }
     expect(hasBotRules({ permission: [] }, "ask")).toBe(false)
     expect(hasBotRules(undefined, "ask")).toBe(false)
@@ -223,7 +268,12 @@ describe("the block list is the same in nikcli", () => {
 
   test("every sample is denied by nikcli in the profiles that ask, whatever the bot's file grants", () => {
     for (const profile of ["ask", "remote-ask"] as const) {
-      for (const [, command] of SAMPLES) expect([profile, command, decide("bash", command, HOSTILE, botPermission(profile))]).toEqual([profile, command, "deny"])
+      for (const [, command] of SAMPLES)
+        expect([profile, command, decide("bash", command, HOSTILE, botPermission(profile))]).toEqual([
+          profile,
+          command,
+          "deny",
+        ])
     }
   })
 
@@ -236,6 +286,7 @@ describe("the block list is the same in nikcli", () => {
   })
 
   test("every sample is blocked by ADE too, for the same rule", () => {
-    for (const [rule, command] of SAMPLES) expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
+    for (const [rule, command] of SAMPLES)
+      expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
   })
 })

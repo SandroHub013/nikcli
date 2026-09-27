@@ -56,7 +56,9 @@ function mount(initialSection: string, framed = false) {
         initialSection,
         builtInGroup: "Voce",
         extraGroup: "ADE",
-        extraSections: [{ id: "set-sec-theme", label: "Tema", glyph: "◐", render: () => document.createElement("div") }],
+        extraSections: [
+          { id: "set-sec-theme", label: "Tema", glyph: "◐", render: () => document.createElement("div") },
+        ],
       }),
     host,
   )
@@ -96,18 +98,26 @@ test("the header keeps the close on its one row, whatever it holds", () => {
   const header = host.querySelector('[data-slot="header"]')!
   const children = header.children.length
   expect(children).toBe(5)
-  const sheet = readFileSync(join(import.meta.dir, "..", "..", "..", "voice", "src", "ui", "voice-settings.css"), "utf-8")
+  const sheet = readFileSync(
+    join(import.meta.dir, "..", "..", "..", "voice", "src", "ui", "voice-settings.css"),
+    "utf-8",
+  )
   let body = ""
   let narrowClose = ""
   postcss.parse(sheet).walkRules((rule) => {
     const narrow = rule.parent?.type === "atrule"
-    if (rule.selector === '[data-component="voice-settings-panel"] [data-slot="header"]' && !narrow) body = rule.toString()
-    if (rule.selector === '[data-component="voice-settings-panel"] [data-slot="close-btn"]' && narrow) narrowClose = rule.toString()
+    if (rule.selector === '[data-component="voice-settings-panel"] [data-slot="header"]' && !narrow)
+      body = rule.toString()
+    if (rule.selector === '[data-component="voice-settings-panel"] [data-slot="close-btn"]' && narrow)
+      narrowClose = rule.toString()
   })
   // Narrow, the header wraps on purpose (the pill takes a row): the X is pinned
   // to the first row there.
   expect(narrowClose).toContain("grid-row: 1")
-  const tracks = (/grid-template-columns:\s*([^;]+);/.exec(body)?.[1] ?? "").trim().split(/\s+(?![^(]*\))/).filter(Boolean).length
+  const tracks = (/grid-template-columns:\s*([^;]+);/.exec(body)?.[1] ?? "")
+    .trim()
+    .split(/\s+(?![^(]*\))/)
+    .filter(Boolean).length
   const onDemand = /grid-auto-flow:\s*column/.test(body)
   expect([children, tracks, onDemand, onDemand || tracks >= children]).toEqual([children, tracks, onDemand, true])
 })

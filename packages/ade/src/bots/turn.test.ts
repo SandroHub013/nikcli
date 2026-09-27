@@ -203,7 +203,10 @@ describe("bots/turn, stopped by newer questions", () => {
 describe("a CLI that does not start", () => {
   test("ends the turn in error with the host's reason, and gives the place back", async () => {
     const host = {
-      spawn: async (options: { onExit: (code: number | null) => void; onLine: (line: string, stream: "out" | "err") => void }) => {
+      spawn: async (options: {
+        onExit: (code: number | null) => void
+        onLine: (line: string, stream: "out" | "err") => void
+      }) => {
         options.onLine("comando non consentito: codex", "err")
         options.onExit(null)
         return { kill: () => {}, write: () => {}, resize: () => {} }
@@ -223,8 +226,15 @@ describe("le opzioni di avvio arrivano all'host", () => {
     const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
     let exit: (code: number | null) => void = () => {}
     const host = {
-      spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[]; onExit: (code: number | null) => void }) => {
-        seen.push({ ...(options.flags ? { flags: options.flags } : {}), ...(options.secrets ? { secrets: options.secrets } : {}) })
+      spawn: async (options: {
+        flags?: readonly string[]
+        secrets?: readonly string[]
+        onExit: (code: number | null) => void
+      }) => {
+        seen.push({
+          ...(options.flags ? { flags: options.flags } : {}),
+          ...(options.secrets ? { secrets: options.secrets } : {}),
+        })
         exit = options.onExit
         return { kill: () => {}, write: () => {}, resize: () => {} }
       },
@@ -242,12 +252,16 @@ describe("le opzioni di avvio arrivano all'host", () => {
     const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
     const host = {
       spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[] }) => {
-        seen.push({ ...(options.flags ? { flags: options.flags } : {}), ...(options.secrets ? { secrets: options.secrets } : {}) })
+        seen.push({
+          ...(options.flags ? { flags: options.flags } : {}),
+          ...(options.secrets ? { secrets: options.secrets } : {}),
+        })
         throw new Error("chiave «finta» non assegnata a claude-code in Impostazioni › Chiavi API")
       },
     }
     const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
-    const result = await runTurn({ runner: "claude", message: "ciao", account: { mode: "key", key: "finta" } }, deps).result
+    const result = await runTurn({ runner: "claude", message: "ciao", account: { mode: "key", key: "finta" } }, deps)
+      .result
     expect(seen[0]!.flags).toEqual(["account-key"])
     expect(seen[0]!.flags).not.toContain("account-plan")
     expect(seen[0]!.secrets).toEqual(["finta"])

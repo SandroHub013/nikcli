@@ -88,7 +88,8 @@ export function modelMenuItems(input: {
 }): readonly ChipMenuItem[] {
   const browsing = !(input.query ?? "").trim()
   const kept = input.kept
-  const keptApart = browsing && kept && !input.models.some((model) => serializeModelRef(model) === kept) ? kept : undefined
+  const keptApart =
+    browsing && kept && !input.models.some((model) => serializeModelRef(model) === kept) ? kept : undefined
   const option = (model: ChatModelChoice): ChipMenuItem => ({
     kind: "option",
     value: serializeModelRef(model),
@@ -100,8 +101,19 @@ export function modelMenuItems(input: {
   const group = (label: string, models: readonly ChatModelChoice[]): readonly ChipMenuItem[] =>
     models.length ? [{ kind: "group", label }, ...models.map(option)] : []
   return [
-    ...(browsing && input.defaultLabel !== undefined ? [{ kind: "option", value: "", label: input.defaultLabel } as const] : []),
-    ...(keptApart ? [{ kind: "option", value: keptApart, label: (input.keptLabel ?? ((value: string) => value))(keptApart), hint: keptApart } as const] : []),
+    ...(browsing && input.defaultLabel !== undefined
+      ? [{ kind: "option", value: "", label: input.defaultLabel } as const]
+      : []),
+    ...(keptApart
+      ? [
+          {
+            kind: "option",
+            value: keptApart,
+            label: (input.keptLabel ?? ((value: string) => value))(keptApart),
+            hint: keptApart,
+          } as const,
+        ]
+      : []),
     ...group(t("picker.recent"), input.sections.recent),
     ...group(t("picker.free"), input.sections.free),
     ...group(t("picker.paidGroup"), input.sections.paid),
@@ -163,7 +175,15 @@ export function hasEfforts(variants: readonly string[] | undefined): boolean {
   return (variants?.length ?? 0) > 0
 }
 
-type EffortKey = "effort.none" | "effort.minimal" | "effort.low" | "effort.medium" | "effort.high" | "effort.xhigh" | "effort.max" | "effort.thinking"
+type EffortKey =
+  | "effort.none"
+  | "effort.minimal"
+  | "effort.low"
+  | "effort.medium"
+  | "effort.high"
+  | "effort.xhigh"
+  | "effort.max"
+  | "effort.thinking"
 
 /* The ids nikcli's models use, in words (model-picker review, BASSO a): «none» and «thinking» were shown raw. */
 const EFFORT_NAMES: Readonly<Record<string, EffortKey>> = {
@@ -195,7 +215,9 @@ export function readableModelName(id: string): string {
     .replace(/:[^:]*$/, "")
     .split(/[-_\s]+/)
     .filter((word) => word.length > 0)
-    .map((word) => (/^\d+(\.\d+)?[bkmt]$/i.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .map((word) =>
+      /^\d+(\.\d+)?[bkmt]$/i.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1),
+    )
   return words.length > 0 ? words.join(" ") : id.trim()
 }
 
@@ -204,7 +226,10 @@ export function readableModelName(id: string): string {
  * does not have it. nikcli answers such a turn mute («prompt loop failed»),
  * so the chip says so. Not read yet, or no model chosen: not known, false.
  */
-export function modelGoneFrom(value: string, state: { readonly kind: string; readonly models?: readonly ChatModelChoice[] }): boolean {
+export function modelGoneFrom(
+  value: string,
+  state: { readonly kind: string; readonly models?: readonly ChatModelChoice[] },
+): boolean {
   // An empty list judges nothing: every model would look gone.
   if (!value || state.kind !== "ready" || !state.models || state.models.length === 0) return false
   return !state.models.some((model) => serializeModelRef(model) === value)

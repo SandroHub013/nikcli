@@ -42,7 +42,9 @@ describe("findLinks (S76)", () => {
 
   test("an extension may hold digits after its first letter", () => {
     for (const name of ["a.mp4", "song.mp3", "f.woff2", "clip.m4a"]) {
-      expect(findLinks(name)).toEqual([{ start: 0, end: name.length, kind: "file", target: name, line: undefined, column: undefined }])
+      expect(findLinks(name)).toEqual([
+        { start: 0, end: name.length, kind: "file", target: name, line: undefined, column: undefined },
+      ])
     }
     expect(findLinks("v1.2.3")).toEqual([])
     expect(findLinks("1.0")).toEqual([])
@@ -61,7 +63,10 @@ describe("findLinks (S76)", () => {
 })
 
 /** A buffer of rows cut to `cols` cells, the way the pane wraps them. */
-function fakeBuffer(rows: Array<{ text: string; wrapped?: boolean }>, type: "normal" | "alternate" = "normal"): LinkBuffer {
+function fakeBuffer(
+  rows: Array<{ text: string; wrapped?: boolean }>,
+  type: "normal" | "alternate" = "normal",
+): LinkBuffer {
   return {
     type,
     getLine: (y) => {
@@ -84,7 +89,12 @@ describe("links on a buffer row (S76)", () => {
     const buffer = fakeBuffer(rows)
     expect(logicalLine(buffer, 1).text).toBe(`vai ${url} ok`)
     for (const row of [1, 2]) {
-      const links = linksOnRow(buffer, row, () => {}, () => {})
+      const links = linksOnRow(
+        buffer,
+        row,
+        () => {},
+        () => {},
+      )
       expect(links).toHaveLength(1)
       expect(links[0].text).toBe(url)
       expect(links[0].range).toEqual({ start: { x: 5, y: 1 }, end: { x: url.length - 16, y: 2 } })
@@ -98,7 +108,12 @@ describe("links on a buffer row (S76)", () => {
 
   test("Ctrl+click asks for the system browser, a plain click does not", () => {
     const requests: LinkRequest[] = []
-    const [link] = linksOnRow(fakeBuffer([{ text: "https://example.com" }]), 1, (request) => requests.push(request), () => {})
+    const [link] = linksOnRow(
+      fakeBuffer([{ text: "https://example.com" }]),
+      1,
+      (request) => requests.push(request),
+      () => {},
+    )
     link.activate({ ctrlKey: true } as MouseEvent, link.text)
     link.activate({ ctrlKey: false } as MouseEvent, link.text)
     expect(requests.map((request) => request.external)).toEqual([true, false])
@@ -107,7 +122,12 @@ describe("links on a buffer row (S76)", () => {
 
   test("hovering says what a click will do, leaving takes it back", () => {
     const titles: Array<string | undefined> = []
-    const [link] = linksOnRow(fakeBuffer([{ text: "src/a.ts:7" }]), 1, () => {}, (title) => titles.push(title))
+    const [link] = linksOnRow(
+      fakeBuffer([{ text: "src/a.ts:7" }]),
+      1,
+      () => {},
+      (title) => titles.push(title),
+    )
     link.hover?.({} as MouseEvent, link.text)
     link.leave?.({} as MouseEvent, link.text)
     expect(titles[0]).toContain("7")
@@ -122,7 +142,13 @@ describe("a drag over a link (S76, Architect's review)", () => {
     const element = new EventTarget()
     const press = watchPress(element)
     const opened: LinkRequest[] = []
-    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !press.moved())
+    const [link] = linksOnRow(
+      url,
+      1,
+      (request) => opened.push(request),
+      () => {},
+      () => !press.moved(),
+    )
     element.dispatchEvent(new MouseEvent("mousedown", { button: 0, clientX: 10, clientY: 10 }))
     element.dispatchEvent(new MouseEvent("mousemove", { buttons: 1, clientX: 60, clientY: 10 }))
     link.activate({} as MouseEvent, link.text)
@@ -133,7 +159,13 @@ describe("a drag over a link (S76, Architect's review)", () => {
     const element = new EventTarget()
     const press = watchPress(element)
     const opened: LinkRequest[] = []
-    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !press.moved())
+    const [link] = linksOnRow(
+      url,
+      1,
+      (request) => opened.push(request),
+      () => {},
+      () => !press.moved(),
+    )
     element.dispatchEvent(new MouseEvent("mousedown", { button: 0, clientX: 10, clientY: 10 }))
     element.dispatchEvent(new MouseEvent("mousemove", { buttons: 1, clientX: 12, clientY: 11 }))
     link.activate({} as MouseEvent, link.text)
@@ -143,7 +175,13 @@ describe("a drag over a link (S76, Architect's review)", () => {
   test("with a selection on screen a click does not open it", () => {
     const opened: LinkRequest[] = []
     const hasSelection = true
-    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !hasSelection)
+    const [link] = linksOnRow(
+      url,
+      1,
+      (request) => opened.push(request),
+      () => {},
+      () => !hasSelection,
+    )
     link.activate({} as MouseEvent, link.text)
     expect(opened).toEqual([])
   })

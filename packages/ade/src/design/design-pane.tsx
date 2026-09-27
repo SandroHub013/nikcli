@@ -25,9 +25,7 @@ export function DesignPane(props: {
   const now = () => new Date()
 
   const active = () =>
-    expanded() && buckets().forYou.some((d) => d.k === expanded())
-      ? expanded()
-      : buckets().forYou[0]?.k
+    expanded() && buckets().forYou.some((d) => d.k === expanded()) ? expanded() : buckets().forYou[0]?.k
 
   const problems = createMemo(() => {
     const loaded = props.hub.register.loaded()
@@ -77,14 +75,31 @@ export function DesignPane(props: {
           {buckets().forYou.length > 0 ? ` · ${t("design.openCount", buckets().forYou.length)}` : ""}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
+          <button
+            type="button"
+            data-slot="pane-action"
+            onClick={() => props.onExpand?.()}
+            aria-label={t("pane.expand")}
+          >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+              <path
+                d="M1 4.5V1h3.5M11 7.5V11H7.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+                stroke-linecap="round"
+              />
             </svg>
           </button>
           <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+              <path
+                d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+                stroke-linecap="round"
+              />
             </svg>
           </button>
         </div>
@@ -99,7 +114,9 @@ export function DesignPane(props: {
         </Show>
 
         <Show when={props.hub.register.error()}>
-          <div data-slot="design-problem" role="alert">{t("design.unreadable", String(props.hub.register.error()))}</div>
+          <div data-slot="design-problem" role="alert">
+            {t("design.unreadable", String(props.hub.register.error()))}
+          </div>
         </Show>
 
         <Show when={problems().length > 0}>
@@ -114,7 +131,11 @@ export function DesignPane(props: {
         <Show when={props.hub.register.path()}>
           <DesignRecipientPicker
             hub={props.hub}
-            queued={[...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length}
+            queued={
+              [...buckets().answered, ...buckets().rework].filter(
+                (proposal) => props.hub.delivery(proposal).state === "in coda",
+              ).length
+            }
           />
 
           <h4 data-slot="design-section">{t("design.section.open")}</h4>
@@ -148,7 +169,9 @@ export function DesignPane(props: {
                     <header data-slot="design-head">
                       <span data-slot="design-key">{proposal.k}</span>
                       <h3 data-slot="design-title">{proposal.title}</h3>
-                      <span data-slot="design-pill" data-tone="later">{t("design.pill.rework")}</span>
+                      <span data-slot="design-pill" data-tone="later">
+                        {t("design.pill.rework")}
+                      </span>
                     </header>
                     <div data-slot="design-answer">{proposal.answer?.words}</div>
                     <div data-slot="design-actions">
@@ -173,14 +196,21 @@ export function DesignPane(props: {
                       <header data-slot="design-head">
                         <span data-slot="design-key">{proposal.k}</span>
                         <h3 data-slot="design-title">{proposal.title}</h3>
-                        <span data-slot="design-pill" data-tone="done">{t("design.pill.answered")}</span>
+                        <span data-slot="design-pill" data-tone="done">
+                          {t("design.pill.answered")}
+                        </span>
                       </header>
                       <div data-slot="design-answer">
                         <b>{choiceLabel()}</b>
-                        <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}> · {proposal.answer?.note}</Show>
+                        <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}>
+                          {" "}
+                          · {proposal.answer?.note}
+                        </Show>
                       </div>
                       <Show when={props.hub.problem(proposal.k)}>
-                        <div data-slot="design-problem" role="alert">{props.hub.problem(proposal.k)}</div>
+                        <div data-slot="design-problem" role="alert">
+                          {props.hub.problem(proposal.k)}
+                        </div>
                       </Show>
                       <Show
                         when={confirmingReopen() === proposal.k}
@@ -201,7 +231,12 @@ export function DesignPane(props: {
                         <div data-slot="design-actions" role="alert">
                           <span data-slot="design-hint">
                             {delivery().state === "consegnata"
-                              ? t("design.change.confirm.delivered", proposal.k, (delivery() as { to: string }).to, choiceLabel())
+                              ? t(
+                                  "design.change.confirm.delivered",
+                                  proposal.k,
+                                  (delivery() as { to: string }).to,
+                                  choiceLabel(),
+                                )
                               : t("design.change.confirm", proposal.k)}
                           </span>
                           <button
@@ -215,11 +250,7 @@ export function DesignPane(props: {
                           >
                             {t("design.reopen")}
                           </button>
-                          <button
-                            type="button"
-                            data-slot="design-ghost"
-                            onClick={() => setConfirmingReopen(undefined)}
-                          >
+                          <button type="button" data-slot="design-ghost" onClick={() => setConfirmingReopen(undefined)}>
                             {t("new.cancel")}
                           </button>
                         </div>
@@ -287,10 +318,7 @@ function DesignRecipientPicker(props: { hub: DesignHub; queued: number }) {
     <div data-slot="design-recipient-wrap">
       <div data-slot="design-recipient">
         <label for="design-recipient-select">{t("design.recipient")}</label>
-        <select
-          id="design-recipient-select"
-          onChange={(event) => onChange(event.currentTarget.value)}
-        >
+        <select id="design-recipient-select" onChange={(event) => onChange(event.currentTarget.value)}>
           <For each={options()}>
             {(option) => (
               <option value={option.value} selected={option.selected}>

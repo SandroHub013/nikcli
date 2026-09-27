@@ -41,7 +41,11 @@ export interface RecordPanelDeps {
 }
 
 /** `asker`: the session that wrote the request, by name, for the question. */
-export async function runRecordRequest(request: PanelRequest, deps: RecordPanelDeps, asker?: string): Promise<PanelOutcome> {
+export async function runRecordRequest(
+  request: PanelRequest,
+  deps: RecordPanelDeps,
+  asker?: string,
+): Promise<PanelOutcome> {
   switch (request.verb) {
     case "start": {
       const pane = request.args[0]

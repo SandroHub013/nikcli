@@ -13,17 +13,28 @@ const recents = [mine, other]
 
 describe("two projects with the same name in different folders", () => {
   test("a pane of the other one is found by its folder, not by the name the open one shares", () => {
-    expect(paneProject({ workspaceId: "app", projectRoot: other.root }, mine, recents)).toEqual({ kind: "root", root: other.root })
-    expect(paneProject({ workspaceId: "app", projectRoot: mine.root }, other, recents)).toEqual({ kind: "root", root: mine.root })
+    expect(paneProject({ workspaceId: "app", projectRoot: other.root }, mine, recents)).toEqual({
+      kind: "root",
+      root: other.root,
+    })
+    expect(paneProject({ workspaceId: "app", projectRoot: mine.root }, other, recents)).toEqual({
+      kind: "root",
+      root: mine.root,
+    })
   })
 
   test("a pane of the open one is the open one, whatever the slashes", () => {
-    expect(paneProject({ workspaceId: "app", projectRoot: "c:\\lavoro\\app\\" }, mine, recents)).toEqual({ kind: "open" })
+    expect(paneProject({ workspaceId: "app", projectRoot: "c:\\lavoro\\app\\" }, mine, recents)).toEqual({
+      kind: "open",
+    })
   })
 
   test("a pane saved before the folder was kept is still found by name", () => {
     expect(paneProject({ workspaceId: "app" }, mine, recents)).toEqual({ kind: "open" })
-    expect(paneProject({ workspaceId: "sito" }, mine, [{ name: "sito", root: "C:/sito" }])).toEqual({ kind: "root", root: "C:/sito" })
+    expect(paneProject({ workspaceId: "sito" }, mine, [{ name: "sito", root: "C:/sito" }])).toEqual({
+      kind: "root",
+      root: "C:/sito",
+    })
     expect(paneProject({ workspaceId: "sparito" }, mine, recents)).toEqual({ kind: "open" })
     expect(paneProject(undefined, mine, recents)).toEqual({ kind: "open" })
   })
@@ -44,7 +55,16 @@ describe("the folder survives a restart", () => {
 
   test("saved and read back, a session and a browser pane keep their project's folder", () => {
     const workbench: Workbench = {
-      panes: [pane({ projectRoot: other.root }), pane({ id: "b1", title: "Browser", mode: "browser", browserUrl: "http://localhost:3000/", projectRoot: other.root })],
+      panes: [
+        pane({ projectRoot: other.root }),
+        pane({
+          id: "b1",
+          title: "Browser",
+          mode: "browser",
+          browserUrl: "http://localhost:3000/",
+          projectRoot: other.root,
+        }),
+      ],
       view: "code",
       sidebarWidth: 260,
     }
@@ -83,7 +103,10 @@ describe("the grid and the pane counts with two projects called app", () => {
 
 describe("folders are compared as host/path.ts compares them", () => {
   test("a drive root keeps its slash: C:/ is the root, C: is not the same folder", () => {
-    expect(paneProject({ workspaceId: "C:", projectRoot: "C:/" }, { name: "C:", root: "C:" }, [])).toEqual({ kind: "root", root: "C:/" })
+    expect(paneProject({ workspaceId: "C:", projectRoot: "C:/" }, { name: "C:", root: "C:" }, [])).toEqual({
+      kind: "root",
+      root: "C:/",
+    })
     expect(belongsTo({ projectRoot: "d:/" }, { name: "D:", root: "D:/" })).toBe(true)
   })
 })
@@ -104,7 +127,9 @@ describe("a session whose folder is gone (ROADMAP, BASSO)", () => {
 
   test("a pane saved before folders were kept, found by name among the recents", async () => {
     const recents = [{ name: "vecchia", root: "C:/x/nikcli-ade-vecchia" }]
-    expect(await goneFolder({ workspaceId: "vecchia" }, open, recents, gone(["C:/x/nikcli-ade-vecchia"]))).toBe("C:/x/nikcli-ade-vecchia")
+    expect(await goneFolder({ workspaceId: "vecchia" }, open, recents, gone(["C:/x/nikcli-ade-vecchia"]))).toBe(
+      "C:/x/nikcli-ade-vecchia",
+    )
   })
 
   test("nothing gone, nothing to say", async () => {
@@ -116,13 +141,22 @@ describe("a session whose folder is gone (ROADMAP, BASSO)", () => {
 test("the pane of a gone folder says so, offers to close, and the flag is never saved", () => {
   expect(t("pane.closeGone")).toBe("Chiudi il pannello")
   expect(activityLabel("folderGone")).toBe("Cartella sparita")
-  const pane = { id: "p1", title: "Claude", status: "error", agent: "claude-code", mode: "auto", lines: [], workspaceId: "app", gone: "C:/x/vecchia" } as unknown as Pane
+  const pane = {
+    id: "p1",
+    title: "Claude",
+    status: "error",
+    agent: "claude-code",
+    mode: "auto",
+    lines: [],
+    workspaceId: "app",
+    gone: "C:/x/vecchia",
+  } as unknown as Pane
   const state = toWorkspaceState({ panes: [pane], view: "code", sidebarWidth: 260 } as unknown as Workbench)
   expect(JSON.stringify(state)).not.toContain("C:/x/vecchia")
 })
 
 test("lint: a gone pane is offered to close, and is never restartable", () => {
   const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
-  expect(source).toContain('current().gone && !deps.isRunning(current().id)')
+  expect(source).toContain("current().gone && !deps.isRunning(current().id)")
   expect(source).toMatch(/restartable = \(\) =>\s+!current\(\)\.suspended &&\s+!current\(\)\.gone/)
 })

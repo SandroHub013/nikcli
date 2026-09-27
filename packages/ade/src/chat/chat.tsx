@@ -151,7 +151,8 @@ export function Chat(props: ChatProps) {
    * if the folder could not be opened, the menu says so and offers Riprova.
    */
   const [catalogAsked, setCatalogAsked] = createSignal<ModelSourceState>({ kind: "idle" })
-  const modelState = (): ModelSourceState => (models().length > 0 ? { kind: "ready", models: models() } : catalogAsked())
+  const modelState = (): ModelSourceState =>
+    models().length > 0 ? { kind: "ready", models: models() } : catalogAsked()
   const openCatalog = async () => {
     if (models().length > 0 || catalogAsked().kind === "loading") return
     setCatalogAsked({ kind: "loading" })
@@ -189,7 +190,9 @@ export function Chat(props: ChatProps) {
    */
   const applyCatalog = (catalog: ChatCatalog) => {
     const testBuild = isTest()
-    const resolvedModels = modelsFromConfigProviders(catalog.configProviders ?? props.configProviders, { isTest: testBuild })
+    const resolvedModels = modelsFromConfigProviders(catalog.configProviders ?? props.configProviders, {
+      isTest: testBuild,
+    })
     setModels(resolvedModels)
     const resolvedAgents = agentsFromList(catalog.agents ?? props.agents)
     setAgents(resolvedAgents)
@@ -294,9 +297,7 @@ export function Chat(props: ChatProps) {
     shownSince = Date.now()
     setCurrent(sessionID)
     setProblem(undefined)
-    void store
-      .loadMessages(sessionID)
-      .catch((error: unknown) => setProblem(requestProblem(error)))
+    void store.loadMessages(sessionID).catch((error: unknown) => setProblem(requestProblem(error)))
   }
 
   const closeMention = () => {
@@ -350,7 +351,12 @@ export function Chat(props: ChatProps) {
     let picked: string | string[] | null = null
     try {
       const dialog = await import("@tauri-apps/plugin-dialog")
-      picked = await dialog.open({ multiple: true, directory: false, defaultPath: root, title: t("chat.attach.addHint") })
+      picked = await dialog.open({
+        multiple: true,
+        directory: false,
+        defaultPath: root,
+        title: t("chat.attach.addHint"),
+      })
     } catch {
       return
     }
@@ -598,7 +604,10 @@ export function Chat(props: ChatProps) {
               }
               onInput={(event) => {
                 setDraft(event.currentTarget.value)
-                lookUp(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)
+                lookUp(
+                  event.currentTarget.value,
+                  event.currentTarget.selectionStart ?? event.currentTarget.value.length,
+                )
               }}
               onBlur={closeMention}
               onKeyDown={onKeyDown}
@@ -703,9 +712,7 @@ function Turn(props: { turn: Turn }) {
           {(error) => (
             <p data-slot="chat-error">
               {error().text}
-              <Show when={error().detail}>
-                {(detail) => <span data-slot="chat-error-detail">{detail()}</span>}
-              </Show>
+              <Show when={error().detail}>{(detail) => <span data-slot="chat-error-detail">{detail()}</span>}</Show>
             </p>
           )}
         </Show>

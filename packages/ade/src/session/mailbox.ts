@@ -29,59 +29,59 @@ export interface MailPane {
 }
 
 /** `token` is what proves `from`; see {@link verifySender}. */
-export type Message = { from: string; token?: string; text: string } & (
+export type Message = { from: string; token?: string; text: string } &
   /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
-  | { kind: "send" | "ask"; to: string; effort?: string; via?: "typed"; budget?: number }
-  /**
-   * `autoClose`: closed once it has replied, unless it has work not yet
-   * integrated. `name` titles it; `worktree` gives it its own checkout;
-   * `model` picks the model where ADE knows the flag.
-   */
-  /** `fork`: starts from the sender's own conversation, so its prompt cache carries over. */
-  | {
-      kind: "spawn"
-      agent: string
-      autoClose: boolean
-      name?: string
-      worktree: boolean
-      base?: string
-      model?: string
-      /** Reasoning effort, translated per agent (`effortArgs`). */
-      effort?: string
-      /** A class of work in `dispatch.json`, which supplies model and effort when not given. */
-      profile?: string
-      fork: boolean
-      /** Seconds the sender estimates the work takes (`--budget`, D73). */
-      budget?: number
-    }
-  /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
-  | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
-  /** The project's shared memory file; `type` for `add`, `text` is the entry. */
-  | { kind: "memory"; op: "add" | "show"; type: string }
-  /** One event for the Decisions or Design register; `text` is its fields as JSON (`register-write.ts`). */
-  | { kind: "registro"; register: RegisterName; op: string }
-  /** Who owns the file named in `text`, from the team board (`owners.ts`). */
-  | { kind: "whoowns" }
-  | { kind: "reply"; ref: string }
-  /**
-   * Not an answer: the session is blocked or needs a decision. The waiter
-   * wakes with it and the request stays open.
-   */
-  | { kind: "update"; ref: string; state: UpdateState }
-  /** Closes a session the sender started with `spawn`, and the ones it started. `text` is empty. */
-  | { kind: "close"; to: string; force: boolean }
-  /**
-   * Restarts a session the sender spawned, in the same pane and worktree:
-   * its own conversation back unless `fresh`, on another model if `model`.
-   */
-  | { kind: "relaunch"; to: string; model?: string; effort?: string; fresh: boolean; note: string }
-  /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
-  | { kind: "interrupt"; to: string }
-  /** Withdraws a request the sender made. `text` is empty. */
-  | { kind: "cancel"; ref: string }
-  /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
-  | { kind: "delivered"; ref: string; ok: boolean }
-)
+  (| { kind: "send" | "ask"; to: string; effort?: string; via?: "typed"; budget?: number }
+    /**
+     * `autoClose`: closed once it has replied, unless it has work not yet
+     * integrated. `name` titles it; `worktree` gives it its own checkout;
+     * `model` picks the model where ADE knows the flag.
+     */
+    /** `fork`: starts from the sender's own conversation, so its prompt cache carries over. */
+    | {
+        kind: "spawn"
+        agent: string
+        autoClose: boolean
+        name?: string
+        worktree: boolean
+        base?: string
+        model?: string
+        /** Reasoning effort, translated per agent (`effortArgs`). */
+        effort?: string
+        /** A class of work in `dispatch.json`, which supplies model and effort when not given. */
+        profile?: string
+        fork: boolean
+        /** Seconds the sender estimates the work takes (`--budget`, D73). */
+        budget?: number
+      }
+    /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
+    | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
+    /** The project's shared memory file; `type` for `add`, `text` is the entry. */
+    | { kind: "memory"; op: "add" | "show"; type: string }
+    /** One event for the Decisions or Design register; `text` is its fields as JSON (`register-write.ts`). */
+    | { kind: "registro"; register: RegisterName; op: string }
+    /** Who owns the file named in `text`, from the team board (`owners.ts`). */
+    | { kind: "whoowns" }
+    | { kind: "reply"; ref: string }
+    /**
+     * Not an answer: the session is blocked or needs a decision. The waiter
+     * wakes with it and the request stays open.
+     */
+    | { kind: "update"; ref: string; state: UpdateState }
+    /** Closes a session the sender started with `spawn`, and the ones it started. `text` is empty. */
+    | { kind: "close"; to: string; force: boolean }
+    /**
+     * Restarts a session the sender spawned, in the same pane and worktree:
+     * its own conversation back unless `fresh`, on another model if `model`.
+     */
+    | { kind: "relaunch"; to: string; model?: string; effort?: string; fresh: boolean; note: string }
+    /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
+    | { kind: "interrupt"; to: string }
+    /** Withdraws a request the sender made. `text` is empty. */
+    | { kind: "cancel"; ref: string }
+    /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
+    | { kind: "delivered"; ref: string; ok: boolean }
+  )
 
 export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
 export type KvOpName = (typeof KV_OPS)[number]
@@ -116,7 +116,9 @@ export const BUDGET_MIN = 60
 export const BUDGET_MAX = 14_400
 
 export function budgetOf(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= BUDGET_MIN && value <= BUDGET_MAX ? value : undefined
+  return typeof value === "number" && Number.isInteger(value) && value >= BUDGET_MIN && value <= BUDGET_MAX
+    ? value
+    : undefined
 }
 
 export function parseMessage(body: string): Message | undefined {
@@ -144,7 +146,17 @@ export function parseMessage(body: string): Message | undefined {
     const model = str("model")
     const effort = str("effort")
     return to
-      ? { kind, from, token, to, fresh: record.fresh === true, note: str("note"), ...(model ? { model } : {}), ...(effort ? { effort } : {}), text: "" }
+      ? {
+          kind,
+          from,
+          token,
+          to,
+          fresh: record.fresh === true,
+          note: str("note"),
+          ...(model ? { model } : {}),
+          ...(effort ? { effort } : {}),
+          text: "",
+        }
       : undefined
   }
   if (kind === "interrupt") {
@@ -188,7 +200,18 @@ export function parseMessage(body: string): Message | undefined {
     // `--digita`: the sender wants the keyboard, whatever the route would be.
     const via = str("via") === "typed" ? ("typed" as const) : undefined
     const budget = kind === "ask" ? budgetOf(record.budget) : undefined
-    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}), ...(via ? { via } : {}), ...(budget ? { budget } : {}) } : undefined
+    return to
+      ? {
+          kind,
+          from,
+          token,
+          to,
+          text,
+          ...(effort ? { effort } : {}),
+          ...(via ? { via } : {}),
+          ...(budget ? { budget } : {}),
+        }
+      : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
@@ -342,7 +365,10 @@ export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: s
       return { error: `nessun progetto "${trimmed.slice(0, slash)}". Progetti: ${projects}` }
     }
     scope = inProject
-    wanted = trimmed.slice(slash + 1).trim().replace(/^#/, "")
+    wanted = trimmed
+      .slice(slash + 1)
+      .trim()
+      .replace(/^#/, "")
   }
   const lower = wanted.toLowerCase()
 
@@ -369,9 +395,18 @@ export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: s
   }
 
   return (
-    pick(scope.filter((pane) => pane.title.toLowerCase() === lower), "titolo") ??
-    pick(scope.filter((pane) => agentName(pane.agent) === agentName(wanted)), "agente") ??
-    pick(scope.filter((pane) => pane.title.toLowerCase().includes(lower)), "titolo") ?? {
+    pick(
+      scope.filter((pane) => pane.title.toLowerCase() === lower),
+      "titolo",
+    ) ??
+    pick(
+      scope.filter((pane) => agentName(pane.agent) === agentName(wanted)),
+      "agente",
+    ) ??
+    pick(
+      scope.filter((pane) => pane.title.toLowerCase().includes(lower)),
+      "titolo",
+    ) ?? {
       error: `nessuna sessione "${trimmed}". Sessioni: ${ordered.map(label).join(", ") || "nessuna"}`,
     }
   )
@@ -427,7 +462,11 @@ function who(sender: MailPane | undefined): string {
  * a keystroke in somebody else's terminal — and line breaks become spaces,
  * because Enter is what submits the line and a message must arrive whole.
  */
-export function formatDelivery(message: { text: string }, sender: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+export function formatDelivery(
+  message: { text: string },
+  sender: MailPane | undefined,
+  options: { keepLines?: boolean } = {},
+): string {
   const reply = sender ? ` — rispondi: ade-msg send ${sender.id} "<testo>"` : ""
   return `[Messaggio da ${who(sender)}]: ${options.keepLines ? cleanText(message.text) : oneLine(message.text)}${reply}`
 }
@@ -448,7 +487,9 @@ export function formatRequest(
   const where = context.worktree
     ? ` Worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica e committa solo lì.`
     : ""
-  const results = context.resultsDir ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md` : undefined
+  const results = context.resultsDir
+    ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md`
+    : undefined
   /*
    * The contract, and nothing the intro already says. This line is paid for
    * on every request, so the sender is named once and the "you may delegate"
@@ -551,7 +592,11 @@ export function goesToInbox(line: string): boolean {
 }
 
 /** The short line typed in place of a long message. */
-export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailPane | undefined, chars: number): string {
+export function formatBell(
+  entry: Pick<InboxEntry, "id" | "kind">,
+  sender: MailPane | undefined,
+  chars: number,
+): string {
   const what =
     entry.kind === "ask" || entry.kind === "spawn"
       ? `Richiesta ${entry.id} da ${who(sender)}`
@@ -645,7 +690,9 @@ export function parseInbox(raw: string | null): InboxEntry[] {
       (item): item is InboxEntry =>
         typeof item === "object" &&
         item !== null &&
-        ["id", "paneId", "name", "from", "kind"].every((key) => typeof (item as Record<string, unknown>)[key] === "string") &&
+        ["id", "paneId", "name", "from", "kind"].every(
+          (key) => typeof (item as Record<string, unknown>)[key] === "string",
+        ) &&
         ["chars", "at", "ringAt", "rings"].every((key) => typeof (item as Record<string, unknown>)[key] === "number"),
     )
   } catch {
@@ -719,7 +766,10 @@ export function updatesAnsweredBy<R extends Pick<OpenRequest, "from" | "to" | "u
 }
 
 /** `elapsed 340s / 1200s`, or undefined for a request with no budget. */
-export function formatElapsed(request: Pick<OpenRequest, "at" | "deliveredAt" | "budget">, now: number): string | undefined {
+export function formatElapsed(
+  request: Pick<OpenRequest, "at" | "deliveredAt" | "budget">,
+  now: number,
+): string | undefined {
   if (!request.budget) return undefined
   return `elapsed ${elapsedSeconds(request, now)}s / ${request.budget}s`
 }
@@ -997,21 +1047,28 @@ export function requestState(
   },
   now: number,
 ): RequestState {
-  if (!target.running) return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
+  if (!target.running)
+    return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
   // The reason a request is waiting on a question, from the hook or from the
   // screen: both mean the same thing to somebody reading `ade-msg list`, and a
   // prompt the hook reported is the one the screen usually does not.
   if (target.permissionPending || target.activity?.state === "permission") return "attende un permesso"
   // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
   const reached = request.deliveredAt ?? request.at
-  if (target.activity?.state === "idle" && target.activity.at > reached && !request.update) return "inattiva senza risposta"
+  if (target.activity?.state === "idle" && target.activity.at > reached && !request.update)
+    return "inattiva senza risposta"
   /*
    * Working for an hour and neither printing nor changing a file: said, never
    * acted on. A long build prints and a long refactor writes; a session that
    * does neither is waiting on something nobody will answer.
    */
   const quiet = (at: number | undefined) => at === undefined || now - at >= WEDGE_MS
-  if (target.activity?.state === "busy" && now - target.activity.at >= WEDGE_MS && quiet(target.lastOutputAt) && quiet(target.lastWriteAt)) {
+  if (
+    target.activity?.state === "busy" &&
+    now - target.activity.at >= WEDGE_MS &&
+    quiet(target.lastOutputAt) &&
+    quiet(target.lastWriteAt)
+  ) {
     return "forse bloccata"
   }
   return "in corso"
@@ -1054,7 +1111,9 @@ export function formatWedged(request: OpenRequest, answerer: MailPane | undefine
  * Ctrl-C to Claude Code twice would quit it, so it is never sent there.
  */
 export function interruptKeys(agentId: string | undefined): string {
-  return agentId === "claude-code" || agentId === "codex" || agentId === "agy" ? String.fromCharCode(27) : String.fromCharCode(3)
+  return agentId === "claude-code" || agentId === "codex" || agentId === "agy"
+    ? String.fromCharCode(27)
+    : String.fromCharCode(3)
 }
 
 /** A decision still waiting for an answer, from the specs' event logs. */
@@ -1083,7 +1142,8 @@ export function openDecisions(logs: readonly { spec: string; text: string }[]): 
       const match = LOG_LINE.exec(line.trim())
       if (!match) continue
       const [, at, session, verb, key, text] = match
-      if (verb === "decisione") pending.set(key!, { spec: log.spec, key: key!, session: session!, text: text!, at: at! })
+      if (verb === "decisione")
+        pending.set(key!, { spec: log.spec, key: key!, session: session!, text: text!, at: at! })
       else pending.delete(key!)
     }
     open.push(...pending.values())
@@ -1169,14 +1229,19 @@ export function shouldNudge(
   // With turn hooks the agent's own word decides: working is never nudged, and a turn that ended is.
   if (target.activity?.state === "busy") return false
   const reached = request.deliveredAt ?? request.at
-  if (target.activity?.state === "idle" && target.activity.at > reached) return now - target.activity.at >= IDLE_NUDGE_MS
+  if (target.activity?.state === "idle" && target.activity.at > reached)
+    return now - target.activity.at >= IDLE_NUDGE_MS
   if (now - request.at < NUDGE_AFTER_MS) return false
   return target.lastOutputAt === undefined || now - target.lastOutputAt >= NUDGE_QUIET_MS
 }
 
 function age(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h${String(Math.floor(s / 60) % 60).padStart(2, "0")}m`
+  return s < 60
+    ? `${s}s`
+    : s < 3600
+      ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`
+      : `${Math.floor(s / 3600)}h${String(Math.floor(s / 60) % 60).padStart(2, "0")}m`
 }
 
 /** What `ade-msg status` prints: every request still waiting for an answer. */
@@ -1191,12 +1256,16 @@ export function requestsTable(
     ? `\ndecisioni aperte:\n${decisions.map((d) => `  ${d.spec} [k=${d.key}] ${d.session}: ${briefOf(d.text, 80)}`).join("\n")}\n`
     : ""
   if (requests.length === 0) return `nessuna richiesta in corso\n${pending}`
-  const title = (id: string) => (id ? panes.find((pane) => pane.id === id)?.title ?? id : "anonima")
+  const title = (id: string) => (id ? (panes.find((pane) => pane.id === id)?.title ?? id) : "anonima")
   const rows = requests.map((request) => [
     request.id,
-    request.kind + (request.autoClose ? "+close" : "") + (request.via === "nativa" ? (request.acked ? "·nativa✓" : "·nativa?") : ""),
+    request.kind +
+      (request.autoClose ? "+close" : "") +
+      (request.via === "nativa" ? (request.acked ? "·nativa✓" : "·nativa?") : ""),
     age(now - request.at) + (request.budget ? ` (${formatElapsed(request, now)})` : ""),
-    request.update && stateOf(request) === "in corso" ? `${request.update.state}: ${briefOf(request.update.text, 40)}` : stateOf(request),
+    request.update && stateOf(request) === "in corso"
+      ? `${request.update.state}: ${briefOf(request.update.text, 40)}`
+      : stateOf(request),
     `${title(request.from)} → ${title(request.to)}`,
     request.brief,
   ])
@@ -1211,25 +1280,27 @@ export function parseOpenRequests(text: string | null | undefined): OpenRequest[
   try {
     const raw: unknown = JSON.parse(text)
     if (!Array.isArray(raw)) return []
-    return raw.filter(
-      (entry): entry is OpenRequest =>
-        !!entry &&
-        typeof entry === "object" &&
-        isRequestId((entry as OpenRequest).id) &&
-        ((entry as OpenRequest).kind === "ask" || (entry as OpenRequest).kind === "spawn") &&
-        typeof (entry as OpenRequest).from === "string" &&
-        typeof (entry as OpenRequest).to === "string" &&
-        typeof (entry as OpenRequest).at === "number",
-    ).map((entry) => {
-      // A saved budget that is not one is dropped, never the request with it.
-      const { budget, timeNotes, ...rest } = entry
-      const kept = budgetOf(budget)
-      return {
-        ...rest,
-        ...(kept ? { budget: kept } : {}),
-        ...(kept && (timeNotes === 1 || timeNotes === 2) ? { timeNotes } : {}),
-      }
-    })
+    return raw
+      .filter(
+        (entry): entry is OpenRequest =>
+          !!entry &&
+          typeof entry === "object" &&
+          isRequestId((entry as OpenRequest).id) &&
+          ((entry as OpenRequest).kind === "ask" || (entry as OpenRequest).kind === "spawn") &&
+          typeof (entry as OpenRequest).from === "string" &&
+          typeof (entry as OpenRequest).to === "string" &&
+          typeof (entry as OpenRequest).at === "number",
+      )
+      .map((entry) => {
+        // A saved budget that is not one is dropped, never the request with it.
+        const { budget, timeNotes, ...rest } = entry
+        const kept = budgetOf(budget)
+        return {
+          ...rest,
+          ...(kept ? { budget: kept } : {}),
+          ...(kept && (timeNotes === 1 || timeNotes === 2) ? { timeNotes } : {}),
+        }
+      })
   } catch {
     return []
   }
@@ -1245,7 +1316,12 @@ export function briefOf(text: string, length = 60): string {
 }
 
 /** The answer to a request, typed into the caller when nothing was waiting for it any more. */
-export function formatLateReply(ref: string, text: string, replier: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+export function formatLateReply(
+  ref: string,
+  text: string,
+  replier: MailPane | undefined,
+  options: { keepLines?: boolean } = {},
+): string {
   return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? cleanText(text) : oneLine(text)}`
 }
 
@@ -1282,22 +1358,22 @@ export function agentsTable(agents: readonly { id: string; label: string }[]): s
 
 export const USAGE =
   "uso:\n" +
-  "  ade-msg send   <sessione> \"<testo>\"       nota, non aspetta risposta\n" +
-  "  ade-msg ask    <sessione> \"<richiesta>\"   aspetta la risposta e la stampa\n" +
-  "  ade-msg spawn  <agente> \"<compito>\"       nuova sessione (subagent), aspetta il risultato\n" +
-  "  ade-msg reply  <id> \"<risultato>\"         risponde a una richiesta ricevuta\n" +
-  "  ade-msg update <id> bloccata|decisione \"<motivo>\"  non è una risposta: sveglia chi aspetta, la richiesta resta aperta\n" +
+  '  ade-msg send   <sessione> "<testo>"       nota, non aspetta risposta\n' +
+  '  ade-msg ask    <sessione> "<richiesta>"   aspetta la risposta e la stampa\n' +
+  '  ade-msg spawn  <agente> "<compito>"       nuova sessione (subagent), aspetta il risultato\n' +
+  '  ade-msg reply  <id> "<risultato>"         risponde a una richiesta ricevuta\n' +
+  '  ade-msg update <id> bloccata|decisione "<motivo>"  non è una risposta: sveglia chi aspetta, la richiesta resta aperta\n' +
   "  ade-msg wait   <id> [<id>...] [--any]     aspetta le risposte (tutte, o la prima con --any)\n" +
   "  ade-msg status                          richieste in corso\n" +
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
   "  ade-msg delivered <id> [no [motivo]]    dopo una consegna nativa: l'hai mandata (o no, e ADE la digita)\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
-  "  ade-msg relaunch <sessione> --note \"<a che punto è>\" [--model <id>] [--fresh]\n" +
+  '  ade-msg relaunch <sessione> --note "<a che punto è>" [--model <id>] [--fresh]\n' +
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
   "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
-  "  ade-msg memory add decisione|fatto|trappola|todo \"<testo>\"\n" +
+  '  ade-msg memory add decisione|fatto|trappola|todo "<testo>"\n' +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +
   "  ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'\n" +
@@ -1310,8 +1386,8 @@ export const USAGE =
   "                                          dentro '<json>' si perdono e una pipe perde le lettere accentate\n" +
   "                                          aperta, campi facoltativi: question (la domanda in una riga), why\n" +
   "                                          (perché adesso, 1-2 frasi), recommend {option, because}; decisioni:\n" +
-  "                                          facts [\"...\"], ogni opzione title, effect, cost, risk; design: keeps\n" +
-  "                                          [\"...\"], ogni variante changes [\"...\"]. context resta obbligatorio con\n" +
+  '                                          facts ["..."], ogni opzione title, effect, cost, risk; design: keeps\n' +
+  '                                          ["..."], ogni variante changes ["..."]. context resta obbligatorio con\n' +
   "                                          questi campi: le versioni vecchie mostrano solo lui. recommend.option\n" +
   "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata;\n" +
   "                                          per design è il nome intero della variante, per esempio «1 · Vetro».\n" +
@@ -1325,9 +1401,9 @@ export const USAGE =
   "                                          release X»); 5) context al massimo 3 frasi, dettagli in facts o in un\n" +
   "                                          file results/…; 6) scrivi con gli accenti (è, perché, più), mai e' o piu\n" +
   "                                          al loro posto\n" +
-  "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
+  '  ade-msg kv set <chiave> "<valore>" | get <chiave> | del <chiave> | list [<prefisso>]\n' +
   "                                          stato condiviso tra le sessioni del progetto\n" +
-  "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
+  '  ade-msg kv lock <chiave> [--ttl <sec>] ["<nota>"] | unlock <chiave> [--force]\n' +
   "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
   "  ade-msg stats                           token per sessione e quota letta dalla cache\n" +
   "  ade-msg who-owns <file>                chi possiede il file secondo la bacheca del team (TEAM.md)\n" +
@@ -1428,7 +1504,10 @@ export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer:
  * those notices with nobody (audit 0.7.7, MEDIO 6): they go to the window's
  * notices instead. A sender that closed hears nothing, as before.
  */
-export function noticeTarget(from: string | undefined, open: (paneId: string) => boolean): { pane: string } | "window" | undefined {
+export function noticeTarget(
+  from: string | undefined,
+  open: (paneId: string) => boolean,
+): { pane: string } | "window" | undefined {
   if (!from) return "window"
   return open(from) ? { pane: from } : undefined
 }

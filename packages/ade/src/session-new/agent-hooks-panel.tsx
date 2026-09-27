@@ -114,26 +114,30 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     knowable from here, so this build does not offer to change it:
                     on a test build that would rewrite the official ADE's hooks. */}
                 <Show when={!state()?.foreign}>
-                <div data-slot="hook-actions">
-                  <button
-                    type="button"
-                    data-slot="hook-action"
-                    disabled={working() || Boolean(state()?.error)}
-                    onClick={() => void apply(target.id, true)}
-                  >
-                    {state()?.outdated ? t("hooks.update") : state()?.installed ? t("hooks.reinstall") : t("hooks.install")}
-                  </button>
-                  <Show when={state()?.installed || state()?.broken}>
+                  <div data-slot="hook-actions">
                     <button
                       type="button"
                       data-slot="hook-action"
-                      disabled={working()}
-                      onClick={() => void apply(target.id, false)}
+                      disabled={working() || Boolean(state()?.error)}
+                      onClick={() => void apply(target.id, true)}
                     >
-                      {t("hooks.remove")}
+                      {state()?.outdated
+                        ? t("hooks.update")
+                        : state()?.installed
+                          ? t("hooks.reinstall")
+                          : t("hooks.install")}
                     </button>
-                  </Show>
-                </div>
+                    <Show when={state()?.installed || state()?.broken}>
+                      <button
+                        type="button"
+                        data-slot="hook-action"
+                        disabled={working()}
+                        onClick={() => void apply(target.id, false)}
+                      >
+                        {t("hooks.remove")}
+                      </button>
+                    </Show>
+                  </div>
                 </Show>
               </li>
             )

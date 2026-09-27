@@ -169,7 +169,7 @@ const noisyCatalog: ProviderList = {
       env: ["ELEVENLABS_API_KEY"],
       options: {},
       models: {
-        "eleven_v3": {
+        eleven_v3: {
           id: "eleven_v3",
           providerID: "elevenlabs",
           name: "Eleven v3",
@@ -185,7 +185,7 @@ const noisyCatalog: ProviderList = {
             interleaved: false,
           },
         } as any,
-        "eleven_multilingual_v2": {
+        eleven_multilingual_v2: {
           id: "eleven_multilingual_v2",
           providerID: "elevenlabs",
           name: "Eleven Multilingual v2",
@@ -399,8 +399,19 @@ describe("the selector shows chat models, and calls free only what is free (C3-b
           env: [],
           options: {},
           models: {
-            "senza-capacities": { id: "senza-capacities", providerID: "silenzioso", cost: { input: 1, output: 2 }, status: "active" } as any,
-            "capacities-vuote": { id: "capacities-vuote", providerID: "silenzioso", cost: { input: 1, output: 2 }, status: "active", capabilities: {} } as any,
+            "senza-capacities": {
+              id: "senza-capacities",
+              providerID: "silenzioso",
+              cost: { input: 1, output: 2 },
+              status: "active",
+            } as any,
+            "capacities-vuote": {
+              id: "capacities-vuote",
+              providerID: "silenzioso",
+              cost: { input: 1, output: 2 },
+              status: "active",
+              capabilities: {},
+            } as any,
           },
         },
       ],
@@ -717,7 +728,11 @@ describe("Model identity and ModelRef (C3 - Point 5)", () => {
 describe("catalogHasModel", () => {
   const list = {
     all: [
-      { id: "openrouter", name: "OpenRouter", models: { "nvidia/nemotron-3.5-lightning:free": { id: "nvidia/nemotron-3.5-lightning:free" } } },
+      {
+        id: "openrouter",
+        name: "OpenRouter",
+        models: { "nvidia/nemotron-3.5-lightning:free": { id: "nvidia/nemotron-3.5-lightning:free" } },
+      },
       { id: "anthropic", name: "Anthropic", models: { "claude-x": { id: "claude-x" } } },
     ],
     default: {},
@@ -725,7 +740,9 @@ describe("catalogHasModel", () => {
   } as unknown as ProviderList
 
   test("a model of a connected provider is there; one that left, or of a provider not connected, is not", () => {
-    expect(catalogHasModel(list, { providerID: "openrouter", modelID: "nvidia/nemotron-3.5-lightning:free" })).toBe(true)
+    expect(catalogHasModel(list, { providerID: "openrouter", modelID: "nvidia/nemotron-3.5-lightning:free" })).toBe(
+      true,
+    )
     expect(catalogHasModel(list, { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" })).toBe(false)
     expect(catalogHasModel(list, { providerID: "anthropic", modelID: "claude-x" })).toBe(false)
     expect(catalogHasModel(list, { providerID: "openrouter", modelID: "constructor" })).toBe(false)
@@ -733,7 +750,9 @@ describe("catalogHasModel", () => {
 
   test("no catalog, or one without its lists, is not known: the server decides", () => {
     expect(catalogHasModel(undefined, { providerID: "openrouter", modelID: "x" })).toBeUndefined()
-    expect(catalogHasModel({ all: [] } as unknown as ProviderList, { providerID: "openrouter", modelID: "x" })).toBeUndefined()
+    expect(
+      catalogHasModel({ all: [] } as unknown as ProviderList, { providerID: "openrouter", modelID: "x" }),
+    ).toBeUndefined()
   })
 })
 

@@ -13,7 +13,13 @@ import { createInitialDialogState, transition, type DialogState } from "./sessio
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta")], focusedPaneId: "pA" }
 const ask = (state: DialogState, paneId: string, what: string, now = 10_000) =>
@@ -46,7 +52,12 @@ describe("a yes is for the question that was read", () => {
   })
 
   test("a queued request closed elsewhere leaves the queue", () => {
-    const asked = ask(ask(createInitialDialogState("idle"), "pA", "cat README").state, "pB", "npm publish", 11_000).state
+    const asked = ask(
+      ask(createInitialDialogState("idle"), "pA", "cat README").state,
+      "pB",
+      "npm publish",
+      11_000,
+    ).state
     expect(asked.queuedPermission?.paneId).toBe("pB")
     const resolved = transition(asked, { type: "permission_resolved", paneId: "pB" }, 12_000, ctx)
     expect(resolved.state.queuedPermission).toBeUndefined()
@@ -54,7 +65,12 @@ describe("a yes is for the question that was read", () => {
   })
 
   test("a queued request replaced by a newer one of the same pane keeps the newer", () => {
-    const asked = ask(ask(ask(createInitialDialogState("idle"), "pA", "cat README").state, "pB", "ls", 11_000).state, "pB", "rm -rf /", 11_500).state
+    const asked = ask(
+      ask(ask(createInitialDialogState("idle"), "pA", "cat README").state, "pB", "ls", 11_000).state,
+      "pB",
+      "rm -rf /",
+      11_500,
+    ).state
     expect(asked.queuedPermission).toEqual({ paneId: "pB", what: "rm -rf /", kind: "shell", silent: undefined })
   })
 })

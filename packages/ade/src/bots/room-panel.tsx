@@ -11,7 +11,15 @@ import { createEffect, createMemo, createResource, createSignal, For, on, Show }
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
 import type { AgentFile } from "./nikcli"
-import { MAX_MEMBERS, MAX_ROUNDS, messageSpendMax, MIN_MEMBERS, ROOM_ROUND_MAX_USD, type RoomPay, type RoomSpend } from "./room"
+import {
+  MAX_MEMBERS,
+  MAX_ROUNDS,
+  messageSpendMax,
+  MIN_MEMBERS,
+  ROOM_ROUND_MAX_USD,
+  type RoomPay,
+  type RoomSpend,
+} from "./room"
 import { memberName, payNote, type RoomBook } from "./room-app"
 import type { PendingPermission, PermissionAnswer } from "./talk"
 
@@ -55,7 +63,13 @@ export function RoomsRoster(props: {
     <div data-slot="rooms-roster">
       <header data-slot="bots-roster-head">
         <span data-slot="bots-roster-title">{t("bots.room.section")}</span>
-        <button type="button" data-slot="bots-new" onClick={() => props.onNew()} aria-label={t("bots.room.new")} title={t("bots.room.new")}>
+        <button
+          type="button"
+          data-slot="bots-new"
+          onClick={() => props.onNew()}
+          aria-label={t("bots.room.new")}
+          title={t("bots.room.new")}
+        >
           +
         </button>
       </header>
@@ -69,7 +83,9 @@ export function RoomsRoster(props: {
               data-status={props.deps.speaking(room.id) ? "working" : undefined}
               onClick={() => props.onOpen(room.id)}
             >
-              <span data-slot="room-glyph" aria-hidden="true">#</span>
+              <span data-slot="room-glyph" aria-hidden="true">
+                #
+              </span>
               <span data-slot="bots-row-text">
                 <span data-slot="bots-row-name">{room.name}</span>
                 <span data-slot="bots-row-line">
@@ -111,10 +127,15 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
       },
     ),
   )
-  createEffect(on(() => props.roomId, () => {
-    setDraft("")
-    field?.focus()
-  }))
+  createEffect(
+    on(
+      () => props.roomId,
+      () => {
+        setDraft("")
+        field?.focus()
+      },
+    ),
+  )
 
   const submit = async () => {
     const text = draft()
@@ -129,9 +150,15 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
         <div data-slot="bots-thread" data-room="true">
           <header data-slot="room-head">
             <span data-slot="room-name"># {current().name}</span>
-            <span data-slot="room-members">{current().members.map((path) => `@${nameOf(path)}`).join(" ")}</span>
+            <span data-slot="room-members">
+              {current()
+                .members.map((path) => `@${nameOf(path)}`)
+                .join(" ")}
+            </span>
             <Show when={current().spend}>
-              {(spend) => <span data-slot="room-cap">{t("bots.room.capLine", `${spend().perRoundUsd.toFixed(2)} $`)}</span>}
+              {(spend) => (
+                <span data-slot="room-cap">{t("bots.room.capLine", `${spend().perRoundUsd.toFixed(2)} $`)}</span>
+              )}
             </Show>
             <button
               type="button"
@@ -183,19 +210,34 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                       {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
                     </Show>
                     <Show when={pending().expiresAt}>
-                      <span data-slot="bots-permission-why">{t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}</span>
+                      <span data-slot="bots-permission-why">
+                        {t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}
+                      </span>
                     </Show>
                   </span>
                   <span data-slot="bots-permission-actions">
-                    <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "reject", pending().requestID)}>
+                    <button
+                      type="button"
+                      data-slot="bots-btn"
+                      onClick={() => props.deps.answer(speaking()!, "reject", pending().requestID)}
+                    >
                       {t("bots.permission.deny")}
                     </button>
                     <Show when={(pending().always?.length ?? 0) > 0}>
-                      <button type="button" data-slot="bots-btn" onClick={() => props.deps.answer(speaking()!, "always", pending().requestID)}>
+                      <button
+                        type="button"
+                        data-slot="bots-btn"
+                        onClick={() => props.deps.answer(speaking()!, "always", pending().requestID)}
+                      >
                         {t("bots.approval.always")}
                       </button>
                     </Show>
-                    <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.deps.answer(speaking()!, "once", pending().requestID)}>
+                    <button
+                      type="button"
+                      data-slot="bots-btn"
+                      data-tone="primary"
+                      onClick={() => props.deps.answer(speaking()!, "once", pending().requestID)}
+                    >
                       {t("bots.permission.allow")}
                     </button>
                   </span>
@@ -334,7 +376,10 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
         <div data-slot="room-pick">
           <For each={props.deps.bots().filter((bot) => bot.mode !== "subagent")}>
             {(bot) => {
-              const [pay] = createResource(() => bot, (entry) => props.deps.payOf(entry).catch(() => undefined))
+              const [pay] = createResource(
+                () => bot,
+                (entry) => props.deps.payOf(entry).catch(() => undefined),
+              )
               return (
                 <label data-slot="room-pick-row">
                   <input

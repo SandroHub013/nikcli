@@ -272,7 +272,14 @@ describe("Enter with nobody to receive the answer, in the Design window (audit 0
       tick: async () => {},
       watch: () => () => {},
     }
-    const hub = createDesignHub({ register, recipient: () => ({ state: "non scelta" }), sessions: () => [], choose: () => {}, delivery: () => ({ state: "in coda" }), onAnswered: () => {} })
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
     const proposal: DesignProposal = {
       k: "DS1",
       title: "Tasto",
@@ -440,7 +447,6 @@ describe("card stability (R0, ALTO 1)", () => {
   })
 })
 
-
 /*
  * D2 review, MEDIO: opening the sheet cleared every pick, the one made in
  * the browser pane with «Scelgo questa» included, and «I pick in the pane,
@@ -469,7 +475,10 @@ describe("the sheet keeps a choice made in this window", () => {
     await register.refresh()
     prepare(hub)
     // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
-    const disposeSheet = render(() => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }), host)
+    const disposeSheet = render(
+      () => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }),
+      host,
+    )
     const picked = hub.draft("DS1").picked
     disposeSheet()
     disposeHub()
@@ -495,7 +504,14 @@ describe("the sheet keeps a choice made in this window", () => {
     const proposal: DesignProposal = {
       k: "DS1",
       title: "Settings",
-      variants: [{ name: "A", description: "desc", preview: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" }],
+      variants: [
+        {
+          name: "A",
+          description: "desc",
+          preview:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        },
+      ],
       raisedBy: "fable",
       openedAt: new Date().toISOString(),
       status: "aperta",
@@ -528,7 +544,17 @@ describe("the sheet keeps a choice made in this window", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     // `render` has its own root: disposing createRoot's would leave the sheet, and its focus trap, mounted.
-    const disposeSheet = render(() => createComponent(DesignSheet, { hub, onClose: () => { closed = true }, onOpenPanel: () => {} }), host)
+    const disposeSheet = render(
+      () =>
+        createComponent(DesignSheet, {
+          hub,
+          onClose: () => {
+            closed = true
+          },
+          onOpenPanel: () => {},
+        }),
+      host,
+    )
 
     // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
     const openLargeBtn = document.querySelector<HTMLButtonElement>('[data-slot="variant-open-large"]')
@@ -737,7 +763,9 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
 
     await register.refresh()
 
-    const changeBtn = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    const changeBtn = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
     expect(changeBtn).not.toBeNull()
     expect(changeBtn.textContent).toBe(t("design.change"))
 
@@ -761,9 +789,13 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
     expect(reopened).toBe(false)
 
     // Open confirmation again and confirm
-    const changeBtnAgain = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    const changeBtnAgain = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
     changeBtnAgain.click()
-    const confirmBtnAgain = host.querySelector('[data-slot="design-actions"][role="alert"] button[data-slot="design-submit"]') as HTMLButtonElement
+    const confirmBtnAgain = host.querySelector(
+      '[data-slot="design-actions"][role="alert"] button[data-slot="design-submit"]',
+    ) as HTMLButtonElement
     confirmBtnAgain.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
@@ -805,7 +837,9 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
 
     await register.refresh()
 
-    const changeBtn = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    const changeBtn = host.querySelector(
+      '[data-slot="design-actions"] button[data-slot="design-ghost"]',
+    ) as HTMLButtonElement
     changeBtn.click()
 
     const alert = host.querySelector('[data-slot="design-actions"][role="alert"]') as HTMLElement

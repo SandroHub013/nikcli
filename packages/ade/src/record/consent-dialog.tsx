@@ -24,7 +24,8 @@ export function RecordConsentDialog(props: {
 }) {
   const [mic, setMic] = createSignal(false)
   const refuse = () => props.onAnswer({ allowed: false, mic: false })
-  const what = () => (props.target.kind === "pane" ? t("record.consent.pane", props.target.paneId) : t("record.consent.window"))
+  const what = () =>
+    props.target.kind === "pane" ? t("record.consent.pane", props.target.paneId) : t("record.consent.window")
   return (
     <Sheet component="record-consent" place="center" size="sm" role="alertdialog" onClose={refuse}>
       <header data-slot="sheet-head">
@@ -32,9 +33,7 @@ export function RecordConsentDialog(props: {
       </header>
       <div data-slot="record-consent-body">
         <p>{props.asker ? t("record.consent.askBy", props.asker, what()) : t("record.consent.ask", what())}</p>
-        <p data-slot="record-consent-note">
-          {t("record.consent.note")}
-        </p>
+        <p data-slot="record-consent-note">{t("record.consent.note")}</p>
         <label data-slot="record-consent-mic">
           <input type="checkbox" checked={mic()} onChange={(event) => setMic(event.currentTarget.checked)} />
           {t("record.consent.mic")}
@@ -49,11 +48,7 @@ export function RecordConsentDialog(props: {
         >
           {t("record.consent.no")}
         </button>
-        <button
-          type="button"
-          data-slot="decision-submit"
-          onClick={() => props.onAnswer({ allowed: true, mic: mic() })}
-        >
+        <button type="button" data-slot="decision-submit" onClick={() => props.onAnswer({ allowed: true, mic: mic() })}>
           {t("record.consent.yes")}
         </button>
       </footer>

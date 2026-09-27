@@ -11,7 +11,13 @@ import { createFakeSpeaker } from "../tts/speaker"
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 
 describe("a stop leaves no held message behind", () => {
@@ -35,7 +41,13 @@ describe("a stop leaves no held message behind", () => {
       scrollTranscript() {},
       confirmVoiceSend: (id: string, approved: boolean) => void decisions.push([id, approved]),
       describeState: () => ({
-        totalSessions: 1, workingSessions: 0, waitingSessions: 0, doneSessions: 0, errorSessions: 0, currentView: "code", spokenSummary: "",
+        totalSessions: 1,
+        workingSessions: 0,
+        waitingSessions: 0,
+        doneSessions: 0,
+        errorSessions: 0,
+        currentView: "code",
+        spokenSummary: "",
       }),
     } as unknown as VoiceHost
     const engine = createVoiceEngine({
@@ -52,6 +64,9 @@ describe("a stop leaves no held message behind", () => {
     expect(engine.status()).toBe("confirming")
     await engine.stop()
 
-    expect(decisions).toEqual([["m1", false], ["m2", false]])
+    expect(decisions).toEqual([
+      ["m1", false],
+      ["m2", false],
+    ])
   })
 })

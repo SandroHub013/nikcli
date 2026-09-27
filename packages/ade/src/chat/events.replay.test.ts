@@ -35,7 +35,10 @@ import { hasChatRules } from "./rules"
  *   says no, and the tool fails with the server's refusal.
  */
 
-type Final = { info: { id: string; role: string; cost?: number; providerID?: string; modelID?: string }; parts: { id: string }[] }[]
+type Final = {
+  info: { id: string; role: string; cost?: number; providerID?: string; modelID?: string }
+  parts: { id: string }[]
+}[]
 
 const fixture = (name: string) => ({
   events: readFileSync(new URL(`./fixtures/${name}.jsonl`, import.meta.url), "utf8")
@@ -52,7 +55,7 @@ function replay(events: ChatEvent[]) {
 }
 
 /** A plain copy of the store's contents, to compare with JSON. */
-const plain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
+const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 /** What the chat shows of a part. */
 const shown = (part: Record<string, any>) => ({
@@ -76,7 +79,12 @@ describe("a recorded conversation, replayed", () => {
         expect((store.part[message.info.id] ?? []).map(shown)).toEqual(message.parts.map(shown))
       }
       // No part left over from a message that is not there.
-      expect(Object.keys(store.part).sort()).toEqual(final.filter((m) => m.parts.length > 0).map((m) => m.info.id).sort())
+      expect(Object.keys(store.part).sort()).toEqual(
+        final
+          .filter((m) => m.parts.length > 0)
+          .map((m) => m.info.id)
+          .sort(),
+      )
       expect(store.session_status[sessionID]).toEqual({ type: "idle" })
       expect(store.permission[sessionID] ?? []).toEqual([])
       expect(store.question[sessionID] ?? []).toEqual([])
@@ -98,9 +106,9 @@ describe("a recorded conversation, replayed", () => {
     const { store } = replay(events)
     const parts = Object.values(store.part).flat()
     expect(parts.some((part) => part.type === "tool" && (part as { tool: string }).tool === "read")).toBe(true)
-    expect(
-      parts.some((part) => part.type === "text" && (part as { text: string }).text.includes("girasole")),
-    ).toBe(true)
+    expect(parts.some((part) => part.type === "text" && (part as { text: string }).text.includes("girasole"))).toBe(
+      true,
+    )
     const last = store.message[store.session[0]!.id]!.at(-1) as { role: string; error?: { name: string } }
     expect(last.role).toBe("assistant")
     expect(last.error?.name).toBe("MessageAbortedError")
@@ -124,7 +132,9 @@ describe("a recorded conversation, replayed", () => {
     expect(events.find((event) => event.type === "permission.replied")!.properties).toMatchObject({ reply: "reject" })
     const bash = Object.values(store.part)
       .flat()
-      .find((part) => part.type === "tool" && (part as { tool: string }).tool === "bash") as { state: { status: string; error: string } }
+      .find((part) => part.type === "tool" && (part as { tool: string }).tool === "bash") as {
+      state: { status: string; error: string }
+    }
     expect(bash.state.status).toBe("error")
     expect(bash.state.error).toContain("PermissionRejectedError")
   })

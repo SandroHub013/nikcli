@@ -81,14 +81,7 @@ export const OPENROUTER_FALLBACK_MODEL = "openai/whisper-large-v3"
 export const OPENROUTER_TIMEOUT_MS = 30_000
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024 // 25 MB limit
 
-export type OpenRouterAudioFormat =
-  | "webm"
-  | "wav"
-  | "mp3"
-  | "flac"
-  | "m4a"
-  | "ogg"
-  | "aac"
+export type OpenRouterAudioFormat = "webm" | "wav" | "mp3" | "flac" | "m4a" | "ogg" | "aac"
 
 // ---------------------------------------------------------------------------
 // Helpers: MIME to Format & Base64 Converter
@@ -268,8 +261,14 @@ export async function wavHead(blob: Blob, ms: number): Promise<Blob | undefined>
   if (blob.size <= 44) return undefined
   const header = new DataView(await blob.slice(0, 44).arrayBuffer())
   const tag = (offset: number) =>
-    String.fromCharCode(header.getUint8(offset), header.getUint8(offset + 1), header.getUint8(offset + 2), header.getUint8(offset + 3))
-  if (tag(0) !== "RIFF" || tag(8) !== "WAVE" || tag(36) !== "data" || header.getUint16(34, true) !== 16) return undefined
+    String.fromCharCode(
+      header.getUint8(offset),
+      header.getUint8(offset + 1),
+      header.getUint8(offset + 2),
+      header.getUint8(offset + 3),
+    )
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE" || tag(36) !== "data" || header.getUint16(34, true) !== 16)
+    return undefined
   const rate = header.getUint32(24, true)
   const bytes = Math.floor((rate * ms) / 1000) * 2
   if (bytes >= blob.size - 44) return undefined
@@ -295,9 +294,7 @@ export interface OpenRouterTranscriber extends Transcriber {
 // OpenRouter Transcriber Factory
 // ---------------------------------------------------------------------------
 
-export function createOpenRouterTranscriber(
-  options: OpenRouterTranscriberOptions
-): OpenRouterTranscriber {
+export function createOpenRouterTranscriber(options: OpenRouterTranscriberOptions): OpenRouterTranscriber {
   const apiKey = options.apiKey
   const timeoutMs = options.timeoutMs ?? OPENROUTER_TIMEOUT_MS
   const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis)
@@ -334,11 +331,10 @@ export function createOpenRouterTranscriber(
       if (!apiKey || apiKey.trim().length === 0) {
         report(
           new ApiKeyMissing({
-            message:
-              options.language?.startsWith("en")
-                ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
-                : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
-          }) as unknown as Error
+            message: options.language?.startsWith("en")
+              ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
+              : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+          }) as unknown as Error,
         )
         return
       }
@@ -346,9 +342,7 @@ export function createOpenRouterTranscriber(
       if (segment.blob.size > MAX_AUDIO_BYTES) {
         const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
         report(
-          new Error(
-            `File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`
-          )
+          new Error(`File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`),
         )
         return
       }
@@ -381,11 +375,7 @@ export function createOpenRouterTranscriber(
         try {
           base64Audio = await blobToBase64(segment.blob)
         } catch (err: any) {
-          report(
-            new Error(
-              `Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`
-            )
-          )
+          report(new Error(`Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`))
           return
         }
       }
@@ -410,7 +400,7 @@ export function createOpenRouterTranscriber(
         response = await fetchFn(OPENROUTER_ENDPOINT, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(requestPayload),
@@ -425,28 +415,29 @@ export function createOpenRouterTranscriber(
         // asking the same model again at once would only be refused again.
         if (!response.ok && (response.status === 400 || response.status === 429 || response.status >= 500)) {
           // Attempt 1: Retry without language and temperature
-          if (response.status !== 429) try {
-            const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: primaryModel,
-                input_audio: {
-                  data: base64Audio,
-                  format: shortFormat,
+          if (response.status !== 429)
+            try {
+              const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  "Content-Type": "application/json",
                 },
-              }),
-              signal: controller.signal,
-            })
-            if (retryResponse.ok) {
-              response = retryResponse
+                body: JSON.stringify({
+                  model: primaryModel,
+                  input_audio: {
+                    data: base64Audio,
+                    format: shortFormat,
+                  },
+                }),
+                signal: controller.signal,
+              })
+              if (retryResponse.ok) {
+                response = retryResponse
+              }
+            } catch {
+              // continue to fallback below
             }
-          } catch {
-            // continue to fallback below
-          }
 
           // Attempt 2: If still failing and primary was not already the fallback model, retry with whisper-large-v3
           if (!response.ok && primaryModel !== OPENROUTER_FALLBACK_MODEL) {
@@ -454,7 +445,7 @@ export function createOpenRouterTranscriber(
               const fallbackResponse = await fetchFn(OPENROUTER_ENDPOINT, {
                 method: "POST",
                 headers: {
-                  "Authorization": `Bearer ${apiKey}`,
+                  Authorization: `Bearer ${apiKey}`,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
@@ -476,116 +467,103 @@ export function createOpenRouterTranscriber(
           }
         }
       } catch (netErr: any) {
-      if (controller.signal.aborted || netErr?.name === "AbortError") {
-        report(
-          new RequestTimeout({
-            timeoutMs,
-            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
-          }) as unknown as Error
-        )
+        if (controller.signal.aborted || netErr?.name === "AbortError") {
+          report(
+            new RequestTimeout({
+              timeoutMs,
+              message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+            }) as unknown as Error,
+          )
+          return
+        }
+
+        const safeNetMessage = sanitizeApiKey(netErr?.message ?? "connessione fallita", apiKey)
+        report(new Error(`Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`))
         return
       }
 
-      const safeNetMessage = sanitizeApiKey(
-        netErr?.message ?? "connessione fallita",
-        apiKey
-      )
-      report(
-        new Error(
-          `Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`
-        )
-      )
-      return
-    }
+      if (!response.ok) {
+        if (response.status === 401) {
+          report(
+            new ApiKeyInvalid({
+              message: "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
+            }) as unknown as Error,
+          )
+          return
+        }
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        report(
-          new ApiKeyInvalid({
-            message:
-              "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
-          }) as unknown as Error
-        )
-        return
-      }
+        if (response.status === 402) {
+          report(
+            new QuotaExhausted({
+              message: "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
+            }) as unknown as Error,
+          )
+          return
+        }
 
-      if (response.status === 402) {
-        report(
-          new QuotaExhausted({
-            message:
-              "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
-          }) as unknown as Error
-        )
-        return
-      }
+        if (response.status === 429) {
+          report(
+            new Error("Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."),
+          )
+          return
+        }
 
-      if (response.status === 429) {
+        let detail = ""
+        try {
+          const errorJson = await response.json()
+          if (errorJson?.error?.message) {
+            detail = String(errorJson.error.message)
+          } else if (typeof errorJson?.error === "string") {
+            detail = errorJson.error
+          }
+        } catch {
+          // Response was not JSON
+        }
+
+        const safeDetail = sanitizeApiKey(detail, apiKey)
+        const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
         report(
           new Error(
-            "Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."
-          )
+            `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`,
+          ),
         )
         return
       }
 
-      let detail = ""
       try {
-        const errorJson = await response.json()
-        if (errorJson?.error?.message) {
-          detail = String(errorJson.error.message)
-        } else if (typeof errorJson?.error === "string") {
-          detail = errorJson.error
+        const data = await response.json()
+
+        if (data?.usage) {
+          lastUsage = data.usage
+          usageCb(data.usage, { gated })
         }
-      } catch {
-        // Response was not JSON
-      }
 
-      const safeDetail = sanitizeApiKey(detail, apiKey)
-      const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
-      report(
-        new Error(
-          `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`
-        )
-      )
-      return
-    }
-
-    try {
-      const data = await response.json()
-
-      if (data?.usage) {
-        lastUsage = data.usage
-        usageCb(data.usage, { gated })
-      }
-
-      const text = (
-        data?.text ??
-        data?.transcription ??
-        (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
-        ""
-      ).trim()
-      if (text) deliver(text)
-    } catch (parseErr: any) {
-      if (parseErr?.name === "AbortError") {
+        const text = (
+          data?.text ??
+          data?.transcription ??
+          (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
+          ""
+        ).trim()
+        if (text) deliver(text)
+      } catch (parseErr: any) {
+        if (parseErr?.name === "AbortError") {
+          report(
+            new RequestTimeout({
+              timeoutMs,
+              message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+            }) as unknown as Error,
+          )
+          return
+        }
         report(
-          new RequestTimeout({
-            timeoutMs,
-            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
-          }) as unknown as Error
+          new Error(`Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`),
         )
-        return
       }
-      report(
-        new Error(
-          `Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`
-        )
-      )
+    } finally {
+      clearTimeout(timer)
+      inFlightRequests--
     }
-  } finally {
-    clearTimeout(timer)
-    inFlightRequests--
   }
-}
 
   /** The start of a sentence, when that is all that should be sent; see `NameGate`. */
   async function probeFor(segment: CapturedSegment): Promise<Blob | undefined> {
@@ -609,7 +587,12 @@ export function createOpenRouterTranscriber(
         if (!earlyGate.active(now() - wholeUnderMs)) return
         earlyGate.onRequest?.()
         let heard = ""
-        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text), "probe", true)
+        const probe = transcribeSegment(
+          { blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS },
+          (text) => (heard = text),
+          "probe",
+          true,
+        )
           .then(() => heard)
           .catch(() => "")
         earlyProbes.set(sequence, probe)
@@ -717,10 +700,9 @@ export function createOpenRouterTranscriber(
       // none is.
       if (!apiKey || apiKey.trim().length === 0) {
         const missing = new ApiKeyMissing({
-          message:
-            options.language?.startsWith("en")
-              ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
-              : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+          message: options.language?.startsWith("en")
+            ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
+            : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
         })
         errorCb(missing as unknown as Error, { purpose: "turn" })
         throw missing
@@ -733,7 +715,8 @@ export function createOpenRouterTranscriber(
         const lower = String(err?.message ?? "").toLowerCase()
         if (lower.includes("negato") || lower.includes("notallowed") || lower.includes("permission")) {
           const permErr = new MicPermissionDenied({
-            message: "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
+            message:
+              "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
             cause: err,
           })
           errorCb(permErr as unknown as Error, { purpose: "turn" })
@@ -749,7 +732,8 @@ export function createOpenRouterTranscriber(
         }
         const failure = new TranscriptionFailed({
           cause: err,
-          message: plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
+          message:
+            plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
         })
         errorCb(failure as unknown as Error, { purpose: "turn" })
         throw failure

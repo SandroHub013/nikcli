@@ -1,12 +1,13 @@
 import type { voiceIt } from "./voice-it"
 
 type VoiceMessages = {
-  [K in keyof typeof voiceIt]: (typeof voiceIt)[K] extends (...args: infer A) => string ? (...args: A) => string : string
+  [K in keyof typeof voiceIt]: (typeof voiceIt)[K] extends (...args: infer A) => string
+    ? (...args: A) => string
+    : string
 }
 
 /** The voice package's interface texts in English. */
 export const voiceEn: VoiceMessages = {
-
   // Voice buttons, orbs, HUD
   "vui.button.off": "Turn on voice control (microphone off)",
   "vui.button.listening": "Voice control is listening (press to turn off)",
@@ -30,7 +31,8 @@ export const voiceEn: VoiceMessages = {
   "vui.listening.title": (wakeWord) => `The microphone is open and waiting for “${wakeWord}”. Press to stop listening.`,
   "vui.paused.text": "Listening paused: PC locked",
   "vui.followUp.text": "Go on…",
-  "vui.followUp.title": (wakeWord) => `For a few seconds you can go on without saying “${wakeWord}”. Press to stop listening.`,
+  "vui.followUp.title": (wakeWord) =>
+    `For a few seconds you can go on without saying “${wakeWord}”. Press to stop listening.`,
   "vui.paused.title": "It resumes by itself when you unlock the PC. Press to resume now.",
   "vui.shortcut.invalid": "Invalid shortcut.",
   "vui.shortcut.conflict": (command) => `Conflicts with the '${command}' command.`,
@@ -109,7 +111,8 @@ export const voiceEn: VoiceMessages = {
   "vui.codexFallback.on.desc": "If Claude Code hits the plan limit, retries the request on Codex",
   "vui.codexFallback.off": "Off",
   "vui.codexFallback.off.desc": "Reports the limit without switching to Codex (default)",
-  "vui.engine.note": "The agent uses your CLI account, for personal use: ADE doesn't read your credentials, keeps only a few turns together and doesn't retry when you hit the limit. It doesn't edit files or run commands in the project: it hands the work to the sessions. For heavy use, sign in to the CLI with an API key.",
+  "vui.engine.note":
+    "The agent uses your CLI account, for personal use: ADE doesn't read your credentials, keeps only a few turns together and doesn't retry when you hit the limit. It doesn't edit files or run commands in the project: it hands the work to the sessions. For heavy use, sign in to the CLI with an API key.",
   "vui.download.starting": "Starting the Parakeet model download (~640 MB)...",
   "vui.download.failed": "The Parakeet model download failed",
   "vui.trial.noEngine": "Couldn't start the speech engine: command not sent.",
@@ -123,7 +126,8 @@ export const voiceEn: VoiceMessages = {
   "vui.panel.resetVoiceConfirm": "Confirm?",
   "vui.panel.sections": "Settings sections",
   "vui.mode.title": "Default mode",
-  "vui.mode.desc": "The assistant and dictation are two separate things, both available: pick one with the orb or the microphone in the bar, or with its shortcut. Here you only choose which one starts when the microphone opens without saying which.",
+  "vui.mode.desc":
+    "The assistant and dictation are two separate things, both available: pick one with the orb or the microphone in the bar, or with its shortcut. Here you only choose which one starts when the microphone opens without saying which.",
   "vui.mode.agent": "Agent",
   "vui.mode.active": "Active",
   "vui.mode.agent.desc": "You speak and ADE acts",
@@ -141,15 +145,18 @@ export const voiceEn: VoiceMessages = {
   "vui.alerts.off.desc": "No proactive voice alerts (default)",
   "vui.replies.voice": "Reply voice",
   "vui.replies.source": "Source",
-  "vui.replies.note": "Natural voices are downloaded the first time they're needed (about 85 MB, Windows only) and then work offline. Until the download finishes, the system voice answers.",
+  "vui.replies.note":
+    "Natural voices are downloaded the first time they're needed (about 85 MB, Windows only) and then work offline. Until the download finishes, the system voice answers.",
   "vui.replies.retry": "Try again",
   "vui.replies.downloading": "Downloading…",
   "vui.reply.male": "Male",
   "vui.reply.ugo": "Ugo (Piper), natural and offline",
-  "vui.reply.ugo.licence": "CC-BY-4.0 model, derived from the lessac voice, whose dataset is licensed for research only.",
+  "vui.reply.ugo.licence":
+    "CC-BY-4.0 model, derived from the lessac voice, whose dataset is licensed for research only.",
   "vui.reply.female": "Female",
   "vui.reply.paola": "Paola (Piper), natural and offline",
-  "vui.reply.paola.licence": "CC0 dataset, model derived from the lessac voice, whose dataset is licensed for research only.",
+  "vui.reply.paola.licence":
+    "CC0 dataset, model derived from the lessac voice, whose dataset is licensed for research only.",
   "vui.reply.lessac.title": "Lessac (English)",
   "vui.reply.lessac.desc": "Lessac (Piper), natural and offline",
   "vui.reply.lessac.licence": "Model dataset licensed for research only.",
@@ -172,7 +179,8 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.kokoro.bm_george": "George",
   "vui.reply.kokoro.bm_george.desc": "Male, British English",
   "vui.reply.kokoro.licence": "Kokoro-82M model, Apache-2.0.",
-  "vui.replies.kokoroItalian": "The Kokoro voices are English: a reply in Italian is read by Ugo or Paola, of the same gender.",
+  "vui.replies.kokoroItalian":
+    "The Kokoro voices are English: a reply in Italian is read by Ugo or Paola, of the same gender.",
   "vui.replies.test": "Try the voice",
   "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
   "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
@@ -185,11 +193,15 @@ export const voiceEn: VoiceMessages = {
   "vui.pack.installSize": (size) => `Install (${size})`,
   "vui.pack.delete": "Delete",
   "vui.pack.deleting": "Deleting…",
-  "vui.pack.kokoro.unavailable": "Kokoro is not available in this version of ADE yet: until it is, Piper reads the replies.",
-  "vui.pack.kokoro.absent": "The Kokoro voices are not installed: until they are, Piper reads the replies. They are downloaded only when you press Install.",
+  "vui.pack.kokoro.unavailable":
+    "Kokoro is not available in this version of ADE yet: until it is, Piper reads the replies.",
+  "vui.pack.kokoro.absent":
+    "The Kokoro voices are not installed: until they are, Piper reads the replies. They are downloaded only when you press Install.",
   "vui.pack.kokoro.installed": "Kokoro voices installed: they work offline.",
-  "vui.pack.kokoro.model": "Model: Kokoro-82M by hexgrad (huggingface.co/hexgrad/Kokoro-82M), Apache-2.0 licence, in the files prepared by kokoro-onnx (MIT).",
-  "vui.pack.kokoro.host": "Read by kokoro-host, a program separate from ADE, with the sherpa-onnx runtime (Apache-2.0) and ONNX Runtime (MIT); espeak-ng (GPL-3.0-or-later) is in the sherpa-onnx DLL downloaded with the runtime, not in the host.",
+  "vui.pack.kokoro.model":
+    "Model: Kokoro-82M by hexgrad (huggingface.co/hexgrad/Kokoro-82M), Apache-2.0 licence, in the files prepared by kokoro-onnx (MIT).",
+  "vui.pack.kokoro.host":
+    "Read by kokoro-host, a program separate from ADE, with the sherpa-onnx runtime (Apache-2.0) and ONNX Runtime (MIT); espeak-ng (GPL-3.0-or-later) is in the sherpa-onnx DLL downloaded with the runtime, not in the host.",
   "vui.send.title": "After dictation",
   "vui.send.manual": "Just transcribe",
   "vui.send.manual.desc": "The text stays there, you send it",
@@ -198,12 +210,14 @@ export const voiceEn: VoiceMessages = {
   "vui.activation.title": "How it turns on",
   "vui.activation.desc": "Choose how the microphone listens while you work",
   "vui.activation.push": "Push to talk",
-  "vui.activation.push.desc": "Hold the shortcut while you speak, or tap it: it closes when the answer is done or with another tap",
+  "vui.activation.push.desc":
+    "Hold the shortcut while you speak, or tap it: it closes when the answer is done or with another tap",
   "vui.activation.toggle": "On and off (toggle)",
   "vui.activation.toggle.desc": "One command turns it on, one turns it off",
   "vui.activation.wake": "Answers only when called by name",
   "vui.activation.wake.desc": "Recommended with the microphone open: what's said in the room, or on TV, stays out",
-  "vui.activation.wake.disabled": "Off: the wake word isn't supported in dictation mode; it only works for agent commands.",
+  "vui.activation.wake.disabled":
+    "Off: the wake word isn't supported in dictation mode; it only works for agent commands.",
   "vui.listen.title": "Listening",
   "vui.listen.always": "Always on",
   "vui.listen.always.desc": (wakeWord) =>
@@ -211,9 +225,11 @@ export const voiceEn: VoiceMessages = {
   "vui.listen.spend": (calls, cost) =>
     `The voice sent ${calls} ${calls === 1 ? "request" : "requests"} to OpenRouter today, for ${cost}.`,
   "vui.listen.manual": "Only when you open it",
-  "vui.listen.manual.desc": "With the button at the top or the shortcut; without an accepted phrase it closes after 30 seconds.",
+  "vui.listen.manual.desc":
+    "With the button at the top or the shortcut; without an accepted phrase it closes after 30 seconds.",
   "vui.shortcuts.title": "Keyboard shortcuts",
-  "vui.shortcuts.desc": "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
+  "vui.shortcuts.desc":
+    "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
   "vui.shortcuts.agent": "Agent mode shortcut",
   "vui.shortcuts.agent.desc": "Starts listening for agent commands",
   "vui.shortcuts.agent.reset": "Restore the default agent mode shortcut",
@@ -227,16 +243,21 @@ export const voiceEn: VoiceMessages = {
   "vui.language.search": "Search a language",
   "vui.language.search.placeholder": "Type to filter (e.g. ital, en, fr)…",
   "vui.language.select": "Speech recognition language",
-  "vui.language.count": (shown, total, backend) => `${shown} of ${total} languages available for the ${backend} engine. Enter in the search field picks the first match.`,
-  "vui.language.unsupported": (language, backend) => `The current language ("${language}") isn't supported by the selected engine (${backend}).`,
+  "vui.language.count": (shown, total, backend) =>
+    `${shown} of ${total} languages available for the ${backend} engine. Enter in the search field picks the first match.`,
+  "vui.language.unsupported": (language, backend) =>
+    `The current language ("${language}") isn't supported by the selected engine (${backend}).`,
   "vui.language.switch": (language) => `Switch to ${language}`,
   "vui.audio.title": "Audio",
   "vui.audio.desc": "Which microphone listens, and where the assistant's voice goes",
   "vui.audio.mic": "Microphone",
-  "vui.audio.unlabelled": "Device names appear after the first microphone permission. Start listening once, then reopen this section.",
-  "vui.audio.current": (choice) => `Current choice: ${choice}. If the device isn't connected the system one is used, and the choice stays saved.`,
+  "vui.audio.unlabelled":
+    "Device names appear after the first microphone permission. Start listening once, then reopen this section.",
+  "vui.audio.current": (choice) =>
+    `Current choice: ${choice}. If the device isn't connected the system one is used, and the choice stays saved.`,
   "vui.audio.output": "Audio output",
-  "vui.audio.output.note": "The assistant's voice uses the system synthesizer, which always plays on the default device: this choice applies to ADE's audio playback and will apply to the voice too once it moves to playable synthesis.",
+  "vui.audio.output.note":
+    "The assistant's voice uses the system synthesizer, which always plays on the default device: this choice applies to ADE's audio playback and will apply to the voice too once it moves to playable synthesis.",
   "vui.device.system": "System device",
   "vui.device.mic": (position) => `Microphone ${position}`,
   "vui.device.output": (position) => `Audio output ${position}`,
@@ -246,15 +267,18 @@ export const voiceEn: VoiceMessages = {
   "vui.model.local": "local model",
   "vui.model.found": (mb, format) => `Found on your computer: ${mb} MB (${format}). It stays saved on your disk.`,
   "vui.model.path": (path) => `Path: ${path}`,
-  "vui.model.cached": (files, mb) => `${files} files, ${mb} MB. It stays installed between launches; ADE asks the browser not to delete it.`,
-  "vui.model.partial": (files, mb) => `${files} files, ${mb} MB — download incomplete. It stays installed between launches; ADE asks the browser not to delete it.`,
+  "vui.model.cached": (files, mb) =>
+    `${files} files, ${mb} MB. It stays installed between launches; ADE asks the browser not to delete it.`,
+  "vui.model.partial": (files, mb) =>
+    `${files} files, ${mb} MB — download incomplete. It stays installed between launches; ADE asks the browser not to delete it.`,
   "vui.model.download": "Download the Parakeet model (~640 MB)",
   "vui.model.download.hint": "Ready as soon as the download finishes",
   "vui.model.downloading": "Downloading...",
   "vui.model.downloaded": "✓ Model downloaded. Parakeet is now active and ready.",
   "vui.model.deleting": "Deleting…",
   "vui.model.delete": "Delete the downloaded model",
-  "vui.model.delete.hint": "Use this if local transcription won't start: it removes the files and downloads them again at the next launch.",
+  "vui.model.delete.hint":
+    "Use this if local transcription won't start: it removes the files and downloads them again at the next launch.",
   "vui.backend.title": "Speech engine",
   "vui.backend.desc": "The three supported speech engines and whether each can run",
   "vui.backend.parakeet": "Local Parakeet",
@@ -265,7 +289,8 @@ export const voiceEn: VoiceMessages = {
   "vui.backend.available": "Available (~640 MB)",
   "vui.backend.unsupported": "Not supported",
   "vui.backend.needsKey": "Key needed",
-  "vui.backend.parakeet.note": "Quantized neural model (~640 MB, INT8). Neural speech transcription on your computer, private and without sending audio to outside servers.",
+  "vui.backend.parakeet.note":
+    "Quantized neural model (~640 MB, INT8). Neural speech transcription on your computer, private and without sending audio to outside servers.",
   "vui.backend.accel": "Hardware acceleration",
   "vui.backend.accel.auto": "Uses WebGPU when available, WASM otherwise",
   "vui.backend.accel.gpu": "Inference on the GPU",
@@ -296,7 +321,8 @@ export const voiceEn: VoiceMessages = {
   "vui.commands.none": "No command matches this filter.",
   "vui.commands.confirms": "asks to confirm",
   "vui.commands.usePhrase": "Use this phrase in the trial field",
-  "vui.commands.count": (shown, total) => `${shown} of ${total} commands. Click a phrase to copy it into the trial field above.`,
+  "vui.commands.count": (shown, total) =>
+    `${shown} of ${total} commands. Click a phrase to copy it into the trial field above.`,
   "vui.live.cancel.tip": "Stops the current sentence without closing the microphone",
   "vui.live.cancel": "Cancel",
   "vui.live.stop": "Stop listening",
@@ -310,14 +336,17 @@ export const voiceEn: VoiceMessages = {
   "vui.asr.keyCheck": "Checking the OpenRouter key failed.",
 
   // Voice wake word hint
-  "vui.wake.hint": (wakeWord) => `Just say "${wakeWord}" to call it. Say "ei nik" as separate words, with a pause after the name. Start the sentence with "${wakeWord}" ("ehi nik" or "hey nick" work too), for example "${wakeWord}, open the browser". Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. Listening by itself is off unless you turn it on, because every sentence it hears is paid for: the switch is in the voice settings, where what it costs and what it has spent today are written. On, it stops by itself past 120 sentences in an hour or after half an hour with nobody calling it, and stays stopped until you turn it back on. When the PC is locked or asleep it pauses and comes back by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
+  "vui.wake.hint": (wakeWord) =>
+    `Just say "${wakeWord}" to call it. Say "ei nik" as separate words, with a pause after the name. Start the sentence with "${wakeWord}" ("ehi nik" or "hey nick" work too), for example "${wakeWord}, open the browser". Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. Listening by itself is off unless you turn it on, because every sentence it hears is paid for: the switch is in the voice settings, where what it costs and what it has spent today are written. On, it stops by itself past 120 sentences in an hour or after half an hour with nobody calling it, and stays stopped until you turn it back on. When the PC is locked or asleep it pauses and comes back by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
 
   // Voice microphone errors, settings repairs, shortcut warnings
   "vui.error.unknown": "unknown error",
-  "vui.mic.noFormat": "No supported recording format: neither 'audio/webm;codecs=opus' nor 'audio/mp4' is available in this environment.",
+  "vui.mic.noFormat":
+    "No supported recording format: neither 'audio/webm;codecs=opus' nor 'audio/mp4' is available in this environment.",
   "vui.mic.unsupported": "Microphone access isn't supported in this browser or environment.",
   "vui.mic.chosenMissing": "The chosen microphone isn't available. Pick another one in the voice settings.",
-  "vui.mic.denied": "Microphone access denied: allow it in the system privacy settings (Windows: Settings › Privacy & security › Microphone, for desktop apps).",
+  "vui.mic.denied":
+    "Microphone access denied: allow it in the system privacy settings (Windows: Settings › Privacy & security › Microphone, for desktop apps).",
   "vui.mic.none": "No microphone found. Connect a microphone and try again.",
   "vui.mic.noneDevice": "No microphone found. Connect an audio device and try again.",
   "vui.mic.failed": (reason) => `Couldn't access the microphone: ${reason}`,
@@ -329,13 +358,16 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.defaults": "Settings invalid or missing: defaults restored.",
   "vui.fix.noVersion": "Settings version missing: set to version 1.",
   "vui.fix.migrated": (from, to) => `Settings migrated from version ${from} to ${to}.`,
-  "vui.fix.wakeDefault": "The assistant now answers only when called by name: you can change this in the voice settings.",
+  "vui.fix.wakeDefault":
+    "The assistant now answers only when called by name: you can change this in the voice settings.",
   "vui.fix.mode": (value, fallback) => `Unknown mode '${value}': restored '${fallback}'.`,
   "vui.fix.activation": (value, fallback) => `Unknown activation '${value}': restored '${fallback}'.`,
   "vui.fix.send": (value, fallback) => `Invalid dictation send '${value}': restored '${fallback}'.`,
   "vui.fix.language": (fallback) => `No language set: restored '${fallback}'.`,
-  "vui.fix.agentChord": (value, problem, fallback) => `Agent mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
-  "vui.fix.transcriptionChord": (value, problem, fallback) => `Dictation mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
+  "vui.fix.agentChord": (value, problem, fallback) =>
+    `Agent mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
+  "vui.fix.transcriptionChord": (value, problem, fallback) =>
+    `Dictation mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
   "vui.fix.backend": (value, fallback) => `Invalid engine '${value}': restored '${fallback}'.`,
   "vui.fix.parakeetBackend": (value, fallback) => `Unknown Parakeet backend '${value}': restored '${fallback}'.`,
   "vui.fix.wordsDropped": (dropped) => `Ignored custom words that aren't text: ${dropped}.`,
@@ -343,7 +375,8 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.speakReplies": "Invalid reply reading setting: turned back on.",
   "vui.fix.spokenAlerts": "Invalid proactive alerts setting: turned back off.",
   "vui.fix.replyVoice": (value) => `Unknown reply voice '${value}': restored Ugo.`,
-  "vui.fix.replyBackend": (value, fallback) => `Kokoro voices read in English: replies now use the '${fallback}' backend instead of '${value}'.`,
+  "vui.fix.replyBackend": (value, fallback) =>
+    `Kokoro voices read in English: replies now use the '${fallback}' backend instead of '${value}'.`,
   "vui.fix.ttsLocale": (value) => `Unknown reply language '${value}': restored Italian.`,
   "vui.fix.agentSpeed": (value) => `Unknown agent speed '${value}': restored fast.`,
   "vui.fix.agentEngine": (value) => `Unknown agent engine '${value}': restored automatic.`,
@@ -357,14 +390,16 @@ export const voiceEn: VoiceMessages = {
   "vui.command.themeToggle": "Switch theme",
   "vui.command.agent": "Agent mode",
   "vui.command.transcription": "Dictation mode",
-  "vui.clash.taken": (label, chord, winner) => `${label}: “${chord}” already belongs to '${winner}', which takes precedence.`,
+  "vui.clash.taken": (label, chord, winner) =>
+    `${label}: “${chord}” already belongs to '${winner}', which takes precedence.`,
   "vui.clash.both": (label, chord) => `${label}: both use “${chord}”, so neither one works.`,
   "vui.clash.inactive": (details) => `Voice shortcuts not active. ${details} Change them in the voice panel.`,
   "vui.risk.noMainKey": "Invalid shortcut: a main key is missing.",
   "vui.risk.typing": (key) => `“${key}” alone is for typing: add Ctrl, Alt or Cmd.`,
   "vui.risk.typingMove": (key) => `“${key}” alone is for typing and moving through text: add Ctrl, Alt or Cmd.`,
   "vui.risk.winKey": "Windows and many Linux desktops reserve combinations with the Win key: it may never reach ADE.",
-  "vui.risk.altLetter": "Alt plus a letter can be caught by the window menu or needed by AltGr to type accented characters.",
+  "vui.risk.altLetter":
+    "Alt plus a letter can be caught by the window menu or needed by AltGr to type accented characters.",
 
   // Voice recording error
   "vui.mic.recordFailed": (reason) => `Couldn't start audio recording: ${reason}`,

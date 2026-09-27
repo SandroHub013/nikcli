@@ -7,7 +7,9 @@ import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
 
 const read = (text: string) => readAgentFile({ path: "C:/p/.nikcli/agent/secondo.md", scope: "project", text })
 const before = read("---\ndescription: prova\nmode: primary\n---\nSei secondo.\n")
-const after = read("---\ndescription: prova\nmode: primary\nmodel: openrouter/nvidia/nemotron-3.5-lightning:free\n---\nSei secondo.\n")
+const after = read(
+  "---\ndescription: prova\nmode: primary\nmodel: openrouter/nvidia/nemotron-3.5-lightning:free\n---\nSei secondo.\n",
+)
 
 describe("the roster and its files", () => {
   test("a model added to a file is a change; the same files are not", () => {

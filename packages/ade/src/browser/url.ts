@@ -238,4 +238,3 @@ export function addressNeedsCover(raw: string): boolean {
   }
   return false
 }
-

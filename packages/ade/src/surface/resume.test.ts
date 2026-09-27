@@ -142,11 +142,15 @@ describe("saving and restoring a session", () => {
   })
 
   test("the spawn's nonce is saved, so the restore can read its last report", () => {
-    const first = roundTrip([session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno", linkNonce: "a1b2c3d4e5f6" })])
+    const first = roundTrip([
+      session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno", linkNonce: "a1b2c3d4e5f6" }),
+    ])
     expect(first.saved.panes[0].linkNonce).toBe("a1b2c3d4e5f6")
     expect(first.restored.panes[0].linkNonce).toBe("a1b2c3d4e5f6")
     // It names a file: a value that is not hex does not survive the load.
-    const parsed = parseWorkspace(serializeWorkspace({ ...first.saved, panes: [{ ...first.saved.panes[0]!, linkNonce: "..\\x" }] }))
+    const parsed = parseWorkspace(
+      serializeWorkspace({ ...first.saved, panes: [{ ...first.saved.panes[0]!, linkNonce: "..\\x" }] }),
+    )
     expect(parsed?.panes[0]?.linkNonce).toBeUndefined()
   })
 

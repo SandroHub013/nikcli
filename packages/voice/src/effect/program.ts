@@ -254,7 +254,11 @@ export interface VoiceProgramOptions {
 
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
-  readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }) => Effect.Effect<void>
+  readonly handlePermissionRequest: (
+    paneId: string,
+    what: string,
+    options?: { silent?: boolean; kind?: PermissionSpeechKind },
+  ) => Effect.Effect<void>
   /** A request closed outside the voice (by hand, by a button, with its pane): its question leaves the dialogue. */
   readonly resolvePermission: (paneId: string) => Effect.Effect<void>
   /**
@@ -413,7 +417,9 @@ export function makeVoiceProgram(
         panes,
         pendingPermission: isPendingPerm,
         pendingPermissionPaneId: pendingPermPaneId,
-        ...(host.pendingPermissionWhat ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) } : {}),
+        ...(host.pendingPermissionWhat
+          ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) }
+          : {}),
         ...(host.pendingPermissionKind
           ? { permissionKind: (paneId: string) => host.pendingPermissionKind!(paneId) }
           : {}),
@@ -1708,7 +1714,8 @@ export function makeVoiceProgram(
               let shouldSpeak = purpose === "turn"
               if (purpose === "probe") {
                 const now = yield* getNowMs
-                shouldSpeak = lastProbeErrorSpokenAt === undefined || now - lastProbeErrorSpokenAt >= PROBE_ERROR_SPEECH_COOLDOWN_MS
+                shouldSpeak =
+                  lastProbeErrorSpokenAt === undefined || now - lastProbeErrorSpokenAt >= PROBE_ERROR_SPEECH_COOLDOWN_MS
                 if (shouldSpeak) lastProbeErrorSpokenAt = now
               }
               if (shouldSpeak) {
@@ -1743,7 +1750,11 @@ export function makeVoiceProgram(
     return {
       submitText: (text: string) => processUtterance(text, false, true).pipe(Effect.ensuring(turnEnded)),
 
-      handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }) =>
+      handlePermissionRequest: (
+        paneId: string,
+        what: string,
+        options?: { silent?: boolean; kind?: PermissionSpeechKind },
+      ) =>
         applyDialogEvent({
           type: "permission_requested",
           paneId,
@@ -1841,7 +1852,14 @@ export function makeVoiceProgram(
         const awake = awakeAt(at)
         const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
         const thinking = currentState.status === "executing" && agentAbort !== null
-        const gate = { mode: settings.mode, activation: settings.activation, awake, awaitingAnswer, thinking, pressed: isPushToTalkPressed }
+        const gate = {
+          mode: settings.mode,
+          activation: settings.activation,
+          awake,
+          awaitingAnswer,
+          thinking,
+          pressed: isPushToTalkPressed,
+        }
         const open = takesWithoutName(gate)
         // Held only by the window: it closes at `wakeUntil` with nobody writing.
         const windowOnly = open && awake && !takesWithoutName({ ...gate, awake: false })

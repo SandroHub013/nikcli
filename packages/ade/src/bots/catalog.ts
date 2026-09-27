@@ -9,7 +9,14 @@
  * counts there, and nikcli is not asked.
  */
 
-import { formatModelLabel, hasReliableCost, isFreeModel, type CatalogEntry, type CatalogProvider, type CatalogSource } from "../chat/model"
+import {
+  formatModelLabel,
+  hasReliableCost,
+  isFreeModel,
+  type CatalogEntry,
+  type CatalogProvider,
+  type CatalogSource,
+} from "../chat/model"
 
 export interface CatalogModel {
   readonly id: string
@@ -57,7 +64,8 @@ function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
     if (end < 0) break
     try {
       const record = JSON.parse(lines.slice(i + 1, end + 1).join("\n")) as unknown
-      if (record && typeof record === "object" && !Array.isArray(record)) records.push([name, record as Record<string, unknown>])
+      if (record && typeof record === "object" && !Array.isArray(record))
+        records.push([name, record as Record<string, unknown>])
     } catch {
       // Not a record: the next name starts over.
     }
@@ -101,7 +109,9 @@ export function catalogFromText(stdout: string): CatalogSource {
     models[id] = record as CatalogEntry
     byProvider.set(provider, models)
   }
-  return { providers: [...byProvider].map(([id, models]): CatalogProvider => ({ id, name: PROVIDER_NAMES[id] ?? id, models })) }
+  return {
+    providers: [...byProvider].map(([id, models]): CatalogProvider => ({ id, name: PROVIDER_NAMES[id] ?? id, models })),
+  }
 }
 
 /**
@@ -124,7 +134,11 @@ export async function catalogFree(model: string, load: (provider: string) => Pro
   }
   const entry = parseModelCatalog(stdout).get(name)
   if (!entry) return false
-  return isFreeModel({ id: entry.id, providerID: entry.providerID ?? provider, ...(entry.cost ? { cost: entry.cost } : {}) })
+  return isFreeModel({
+    id: entry.id,
+    providerID: entry.providerID ?? provider,
+    ...(entry.cost ? { cost: entry.cost } : {}),
+  })
 }
 
 /**
@@ -163,7 +177,10 @@ export function botModelLabel(id: string): string {
  * «prompt loop failed». Undefined when the catalog cannot be read, is empty,
  * or the name has no provider: not knowing.
  */
-export async function modelGone(model: string, load: (provider: string) => Promise<string>): Promise<boolean | undefined> {
+export async function modelGone(
+  model: string,
+  load: (provider: string) => Promise<string>,
+): Promise<boolean | undefined> {
   const name = model.trim()
   const slash = name.indexOf("/")
   if (slash <= 0) return undefined

@@ -33,10 +33,7 @@ const PERMISSION_SPEECH_LABEL_KEYS = {
   unknown: "voice.permission.type.unknown",
 } as const
 
-export function permissionSpeechLabel(
-  kind?: PermissionRequest["kind"],
-  currentLocale: Locale = locale(),
-): string {
+export function permissionSpeechLabel(kind?: PermissionRequest["kind"], currentLocale: Locale = locale()): string {
   const key =
     kind === "shell" || kind === "write" || kind === "network" || kind === "unknown"
       ? PERMISSION_SPEECH_LABEL_KEYS[kind]

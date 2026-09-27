@@ -83,7 +83,19 @@ export const SECRET_WORDS = [
 export const SECRET_EXACT_WORDS = ["pat"]
 
 /** How a real key announces itself when the box asks you to paste one. */
-export const SECRET_PREFIXES = ["sk-", "ghp_", "gho_", "ghs_", "github_pat_", "xox", "AKIA", "AIza", "glpat-", "hf_", "eyJ"]
+export const SECRET_PREFIXES = [
+  "sk-",
+  "ghp_",
+  "gho_",
+  "ghs_",
+  "github_pat_",
+  "xox",
+  "AKIA",
+  "AIza",
+  "glpat-",
+  "hf_",
+  "eyJ",
+]
 
 const anyField = (conditions: string[]): string => `${FIELD}:is(${conditions.join(", ")})`
 

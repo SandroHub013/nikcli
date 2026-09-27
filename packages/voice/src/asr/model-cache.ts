@@ -221,9 +221,7 @@ export async function inspectLocalFilesystemModel(): Promise<{
 }> {
   // 1. Try Node.js / Bun runtime filesystem if available
   try {
-    const isNodeLike =
-      typeof process !== "undefined" &&
-      Boolean(process.versions?.node || (process as any).isBun)
+    const isNodeLike = typeof process !== "undefined" && Boolean(process.versions?.node || (process as any).isBun)
     if (isNodeLike) {
       const fs = await import("fs")
       const path = await import("path")
@@ -312,12 +310,11 @@ export async function inspectLocalFilesystemModel(): Promise<{
   // 2. Try Tauri desktop host if running inside Tauri WebView
   try {
     const tauriGlobal =
-      typeof window !== "undefined" &&
-      Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)
+      typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)
     if (tauriGlobal) {
       let invoke: ((cmd: string, args?: Record<string, unknown>) => Promise<any>) | undefined
       try {
-        const tauriCore: any = await (new Function('return import("@tauri-apps/api/core")')().catch(() => null))
+        const tauriCore: any = await new Function('return import("@tauri-apps/api/core")')().catch(() => null)
         if (tauriCore && typeof tauriCore.invoke === "function") {
           invoke = tauriCore.invoke
         }
@@ -346,8 +343,16 @@ export async function inspectLocalFilesystemModel(): Promise<{
               (await invoke("read_dir", { path: hub })) || []
 
             entries.sort((a: any, b: any) => {
-              const aTdt = String(a.name || "").toLowerCase().includes("tdt-0.6b-v3") ? 1 : 0
-              const bTdt = String(b.name || "").toLowerCase().includes("tdt-0.6b-v3") ? 1 : 0
+              const aTdt = String(a.name || "")
+                .toLowerCase()
+                .includes("tdt-0.6b-v3")
+                ? 1
+                : 0
+              const bTdt = String(b.name || "")
+                .toLowerCase()
+                .includes("tdt-0.6b-v3")
+                ? 1
+                : 0
               return bTdt - aTdt
             })
 
@@ -377,16 +382,22 @@ export async function inspectLocalFilesystemModel(): Promise<{
                   const snapFiles: Array<{ name: string; path: string; size: number }> =
                     (await invoke("read_dir", { path: snap.path })) || []
                   snapFiles.sort((a: any, b: any) => {
-                    const aTdt = String(a.name || "").toLowerCase().includes("tdt-0.6b-v3") ? 1 : 0
-                    const bTdt = String(b.name || "").toLowerCase().includes("tdt-0.6b-v3") ? 1 : 0
+                    const aTdt = String(a.name || "")
+                      .toLowerCase()
+                      .includes("tdt-0.6b-v3")
+                      ? 1
+                      : 0
+                    const bTdt = String(b.name || "")
+                      .toLowerCase()
+                      .includes("tdt-0.6b-v3")
+                      ? 1
+                      : 0
                     return bTdt - aTdt
                   })
                   for (const sf of snapFiles) {
                     const sfLower = String(sf.name || "").toLowerCase()
                     if (
-                      (sfLower.endsWith(".gguf") ||
-                        sfLower.endsWith(".onnx") ||
-                        sfLower.endsWith(".bin")) &&
+                      (sfLower.endsWith(".gguf") || sfLower.endsWith(".onnx") || sfLower.endsWith(".bin")) &&
                       sf.size > 10_000_000
                     ) {
                       return {
@@ -441,9 +452,7 @@ export async function inspectModelCache(options: CacheOptions = {}): Promise<Cac
             : mine
           const files = matching.length
           const bytes = sizeOf(await valuesOf(db, matching))
-          const present = requiredFiles
-            ? hasRequiredFiles(mine, requiredFiles)
-            : isComplete(files)
+          const present = requiredFiles ? hasRequiredFiles(mine, requiredFiles) : isComplete(files)
           indexedDbResult = {
             files,
             bytes,
@@ -567,9 +576,7 @@ export interface DownloadParakeetOptions {
  * Directly downloads the quantized Parakeet model weights into local IndexedDB
  * storage, making the local transcriber immediately ready for offline use.
  */
-export async function downloadParakeetModel(
-  options: DownloadParakeetOptions = {}
-): Promise<CachedModel> {
+export async function downloadParakeetModel(options: DownloadParakeetOptions = {}): Promise<CachedModel> {
   await requestPersistentStorage()
 
   let getModel = options.getParakeetModel
@@ -578,9 +585,7 @@ export async function downloadParakeetModel(
       const pkg: any = await import("parakeet.js")
       getModel = pkg.getParakeetModel ?? pkg.default?.getParakeetModel
     } catch (err: any) {
-      throw new Error(
-        `Impossibile caricare parakeet.js per il download: ${err?.message ?? "modulo mancante"}`
-      )
+      throw new Error(`Impossibile caricare parakeet.js per il download: ${err?.message ?? "modulo mancante"}`)
     }
   }
 
@@ -594,17 +599,18 @@ export async function downloadParakeetModel(
   let completedFilesBytes = 0
   let lastFile = ""
 
-  const fileSizes: Record<string, number> = quant === "fp16"
-    ? {
-        "encoder-model.fp16.onnx": 1_180_000_000,
-        "decoder_joint-model.int8.onnx": 18_202_004,
-        "vocab.txt": 102_132,
-      }
-    : {
-        "encoder-model.int8.onnx": 652_183_999,
-        "decoder_joint-model.int8.onnx": 18_202_004,
-        "vocab.txt": 102_132,
-      }
+  const fileSizes: Record<string, number> =
+    quant === "fp16"
+      ? {
+          "encoder-model.fp16.onnx": 1_180_000_000,
+          "decoder_joint-model.int8.onnx": 18_202_004,
+          "vocab.txt": 102_132,
+        }
+      : {
+          "encoder-model.int8.onnx": 652_183_999,
+          "decoder_joint-model.int8.onnx": 18_202_004,
+          "vocab.txt": 102_132,
+        }
 
   const progressBridge = (p: { loaded: number; total: number; file: string }) => {
     if (lastFile && p.file !== lastFile) {
@@ -612,14 +618,8 @@ export async function downloadParakeetModel(
     }
     lastFile = p.file
 
-    const currentTotalLoaded = Math.min(
-      totalEstimatedBytes,
-      completedFilesBytes + (p.loaded || 0)
-    )
-    const percent = Math.min(
-      99,
-      Math.max(1, Math.round((currentTotalLoaded / totalEstimatedBytes) * 100))
-    )
+    const currentTotalLoaded = Math.min(totalEstimatedBytes, completedFilesBytes + (p.loaded || 0))
+    const percent = Math.min(99, Math.max(1, Math.round((currentTotalLoaded / totalEstimatedBytes) * 100)))
     const mbLoaded = (currentTotalLoaded / (1024 * 1024)).toFixed(0)
     const mbTotal = (totalEstimatedBytes / (1024 * 1024)).toFixed(0)
 
@@ -636,9 +636,10 @@ export async function downloadParakeetModel(
     loaded: 0,
     total: totalEstimatedBytes,
     percent: 0,
-    message: quant === "fp16"
-      ? "Inizio scaricamento del modello Parakeet quantizzato FP16 (~1,2 GB)..."
-      : "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
+    message:
+      quant === "fp16"
+        ? "Inizio scaricamento del modello Parakeet quantizzato FP16 (~1,2 GB)..."
+        : "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
   })
 
   await getModel(modelKey, {

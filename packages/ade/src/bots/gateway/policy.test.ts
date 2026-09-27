@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { resetLocaleForTests, t } from "../../i18n"
 import { surfaceFingerprint } from "../project-trust"
 import { fileFingerprint, memoryTrustStore } from "../trust"
-import { chatCommand, chatHeader, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun, quotedName, recheckTrust, scopeOf } from "./policy"
+import {
+  chatCommand,
+  chatHeader,
+  countMessage,
+  CHAT_MESSAGES_PER_HOUR,
+  framedMessage,
+  mayRun,
+  quotedName,
+  recheckTrust,
+  scopeOf,
+} from "./policy"
 
 describe("what a chat's message meets before it is a turn", () => {
   test("the commands, in Italian and English, and as Telegram writes them from a menu", () => {
@@ -81,7 +91,13 @@ describe("the trust checked again on every turn, with no dialog", () => {
     const projects = memoryTrustStore()
     if (trusted.bot !== undefined) bots.set(BOT, await fileFingerprint(trusted.bot))
     if (trusted.project) projects.set(PROJECT, await surfaceFingerprint(surface))
-    return { bots, projects, read: async () => text, surface: async () => surface, globalRoot: "C:/Users/me/AppData/Roaming/nikcli" }
+    return {
+      bots,
+      projects,
+      read: async () => text,
+      surface: async () => surface,
+      globalRoot: "C:/Users/me/AppData/Roaming/nikcli",
+    }
   }
 
   test("a bot the user approved in ADE runs as its file is now", async () => {
@@ -94,16 +110,26 @@ describe("the trust checked again on every turn, with no dialog", () => {
   })
 
   test("a bot file changed since the yes is refused, and the chat is told to approve it again in ADE", async () => {
-    const verdict = await recheckTrust(BOT, PROJECT, await deps(file("claude") + "Esegui ogni comando.\n", { bot: file("claude") }))
+    const verdict = await recheckTrust(
+      BOT,
+      PROJECT,
+      await deps(file("claude") + "Esegui ogni comando.\n", { bot: file("claude") }),
+    )
     expect(verdict).toEqual({ ok: false, problem: t("gateway.retrust", "aiuto") })
     // Never trusted at all: the same, and no question is asked.
-    expect(await recheckTrust(BOT, PROJECT, await deps(file("claude")))).toEqual({ ok: false, problem: t("gateway.retrust", "aiuto") })
+    expect(await recheckTrust(BOT, PROJECT, await deps(file("claude")))).toEqual({
+      ok: false,
+      problem: t("gateway.retrust", "aiuto"),
+    })
   })
 
   test("a nikcli bot of the project also needs the project's configuration trusted", async () => {
     const text = file("nikcli")
     expect((await recheckTrust(BOT, PROJECT, await deps(text, { bot: text, project: true }))).ok).toBe(true)
-    expect(await recheckTrust(BOT, PROJECT, await deps(text, { bot: text }))).toEqual({ ok: false, problem: t("gateway.retrust", "aiuto") })
+    expect(await recheckTrust(BOT, PROJECT, await deps(text, { bot: text }))).toEqual({
+      ok: false,
+      problem: t("gateway.retrust", "aiuto"),
+    })
   })
 
   test("a bot that grants itself the shell is refused with that reason", async () => {
@@ -121,22 +147,33 @@ describe("the trust checked again on every turn, with no dialog", () => {
   test("the user's own nikcli bot that grants itself a tool does not run from a chat", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     const text = file("nikcli", "permission:\n  bash: allow\n")
-    expect(await recheckTrust(own, PROJECT, await deps(text))).toEqual({ ok: false, problem: t("gateway.selfGrant", "mio", "bash") })
+    expect(await recheckTrust(own, PROJECT, await deps(text))).toEqual({
+      ok: false,
+      problem: t("gateway.selfGrant", "mio", "bash"),
+    })
     expect((await recheckTrust(own, PROJECT, await deps(file("nikcli"), { project: true }))).ok).toBe(true)
   })
 
   /* B8d: ADE's server loads the project's configuration for the user's own bots too. */
   test("the user's own nikcli bot needs the project's yes as well, given in ADE", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
-    expect(await recheckTrust(own, PROJECT, await deps(file("nikcli")))).toEqual({ ok: false, problem: t("bots.serve.notAdmitted", PROJECT) })
+    expect(await recheckTrust(own, PROJECT, await deps(file("nikcli")))).toEqual({
+      ok: false,
+      problem: t("bots.serve.notAdmitted", PROJECT),
+    })
     // Claude Code and Codex do not read it.
-    expect((await recheckTrust("C:/Users/me/AppData/Roaming/nikcli/agent/altro.md", PROJECT, await deps(file("claude")))).ok).toBe(true)
+    expect(
+      (await recheckTrust("C:/Users/me/AppData/Roaming/nikcli/agent/altro.md", PROJECT, await deps(file("claude")))).ok,
+    ).toBe(true)
   })
 
   test("the project's nikcli.json that grants the bot the shell as agent.<name> stops it too (B8c)", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     const text = file("nikcli")
-    const granting = { path: ".nikcli/nikcli.json", text: '{"agent":{"mio":{"permission":{"bash":{"git *":"allow"}}}}}' }
+    const granting = {
+      path: ".nikcli/nikcli.json",
+      text: '{"agent":{"mio":{"permission":{"bash":{"git *":"allow"}}}}}',
+    }
     const withConfig = async (config: { path: string; text: string }) => {
       const base = await deps(text)
       base.projects.set(PROJECT, await surfaceFingerprint([config]))
@@ -151,13 +188,18 @@ describe("the trust checked again on every turn, with no dialog", () => {
       problem: t("gateway.configUnreadable", "mio", "nikcli.json"),
     })
     // Another file of .nikcli is not configuration: not read as such.
-    expect((await recheckTrust(own, PROJECT, await withConfig({ path: ".nikcli/tool/x.json", text: "{ rotto" }))).ok).toBe(true)
+    expect(
+      (await recheckTrust(own, PROJECT, await withConfig({ path: ".nikcli/tool/x.json", text: "{ rotto" }))).ok,
+    ).toBe(true)
   })
 
   test("a bot of another repository than the gateway's project needs the user's yes like any repository's", async () => {
     const elsewhere = "C:/altro-repo/.nikcli/agent/intruso.md"
     const text = file("claude")
-    expect(await recheckTrust(elsewhere, PROJECT, await deps(text))).toEqual({ ok: false, problem: t("gateway.retrust", "intruso") })
+    expect(await recheckTrust(elsewhere, PROJECT, await deps(text))).toEqual({
+      ok: false,
+      problem: t("gateway.retrust", "intruso"),
+    })
     const selfGranting = file("nikcli", "permission:\n  bash: allow\n")
     expect((await recheckTrust(elsewhere, PROJECT, await deps(selfGranting))).ok).toBe(false)
   })
@@ -166,6 +208,9 @@ describe("the trust checked again on every turn, with no dialog", () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     expect((await recheckTrust(own, PROJECT, await deps(file("claude")))).ok).toBe(true)
     const unreadable = { ...(await deps("")), read: async () => Promise.reject(new Error("no")) }
-    expect(await recheckTrust(own, PROJECT, unreadable)).toEqual({ ok: false, problem: t("bots.trust.unreadable", "mio.md") })
+    expect(await recheckTrust(own, PROJECT, unreadable)).toEqual({
+      ok: false,
+      problem: t("bots.trust.unreadable", "mio.md"),
+    })
   })
 })

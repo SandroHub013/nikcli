@@ -89,7 +89,13 @@ export function ChipMenu(props: ChipMenuProps) {
   const onMenuKey = (event: KeyboardEvent) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault()
-      setActive(moveActive(values(), active() !== undefined && values().includes(active()!) ? active() : undefined, event.key === "ArrowDown" ? 1 : -1))
+      setActive(
+        moveActive(
+          values(),
+          active() !== undefined && values().includes(active()!) ? active() : undefined,
+          event.key === "ArrowDown" ? 1 : -1,
+        ),
+      )
     } else if (event.key === "Enter") {
       const value = active()
       if (value !== undefined && values().includes(value)) {
@@ -106,7 +112,13 @@ export function ChipMenu(props: ChipMenuProps) {
   }
 
   return (
-    <div data-slot="chip-menu" data-kind={props.kind} data-below={props.below ? "" : undefined} data-tone={props.tone} ref={root}>
+    <div
+      data-slot="chip-menu"
+      data-kind={props.kind}
+      data-below={props.below ? "" : undefined}
+      data-tone={props.tone}
+      ref={root}
+    >
       <button
         type="button"
         data-slot="chip"
@@ -127,7 +139,14 @@ export function ChipMenu(props: ChipMenuProps) {
         <span data-slot="chip-text">{props.text}</span>
         {/* Drawn, not a ▾: at the chip's size the glyph read as a dot. */}
         <svg data-slot="chip-caret" aria-hidden="true" viewBox="0 0 10 6" width="10" height="6">
-          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          <path
+            d="M1 1l4 4 4-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
       </button>
       <Show when={open()}>
@@ -141,7 +160,9 @@ export function ChipMenu(props: ChipMenuProps) {
                 role="combobox"
                 aria-expanded="true"
                 aria-controls={`${id}-list`}
-                aria-activedescendant={active() !== undefined && values().includes(active()!) ? optionId(active()!) : undefined}
+                aria-activedescendant={
+                  active() !== undefined && values().includes(active()!) ? optionId(active()!) : undefined
+                }
                 aria-label={search().placeholder}
                 placeholder={search().placeholder}
                 value={search().query}
@@ -163,7 +184,9 @@ export function ChipMenu(props: ChipMenuProps) {
             role="listbox"
             aria-label={props.label}
             tabIndex={props.search ? -1 : 0}
-            aria-activedescendant={!props.search && active() !== undefined && values().includes(active()!) ? optionId(active()!) : undefined}
+            aria-activedescendant={
+              !props.search && active() !== undefined && values().includes(active()!) ? optionId(active()!) : undefined
+            }
             onKeyDown={(event) => {
               if (!props.search) onMenuKey(event)
             }}

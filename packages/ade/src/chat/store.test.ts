@@ -28,7 +28,13 @@ async function until(what: string, check: () => boolean, ms = 2000) {
 
 const session = (id: string) => ({ id, title: id, directory: A, time: { created: 1, updated: 1 } })
 const assistant = (id: string, sessionID = "ses_1") => ({ id, sessionID, role: "assistant", time: { created: 2 } })
-const textPart = (id: string, messageID: string, text: string) => ({ id, messageID, sessionID: "ses_1", type: "text", text })
+const textPart = (id: string, messageID: string, text: string) => ({
+  id,
+  messageID,
+  sessionID: "ses_1",
+  type: "text",
+  text,
+})
 
 /** A fake nikcli server: `/event` streams what the test pushes, the rest answers from `routes`. */
 function fakeServer() {
@@ -45,7 +51,13 @@ function fakeServer() {
     statusGate: undefined as Promise<void> | undefined,
     /** The catalog (`/config/providers`): the free model the tests send, on OpenRouter, which the server can run. */
     providers: {
-      providers: [{ id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } }],
+      providers: [
+        {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } },
+        },
+      ],
       default: {},
     } as object | undefined,
   }
@@ -76,7 +88,10 @@ function fakeServer() {
         streams.push({
           id,
           directory: decodeURIComponent(header),
-          push: (event) => void head.then(() => open && onEvent({ kind: "chunk", bytes: bytes(`data: ${JSON.stringify(event)}\n\n`) })),
+          push: (event) =>
+            void head.then(
+              () => open && onEvent({ kind: "chunk", bytes: bytes(`data: ${JSON.stringify(event)}\n\n`) }),
+            ),
           end: () =>
             void head.then(() => {
               if (open) onEvent({ kind: "end" })
@@ -89,27 +104,31 @@ function fakeServer() {
       else if (request.method === "GET" && path === "/session/status") {
         const status = routes.status
         void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
-      }
-      else if (request.method === "GET" && path === "/config/providers") {
+      } else if (request.method === "GET" && path === "/config/providers") {
         if (routes.providers) reply(onEvent, 200, routes.providers)
         else reply(onEvent, 500, { error: "catalogo non disponibile" })
-      }
-      else if (request.method === "GET" && path === "/agent") reply(onEvent, 200, [{ name: "build", mode: "primary" }])
+      } else if (request.method === "GET" && path === "/agent")
+        reply(onEvent, 200, [{ name: "build", mode: "primary" }])
       else if (request.method === "GET" && path === "/config") reply(onEvent, 200, { model: "openrouter/x:free" })
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
       else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
-      else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path)) reply(onEvent, 200, true)
+      else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path))
+        reply(onEvent, 200, true)
       else if (request.method === "GET" && /^\/session\/[^/]+\/message$/.test(path)) {
         reply(onEvent, 200, routes.messages[path.split("/")[2]!] ?? [])
       } else if (request.method === "POST" && path === "/session") {
         // As the server does: the session keeps the rules it was made with.
         reply(onEvent, 200, { ...session("ses_nuova"), permission: JSON.parse(request.body ?? "{}").permission })
-      }
-      else if (request.method === "PATCH" && /^\/session\/[^/]+$/.test(path)) {
+      } else if (request.method === "PATCH" && /^\/session\/[^/]+$/.test(path)) {
         const id = path.split("/")[2]!
         const found = routes.sessions.find((s) => (s as { id: string }).id === id)
         if (!found) reply(onEvent, 404, { error: "non trovata" })
-        else reply(onEvent, 200, { ...found, title: JSON.parse(request.body ?? "{}").title, time: { created: 1, updated: 9 } })
+        else
+          reply(onEvent, 200, {
+            ...found,
+            title: JSON.parse(request.body ?? "{}").title,
+            time: { created: 1, updated: 9 },
+          })
       } else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
       else if (request.method === "POST" && path.endsWith("/abort")) reply(onEvent, 200, true)
       else if (request.method === "GET" && path === "/find/file") reply(onEvent, 200, ["src/app.ts", "src/api.ts"])
@@ -121,7 +140,8 @@ function fakeServer() {
     },
   }
   const stream = () => streams.at(-1)!
-  const calls = (method: string, path: RegExp) => sent.filter((r) => r.method === method && path.test(r.path.split("?")[0]!))
+  const calls = (method: string, path: RegExp) =>
+    sent.filter((r) => r.method === method && path.test(r.path.split("?")[0]!))
   return { bridge, sent, aborted, streams, stream, routes, calls }
 }
 
@@ -134,7 +154,10 @@ function storeOn(
     connect: (directory) =>
       openChat(directory, {
         bridge: server.bridge,
-        admit: async () => (extra.trusted?.() ?? true ? { ok: true } : { ok: false, problem: "Il progetto è cambiato e non ti fidi più." }),
+        admit: async () =>
+          (extra.trusted?.() ?? true)
+            ? { ok: true }
+            : { ok: false, problem: "Il progetto è cambiato e non ti fidi più." },
         now: extra.now ?? (() => 0),
       }),
     sleep: async (ms) => {
@@ -191,9 +214,17 @@ describe("the chat's store", () => {
     })
     await until("la vista legge", () => seen.includes("Il mare"))
     dispose()
-    server.stream().push({ type: "message.part.updated", properties: { part: textPart("prt_1", "msg_1", "Il mare d'inverno") } })
-    server.stream().push({ type: "message.part.updated", properties: { part: textPart("prt_1", "msg_1", "Il mare d'inverno è grigio.") } })
-    await until("la risposta completa", () => (store.state.data.part.msg_1?.[0] as { text?: string }).text === "Il mare d'inverno è grigio.")
+    server
+      .stream()
+      .push({ type: "message.part.updated", properties: { part: textPart("prt_1", "msg_1", "Il mare d'inverno") } })
+    server.stream().push({
+      type: "message.part.updated",
+      properties: { part: textPart("prt_1", "msg_1", "Il mare d'inverno è grigio.") },
+    })
+    await until(
+      "la risposta completa",
+      () => (store.state.data.part.msg_1?.[0] as { text?: string }).text === "Il mare d'inverno è grigio.",
+    )
     expect(seen).toEqual(["Il mare"])
     expect(server.streams).toHaveLength(1)
     expect(server.aborted).toEqual([])
@@ -202,7 +233,9 @@ describe("the chat's store", () => {
 
   test("requests waiting when the stream opens, or asked while it was down, are loaded; answered ones go", async () => {
     const server = fakeServer()
-    server.routes.permissions = [{ id: "per_1", sessionID: "ses_1", permission: "bash", patterns: ["npm test"], metadata: {}, always: [] }]
+    server.routes.permissions = [
+      { id: "per_1", sessionID: "ses_1", permission: "bash", patterns: ["npm test"], metadata: {}, always: [] },
+    ]
     server.routes.questions = [{ id: "que_1", sessionID: "ses_1", questions: [] }]
     const { store } = storeOn(server)
     await store.open(A)
@@ -212,7 +245,9 @@ describe("the chat's store", () => {
 
     // The stream goes down; meanwhile the first is answered elsewhere and a new one is asked.
     server.stream().end()
-    server.routes.permissions = [{ id: "per_2", sessionID: "ses_1", permission: "edit", patterns: ["a.ts"], metadata: {}, always: [] }]
+    server.routes.permissions = [
+      { id: "per_2", sessionID: "ses_1", permission: "edit", patterns: ["a.ts"], metadata: {}, always: [] },
+    ]
     server.routes.questions = []
     await live(server, store, 2)
     expect(store.state.data.permission.ses_1!.map((p) => p.id)).toEqual(["per_2"])
@@ -430,7 +465,9 @@ describe("the chat's store", () => {
         {
           id: "openrouter",
           name: "OpenRouter",
-          models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter", variants: { none: {}, thinking: {} } } },
+          models: {
+            [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter", variants: { none: {}, thinking: {} } },
+          },
         },
       ],
       default: {},
@@ -452,11 +489,17 @@ describe("the chat's store", () => {
     await store.open(A)
     await live(server, store)
     const gone = { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" }
-    const refused = await store.send(undefined, "Ciao", gone).then(() => undefined, (error: unknown) => error)
+    const refused = await store.send(undefined, "Ciao", gone).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(refused).toBeInstanceOf(Error)
     expect((refused as Error).message).toBe(t("chat.model.missing", "openrouter/nex-agi/nex-n2.5-mini:free"))
     const elsewhere = { providerID: "anthropic", modelID: "claude-x" }
-    const notConnected = await store.send("ses_1", "Ciao", elsewhere).then(() => undefined, (error: unknown) => error)
+    const notConnected = await store.send("ses_1", "Ciao", elsewhere).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect((notConnected as Error).message).toBe(t("chat.model.missing", "anthropic/claude-x"))
     expect(server.calls("POST", /^\/session$/)).toHaveLength(0)
     expect(server.calls("POST", /\/prompt_async$/)).toHaveLength(0)
@@ -475,7 +518,11 @@ describe("the chat's store", () => {
     // Connected after the catalog was read.
     server.routes.providers = {
       providers: [
-        { id: "openrouter", name: "OpenRouter", models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } } },
+        {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: { [FREE.modelID]: { id: FREE.modelID, providerID: "openrouter" } },
+        },
         { id: "anthropic", name: "Anthropic", models: { "claude-x": { id: "claude-x", providerID: "anthropic" } } },
       ],
       default: {},
@@ -493,7 +540,9 @@ describe("the chat's store", () => {
     const { store } = storeOn(server)
     await store.open(A)
     await live(server, store)
-    expect(await store.send(undefined, "Ciao", { providerID: "openrouter", modelID: "qualunque:free" })).toBe("ses_nuova")
+    expect(await store.send(undefined, "Ciao", { providerID: "openrouter", modelID: "qualunque:free" })).toBe(
+      "ses_nuova",
+    )
     expect(server.calls("POST", /\/prompt_async$/)).toHaveLength(1)
   })
 
@@ -504,12 +553,17 @@ describe("the chat's store", () => {
     const { store } = storeOn(server)
     await store.open(A)
     await live(server, store)
-    const refused = await store.send("ses_1", "rm -rf build", FREE).then(() => undefined, (error: unknown) => error)
+    const refused = await store.send("ses_1", "rm -rf build", FREE).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(refused).toBeInstanceOf(ForeignSession)
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
     // One the chat made, listed by the server, is fine.
     await store.send("ses_2", "Ciao", FREE)
-    expect(server.calls("POST", /\/prompt_async$/).map((r) => r.path.split("?")[0])).toEqual(["/session/ses_2/prompt_async"])
+    expect(server.calls("POST", /\/prompt_async$/).map((r) => r.path.split("?")[0])).toEqual([
+      "/session/ses_2/prompt_async",
+    ])
   })
 
   test("a session made elsewhere is neither renamed nor stopped: nothing reaches the server", async () => {
@@ -517,8 +571,14 @@ describe("the chat's store", () => {
     const { store } = storeOn(server)
     await store.open(A)
     await live(server, store)
-    const renamed = await store.rename("ses_1", "Mio").then(() => undefined, (error: unknown) => error)
-    const stopped = await store.abort("ses_1").then(() => undefined, (error: unknown) => error)
+    const renamed = await store.rename("ses_1", "Mio").then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const stopped = await store.abort("ses_1").then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(renamed).toBeInstanceOf(ForeignSession)
     expect(stopped).toBeInstanceOf(ForeignSession)
     expect(server.calls("PATCH", /^\/session\//)).toEqual([])
@@ -570,7 +630,10 @@ describe("the chat's store", () => {
     const patch = server.calls("PATCH", /^\/session\/ses_1$/)
     expect(patch.map((r) => JSON.parse(r.body!))).toEqual([{ title: "Il piano del lunedì" }])
     expect(store.state.data.session.find((s) => s.id === "ses_1")?.title).toBe("Il piano del lunedì")
-    const empty = await store.rename("ses_1", "   ").then(() => undefined, (error: unknown) => error)
+    const empty = await store.rename("ses_1", "   ").then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(empty).toBeInstanceOf(Error)
     expect(server.calls("PATCH", /^\/session\//)).toHaveLength(1)
   })
@@ -581,7 +644,12 @@ describe("the chat's store", () => {
     const { store } = storeOn(server)
     await store.open(A)
     await live(server, store)
-    const file = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src/app.ts", filename: "app.ts" }
+    const file = {
+      type: "file" as const,
+      mime: "text/plain",
+      url: "file:///C:/progetto-a/src/app.ts",
+      filename: "app.ts",
+    }
     await store.send(undefined, "Guarda @src/app.ts", FREE, undefined, [file])
     const body = JSON.parse(server.calls("POST", /\/prompt_async$/)[0]!.body!)
     expect(body.parts).toEqual([{ type: "text", text: "Guarda @src/app.ts" }, file])
@@ -602,7 +670,10 @@ describe("the chat's store", () => {
     ]) {
       const refused = await store
         .send(undefined, "Leggi", FREE, undefined, [{ type: "file", mime: "text/plain", url }])
-        .then(() => undefined, (error: unknown) => error)
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        )
       expect([url, refused instanceof Error]).toEqual([url, true])
     }
     expect(server.calls("POST", /^\/session$/)).toEqual([])
@@ -622,26 +693,42 @@ describe("the chat's store", () => {
     await live(server, store)
     // A junction or a link inside the folder, aimed at ~/.ssh: inside as written, outside once followed.
     const linked = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/note.txt" }
-    const refused = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(() => undefined, (error: unknown) => error)
+    const refused = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(refused).toBeInstanceOf(Error)
     expect((refused as Error).message).toBe(t("chat.attach.outside", "C:/progetto-a/note.txt"))
     expect(asked).toEqual([[A, "C:/progetto-a/note.txt"]])
     const folder = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src" }
-    expect(await store.send(undefined, "Leggi", FREE, undefined, [folder]).then(() => "sent", () => "refused")).toBe("refused")
+    expect(
+      await store.send(undefined, "Leggi", FREE, undefined, [folder]).then(
+        () => "sent",
+        () => "refused",
+      ),
+    ).toBe("refused")
     expect(server.calls("POST", /^\/session$/)).toEqual([])
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
   })
 
   test("a .env is refused with its reason, by its name or by what Rust finds it is", async () => {
     const server = fakeServer()
-    const { store } = storeOn(server, { checkAttachment: async (_root, path) => (path.endsWith("note.txt") ? "env" : "ok") })
+    const { store } = storeOn(server, {
+      checkAttachment: async (_root, path) => (path.endsWith("note.txt") ? "env" : "ok"),
+    })
     await store.open(A)
     await live(server, store)
     const byName = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/.env.local" }
-    const named = await store.send(undefined, "Leggi", FREE, undefined, [byName]).then(() => undefined, (error: unknown) => error)
+    const named = await store.send(undefined, "Leggi", FREE, undefined, [byName]).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect((named as Error).message).toBe(t("chat.attach.env", "C:/progetto-a/.env.local"))
     const linked = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/note.txt" }
-    const followed = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(() => undefined, (error: unknown) => error)
+    const followed = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect((followed as Error).message).toBe(t("chat.attach.env", "C:/progetto-a/note.txt"))
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
   })
@@ -652,7 +739,12 @@ describe("the chat's store", () => {
     await store.open(A)
     await live(server, store)
     const file = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src/app.ts" }
-    expect(await store.send(undefined, "Leggi", FREE, undefined, [file]).then(() => "sent", () => "refused")).toBe("refused")
+    expect(
+      await store.send(undefined, "Leggi", FREE, undefined, [file]).then(
+        () => "sent",
+        () => "refused",
+      ),
+    ).toBe("refused")
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
   })
 
@@ -688,7 +780,10 @@ describe("the chat's store", () => {
         return openChat(directory, { bridge: server.bridge, admit: async () => ({ ok: true }), now: () => 0 })
       },
     })
-    const before = await store.catalog().then(() => "caricato", (error: unknown) => error)
+    const before = await store.catalog().then(
+      () => "caricato",
+      (error: unknown) => error,
+    )
     // Not open: nothing to load it through, and nothing is called.
     expect(before).toBeInstanceOf(Error)
     expect(server.sent).toEqual([])
@@ -699,10 +794,16 @@ describe("the chat's store", () => {
     expect(one.configModel).toBe("openrouter/x:free")
     expect(one.agents?.map((agent) => agent.name)).toEqual(["build"])
     expect(connects).toBe(1)
-    const catalog = [...server.calls("GET", /^\/config\/providers$/), ...server.calls("GET", /^\/agent$/), ...server.calls("GET", /^\/config$/)]
+    const catalog = [
+      ...server.calls("GET", /^\/config\/providers$/),
+      ...server.calls("GET", /^\/agent$/),
+      ...server.calls("GET", /^\/config$/),
+    ]
     expect(catalog).toHaveLength(3)
     for (const request of catalog) {
-      expect(decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")).toBe(A)
+      expect(
+        decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? ""),
+      ).toBe(A)
     }
   })
 })

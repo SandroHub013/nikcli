@@ -14,7 +14,9 @@ describe("contrastFor (audit 0.7.7, Architect)", () => {
 })
 
 describe("paintTerminals", () => {
-  const fake = () => ({ terminal: { options: {} as { theme?: ITheme; allowTransparency?: boolean; minimumContrastRatio?: number } } })
+  const fake = () => ({
+    terminal: { options: {} as { theme?: ITheme; allowTransparency?: boolean; minimumContrastRatio?: number } },
+  })
 
   it("a theme change reaches every terminal already open", () => {
     const registry = [fake(), fake()]

@@ -172,7 +172,11 @@
   padding: 0 28px;
   background: #000;
   color: #fff;
-  font: var(--ade-weight-semibold) 15px/1 -apple-system, "Segoe UI", system-ui, sans-serif;
+  font:
+    var(--ade-weight-semibold) 15px/1 -apple-system,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
 }
 
 [data-slot="sim-indicators"] {
@@ -232,8 +236,17 @@
   height: 18px;
   cursor: nwse-resize;
   touch-action: none;
-  background:
-    linear-gradient(135deg, transparent 50%, var(--ade-border-strong) 50%, var(--ade-border-strong) 58%, transparent 58%, transparent 70%, var(--ade-border-strong) 70%, var(--ade-border-strong) 78%, transparent 78%);
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--ade-border-strong) 50%,
+    var(--ade-border-strong) 58%,
+    transparent 58%,
+    transparent 70%,
+    var(--ade-border-strong) 70%,
+    var(--ade-border-strong) 78%,
+    transparent 78%
+  );
 }
 
 [data-slot="sim-empty"] {

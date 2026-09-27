@@ -78,7 +78,8 @@ const text = (value: unknown): value is string => typeof value === "string"
 function parseSpeaker(value: unknown): RoomSpeaker | undefined {
   if (!isRecord(value)) return undefined
   if (value["kind"] === "user") return { kind: "user" }
-  if (value["kind"] === "bot" && text(value["id"]) && text(value["name"])) return { kind: "bot", id: value["id"], name: value["name"] }
+  if (value["kind"] === "bot" && text(value["id"]) && text(value["name"]))
+    return { kind: "bot", id: value["id"], name: value["name"] }
   return undefined
 }
 
@@ -101,7 +102,8 @@ function parseLog(value: unknown): RoomLog {
 }
 
 function parseRoom(value: unknown): RoomRecord | undefined {
-  if (!isRecord(value) || !text(value["id"]) || !text(value["name"]) || !Array.isArray(value["members"])) return undefined
+  if (!isRecord(value) || !text(value["id"]) || !text(value["name"]) || !Array.isArray(value["members"]))
+    return undefined
   const members = value["members"].filter(text)
   if (members.length === 0 || members.length > MAX_MEMBERS) return undefined
   const spend = isRecord(value["spend"]) ? value["spend"]["perRoundUsd"] : undefined
@@ -205,7 +207,10 @@ export interface RoomRunnerDeps {
    * one is not. `asking(true)` while a trust dialog waits for the user, then
    * `asking(false)`: the room says it is waiting, rather than keep silent.
    */
-  readonly seats: (room: RoomRecord, asking: (waiting: boolean) => void) => Promise<readonly RoomSeat[] | { readonly problem: string }>
+  readonly seats: (
+    room: RoomRecord,
+    asking: (waiting: boolean) => void,
+  ) => Promise<readonly RoomSeat[] | { readonly problem: string }>
   readonly turns: Pick<BotTurns, "room" | "stop">
   /** ADE Test: only free models (B8b brief). */
   readonly testBuild: () => boolean
@@ -260,7 +265,10 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
       }
     })
     // Held from here, so a message sent while the members are checked ends this run too.
-    const run: { cancelled: boolean; speaking?: AgentFile; done: Promise<unknown> } = { cancelled: false, done: Promise.resolve() }
+    const run: { cancelled: boolean; speaking?: AgentFile; done: Promise<unknown> } = {
+      cancelled: false,
+      done: Promise.resolve(),
+    }
     runs.set(roomId, run)
     const room = roomOf(roomId)!
     const admitted = admit(room)
@@ -289,7 +297,13 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
         speak: async (member, prompt, leftUsd) => {
           const seat = byId.get(member.id)
           if (!seat) return { text: null, costUsd: 0 }
-          const turn = deps.turns.room(seat.bot, prompt, roomThread(roomId, seat.bot.path), seat.cwd, memberBudget(seat.pay, leftUsd))
+          const turn = deps.turns.room(
+            seat.bot,
+            prompt,
+            roomThread(roomId, seat.bot.path),
+            seat.cwd,
+            memberBudget(seat.pay, leftUsd),
+          )
           // The bot is busy elsewhere, in its chat or another room: it keeps silent here.
           if (!turn) return { text: null, costUsd: 0 }
           run.speaking = seat.bot

@@ -28,7 +28,10 @@ test("every font weight in the CSS is a token", () => {
       .forEach((line, index) => {
         const weight = /font-weight:\s*([^;]+);/.exec(line)?.[1]?.trim()
         const shorthand = /\bfont:\s*(\d{3}|bold)\s/.exec(line)?.[1]
-        if ((weight && !/^var\(--ade-weight-(normal|medium|semibold|bold)\)$/.test(weight) && weight !== "inherit") || shorthand) {
+        if (
+          (weight && !/^var\(--ade-weight-(normal|medium|semibold|bold)\)$/.test(weight) && weight !== "inherit") ||
+          shorthand
+        ) {
           loose.push(`${file}:${index + 1} ${line.trim()}`)
         }
       })

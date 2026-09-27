@@ -13,7 +13,12 @@ const ASKER = { title: "Sessione 2 — Claude Code", agentId: "claude-code" }
 
 describe("the key request dialog (keys ask)", () => {
   test("names the pane and the agent that ask, and says the key goes to that agent", () => {
-    const text = keyRequestText({ env: "OPENAI_API_KEY", reason: "per i test di integrazione", asker: ASKER, agentLabel: label })
+    const text = keyRequestText({
+      env: "OPENAI_API_KEY",
+      reason: "per i test di integrazione",
+      asker: ASKER,
+      agentLabel: label,
+    })
     expect(text.title).toBe(t("keys.request.from", "Sessione 2 — Claude Code", "Claude Code", "OPENAI_API_KEY"))
     expect(text.title).toContain("Sessione 2 — Claude Code")
     expect(text.title).toContain("OPENAI_API_KEY")
@@ -22,7 +27,12 @@ describe("the key request dialog (keys ask)", () => {
   })
 
   test("the reason is the agent's text: no control characters, and cut short", () => {
-    const text = keyRequestText({ env: "X_KEY", reason: `riga\u0007\ndue\r\n${"a".repeat(1000)}`, asker: ASKER, agentLabel: label })
+    const text = keyRequestText({
+      env: "X_KEY",
+      reason: `riga\u0007\ndue\r\n${"a".repeat(1000)}`,
+      asker: ASKER,
+      agentLabel: label,
+    })
     expect(text.says).not.toMatch(/[\u0000-\u001f]/)
     expect(text.says!.startsWith("riga due ")).toBe(true)
     expect(text.says!.length).toBe(KEY_REASON_MAX)

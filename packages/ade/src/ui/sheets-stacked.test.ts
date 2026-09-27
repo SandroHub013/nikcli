@@ -27,7 +27,8 @@ beforeAll(() => {
   HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
     const before = document.activeElement
     nativeFocus.call(this, options)
-    if (document.activeElement === this && before !== this) this.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+    if (document.activeElement === this && before !== this)
+      this.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
   }
 })
 afterAll(() => {

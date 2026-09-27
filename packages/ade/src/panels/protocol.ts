@@ -35,7 +35,9 @@ import { AGENTS } from "../session-new/agents"
  * into the shell, which ran `calc`. A terminal is the user's own shell, with
  * no agent to ask anything; a command the user added is not known to be one.
  */
-const REQUESTERS: ReadonlySet<string> = new Set(AGENTS.filter((agent) => agent.id !== "terminal").map((agent) => agent.id))
+const REQUESTERS: ReadonlySet<string> = new Set(
+  AGENTS.filter((agent) => agent.id !== "terminal").map((agent) => agent.id),
+)
 
 export function acceptsRequests(agentId: string | undefined): boolean {
   return agentId !== undefined && REQUESTERS.has(agentId)

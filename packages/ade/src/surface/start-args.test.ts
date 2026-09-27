@@ -52,7 +52,11 @@ describe("a pane's start, the first and every restart (review-alti, ALTO 5)", ()
 describe("how a pane with no process comes back", () => {
   test("a sign-in runs its sign-in again, and resumes nothing", () => {
     expect(restartOf({ signIn: ["auth", "login"] })).toEqual({ kind: "signIn", extra: ["auth", "login"] })
-    const args = startArgsFor("claude-code", { signIn: ["auth", "login"] }, { title: "accesso", opening: [], extra: ["auth", "login"] })
+    const args = startArgsFor(
+      "claude-code",
+      { signIn: ["auth", "login"] },
+      { title: "accesso", opening: [], extra: ["auth", "login"] },
+    )
     expect(args.slice(-2)).toEqual(["auth", "login"])
   })
 

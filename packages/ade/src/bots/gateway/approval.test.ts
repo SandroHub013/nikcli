@@ -24,7 +24,13 @@ describe("the command shown on the phone", () => {
     const answers: string[] = []
     const ended = new AbortController()
     ended.abort()
-    permissionAnswerer({ ask: async () => "once", refuse: false, answer: (_id, reply) => void answers.push(reply), say: () => {}, signal: ended.signal })({
+    permissionAnswerer({
+      ask: async () => "once",
+      refuse: false,
+      answer: (_id, reply) => void answers.push(reply),
+      say: () => {},
+      signal: ended.signal,
+    })({
       permission: "bash",
       patterns: "rm -rf /",
       askedAt: 0,

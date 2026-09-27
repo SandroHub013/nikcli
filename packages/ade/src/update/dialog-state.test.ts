@@ -11,7 +11,11 @@ describe("update dialog", () => {
   })
 
   test("while the download runs it cannot be stopped, but the dialog can be put away", () => {
-    const view = updateDialogView({ updating: true, progress: { phase: "download", downloaded: 1, total: 9 }, error: undefined })
+    const view = updateDialogView({
+      updating: true,
+      progress: { phase: "download", downloaded: 1, total: 9 },
+      error: undefined,
+    })
     expect(view.stage).toBe("download")
     expect(view.ghost).toEqual({ label: "hide", enabled: true })
     expect(view.submit.enabled).toBe(false)
@@ -33,7 +37,11 @@ describe("update dialog", () => {
   })
 
   test("a failure offers close and retry, whatever else was going on", () => {
-    const view = updateDialogView({ updating: false, progress: { phase: "download", downloaded: 3, total: 9 }, error: "connection reset" })
+    const view = updateDialogView({
+      updating: false,
+      progress: { phase: "download", downloaded: 3, total: 9 },
+      error: "connection reset",
+    })
     expect(view.stage).toBe("error")
     expect(view.ghost).toEqual({ label: "close", enabled: true })
     expect(view.submit).toEqual({ label: "retry", enabled: true })

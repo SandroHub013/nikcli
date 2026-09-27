@@ -77,7 +77,11 @@ export interface ForgetReport {
  * deletion nobody verified is the bug this whole report exists for.
  */
 export type ForgetMessage =
-  | { key: "browser.forget.done.all" | "browser.forget.done.cookies" | "browser.forget.unsure.cookies"; ok: boolean; cookies: number }
+  | {
+      key: "browser.forget.done.all" | "browser.forget.done.cookies" | "browser.forget.unsure.cookies"
+      ok: boolean
+      cookies: number
+    }
   | {
       key:
         | "browser.forget.done.storage"
@@ -92,7 +96,12 @@ export function forgetMessage(report: ForgetReport): ForgetMessage {
   const cookies = report.cookiesDeleted
   if (report.storageCleared) {
     return {
-      key: cookies > 0 ? "browser.forget.done.all" : report.cookiesReadable ? "browser.forget.done.storage" : "browser.forget.done.storage.noCookies",
+      key:
+        cookies > 0
+          ? "browser.forget.done.all"
+          : report.cookiesReadable
+            ? "browser.forget.done.storage"
+            : "browser.forget.done.storage.noCookies",
       ok: true,
       cookies,
     }
@@ -105,7 +114,9 @@ export function forgetMessage(report: ForgetReport): ForgetMessage {
 }
 
 /** Drops cookies and site storage for `url` from ADE's profile. */
-export async function forgetSite(url: string): Promise<{ report: ForgetReport; error?: undefined } | { error: string; report?: undefined }> {
+export async function forgetSite(
+  url: string,
+): Promise<{ report: ForgetReport; error?: undefined } | { error: string; report?: undefined }> {
   if (!isDesktop()) return { error: "non disponibile fuori dall'app" }
   try {
     const { invoke } = await import("@tauri-apps/api/core")

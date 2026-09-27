@@ -21,7 +21,15 @@ function slice(from: string, to: string, after = 0): string {
 describe("the bot's composer", () => {
   test("lint: the model and effort chips sit in the row under the field, before Invia", () => {
     const row = slice('<div data-slot="bots-composer-row">', "</form>")
-    for (const piece of ["<ModelPicker", "<ChipMenu", "<EffortPicker", "onChoose={chooseModel}", "onChoose={chooseEffort}", 'data-slot="bots-composer-cap"', 'type="submit"'])
+    for (const piece of [
+      "<ModelPicker",
+      "<ChipMenu",
+      "<EffortPicker",
+      "onChoose={chooseModel}",
+      "onChoose={chooseEffort}",
+      'data-slot="bots-composer-cap"',
+      'type="submit"',
+    ])
       expect(row).toContain(piece)
     expect(row.indexOf("<EffortPicker")).toBeLessThan(row.indexOf('type="submit"'))
     // The field first, the row under it, in the same form.
@@ -50,7 +58,10 @@ describe("lint: the bot's Invia", () => {
   const body = (css: string, selector: string) => {
     const start = css.indexOf(`${selector} {`)
     expect(start).toBeGreaterThan(-1)
-    return css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start)).replace(/\s+/g, " ").trim()
+    return css
+      .slice(css.indexOf("{", start) + 1, css.indexOf("}", start))
+      .replace(/\s+/g, " ")
+      .trim()
   }
 
   test("lint: the bot's and the room's Invia are the Chat's, not the form's primary button", () => {
@@ -70,7 +81,9 @@ describe("lint: the bot's Invia", () => {
 
   test("lint: no teal on either Invia: no --ade-accent in any of their rules, at rest, hovered or focused", () => {
     const rules = (css: string, slot: string) => {
-      const found = [...css.matchAll(new RegExp(`\\[data-slot="${slot}"\\][^{]*\\{[^}]*\\}`, "g"))].map((match) => match[0])
+      const found = [...css.matchAll(new RegExp(`\\[data-slot="${slot}"\\][^{]*\\{[^}]*\\}`, "g"))].map(
+        (match) => match[0],
+      )
       expect(found.length).toBeGreaterThan(0)
       return found
     }

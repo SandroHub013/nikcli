@@ -104,7 +104,10 @@ describe("openProject", () => {
 describe("grantedRoots (audit 0.7.7, D1-2)", () => {
   it("holds every root granted this session, and only those", async () => {
     await discoverProject(fakeHost(), "C:/granted/one")
-    await discoverProject(fakeHost({ run: async () => ({ code: 0, stdout: "C:/granted/two", stderr: "" }) }), "C:/granted/two/sub")
+    await discoverProject(
+      fakeHost({ run: async () => ({ code: 0, stdout: "C:/granted/two", stderr: "" }) }),
+      "C:/granted/two/sub",
+    )
     await discoverProject(fakeHost(), "ssh://niko@devbox/srv/app")
     const roots = grantedRoots()
     expect(roots).toContain("C:/granted/one")

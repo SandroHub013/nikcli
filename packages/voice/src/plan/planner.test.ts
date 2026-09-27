@@ -180,10 +180,13 @@ describe("createOpenRouterCompletion", () => {
     const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
       authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
       sent = JSON.parse(String(init?.body)) as Record<string, unknown>
-      return new Response(JSON.stringify({
-        choices: [{ message: { content: "[]" } }],
-        usage: { cost: 0.002 },
-      }), { status: 200 })
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "[]" } }],
+          usage: { cost: 0.002 },
+        }),
+        { status: 200 },
+      )
     }) as unknown as typeof fetch
     let usage: { cost?: number } | undefined
     const complete = createOpenRouterCompletion({

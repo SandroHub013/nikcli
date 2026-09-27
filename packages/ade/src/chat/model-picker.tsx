@@ -52,7 +52,8 @@ export function ModelPicker(props: ModelPickerProps) {
    * disponibile» on the chip, the id only in the tooltip, and the menu says
    * to pick another (review of bot-riquadro, a).
    */
-  const gone = () => Boolean(props.value) && (props.gone === true || (props.state ? modelGoneFrom(props.value, props.state) : false))
+  const gone = () =>
+    Boolean(props.value) && (props.gone === true || (props.state ? modelGoneFrom(props.value, props.state) : false))
   const goneLabel = (value: string) => t("picker.gone", readableModelName(value))
   const items = createMemo(() =>
     modelMenuItems({
@@ -61,13 +62,22 @@ export function ModelPicker(props: ModelPickerProps) {
       query: query(),
       ...(props.defaultLabel !== undefined ? { defaultLabel: props.defaultLabel } : {}),
       ...(props.kept ? { kept: props.kept } : {}),
-      ...(gone() && props.kept === props.value ? { keptLabel: goneLabel } : props.fallback ? { keptLabel: props.fallback } : {}),
+      ...(gone() && props.kept === props.value
+        ? { keptLabel: goneLabel }
+        : props.fallback
+          ? { keptLabel: props.fallback }
+          : {}),
     }),
   )
   const text = () =>
     gone()
       ? goneLabel(props.value)
-      : chipText(props.value, props.models, props.fallback ?? ((value) => value), props.defaultLabel ?? t("chat.model.choose"))
+      : chipText(
+          props.value,
+          props.models,
+          props.fallback ?? ((value) => value),
+          props.defaultLabel ?? t("chat.model.choose"),
+        )
   const state = () => props.state ?? { kind: "ready" as const, models: props.models }
 
   return (
@@ -84,27 +94,40 @@ export function ModelPicker(props: ModelPickerProps) {
       empty={state().kind === "ready" ? t("picker.none") : undefined}
       status={
         // Nothing to say once the list is there: an empty line would sit over it.
-        state().kind === "ready" ? (gone() ? <span data-slot="chip-note" data-state="warn">{t("picker.goneNote", readableModelName(props.value))}</span> : undefined) : <Switch>
-          <Match when={state().kind === "loading" || state().kind === "idle"}>
-            <span data-slot="chip-note">{t("picker.loading")}</span>
-          </Match>
-          <Match when={state().kind === "failed" && state()}>
-            {(failed) => (
-              <span data-slot="chip-note" data-state="error" role="alert">
-                {t("picker.failed", (failed() as { reason: string }).reason)}{" "}
-                <button type="button" data-slot="chip-retry" onClick={() => props.onRetry?.()}>
-                  {t("picker.retry")}
-                </button>
-              </span>
-            )}
-          </Match>
-        </Switch>
+        state().kind === "ready" ? (
+          gone() ? (
+            <span data-slot="chip-note" data-state="warn">
+              {t("picker.goneNote", readableModelName(props.value))}
+            </span>
+          ) : undefined
+        ) : (
+          <Switch>
+            <Match when={state().kind === "loading" || state().kind === "idle"}>
+              <span data-slot="chip-note">{t("picker.loading")}</span>
+            </Match>
+            <Match when={state().kind === "failed" && state()}>
+              {(failed) => (
+                <span data-slot="chip-note" data-state="error" role="alert">
+                  {t("picker.failed", (failed() as { reason: string }).reason)}{" "}
+                  <button type="button" data-slot="chip-retry" onClick={() => props.onRetry?.()}>
+                    {t("picker.retry")}
+                  </button>
+                </span>
+              )}
+            </Match>
+          </Switch>
+        )
       }
       footer={
         sections().paidHidden > 0 ? (
           <span data-slot="chip-note">
             {t("picker.paidHidden", sections().paidHidden)}{" "}
-            <button type="button" data-slot="chip-retry" onPointerDown={(event) => event.preventDefault()} onClick={() => setShowPaid(true)}>
+            <button
+              type="button"
+              data-slot="chip-retry"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => setShowPaid(true)}
+            >
               {t("picker.showPaid")}
             </button>
           </span>

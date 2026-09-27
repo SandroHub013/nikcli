@@ -66,11 +66,51 @@ function escapeHtml(text: string): string {
  * `background:url(https://…)` is a tracking pixel the image rule cannot see.
  */
 export const ALLOWED_TAGS = [
-  "p", "h1", "h2", "h3", "h4", "h5", "h6", "a", "em", "strong", "del", "code", "pre", "blockquote",
-  "ul", "ol", "li", "table", "thead", "tbody", "tr", "th", "td",
-  "img", "hr", "br", "span", "div", "details", "summary", "input",
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "a",
+  "em",
+  "strong",
+  "del",
+  "code",
+  "pre",
+  "blockquote",
+  "ul",
+  "ol",
+  "li",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "img",
+  "hr",
+  "br",
+  "span",
+  "div",
+  "details",
+  "summary",
+  "input",
 ]
-export const ALLOWED_ATTR = ["href", "src", "alt", "title", "align", "colspan", "rowspan", "start", "type", "checked", "disabled"]
+export const ALLOWED_ATTR = [
+  "href",
+  "src",
+  "alt",
+  "title",
+  "align",
+  "colspan",
+  "rowspan",
+  "start",
+  "type",
+  "checked",
+  "disabled",
+]
 
 export function renderMarkdown(text: string, resolve: ResolveImage): string {
   // No cleaning, no HTML: the text as text.

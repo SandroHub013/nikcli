@@ -95,7 +95,9 @@ describe("sidebar section scrolling and scrollbars", () => {
   })
 
   test("every open section stays scrollable without showing a visible scrollbar", () => {
-    const nonScrolls = ruleBodies('[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]')
+    const nonScrolls = ruleBodies(
+      '[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]',
+    )
     for (const body of nonScrolls) {
       expect(body).toContain("overflow-y: auto")
       expect(body).toContain("scrollbar-width: none")
@@ -115,4 +117,3 @@ describe("sidebar section scrolling and scrollbars", () => {
     expect(body).toContain("min-height: fit-content")
   })
 })
-

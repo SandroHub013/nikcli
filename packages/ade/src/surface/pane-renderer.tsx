@@ -211,13 +211,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}
         onFocus={focus}
-        onChange={(draft) =>
-          buffers.update(current().id, (buffer) => (buffer ? editBuffer(buffer, draft) : buffer))
-        }
+        onChange={(draft) => buffers.update(current().id, (buffer) => (buffer ? editBuffer(buffer, draft) : buffer))}
         onSave={() => deps.saveFile(current().id)}
-        onRevert={() =>
-          buffers.update(current().id, (buffer) => (buffer ? revertBuffer(buffer) : buffer))
-        }
+        onRevert={() => buffers.update(current().id, (buffer) => (buffer ? revertBuffer(buffer) : buffer))}
         onClose={() => deps.close(current().id)}
         onExpand={expand}
       />
@@ -391,7 +387,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           if (controller) {
             stacks.app.push(current().id, {
               verbs: SIMULATOR_VERBS,
-              run: (request, from) => runSimulatorCommand(controller, request, (url) => deps.confirmOpen("app", url, from)),
+              run: (request, from) =>
+                runSimulatorCommand(controller, request, (url) => deps.confirmOpen("app", url, from)),
             })
             deps.announceToAll("app")
           } else {
@@ -526,17 +523,17 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
               }))
             : current().gone && !deps.isRunning(current().id)
               ? [{ label: t("pane.closeGone"), tone: "primary" as const, onClick: () => deps.close(current().id) }]
-            : current().suspended && !deps.isRunning(current().id)
-              ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
-              : restartable()
-              ? [
-                  {
-                    label: current().status === "error" ? "Riprova" : "Riprendi",
-                    tone: "primary" as const,
-                    onClick: () => deps.restart(current()),
-                  },
-                ]
-              : undefined
+              : current().suspended && !deps.isRunning(current().id)
+                ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
+                : restartable()
+                  ? [
+                      {
+                        label: current().status === "error" ? "Riprova" : "Riprendi",
+                        tone: "primary" as const,
+                        onClick: () => deps.restart(current()),
+                      },
+                    ]
+                  : undefined
         }
         inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}
@@ -577,41 +574,62 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     )
 
     return (
-      <Show when={current().plugin} fallback={
-        <Show when={current().filePath} fallback={
-          <Show when={current().browserUrl} fallback={
-            /*
-             * Tested on the mode, not on the path: a video pane opens empty
-             * and `videoPath` is "" until a file is chosen, so asking for the
-             * path drew a terminal in a pane with no session behind it and no
-             * way to get one.
-             */
-            <Show when={current().mode === "video"} fallback={
-              <Show when={current().mode === "model"} fallback={
-                <Show when={current().mode === "app"} fallback={
-                  <Show when={current().mode === "decisions"} fallback={
-                    <Show when={current().mode === "design"} fallback={sessionPane()}>
-                      {designPane()}
-                    </Show>
-                  }>
-                    {decisionsPane()}
+      <Show
+        when={current().plugin}
+        fallback={
+          <Show
+            when={current().filePath}
+            fallback={
+              <Show
+                when={current().browserUrl}
+                fallback={
+                  /*
+                   * Tested on the mode, not on the path: a video pane opens empty
+                   * and `videoPath` is "" until a file is chosen, so asking for the
+                   * path drew a terminal in a pane with no session behind it and no
+                   * way to get one.
+                   */
+                  <Show
+                    when={current().mode === "video"}
+                    fallback={
+                      <Show
+                        when={current().mode === "model"}
+                        fallback={
+                          <Show
+                            when={current().mode === "app"}
+                            fallback={
+                              <Show
+                                when={current().mode === "decisions"}
+                                fallback={
+                                  <Show when={current().mode === "design"} fallback={sessionPane()}>
+                                    {designPane()}
+                                  </Show>
+                                }
+                              >
+                                {decisionsPane()}
+                              </Show>
+                            }
+                          >
+                            {simulatorPane()}
+                          </Show>
+                        }
+                      >
+                        {modelPane()}
+                      </Show>
+                    }
+                  >
+                    {videoPane()}
                   </Show>
-                }>
-                  {simulatorPane()}
-                </Show>
-              }>
-                {modelPane()}
+                }
+              >
+                {browserPane()}
               </Show>
-            }>
-              {videoPane()}
-            </Show>
-          }>
-            {browserPane()}
+            }
+          >
+            {filePane()}
           </Show>
-        }>
-          {filePane()}
-        </Show>
-      }>
+        }
+      >
         {pluginPane()}
       </Show>
     )

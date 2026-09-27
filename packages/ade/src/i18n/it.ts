@@ -38,10 +38,8 @@ export const it = {
     `Regola quanto la scrivania si vede attraverso la finestra. Dal ${min}% in su il testo resta sopra il contrasto minimo.`,
   "settings.theme.opacityLow": (min: number) =>
     `Sotto il ${min}% il vetro è più spinto e il testo perde contrasto sulle scrivanie chiare.`,
-  "settings.theme.unsupported":
-    "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
-  "settings.theme.desktopOnly":
-    "La trasparenza nativa della finestra è disponibile solo nell'applicazione desktop.",
+  "settings.theme.unsupported": "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
+  "settings.theme.desktopOnly": "La trasparenza nativa della finestra è disponibile solo nell'applicazione desktop.",
   "settings.theme.toLight": "Passa al tema chiaro",
   "settings.theme.toDark": "Passa al tema scuro",
   "settings.theme.toGlass": "Passa al tema vetro",
@@ -61,7 +59,10 @@ export const it = {
   "palette.recents.forgetGone": (n: number) => `Togli dai recenti le cartelle sparite (${n})`,
   "palette.design.variant": (k: string, title: string, variant: number, name: string) =>
     `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
-  "confirm.forgetGone": (n: number) => (n === 1 ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?" : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`),
+  "confirm.forgetGone": (n: number) =>
+    n === 1
+      ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?"
+      : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`,
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",
   "palette.pane.rename": "Rinomina sessione",
@@ -216,8 +217,10 @@ export const it = {
   "preview.binary": "File binario o codifica non supportata.",
   "preview.loading": "Caricamento in corso...",
   "empty.title": "Nessun progetto aperto",
-  "empty.browser": "Nel browser ADE non può leggere il disco né avviare processi: gli alberi di lavoro e le sessioni reali esistono solo nell'app desktop.",
-  "empty.desktop": "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro isolata; altrimenti gli agenti scrivono direttamente nella cartella.",
+  "empty.browser":
+    "Nel browser ADE non può leggere il disco né avviare processi: gli alberi di lavoro e le sessioni reali esistono solo nell'app desktop.",
+  "empty.desktop":
+    "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro isolata; altrimenti gli agenti scrivono direttamente nella cartella.",
   "empty.open": "Apri progetto",
   "projectBar.noGit": "Non è un repository git: gli agenti modificano direttamente i file del progetto.",
   "projectBar.noGit.short": "senza isolamento",
@@ -226,7 +229,7 @@ export const it = {
   "new.title": "Nuova sessione",
   "new.cancel": "Annulla",
   "new.close": "Chiudi",
-  "new.launch": (count: number) => count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`,
+  "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
   "new.notInstalled": "non installato",
   "new.missing": "assente",
@@ -234,44 +237,55 @@ export const it = {
   "new.count.label": "sessioni parallele",
   "new.preview": "Partirà",
   "new.role.reviewer": "revisiona",
-  "new.summary": (count: number, agent: string, workspace: string) => `${count} ${count === 1 ? "sessione" : "sessioni"} con ${agent} in ${workspace}`,
+  "new.summary": (count: number, agent: string, workspace: string) =>
+    `${count} ${count === 1 ? "sessione" : "sessioni"} con ${agent} in ${workspace}`,
   "hooks.title": "Ripresa delle sessioni",
-  "hooks.desc": "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
-  "hooks.files": "Sono file che non appartengono ad ADE: vengono mostrati per intero qui sotto, le altre voci già presenti restano intatte, e «Rimuovi» rimette la configurazione com'era.",
+  "hooks.desc":
+    "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
+  "hooks.files":
+    "Sono file che non appartengono ad ADE: vengono mostrati per intero qui sotto, le altre voci già presenti restano intatte, e «Rimuovi» rimette la configurazione com'era.",
   "hooks.state.unavailable": "non disponibile",
   "hooks.state.on": "attivo",
   "hooks.state.broken": "da reinstallare",
   "hooks.state.off": "non attivo",
-  "hooks.broken": "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
-  "hooks.plugin": "Un plugin del TUI di nikcli, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un nikcli che ADE non ha avviato.",
+  "hooks.broken":
+    "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
+  "hooks.plugin":
+    "Un plugin del TUI di nikcli, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un nikcli che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.update": "Aggiorna",
   "hooks.outdated": "Quello installato è di una versione precedente di ADE: premi Aggiorna per mettere quello nuovo.",
   "hooks.remove": "Rimuovi",
-  "hooks.outside": "Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova, quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.",
+  "hooks.outside":
+    "Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova, quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.",
   "agent.mic.start": "Avvia il microfono",
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
-  "agent.noPlanner": "Senza una chiave OpenRouter nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
+  "agent.noPlanner":
+    "Senza una chiave OpenRouter nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
   "agent.onboarding.title": "Prima di parlarci",
   "agent.onboarding.subtitle": "Per usare la voce servono tre elementi. Ecco cosa è pronto e cosa manca:",
   "agent.onboarding.key.title": "Chiave OpenRouter",
-  "agent.onboarding.key.desc": "Serve per la trascrizione rapida (Whisper / Gemma). Si ottiene gratuitamente o a consumo su openrouter.ai.",
+  "agent.onboarding.key.desc":
+    "Serve per la trascrizione rapida (Whisper / Gemma). Si ottiene gratuitamente o a consumo su openrouter.ai.",
   "agent.onboarding.key.action": "Imposta chiave",
   "agent.onboarding.key.done": "Configurata",
   "agent.onboarding.agent.title": "Agente (Claude Code o Codex)",
-  "agent.onboarding.agent.desc": "nik coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
+  "agent.onboarding.agent.desc":
+    "nik coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
   "agent.onboarding.agent.action": "Configura agente",
   "agent.onboarding.agent.done": "Disponibile",
   "agent.onboarding.voice.title": "Voce naturale (Piper)",
-  "agent.onboarding.voice.desc": "Sintesi neurale locale per risposte parlate fluide e offline, evitando voci robotiche.",
+  "agent.onboarding.voice.desc":
+    "Sintesi neurale locale per risposte parlate fluide e offline, evitando voci robotiche.",
   "agent.onboarding.voice.action": "Scarica voce",
   "agent.onboarding.voice.downloading": "Download in corso…",
   "agent.onboarding.voice.retry": "Riprova",
   "agent.onboarding.voice.done": "Installata",
   "agent.empty.title": "Niente da mostrare, ancora.",
-  "agent.empty.body": "Parla all'assistente o scrivigli qui sotto. Quello che gli chiedi e ogni azione che esegue per te compaiono qui.",
+  "agent.empty.body":
+    "Parla all'assistente o scrivigli qui sotto. Quello che gli chiedi e ogni azione che esegue per te compaiono qui.",
   "agent.empty.example1": "«avvia quattro sessioni claude su questo progetto»",
   "agent.empty.example2": "«apri il pannello due»",
   "agent.empty.example3": "«cosa sta succedendo»",
@@ -305,7 +319,8 @@ export const it = {
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,
   "update.openFailed": (problem: string) => `Impossibile aprire la pagina: ${problem}`,
-  "update.restart": (running: number) => `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso viene interrotta e ripresa" : `le ${running} sessioni in corso vengono interrotte e riprese`} alla riapertura.`,
+  "update.restart": (running: number) =>
+    `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso viene interrotta e ripresa" : `le ${running} sessioni in corso vengono interrotte e riprese`} alla riapertura.`,
   "update.restart.title": "Aggiorna ADE",
   "update.restart.ok": "Aggiorna e riavvia",
   "update.restart.later": "Più tardi",
@@ -313,7 +328,8 @@ export const it = {
   "update.checking": "Controllo…",
   "update.action": "Aggiorna",
   "update.acting": "Aggiornamento…",
-  "update.downloading": (done: string, total: string | null) => (total ? `Scarico ${done} di ${total} MB` : `Scarico ${done} MB`),
+  "update.downloading": (done: string, total: string | null) =>
+    total ? `Scarico ${done} di ${total} MB` : `Scarico ${done} MB`,
   "update.installing": "Installo: ADE si chiude e si riapre da sola.",
   "update.restart.none": "ADE si chiude e si riapre da sola. Non ci sono sessioni in corso.",
   "update.dialog.starting": "Scarico la versione nuova…",
@@ -336,15 +352,22 @@ export const it = {
   "boot.host": "avvio di ADE",
   "boot.restore": "ripristino le sessioni",
   "boot.project": "apro il progetto",
-  "pane.closeRunning": (agent: string) => `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
-  "editor.closeDirty": (path: string) => `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
-  "editor.saveUnreadable": (path: string, problem: string) => `${path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${problem}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
-  "editor.saveCancelled.unreadable": (problem: string) => `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,
-  "editor.saveChanged": (path: string) => `${path}\n\nIl file è cambiato su disco da quando l'hai aperto. Salvando, quelle modifiche vengono sostituite dalle tue.\n\nProcedere?`,
+  "pane.closeRunning": (agent: string) =>
+    `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
+  "editor.closeDirty": (path: string) =>
+    `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
+  "editor.saveUnreadable": (path: string, problem: string) =>
+    `${path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${problem}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
+  "editor.saveCancelled.unreadable": (problem: string) =>
+    `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,
+  "editor.saveChanged": (path: string) =>
+    `${path}\n\nIl file è cambiato su disco da quando l'hai aperto. Salvando, quelle modifiche vengono sostituite dalle tue.\n\nProcedere?`,
   "editor.saveCancelled.changed": "Salvataggio annullato: il file è cambiato su disco.",
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
-  "task.notSent": "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
-  "task.stepNotSent": (text: string) => `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
+  "task.notSent":
+    "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
+  "task.stepNotSent": (text: string) =>
+    `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.none": "Nessun task iniziale",
   "bar.newPane": "Nuovo pannello",
   "bar.windowControls": "Controlli finestra",
@@ -354,7 +377,8 @@ export const it = {
   "settings.subtitle": "Voce, routine, codice, MCP, plugin e competenze",
   "settings.group.voice": "Voce",
   "settings.routine": "Routine",
-  "settings.routine.desc": "Cose che ADE fa da sé: a un orario, all'apertura di un progetto, o quando una sessione finisce.",
+  "settings.routine.desc":
+    "Cose che ADE fa da sé: a un orario, all'apertura di un progetto, o quando una sessione finisce.",
   "settings.routine.instead": "Per ora una sessione si avvia a mano, dalla schermata di lancio.",
   "settings.code": "Codice",
   "settings.keys": "Chiavi API",
@@ -363,25 +387,31 @@ export const it = {
   "settings.noPlugins": "Nessun plugin caricato.",
   "settings.notBuilt": "Non c'è ancora niente da configurare qui: la sezione esiste, la funzione no.",
   "settings.grid.title": "Griglia",
-  "settings.grid.desc": "Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno scenda sotto la larghezza minima leggibile.",
+  "settings.grid.desc":
+    "Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno scenda sotto la larghezza minima leggibile.",
   "settings.grid.columns": "Colonne della griglia",
   "settings.grid.auto": "Auto",
   "settings.mcp.desc": "I server a cui ADE si collega col Model Context Protocol, e quali strumenti espongono.",
-  "settings.mcp.instead": "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
+  "settings.mcp.instead":
+    "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
   "settings.bots.title": "Bot",
-  "settings.bots.desc": "Gli agenti di nikcli che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
+  "settings.bots.desc":
+    "Gli agenti di nikcli che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
   "settings.bots.empty": "Nessun agente nikcli. Se ne crea uno dalla vista Bot.",
   "settings.bots.reading": "Lettura delle cartelle di nikcli…",
   "settings.bots.defaultModel": "modello di nikcli",
   "settings.bots.scopeProject": "progetto",
   "settings.bots.scopeGlobal": "globale",
   "settings.skills.title": "Strumenti",
-  "settings.skills.desc": "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: nikcli registra nel file solo le rinunce.",
+  "settings.skills.desc":
+    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: nikcli registra nel file solo le rinunce.",
   "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.",
   "settings.skills.without": (tools: string) => `senza ${tools}`,
   "settings.providers.title": "Provider",
-  "settings.providers.desc1": "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
-  "settings.providers.desc2Before": (max: number) => `ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli abbonamenti sono per uso personale e ADE tiene al massimo ${max} turni insieme per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con `,
+  "settings.providers.desc1":
+    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
+  "settings.providers.desc2Before": (max: number) =>
+    `ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli abbonamenti sono per uso personale e ADE tiene al massimo ${max} turni insieme per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con `,
   "settings.providers.desc2After": ").",
   "settings.providers.checking": "Controllo…",
   "settings.providers.notInstalled": "Non installato",
@@ -400,8 +430,10 @@ export const it = {
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "assistente vocale",
   "voice.shortcut.feature.transcription": "dettatura",
-  "voice.shortcut.busy": (chord: string, feature: string) => `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
-  "voice.shortcut.unknown": (chord: string) => `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
+  "voice.shortcut.busy": (chord: string, feature: string) =>
+    `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
+  "voice.shortcut.unknown": (chord: string) =>
+    `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "voice.permission.notRefusal": "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
   "voice.permission.type.shell": "un comando",
   "voice.permission.type.write": "una modifica ai file",
@@ -465,7 +497,8 @@ export const it = {
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
   "record.export.failed": (problem: string) => `Esportazione non riuscita: ${problem}`,
-  "pane.maybeStuck": (request: string) => `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
+  "pane.maybeStuck": (request: string) =>
+    `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
 
   // Pane activity (labels for the codes in grid/activity.ts)
   "activity.ready": "Disponibile",
@@ -510,7 +543,8 @@ export const it = {
   "pane.resume": "Riprendi",
   "pane.closeGone": "Chiudi il pannello",
   "pane.input.suspended": "Riprendi per scrivere",
-  "note.suspendKillFailed": "Non sospesa: la chiusura dei processi non è riuscita e la sessione non risponde più. Chiudi il pannello e riaprilo.",
+  "note.suspendKillFailed":
+    "Non sospesa: la chiusura dei processi non è riuscita e la sessione non risponde più. Chiudi il pannello e riaprilo.",
   "pane.limit": "limite raggiunto",
   "pane.limit.window": (window: string) => `finestra ${window} esaurita`,
 
@@ -604,24 +638,31 @@ export const it = {
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>
     `Il bot ha chiesto il permesso «${permission}» per:\n${what}\n\nDa remoto non è concesso: ho detto di no.`,
-  "gateway.noProxySlack": "Su Slack il bot tiene aperta una connessione e il client che la parla non sa passare da un proxy: se questo computer esce su internet solo attraverso un proxy, il bot Slack non ci arriva.",
+  "gateway.noProxySlack":
+    "Su Slack il bot tiene aperta una connessione e il client che la parla non sa passare da un proxy: se questo computer esce su internet solo attraverso un proxy, il bot Slack non ci arriva.",
   "gateway.panel.platformSlack": "Slack",
   "gateway.panel.titleSlack": "Gateway · Slack",
-  "gateway.panel.introSlack": "Scrivi a questo bot da Slack, mentre ADE è aperta. Ogni bot ha la sua app Slack, creata dal manifest che ADE prepara qui sotto.",
-  "gateway.panel.tokenHelpSlack": "Incolla il Bot User OAuth Token, che comincia con xoxb-: lo trovi in OAuth & Permissions dopo aver installato l'app nel workspace. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+  "gateway.panel.introSlack":
+    "Scrivi a questo bot da Slack, mentre ADE è aperta. Ogni bot ha la sua app Slack, creata dal manifest che ADE prepara qui sotto.",
+  "gateway.panel.tokenHelpSlack":
+    "Incolla il Bot User OAuth Token, che comincia con xoxb-: lo trovi in OAuth & Permissions dopo aver installato l'app nel workspace. Resta nel portachiavi del sistema: ADE non lo mostra più.",
   "gateway.panel.tokenPlaceholderSlack": "xoxb-…",
   "gateway.panel.appToken": "Token dell'app (App-Level Token)",
-  "gateway.panel.appTokenHelp": "Il secondo token apre la connessione del bot. Il manifest non lo crea: fallo a mano in Basic Information › App-Level Tokens, con lo scope connections:write, e incollalo qui. Comincia con xapp-.",
+  "gateway.panel.appTokenHelp":
+    "Il secondo token apre la connessione del bot. Il manifest non lo crea: fallo a mano in Basic Information › App-Level Tokens, con lo scope connections:write, e incollalo qui. Comincia con xapp-.",
   "gateway.panel.appTokenSaved": "App-Level Token salvato nel portachiavi",
   "gateway.panel.appTokenPlaceholder": "xapp-…",
   "gateway.panel.needAppToken": "Per accendere serve anche l'App-Level Token di Slack (xapp-…): salvalo qui sopra.",
   "gateway.panel.slackSetup": "Nell'app Slack",
-  "gateway.panel.slackManifestHow": "Su api.slack.com/apps scegli «Create New App», poi «From a manifest», e incolla il manifest di questo bot. Poi installa l'app nel workspace: il token xoxb- compare in OAuth & Permissions.",
+  "gateway.panel.slackManifestHow":
+    "Su api.slack.com/apps scegli «Create New App», poi «From a manifest», e incolla il manifest di questo bot. Poi installa l'app nel workspace: il token xoxb- compare in OAuth & Permissions.",
   "gateway.panel.slackManifestShow": "Mostra il manifest",
   "gateway.panel.slackManifest": "Manifest dell'app Slack",
   "gateway.panel.slackManifestMissing": "Il manifest si prepara solo nell'app di ADE.",
-  "gateway.panel.slackReinstall": "Se cambi gli scope dell'app, reinstallala nel workspace: finché non lo fai Slack non manda gli eventi che mancano, e il bot tace senza nessun errore. «Prova» dice quali scope mancano.",
-  "gateway.panel.slackInvite": "Nei canali e nei messaggi di gruppo il bot riceve solo i messaggi che lo nominano, e solo dove l'hai aggiunto (in un canale con /invite): il resto non gli arriva. In un messaggio diretto a lui solo non serve niente.",
+  "gateway.panel.slackReinstall":
+    "Se cambi gli scope dell'app, reinstallala nel workspace: finché non lo fai Slack non manda gli eventi che mancano, e il bot tace senza nessun errore. «Prova» dice quali scope mancano.",
+  "gateway.panel.slackInvite":
+    "Nei canali e nei messaggi di gruppo il bot riceve solo i messaggi che lo nominano, e solo dove l'hai aggiunto (in un canale con /invite): il resto non gli arriva. In un messaggio diretto a lui solo non serve niente.",
   "gateway.panel.platform": "Piattaforma del bot",
   "gateway.panel.platformTelegram": "Telegram",
   "gateway.panel.platformDiscord": "Discord",
@@ -641,15 +682,18 @@ export const it = {
   "gateway.panel.invite":
     "Invita il bot nel tuo server da OAuth2 › URL Generator, con gli scope bot e applications.commands. In una chat privata non serve nessun invito.",
   "gateway.panel.title": "Gateway · Telegram",
-  "gateway.panel.intro": "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
+  "gateway.panel.intro":
+    "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
   "gateway.panel.off": "Spento",
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
   "gateway.panel.connected": "Acceso · collegato",
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
-  "gateway.panel.redacted": (time: string) => `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
+  "gateway.panel.redacted": (time: string) =>
+    `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
   "gateway.panel.token": "Token del bot",
-  "gateway.panel.tokenHelp": "Incolla il token che BotFather ti ha dato. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+  "gateway.panel.tokenHelp":
+    "Incolla il token che BotFather ti ha dato. Resta nel portachiavi del sistema: ADE non lo mostra più.",
   "gateway.panel.tokenSaved": "Token salvato nel portachiavi",
   "gateway.panel.probed": (name: string) => `risponde come ${name}`,
   "gateway.panel.tokenReplace": "Incolla un token nuovo per sostituirlo",
@@ -663,8 +707,10 @@ export const it = {
   "gateway.panel.switchOff": "Spegni",
   "gateway.panel.authorized": "Chi può scrivere",
   "gateway.panel.nobody": "Nessuno. Scrivi al bot da Telegram: ricevi un codice, e lo inserisci qui.",
-  "gateway.panel.nobodyDiscord": "Nessuno. Scrivi al bot in un messaggio privato su Discord: ricevi un codice, e lo inserisci qui.",
-  "gateway.panel.nobodySlack": "Nessuno. Scrivi al bot in un messaggio diretto su Slack: ricevi un codice, e lo inserisci qui.",
+  "gateway.panel.nobodyDiscord":
+    "Nessuno. Scrivi al bot in un messaggio privato su Discord: ricevi un codice, e lo inserisci qui.",
+  "gateway.panel.nobodySlack":
+    "Nessuno. Scrivi al bot in un messaggio diretto su Slack: ricevi un codice, e lo inserisci qui.",
   "gateway.panel.revoke": "Revoca",
   "gateway.panel.pairing": "Abbinamento",
   "gateway.panel.onlyYours": "Abbina solo un tuo account: chi abbini comanda il bot sul tuo PC e sui tuoi abbonamenti.",
@@ -700,7 +746,8 @@ export const it = {
   "chat.session.waiting": "aspetta te",
   "chat.session.foreign": "fuori dalla Chat",
   "chat.status.noProject": "Apri un progetto per usare la Chat.",
-  "chat.status.notOpen": "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
+  "chat.status.notOpen":
+    "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
   "chat.connect": "Collega adesso",
   "chat.status.admitting": "Controllo la fiducia nel progetto…",
   "chat.status.connecting": "Collegamento al server di nikcli…",
@@ -713,7 +760,8 @@ export const it = {
   "chat.question.send": "Rispondi",
   "chat.question.reject": "Non rispondere",
   "chat.answer.failed": "La risposta non è arrivata al server: riprova.",
-  "chat.trustPending": (directory: string) => `La fiducia nel progetto ${directory} non è ancora decisa: riprova tra poco.`,
+  "chat.trustPending": (directory: string) =>
+    `La fiducia nel progetto ${directory} non è ancora decisa: riprova tra poco.`,
   "gateway.panel.pairingAfterOn": "Il gateway è spento: dopo l'accensione, chi scrive al bot riceve un codice.",
   "gateway.panel.needToken": "Per accendere serve il token del bot: salvalo qui sopra.",
   "gateway.panel.previousProject": (project: string) => `Prima i turni da chat giravano in: ${project}`,
@@ -721,20 +769,27 @@ export const it = {
     `Il gateway di questo bot girava in:\n${from}\n\nSe lo accendi adesso, i turni da chat gireranno in:\n${to}\n\nAccendo in questo progetto?`,
   "gateway.panel.pairingOpenUntil": (time: string) => `Chi scrive al bot fino alle ${time} riceve un codice.`,
   "gateway.panel.remote": "Comandi da remoto",
-  "gateway.panel.remoteNever": (runner: string) => `Da chat questo bot non esegue comandi: ${runner} non può chiederti il permesso comando per comando.`,
+  "gateway.panel.remoteNever": (runner: string) =>
+    `Da chat questo bot non esegue comandi: ${runner} non può chiederti il permesso comando per comando.`,
   "gateway.panel.remoteOn": "Accesi: ogni comando ti viene chiesto su Telegram, e senza risposta in 5 minuti vale no.",
-  "gateway.panel.remoteOnDiscord": "Accesi: ogni comando ti viene chiesto su Discord, e senza risposta in 5 minuti vale no.",
-  "gateway.panel.remoteOnSlack": "Accesi: ogni comando ti viene chiesto su Slack, e senza risposta in 5 minuti vale no.",
+  "gateway.panel.remoteOnDiscord":
+    "Accesi: ogni comando ti viene chiesto su Discord, e senza risposta in 5 minuti vale no.",
+  "gateway.panel.remoteOnSlack":
+    "Accesi: ogni comando ti viene chiesto su Slack, e senza risposta in 5 minuti vale no.",
   "gateway.panel.remoteOff": "Spenti: da chat il bot non esegue comandi sul PC.",
   "gateway.panel.remoteAsk": "Accendi…",
   "gateway.panel.remoteSwitchOff": "Spegni i comandi",
-  "gateway.panel.remoteWhat": "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Telegram con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
-  "gateway.panel.remoteWhatDiscord": "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Discord con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
-  "gateway.panel.remoteWhatSlack": "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Slack con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
+  "gateway.panel.remoteWhat":
+    "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Telegram con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
+  "gateway.panel.remoteWhatDiscord":
+    "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Discord con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
+  "gateway.panel.remoteWhatSlack":
+    "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Slack con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
   "gateway.panel.cancel": "Annulla",
   "gateway.panel.remoteConfirm": "Accendi i comandi",
   "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di nikcli.",
-  "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
+  "browser.design.label": (k: string, title: string, variant: number) =>
+    title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`,
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
   "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",
   "browser.design.refused": "Non è una pagina di .ade/design di un progetto aperto: non la apro.",
@@ -747,7 +802,8 @@ export const it = {
   "browser.design.next": "Variante successiva",
   "design.variant.cannotOpen": "Qui non si può aprire la variante in un pannello.",
   "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
-  "design.variant.notDesign": (k: string) => `La pagina di questa variante non è in .ade/design/${k}/ di un progetto aperto.`,
+  "design.variant.notDesign": (k: string) =>
+    `La pagina di questa variante non è in .ade/design/${k}/ di un progetto aperto.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
   "browser.forget.done.all": (cookies: number) =>
@@ -756,25 +812,30 @@ export const it = {
   "browser.forget.done.storage.noCookies": "Storage del sito cancellato; i cookie non sono leggibili da qui.",
   "browser.forget.done.cookies": (cookies: number) =>
     `${cookies === 1 ? "Un cookie eliminato" : `${cookies} cookie eliminati`}; lo storage del sito non è stato trovato.`,
-  "browser.forget.unsure": "Ho chiesto la cancellazione, ma non ho potuto verificarla: il dato potrebbe essere ancora lì.",
+  "browser.forget.unsure":
+    "Ho chiesto la cancellazione, ma non ho potuto verificarla: il dato potrebbe essere ancora lì.",
   "browser.forget.unsure.cookies": (cookies: number) =>
     `${cookies === 1 ? "Un cookie eliminato" : `${cookies} cookie eliminati`}; la cancellazione dello storage non è verificabile: il dato potrebbe essere ancora lì.`,
-  "browser.forget.done.none": "Niente è stato cancellato — il sito potrebbe non aver salvato dati, oppure ADE non è riuscita a raggiungerli.",
+  "browser.forget.done.none":
+    "Niente è stato cancellato — il sito potrebbe non aver salvato dati, oppure ADE non è riuscita a raggiungerli.",
   "browser.forget.failed": (problem: string) => `Non cancellati: ${problem}`,
   "browser.storage.note": "Cookie e dati restano nel profilo di ADE.",
   "browser.blocked.title": "Questo sito non si lascia mostrare dentro ADE",
-  "browser.blocked.msg": "Il server vieta di incorporare la pagina in un'altra app (X-Frame-Options o CSP frame-ancestors) e non permette ad ADE di leggerne una copia.",
+  "browser.blocked.msg":
+    "Il server vieta di incorporare la pagina in un'altra app (X-Frame-Options o CSP frame-ancestors) e non permette ad ADE di leggerne una copia.",
   "browser.openExternal": "Apri nel browser",
   "browser.openExternal.failed": (problem: string) => `Apertura nel browser non riuscita: ${problem}`,
   "browser.noCopy.title": "Ispeziona non è disponibile per questa pagina",
-  "browser.noCopy.msg": "Per selezionare gli elementi ADE ha bisogno di una copia della pagina, e questo sito non permette di leggerla (CORS). In Naviga la pagina resta visibile.",
+  "browser.noCopy.msg":
+    "Per selezionare gli elementi ADE ha bisogno di una copia della pagina, e questo sito non permette di leggerla (CORS). In Naviga la pagina resta visibile.",
   "browser.noCopy.back": "Torna a Naviga",
   "browser.context": "Contesto catturato:",
   "browser.clearSelection": "Deseleziona tutto",
   "browser.prompt.selected": "Descrivi cosa modificare...",
   "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione...",
   "browser.selection.none": "Nessun elemento selezionato",
-  "browser.selection.count": (count: number) => count === 1 ? "1 elemento selezionato" : `${count} elementi selezionati`,
+  "browser.selection.count": (count: number) =>
+    count === 1 ? "1 elemento selezionato" : `${count} elementi selezionati`,
   "browser.owner.none": "Non legato",
   "browser.owner.ready": (title: string) => `↳ ${title}`,
   "browser.owner.closed": (title: string) => `${title} (chiusa)`,
@@ -805,7 +866,8 @@ export const it = {
   "devServer.found": (title: string, url: string) => `«${title}» ha avviato un server su ${url}`,
   "devServer.open": "Apri nel pannello web",
   "devServer.dismiss": "Ignora",
-  "note.browserRequest": (title: string) => `Richiesta dal pannello web «${title}» in coda: arriva quando finisce il turno.`,
+  "note.browserRequest": (title: string) =>
+    `Richiesta dal pannello web «${title}» in coda: arriva quando finisce il turno.`,
 
   // Decisions
   "date.today": "oggi",
@@ -814,7 +876,7 @@ export const it = {
   "date.inDays": (days: number) => `fra ${days} giorni`,
   "decisions.title": "Decisioni",
   "decisions.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
-  "decisions.count": (count: number) => count === 1 ? "1 decisione" : `${count} decisioni`,
+  "decisions.count": (count: number) => (count === 1 ? "1 decisione" : `${count} decisioni`),
   "decisions.needAnswer": "scegli un'opzione o scrivi la risposta",
   "decisions.from": (who: string) => `da ${who}`,
   "decisions.unlocks": (what: string) => `sblocca: ${what}`,
@@ -846,7 +908,8 @@ export const it = {
   "decisions.change": "Cambia risposta",
   "decisions.reopen": "Riapri ora",
   "decisions.change.confirm": (key: string) => `Riaprire ${key}?`,
-  "decisions.change.confirm.delivered": (key: string, recipient: string, answer: string) => `Riaprire ${key}? ${recipient} ha già la risposta ${answer}`,
+  "decisions.change.confirm.delivered": (key: string, recipient: string, answer: string) =>
+    `Riaprire ${key}? ${recipient} ha già la risposta ${answer}`,
   "decisions.delivery.done": (to: string, when: string) => `✓ consegnata a ${to} · ${when} · chi la esegue la chiude`,
   "decisions.delivery.by": (who: string, day: string) => `risposta di ${who} · ${day}`,
   "decisions.queued.ready": (title: string) => `in coda: parte appena «${title}» è libera`,
@@ -856,7 +919,8 @@ export const it = {
   "decisions.recipient.nobody": "nessuna sessione",
   "decisions.recipient.stopped": "(ferma)",
   "decisions.recipient.closed": "(chiusa)",
-  "decisions.recipient.confirm": (queued: number, title: string) => `Consegnare ${queued === 1 ? "la risposta in coda" : `le ${queued} risposte in coda`} a «${title}»?`,
+  "decisions.recipient.confirm": (queued: number, title: string) =>
+    `Consegnare ${queued === 1 ? "la risposta in coda" : `le ${queued} risposte in coda`} a «${title}»?`,
   "decisions.recipient.deliver": "Consegna",
   "decisions.recipient.none": "Nessuna sessione riceve le risposte: restano in coda finché non ne scegli una.",
   "decisions.recipient.idle": (title: string) => `«${title}» non è in esecuzione: le risposte restano in coda.`,
@@ -867,11 +931,16 @@ export const it = {
   "decisions.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
   "decisions.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
   "decisions.sheet.keys": "1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude",
-  "decisions.sheet.queued.none": (count: number) => `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
-  "decisions.sheet.queued.idle": (count: number) => `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: la sessione scelta non è in esecuzione`,
-  "decisions.sheet.status.sent": (key: string, choice: string, recipient: string) => `${key}: ${choice}, a ${recipient}`,
-  "decisions.sheet.status.idle": (key: string, choice: string, recipient: string) => `${key}: ${choice}, in coda (${recipient} non è in esecuzione)`,
-  "decisions.sheet.status.none": (key: string, choice: string) => `${key}: ${choice}, in coda (nessuna sessione scelta)`,
+  "decisions.sheet.queued.none": (count: number) =>
+    `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
+  "decisions.sheet.queued.idle": (count: number) =>
+    `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: la sessione scelta non è in esecuzione`,
+  "decisions.sheet.status.sent": (key: string, choice: string, recipient: string) =>
+    `${key}: ${choice}, a ${recipient}`,
+  "decisions.sheet.status.idle": (key: string, choice: string, recipient: string) =>
+    `${key}: ${choice}, in coda (${recipient} non è in esecuzione)`,
+  "decisions.sheet.status.none": (key: string, choice: string) =>
+    `${key}: ${choice}, in coda (nessuna sessione scelta)`,
   "decisions.sheet.full": "Vista completa",
   "decisions.hint.ready": (title: string) => `→ ${title}, come messaggio`,
   "decisions.hint.idle": (title: string) => `→ in coda: «${title}» non è in esecuzione`,
@@ -885,7 +954,7 @@ export const it = {
 
   "design.title": "Design",
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
-  "design.count": (count: number) => count === 1 ? "1 proposta design" : `${count} proposte design`,
+  "design.count": (count: number) => (count === 1 ? "1 proposta design" : `${count} proposte design`),
   "design.waiting": "Proposte di design in attesa",
   "design.needChoice": "scegli una variante o scrivi una nota",
   "design.variants": "Varianti",
@@ -894,9 +963,11 @@ export const it = {
   "design.variant.openLarge": "Apri grande",
   "design.preview": "Anteprima",
   "design.preview.source": "Fonte",
-  "design.preview.outside": (path: string, k: string) => `Fuori dal progetto: ${path} — le anteprime stanno in .ade/design/${k}/`,
+  "design.preview.outside": (path: string, k: string) =>
+    `Fuori dal progetto: ${path} — le anteprime stanno in .ade/design/${k}/`,
   "design.preview.failed": (path: string, error: string) => `Non si carica: ${path} — ${error}`,
-  "design.preview.inline": (k: string) => `Anteprima scritta nel registro: non si mostra, serve una pagina per variante in .ade/design/${k}/`,
+  "design.preview.inline": (k: string) =>
+    `Anteprima scritta nel registro: non si mostra, serve una pagina per variante in .ade/design/${k}/`,
   "design.preview.imageBroken": "il file non si apre (mancante, o fuori dai progetti aperti)",
   "design.preview.shared": "Queste varianti mostrano la stessa pagina: chiedi una pagina per variante",
   "design.submit": "Registra scelta",
@@ -915,7 +986,8 @@ export const it = {
   "design.change": "Cambia scelta",
   "design.reopen": "Riapri ora",
   "design.change.confirm": (key: string) => `Riaprire ${key}?`,
-  "design.change.confirm.delivered": (key: string, recipient: string, choice: string) => `Riaprire ${key}? ${recipient} ha già la scelta ${choice}`,
+  "design.change.confirm.delivered": (key: string, recipient: string, choice: string) =>
+    `Riaprire ${key}? ${recipient} ha già la scelta ${choice}`,
   "design.delivery.done": (to: string, when: string) => `✓ consegnata a ${to} · ${when} · chi la realizza la chiude`,
   "design.delivery.by": (who: string, day: string) => `scelta di ${who} · ${day}`,
   "design.queued.ready": (title: string) => `in coda: parte appena «${title}» è libera`,
@@ -925,7 +997,8 @@ export const it = {
   "design.recipient.nobody": "nessuna sessione",
   "design.recipient.stopped": "(ferma)",
   "design.recipient.closed": "(chiusa)",
-  "design.recipient.confirm": (queued: number, title: string) => `Consegnare ${queued === 1 ? "la scelta in coda" : `le ${queued} scelte in coda`} a «${title}»?`,
+  "design.recipient.confirm": (queued: number, title: string) =>
+    `Consegnare ${queued === 1 ? "la scelta in coda" : `le ${queued} scelte in coda`} a «${title}»?`,
   "design.recipient.deliver": "Consegna",
   "design.sheet.position": (index: number, total: number) => `${index} di ${total}`,
   "design.sheet.empty": "Quando una sessione ne apre una, il badge in alto la mostra.",
@@ -933,10 +1006,13 @@ export const it = {
   "design.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
   "design.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
   "design.sheet.keys": "1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude",
-  "design.sheet.queued.none": (count: number) => `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
-  "design.sheet.queued.idle": (count: number) => `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: la sessione scelta non è in esecuzione`,
+  "design.sheet.queued.none": (count: number) =>
+    `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
+  "design.sheet.queued.idle": (count: number) =>
+    `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: la sessione scelta non è in esecuzione`,
   "design.sheet.status.sent": (key: string, choice: string, recipient: string) => `${key}: ${choice}, a ${recipient}`,
-  "design.sheet.status.idle": (key: string, choice: string, recipient: string) => `${key}: ${choice}, in coda (${recipient} non è in esecuzione)`,
+  "design.sheet.status.idle": (key: string, choice: string, recipient: string) =>
+    `${key}: ${choice}, in coda (${recipient} non è in esecuzione)`,
   "design.sheet.status.none": (key: string, choice: string) => `${key}: ${choice}, in coda (nessuna sessione scelta)`,
   "design.sheet.full": "Vista completa",
   "design.hint.ready": (title: string) => `→ ${title}, come messaggio`,
@@ -959,7 +1035,8 @@ export const it = {
   "editor.nothingToSave": "Nessuna modifica da salvare.",
   "editor.noFile": "Nessun file aperto.",
   "editor.loading": "Caricamento file in corso...",
-  "editor.truncatedBanner": "Il file è troppo grande ed è stato troncato in lettura. Il salvataggio è disabilitato per proteggere il file su disco.",
+  "editor.truncatedBanner":
+    "Il file è troppo grande ed è stato troncato in lettura. Il salvataggio è disabilitato per proteggere il file su disco.",
   "editor.modified": "Modificato",
   "editor.saved": "Salvato",
   "editor.unsaved": "Modifiche non salvate",
@@ -975,7 +1052,8 @@ export const it = {
   "plugins.renderFailed": "Questo plugin non è riuscito a disegnare il pannello.",
   "plugins.sectionFailed": "Sezione non disponibile.",
   "plugins.summary": (active: number) => `${active} ${active === 1 ? "plugin attivo" : "plugin attivi"}.`,
-  "plugins.summary.failed": (active: number, failed: number) => `${active} ${active === 1 ? "plugin attivo" : "plugin attivi"}, ${failed} ${failed === 1 ? "non caricato" : "non caricati"}.`,
+  "plugins.summary.failed": (active: number, failed: number) =>
+    `${active} ${active === 1 ? "plugin attivo" : "plugin attivi"}, ${failed} ${failed === 1 ? "non caricato" : "non caricati"}.`,
   "plugins.commands": (count: number) => `${count} ${count === 1 ? "comando" : "comandi"}`,
   "plugins.panes": (count: number) => `${count} ${count === 1 ? "pannello" : "pannelli"}`,
   "plugins.sections": (count: number) => `${count} ${count === 1 ? "sezione" : "sezioni"}`,
@@ -1001,7 +1079,7 @@ export const it = {
   "shots.close": "chiudi",
 
   // Extensions
-  "extensions.missingType": "senza type \"http\": Claude Code non lo carica, altri client sì",
+  "extensions.missingType": 'senza type "http": Claude Code non lo carica, altri client sì',
   "extensions.filter": "Filtro",
   "extensions.filter.all": "Tutti",
   "extensions.filter.oneClick": "Con un clic",
@@ -1011,15 +1089,20 @@ export const it = {
   "extensions.transport.stdio": "locale (stdio)",
   "extensions.after.oauth": "L'agente chiede l'accesso (OAuth) al primo uso.",
   "extensions.after.none": "Nessuna credenziale richiesta.",
-  "extensions.after.oauthOrEnv": (list: string) => `Accesso OAuth al primo uso, oppure imposta ${list} nell'ambiente dell'agente.`,
-  "extensions.after.env": (list: string) => `Imposta ${list} nell'ambiente dell'agente: in .mcp.json resta solo il riferimento.`,
-  "extensions.added": (name: string, file: string, hint: string) => `${name} aggiunto a ${file}. ${hint} Vale per le sessioni avviate da ora.`,
+  "extensions.after.oauthOrEnv": (list: string) =>
+    `Accesso OAuth al primo uso, oppure imposta ${list} nell'ambiente dell'agente.`,
+  "extensions.after.env": (list: string) =>
+    `Imposta ${list} nell'ambiente dell'agente: in .mcp.json resta solo il riferimento.`,
+  "extensions.added": (name: string, file: string, hint: string) =>
+    `${name} aggiunto a ${file}. ${hint} Vale per le sessioni avviate da ora.`,
   "extensions.removed": (name: string, file: string) => `${name} tolto da ${file}.`,
   "extensions.tab.installed": (count: number) => `Installati · ${count}`,
   "extensions.tab.catalog": (count: number) => `Catalogo MCP · ${count}`,
   "extensions.tab.plugins": (count: number) => `Plugin · ${count}`,
-  "extensions.desc": (file: string) => `Server MCP e plugin. «Aggiungi al progetto» scrive solo il ${file} del progetto aperto, che le CLI agente leggono all'avvio della sessione; le credenziali restano fuori dal file.`,
-  "extensions.noProject": (file: string) => `Apri un progetto per aggiungere server MCP: si installano nel suo ${file}.`,
+  "extensions.desc": (file: string) =>
+    `Server MCP e plugin. «Aggiungi al progetto» scrive solo il ${file} del progetto aperto, che le CLI agente leggono all'avvio della sessione; le credenziali restano fuori dal file.`,
+  "extensions.noProject": (file: string) =>
+    `Apri un progetto per aggiungere server MCP: si installano nel suo ${file}.`,
   "extensions.search": "Cerca un server: Stripe, calendario, database…",
   "extensions.search.label": "Cerca nel catalogo",
   "extensions.noMatch": "Nessun server corrisponde.",
@@ -1048,13 +1131,15 @@ export const it = {
   "keys.problem.noValue": "incolla il valore",
   "keys.problem.tooLong": "troppo lungo (massimo 4096 caratteri)",
   "keys.problem.newline": "contiene un a capo: incollalo su una riga",
-  "keys.billing": (agent: string, account: string) => `${agent} userà questa chiave invece ${account}: consumo a pagamento`,
+  "keys.billing": (agent: string, account: string) =>
+    `${agent} userà questa chiave invece ${account}: consumo a pagamento`,
   "keys.billing.claude": "dell'abbonamento Claude",
   "keys.billing.chatgpt": "dell'accesso ChatGPT",
   "keys.added.today": "aggiunta oggi",
   "keys.added.yesterday": "aggiunta ieri",
   "keys.added.days": (days: number) => `aggiunta ${days} giorni fa`,
-  "keys.desc": "Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della sessione.",
+  "keys.desc":
+    "Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della sessione.",
   "keys.noKeychain": "Questa versione di ADE non ha accesso al portachiavi.",
   "keys.none": "Nessuna chiave salvata.",
   "keys.hidden": "valore nascosto",
@@ -1084,7 +1169,8 @@ export const it = {
   "keys.request.says": "L'agente scrive:",
   "keys.request.goes": (agent: string) =>
     `Resta nel portachiavi del sistema e va a ${agent}, che la riceve al prossimo avvio della sessione. Puoi anche ignorare la richiesta.`,
-  "keys.request.hint": "Resta nel portachiavi del sistema; la sessione la riceve al prossimo avvio. Puoi anche ignorare la richiesta.",
+  "keys.request.hint":
+    "Resta nel portachiavi del sistema; la sessione la riceve al prossimo avvio. Puoi anche ignorare la richiesta.",
 
   // Video, 3D model, simulator, recording, remote, quota
   "media.pick": "Scegli un file",
@@ -1124,7 +1210,8 @@ export const it = {
   "panels.consent.someone": "Un agente",
   "panels.consent.allow": "Consenti",
   "panels.consent.deny": "Nega",
-  "record.consent.note": "Il video riprende tutto quello che appare finché non la fermi dal pulsante REC. I campi con chiavi e password vengono oscurati.",
+  "record.consent.note":
+    "Il video riprende tutto quello che appare finché non la fermi dal pulsante REC. I campi con chiavi e password vengono oscurati.",
   "record.consent.mic": "Registra anche il microfono",
   "record.consent.no": "No",
   "record.consent.yes": "Registra",
@@ -1156,12 +1243,14 @@ export const it = {
   "quota.na.noWindows": "quota-axi non riporta finestre per questo provider.",
   "quota.na.noTime": "Il rapporto di quota-axi non dice quando è stato scritto.",
   "quota.na.future": (time: string) => `Il rapporto è datato ${time}, dopo l'ora attuale: non è affidabile.`,
-  "quota.na.claude.noFile": "File di quota di Claude non trovato (~/.llm-quota/official/claude.json): lo scrive la statusLine di Claude Code.",
+  "quota.na.claude.noFile":
+    "File di quota di Claude non trovato (~/.llm-quota/official/claude.json): lo scrive la statusLine di Claude Code.",
   "quota.na.claude.noWindows": "Il file di Claude non riporta finestre di quota.",
   "quota.na.claude.noTime": "Il file di Claude non dice quando è stato scritto.",
   "quota.readClaude": (time: string) => `Letto dalla statusLine di Claude Code alle ${time}`,
   "quota.staleNote": "Dato non recente: la quota di adesso può essere diversa.",
-  "quota.na.agy.noFile": "File di quota di agy non trovato (~/.llm-quota/official/antigravity.json): lo scrive la statusLine di agy.",
+  "quota.na.agy.noFile":
+    "File di quota di agy non trovato (~/.llm-quota/official/antigravity.json): lo scrive la statusLine di agy.",
   "quota.na.agy.noBuckets": "Il file di agy non riporta finestre di quota.",
   "quota.na.agy.noTime": "Il file di agy non dice quando è stato scritto.",
   "quota.readAgy": (time: string) => `Letto dalla statusLine di agy alle ${time}`,
@@ -1170,8 +1259,10 @@ export const it = {
   "quota.week": "sett.",
   "quota.tip.title": (name: string) => `Quota ${name}`,
   "quota.tip.window": (label: string, percent: number) => `${label}: ${percent}% rimasto`,
-  "quota.tip.windowResetOn": (label: string, percent: number, day: string) => `${label}: ${percent}% rimasto · reset il ${day}`,
-  "quota.tip.windowResetIn": (label: string, percent: number, wait: string) => `${label}: ${percent}% rimasto · reset tra ${wait}`,
+  "quota.tip.windowResetOn": (label: string, percent: number, day: string) =>
+    `${label}: ${percent}% rimasto · reset il ${day}`,
+  "quota.tip.windowResetIn": (label: string, percent: number, wait: string) =>
+    `${label}: ${percent}% rimasto · reset tra ${wait}`,
 
   // Browser address
   "browser.address.placeholder": "localhost:3000 o porta :5173",
@@ -1181,9 +1272,11 @@ export const it = {
   "resume.noMint": (agent: string) =>
     `${agent} non ha aperto una conversazione da ritrovare: se ADE si chiude, questa sessione riparte da zero`,
   "resume.asking": (agent: string) => `Chiedo a ${agent} una conversazione da poter ritrovare…`,
-  "resume.slowMint": (agent: string, seconds: number) => `${agent} ci mette più del solito ad aprire la conversazione: aspetto ancora fino a ${seconds} secondi.`,
+  "resume.slowMint": (agent: string, seconds: number) =>
+    `${agent} ci mette più del solito ad aprire la conversazione: aspetto ancora fino a ${seconds} secondi.`,
   "resume.lookingHere": (agent: string) => `Cerco l'ultima conversazione di ${agent} in questa cartella…`,
-  "resume.noneHere": (agent: string) => `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
+  "resume.noneHere": (agent: string) =>
+    `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>
     `Questa conversazione è di un'altra cartella (${dir}): le schede di nikcli sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
   "resume.shared": (pane: string) =>
@@ -1195,11 +1288,14 @@ export const it = {
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
   "note.enterHeld": "Digitata, Invio non premuto: c'è un permesso aperto",
-  "note.panelReplyHeld": (why: string) => `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
-  "note.panelReplyStale": (n: number) => `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
+  "note.panelReplyHeld": (why: string) =>
+    `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
+  "note.panelReplyStale": (n: number) =>
+    `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
   "note.dictationHeld": "Dettatura non scritta: c'è una domanda aperta, rispondi prima e poi detta",
   "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
-  "note.inboxLost": (id: string) => `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
+  "note.inboxLost": (id: string) =>
+    `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
   "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
   "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
@@ -1215,7 +1311,8 @@ export const it = {
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
-  "note.restartedFresh": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}, da zero`,
+  "note.restartedFresh": (from: string, model: string) =>
+    `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}, da zero`,
   "note.askFrom": (from: string, text: string) => `Richiesta ricevuta da ${from}: ${text}`,
   "note.messageFrom": (from: string, text: string) => `Messaggio ricevuto da ${from}: ${text}`,
   "note.askTo": (to: string, text: string) => `Richiesta inviata a ${to}: ${text}`,
@@ -1228,10 +1325,12 @@ export const it = {
     `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei nik» o «nik». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
   "voice.shortcutOnly": (shortcut: string) =>
     `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei nik».`,
-  "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) => `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
+  "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) =>
+    `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "voice.listeningOff": (shortcut: string, always: string) =>
     `Da questa versione ADE non ascolta più da sola: il microfono si apre con la scorciatoia ${shortcut} o con il tasto in alto, e il nome funziona lì dentro. Ascoltare sempre costa, perché ogni voce in stanza viene mandata al servizio che trascrive: se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
-  "voice.alert.permission": (pane: string, what: string) => `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
+  "voice.alert.permission": (pane: string, what: string) =>
+    `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,
   "voice.alert.completedSimple": (pane: string) => `${pane} ha finito il lavoro.`,
   "voice.alert.decision": (title: string) => `C'è una decisione aperta nel registro: ${title}.`,
@@ -1240,7 +1339,8 @@ export const it = {
   "voice.alert.capReached": (cap: number) => `Ho raggiunto il limite di ${cap} avvisi per quest'ora: mi fermo qui.`,
   "voice.fallback.prefix": "Claude è al limite: rispondo con Codex.",
   "voice.fallback.codexUnavailable": "Claude è al limite del piano e Codex non è disponibile.",
-  "voice.fallback.codexFailed": (detail: string) => `Claude è al limite e anche Codex non è riuscito a rispondere: ${detail}`,
+  "voice.fallback.codexFailed": (detail: string) =>
+    `Claude è al limite e anche Codex non è riuscito a rispondere: ${detail}`,
   "editor.saveFailed": (problem: string) => `Salvataggio fallito: ${problem}`,
   "keys.passed": (names: string) => `Chiavi API passate: ${names}`,
 
@@ -1264,18 +1364,22 @@ export const it = {
   "mcp.error.notObject": "La configurazione del server MCP non è un oggetto.",
   "mcp.error.urlOrCommand": "La configurazione MCP deve avere url oppure command.",
   "mcp.error.urlAndCommand": "La configurazione MCP deve avere url oppure command, non entrambi.",
-  "mcp.error.remoteType": "Un server MCP remoto deve dichiarare type \"http\" o \"sse\": senza, Claude Code lo ignora.",
-  "mcp.error.stdioType": "Un server MCP con command ha type \"stdio\" o nessun type.",
+  "mcp.error.remoteType": 'Un server MCP remoto deve dichiarare type "http" o "sse": senza, Claude Code lo ignora.',
+  "mcp.error.stdioType": 'Un server MCP con command ha type "stdio" o nessun type.',
   "mcp.error.urlCredentials": "url non può contenere credenziali incorporate.",
-  "mcp.error.urlSecret": (name: string) => `url contiene un valore segreto nel parametro ${name}: usa un riferimento "\${NOME_VARIABILE}".`,
+  "mcp.error.urlSecret": (name: string) =>
+    `url contiene un valore segreto nel parametro ${name}: usa un riferimento "\${NOME_VARIABILE}".`,
   "mcp.error.url": "url deve essere un URL valido.",
   "mcp.error.args": "args deve essere un array di stringhe.",
-  "mcp.error.argSecret": (index: number) => `args[${index}] contiene un possibile segreto: usa un riferimento "\${NOME_VARIABILE}".`,
+  "mcp.error.argSecret": (index: number) =>
+    `args[${index}] contiene un possibile segreto: usa un riferimento "\${NOME_VARIABILE}".`,
   "mcp.error.env": "env deve essere un oggetto di stringhe.",
   "mcp.error.headers": "headers deve essere un oggetto di stringhe.",
-  "mcp.error.secretRef": (field: string) => `${field} deve usare un riferimento "\${NOME_VARIABILE}", non un valore segreto.`,
+  "mcp.error.secretRef": (field: string) =>
+    `${field} deve usare un riferimento "\${NOME_VARIABILE}", non un valore segreto.`,
   "mcp.error.oauth": "oauth deve essere un oggetto.",
-  "mcp.error.oauthSecret": "oauth.clientId e oauth.clientSecret devono usare riferimenti di variabile, non valori segreti.",
+  "mcp.error.oauthSecret":
+    "oauth.clientId e oauth.clientSecret devono usare riferimenti di variabile, non valori segreti.",
   "mcp.error.missing": "Manca la configurazione del server MCP.",
   "mcp.error.serialize": (file: string) => `${file} non è serializzabile.`,
   "mcp.error.duplicate": (name: string, file: string) => `Il server MCP "${name}" è già presente in ${file}.`,
@@ -1304,7 +1408,8 @@ export const it = {
   "decisions.log.facts": "facts non è un elenco di testi",
   "decisions.log.recommend": "recommend vuole { option, because }",
   "decisions.log.recommendOption": (option: string) => `la raccomandazione «${option}» non è una delle opzioni`,
-  "decisions.log.contextNeeded": "con i campi nuovi serve anche context: le versioni che non li conoscono mostrano solo quello",
+  "decisions.log.contextNeeded":
+    "con i campi nuovi serve anche context: le versioni che non li conoscono mostrano solo quello",
   "decisions.log.tooLarge": (mb: number) => `il registro delle decisioni supera ${mb} MB`,
   "decisions.rule.exists": (key: string) => `${key} esiste già`,
   "decisions.rule.neverOpened": (key: string) => `${key} non è mai stata aperta`,
@@ -1314,7 +1419,8 @@ export const it = {
   "decisions.status.risposta": "con risposta",
   "decisions.status.rimandata": "rimandata",
   "decisions.status.chiusa": "chiusa",
-  "decisions.rule.deferOpen": (key: string, status: string) => `si rimanda solo una decisione aperta (${key} è ${status})`,
+  "decisions.rule.deferOpen": (key: string, status: string) =>
+    `si rimanda solo una decisione aperta (${key} è ${status})`,
   "decisions.rule.open": (key: string) => `${key} è già aperta`,
   "decisions.rule.close": (key: string) => `${key} si chiude solo dopo una risposta o con un'evidenza`,
   "decisions.problem.line": (line: number, reason: string) => `riga ${line}: ${reason}`,
@@ -1342,7 +1448,8 @@ export const it = {
   "design.log.keeps": "keeps non è un elenco di testi",
   "design.log.recommend": "recommend vuole { option, because }",
   "design.log.recommendOption": (option: string) => `la raccomandazione «${option}» non è una delle varianti`,
-  "design.log.contextNeeded": "con i campi nuovi serve anche context: le versioni che non li conoscono mostrano solo quello",
+  "design.log.contextNeeded":
+    "con i campi nuovi serve anche context: le versioni che non li conoscono mostrano solo quello",
   "design.log.tooLarge": (mb: number) => `il registro di design supera ${mb} MB`,
   "design.rule.exists": (key: string) => `${key} esiste già`,
   "design.rule.neverOpened": (key: string) => `${key} non è mai stata aperta`,
@@ -1362,7 +1469,8 @@ export const it = {
   "chat.model.label": "Modello",
   "chat.model.free": "gratis",
   "voice.path.askFile": (path: string) => `La voce chiede di aprire un file fuori dal progetto:\n\n${path}\n\nLo apro?`,
-  "voice.path.askProject": (root: string) => `La voce chiede di aprire come progetto una cartella che non è tra i recenti:\n\n${root}\n\nLa apro?`,
+  "voice.path.askProject": (root: string) =>
+    `La voce chiede di aprire come progetto una cartella che non è tra i recenti:\n\n${root}\n\nLa apro?`,
   "voice.path.refused": "Non l'ho aperto: negato dall'utente.",
   "voice.path.open": "Apri",
   "voice.path.cancel": "Non aprire",
@@ -1392,7 +1500,8 @@ export const it = {
   "effort.max": "massimo",
   "bots.models.noHost": "ADE non può eseguire nikcli qui",
   "bots.models.notFound": "nikcli non si avvia (è nel PATH?)",
-  "bots.models.exit": (code: string, detail: string) => `nikcli models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
+  "bots.models.exit": (code: string, detail: string) =>
+    `nikcli models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
   "bots.models.empty": "nikcli non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
@@ -1406,7 +1515,8 @@ export const it = {
   "chat.agent.name.explore": "Esploratore",
   "chat.new": "Nuova conversazione",
   "chat.empty.title": "Chiedi qualcosa.",
-  "chat.empty.body": "Una conversazione con nikcli in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
+  "chat.empty.body":
+    "Una conversazione con nikcli in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
   "chat.input.placeholder": "Scrivi un messaggio…",
   "chat.send": "Invia",
   "chat.stop": "Ferma",
@@ -1417,7 +1527,8 @@ export const it = {
   "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in nikcli.",
   "chat.error.credit": "Il credito presso il fornitore è finito.",
   "chat.error.modelMissing": "Il fornitore non trova questo modello: scegline un altro.",
-  "chat.error.rateLimit": "Il fornitore limita le richieste in questo momento: riprova fra poco o scegli un altro modello.",
+  "chat.error.rateLimit":
+    "Il fornitore limita le richieste in questo momento: riprova fra poco o scegli un altro modello.",
   "chat.error.providerDown": "Il fornitore non risponde: riprova fra poco.",
   "chat.error.tooLarge": "La richiesta è troppo grande per il fornitore.",
   "chat.error.structured": "Il modello non ha risposto nel formato richiesto.",
@@ -1432,7 +1543,8 @@ export const it = {
     `Il trasporto della Chat parla solo con il server di nikcli, non con ${origin}.`,
   "chat.error.requestAborted": "La richiesta è stata interrotta.",
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
-  "chat.attach.outside": (path: string) => `${path} non è un file di questo progetto: la Chat allega solo file della cartella aperta.`,
+  "chat.attach.outside": (path: string) =>
+    `${path} non è un file di questo progetto: la Chat allega solo file della cartella aperta.`,
   "chat.attach.notFile": (path: string) => `${path} non è un file: la Chat allega solo file.`,
   "chat.attach.env": (path: string) =>
     `${path} non si allega: i file .env contengono di solito chiavi e password, e un allegato arriva al fornitore del modello.`,
@@ -1469,7 +1581,8 @@ export const it = {
   "bots.face.reset": "Torna a quella del nome",
   "bots.subagent.isA": "È un ",
   "bots.subagent.label": "subagente",
-  "bots.subagent.desc": ": non risponde da solo, lo chiama un altro agente. Puoi comunque scrivergli, ma nikcli userà l'agente predefinito al suo posto.",
+  "bots.subagent.desc":
+    ": non risponde da solo, lo chiama un altro agente. Puoi comunque scrivergli, ma nikcli userà l'agente predefinito al suo posto.",
   "bots.permission.request": "Richiesta di permesso",
   "bots.permission.wantsToUse": "Vuole usare",
   "bots.permission.on": "su",
@@ -1493,10 +1606,13 @@ export const it = {
   "bots.approval.reason.database": "cancella tabelle di un database",
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
-  "bots.approval.reason.opaqueShell": "fa girare comandi che nessuna lista può leggere: codificati, presi da una variabile o decodificati",
-  "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
+  "bots.approval.reason.opaqueShell":
+    "fa girare comandi che nessuna lista può leggere: codificati, presi da una variabile o decodificati",
+  "bots.approval.reason.nestedShell":
+    "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
-  "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
+  "bots.approval.reason.tool": (tool: string) =>
+    `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
   "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
@@ -1511,7 +1627,8 @@ export const it = {
   "bots.routine.off": (reason: string) => `Questo bot non può avere routine: ${reason}.`,
   "bots.routine.source": "Fonte",
   "bots.routine.checked": (date: string) => `letta il ${date}`,
-  "bots.routine.empty": "Nessuna routine. Una routine manda da sola un messaggio al bot, a intervalli, solo mentre ADE è aperta.",
+  "bots.routine.empty":
+    "Nessuna routine. Una routine manda da sola un messaggio al bot, a intervalli, solo mentre ADE è aperta.",
   "bots.routine.new": "Nuova routine",
   "bots.routine.prompt": "Che cosa deve fare",
   "bots.routine.kind.hours": "Ogni tot ore",
@@ -1544,8 +1661,10 @@ export const it = {
   "bots.routine.reconsent": "Ridai il consenso",
   "bots.routine.reconsentConfirm": "Acconsento",
   "bots.routine.remove": "Elimina",
-  "bots.routine.suspended.trust": "il bot o il progetto non hanno la tua fiducia: apri la conversazione del bot e rispondi.",
-  "bots.routine.suspended.noProject": "Codex in abbonamento gira solo in un progetto con la tua fiducia: crea la routine con un progetto aperto.",
+  "bots.routine.suspended.trust":
+    "il bot o il progetto non hanno la tua fiducia: apri la conversazione del bot e rispondi.",
+  "bots.routine.suspended.noProject":
+    "Codex in abbonamento gira solo in un progetto con la tua fiducia: crea la routine con un progetto aperto.",
   "bots.routine.mode.plan": "abbonamento",
   "bots.routine.mode.key": "chiave API",
   "bots.routine.mode.free": "modello gratuito",
@@ -1571,7 +1690,8 @@ export const it = {
     `L'ultima esecuzione è costata ${cost}, oltre il tetto di ${max} per esecuzione.`,
   "bots.routine.note.limit": "Il piano ha raggiunto il suo limite: niente altre routine oggi, si riprende domani.",
   "bots.routine.note.perDay": (runs: number) => `Fatte le ${runs} esecuzioni consentite oggi: si riprende domani.`,
-  "bots.routine.note.spendDay": (max: string) => `Il tetto di spesa di oggi (${max}) non basta per un'altra esecuzione: si riprende domani.`,
+  "bots.routine.note.spendDay": (max: string) =>
+    `Il tetto di spesa di oggi (${max}) non basta per un'altra esecuzione: si riprende domani.`,
   "bots.routine.note.missed": (missed: number) =>
     missed === 1
       ? "ADE era chiusa: un'esecuzione saltata non si recupera; ne faccio una adesso."
@@ -1581,7 +1701,8 @@ export const it = {
   "bots.routine.note.stopped": "Fermata.",
   "bots.routine.note.failed": (why: string) => (why ? `Non riuscita: ${why}` : "Non riuscita."),
   "bots.memory.label": "Memoria",
-  "bots.memory.hint": "Il bot la vede all'inizio di ogni conversazione e la cambia dalle sue risposte; i cambi valgono dalla conversazione dopo.",
+  "bots.memory.hint":
+    "Il bot la vede all'inizio di ogni conversazione e la cambia dalle sue risposte; i cambi valgono dalla conversazione dopo.",
   "bots.memory.usage": (block: string, size: number, limit: number) => `${block} · ${size}/${limit} caratteri`,
   "bots.memory.emptyBlock": "Vuoto.",
   "bots.memory.remove": "Togli",
@@ -1605,7 +1726,9 @@ export const it = {
   "bots.memory.error.manyMatches": (block: string, match: string) =>
     `Più voci (${block}) contengono «${match}»: scrivi un pezzo che ne indichi una sola.`,
   "bots.memory.error.unreadable": (count: number) =>
-    count === 1 ? "Un tag ade-memory non era leggibile e non è stato applicato." : `${count} tag ade-memory non erano leggibili e non sono stati applicati.`,
+    count === 1
+      ? "Un tag ade-memory non era leggibile e non è stato applicato."
+      : `${count} tag ade-memory non erano leggibili e non sono stati applicati.`,
   "bots.memory.done.add": (block: string) => `Memoria: aggiunta una voce (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memoria: cambiata una voce (${block}).`,
   "bots.memory.done.remove": (block: string) => `Memoria: tolta una voce (${block}).`,
@@ -1620,7 +1743,8 @@ export const it = {
   "bots.memory.from.routine": "da una routine",
   "bots.memory.from.gateway": "da una chat",
   "bots.memory.from.room": "da una stanza",
-  "bots.room.testOnlyFree": (name: string) => `In ADE Test una stanza ha solo bot su modelli gratuiti: ${name} non lo è.`,
+  "bots.room.testOnlyFree": (name: string) =>
+    `In ADE Test una stanza ha solo bot su modelli gratuiti: ${name} non lo è.`,
   "bots.room.spendRequired": "Con un bot a pagamento serve un tetto di spesa per giro.",
   "bots.room.spendRange": (max: number) => `Il tetto per giro va da più di 0 a ${max} $.`,
   "bots.room.end.rounds": "Tre giri fatti: la stanza si ferma. Scrivi per andare avanti.",
@@ -1635,9 +1759,11 @@ export const it = {
   "bots.room.delete": "Elimina stanza",
   "bots.room.deleteAsk": (name: string) => `Eliminare la stanza «${name}» con la sua conversazione? I bot restano.`,
   "bots.room.notTrusted": (name: string) => `@${name} non ha la tua fiducia: la stanza non parte.`,
-  "bots.room.empty": "Scrivi un messaggio: rispondono tutti, o solo chi citi con @nome (@tutti per tutti). Un giro in cui nessuno ha niente da dire chiude lo scambio.",
+  "bots.room.empty":
+    "Scrivi un messaggio: rispondono tutti, o solo chi citi con @nome (@tutti per tutti). Un giro in cui nessuno ha niente da dire chiude lo scambio.",
   "bots.room.speaking": (name: string) => `@${name} sta scrivendo…`,
-  "bots.room.askingTrust": "Aspetto la tua risposta nella finestra di fiducia di ADE, aperta sopra ADE: se non la vedi, porta ADE in primo piano.",
+  "bots.room.askingTrust":
+    "Aspetto la tua risposta nella finestra di fiducia di ADE, aperta sopra ADE: se non la vedi, porta ADE in primo piano.",
   "bots.room.stop": "Ferma",
   "bots.room.everyone": "tutti",
   "bots.room.user": "utente",
@@ -1678,14 +1804,14 @@ export const it = {
   "bots.terms.parallel": (now: number, label: string, max: number) =>
     `Già ${now} turni di ${label} in corso: ADE ne tiene al massimo ${max} insieme sul tuo abbonamento. Riprova quando uno finisce.`,
   "bots.talk.exited": (program: string, code: number) => `${program} è uscito con codice ${code}.`,
-  "bots.talk.exitedBecause": (program: string, code: number, words: string) => `${program} è uscito con codice ${code}: ${words}`,
+  "bots.talk.exitedBecause": (program: string, code: number, words: string) =>
+    `${program} è uscito con codice ${code}: ${words}`,
   "bots.talk.truncated": "…troncato",
   "bots.lastLine.permission": (name: string) => `Chiede il permesso: ${name}`,
   "bots.lastLine.you": (text: string) => `Tu: ${text}`,
   "bots.when.now": "ora",
   "bots.when.yesterday": "ieri",
-  "bots.when.weekday": (index: number) =>
-    ["dom", "lun", "mar", "mer", "gio", "ven", "sab"][index] ?? `giorno ${index}`,
+  "bots.when.weekday": (index: number) => ["dom", "lun", "mar", "mer", "gio", "ven", "sab"][index] ?? `giorno ${index}`,
   "bots.when.month": (index: number) =>
     ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"][index] ?? `mese ${index}`,
   "bots.turn.timeout": (label: string, span: string) => `${label} non ha finito il turno in ${span}: l'ho fermato.`,
@@ -1697,7 +1823,8 @@ export const it = {
   "bots.turn.noHost": "Nessun host: un turno si esegue solo nell'app desktop.",
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
-  "bots.turn.nikcliOnServer": "Un turno di nikcli gira sul server di nikcli di ADE, con le regole della sua sessione: qui non parte.",
+  "bots.turn.nikcliOnServer":
+    "Un turno di nikcli gira sul server di nikcli di ADE, con le regole della sua sessione: qui non parte.",
   "bots.serve.noFolder": "Un bot nikcli risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
     `Il progetto ${root} non è ancora ammesso per nikcli, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
@@ -1721,7 +1848,8 @@ export const it = {
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
     `Claude Code non ha avuto il permesso per: ${names}. Abilita lo strumento nella scheda del bot.`,
-  "bots.runner.conversationGone": "Claude Code non ha più questa conversazione: il prossimo messaggio ne apre una nuova.",
+  "bots.runner.conversationGone":
+    "Claude Code non ha più questa conversazione: il prossimo messaggio ne apre una nuova.",
   "bots.runner.claudeError": "Claude Code ha concluso con un errore.",
   "bots.runner.command": "comando",
   "bots.runner.edit": "modifica",
@@ -1762,9 +1890,12 @@ export const it = {
   "bots.lastTurn.label": "ultimo turno:",
   "bots.lastTurn.unknownModel": "modello non riportato",
   "bots.conversation.total": "in questa conversazione:",
-  "bots.form.generateCostDefault": "Nikcli scrive la persona con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
-  "bots.form.generateCostPaid": (model: string) => `Nikcli scrive la persona con ${model}. Questa chiamata consuma credito.`,
-  "bots.form.generateCostFree": (model: string) => `Nikcli scrive la persona con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
+  "bots.form.generateCostDefault":
+    "Nikcli scrive la persona con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
+  "bots.form.generateCostPaid": (model: string) =>
+    `Nikcli scrive la persona con ${model}. Questa chiamata consuma credito.`,
+  "bots.form.generateCostFree": (model: string) =>
+    `Nikcli scrive la persona con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
   "bots.scope.project": "progetto",
   "bots.scope.global": "globale",
   "bots.terminal.subagentTip": "Un subagente non si avvia da solo: lo chiama un altro agente",
@@ -1788,7 +1919,8 @@ export const it = {
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
   "bots.form.namePlaceholder": "Revisore",
-  "bots.form.hintGenerating": "Con la persona vuota è nikcli a scegliere l'identificativo: questo nome è solo un promemoria.",
+  "bots.form.hintGenerating":
+    "Con la persona vuota è nikcli a scegliere l'identificativo: questo nome è solo un promemoria.",
   "bots.form.hintNamed": "Diventa il nome del file e l'identificativo passato a --agent.",
   "bots.form.logo": "Logo",
   "bots.form.description": "A cosa serve",
@@ -1799,7 +1931,8 @@ export const it = {
   "bots.form.objectives": "Obiettivi",
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
   "bots.form.persona": "Persona",
-  "bots.form.personaPlaceholder": "Lascia vuoto e la scrive nikcli dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
+  "bots.form.personaPlaceholder":
+    "Lascia vuoto e la scrive nikcli dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
   "bots.form.generateWithNikcli": "Genera con nikcli",
@@ -1810,7 +1943,8 @@ export const it = {
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
   "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Provider.",
-  "bots.terms.notice": "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
+  "bots.terms.notice":
+    "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
   "bots.engine.nikcliDefault": "Predefinito di nikcli",

@@ -118,7 +118,9 @@ describe("planResume", () => {
   test("Claude Code's transcript is looked for where Claude Code writes it", () => {
     const path = RESUME["claude-code"]!.transcript!("C:\\Users\\me", "C:\\Users\\me\\Favorites\\nikcli", "abc")
     expect(path).toBe("C:\\Users\\me\\.claude\\projects\\C--Users-me-Favorites-nikcli\\abc.jsonl")
-    expect(RESUME["claude-code"]!.transcript!("/home/me/", "/w/a.b", "x")).toBe("/home/me/.claude/projects/-w-a-b/x.jsonl")
+    expect(RESUME["claude-code"]!.transcript!("/home/me/", "/w/a.b", "x")).toBe(
+      "/home/me/.claude/projects/-w-a-b/x.jsonl",
+    )
     // Past 200 characters Claude Code hashes the name: unknown, so trusted.
     expect(RESUME["claude-code"]!.transcript!("/h", `/${"a".repeat(220)}`, "x")).toBeUndefined()
   })
@@ -134,7 +136,11 @@ describe("planResume", () => {
     expect(latest.read(text, "C:\\Users\\me\\elsewhere")).toBeUndefined()
     expect(latest.read("not json", "C:\\Users\\me")).toBeUndefined()
     expect(latest.path("C:\\Users\\me")).toBe("C:\\Users\\me\\.gemini\\antigravity-cli\\cache\\last_conversations.json")
-    expect(planResume({ agentId: "agy", resumeId: "x" })).toEqual({ kind: "resume", via: "id", args: ["--conversation", "x"] })
+    expect(planResume({ agentId: "agy", resumeId: "x" })).toEqual({
+      kind: "resume",
+      via: "id",
+      args: ["--conversation", "x"],
+    })
     // No `--session-id` for agy: a vanished conversation cannot be re-pinned, and its id is dropped (`gone`), not reopened.
     expect(planResume({ agentId: "agy", resumeId: "x", missing: true })).toEqual({ kind: "fresh", gone: true })
   })
@@ -196,7 +202,12 @@ describe("planRestore", () => {
 })
 
 describe("the most recent conversation, when one pane is reopened", () => {
-  const pane = (id: string, agent: string, cwd: string, resumeId?: string) => ({ id, agent, cwd, ...(resumeId ? { resumeId } : {}) })
+  const pane = (id: string, agent: string, cwd: string, resumeId?: string) => ({
+    id,
+    agent,
+    cwd,
+    ...(resumeId ? { resumeId } : {}),
+  })
 
   test("nikcli: a pane in another folder, or one holding its own id, does not take it (prove dal vivo 2, B)", () => {
     const mine = pane("b", "nikcli", "C:/proj")
@@ -382,13 +393,19 @@ describe("nikcli's latest conversation in this folder", () => {
     const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
     expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
     // With the other slash and case Windows hands back.
-    expect(lastNikcliHere(output, "c:/users/me/favorites/relbuild-tmp/p1-git/", none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastNikcliHere(output, "c:/users/me/favorites/relbuild-tmp/p1-git/", none)).toBe(
+      "ses_f22f7ce38ffetKaHXDQ4xUS0u0",
+    )
   })
 
   test("a conversation another pane holds is left out", () => {
     const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
-    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0"]))).toBe("ses_f2303a230ffeVeq2JI9TTxJVBW")
-    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0", "ses_f2303a230ffeVeq2JI9TTxJVBW"]))).toBeNull()
+    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0"]))).toBe(
+      "ses_f2303a230ffeVeq2JI9TTxJVBW",
+    )
+    expect(
+      lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0", "ses_f2303a230ffeVeq2JI9TTxJVBW"])),
+    ).toBeNull()
   })
 
   test("another folder's, a child's, or a malformed id is never taken, even if the server let it through", () => {
@@ -403,10 +420,15 @@ describe("nikcli's latest conversation in this folder", () => {
 
   test("a bot's conversation is never a pane's, however recent and whatever its title", () => {
     const output = listed(
-      session("ses_eeeeeeeeeeeeeeeeeeeeeeeeee", 50, { title: "renamed by hand", permission: [BOT_SESSION_MARK, ...botPermission("ask")] }),
+      session("ses_eeeeeeeeeeeeeeeeeeeeeeeeee", 50, {
+        title: "renamed by hand",
+        permission: [BOT_SESSION_MARK, ...botPermission("ask")],
+      }),
       // Made before the mark: the profile's rules at the end say it.
       session("ses_ffffffffffffffffffffffffff", 40, { permission: [...botPermission("remote-none")] }),
-      session("ses_gggggggggggggggggggggggggg", 30, { permission: [{ permission: "edit", pattern: "*", action: "ask" }] }),
+      session("ses_gggggggggggggggggggggggggg", 30, {
+        permission: [{ permission: "edit", pattern: "*", action: "ask" }],
+      }),
     )
     expect(lastNikcliHere(output, HERE, none)).toBe("ses_gggggggggggggggggggggggggg")
   })
@@ -499,7 +521,9 @@ describe("a restore's claims reach the panes it reopens", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const claims = restoreClaims(planned)")
     expect(workbench).toContain("void reopen(pane, undefined, claims)")
-    expect(workbench).toContain("lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)")
+    expect(workbench).toContain(
+      "lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)",
+    )
   })
 })
 
@@ -518,7 +542,9 @@ describe("the conversation a start opens", () => {
 
   test("a minted or found id is the one opened; the most recent one, or a fresh start, is not known", () => {
     expect(openedConversation({ kind: "here" }, "ses_trovata12345678", undefined)).toBe("ses_trovata12345678")
-    expect(openedConversation({ kind: "resume", via: "last", args: ["--continue"] }, undefined, "ses_salvata")).toBeUndefined()
+    expect(
+      openedConversation({ kind: "resume", via: "last", args: ["--continue"] }, undefined, "ses_salvata"),
+    ).toBeUndefined()
     expect(openedConversation({ kind: "fresh" }, undefined, "ses_salvata")).toBeUndefined()
     expect(openedConversation(undefined, undefined, "ses_salvata")).toBeUndefined()
   })
@@ -526,7 +552,9 @@ describe("the conversation a start opens", () => {
   test("lint: the other-folder note is kept for the conversation the start actually reopened", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const openedId = openedConversation(resume, mintedId, launched?.resumeId)")
-    expect(workbench).toContain("if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {")
+    expect(workbench).toContain(
+      "if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {",
+    )
     expect(workbench).toContain("...(openedId !== launched?.resumeId ? { otherDir: undefined } : {}),")
     expect(workbench).not.toContain("mintedId === launched.resumeId")
     expect(workbench).toContain("otherDir: followedFolder(report, workDir, followed ?? {})")
@@ -586,9 +614,13 @@ describe("a conversation being minted is not another pane's «here»", () => {
     const minting = mints.track(new Promise<string | undefined>((resolve) => (answer = resolve)), "p1")
     // The live pane: the list already has C, the newest.
     let settled = false
-    const here = lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints, open).then(
-      (id) => ((settled = true), id),
-    )
+    const here = lastHereBesideMints(
+      answering(listed(session(minted, 30), session(older, 20))),
+      read,
+      new Set(),
+      mints,
+      open,
+    ).then((id) => ((settled = true), id))
     await later()
     expect(settled).toBe(false)
     answer(minted)
@@ -599,7 +631,15 @@ describe("a conversation being minted is not another pane's «here»", () => {
   test("a mint that answered before the list is left out at once", async () => {
     const mints = new MintLedger()
     await mints.track(Promise.resolve(minted), "p1")
-    expect(await lastHereBesideMints(answering(listed(session(minted, 30), session(older, 20))), read, new Set(), mints, open)).toBe(older)
+    expect(
+      await lastHereBesideMints(
+        answering(listed(session(minted, 30), session(older, 20))),
+        read,
+        new Set(),
+        mints,
+        open,
+      ),
+    ).toBe(older)
   })
 
   test("the minted conversation alone in the folder: none here, and the pane mints its own", async () => {
@@ -650,9 +690,13 @@ describe("a conversation being minted is not another pane's «here»", () => {
     const due: (() => void)[] = []
     const timers = { set: (run: () => void) => due.push(run), clear: () => {} }
     const marked = (output: string, taken: ReadonlySet<string>) => lastNikcliHere(output, HERE, taken, [mintMark("p1")])
-    const list = answering(listed(session(minted, 30, { title: `Sessione 1 — nikcli${mintMark("p1")}` }), session(older, 20)))
+    const list = answering(
+      listed(session(minted, 30, { title: `Sessione 1 — nikcli${mintMark("p1")}` }), session(older, 20)),
+    )
     let settled = false
-    const here = lastHereBesideMints(list, marked, new Set(), mints, open, { ms: 15_000, timers }).then((id) => ((settled = true), id))
+    const here = lastHereBesideMints(list, marked, new Set(), mints, open, { ms: 15_000, timers }).then(
+      (id) => ((settled = true), id),
+    )
     await later()
     expect(settled).toBe(false)
     expect(due).toHaveLength(1)
@@ -722,7 +766,10 @@ describe("a resumed start that types nothing is idle, and says it was resumed", 
   })
 
   test("the other starts keep what they said", () => {
-    expect(startingState({ task: "", resumed: true, typeIntoResumed: false })).toMatchObject({ status: "idle", activity: "resumed" })
+    expect(startingState({ task: "", resumed: true, typeIntoResumed: false })).toMatchObject({
+      status: "idle",
+      activity: "resumed",
+    })
     expect(startingState({ task: "Rispondi OK.", resumed: true, typeIntoResumed: true })).toEqual({
       typesTask: true,
       status: "working",

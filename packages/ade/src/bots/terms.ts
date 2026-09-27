@@ -180,7 +180,8 @@ export function routineModeOf(
   /** The catalog's word (`catalog.ts`); absent, the `:free` suffix. */
   free?: boolean,
 ): RoutineMode {
-  if (!runner || runner === "nikcli") return (free ?? (typeof model === "string" && /:free$/i.test(model.trim()))) ? "free" : "paid"
+  if (!runner || runner === "nikcli")
+    return (free ?? (typeof model === "string" && /:free$/i.test(model.trim()))) ? "free" : "paid"
   return accountMode === "key" ? "key" : "plan"
 }
 

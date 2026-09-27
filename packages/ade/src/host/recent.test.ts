@@ -1,5 +1,14 @@
 import { describe, it, expect } from "bun:test"
-import { addRecent, isMissingRecent, missingRecents, removeRecent, serializeRecents, parseRecents, withMissing, type RecentEntry } from "./recent"
+import {
+  addRecent,
+  isMissingRecent,
+  missingRecents,
+  removeRecent,
+  serializeRecents,
+  parseRecents,
+  withMissing,
+  type RecentEntry,
+} from "./recent"
 
 const entry = (root: string, name?: string): Omit<RecentEntry, "openedAt"> => ({
   root,

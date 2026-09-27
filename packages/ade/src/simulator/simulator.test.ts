@@ -103,7 +103,9 @@ describe("guessDevServers", () => {
   })
 
   test("scripts that only build are not dev servers", () => {
-    expect(guessDevServers({ packageJson: JSON.stringify({ scripts: { build: "vite build", test: "vitest" } }) })).toEqual([])
+    expect(
+      guessDevServers({ packageJson: JSON.stringify({ scripts: { build: "vite build", test: "vitest" } }) }),
+    ).toEqual([])
   })
 })
 
@@ -135,7 +137,12 @@ describe("app URLs", () => {
 
 describe("runSimulatorCommand", () => {
   function fake(reachable = true) {
-    let state: SimulatorState = { device: deviceById("iphone-15"), landscape: false, viewportWidth: 393, viewportHeight: 798 }
+    let state: SimulatorState = {
+      device: deviceById("iphone-15"),
+      landscape: false,
+      viewportWidth: 393,
+      viewportHeight: 798,
+    }
     const controller: SimulatorController = {
       state: () => state,
       async open(url) {
@@ -170,7 +177,10 @@ describe("runSimulatorCommand", () => {
       detail: "http://localhost:5173/ su iPhone 15 (393×798, verticale)",
     })
     const down = await runSimulatorCommand(fake(false), request("@ade app open 5173"), neverAsked)
-    expect(down).toEqual({ ok: false, reason: "http://localhost:5173/ su iPhone 15 (393×798, verticale) — server non raggiungibile" })
+    expect(down).toEqual({
+      ok: false,
+      reason: "http://localhost:5173/ su iPhone 15 (393×798, verticale) — server non raggiungibile",
+    })
   })
 
   test("size is for windows only, rotate for devices only", async () => {
@@ -201,24 +211,39 @@ describe("runSimulatorCommand", () => {
     expect(no).toEqual({ ok: false, reason: "negato dall'utente" })
     expect(asked).toEqual(["https://evil.example/app"])
     expect(controller.state().url).toBeUndefined()
-    const yes = await runSimulatorCommand(controller, request("@ade app open https://evil.example/app"), async (url) => {
-      asked.push(url)
-      return true
-    })
+    const yes = await runSimulatorCommand(
+      controller,
+      request("@ade app open https://evil.example/app"),
+      async (url) => {
+        asked.push(url)
+        return true
+      },
+    )
     expect(yes.ok).toBe(true)
     expect(controller.state().url).toBe("https://evil.example/app")
     expect(asked).toEqual(["https://evil.example/app", "https://evil.example/app"])
   })
 
   test("a dev server on this machine opens without asking", async () => {
-    for (const line of ["@ade app open 5173", "@ade app open localhost:8081", "@ade app open http://127.0.0.1:3000", "@ade app open http://[::1]:4000"]) {
+    for (const line of [
+      "@ade app open 5173",
+      "@ade app open localhost:8081",
+      "@ade app open http://127.0.0.1:3000",
+      "@ade app open http://[::1]:4000",
+    ]) {
       expect((await runSimulatorCommand(fake(), request(line), neverAsked)).ok).toBe(true)
     }
   })
 
   test("describes landscape", () => {
-    expect(describeSimulator({ device: deviceById("pixel-8"), landscape: true, viewportWidth: 915, viewportHeight: 412, url: "http://x/" })).toBe(
-      "http://x/ su Pixel 8 (915×412, orizzontale)",
-    )
+    expect(
+      describeSimulator({
+        device: deviceById("pixel-8"),
+        landscape: true,
+        viewportWidth: 915,
+        viewportHeight: 412,
+        url: "http://x/",
+      }),
+    ).toBe("http://x/ su Pixel 8 (915×412, orizzontale)")
   })
 })

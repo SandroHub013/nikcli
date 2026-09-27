@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  createInitialDialogState,
-  DEFAULT_CONFIRMATION_TIMEOUT_MS,
-  transition,
-} from "./session"
+import { createInitialDialogState, DEFAULT_CONFIRMATION_TIMEOUT_MS, transition } from "./session"
 
 describe("dialog state machine", () => {
   describe("wake and sleep cycles", () => {
@@ -25,11 +21,7 @@ describe("dialog state machine", () => {
 
     test("ignores normal commands while asleep", () => {
       const s0 = createInitialDialogState("asleep")
-      const { state: s1, effects } = transition(
-        s0,
-        { type: "utterance", text: "nuova sessione" },
-        1000
-      )
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "nuova sessione" }, 1000)
 
       expect(s1.status).toBe("asleep")
       expect(effects.length).toBe(0)
@@ -47,11 +39,7 @@ describe("dialog state machine", () => {
     test("destructive intent 'uccidi processo' requires confirmation and does not execute directly", () => {
       const s0 = createInitialDialogState("idle")
       const now = 10_000
-      const { state: s1, effects } = transition(
-        s0,
-        { type: "utterance", text: "uccidi processo" },
-        now
-      )
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "uccidi processo" }, now)
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction).toBeDefined()
@@ -66,27 +54,17 @@ describe("dialog state machine", () => {
       // Must ask about this action by name, as a question — not restate the
       // readback, which is a statement and reads as broken Italian in a prompt.
       expect(
-        effects.some(
-          (e) => e.type === "speak" && e.text.includes("Fermo il processo") && e.text.includes("?")
-        )
+        effects.some((e) => e.type === "speak" && e.text.includes("Fermo il processo") && e.text.includes("?")),
       ).toBe(true)
     })
 
     test("confirming a destructive action with 'si' executes the intent", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: s1 } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000
-      )
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
 
       expect(s1.status).toBe("confirming")
 
-      const { state: s2, effects: e2 } = transition(
-        s1,
-        { type: "utterance", text: "si" },
-        12_000
-      )
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "si" }, 12_000)
 
       expect(s2.status).toBe("executing")
       expect(s2.pendingAction).toBeUndefined()
@@ -101,17 +79,9 @@ describe("dialog state machine", () => {
 
     test("cancelling a destructive action with 'annulla' returns to idle without executing", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: s1 } = transition(
-        s0,
-        { type: "utterance", text: "uccidi processo" },
-        10_000
-      )
+      const { state: s1 } = transition(s0, { type: "utterance", text: "uccidi processo" }, 10_000)
 
-      const { state: s2, effects: e2 } = transition(
-        s1,
-        { type: "utterance", text: "annulla" },
-        12_000
-      )
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "annulla" }, 12_000)
 
       expect(s2.status).toBe("idle")
       expect(s2.pendingAction).toBeUndefined()
@@ -121,18 +91,10 @@ describe("dialog state machine", () => {
 
     test("timeout during confirmation automatically aborts to idle", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: s1 } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello" },
-        10_000
-      )
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello" }, 10_000)
 
       const timeoutTime = 10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS + 1
-      const { state: s2, effects: e2 } = transition(
-        s1,
-        { type: "timeout" },
-        timeoutTime
-      )
+      const { state: s2, effects: e2 } = transition(s1, { type: "timeout" }, timeoutTime)
 
       expect(s2.status).toBe("idle")
       expect(s2.pendingAction).toBeUndefined()
@@ -169,9 +131,7 @@ describe("dialog state machine", () => {
 
       expect(s2.status).toBe("idle")
       expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
-      expect(
-        effects.some((e) => e.type === "speak" && e.text.includes("lascio stare"))
-      ).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("lascio stare"))).toBe(true)
     })
 
     test("«non consentire» nega il permesso invece di concederlo", () => {
@@ -179,7 +139,7 @@ describe("dialog state machine", () => {
       const { state: s1 } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
-        5000
+        5000,
       )
       expect(s1.status).toBe("confirming")
 
@@ -212,7 +172,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects: e1 } = transition(
         s0,
         { type: "utterance", text: "inizia dettatura pannello 1" },
-        1000
+        1000,
       )
 
       expect(s1.status).toBe("dictating")
@@ -221,30 +181,15 @@ describe("dialog state machine", () => {
       expect(e1.some((e) => e.type === "speak")).toBe(true)
 
       // Speak words that would normally be commands
-      const { state: s2 } = transition(
-        s1,
-        { type: "utterance", text: "crea un test e chiudi il pannello" },
-        2000
-      )
+      const { state: s2 } = transition(s1, { type: "utterance", text: "crea un test e chiudi il pannello" }, 2000)
       expect(s2.status).toBe("dictating")
       expect(s2.dictation?.chunks).toEqual(["crea un test e chiudi il pannello"])
 
-      const { state: s3 } = transition(
-        s2,
-        { type: "utterance", text: "poi aggiungi la funzione di login" },
-        3000
-      )
-      expect(s3.dictation?.chunks).toEqual([
-        "crea un test e chiudi il pannello",
-        "poi aggiungi la funzione di login",
-      ])
+      const { state: s3 } = transition(s2, { type: "utterance", text: "poi aggiungi la funzione di login" }, 3000)
+      expect(s3.dictation?.chunks).toEqual(["crea un test e chiudi il pannello", "poi aggiungi la funzione di login"])
 
       // Finish dictation
-      const { state: s4, effects: e4 } = transition(
-        s3,
-        { type: "utterance", text: "fine dettatura" },
-        4000
-      )
+      const { state: s4, effects: e4 } = transition(s3, { type: "utterance", text: "fine dettatura" }, 4000)
 
       expect(s4.status).toBe("idle")
       expect(s4.dictation).toBeUndefined()
@@ -252,9 +197,7 @@ describe("dialog state machine", () => {
       expect(promptEffect).toBeDefined()
       if (promptEffect && promptEffect.type === "send_prompt") {
         expect(promptEffect.paneId).toBe("1")
-        expect(promptEffect.text).toBe(
-          "crea un test e chiudi il pannello poi aggiungi la funzione di login"
-        )
+        expect(promptEffect.text).toBe("crea un test e chiudi il pannello poi aggiungi la funzione di login")
       }
     })
   })
@@ -267,11 +210,7 @@ describe("dialog state machine", () => {
   describe("permission.allow free-standing requires confirmation", () => {
     test("«autorizza» in idle enters confirming and does not answer the permission", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: s1, effects } = transition(
-        s0,
-        { type: "utterance", text: "autorizza" },
-        10_000
-      )
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "autorizza" }, 10_000)
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.intent.intent).toBe("permission.allow")
@@ -315,7 +254,7 @@ describe("dialog state machine", () => {
         s0,
         { type: "permission_requested", paneId: "agent-1", what: raw, kind: "shell" },
         5000,
-        { panes }
+        { panes },
       )
 
       expect(s1.status).toBe("confirming")
@@ -354,12 +293,9 @@ describe("dialog state machine", () => {
           isFile: false,
         },
       ]
-      const { state: s1, effects } = transition(
-        s0,
-        { type: "utterance", text: "autorizza pannello 2" },
-        10_000,
-        { panes }
-      )
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "autorizza pannello 2" }, 10_000, {
+        panes,
+      })
 
       expect(s1.status).toBe("confirming")
       const speak = effects.find((e) => e.type === "speak")
@@ -397,12 +333,7 @@ describe("dialog state machine", () => {
           isFile: false,
         },
       ]
-      const { state: s1, effects } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000,
-        { panes }
-      )
+      const { state: s1, effects } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000, { panes })
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
@@ -426,12 +357,7 @@ describe("dialog state machine", () => {
           isFile: false,
         },
       ]
-      const { state: s1 } = transition(
-        s0,
-        { type: "utterance", text: "uccidi processo 1" },
-        10_000,
-        { panes }
-      )
+      const { state: s1 } = transition(s0, { type: "utterance", text: "uccidi processo 1" }, 10_000, { panes })
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.confirmPrompt).toContain("Bastelli")
@@ -466,23 +392,19 @@ describe("dialog state machine", () => {
         },
       ]
 
-      const { state: s1 } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello" },
-        10_000,
-        { panes, focusedPaneId: "pane-1" }
-      )
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello" }, 10_000, {
+        panes,
+        focusedPaneId: "pane-1",
+      })
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.slots.paneId).toBe("pane-1")
 
       // A click moves focus before the answer: the slots must not follow.
-      const { state: s2, effects } = transition(
-        s1,
-        { type: "utterance", text: "sì" },
-        12_000,
-        { panes, focusedPaneId: "pane-2" }
-      )
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 12_000, {
+        panes,
+        focusedPaneId: "pane-2",
+      })
       expect(s2.status).toBe("executing")
       const exec = effects.find((e) => e.type === "execute_intent")
       expect(exec).toBeDefined()
@@ -498,7 +420,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects: e1 } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
-        5000
+        5000,
       )
 
       expect(s1.status).toBe("confirming")
@@ -508,11 +430,7 @@ describe("dialog state machine", () => {
       expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(false)
 
       // User says 'consenti'
-      const { state: s2, effects: e2 } = transition(
-        s1,
-        { type: "utterance", text: "consenti" },
-        20_000
-      )
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "consenti" }, 20_000)
 
       expect(s2.status).toBe("idle")
       const ansEffect = e2.find((e) => e.type === "answer_permission")
@@ -528,7 +446,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects: e1 } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "bun test", silent: true },
-        5000
+        5000,
       )
 
       expect(s1.status).toBe("confirming")
@@ -541,14 +459,10 @@ describe("dialog state machine", () => {
       const { state: s1 } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "curl http://malicious.test" },
-        5000
+        5000,
       )
 
-      const { state: s2, effects: e2 } = transition(
-        s1,
-        { type: "utterance", text: "rifiuta" },
-        6000
-      )
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "rifiuta" }, 6000)
 
       expect(s2.status).toBe("idle")
       const ansEffect = e2.find((e) => e.type === "answer_permission")
@@ -566,7 +480,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects } = transition(
         s0,
         { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "rispondi sì al permesso" },
-        10_000
+        10_000,
       )
 
       expect(s1.status).toBe("confirming")
@@ -589,7 +503,7 @@ describe("dialog state machine", () => {
       const { state: s1 } = transition(
         s0,
         { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "nota" },
-        10_000
+        10_000,
       )
       const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 11_000)
 
@@ -608,7 +522,7 @@ describe("dialog state machine", () => {
       const { state: s1 } = transition(
         s0,
         { type: "send_requested", id: "m-2", to: "Browser", text: "comando pericoloso" },
-        10_000
+        10_000,
       )
       const { state: s2, effects } = transition(s1, { type: "utterance", text: "non confermo" }, 11_000)
 
@@ -625,11 +539,7 @@ describe("dialog state machine", () => {
 
     test("the send times out unapproved, like any other confirmation", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: s1 } = transition(
-        s0,
-        { type: "send_requested", id: "m-3", to: "Codex", text: "nota" },
-        10_000
-      )
+      const { state: s1 } = transition(s0, { type: "send_requested", id: "m-3", to: "Codex", text: "nota" }, 10_000)
       const { state: s2, effects } = transition(s1, { type: "timeout" }, 10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS)
 
       expect(s2.status).toBe("idle")
@@ -647,11 +557,7 @@ describe("dialog state machine", () => {
     test("during confirming: queues without replacing the pending action, then promotes after the answer", () => {
       // User asked to close pane 2; confirmation is in flight.
       const s0 = createInitialDialogState("idle")
-      const { state: confirming } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000
-      )
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
       expect(confirming.status).toBe("confirming")
       expect(confirming.pendingAction?.intent.intent).toBe("pane.close")
 
@@ -659,7 +565,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects: e1 } = transition(
         confirming,
         { type: "permission_requested", paneId: "agent-3", what: "rm -rf build", kind: "shell" },
-        11_000
+        11_000,
       )
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.intent.intent).toBe("pane.close")
@@ -669,12 +575,8 @@ describe("dialog state machine", () => {
         kind: "shell",
         silent: undefined,
       })
-      expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("un comando"))
-      ).toBe(true)
-      expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
-      ).toBe(false)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(false)
       expect(e1.some((e) => e.type === "answer_permission")).toBe(false)
 
       // User confirms the close: executes, does NOT answer the permission yet.
@@ -690,26 +592,18 @@ describe("dialog state machine", () => {
       expect(s3.pendingAction?.isPermission).toBe(true)
       expect(s3.pendingAction?.paneId).toBe("agent-3")
       expect(s3.queuedPermission).toBeUndefined()
-      expect(
-        e3.some((e) => e.type === "speak" && e.text.includes("un comando"))
-      ).toBe(true)
-      expect(
-        e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
-      ).toBe(false)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))).toBe(false)
       expect(e3.some((e) => e.type === "start_timer")).toBe(true)
     })
 
     test("during confirming: a denied confirmation still promotes the queued permission", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: confirming } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000
-      )
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
       const { state: s1 } = transition(
         confirming,
         { type: "permission_requested", paneId: "agent-3", what: "curl evil.test", kind: "network" },
-        11_000
+        11_000,
       )
       expect(s1.queuedPermission).toBeDefined()
 
@@ -724,21 +618,13 @@ describe("dialog state machine", () => {
 
     test("during dictating: queues, keeps the buffer, promotes when dictation finishes", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: dictating } = transition(
-        s0,
-        { type: "utterance", text: "inizia dettatura pannello 1" },
-        1000
-      )
-      const { state: s1 } = transition(
-        dictating,
-        { type: "utterance", text: "crea un test" },
-        2000
-      )
+      const { state: dictating } = transition(s0, { type: "utterance", text: "inizia dettatura pannello 1" }, 1000)
+      const { state: s1 } = transition(dictating, { type: "utterance", text: "crea un test" }, 2000)
 
       const { state: s2, effects: e2 } = transition(
         s1,
         { type: "permission_requested", paneId: "agent-9", what: "npm publish", kind: "shell" },
-        3000
+        3000,
       )
       expect(s2.status).toBe("dictating")
       expect(s2.dictation?.chunks).toEqual(["crea un test"])
@@ -748,11 +634,7 @@ describe("dialog state machine", () => {
       // The dictation must not be sent or dropped by the permission.
       expect(e2.some((e) => e.type === "send_prompt")).toBe(false)
 
-      const { state: s3, effects: e3 } = transition(
-        s2,
-        { type: "utterance", text: "fine dettatura" },
-        4000
-      )
+      const { state: s3, effects: e3 } = transition(s2, { type: "utterance", text: "fine dettatura" }, 4000)
       expect(e3.some((e) => e.type === "send_prompt" && e.text === "crea un test")).toBe(true)
       expect(s3.status).toBe("confirming")
       expect(s3.dictation).toBeUndefined()
@@ -768,19 +650,15 @@ describe("dialog state machine", () => {
       const { state: s1, effects: e1 } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "sudo apt install", kind: "shell" },
-        5000
+        5000,
       )
 
       // Stays asleep: room noise must not open a 30 s granting window.
       expect(s1.status).toBe("asleep")
       expect(s1.pendingAction).toBeUndefined()
       expect(s1.queuedPermission?.paneId).toBe("agent-1")
-      expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("un comando"))
-      ).toBe(true)
-      expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))
-      ).toBe(false)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(false)
 
       const { state: s2, effects: e2 } = transition(s1, { type: "wake" }, 6000)
       expect(s2.status).toBe("confirming")
@@ -794,15 +672,11 @@ describe("dialog state machine", () => {
 
     test("silent permission during confirming queues without speaking", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: confirming } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000
-      )
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
       const { state: s1, effects: e1 } = transition(
         confirming,
         { type: "permission_requested", paneId: "agent-3", what: "git push --force", silent: true },
-        11_000
+        11_000,
       )
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.intent.intent).toBe("pane.close")
@@ -813,20 +687,16 @@ describe("dialog state machine", () => {
 
     test("a second permission while one is already queued keeps the first", () => {
       const s0 = createInitialDialogState("idle")
-      const { state: confirming } = transition(
-        s0,
-        { type: "utterance", text: "chiudi pannello 2" },
-        10_000
-      )
+      const { state: confirming } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
       const { state: s1 } = transition(
         confirming,
         { type: "permission_requested", paneId: "agent-a", what: "first tool" },
-        11_000
+        11_000,
       )
       const { state: s2 } = transition(
         s1,
         { type: "permission_requested", paneId: "agent-b", what: "second tool" },
-        11_500
+        11_500,
       )
       expect(s2.queuedPermission?.paneId).toBe("agent-a")
       expect(s2.pendingAction?.intent.intent).toBe("pane.close")
@@ -837,7 +707,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects } = transition(
         s0,
         { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
-        5000
+        5000,
       )
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.isPermission).toBe(true)

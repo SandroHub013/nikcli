@@ -37,7 +37,8 @@ export function tauriGatewayBridge(): GatewayBridge {
     },
     ready: () => invoke<void>("gateway_ready"),
     send: (bot, platform, chat, text) => invoke<string>("gateway_send", { bot, platform, chat, text, buttons: null }),
-    sendButtons: (bot, platform, chat, text, buttons) => invoke<string>("gateway_send", { bot, platform, chat, text, buttons }),
+    sendButtons: (bot, platform, chat, text, buttons) =>
+      invoke<string>("gateway_send", { bot, platform, chat, text, buttons }),
     typing: (bot, platform, chat) => invoke<void>("gateway_typing", { bot, platform, chat }),
     async project(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")
@@ -54,7 +55,8 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
     slackManifest: (name) => invoke("gateway_slack_manifest", { name }),
     clearToken: (bot, platform) => invoke("gateway_clear_token", { bot, platform }),
     probe: (bot, platform) => invoke("gateway_probe", { bot, platform }),
-    setEnabled: (bot, platform, enabled, project) => invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null }),
+    setEnabled: (bot, platform, enabled, project) =>
+      invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null }),
     pairingList: (bot, platform) => invoke("gateway_pairing_list", { bot, platform }),
     pairingApprove: (bot, platform, code) => invoke("gateway_pairing_approve", { bot, platform, code }),
     pairingReject: (bot, platform, request) => invoke("gateway_pairing_reject", { bot, platform, request }),

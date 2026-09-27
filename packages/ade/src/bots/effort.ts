@@ -74,7 +74,11 @@ export function effortChoices(input: {
 }): EffortChoices {
   const saved = input.saved.trim()
   if (!input.nikcli) {
-    return { options: input.fixed, ...(saved && !input.fixed.includes(saved) ? { kept: saved } : {}), none: input.fixed.length === 0 }
+    return {
+      options: input.fixed,
+      ...(saved && !input.fixed.includes(saved) ? { kept: saved } : {}),
+      none: input.fixed.length === 0,
+    }
   }
   if (input.variants === undefined) return { options: [], ...(saved ? { kept: saved } : {}), none: false }
   if (input.variants.length === 0) return { options: [], ...(saved ? { stale: saved } : {}), none: true }

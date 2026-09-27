@@ -259,14 +259,11 @@ describe("dispatch", () => {
       expect(outcome.success).toBe(false)
     })
 
-    test.each(["dialog.confirm", "dialog.cancel", "dictation.finish"])(
-      "%s senza nulla in corso",
-      async (intent) => {
-        const { outcome } = await run(intent, {})
-        expect(outcome.success).toBe(false)
-        expect(outcome.spoken).toStartWith("Non c'è")
-      },
-    )
+    test.each(["dialog.confirm", "dialog.cancel", "dictation.finish"])("%s senza nulla in corso", async (intent) => {
+      const { outcome } = await run(intent, {})
+      expect(outcome.success).toBe(false)
+      expect(outcome.spoken).toStartWith("Non c'è")
+    })
 
     test("progetto recente senza nome apre la scelta del progetto", async () => {
       const { outcome, host } = await run("project.recent", {})
@@ -307,16 +304,11 @@ describe("dispatch", () => {
     test("dispatches sendPrompt", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
-      const outcome = await dispatch(
-        makeParseResult(spec, { paneIndex: 1, text: "esegui il build" }),
-        host
-      )
+      const outcome = await dispatch(makeParseResult(spec, { paneIndex: 1, text: "esegui il build" }), host)
 
       expect(outcome.success).toBe(true)
       expect(
-        host.calls.some(
-          (c) => c.method === "sendPrompt" && c.args[0] === "pane-1" && c.args[1] === "esegui il build"
-        )
+        host.calls.some((c) => c.method === "sendPrompt" && c.args[0] === "pane-1" && c.args[1] === "esegui il build"),
       ).toBe(true)
     })
 
@@ -349,17 +341,15 @@ describe("dispatch", () => {
       test("with text and a focused panel it goes there", async () => {
         const host = new MockVoiceHost()
         const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
-        const outcome = await dispatch(
-          makeParseResult(spec, { text: "esegui il build" }),
-          host,
-          { focusedPaneId: "pane-2" }
-        )
+        const outcome = await dispatch(makeParseResult(spec, { text: "esegui il build" }), host, {
+          focusedPaneId: "pane-2",
+        })
 
         expect(outcome.success).toBe(true)
         expect(
           host.calls.some(
-            (c) => c.method === "sendPrompt" && c.args[0] === "pane-2" && c.args[1] === "esegui il build"
-          )
+            (c) => c.method === "sendPrompt" && c.args[0] === "pane-2" && c.args[1] === "esegui il build",
+          ),
         ).toBe(true)
       })
     })
@@ -385,16 +375,13 @@ describe("dispatch", () => {
     test("dispatches browserNavigate", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "browser.navigate")!
-      const outcome = await dispatch(
-        makeParseResult(spec, { url: "http://localhost:5173", paneIndex: 2 }),
-        host
-      )
+      const outcome = await dispatch(makeParseResult(spec, { url: "http://localhost:5173", paneIndex: 2 }), host)
 
       expect(outcome.success).toBe(true)
       expect(
         host.calls.some(
-          (c) => c.method === "browserNavigate" && c.args[0] === "pane-2" && c.args[1] === "http://localhost:5173"
-        )
+          (c) => c.method === "browserNavigate" && c.args[0] === "pane-2" && c.args[1] === "http://localhost:5173",
+        ),
       ).toBe(true)
     })
 
@@ -405,9 +392,7 @@ describe("dispatch", () => {
 
       expect(outcome.success).toBe(true)
       expect(
-        host.calls.some(
-          (c) => c.method === "answerPermission" && c.args[0] === "pane-1" && c.args[1] === "allow"
-        )
+        host.calls.some((c) => c.method === "answerPermission" && c.args[0] === "pane-1" && c.args[1] === "allow"),
       ).toBe(true)
     })
 
@@ -418,9 +403,7 @@ describe("dispatch", () => {
 
       expect(outcome.success).toBe(true)
       expect(
-        host.calls.some(
-          (c) => c.method === "answerPermission" && c.args[0] === "pane-1" && c.args[1] === "deny"
-        )
+        host.calls.some((c) => c.method === "answerPermission" && c.args[0] === "pane-1" && c.args[1] === "deny"),
       ).toBe(true)
     })
 
@@ -507,10 +490,16 @@ describe("a command that threw", () => {
     expect(plainFailure("TypeError: Cannot read properties of undefined (reading 'id')")).toBe(
       "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.",
     )
-    expect(plainFailure("Failed to fetch")).toBe("Non sono riuscito a farlo. Non ho rete in questo momento: ti sento appena torna.")
+    expect(plainFailure("Failed to fetch")).toBe(
+      "Non sono riuscito a farlo. Non ho rete in questo momento: ti sento appena torna.",
+    )
     expect(plainFailure(undefined)).not.toContain("undefined")
-    expect(plainFailure("ENOENT: no such file, open 'C:/x'")).toBe("Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.")
-    expect(plainFailure("non c'è nessun progetto aperto")).toBe("Non sono riuscito a farlo: non c'è nessun progetto aperto")
+    expect(plainFailure("ENOENT: no such file, open 'C:/x'")).toBe(
+      "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.",
+    )
+    expect(plainFailure("non c'è nessun progetto aperto")).toBe(
+      "Non sono riuscito a farlo: non c'è nessun progetto aperto",
+    )
 
     // English
     expect(plainFailure("TypeError: Cannot read properties of undefined", "en")).toBe(
@@ -543,10 +532,7 @@ test("permission.deny cannot deny a changed pending request", async () => {
   }
   const spec = VOCABULARY.find((v) => v.intent === "permission.deny")!
 
-  const outcome = await dispatch(
-    makeParseResult(spec, { paneIndex: 1, what: "curl original-secret" }),
-    host,
-  )
+  const outcome = await dispatch(makeParseResult(spec, { paneIndex: 1, what: "curl original-secret" }), host)
 
   expect(outcome.success).toBe(false)
   expect(outcome.error).toBe("no_permission")

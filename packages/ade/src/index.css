@@ -174,7 +174,7 @@
    * to 2.75, which is right: there the desktop shows through and a quieter
    * wash would be lost in it.
    */
-  --ade-hover: rgba(0, 0, 0, 0.10);
+  --ade-hover: rgba(0, 0, 0, 0.1);
   --ade-active: rgba(0, 0, 0, 0.18);
 }
 
@@ -229,7 +229,9 @@ body[data-theme="glass"] #root,
  */
 [data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"],
 [data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component],
-[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] > [data-component]:not(:has([data-slot="grid-cell"])) {
+[data-component="ade-shell"][data-theme="glass"]
+  [data-slot="ade-main"]
+  > [data-component]:not(:has([data-slot="grid-cell"])) {
   background: var(--ade-glass-read);
 }
 
@@ -272,7 +274,6 @@ body[data-theme="glass"] #root,
   background: color-mix(in srgb, var(--ade-overlay) 88%, transparent);
 }
 
-
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
   /*
@@ -285,7 +286,7 @@ body[data-theme="glass"] #root,
   --ade-surface: light-dark(#faf9f8, #1a1818);
   --ade-raised: light-dark(#ffffff, #211e1e);
   --ade-overlay: light-dark(#ffffff, #2a2626);
-  --ade-scrim: light-dark(rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.55));
+  --ade-scrim: light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.55));
 
   /* ── borders ───────────────────────────────────────────────────────────── */
   /*
@@ -297,7 +298,7 @@ body[data-theme="glass"] #root,
   --ade-border-subtle: light-dark(#e8e5e2, #232020);
   --ade-border: light-dark(#d8d4d0, #2b2727);
   --ade-border-strong: light-dark(#c2bdb8, #3a3535);
-  --ade-highlight: light-dark(rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.04));
+  --ade-highlight: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.04));
 
   /* ── text ───────────────────────────────────────────────────────────────── */
   /*
@@ -322,10 +323,10 @@ body[data-theme="glass"] #root,
    * measures 6.8:1 on raised.
    */
   --ade-accent: light-dark(#1a9e87, #7fd6c4);
-  --ade-accent-soft: light-dark(rgba(26, 158, 135, 0.10), rgba(127, 214, 196, 0.15));
+  --ade-accent-soft: light-dark(rgba(26, 158, 135, 0.1), rgba(127, 214, 196, 0.15));
   --ade-accent-strong: light-dark(#148272, #5ec4ae);
   --ade-accent-fg: light-dark(#ffffff, #0a1613);
-  --ade-accent-glow: light-dark(rgba(26, 158, 135, 0.15), rgba(127, 214, 196, 0.20));
+  --ade-accent-glow: light-dark(rgba(26, 158, 135, 0.15), rgba(127, 214, 196, 0.2));
 
   /* ── status ─────────────────────────────────────────────────────────────── */
   /*
@@ -335,13 +336,13 @@ body[data-theme="glass"] #root,
    * for badges and tinted rows.
    */
   --ade-working: light-dark(#9a6d28, #d9a45f);
-  --ade-working-bg: light-dark(rgba(154, 109, 40, 0.10), rgba(217, 164, 95, 0.12));
+  --ade-working-bg: light-dark(rgba(154, 109, 40, 0.1), rgba(217, 164, 95, 0.12));
   --ade-waiting: light-dark(#3b6fb0, #7da9e4);
-  --ade-waiting-bg: light-dark(rgba(59, 111, 176, 0.10), rgba(125, 169, 228, 0.12));
+  --ade-waiting-bg: light-dark(rgba(59, 111, 176, 0.1), rgba(125, 169, 228, 0.12));
   --ade-done: light-dark(#2e8a50, #71c491);
-  --ade-done-bg: light-dark(rgba(46, 138, 80, 0.10), rgba(113, 196, 145, 0.12));
+  --ade-done-bg: light-dark(rgba(46, 138, 80, 0.1), rgba(113, 196, 145, 0.12));
   --ade-error: light-dark(#b74a5e, #e0879a);
-  --ade-error-bg: light-dark(rgba(183, 74, 94, 0.10), rgba(224, 135, 154, 0.12));
+  --ade-error-bg: light-dark(rgba(183, 74, 94, 0.1), rgba(224, 135, 154, 0.12));
   /*
    * Amber for what waits on someone (a recipient still missing, a check not yet
    * run). It was only ever a fallback, #b7791f, which reads under 4.5:1 as text
@@ -367,18 +368,9 @@ body[data-theme="glass"] #root,
   /* ── elevation ──────────────────────────────────────────────────────────── */
   /* Short, low-opacity shadows: depth, not smoke. Lighter on light grounds,
      where the same opacity would read as dirt. */
-  --ade-shadow-sm: light-dark(
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 1px 2px rgba(0, 0, 0, 0.25)
-  );
-  --ade-shadow-md: light-dark(
-    0 2px 6px rgba(0, 0, 0, 0.10),
-    0 2px 6px rgba(0, 0, 0, 0.30)
-  );
-  --ade-shadow-lg: light-dark(
-    0 4px 16px rgba(0, 0, 0, 0.14),
-    0 4px 16px rgba(0, 0, 0, 0.40)
-  );
+  --ade-shadow-sm: light-dark(0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.25));
+  --ade-shadow-md: light-dark(0 2px 6px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.3));
+  --ade-shadow-lg: light-dark(0 4px 16px rgba(0, 0, 0, 0.14), 0 4px 16px rgba(0, 0, 0, 0.4));
 
   /* ── motion ─────────────────────────────────────────────────────────────── */
   --ade-dur-fast: 120ms;
@@ -411,10 +403,8 @@ body[data-theme="glass"] #root,
    * all, so its hover snapped.
    */
   --ade-btn-transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    border-color var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
+    background var(--ade-dur-fast) var(--ade-ease), border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease), transform var(--ade-dur-fast) var(--ade-ease);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
   /* One ring, applied everywhere through :focus-visible, and neutral in every
@@ -428,9 +418,7 @@ body[data-theme="glass"] #root,
      `grid/contorni.test.ts` computes it per theme and asks for 3:1. The softer
      second layer is the same grey mixed with nothing, so the geometry is
      unchanged and only the hue moved. */
-  --ade-focus-ring:
-    0 0 0 2px var(--ade-text-weak),
-    0 0 0 4px color-mix(in srgb, var(--ade-text-weak) 45%, transparent);
+  --ade-focus-ring: 0 0 0 2px var(--ade-text-weak), 0 0 0 4px color-mix(in srgb, var(--ade-text-weak) 45%, transparent);
 
   --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
 
@@ -663,8 +651,7 @@ body,
  * progress nothing inside the panes may select text or take the pointer, or a
  * terminal under the cursor swallows the move and the drop never arrives.
  */
-[data-component="session-grid"]:has(> [data-slot="grid-cell"] + [data-slot="grid-cell"])
-  [data-slot="pane-header"] {
+[data-component="session-grid"]:has(> [data-slot="grid-cell"] + [data-slot="grid-cell"]) [data-slot="pane-header"] {
   cursor: grab;
 }
 
@@ -704,13 +691,37 @@ body,
  * the other. The dashed border is dropped for the edges, because a border
  * follows the box and not the clip.
  */
-[data-slot="drop-zone"] { inset: 0; }
-[data-slot="drop-zone"][data-zone="swap"] { inset: 30%; border-radius: var(--ade-radius-lg); }
-[data-slot="drop-zone"]:not([data-zone="swap"]) { border: none; border-radius: 0; }
-[data-slot="drop-zone"][data-zone="before"] { clip-path: polygon(0 0, 30% 30%, 30% 70%, 0 100%); justify-content: flex-start; padding-left: 4%; }
-[data-slot="drop-zone"][data-zone="after"] { clip-path: polygon(100% 0, 70% 30%, 70% 70%, 100% 100%); justify-content: flex-end; padding-right: 4%; }
-[data-slot="drop-zone"][data-zone="above"] { clip-path: polygon(0 0, 100% 0, 70% 30%, 30% 30%); align-items: flex-start; padding-top: 6%; }
-[data-slot="drop-zone"][data-zone="below"] { clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%); align-items: flex-end; padding-bottom: 6%; }
+[data-slot="drop-zone"] {
+  inset: 0;
+}
+[data-slot="drop-zone"][data-zone="swap"] {
+  inset: 30%;
+  border-radius: var(--ade-radius-lg);
+}
+[data-slot="drop-zone"]:not([data-zone="swap"]) {
+  border: none;
+  border-radius: 0;
+}
+[data-slot="drop-zone"][data-zone="before"] {
+  clip-path: polygon(0 0, 30% 30%, 30% 70%, 0 100%);
+  justify-content: flex-start;
+  padding-left: 4%;
+}
+[data-slot="drop-zone"][data-zone="after"] {
+  clip-path: polygon(100% 0, 70% 30%, 70% 70%, 100% 100%);
+  justify-content: flex-end;
+  padding-right: 4%;
+}
+[data-slot="drop-zone"][data-zone="above"] {
+  clip-path: polygon(0 0, 100% 0, 70% 30%, 30% 30%);
+  align-items: flex-start;
+  padding-top: 6%;
+}
+[data-slot="drop-zone"][data-zone="below"] {
+  clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%);
+  align-items: flex-end;
+  padding-bottom: 6%;
+}
 
 [data-slot="drop-zone-label"] {
   padding: var(--ade-space-2) var(--ade-space-5);
@@ -757,7 +768,9 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-slot="tile-resize"] { transition: none; }
+  [data-slot="tile-resize"] {
+    transition: none;
+  }
 }
 
 /* Pane rules live in grid/pane.css — the card owns its own stylesheet. */
@@ -784,7 +797,6 @@ body,
     opacity: 0.45;
   }
 }
-
 
 /* ── sidebar ──────────────────────────────────────────────────────────────── */
 
@@ -1177,7 +1189,6 @@ body,
   font-family: var(--ade-sans);
 }
 
-
 /* Registrazione in corso (S36): sopra ogni cosa, perché nessuno deve filmare
    senza saperlo. Il punto pulsa solo mentre si registra davvero. Sta nella
    barra, prima dei pulsanti della finestra: fisso nell'angolo li copriva.
@@ -1215,11 +1226,15 @@ body,
 }
 
 @keyframes ade-rec-pulse {
-  50% { opacity: 0.25; }
+  50% {
+    opacity: 0.25;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-slot="ade-rec-dot"] { animation: none; }
+  [data-slot="ade-rec-dot"] {
+    animation: none;
+  }
 }
 
 /* An agent asks to record (S36): one question, the microphone as its own switch. */
@@ -1344,7 +1359,6 @@ body,
   }
 }
 
-
 /*
  * While a take runs (S36), secrets are not drawn at all, so no frame of the
  * video can hold one. The user sees them covered too, which says why.
@@ -1367,9 +1381,96 @@ html[data-ade-recording] input[type="password"],
 html[data-ade-recording] input[autocomplete="current-password"],
 html[data-ade-recording] input[autocomplete="new-password"],
 html[data-ade-recording] input[autocomplete="one-time-code"],
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i]),
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i]),
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i]),
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id*="key" i],
+    [name*="key" i],
+    [aria-label*="key" i],
+    [placeholder*="key" i],
+    [data-testid*="key" i],
+    [id*="chiave" i],
+    [name*="chiave" i],
+    [aria-label*="chiave" i],
+    [placeholder*="chiave" i],
+    [data-testid*="chiave" i],
+    [id*="token" i],
+    [name*="token" i],
+    [aria-label*="token" i],
+    [placeholder*="token" i],
+    [data-testid*="token" i],
+    [id*="secret" i],
+    [name*="secret" i],
+    [aria-label*="secret" i],
+    [placeholder*="secret" i],
+    [data-testid*="secret" i],
+    [id*="segreto" i],
+    [name*="segreto" i],
+    [aria-label*="segreto" i],
+    [placeholder*="segreto" i],
+    [data-testid*="segreto" i],
+    [id*="credential" i],
+    [name*="credential" i],
+    [aria-label*="credential" i],
+    [placeholder*="credential" i],
+    [data-testid*="credential" i],
+    [id*="credenziale" i],
+    [name*="credenziale" i],
+    [aria-label*="credenziale" i],
+    [placeholder*="credenziale" i],
+    [data-testid*="credenziale" i],
+    [id*="passphrase" i],
+    [name*="passphrase" i],
+    [aria-label*="passphrase" i],
+    [placeholder*="passphrase" i],
+    [data-testid*="passphrase" i],
+    [id*="password" i],
+    [name*="password" i],
+    [aria-label*="password" i],
+    [placeholder*="password" i],
+    [data-testid*="password" i],
+    [id*="bearer" i],
+    [name*="bearer" i],
+    [aria-label*="bearer" i],
+    [placeholder*="bearer" i],
+    [data-testid*="bearer" i],
+    [id*="authorization" i],
+    [name*="authorization" i],
+    [aria-label*="authorization" i],
+    [placeholder*="authorization" i],
+    [data-testid*="authorization" i],
+    [id*="dsn" i],
+    [name*="dsn" i],
+    [aria-label*="dsn" i],
+    [placeholder*="dsn" i],
+    [data-testid*="dsn" i],
+    [id*="otp" i],
+    [name*="otp" i],
+    [aria-label*="otp" i],
+    [placeholder*="otp" i],
+    [data-testid*="otp" i]
+  ),
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id="pat" i],
+    [name="pat" i],
+    [aria-label="pat" i],
+    [placeholder="pat" i],
+    [data-testid="pat" i]
+  ),
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [placeholder^="sk-" i],
+    [placeholder^="ghp_" i],
+    [placeholder^="gho_" i],
+    [placeholder^="ghs_" i],
+    [placeholder^="github_pat_" i],
+    [placeholder^="xox" i],
+    [placeholder^="AKIA" i],
+    [placeholder^="AIza" i],
+    [placeholder^="glpat-" i],
+    [placeholder^="hf_" i],
+    [placeholder^="eyJ" i]
+  ),
 html[data-ade-recording] [data-secrets],
 html[data-ade-recording] [data-secrets] * {
   color: transparent !important;
@@ -1383,9 +1484,96 @@ html[data-ade-recording] input[type="password"]::selection,
 html[data-ade-recording] input[autocomplete="current-password"]::selection,
 html[data-ade-recording] input[autocomplete="new-password"]::selection,
 html[data-ade-recording] input[autocomplete="one-time-code"]::selection,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i])::selection,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i])::selection,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i])::selection,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id*="key" i],
+    [name*="key" i],
+    [aria-label*="key" i],
+    [placeholder*="key" i],
+    [data-testid*="key" i],
+    [id*="chiave" i],
+    [name*="chiave" i],
+    [aria-label*="chiave" i],
+    [placeholder*="chiave" i],
+    [data-testid*="chiave" i],
+    [id*="token" i],
+    [name*="token" i],
+    [aria-label*="token" i],
+    [placeholder*="token" i],
+    [data-testid*="token" i],
+    [id*="secret" i],
+    [name*="secret" i],
+    [aria-label*="secret" i],
+    [placeholder*="secret" i],
+    [data-testid*="secret" i],
+    [id*="segreto" i],
+    [name*="segreto" i],
+    [aria-label*="segreto" i],
+    [placeholder*="segreto" i],
+    [data-testid*="segreto" i],
+    [id*="credential" i],
+    [name*="credential" i],
+    [aria-label*="credential" i],
+    [placeholder*="credential" i],
+    [data-testid*="credential" i],
+    [id*="credenziale" i],
+    [name*="credenziale" i],
+    [aria-label*="credenziale" i],
+    [placeholder*="credenziale" i],
+    [data-testid*="credenziale" i],
+    [id*="passphrase" i],
+    [name*="passphrase" i],
+    [aria-label*="passphrase" i],
+    [placeholder*="passphrase" i],
+    [data-testid*="passphrase" i],
+    [id*="password" i],
+    [name*="password" i],
+    [aria-label*="password" i],
+    [placeholder*="password" i],
+    [data-testid*="password" i],
+    [id*="bearer" i],
+    [name*="bearer" i],
+    [aria-label*="bearer" i],
+    [placeholder*="bearer" i],
+    [data-testid*="bearer" i],
+    [id*="authorization" i],
+    [name*="authorization" i],
+    [aria-label*="authorization" i],
+    [placeholder*="authorization" i],
+    [data-testid*="authorization" i],
+    [id*="dsn" i],
+    [name*="dsn" i],
+    [aria-label*="dsn" i],
+    [placeholder*="dsn" i],
+    [data-testid*="dsn" i],
+    [id*="otp" i],
+    [name*="otp" i],
+    [aria-label*="otp" i],
+    [placeholder*="otp" i],
+    [data-testid*="otp" i]
+  )::selection,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id="pat" i],
+    [name="pat" i],
+    [aria-label="pat" i],
+    [placeholder="pat" i],
+    [data-testid="pat" i]
+  )::selection,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [placeholder^="sk-" i],
+    [placeholder^="ghp_" i],
+    [placeholder^="gho_" i],
+    [placeholder^="ghs_" i],
+    [placeholder^="github_pat_" i],
+    [placeholder^="xox" i],
+    [placeholder^="AKIA" i],
+    [placeholder^="AIza" i],
+    [placeholder^="glpat-" i],
+    [placeholder^="hf_" i],
+    [placeholder^="eyJ" i]
+  )::selection,
 html[data-ade-recording] [data-secrets]::selection,
 html[data-ade-recording] [data-secrets] *::selection {
   color: transparent !important;
@@ -1396,9 +1584,96 @@ html[data-ade-recording] input[type="password"]::placeholder,
 html[data-ade-recording] input[autocomplete="current-password"]::placeholder,
 html[data-ade-recording] input[autocomplete="new-password"]::placeholder,
 html[data-ade-recording] input[autocomplete="one-time-code"]::placeholder,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i])::placeholder,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i])::placeholder,
-html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i])::placeholder,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id*="key" i],
+    [name*="key" i],
+    [aria-label*="key" i],
+    [placeholder*="key" i],
+    [data-testid*="key" i],
+    [id*="chiave" i],
+    [name*="chiave" i],
+    [aria-label*="chiave" i],
+    [placeholder*="chiave" i],
+    [data-testid*="chiave" i],
+    [id*="token" i],
+    [name*="token" i],
+    [aria-label*="token" i],
+    [placeholder*="token" i],
+    [data-testid*="token" i],
+    [id*="secret" i],
+    [name*="secret" i],
+    [aria-label*="secret" i],
+    [placeholder*="secret" i],
+    [data-testid*="secret" i],
+    [id*="segreto" i],
+    [name*="segreto" i],
+    [aria-label*="segreto" i],
+    [placeholder*="segreto" i],
+    [data-testid*="segreto" i],
+    [id*="credential" i],
+    [name*="credential" i],
+    [aria-label*="credential" i],
+    [placeholder*="credential" i],
+    [data-testid*="credential" i],
+    [id*="credenziale" i],
+    [name*="credenziale" i],
+    [aria-label*="credenziale" i],
+    [placeholder*="credenziale" i],
+    [data-testid*="credenziale" i],
+    [id*="passphrase" i],
+    [name*="passphrase" i],
+    [aria-label*="passphrase" i],
+    [placeholder*="passphrase" i],
+    [data-testid*="passphrase" i],
+    [id*="password" i],
+    [name*="password" i],
+    [aria-label*="password" i],
+    [placeholder*="password" i],
+    [data-testid*="password" i],
+    [id*="bearer" i],
+    [name*="bearer" i],
+    [aria-label*="bearer" i],
+    [placeholder*="bearer" i],
+    [data-testid*="bearer" i],
+    [id*="authorization" i],
+    [name*="authorization" i],
+    [aria-label*="authorization" i],
+    [placeholder*="authorization" i],
+    [data-testid*="authorization" i],
+    [id*="dsn" i],
+    [name*="dsn" i],
+    [aria-label*="dsn" i],
+    [placeholder*="dsn" i],
+    [data-testid*="dsn" i],
+    [id*="otp" i],
+    [name*="otp" i],
+    [aria-label*="otp" i],
+    [placeholder*="otp" i],
+    [data-testid*="otp" i]
+  )::placeholder,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [id="pat" i],
+    [name="pat" i],
+    [aria-label="pat" i],
+    [placeholder="pat" i],
+    [data-testid="pat" i]
+  )::placeholder,
+html[data-ade-recording]
+  :is(input, textarea, select, [contenteditable]):is(
+    [placeholder^="sk-" i],
+    [placeholder^="ghp_" i],
+    [placeholder^="gho_" i],
+    [placeholder^="ghs_" i],
+    [placeholder^="github_pat_" i],
+    [placeholder^="xox" i],
+    [placeholder^="AKIA" i],
+    [placeholder^="AIza" i],
+    [placeholder^="glpat-" i],
+    [placeholder^="hf_" i],
+    [placeholder^="eyJ" i]
+  )::placeholder,
 html[data-ade-recording] [data-secrets]::placeholder,
 html[data-ade-recording] [data-secrets] *::placeholder {
   visibility: hidden !important;
@@ -1487,4 +1762,3 @@ html[data-ade-recording] [data-theme="glass"] [data-slot="browser-record-veil"] 
 html[data-ade-recording] [data-slot="browser-frame"] {
   visibility: hidden;
 }
-

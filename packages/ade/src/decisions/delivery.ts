@@ -45,7 +45,8 @@ export function parseRecipients(raw: string | null): Record<string, RecipientCho
     const kept: Record<string, RecipientChoice> = {}
     for (const [path, choice] of Object.entries(value as Record<string, unknown>)) {
       const item = choice as Partial<RecipientChoice> | null
-      if (item && typeof item.id === "string" && typeof item.title === "string") kept[path] = { id: item.id, title: item.title }
+      if (item && typeof item.id === "string" && typeof item.title === "string")
+        kept[path] = { id: item.id, title: item.title }
     }
     return kept
   } catch {
@@ -101,7 +102,11 @@ export function recipientOptions(
   }
   // A chosen session whose pane was closed is still listed, so the choice stays visible.
   if (recipient.state !== "non scelta" && !sessions.some((pane) => pane.id === recipient.id)) {
-    options.push({ value: recipient.id, label: `${recipient.title} ${t("decisions.recipient.closed")}`, selected: recipient.id === shown })
+    options.push({
+      value: recipient.id,
+      label: `${recipient.title} ${t("decisions.recipient.closed")}`,
+      selected: recipient.id === shown,
+    })
   }
   return options
 }
@@ -123,7 +128,11 @@ export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
  * answers somewhere waits for a confirmation; choosing nobody, or a change
  * with nothing queued, sends nothing and applies at once.
  */
-export function recipientChange(currentId: string | undefined, nextId: string | undefined, queued: number): "nessuna" | "applica" | "conferma" {
+export function recipientChange(
+  currentId: string | undefined,
+  nextId: string | undefined,
+  queued: number,
+): "nessuna" | "applica" | "conferma" {
   if ((currentId ?? "") === (nextId ?? "")) return "nessuna"
   if (!nextId || queued === 0) return "applica"
   return "conferma"
@@ -136,7 +145,10 @@ export function recipientChange(currentId: string | undefined, nextId: string | 
  * guess by name would type an answer into a session that never asked for it.
  * Pane ids survive a restart, so the choice holds across one.
  */
-export function resolveRecipient(candidates: readonly DeliveryCandidate[], choice: RecipientChoice | undefined): RecipientStatus {
+export function resolveRecipient(
+  candidates: readonly DeliveryCandidate[],
+  choice: RecipientChoice | undefined,
+): RecipientStatus {
   if (!choice) return { state: "non scelta" }
   const pane = candidates.find((candidate) => candidate.id === choice.id)
   if (pane?.running) return { state: "pronta", id: pane.id, title: pane.title }
@@ -220,7 +232,10 @@ export function parseOutbox(raw: string | null): OutboxItem[] {
 }
 
 /** Adds an answer to send, replacing whatever was queued for the same decision. */
-export function enqueue(outbox: readonly OutboxItem[], item: Omit<OutboxItem, "deliveredTo" | "deliveredAt">): OutboxItem[] {
+export function enqueue(
+  outbox: readonly OutboxItem[],
+  item: Omit<OutboxItem, "deliveredTo" | "deliveredAt">,
+): OutboxItem[] {
   return [...outbox.filter((entry) => !(entry.path === item.path && entry.k === item.k)), { ...item }]
 }
 
@@ -257,7 +272,9 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, decisio
 
 /** The items for `path` that still have to go out, oldest first. */
 export function pendingFor(outbox: readonly OutboxItem[], path: string): OutboxItem[] {
-  return outbox.filter((item) => item.path === path && item.deliveredAt === undefined).sort((a, b) => a.queuedAt - b.queuedAt)
+  return outbox
+    .filter((item) => item.path === path && item.deliveredAt === undefined)
+    .sort((a, b) => a.queuedAt - b.queuedAt)
 }
 
 export type DeliveryState =
@@ -267,10 +284,17 @@ export type DeliveryState =
 
 /** What to say under an answer that is waiting to be carried out. */
 export function deliveryState(outbox: readonly OutboxItem[], path: string, decision: Decision): DeliveryState {
-  const item = outbox.find((entry) => entry.path === path && entry.k === decision.k && entry.answeredAt === decision.answer?.at)
+  const item = outbox.find(
+    (entry) => entry.path === path && entry.k === decision.k && entry.answeredAt === decision.answer?.at,
+  )
   if (!item) return { state: "fuori da ADE" }
   if (item.deliveredAt !== undefined && item.deliveredTo) {
-    return { state: "consegnata", to: item.deliveredTo, ...(item.deliveredToId ? { toId: item.deliveredToId } : {}), at: item.deliveredAt }
+    return {
+      state: "consegnata",
+      to: item.deliveredTo,
+      ...(item.deliveredToId ? { toId: item.deliveredToId } : {}),
+      at: item.deliveredAt,
+    }
   }
   return { state: "in coda" }
 }

@@ -25,13 +25,7 @@ import type { PlanStep } from "../plan/schema"
 // Types
 // ---------------------------------------------------------------------------
 
-export type DialogStatus =
-  | "asleep"
-  | "idle"
-  | "listening"
-  | "confirming"
-  | "dictating"
-  | "executing"
+export type DialogStatus = "asleep" | "idle" | "listening" | "confirming" | "dictating" | "executing"
 
 export interface PendingAction {
   /** The parsed intent awaiting explicit confirmation. */
@@ -160,12 +154,35 @@ export function createInitialDialogState(status: DialogStatus = "idle"): DialogS
  * la cena» used to confirm: the parser scored the yes and charged the rest as
  * surplus. A small closed set confirms, and nothing else does.
  */
-const YES_WORDS: ReadonlySet<string> = new Set(["si", "conferma", "confermo", "procedi", "certo", "ok", "okay", "consenti"])
+const YES_WORDS: ReadonlySet<string> = new Set([
+  "si",
+  "conferma",
+  "confermo",
+  "procedi",
+  "certo",
+  "ok",
+  "okay",
+  "consenti",
+])
 
 /** Words that turn an answer into a no wherever they appear: a yes with a «but» is not a yes. */
 const VETO_WORDS: ReadonlySet<string> = new Set([
-  "ma", "pero", "anzi", "dopo", "aspetta", "aspetto", "attendi", "momento",
-  "stop", "fermo", "ferma", "fermati", "annulla", "wait", "nope", "cancel",
+  "ma",
+  "pero",
+  "anzi",
+  "dopo",
+  "aspetta",
+  "aspetto",
+  "attendi",
+  "momento",
+  "stop",
+  "fermo",
+  "ferma",
+  "fermati",
+  "annulla",
+  "wait",
+  "nope",
+  "cancel",
 ])
 
 export type ConfirmationAnswer = "yes" | "no" | "unclear"
@@ -239,11 +256,7 @@ function permissionKindSpeech(kind?: PermissionSpeechKind): string {
   }
 }
 
-function permissionPrompt(
-  paneId: string,
-  kind: PermissionSpeechKind | undefined,
-  ctx: ParseContext,
-): string {
+function permissionPrompt(paneId: string, kind: PermissionSpeechKind | undefined, ctx: ParseContext): string {
   const paneTitle = ctx.panes?.find((p) => p.id === paneId)?.title ?? paneId
   return `L'agente sul pannello «${paneTitle}» richiede il permesso per: ${permissionKindSpeech(kind)}. Vuoi consentire?`
 }
@@ -318,11 +331,7 @@ function sendConfirmationPrompt(to: string, text: string, lead?: string): string
  * permission queue has had its turn. Same contract as
  * {@link promoteQueuedPermission}: null when nothing is queued.
  */
-function promoteQueuedSend(
-  state: DialogState,
-  now: number,
-  effects: DialogEffect[],
-): TransitionResult | null {
+function promoteQueuedSend(state: DialogState, now: number, effects: DialogEffect[]): TransitionResult | null {
   const req = state.queuedSend
   if (!req) return null
 
@@ -404,11 +413,7 @@ function promoteQueued(
 }
 
 /** Same as the machine's `withSpoken`, usable from the module-level helper. */
-function withSpokenLocal(
-  nextState: DialogState,
-  text: string,
-  effects: DialogEffect[],
-): TransitionResult {
+function withSpokenLocal(nextState: DialogState, text: string, effects: DialogEffect[]): TransitionResult {
   effects.push({ type: "speak", text })
   return {
     state: { ...nextState, lastSpokenText: text },
@@ -432,7 +437,7 @@ export function transition(
   state: DialogState,
   event: DialogEvent,
   now: number,
-  ctx: ParseContext = {}
+  ctx: ParseContext = {},
 ): TransitionResult {
   const effects: DialogEffect[] = []
 
@@ -468,12 +473,22 @@ export function transition(
    */
   if (event.type === "permission_resolved") {
     const queued = state.queuedPermission?.paneId === event.paneId ? undefined : state.queuedPermission
-    const asked = state.status === "confirming" && state.pendingAction?.isPermission && state.pendingAction.paneId === event.paneId
+    const asked =
+      state.status === "confirming" && state.pendingAction?.isPermission && state.pendingAction.paneId === event.paneId
     if (!asked) return { state: { ...state, queuedPermission: queued }, effects: [] }
     effects.push({ type: "cancel_timer" })
-    const closed: DialogState = { ...state, status: "idle", pendingAction: undefined, timeoutAt: undefined, queuedPermission: queued }
+    const closed: DialogState = {
+      ...state,
+      status: "idle",
+      pendingAction: undefined,
+      timeoutAt: undefined,
+      queuedPermission: queued,
+    }
     const title = ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
-    return promoteQueued(closed, now, ctx, effects) ?? withSpoken(closed, `Il pannello «${title}» ha già avuto la sua risposta.`)
+    return (
+      promoteQueued(closed, now, ctx, effects) ??
+      withSpoken(closed, `Il pannello «${title}» ha già avuto la sua risposta.`)
+    )
   }
 
   if (event.type === "permission_requested") {
@@ -486,11 +501,10 @@ export function transition(
      */
     /* The pane being asked asks again: its new request replaces the question, it does not queue behind it. */
     const sameAsked =
-      state.status === "confirming" && state.pendingAction?.isPermission === true && state.pendingAction.paneId === event.paneId
-    if (
-      !sameAsked &&
-      (state.status === "confirming" || state.status === "dictating" || state.status === "asleep")
-    ) {
+      state.status === "confirming" &&
+      state.pendingAction?.isPermission === true &&
+      state.pendingAction.paneId === event.paneId
+    if (!sameAsked && (state.status === "confirming" || state.status === "dictating" || state.status === "asleep")) {
       /* First in wins: a second arrival while one is already waiting does
        * not drop the first question on the floor. The same pane asking again
        * is not a second arrival: its newer request is the one on screen. */
@@ -509,8 +523,7 @@ export function transition(
         return { state: nextState, effects: [] }
       }
 
-      const paneTitle =
-        ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
+      const paneTitle = ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
       return withSpokenLocal(
         nextState,
         `Ho messo in coda una richiesta di permesso dal pannello «${paneTitle}» per: ${permissionKindSpeech(event.kind)}. La affronto appena posso.`,
@@ -562,11 +575,7 @@ export function transition(
    * confirmation, a dictation, or sleep (rilievo 20).
    */
   if (event.type === "send_requested") {
-    if (
-      state.status === "confirming" ||
-      state.status === "dictating" ||
-      state.status === "asleep"
-    ) {
+    if (state.status === "confirming" || state.status === "dictating" || state.status === "asleep") {
       /*
        * One in line at a time, first in wins. A third was dropped yet told
        * «in coda», and its sender waited for ever (V1-ter, reserve of ALTO 8):
@@ -574,11 +583,7 @@ export function transition(
        */
       if (state.queuedSend && state.queuedSend.id !== event.id) {
         effects.push({ type: "confirm_send", id: event.id, approved: false })
-        return withSpokenLocal(
-          state,
-          `Ho già un messaggio in coda: non invio quello a «${event.to}».`,
-          effects,
-        )
+        return withSpokenLocal(state, `Ho già un messaggio in coda: non invio quello a «${event.to}».`, effects)
       }
       const queuedSend = state.queuedSend ?? {
         id: event.id,
@@ -625,7 +630,11 @@ export function transition(
       if (state.queuedPlan) {
         return withSpokenLocal(state, "Ho già un piano in coda: non chiedo il nuovo, chiedo il primo.", effects)
       }
-      return withSpokenLocal({ ...state, queuedPlan: plan }, "Ho messo in coda il piano. Te lo chiedo appena posso.", effects)
+      return withSpokenLocal(
+        { ...state, queuedPlan: plan },
+        "Ho messo in coda il piano. Te lo chiedo appena posso.",
+        effects,
+      )
     }
     return askPlan(state, plan, now, effects)
   }
@@ -634,10 +643,7 @@ export function transition(
   if (state.status === "asleep") {
     if (event.type === "wake") {
       const woken = { ...state, status: "idle" as const }
-      return (
-        promoteQueued(woken, now, ctx, effects) ??
-        withSpoken(woken, "Sono sveglio e in ascolto.")
-      )
+      return promoteQueued(woken, now, ctx, effects) ?? withSpoken(woken, "Sono sveglio e in ascolto.")
     }
 
     if (event.type === "utterance") {
@@ -655,10 +661,7 @@ export function transition(
   if (state.status === "dictating") {
     if (event.type === "cancel") {
       const abandoned: DialogState = { ...state, status: "idle", dictation: undefined }
-      return (
-        promoteQueued(abandoned, now, ctx, effects) ??
-        withSpoken(abandoned, "Dettatura annullata.")
-      )
+      return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Dettatura annullata.")
     }
 
     if (event.type === "utterance") {
@@ -720,8 +723,7 @@ export function transition(
           timeoutAt: undefined,
         }
         return (
-          promoteQueued(expired, now, ctx, effects) ??
-          withSpoken(expired, "Non ho sentito risposta: non invio niente.")
+          promoteQueued(expired, now, ctx, effects) ?? withSpoken(expired, "Non ho sentito risposta: non invio niente.")
         )
       }
       const expired: DialogState = {
@@ -731,10 +733,7 @@ export function transition(
         pendingPlan: undefined,
         timeoutAt: undefined,
       }
-      return (
-        promoteQueued(expired, now, ctx, effects) ??
-        withSpoken(expired, "Non ho sentito risposta: lascio stare.")
-      )
+      return promoteQueued(expired, now, ctx, effects) ?? withSpoken(expired, "Non ho sentito risposta: lascio stare.")
     }
 
     if (event.type === "cancel") {
@@ -751,10 +750,7 @@ export function transition(
           pendingSend: undefined,
           timeoutAt: undefined,
         }
-        return (
-          promoteQueued(cancelled, now, ctx, effects) ??
-          withSpoken(cancelled, "Va bene, non invio niente.")
-        )
+        return promoteQueued(cancelled, now, ctx, effects) ?? withSpoken(cancelled, "Va bene, non invio niente.")
       }
       const cancelled: DialogState = {
         ...state,
@@ -763,10 +759,7 @@ export function transition(
         pendingPlan: undefined,
         timeoutAt: undefined,
       }
-      return (
-        promoteQueued(cancelled, now, ctx, effects) ??
-        withSpoken(cancelled, "Va bene, lascio stare.")
-      )
+      return promoteQueued(cancelled, now, ctx, effects) ?? withSpoken(cancelled, "Va bene, lascio stare.")
     }
 
     if (event.type === "utterance") {
@@ -792,10 +785,7 @@ export function transition(
             pendingPlan: undefined,
             timeoutAt: undefined,
           }
-          return (
-            promoteQueued(abandoned, now, ctx, effects) ??
-            withSpoken(abandoned, "Va bene, non invio niente.")
-          )
+          return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Va bene, non invio niente.")
         }
 
         /* Out of the queue and not yet read whole: read again, as for a permission (V1-ter, ALTO 4). */
@@ -819,10 +809,7 @@ export function transition(
             pendingPlan: undefined,
             timeoutAt: undefined,
           }
-          return (
-            promoteQueued(approved, now, ctx, effects) ??
-            withSpoken(approved, "Invio confermato.")
-          )
+          return promoteQueued(approved, now, ctx, effects) ?? withSpoken(approved, "Invio confermato.")
         }
         return withSpoken(state, "Sì o no?")
       }
@@ -844,10 +831,7 @@ export function transition(
             pendingPlan: undefined,
             timeoutAt: undefined,
           }
-          return (
-            promoteQueued(abandoned, now, ctx, effects) ??
-            withSpoken(abandoned, "Va bene, non invio niente.")
-          )
+          return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Va bene, non invio niente.")
         }
 
         const plan = state.pendingPlan
@@ -877,7 +861,7 @@ export function transition(
               pendingAction: undefined,
               timeoutAt: undefined,
             },
-            "Eseguo il piano."
+            "Eseguo il piano.",
           )
         }
         return withSpoken(state, "Sì o no?")
@@ -944,10 +928,7 @@ export function transition(
 
         if (action.isPermission && action.paneId) {
           if (action.userAsked && action.intent.intent === "permission.deny") {
-            return (
-              promoteQueued(abandoned, now, ctx, effects) ??
-              withSpoken(abandoned, "Non lo nego.")
-            )
+            return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Non lo nego.")
           }
           effects.push({
             type: "answer_permission",
@@ -955,15 +936,9 @@ export function transition(
             answer: "deny",
             what: action.what,
           })
-          return (
-            promoteQueued(abandoned, now, ctx, effects) ??
-            withSpoken(abandoned, "Permesso negato.")
-          )
+          return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Permesso negato.")
         }
-        return (
-          promoteQueued(abandoned, now, ctx, effects) ??
-          withSpoken(abandoned, "Va bene, lascio stare.")
-        )
+        return promoteQueued(abandoned, now, ctx, effects) ?? withSpoken(abandoned, "Va bene, lascio stare.")
       }
 
       // Confirmation positive: only a yes from the closed set.
@@ -1007,16 +982,13 @@ export function transition(
               pendingAction: undefined,
               timeoutAt: undefined,
             },
-            action.intent.readback
+            action.intent.readback,
           )
         }
       }
 
       // Unrecognized confirmation answer
-      return withSpoken(
-        state,
-        "Sì o no?"
-      )
+      return withSpoken(state, "Sì o no?")
     }
 
     return { state, effects: [] }
@@ -1064,10 +1036,7 @@ export function transition(
       if (parsed.outcome === "ambiguous") {
         const first = parsed.candidates[0]?.intent.readback ?? "prima opzione"
         const second = parsed.candidates[1]?.intent.readback ?? "seconda opzione"
-        return withSpoken(
-          state,
-          `Comando ambiguo. Intendi ${first.toLowerCase()} oppure ${second.toLowerCase()}?`
-        )
+        return withSpoken(state, `Comando ambiguo. Intendi ${first.toLowerCase()} oppure ${second.toLowerCase()}?`)
       }
 
       const intent = parsed.intent!
@@ -1078,8 +1047,7 @@ export function transition(
       }
 
       if (intent.intent === "dialog.repeat") {
-        const textToRepeat =
-          state.lastSpokenText ?? "Nessun messaggio precedente da ripetere."
+        const textToRepeat = state.lastSpokenText ?? "Nessun messaggio precedente da ripetere."
         return withSpoken(state, textToRepeat)
       }
 
@@ -1095,7 +1063,7 @@ export function transition(
               chunks: [],
             },
           },
-          intent.readback
+          intent.readback,
         )
       }
 
@@ -1107,11 +1075,11 @@ export function transition(
        * open at this moment and is a permission question like an agent's: its
        * yes carries what it grants, and a request resolved elsewhere ends it.
        */
-      if (
-        (intent.intent === "permission.allow" || intent.intent === "permission.deny") &&
-        ctx.permissionWhat
-      ) {
-        const byIndex = parsed.slots.paneIndex !== undefined ? ctx.panes?.find((p) => p.index === Number(parsed.slots.paneIndex)) : undefined
+      if ((intent.intent === "permission.allow" || intent.intent === "permission.deny") && ctx.permissionWhat) {
+        const byIndex =
+          parsed.slots.paneIndex !== undefined
+            ? ctx.panes?.find((p) => p.index === Number(parsed.slots.paneIndex))
+            : undefined
         const byTitle =
           parsed.slots.paneTitle !== undefined
             ? ctx.panes?.find((p) => p.title.toLowerCase() === String(parsed.slots.paneTitle).toLowerCase())
@@ -1174,8 +1142,7 @@ export function transition(
          * confermare al buio quando più sessioni erano aperte.
          */
         const confirmPaneTitle =
-          parsed.slots.paneTitle ??
-          ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
+          parsed.slots.paneTitle ?? ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
 
         if (intent.intent === "permission.allow") {
           if (confirmPaneTitle) {
@@ -1199,9 +1166,7 @@ export function transition(
          */
         const frozenSlots: Record<string, any> = { ...parsed.slots }
         const hasNamedTarget =
-          frozenSlots.paneId !== undefined ||
-          frozenSlots.paneIndex !== undefined ||
-          frozenSlots.paneTitle !== undefined
+          frozenSlots.paneId !== undefined || frozenSlots.paneIndex !== undefined || frozenSlots.paneTitle !== undefined
         if (!hasNamedTarget && ctx.focusedPaneId) {
           frozenSlots.paneId = ctx.focusedPaneId
         }
@@ -1218,7 +1183,7 @@ export function transition(
               isPermission: false,
             },
           },
-          prompt
+          prompt,
         )
       }
 
@@ -1234,7 +1199,7 @@ export function transition(
           ...state,
           status: "executing",
         },
-        intent.readback
+        intent.readback,
       )
     }
   }

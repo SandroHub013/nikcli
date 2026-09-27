@@ -86,7 +86,9 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   const onKeyDown = (event: KeyboardEvent) => {
     const decision = current()
     const draft = decision ? props.hub.draft(decision.k) : undefined
-    const picked = Boolean(decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)))
+    const picked = Boolean(
+      decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)),
+    )
     const inText = event.target === note
     const action = sheetKey(event, decision?.options.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return
@@ -102,7 +104,13 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   }
 
   return (
-    <Sheet component="decisions-sheet" onClose={props.onClose} size="md" ref={(element) => (surface = element)} onKeyDown={onKeyDown}>
+    <Sheet
+      component="decisions-sheet"
+      onClose={props.onClose}
+      size="md"
+      ref={(element) => (surface = element)}
+      onKeyDown={onKeyDown}
+    >
       <header data-slot="sheet-head">
         <SheetTitle as="strong">{t("palette.decisions.open")}</SheetTitle>
         <Show when={open().length > 0}>
@@ -113,14 +121,22 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
         </Show>
         <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label={t("new.close")}>
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-            <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            <path
+              d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
       </header>
 
       <div data-slot="sheet-body">
         <Show when={props.hub.register.error()}>
-          <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
+          <div data-slot="decision-problem" role="alert">
+            {t("decisions.unreadable", String(props.hub.register.error()))}
+          </div>
         </Show>
         <Show
           when={current()?.k}
@@ -173,11 +189,18 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
       <footer data-slot="sheet-foot">
         <span>{t("decisions.sheet.keys")}</span>
         <Show when={statusMessage()}>
-          <span data-slot="sheet-status" role="status" aria-live="polite">{statusMessage()}</span>
+          <span data-slot="sheet-status" role="status" aria-live="polite">
+            {statusMessage()}
+          </span>
         </Show>
         <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
           <span data-tone="warn">
-            {t(props.hub.recipient().state === "non scelta" ? "decisions.sheet.queued.none" : "decisions.sheet.queued.idle", queued())}
+            {t(
+              props.hub.recipient().state === "non scelta"
+                ? "decisions.sheet.queued.none"
+                : "decisions.sheet.queued.idle",
+              queued(),
+            )}
           </span>
         </Show>
         <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>

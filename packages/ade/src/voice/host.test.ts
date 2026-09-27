@@ -727,7 +727,10 @@ describe("answerPermission answers only the request that was asked", () => {
 
   test("a different request on the pane is not granted", () => {
     const answered: PermissionAnswer[] = []
-    const { deps } = createMockDeps({ permissions: () => ({ p1: request("rm -rf ~") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: request("rm -rf ~") }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
     const host = createAdeVoiceHost(deps)
     expect(host.answerPermission("p1", "allow", "cat README")).toBe(false)
     expect(answered).toEqual([])
@@ -735,7 +738,10 @@ describe("answerPermission answers only the request that was asked", () => {
 
   test("the same request is", () => {
     const answered: PermissionAnswer[] = []
-    const { deps } = createMockDeps({ permissions: () => ({ p1: request("cat README") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: request("cat README") }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
     const host = createAdeVoiceHost(deps)
     expect(host.answerPermission("p1", "allow", "cat README")).toBe(true)
     expect(answered.map((a) => a.send)).toEqual(["y"])

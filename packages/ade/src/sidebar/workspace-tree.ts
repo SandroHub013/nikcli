@@ -11,7 +11,13 @@ import type { PaneStatus } from "../grid/pane"
 
 export type WorkspaceSessionStatus = PaneStatus
 
-export type AgentDisplayStatus = "disponibile" | "a lavoro" | "in attesa di input" | "task completata" | "errore" | "sospesa"
+export type AgentDisplayStatus =
+  | "disponibile"
+  | "a lavoro"
+  | "in attesa di input"
+  | "task completata"
+  | "errore"
+  | "sospesa"
 
 /** A suspended session (P1-C6) has no process: it is neither available nor at work, whatever its last status. */
 export function mapAgentStatus(status: WorkspaceSessionStatus, suspended?: boolean): AgentDisplayStatus {

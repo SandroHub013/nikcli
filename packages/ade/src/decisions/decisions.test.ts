@@ -131,7 +131,13 @@ describe("folding events into decisions", () => {
   test("a deferred decision reopened before expiration stays accepted when folded later (MEDIO 1)", () => {
     const events: DecisionEvent[] = [
       opened("D1", { at: "2026-09-15T10:00:00.000Z" }),
-      { type: "rimandata", k: "D1", at: "2026-09-15T11:00:00.000Z", by: "utente", until: "2026-09-20T00:00:00.000Z" } as DecisionEvent,
+      {
+        type: "rimandata",
+        k: "D1",
+        at: "2026-09-15T11:00:00.000Z",
+        by: "utente",
+        until: "2026-09-20T00:00:00.000Z",
+      } as DecisionEvent,
       { type: "riaperta", k: "D1", at: "2026-09-19T12:00:00.000Z", by: "utente" } as DecisionEvent,
     ]
 
@@ -249,8 +255,22 @@ describe("buckets and messages", () => {
       facts: ["Larghezza schermo 1280px", "Altezza 800px"],
       recommend: { option: "A", because: "Più visibile" },
       options: [
-        { label: "A", title: "In alto", detail: "Sotto l'intestazione", effect: "Sempre visibile a colpo d'occhio", cost: "3 ore", risk: "Occupa 32px verticali" },
-        { label: "B", title: "In basso", detail: "Sopra la barra di stato", effect: "Più vicina al mouse", cost: "1 ora", risk: "Meno evidente" },
+        {
+          label: "A",
+          title: "In alto",
+          detail: "Sotto l'intestazione",
+          effect: "Sempre visibile a colpo d'occhio",
+          cost: "3 ore",
+          risk: "Occupa 32px verticali",
+        },
+        {
+          label: "B",
+          title: "In basso",
+          detail: "Sopra la barra di stato",
+          effect: "Più vicina al mouse",
+          cost: "1 ora",
+          risk: "Meno evidente",
+        },
       ],
     }
     const { decisions } = foldDecisions([event])
@@ -379,9 +399,25 @@ describe("the answer button's gate", () => {
 describe("multiple answers (S75 point 6)", () => {
   const T = "2026-09-23T10:00:00.000Z"
   const open = (extra: Record<string, unknown> = {}) =>
-    ({ type: "aperta", k: "D40", at: T, by: "fable", title: "Quali", options: [{ label: "A" }, { label: "B" }, { label: "C" }], multi: true, ...extra }) as unknown as DecisionEvent
+    ({
+      type: "aperta",
+      k: "D40",
+      at: T,
+      by: "fable",
+      title: "Quali",
+      options: [{ label: "A" }, { label: "B" }, { label: "C" }],
+      multi: true,
+      ...extra,
+    }) as unknown as DecisionEvent
   const answer = (extra: Record<string, unknown>) =>
-    ({ type: "risposta", k: "D40", at: "2026-09-23T10:05:00.000Z", by: "utente", words: "A + C", ...extra }) as unknown as DecisionEvent
+    ({
+      type: "risposta",
+      k: "D40",
+      at: "2026-09-23T10:05:00.000Z",
+      by: "utente",
+      words: "A + C",
+      ...extra,
+    }) as unknown as DecisionEvent
 
   test("multi with a single option is a line problem; choice and choices together too", () => {
     expect(toEvent(open({ options: [{ label: "A" }] }))).toBe("una scelta multipla vuole almeno due opzioni")
@@ -395,8 +431,12 @@ describe("multiple answers (S75 point 6)", () => {
     const good = foldDecisions([open(), answer({ choices: ["A", "C"] })])
     expect(good.rejected).toEqual([])
     expect(good.decisions[0]).toMatchObject({ status: "risposta", answer: { choices: ["A", "C"] } })
-    expect(foldDecisions([open(), answer({ choices: ["A", "Z"] })]).rejected.map((r) => r.reason)).toEqual(["D40: una delle scelte non è un'opzione"])
-    expect(foldDecisions([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual(["D40 è a scelta multipla: si risponde con choices"])
+    expect(foldDecisions([open(), answer({ choices: ["A", "Z"] })]).rejected.map((r) => r.reason)).toEqual([
+      "D40: una delle scelte non è un'opzione",
+    ])
+    expect(foldDecisions([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual([
+      "D40 è a scelta multipla: si risponde con choices",
+    ])
   })
 
   test("on a single question choices is refused", () => {

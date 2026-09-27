@@ -56,7 +56,12 @@ export function nativeLaunchArgs(agentId: string, title: string): string[] {
 
 /** The pane's title as a session name: trimmed, one line, never empty. */
 export function nativeName(title: string): string {
-  const clean = title.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60).trim()
+  const clean = title
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .trim()
   return clean || "ade"
 }
 
@@ -136,7 +141,8 @@ export function routeFor(input: RouteInput): Route {
   if (input.senderAgent !== CLAUDE) return { via: "digitata", reason: "il mittente non è una sessione Claude" }
   if (input.targetAgent !== CLAUDE) return { via: "digitata", reason: "il destinatario non è una sessione Claude" }
   if (!input.targetSessionId) return { via: "digitata", reason: "conversazione del destinatario non ancora nota" }
-  if (input.listed === undefined) return { via: "digitata", reason: "il CLI non elenca le sessioni (claude agents --json)" }
+  if (input.listed === undefined)
+    return { via: "digitata", reason: "il CLI non elenca le sessioni (claude agents --json)" }
   const row = input.listed.find((session) => session.sessionId === input.targetSessionId)
   if (!row) return { via: "digitata", reason: "destinatario non nell'elenco del CLI" }
   return { via: "nativa", name: row.name }
@@ -204,7 +210,15 @@ export function parseHandoffs(text: string | null | undefined): Handoff[] {
           typeof (entry as Handoff).from === "string" &&
           typeof (entry as Handoff).at === "number",
       )
-      .map(({ paneId, line, full, id, kind, from, at }) => ({ paneId, line, ...(typeof full === "string" ? { full } : {}), id, kind, from, at }))
+      .map(({ paneId, line, full, id, kind, from, at }) => ({
+        paneId,
+        line,
+        ...(typeof full === "string" ? { full } : {}),
+        id,
+        kind,
+        from,
+        at,
+      }))
   } catch {
     return []
   }

@@ -1,5 +1,5 @@
-import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model";
-import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
+import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model"
+import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n"
 
 /*
  * Nothing in this file may import a *value* from `model.ts`. `model.ts` needs
@@ -9,24 +9,24 @@ import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
  */
 
 /** The Kokoro voices, as facts and not as labels. */
-export type KokoroVoiceId = "af_heart" | "am_fenrir" | "bf_emma" | "bm_george";
+export type KokoroVoiceId = "af_heart" | "am_fenrir" | "bf_emma" | "bm_george"
 
 export interface KokoroVoice {
-  readonly id: KokoroVoiceId;
+  readonly id: KokoroVoiceId
   /** The locale the voice is spoken in, and the only one it can be spoken in. */
-  readonly locale: TtsLocale;
-  readonly gender: "f" | "m";
+  readonly locale: TtsLocale
+  readonly gender: "f" | "m"
   /**
    * The speaker index in the voice pack. The model is shared by all four and
    * weighs 163 MB; this is what says which voice speaks, and it is why the
    * pack is installed once for the four rather than four times.
    */
-  readonly sid: number;
+  readonly sid: number
   /** The weights behind the voice, and the licence they come with. */
-  readonly model: string;
+  readonly model: string
   /** Where the files are pinned: a release tag, not a branch. */
-  readonly source: string;
-  readonly licence: string;
+  readonly source: string
+  readonly licence: string
 }
 
 /**
@@ -79,18 +79,18 @@ export const KOKORO_VOICES: readonly KokoroVoice[] = [
     source: "thewh1teagle/kokoro-onnx@model-files-v1.1",
     licence: "Apache-2.0",
   },
-];
+]
 
-const BY_ID = new Map<string, KokoroVoice>(KOKORO_VOICES.map((voice) => [voice.id, voice]));
+const BY_ID = new Map<string, KokoroVoice>(KOKORO_VOICES.map((voice) => [voice.id, voice]))
 
 /** What is known about a voice, or nothing when it is not a Kokoro one. */
 export function kokoroVoice(voice: ReplyVoice): KokoroVoice | undefined {
-  return BY_ID.get(voice);
+  return BY_ID.get(voice)
 }
 
 /** Whether this voice is read by Kokoro rather than by Piper. */
 export function isKokoroVoice(voice: ReplyVoice): boolean {
-  return BY_ID.has(voice);
+  return BY_ID.has(voice)
 }
 
 /**
@@ -103,16 +103,16 @@ export function isKokoroVoice(voice: ReplyVoice): boolean {
  * otherwise have been the only thing wrong.
  */
 export function g2pLocale(locale: TtsLocale): "it" | "en-us" | "en" {
-  if (locale === "en-US") return "en-us";
-  if (locale === "en-GB") return "en";
-  return "it";
+  if (locale === "en-US") return "en-us"
+  if (locale === "en-GB") return "en"
+  return "it"
 }
 
 /** A Piper voice asked for the wrong language: Lessac is the English one. */
 function piperVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
-  const italian = chosen === "ugo" || chosen === "paola";
-  if (locale.startsWith("en")) return italian ? "lessac" : chosen;
-  return chosen === "lessac" ? "ugo" : chosen;
+  const italian = chosen === "ugo" || chosen === "paola"
+  if (locale.startsWith("en")) return italian ? "lessac" : chosen
+  return chosen === "lessac" ? "ugo" : chosen
 }
 
 /**
@@ -130,11 +130,11 @@ function piperVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
  * thing this whole rule exists to avoid.
  */
 export function replyVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
-  if (chosen === "system") return "system";
-  const kokoro = kokoroVoice(chosen);
-  if (!kokoro) return piperVoiceFor(chosen, locale);
-  if (locale.startsWith("en")) return chosen;
-  return kokoro.gender === "f" ? "paola" : "ugo";
+  if (chosen === "system") return "system"
+  const kokoro = kokoroVoice(chosen)
+  if (!kokoro) return piperVoiceFor(chosen, locale)
+  if (locale.startsWith("en")) return chosen
+  return kokoro.gender === "f" ? "paola" : "ugo"
 }
 
 /**
@@ -148,15 +148,15 @@ export function replyVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice
  * And a profile that never chose Kokoro cannot reach it through this chain.
  */
 export function replyVoiceChain(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice[] {
-  const first = replyVoiceFor(chosen, locale);
-  if (first === "system") return ["system"];
-  if (!isKokoroVoice(first)) return [first, "system"];
-  return [first, piperVoiceFor("lessac", locale), "system"];
+  const first = replyVoiceFor(chosen, locale)
+  if (first === "system") return ["system"]
+  if (!isKokoroVoice(first)) return [first, "system"]
+  return [first, piperVoiceFor("lessac", locale), "system"]
 }
 
 /** Whether a plain string is one of the voices the catalog knows. */
 function isReplyVoice(voice: string): voice is ReplyVoice {
-  return (REPLY_VOICES as readonly string[]).includes(voice);
+  return (REPLY_VOICES as readonly string[]).includes(voice)
 }
 
 /**
@@ -178,14 +178,14 @@ function isReplyVoice(voice: string): voice is ReplyVoice {
  * goes on. An id nothing knows is the only step there is.
  */
 export function replyVoiceChainFrom(voice: string, locale: TtsLocale): string[] {
-  if (!isReplyVoice(voice)) return voice === "system" ? ["system"] : [voice];
-  if (isKokoroVoice(voice)) return replyVoiceChain(voice, locale);
-  return [voice, "system"];
+  if (!isReplyVoice(voice)) return voice === "system" ? ["system"] : [voice]
+  if (isKokoroVoice(voice)) return replyVoiceChain(voice, locale)
+  return [voice, "system"]
 }
 
 /** The backend that reads a voice, for the panel and the bridge. */
 export function backendOf(voice: ReplyVoice): ReplyBackend {
-  return kokoroVoice(voice) ? "kokoro" : voice === "system" ? "system" : "piper";
+  return kokoroVoice(voice) ? "kokoro" : voice === "system" ? "system" : "piper"
 }
 
 /**
@@ -202,8 +202,8 @@ export function backendOf(voice: ReplyVoice): ReplyBackend {
  * voice is speaking.
  */
 export function speakingReplyVoice(chosen: ReplyVoice, ttsLocale: TtsLocale, ui: Locale): ReplyVoice {
-  if (!isKokoroVoice(chosen)) return activeReplyVoice(chosen, ui);
-  return replyVoiceFor(chosen, ttsLocale);
+  if (!isKokoroVoice(chosen)) return activeReplyVoice(chosen, ui)
+  return replyVoiceFor(chosen, ttsLocale)
 }
 
 /**
@@ -216,59 +216,59 @@ export function speakingReplyVoice(chosen: ReplyVoice, ttsLocale: TtsLocale, ui:
  * facts, and `KOKORO_VOICE_CHOICES` below gives them their names (K6).
  */
 export const REPLY_VOICE_CHOICES: readonly {
-  value: ReplyVoice;
-  title: string;
-  desc: string;
-  licence?: string;
+  value: ReplyVoice
+  title: string
+  desc: string
+  licence?: string
 }[] = [
   {
     value: "ugo",
     get title() {
-      return t("vui.reply.male");
+      return t("vui.reply.male")
     },
     get desc() {
-      return t("vui.reply.ugo");
+      return t("vui.reply.ugo")
     },
     get licence() {
-      return t("vui.reply.ugo.licence");
+      return t("vui.reply.ugo.licence")
     },
   },
   {
     value: "paola",
     get title() {
-      return t("vui.reply.female");
+      return t("vui.reply.female")
     },
     get desc() {
-      return t("vui.reply.paola");
+      return t("vui.reply.paola")
     },
     get licence() {
-      return t("vui.reply.paola.licence");
+      return t("vui.reply.paola.licence")
     },
   },
   {
     value: "lessac",
     get title() {
-      return t("vui.reply.lessac.title");
+      return t("vui.reply.lessac.title")
     },
     get desc() {
-      return t("vui.reply.lessac.desc");
+      return t("vui.reply.lessac.desc")
     },
     get licence() {
-      return t("vui.reply.lessac.licence");
+      return t("vui.reply.lessac.licence")
     },
   },
   {
     value: "system",
     get title() {
-      return t("vui.reply.system");
+      return t("vui.reply.system")
     },
     get desc() {
-      return t("vui.reply.system.desc");
+      return t("vui.reply.system.desc")
     },
   },
-];
+]
 
-type ReplyVoiceChoice = (typeof REPLY_VOICE_CHOICES)[number];
+type ReplyVoiceChoice = (typeof REPLY_VOICE_CHOICES)[number]
 
 /** The names the panel gives the Kokoro voices, and who speaks in each. */
 const KOKORO_LABELS: Record<KokoroVoiceId, { readonly title: MessageKey; readonly desc: MessageKey }> = {
@@ -276,21 +276,21 @@ const KOKORO_LABELS: Record<KokoroVoiceId, { readonly title: MessageKey; readonl
   am_fenrir: { title: "vui.reply.kokoro.am_fenrir", desc: "vui.reply.kokoro.am_fenrir.desc" },
   bf_emma: { title: "vui.reply.kokoro.bf_emma", desc: "vui.reply.kokoro.bf_emma.desc" },
   bm_george: { title: "vui.reply.kokoro.bm_george", desc: "vui.reply.kokoro.bm_george.desc" },
-};
+}
 
 /** The four Kokoro voices as the panel offers them, in the catalog's order (K6). */
 export const KOKORO_VOICE_CHOICES: readonly ReplyVoiceChoice[] = KOKORO_VOICES.map((voice) => ({
   value: voice.id,
   get title() {
-    return t(KOKORO_LABELS[voice.id].title);
+    return t(KOKORO_LABELS[voice.id].title)
   },
   get desc() {
-    return t(KOKORO_LABELS[voice.id].desc);
+    return t(KOKORO_LABELS[voice.id].desc)
   },
   get licence() {
-    return t("vui.reply.kokoro.licence");
+    return t("vui.reply.kokoro.licence")
   },
-}));
+}))
 
 /**
  * What reads the replies, chosen before the voice (K6): the voices a backend
@@ -301,45 +301,41 @@ export const REPLY_BACKEND_CHOICES: readonly { value: ReplyBackend; title: strin
   {
     value: "piper",
     get title() {
-      return t("vui.backend.piper");
+      return t("vui.backend.piper")
     },
     get desc() {
-      return t("vui.backend.piper.desc");
+      return t("vui.backend.piper.desc")
     },
   },
   {
     value: "kokoro",
     get title() {
-      return t("vui.backend.kokoro");
+      return t("vui.backend.kokoro")
     },
     get desc() {
-      return t("vui.backend.kokoro.desc");
+      return t("vui.backend.kokoro.desc")
     },
   },
   {
     value: "system",
     get title() {
-      return t("vui.backend.system");
+      return t("vui.backend.system")
     },
     get desc() {
-      return t("vui.backend.system.desc");
+      return t("vui.backend.system.desc")
     },
   },
-];
+]
 
 const PIPER_BY_LOCALE: Record<Locale, ReadonlySet<ReplyVoice>> = {
   it: new Set<ReplyVoice>(["ugo", "paola"]),
   en: new Set<ReplyVoice>(["lessac"]),
-};
+}
 
 /** Voices the panel may offer for the interface language: matching Piper voices, plus system. */
-export function replyVoiceChoicesForLocale(
-  language: Locale,
-): (typeof REPLY_VOICE_CHOICES)[number][] {
-  const piper = PIPER_BY_LOCALE[language];
-  return REPLY_VOICE_CHOICES.filter(
-    (choice) => choice.value === "system" || piper.has(choice.value),
-  );
+export function replyVoiceChoicesForLocale(language: Locale): (typeof REPLY_VOICE_CHOICES)[number][] {
+  const piper = PIPER_BY_LOCALE[language]
+  return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system" || piper.has(choice.value))
 }
 
 /**
@@ -348,10 +344,10 @@ export function replyVoiceChoicesForLocale(
  * since an Italian reply on one of them is read by Ugo or Paola anyway.
  */
 export function replyVoiceChoicesFor(backend: ReplyBackend, language: Locale): ReplyVoiceChoice[] {
-  if (backend === "kokoro") return [...KOKORO_VOICE_CHOICES];
-  if (backend === "system") return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system");
-  const piper = PIPER_BY_LOCALE[language];
-  return REPLY_VOICE_CHOICES.filter((choice) => piper.has(choice.value));
+  if (backend === "kokoro") return [...KOKORO_VOICE_CHOICES]
+  if (backend === "system") return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system")
+  const piper = PIPER_BY_LOCALE[language]
+  return REPLY_VOICE_CHOICES.filter((choice) => piper.has(choice.value))
 }
 
 /**
@@ -359,18 +355,26 @@ export function replyVoiceChoicesFor(backend: ReplyBackend, language: Locale): R
  * already that backend's, then the one last picked there, otherwise the
  * backend's first for the language.
  */
-export function voiceOnBackend(backend: ReplyBackend, chosen: ReplyVoice, language: Locale, memory?: ReplyVoiceMemory): ReplyVoice {
-  if (backendOf(chosen) === backend) return chosen;
-  const remembered = backend === "system" ? undefined : memory?.[backend];
-  if (remembered && backendOf(remembered) === backend) return remembered;
-  return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system";
+export function voiceOnBackend(
+  backend: ReplyBackend,
+  chosen: ReplyVoice,
+  language: Locale,
+  memory?: ReplyVoiceMemory,
+): ReplyVoice {
+  if (backendOf(chosen) === backend) return chosen
+  const remembered = backend === "system" ? undefined : memory?.[backend]
+  if (remembered && backendOf(remembered) === backend) return remembered
+  return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system"
 }
 
 /** `memory` with `voice` as the last one picked on its backend; the system voice has nothing to remember. */
-export function rememberReplyVoice(memory: ReplyVoiceMemory | undefined, voice: ReplyVoice): ReplyVoiceMemory | undefined {
-  const backend = backendOf(voice);
-  if (backend === "system") return memory;
-  return { ...memory, [backend]: voice };
+export function rememberReplyVoice(
+  memory: ReplyVoiceMemory | undefined,
+  voice: ReplyVoice,
+): ReplyVoiceMemory | undefined {
+  const backend = backendOf(voice)
+  if (backend === "system") return memory
+  return { ...memory, [backend]: voice }
 }
 
 /**
@@ -381,7 +385,7 @@ export function rememberReplyVoice(memory: ReplyVoiceMemory | undefined, voice: 
  * English voice ends up reading an Italian sentence. So this only answers when
  * the words are enough, and the setting is what answers the rest.
  */
-export type ReplyLanguage = "it" | "en";
+export type ReplyLanguage = "it" | "en"
 
 /*
  * Words that only one of the two languages uses, as whole words.
@@ -392,24 +396,147 @@ export type ReplyLanguage = "it" | "en";
  * own, which is a smaller list and a much better one.
  */
 const ITALIAN_WORDS = new Set([
-  "il", "lo", "gli", "una", "uno", "delle", "della", "dei", "degli", "nel", "nella", "nelle", "dal", "dalla",
-  "che", "chi", "non", "cosa", "come", "perché", "percio", "quindi", "già", "più", "sono", "essere", "stato",
-  "hanno", "aveva", "questo", "quella", "quelli", "quelle", "suo", "sua", "suoi", "sue", "loro", "noi", "voi",
-  "molto", "ogni", "qualche", "anche", "ancora", "quando", "dove", "senza", "sotto", "sopra", "dopo", "prima",
-  "posso", "devo", "vorrei", "fatto", "adesso", "nessuno", "niente", "sempre", "mai", "così", "sì", "tutto",
-  "apro", "aperta", "sessione", "pannello", "errore", "riprova", "funziona", "volendo",
-]);
+  "il",
+  "lo",
+  "gli",
+  "una",
+  "uno",
+  "delle",
+  "della",
+  "dei",
+  "degli",
+  "nel",
+  "nella",
+  "nelle",
+  "dal",
+  "dalla",
+  "che",
+  "chi",
+  "non",
+  "cosa",
+  "come",
+  "perché",
+  "percio",
+  "quindi",
+  "già",
+  "più",
+  "sono",
+  "essere",
+  "stato",
+  "hanno",
+  "aveva",
+  "questo",
+  "quella",
+  "quelli",
+  "quelle",
+  "suo",
+  "sua",
+  "suoi",
+  "sue",
+  "loro",
+  "noi",
+  "voi",
+  "molto",
+  "ogni",
+  "qualche",
+  "anche",
+  "ancora",
+  "quando",
+  "dove",
+  "senza",
+  "sotto",
+  "sopra",
+  "dopo",
+  "prima",
+  "posso",
+  "devo",
+  "vorrei",
+  "fatto",
+  "adesso",
+  "nessuno",
+  "niente",
+  "sempre",
+  "mai",
+  "così",
+  "sì",
+  "tutto",
+  "apro",
+  "aperta",
+  "sessione",
+  "pannello",
+  "errore",
+  "riprova",
+  "funziona",
+  "volendo",
+])
 
 const ENGLISH_WORDS = new Set([
-  "the", "of", "for", "with", "and", "are", "was", "were", "its", "this", "that", "these", "those", "you",
-  "your", "they", "their", "have", "has", "had", "not", "but", "from", "there", "which", "who", "what", "how",
-  "would", "could", "should", "will", "been", "about", "into", "than", "then", "also", "very", "just", "more",
-  "some", "only", "other", "because", "where", "when", "does", "session", "opened", "panel", "error", "retry",
-  "works", "everything", "still", "want", "need", "let", "please", "here", "now",
-]);
+  "the",
+  "of",
+  "for",
+  "with",
+  "and",
+  "are",
+  "was",
+  "were",
+  "its",
+  "this",
+  "that",
+  "these",
+  "those",
+  "you",
+  "your",
+  "they",
+  "their",
+  "have",
+  "has",
+  "had",
+  "not",
+  "but",
+  "from",
+  "there",
+  "which",
+  "who",
+  "what",
+  "how",
+  "would",
+  "could",
+  "should",
+  "will",
+  "been",
+  "about",
+  "into",
+  "than",
+  "then",
+  "also",
+  "very",
+  "just",
+  "more",
+  "some",
+  "only",
+  "other",
+  "because",
+  "where",
+  "when",
+  "does",
+  "session",
+  "opened",
+  "panel",
+  "error",
+  "retry",
+  "works",
+  "everything",
+  "still",
+  "want",
+  "need",
+  "let",
+  "please",
+  "here",
+  "now",
+])
 
 /** The accented letters an Italian sentence has and an English one does not. */
-const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i;
+const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i
 
 /**
  * The language a reply is written in, or `undefined` when the text does not say.
@@ -423,18 +550,18 @@ const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i;
  * a wrong answer here is a wrong voice, not a wrong word.
  */
 export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
-  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
-  if (words.length === 0) return undefined;
-  let italian = 0;
-  let english = 0;
+  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? []
+  if (words.length === 0) return undefined
+  let italian = 0
+  let english = 0
   for (const word of words) {
-    if (ITALIAN_WORDS.has(word)) italian += 1;
-    if (ENGLISH_WORDS.has(word)) english += 1;
+    if (ITALIAN_WORDS.has(word)) italian += 1
+    if (ENGLISH_WORDS.has(word)) english += 1
   }
-  if (ITALIAN_ONLY_LETTERS.test(text) && italian + 1 > english) italian += 1;
-  if (italian > english) return "it";
-  if (english > italian) return "en";
-  return undefined;
+  if (ITALIAN_ONLY_LETTERS.test(text) && italian + 1 > english) italian += 1
+  if (italian > english) return "it"
+  if (english > italian) return "en"
+  return undefined
 }
 
 /**
@@ -454,8 +581,8 @@ export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
  * there is one Italian voice locale and no variant to preserve.
  */
 export function interfaceLocale(ui: Locale, ttsLocale: TtsLocale): TtsLocale {
-  if (ui !== "en") return "it-IT";
-  return ttsLocale.startsWith("en") ? ttsLocale : "en-US";
+  if (ui !== "en") return "it-IT"
+  return ttsLocale.startsWith("en") ? ttsLocale : "en-US"
 }
 
 /**
@@ -478,18 +605,18 @@ export function interfaceLocale(ui: Locale, ttsLocale: TtsLocale): TtsLocale {
  * rule that always answered in English.
  */
 export function replyLocale(chosen: ReplyVoice, detected: ReplyLanguage | undefined, fallback: TtsLocale): TtsLocale {
-  const voice = kokoroVoice(chosen);
-  if (detected === "it") return "it-IT";
+  const voice = kokoroVoice(chosen)
+  if (detected === "it") return "it-IT"
   if (detected === "en") {
     // The variant is the voice's own, and only because the reply is English: the
     // British voices are not en-US, and rounding them to it is what K1 measured
     // as a voice with the wrong mouth.
-    if (voice && voice.locale.startsWith("en")) return voice.locale;
-    return fallback.startsWith("en") ? fallback : "en-US";
+    if (voice && voice.locale.startsWith("en")) return voice.locale
+    return fallback.startsWith("en") ? fallback : "en-US"
   }
   // Nothing said: the interface's language, which is what the setting holds, and
   // the voice is derived from it by `replyVoiceFor`.
-  return fallback;
+  return fallback
 }
 
 /**
@@ -499,12 +626,8 @@ export function replyLocale(chosen: ReplyVoice, detected: ReplyLanguage | undefi
  * agree; the catalog still holds every id, the panel just does not offer the
  * ones that would do nothing.
  */
-export function activeReplyVoice(
-  chosen: ReplyVoice,
-  language: Locale,
-): ReplyVoice {
-  if (chosen === "system") return "system";
-  if (language === "en")
-    return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen;
-  return chosen === "lessac" ? "ugo" : chosen;
+export function activeReplyVoice(chosen: ReplyVoice, language: Locale): ReplyVoice {
+  if (chosen === "system") return "system"
+  if (language === "en") return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
+  return chosen === "lessac" ? "ugo" : chosen
 }

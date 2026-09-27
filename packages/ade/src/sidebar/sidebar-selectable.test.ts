@@ -7,13 +7,7 @@ const sidebarTsx = readFileSync(new URL("./sidebar.tsx", import.meta.url), "utf8
 
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "")
 
-const ROW_SLOTS = [
-  "workspace-header",
-  "tree-row",
-  "session-row",
-  "active-agent-card",
-  "file-result",
-] as const
+const ROW_SLOTS = ["workspace-header", "tree-row", "session-row", "active-agent-card", "file-result"] as const
 
 describe("sidebar hover and selection follow the form, not the slot name", () => {
   /*
@@ -28,12 +22,12 @@ describe("sidebar hover and selection follow the form, not the slot name", () =>
     expect(css).toContain('[data-component="ade-sidebar"] [data-selectable]:hover')
     expect(css).toContain('[data-component="ade-sidebar"] [data-selectable][data-selected]')
 
-    const oldHover = ['workspace-header', 'tree-row', 'session-row', 'active-agent-card']
+    const oldHover = ["workspace-header", "tree-row", "session-row", "active-agent-card"]
     for (const slot of oldHover) {
       expect(css).not.toContain(`[data-component="ade-sidebar"] [data-slot="${slot}"]:hover`)
     }
     for (const slot of ROW_SLOTS) {
-      const state = slot === 'workspace-header' ? 'data-active' : 'data-selected'
+      const state = slot === "workspace-header" ? "data-active" : "data-selected"
       expect(css).not.toContain(`[data-component="ade-sidebar"] [data-slot="${slot}"][${state}]`)
     }
   })

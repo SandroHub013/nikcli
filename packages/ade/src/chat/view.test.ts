@@ -9,7 +9,9 @@ const part = (value: Record<string, unknown>) => value as unknown as Part
 
 describe("a message's parts, as the chat shows them", () => {
   test("text keeps its code blocks; markup stays text", () => {
-    const view = partView(part({ id: "prt_1", type: "text", text: 'Ecco <img src=x onerror="alert(1)">\n```ts\nconst a = 1\n```' }))
+    const view = partView(
+      part({ id: "prt_1", type: "text", text: 'Ecco <img src=x onerror="alert(1)">\n```ts\nconst a = 1\n```' }),
+    )
     expect(view).toEqual({
       kind: "text",
       id: "prt_1",
@@ -30,16 +32,40 @@ describe("a message's parts, as the chat shows them", () => {
   test("a tool call says what it ran on; a long output is cut and says so", () => {
     const long = "x".repeat(OUTPUT_LIMIT + 10)
     expect(
-      partView(part({ id: "t1", type: "tool", tool: "bash", state: { status: "completed", input: { command: "npm\n  test" }, output: long } })),
+      partView(
+        part({
+          id: "t1",
+          type: "tool",
+          tool: "bash",
+          state: { status: "completed", input: { command: "npm\n  test" }, output: long },
+        }),
+      ),
     ).toMatchObject({ kind: "tool", tool: "bash", status: "completed", subject: "npm test", cut: true })
-    expect((partView(part({ id: "t1", type: "tool", tool: "bash", state: { status: "completed", input: {}, output: long } })) as { output: string }).output).toHaveLength(OUTPUT_LIMIT)
-    expect(partView(part({ id: "t2", type: "tool", tool: "edit", state: { status: "error", input: { filePath: "src/a.ts" }, error: "negato" } }))).toMatchObject({
+    expect(
+      (
+        partView(
+          part({ id: "t1", type: "tool", tool: "bash", state: { status: "completed", input: {}, output: long } }),
+        ) as { output: string }
+      ).output,
+    ).toHaveLength(OUTPUT_LIMIT)
+    expect(
+      partView(
+        part({
+          id: "t2",
+          type: "tool",
+          tool: "edit",
+          state: { status: "error", input: { filePath: "src/a.ts" }, error: "negato" },
+        }),
+      ),
+    ).toMatchObject({
       status: "error",
       subject: "src/a.ts",
       error: "negato",
       cut: false,
     })
-    expect(partView(part({ id: "t3", type: "tool", tool: "mcp_x", state: { status: "strano", input: { a: 1 } } }))).toMatchObject({
+    expect(
+      partView(part({ id: "t3", type: "tool", tool: "mcp_x", state: { status: "strano", input: { a: 1 } } })),
+    ).toMatchObject({
       status: "pending",
       subject: '{"a":1}',
     })
@@ -50,7 +76,8 @@ describe("a message's parts, as the chat shows them", () => {
       .split("\n")
       .filter(Boolean)
       .map((l) => JSON.parse(l))
-    const read = events.findLast((e) => e.type === "message.part.updated" && e.properties.part.tool === "read").properties.part
+    const read = events.findLast((e) => e.type === "message.part.updated" && e.properties.part.tool === "read")
+      .properties.part
     expect(partView(read)).toMatchObject({ kind: "tool", tool: "read", status: "completed" })
     expect((partView(read) as { subject: string }).subject).toContain("nota.txt")
   })
@@ -58,16 +85,39 @@ describe("a message's parts, as the chat shows them", () => {
 
 describe("a permission request", () => {
   test("says what and on what, each pattern whole, line breaks and spaces kept", () => {
-    const request = { id: "per_1", sessionID: "s", permission: "bash", patterns: ["rm -rf\n  build", 3], metadata: {}, always: [] }
-    expect(permissionView(request as unknown as PermissionRequest)).toEqual({ id: "per_1", permission: "bash", patterns: ["rm -rf\n  build"] })
+    const request = {
+      id: "per_1",
+      sessionID: "s",
+      permission: "bash",
+      patterns: ["rm -rf\n  build", 3],
+      metadata: {},
+      always: [],
+    }
+    expect(permissionView(request as unknown as PermissionRequest)).toEqual({
+      id: "per_1",
+      permission: "bash",
+      patterns: ["rm -rf\n  build"],
+    })
   })
 
   test("with the message's parts, the call that asks is found by its id and shown whole", () => {
     const command = `git status && ${"echo x; ".repeat(60)}rm -rf build`
     const parts = [
       { id: "prt_1", type: "text", text: "Provo" },
-      { id: "prt_2", type: "tool", tool: "bash", callID: "call_a", state: { status: "running", input: { command: "ls" } } },
-      { id: "prt_3", type: "tool", tool: "bash", callID: "call_b", state: { status: "running", input: { command, description: "pulizia" } } },
+      {
+        id: "prt_2",
+        type: "tool",
+        tool: "bash",
+        callID: "call_a",
+        state: { status: "running", input: { command: "ls" } },
+      },
+      {
+        id: "prt_3",
+        type: "tool",
+        tool: "bash",
+        callID: "call_b",
+        state: { status: "running", input: { command, description: "pulizia" } },
+      },
     ] as unknown as Part[]
     const request = {
       id: "per_3",
@@ -133,8 +183,24 @@ describe("a question", () => {
     id: "que_1",
     sessionID: "s",
     questions: [
-      { question: "Quale?", header: "Scelta", options: [{ label: "A", description: "" }, { label: "B", description: "" }] },
-      { question: "Colori?", header: "Colori", multiple: true, custom: false, options: [{ label: "rosso", description: "" }, { label: "blu", description: "" }] },
+      {
+        question: "Quale?",
+        header: "Scelta",
+        options: [
+          { label: "A", description: "" },
+          { label: "B", description: "" },
+        ],
+      },
+      {
+        question: "Colori?",
+        header: "Colori",
+        multiple: true,
+        custom: false,
+        options: [
+          { label: "rosso", description: "" },
+          { label: "blu", description: "" },
+        ],
+      },
     ],
   } as unknown as QuestionRequest
 

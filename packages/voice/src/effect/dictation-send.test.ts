@@ -79,11 +79,7 @@ describe("a finished dictation is announced only once the host has taken it", ()
     const host = new DictationHost(refusal)
     const speaker = createFakeSpeaker()
     const visible: string[] = []
-    const layer = Layer.mergeAll(
-      TranscriberFake(createFakeTranscriber()),
-      SpeakerFake(speaker),
-      VoiceHostLive(host),
-    )
+    const layer = Layer.mergeAll(TranscriberFake(createFakeTranscriber()), SpeakerFake(speaker), VoiceHostLive(host))
 
     await Effect.runPromise(
       Effect.scoped(
@@ -124,8 +120,24 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
   class TwoPaneHost implements VoiceHost {
     calls: { method: string; args: unknown[] }[] = []
     panes: PaneSummary[] = [
-      { id: "pane-1", title: "Primo", status: "working", index: 1, hasLiveProcess: true, isBrowser: false, isFile: false },
-      { id: "pane-2", title: "Secondo", status: "working", index: 2, hasLiveProcess: true, isBrowser: false, isFile: false },
+      {
+        id: "pane-1",
+        title: "Primo",
+        status: "working",
+        index: 1,
+        hasLiveProcess: true,
+        isBrowser: false,
+        isFile: false,
+      },
+      {
+        id: "pane-2",
+        title: "Secondo",
+        status: "working",
+        index: 2,
+        hasLiveProcess: true,
+        isBrowser: false,
+        isFile: false,
+      },
     ]
 
     listPanes(): PaneSummary[] {
@@ -174,11 +186,7 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
     steps: (string | "elsewhere")[],
   ) {
     const host = new TwoPaneHost()
-    const layer = Layer.mergeAll(
-      TranscriberFake(transcriber),
-      SpeakerFake(createFakeSpeaker()),
-      VoiceHostLive(host),
-    )
+    const layer = Layer.mergeAll(TranscriberFake(transcriber), SpeakerFake(createFakeSpeaker()), VoiceHostLive(host))
 
     await Effect.runPromise(
       Effect.scoped(
@@ -210,7 +218,11 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
   test("la frase va al pannello che era a fuoco quando è iniziata, non a quello di dopo", async () => {
     const transcriber = createFakeTranscriber()
     // And the mouse is reached for before the sentence is finished.
-    const host = await speakWhileTheFocusMoves(transcriber, { paneId: "pane-1" }, ["aggiungi un", "elsewhere", "aggiungi un test"])
+    const host = await speakWhileTheFocusMoves(transcriber, { paneId: "pane-1" }, [
+      "aggiungi un",
+      "elsewhere",
+      "aggiungi un test",
+    ])
 
     expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "aggiungi un test"] })
     expect(host.calls).not.toContainEqual({ method: "insertText", args: ["pane-2", "aggiungi un test"] })
@@ -234,11 +246,7 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
   test("una frase senza inizio riconosciuto va al pannello a fuoco in quel momento", async () => {
     const transcriber = createFakeTranscriber()
     const host = new TwoPaneHost()
-    const layer = Layer.mergeAll(
-      TranscriberFake(transcriber),
-      SpeakerFake(createFakeSpeaker()),
-      VoiceHostLive(host),
-    )
+    const layer = Layer.mergeAll(TranscriberFake(transcriber), SpeakerFake(createFakeSpeaker()), VoiceHostLive(host))
 
     await Effect.runPromise(
       Effect.scoped(

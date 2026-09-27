@@ -49,7 +49,10 @@ describe("the catalog behind a model chip (catalog review, conditions 1 and 3)",
   })
 
   test("a failure is not kept: it says why, and the next open reads again", async () => {
-    const s = counted([{ ok: false, reason: "nikcli models è uscito con 1: config non valida" }, { ok: true, models: [QWEN] }])
+    const s = counted([
+      { ok: false, reason: "nikcli models è uscito con 1: config non valida" },
+      { ok: true, models: [QWEN] },
+    ])
     s.release()
     const failed = await s.source.read("C:/p")
     expect(failed).toEqual({ ok: false, reason: "nikcli models è uscito con 1: config non valida" })
@@ -67,7 +70,10 @@ describe("the catalog behind a model chip (catalog review, conditions 1 and 3)",
   })
 
   test("each folder has its own list", async () => {
-    const s = counted([{ ok: true, models: [QWEN] }, { ok: true, models: [] }])
+    const s = counted([
+      { ok: true, models: [QWEN] },
+      { ok: true, models: [] },
+    ])
     s.release()
     await s.source.read("C:/a")
     await s.source.read("C:/b")

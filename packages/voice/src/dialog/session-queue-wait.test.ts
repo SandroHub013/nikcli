@@ -14,19 +14,36 @@ import { answersWithoutName } from "./name-gate"
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa")], focusedPaneId: "pA" }
 const plan = { steps: [{ action: "send_prompt" as const, paneIndex: 1, text: "esegui i test" }], refusals: [] }
 
 function askedWithQueue(event: Parameters<typeof transition>[1]): DialogState {
-  const asked = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx).state
+  const asked = transition(
+    createInitialDialogState("idle"),
+    { type: "permission_requested", paneId: "pA", what: "cat README" },
+    10_000,
+    ctx,
+  ).state
   return transition(asked, event, 11_000, ctx).state
 }
 
 describe("what comes out of the queue waits to be read", () => {
   test("a held message promoted by a yes is not granted by the next «va bene» said over it", () => {
-    const queued = askedWithQueue({ type: "send_requested", id: "m1", to: "claude-code", text: "fai push", lead: "Un mittente senza firma vuole avviare una sessione" })
+    const queued = askedWithQueue({
+      type: "send_requested",
+      id: "m1",
+      to: "claude-code",
+      text: "fai push",
+      lead: "Un mittente senza firma vuole avviare una sessione",
+    })
     const promoted = transition(queued, { type: "utterance", text: "sì" }, 20_000, ctx)
     expect(promoted.state.pendingSend?.id).toBe("m1")
 
@@ -54,19 +71,33 @@ describe("what comes out of the queue waits to be read", () => {
     const early = transition(promoted.state, { type: "utterance", text: "va bene" }, 20_600, ctx)
     expect(early.effects.some((e) => e.type === "execute_plan")).toBe(false)
 
-    const read = transition(early.state, { type: "utterance", text: "sì" }, 20_600 + readingMs("x".repeat(200)) + 1, ctx)
+    const read = transition(
+      early.state,
+      { type: "utterance", text: "sì" },
+      20_600 + readingMs("x".repeat(200)) + 1,
+      ctx,
+    )
     expect(read.effects.some((e) => e.type === "execute_plan")).toBe(true)
   })
 
   test("promoted from the queue, a message or a plan is answered with the name", () => {
     const sendQueued = askedWithQueue({ type: "send_requested", id: "m1", to: "Alfa", text: "cancella dist" })
-    expect(answersWithoutName(transition(sendQueued, { type: "utterance", text: "sì" }, 20_000, ctx).state, false)).toBe(false)
+    expect(
+      answersWithoutName(transition(sendQueued, { type: "utterance", text: "sì" }, 20_000, ctx).state, false),
+    ).toBe(false)
     const planQueued = askedWithQueue({ type: "plan_ready", ...plan })
-    expect(answersWithoutName(transition(planQueued, { type: "utterance", text: "sì" }, 20_000, ctx).state, false)).toBe(false)
+    expect(
+      answersWithoutName(transition(planQueued, { type: "utterance", text: "sì" }, 20_000, ctx).state, false),
+    ).toBe(false)
   })
 
   test("asked at once, a message keeps its answer without the name", () => {
-    const direct = transition(createInitialDialogState("idle"), { type: "send_requested", id: "m1", to: "Alfa", text: "cancella dist" }, 10_000, ctx).state
+    const direct = transition(
+      createInitialDialogState("idle"),
+      { type: "send_requested", id: "m1", to: "Alfa", text: "cancella dist" },
+      10_000,
+      ctx,
+    ).state
     expect(answersWithoutName(direct, false)).toBe(true)
   })
 })
@@ -78,9 +109,19 @@ describe("what comes out of the queue waits to be read", () => {
  */
 describe("every permission question waits to be read", () => {
   test("the same pane asks again: a yes said over the new question reads only its safe type again", () => {
-    const first = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README", kind: "shell" }, 10_000, ctx).state
+    const first = transition(
+      createInitialDialogState("idle"),
+      { type: "permission_requested", paneId: "pA", what: "cat README", kind: "shell" },
+      10_000,
+      ctx,
+    ).state
     const raw = "export API_KEY=secret-value"
-    const replaced = transition(first, { type: "permission_requested", paneId: "pA", what: raw, kind: "shell" }, 20_000, ctx)
+    const replaced = transition(
+      first,
+      { type: "permission_requested", paneId: "pA", what: raw, kind: "shell" },
+      20_000,
+      ctx,
+    )
     const early = transition(replaced.state, { type: "utterance", text: "sì" }, 20_300, ctx)
     expect(early.effects.some((e) => e.type === "answer_permission" && e.answer === "allow")).toBe(false)
     expect(early.effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
@@ -89,10 +130,20 @@ describe("every permission question waits to be read", () => {
   })
 
   test("a new question too; a yes once it is read grants it", () => {
-    const asked = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx)
+    const asked = transition(
+      createInitialDialogState("idle"),
+      { type: "permission_requested", paneId: "pA", what: "cat README" },
+      10_000,
+      ctx,
+    )
     const early = transition(asked.state, { type: "utterance", text: "sì" }, 10_300, ctx)
     expect(early.effects.some((e) => e.type === "answer_permission")).toBe(false)
     const read = transition(early.state, { type: "utterance", text: "sì" }, 30_000, ctx)
-    expect(read.effects).toContainEqual({ type: "answer_permission", paneId: "pA", answer: "allow", what: "cat README" })
+    expect(read.effects).toContainEqual({
+      type: "answer_permission",
+      paneId: "pA",
+      answer: "allow",
+      what: "cat README",
+    })
   })
 })

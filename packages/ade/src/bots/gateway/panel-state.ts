@@ -107,14 +107,25 @@ export interface GatewayPanelDeps {
    * The trust a chat's turns need, asked with ADE's dialogs, then checked as
    * every chat turn checks it; with the fingerprint of the file as read.
    */
-  readonly approve: (bot: AgentFile, project: string) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
+  readonly approve: (
+    bot: AgentFile,
+    project: string,
+  ) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
   /** Asks the user a yes or no in ADE: switching on in another project than before. */
   readonly confirm: (question: string) => Promise<boolean>
   readonly platform?: string
   readonly now?: () => number
 }
 
-const OFF: GatewayStatus = { bot: "", platform: "", enabled: false, running: false, connected: false, hasToken: false, authorized: [] }
+const OFF: GatewayStatus = {
+  bot: "",
+  platform: "",
+  enabled: false,
+  running: false,
+  connected: false,
+  hasToken: false,
+  authorized: [],
+}
 const NO_PAIRING: PairingInfo = { open: false, pending: [], authorized: [], attemptsLeft: 0 }
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))

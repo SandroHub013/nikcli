@@ -828,11 +828,15 @@
   min-width: 0;
 }
 
-[data-slot="chat-composer-gap"] { flex: 1 1 auto; }
+[data-slot="chat-composer-gap"] {
+  flex: 1 1 auto;
+}
 
 /* Narrow: the chips give way first, the model's name is cut, never the row. */
 @media (max-width: 900px) {
-  [data-slot="chat-composer-row"] [data-slot="chip"] { max-width: 12rem; }
+  [data-slot="chat-composer-row"] [data-slot="chip"] {
+    max-width: 12rem;
+  }
 }
 
 /* C6: the composer's files, the `@` list and what a screen reader hears. `+` is a chip of its own. */

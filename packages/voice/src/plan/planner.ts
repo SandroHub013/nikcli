@@ -255,9 +255,7 @@ export async function planUtterance(
     // the first is a sentence in Italian, the second is what the provider
     // said. Both, because the second used to be thrown away with the error.
     const detail = providerError(error).message
-    return failure
-      ? { steps: [], refusals: [], failure, ...(detail ? { detail } : {}) }
-      : { steps: [], refusals: [] }
+    return failure ? { steps: [], refusals: [], failure, ...(detail ? { detail } : {}) } : { steps: [], refusals: [] }
   }
 
   const raw = extractJson(answer)

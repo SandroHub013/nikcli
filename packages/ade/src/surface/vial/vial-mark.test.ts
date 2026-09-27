@@ -16,7 +16,17 @@ test("mounts a canvas per button and passes count changes to its tube", async ()
   const dispose = createRoot((dispose) => {
     const [count, set] = createSignal(2)
     setCount = set
-    render(() => VialMark({ fam: "design", get count() { return count() }, theme: "dark" }), host)
+    render(
+      () =>
+        VialMark({
+          fam: "design",
+          get count() {
+            return count()
+          },
+          theme: "dark",
+        }),
+      host,
+    )
     return dispose
   })
   try {

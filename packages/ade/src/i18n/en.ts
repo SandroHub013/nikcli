@@ -33,10 +33,8 @@ export const en: Messages = {
     `Sets how much of the desktop shows through the window. From ${min}% up, text stays above the minimum contrast.`,
   "settings.theme.opacityLow": (min) =>
     `Below ${min}% the glass goes further and text loses contrast on pale desktops.`,
-  "settings.theme.unsupported":
-    "Glass theme is not supported on this operating system or window compositor.",
-  "settings.theme.desktopOnly":
-    "Native window transparency is only available in the desktop application.",
+  "settings.theme.unsupported": "Glass theme is not supported on this operating system or window compositor.",
+  "settings.theme.desktopOnly": "Native window transparency is only available in the desktop application.",
   "settings.theme.toLight": "Switch to light theme",
   "settings.theme.toDark": "Switch to dark theme",
   "settings.theme.toGlass": "Switch to glass theme",
@@ -56,7 +54,10 @@ export const en: Messages = {
   "palette.recents.forgetGone": (n) => `Remove gone folders from the recents (${n})`,
   "palette.design.variant": (k, title, variant, name) =>
     `Design: open the variant — ${title ? `${k} · ${title}` : k} · Variant ${variant}${name ? ` «${name}»` : ""}`,
-  "confirm.forgetGone": (n) => (n === 1 ? "Remove 1 gone folder from the recent projects and the Spaces?" : `Remove ${n} gone folders from the recent projects and the Spaces?`),
+  "confirm.forgetGone": (n) =>
+    n === 1
+      ? "Remove 1 gone folder from the recent projects and the Spaces?"
+      : `Remove ${n} gone folders from the recent projects and the Spaces?`,
   "palette.pane.shrink": "Restore panel size",
   "palette.pane.expand": "Maximize panel",
   "palette.pane.rename": "Rename session",
@@ -211,8 +212,10 @@ export const en: Messages = {
   "preview.binary": "Binary file or unsupported encoding.",
   "preview.loading": "Loading…",
   "empty.title": "No project open",
-  "empty.browser": "In the browser, ADE can't read the disk or start processes. Worktrees and real sessions are only available in the desktop app.",
-  "empty.desktop": "Choose a folder to get started. In a git repository, each session gets its own isolated working copy; otherwise agents write straight into the folder.",
+  "empty.browser":
+    "In the browser, ADE can't read the disk or start processes. Worktrees and real sessions are only available in the desktop app.",
+  "empty.desktop":
+    "Choose a folder to get started. In a git repository, each session gets its own isolated working copy; otherwise agents write straight into the folder.",
   "empty.open": "Open project",
   "projectBar.noGit": "Not a git repository: agents edit the project files directly.",
   "projectBar.noGit.short": "not isolated",
@@ -221,7 +224,7 @@ export const en: Messages = {
   "new.title": "New session",
   "new.cancel": "Cancel",
   "new.close": "Close",
-  "new.launch": (count) => count === 1 ? "Start 1 session" : `Start ${count} sessions`,
+  "new.launch": (count) => (count === 1 ? "Start 1 session" : `Start ${count} sessions`),
   "new.agent": "Agent",
   "new.notInstalled": "not installed",
   "new.missing": "missing",
@@ -229,38 +232,48 @@ export const en: Messages = {
   "new.count.label": "parallel sessions",
   "new.preview": "Will start",
   "new.role.reviewer": "reviews",
-  "new.summary": (count, agent, workspace) => `${count} ${count === 1 ? "session" : "sessions"} with ${agent} in ${workspace}`,
+  "new.summary": (count, agent, workspace) =>
+    `${count} ${count === 1 ? "session" : "sessions"} with ${agent} in ${workspace}`,
   "hooks.title": "Session resume",
-  "hooks.desc": "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
-  "hooks.files": "These files don't belong to ADE. They're shown in full below, any entries already in them are left alone, and Remove puts the configuration back the way it was.",
+  "hooks.desc":
+    "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
+  "hooks.files":
+    "These files don't belong to ADE. They're shown in full below, any entries already in them are left alone, and Remove puts the configuration back the way it was.",
   "hooks.state.unavailable": "unavailable",
   "hooks.state.on": "on",
   "hooks.state.broken": "needs reinstalling",
   "hooks.state.off": "off",
-  "hooks.broken": "The configuration has an ADE entry that doesn't match the script on disk, so the CLI is running a hook that does nothing. Reinstall to fix it.",
-  "hooks.plugin": "A plugin of nikcli's TUI, not a configuration entry: it tells ADE which conversation the pane shows, also after /new, /sessions or a change of tab. It does nothing in a nikcli ADE did not start.",
+  "hooks.broken":
+    "The configuration has an ADE entry that doesn't match the script on disk, so the CLI is running a hook that does nothing. Reinstall to fix it.",
+  "hooks.plugin":
+    "A plugin of nikcli's TUI, not a configuration entry: it tells ADE which conversation the pane shows, also after /new, /sessions or a change of tab. It does nothing in a nikcli ADE did not start.",
   "hooks.install": "Install",
   "hooks.reinstall": "Reinstall",
   "hooks.update": "Update",
   "hooks.outdated": "The installed one is from an earlier ADE: press Update to put in the new one.",
   "hooks.remove": "Remove",
-  "hooks.outside": "The script does nothing outside ADE: it exits at the first environment variable it can't find, so the same CLI started from any other terminal behaves exactly as before.",
+  "hooks.outside":
+    "The script does nothing outside ADE: it exits at the first environment variable it can't find, so the same CLI started from any other terminal behaves exactly as before.",
   "agent.mic.start": "Turn on microphone",
   "agent.mic.stop": "Turn off microphone",
   "agent.settings": "Settings",
-  "agent.noPlanner": "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
+  "agent.noPlanner":
+    "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
   "agent.onboarding.title": "Before speaking to nik",
-  "agent.onboarding.subtitle": "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",
+  "agent.onboarding.subtitle":
+    "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",
   "agent.onboarding.key.title": "OpenRouter API Key",
   "agent.onboarding.key.desc": "Required for fast speech transcription (Whisper / Gemma). Obtainable at openrouter.ai.",
   "agent.onboarding.key.action": "Set API key",
   "agent.onboarding.key.done": "Configured",
   "agent.onboarding.agent.title": "Agent (Claude Code or Codex)",
-  "agent.onboarding.agent.desc": "nik orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
+  "agent.onboarding.agent.desc":
+    "nik orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
   "agent.onboarding.agent.action": "Configure agent",
   "agent.onboarding.agent.done": "Available",
   "agent.onboarding.voice.title": "Natural voice (Piper)",
-  "agent.onboarding.voice.desc": "Local neural text-to-speech for fluent offline replies, avoiding robotic system voices.",
+  "agent.onboarding.voice.desc":
+    "Local neural text-to-speech for fluent offline replies, avoiding robotic system voices.",
   "agent.onboarding.voice.action": "Download voice",
   "agent.onboarding.voice.downloading": "Downloading…",
   "agent.onboarding.voice.retry": "Try again",
@@ -300,7 +313,8 @@ export const en: Messages = {
   "update.desktopOnly": "Updates are checked from the desktop app.",
   "update.alreadyShown": (version) => `Already in your notifications: ADE ${version} is available.`,
   "update.openFailed": (problem) => `Couldn't open the page: ${problem}`,
-  "update.restart": (running) => `ADE will restart to update. ${running === 1 ? "The running session will be stopped and resumed" : `The ${running} running sessions will be stopped and resumed`} when it reopens.`,
+  "update.restart": (running) =>
+    `ADE will restart to update. ${running === 1 ? "The running session will be stopped and resumed" : `The ${running} running sessions will be stopped and resumed`} when it reopens.`,
   "update.restart.title": "Update ADE",
   "update.restart.ok": "Update and restart",
   "update.restart.later": "Later",
@@ -333,12 +347,15 @@ export const en: Messages = {
   "boot.project": "opening the project",
   "pane.closeRunning": (agent) => `${agent}\n\nThe agent is still running. Closing the pane stops it.\n\nClose anyway?`,
   "editor.closeDirty": (path) => `${path}\n\nYou have unsaved changes. Closing will discard them.\n\nClose anyway?`,
-  "editor.saveUnreadable": (path, problem) => `${path}\n\nCouldn't re-read the file to check whether it changed (${problem}).\n\nSave anyway and replace what's on disk?`,
+  "editor.saveUnreadable": (path, problem) =>
+    `${path}\n\nCouldn't re-read the file to check whether it changed (${problem}).\n\nSave anyway and replace what's on disk?`,
   "editor.saveCancelled.unreadable": (problem) => `Save cancelled: couldn't re-read the file (${problem}).`,
-  "editor.saveChanged": (path) => `${path}\n\nThe file changed on disk since you opened it. Saving will replace those changes with yours.\n\nContinue?`,
+  "editor.saveChanged": (path) =>
+    `${path}\n\nThe file changed on disk since you opened it. Saving will replace those changes with yours.\n\nContinue?`,
   "editor.saveCancelled.changed": "Save cancelled: the file changed on disk.",
   "keys.unread": (problem) => `Couldn't read the API keys, so the session starts without them: ${problem}`,
-  "task.notSent": "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
+  "task.notSent":
+    "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
   "task.none": "No initial task",
   "bar.newPane": "New panel",
@@ -358,25 +375,31 @@ export const en: Messages = {
   "settings.noPlugins": "No plugins loaded.",
   "settings.notBuilt": "Nothing to configure here yet: the section exists, the feature doesn't.",
   "settings.grid.title": "Grid",
-  "settings.grid.desc": "How many columns the panels use in the Code view. On Auto, ADE picks based on the window width and how many panels are open, so none gets narrower than is readable.",
+  "settings.grid.desc":
+    "How many columns the panels use in the Code view. On Auto, ADE picks based on the window width and how many panels are open, so none gets narrower than is readable.",
   "settings.grid.columns": "Grid columns",
   "settings.grid.auto": "Auto",
   "settings.mcp.desc": "The servers ADE connects to over the Model Context Protocol, and the tools they provide.",
-  "settings.mcp.instead": "In the meantime, the agent CLIs ADE starts use their own MCP configuration, the same one they'd use from a terminal.",
+  "settings.mcp.instead":
+    "In the meantime, the agent CLIs ADE starts use their own MCP configuration, the same one they'd use from a terminal.",
   "settings.bots.title": "Bots",
-  "settings.bots.desc": "The nikcli agents known to this machine: which model they run with, and whether they belong to the project or are global. Create and edit them in the Bot view.",
+  "settings.bots.desc":
+    "The nikcli agents known to this machine: which model they run with, and whether they belong to the project or are global. Create and edit them in the Bot view.",
   "settings.bots.empty": "No nikcli agents yet. Create one in the Bot view.",
   "settings.bots.reading": "Reading nikcli folders…",
   "settings.bots.defaultModel": "nikcli default model",
   "settings.bots.scopeProject": "project",
   "settings.bots.scopeGlobal": "global",
   "settings.skills.title": "Tools",
-  "settings.skills.desc": "Which tools have been disabled for a bot. Any bot not listed here has all of them: nikcli only records disabled tools in the file.",
+  "settings.skills.desc":
+    "Which tools have been disabled for a bot. Any bot not listed here has all of them: nikcli only records disabled tools in the file.",
   "settings.skills.empty": "No bot has restrictions: all bots can use every nikcli tool.",
   "settings.skills.without": (tools) => `without ${tools}`,
   "settings.providers.title": "Providers",
-  "settings.providers.desc1": "The runners a bot can use, each with its own CLI account: Anthropic subscriptions go through Claude Code, ChatGPT through Codex, and keys and other subscriptions through nikcli. The engine, model, and reasoning effort are set in each bot's card.",
-  "settings.providers.desc2Before": (max) => `ADE never asks for or reads credentials: sign-in happens in each CLI's official flow. Subscriptions are for personal use and ADE keeps at most ${max} turns at once for each; for intensive or unattended automation sign in to the CLI with an API key (Claude Code accepts the Anthropic Console key, Codex the OpenAI key with `,
+  "settings.providers.desc1":
+    "The runners a bot can use, each with its own CLI account: Anthropic subscriptions go through Claude Code, ChatGPT through Codex, and keys and other subscriptions through nikcli. The engine, model, and reasoning effort are set in each bot's card.",
+  "settings.providers.desc2Before": (max) =>
+    `ADE never asks for or reads credentials: sign-in happens in each CLI's official flow. Subscriptions are for personal use and ADE keeps at most ${max} turns at once for each; for intensive or unattended automation sign in to the CLI with an API key (Claude Code accepts the Anthropic Console key, Codex the OpenAI key with `,
   "settings.providers.desc2After": ").",
   "settings.providers.checking": "Checking…",
   "settings.providers.notInstalled": "Not installed",
@@ -395,9 +418,12 @@ export const en: Messages = {
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "voice assistant",
   "voice.shortcut.feature.transcription": "dictation",
-  "voice.shortcut.busy": (chord, feature) => `The shortcut ${chord} for ${feature} is unavailable: another application might be using it. Choose another one in voice settings.`,
-  "voice.shortcut.unknown": (chord) => `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
-  "voice.permission.notRefusal": "None of the proposed answers is a refusal: please answer yourself, I won't choose for you.",
+  "voice.shortcut.busy": (chord, feature) =>
+    `The shortcut ${chord} for ${feature} is unavailable: another application might be using it. Choose another one in voice settings.`,
+  "voice.shortcut.unknown": (chord) =>
+    `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
+  "voice.permission.notRefusal":
+    "None of the proposed answers is a refusal: please answer yourself, I won't choose for you.",
   "voice.permission.type.shell": "a command",
   "voice.permission.type.write": "a file change",
   "voice.permission.type.network": "a network request",
@@ -460,7 +486,8 @@ export const en: Messages = {
   "record.export.desktopOnly": "Exporting only works in the desktop app.",
   "record.export.done": (path) => `Video ready: ${path}`,
   "record.export.failed": (problem) => `Export failed: ${problem}`,
-  "pane.maybeStuck": (request) => `Possibly stuck: working for over an hour with no output or changes (request ${request})`,
+  "pane.maybeStuck": (request) =>
+    `Possibly stuck: working for over an hour with no output or changes (request ${request})`,
 
   // Pane activity (labels for the codes in grid/activity.ts)
   "activity.ready": "Ready",
@@ -505,7 +532,8 @@ export const en: Messages = {
   "pane.resume": "Resume",
   "pane.closeGone": "Close the pane",
   "pane.input.suspended": "Resume to write",
-  "note.suspendKillFailed": "Not suspended: closing the processes failed and the session no longer answers. Close the pane and open it again.",
+  "note.suspendKillFailed":
+    "Not suspended: closing the processes failed and the session no longer answers. Close the pane and open it again.",
   "pane.limit": "limit reached",
   "pane.limit.window": (window) => `${window} window used up`,
 
@@ -595,24 +623,31 @@ export const en: Messages = {
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>
     `The bot asked for the permission «${permission}» for:\n${what}\n\nNot granted from a chat: I said no.`,
-  "gateway.noProxySlack": "On Slack the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Slack bot will not get there.",
+  "gateway.noProxySlack":
+    "On Slack the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Slack bot will not get there.",
   "gateway.panel.platformSlack": "Slack",
   "gateway.panel.titleSlack": "Gateway · Slack app",
-  "gateway.panel.introSlack": "Write to this bot from Slack, while ADE is open. Every bot has its own Slack app, made from the manifest ADE prepares below.",
-  "gateway.panel.tokenHelpSlack": "Paste the Bot User OAuth Token, which starts with xoxb-: it is in OAuth & Permissions once the app is installed in the workspace. It stays in the system keychain: ADE never shows it again.",
+  "gateway.panel.introSlack":
+    "Write to this bot from Slack, while ADE is open. Every bot has its own Slack app, made from the manifest ADE prepares below.",
+  "gateway.panel.tokenHelpSlack":
+    "Paste the Bot User OAuth Token, which starts with xoxb-: it is in OAuth & Permissions once the app is installed in the workspace. It stays in the system keychain: ADE never shows it again.",
   "gateway.panel.tokenPlaceholderSlack": "xoxb-…",
   "gateway.panel.appToken": "App-Level Token",
-  "gateway.panel.appTokenHelp": "The second token opens the bot's connection. The manifest does not make it: create it by hand in Basic Information › App-Level Tokens, with the connections:write scope, and paste it here. It starts with xapp-.",
+  "gateway.panel.appTokenHelp":
+    "The second token opens the bot's connection. The manifest does not make it: create it by hand in Basic Information › App-Level Tokens, with the connections:write scope, and paste it here. It starts with xapp-.",
   "gateway.panel.appTokenSaved": "App-Level Token saved in the keychain",
   "gateway.panel.appTokenPlaceholder": "xapp-…",
   "gateway.panel.needAppToken": "Switching on also needs Slack's App-Level Token (xapp-…): save it above.",
   "gateway.panel.slackSetup": "In the Slack app",
-  "gateway.panel.slackManifestHow": "On api.slack.com/apps choose «Create New App», then «From a manifest», and paste this bot's manifest. Then install the app in the workspace: the xoxb- token shows up in OAuth & Permissions.",
+  "gateway.panel.slackManifestHow":
+    "On api.slack.com/apps choose «Create New App», then «From a manifest», and paste this bot's manifest. Then install the app in the workspace: the xoxb- token shows up in OAuth & Permissions.",
   "gateway.panel.slackManifestShow": "Show the manifest",
   "gateway.panel.slackManifest": "Slack app manifest",
   "gateway.panel.slackManifestMissing": "The manifest is only prepared in the ADE app.",
-  "gateway.panel.slackReinstall": "If you change the app's scopes, reinstall it in the workspace: until you do, Slack does not send the missing events, and the bot stays silent with no error at all. «Test» says which scopes are missing.",
-  "gateway.panel.slackInvite": "In channels and group messages the bot gets only the messages that name it, and only where you added it (in a channel, with /invite): the rest never reaches it. A direct message to it alone needs nothing.",
+  "gateway.panel.slackReinstall":
+    "If you change the app's scopes, reinstall it in the workspace: until you do, Slack does not send the missing events, and the bot stays silent with no error at all. «Test» says which scopes are missing.",
+  "gateway.panel.slackInvite":
+    "In channels and group messages the bot gets only the messages that name it, and only where you added it (in a channel, with /invite): the rest never reaches it. A direct message to it alone needs nothing.",
   "gateway.panel.platform": "The bot's platform",
   "gateway.panel.platformTelegram": "Telegram",
   "gateway.panel.platformDiscord": "Discord",
@@ -632,15 +667,18 @@ export const en: Messages = {
   "gateway.panel.invite":
     "Invite the bot to your server from OAuth2 › URL Generator, with the bot and applications.commands scopes. A private chat needs no invite.",
   "gateway.panel.title": "Gateway · Telegram bot",
-  "gateway.panel.intro": "Write to this bot from Telegram while ADE is open. Each bot has its own Telegram bot, made with BotFather.",
+  "gateway.panel.intro":
+    "Write to this bot from Telegram while ADE is open. Each bot has its own Telegram bot, made with BotFather.",
   "gateway.panel.off": "Off",
   "gateway.panel.stopped": "On, but stopped by an error",
   "gateway.panel.connected": "On · connected",
   "gateway.panel.connecting": "On · connecting",
   "gateway.panel.lastMessage": (time) => `last message at ${time}`,
-  "gateway.panel.redacted": (time) => `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,
+  "gateway.panel.redacted": (time) =>
+    `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,
   "gateway.panel.token": "Bot token",
-  "gateway.panel.tokenHelp": "Paste the token BotFather gave you. It stays in the system keychain: ADE never shows it again.",
+  "gateway.panel.tokenHelp":
+    "Paste the token BotFather gave you. It stays in the system keychain: ADE never shows it again.",
   "gateway.panel.tokenSaved": "Token saved in the keychain",
   "gateway.panel.probed": (name) => `answers as ${name}`,
   "gateway.panel.tokenReplace": "Paste a new token to replace it",
@@ -654,11 +692,14 @@ export const en: Messages = {
   "gateway.panel.switchOff": "Switch off",
   "gateway.panel.authorized": "Who may write",
   "gateway.panel.nobody": "Nobody. Write to the bot from Telegram: you get a code, and you enter it here.",
-  "gateway.panel.nobodyDiscord": "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
-  "gateway.panel.nobodySlack": "Nobody. Write to the bot in a direct message on Slack: you get a code, and you enter it here.",
+  "gateway.panel.nobodyDiscord":
+    "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
+  "gateway.panel.nobodySlack":
+    "Nobody. Write to the bot in a direct message on Slack: you get a code, and you enter it here.",
   "gateway.panel.revoke": "Revoke",
   "gateway.panel.pairing": "Pairing",
-  "gateway.panel.onlyYours": "Pair only an account of yours: whoever you pair drives the bot on your PC and your subscriptions.",
+  "gateway.panel.onlyYours":
+    "Pair only an account of yours: whoever you pair drives the bot on your PC and your subscriptions.",
   "gateway.panel.expires": (time) => `expires at ${time}`,
   "gateway.panel.reject": "Refuse",
   "gateway.panel.code": "Pairing code",
@@ -691,7 +732,8 @@ export const en: Messages = {
   "chat.session.waiting": "waiting for you",
   "chat.session.foreign": "outside the Chat",
   "chat.status.noProject": "Open a project to use the Chat.",
-  "chat.status.notOpen": "The Chat is not connected to this project yet: it connects when you pick a model or send a message.",
+  "chat.status.notOpen":
+    "The Chat is not connected to this project yet: it connects when you pick a model or send a message.",
   "chat.connect": "Connect now",
   "chat.status.admitting": "Checking your trust in the project…",
   "chat.status.connecting": "Connecting to the nikcli server…",
@@ -712,20 +754,25 @@ export const en: Messages = {
     `This bot's gateway ran in:\n${from}\n\nSwitched on now, chat turns will run in:\n${to}\n\nSwitch on in this project?`,
   "gateway.panel.pairingOpenUntil": (time) => `Whoever writes to the bot until ${time} gets a code.`,
   "gateway.panel.remote": "Remote commands",
-  "gateway.panel.remoteNever": (runner) => `From a chat this bot runs no commands: ${runner} cannot ask you command by command.`,
+  "gateway.panel.remoteNever": (runner) =>
+    `From a chat this bot runs no commands: ${runner} cannot ask you command by command.`,
   "gateway.panel.remoteOn": "On: every command is asked on Telegram, and no answer in 5 minutes means no.",
   "gateway.panel.remoteOnDiscord": "On: every command is asked on Discord, and no answer in 5 minutes means no.",
   "gateway.panel.remoteOnSlack": "On: every command is asked on Slack, and no answer in 5 minutes means no.",
   "gateway.panel.remoteOff": "Off: from a chat the bot runs no commands on the PC.",
   "gateway.panel.remoteAsk": "Switch on…",
   "gateway.panel.remoteSwitchOff": "Switch the commands off",
-  "gateway.panel.remoteWhat": "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Telegram with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
-  "gateway.panel.remoteWhatDiscord": "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Discord with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
-  "gateway.panel.remoteWhatSlack": "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Slack with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
+  "gateway.panel.remoteWhat":
+    "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Telegram with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
+  "gateway.panel.remoteWhatDiscord":
+    "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Discord with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
+  "gateway.panel.remoteWhatSlack":
+    "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Slack with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
   "gateway.panel.cancel": "Cancel",
   "gateway.panel.remoteConfirm": "Switch the commands on",
   "gateway.panel.mcp": "From a chat the bot also uses your MCP servers and the plugins of your nikcli configuration.",
-  "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
+  "browser.design.label": (k, title, variant) =>
+    title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`,
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
   "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",
   "browser.design.refused": "Not a .ade/design page of an open project: not opened.",
@@ -754,18 +801,20 @@ export const en: Messages = {
   "browser.forget.failed": (problem) => `Not cleared: ${problem}`,
   "browser.storage.note": "Cookies and data stay in ADE's profile.",
   "browser.blocked.title": "This site can't be shown inside ADE",
-  "browser.blocked.msg": "The server forbids embedding the page in another app (X-Frame-Options or CSP frame-ancestors) and doesn't let ADE read a copy of it.",
+  "browser.blocked.msg":
+    "The server forbids embedding the page in another app (X-Frame-Options or CSP frame-ancestors) and doesn't let ADE read a copy of it.",
   "browser.openExternal": "Open in browser",
   "browser.openExternal.failed": (problem) => `Couldn't open it in the browser: ${problem}`,
   "browser.noCopy.title": "Inspect isn't available for this page",
-  "browser.noCopy.msg": "To select elements ADE needs a copy of the page, and this site doesn't allow reading one (CORS). In Browse the page stays visible.",
+  "browser.noCopy.msg":
+    "To select elements ADE needs a copy of the page, and this site doesn't allow reading one (CORS). In Browse the page stays visible.",
   "browser.noCopy.back": "Back to Browse",
   "browser.context": "Captured context:",
   "browser.clearSelection": "Clear selection",
   "browser.prompt.selected": "Describe what to change…",
   "browser.prompt.empty": "Point at an element on the page, or type an instruction…",
   "browser.selection.none": "No elements selected",
-  "browser.selection.count": (count) => count === 1 ? "1 element selected" : `${count} elements selected`,
+  "browser.selection.count": (count) => (count === 1 ? "1 element selected" : `${count} elements selected`),
   "browser.owner.none": "Not linked",
   "browser.owner.ready": (title) => `↳ ${title}`,
   "browser.owner.closed": (title) => `${title} (closed)`,
@@ -805,7 +854,7 @@ export const en: Messages = {
   "date.inDays": (days) => `in ${days} days`,
   "decisions.title": "Decisions",
   "decisions.openCount": (count) => `${count} open`,
-  "decisions.count": (count) => count === 1 ? "1 decision" : `${count} decisions`,
+  "decisions.count": (count) => (count === 1 ? "1 decision" : `${count} decisions`),
   "decisions.needAnswer": "choose an option or write your answer",
   "decisions.from": (who) => `from ${who}`,
   "decisions.unlocks": (what) => `unblocks: ${what}`,
@@ -837,7 +886,8 @@ export const en: Messages = {
   "decisions.change": "Change answer",
   "decisions.reopen": "Reopen now",
   "decisions.change.confirm": (key) => `Reopen ${key}?`,
-  "decisions.change.confirm.delivered": (key, recipient, answer) => `Reopen ${key}? ${recipient} already has answer ${answer}`,
+  "decisions.change.confirm.delivered": (key, recipient, answer) =>
+    `Reopen ${key}? ${recipient} already has answer ${answer}`,
   "decisions.delivery.done": (to, when) => `✓ delivered to ${to} · ${when} · whoever carries it out closes it`,
   "decisions.delivery.by": (who, day) => `answered by ${who} · ${day}`,
   "decisions.queued.ready": (title) => `queued: goes out as soon as “${title}” is free`,
@@ -847,7 +897,8 @@ export const en: Messages = {
   "decisions.recipient.nobody": "no session",
   "decisions.recipient.stopped": "(stopped)",
   "decisions.recipient.closed": "(closed)",
-  "decisions.recipient.confirm": (queued, title) => `Deliver ${queued === 1 ? "the queued answer" : `the ${queued} queued answers`} to “${title}”?`,
+  "decisions.recipient.confirm": (queued, title) =>
+    `Deliver ${queued === 1 ? "the queued answer" : `the ${queued} queued answers`} to “${title}”?`,
   "decisions.recipient.deliver": "Deliver",
   "decisions.recipient.none": "No session receives answers, so they stay queued until you choose one.",
   "decisions.recipient.idle": (title) => `“${title}” isn't running, so answers stay queued.`,
@@ -858,8 +909,10 @@ export const en: Messages = {
   "decisions.sheet.needRecipient": "Nobody receives the answer: choose who does, then Enter",
   "decisions.sheet.needText": "Write your answer in the note, then press Ctrl+Enter",
   "decisions.sheet.keys": "1–9 choose · Enter records · ← → browse · Esc closes",
-  "decisions.sheet.queued.none": (count) => `${count === 1 ? "1 answer" : `${count} answers`} queued: no session receives them`,
-  "decisions.sheet.queued.idle": (count) => `${count === 1 ? "1 answer" : `${count} answers`} queued: the chosen session isn't running`,
+  "decisions.sheet.queued.none": (count) =>
+    `${count === 1 ? "1 answer" : `${count} answers`} queued: no session receives them`,
+  "decisions.sheet.queued.idle": (count) =>
+    `${count === 1 ? "1 answer" : `${count} answers`} queued: the chosen session isn't running`,
   "decisions.sheet.status.sent": (key, choice, recipient) => `${key}: ${choice}, to ${recipient}`,
   "decisions.sheet.status.idle": (key, choice, recipient) => `${key}: ${choice}, queued (${recipient} is not running)`,
   "decisions.sheet.status.none": (key, choice) => `${key}: ${choice}, queued (no session chosen)`,
@@ -876,7 +929,7 @@ export const en: Messages = {
 
   "design.title": "Design",
   "design.openCount": (count) => `${count} open`,
-  "design.count": (count) => count === 1 ? "1 design proposal" : `${count} design proposals`,
+  "design.count": (count) => (count === 1 ? "1 design proposal" : `${count} design proposals`),
   "design.waiting": "Design proposals waiting",
   "design.needChoice": "choose a variant or write a note",
   "design.variants": "Variants",
@@ -887,7 +940,8 @@ export const en: Messages = {
   "design.preview.source": "Source",
   "design.preview.outside": (path, k) => `Outside the project: ${path} — previews live in .ade/design/${k}/`,
   "design.preview.failed": (path, error) => `Does not load: ${path} — ${error}`,
-  "design.preview.inline": (k) => `Preview written in the register: not shown, it needs one page per variant in .ade/design/${k}/`,
+  "design.preview.inline": (k) =>
+    `Preview written in the register: not shown, it needs one page per variant in .ade/design/${k}/`,
   "design.preview.imageBroken": "the file does not open (missing, or outside the open projects)",
   "design.preview.shared": "These variants show the same page: ask for one page per variant",
   "design.submit": "Record choice",
@@ -906,7 +960,8 @@ export const en: Messages = {
   "design.change": "Change choice",
   "design.reopen": "Reopen now",
   "design.change.confirm": (key) => `Reopen ${key}?`,
-  "design.change.confirm.delivered": (key, recipient, choice) => `Reopen ${key}? ${recipient} already has choice ${choice}`,
+  "design.change.confirm.delivered": (key, recipient, choice) =>
+    `Reopen ${key}? ${recipient} already has choice ${choice}`,
   "design.delivery.done": (to, when) => `✓ delivered to ${to} · ${when} · whoever implements it closes it`,
   "design.delivery.by": (who, day) => `chosen by ${who} · ${day}`,
   "design.queued.ready": (title) => `queued: goes out as soon as “${title}” is free`,
@@ -916,7 +971,8 @@ export const en: Messages = {
   "design.recipient.nobody": "no session",
   "design.recipient.stopped": "(stopped)",
   "design.recipient.closed": "(closed)",
-  "design.recipient.confirm": (queued, title) => `Deliver ${queued === 1 ? "the queued choice" : `the ${queued} queued choices`} to “${title}”?`,
+  "design.recipient.confirm": (queued, title) =>
+    `Deliver ${queued === 1 ? "the queued choice" : `the ${queued} queued choices`} to “${title}”?`,
   "design.recipient.deliver": "Deliver",
   "design.sheet.position": (index, total) => `${index} of ${total}`,
   "design.sheet.empty": "When a session opens one, the badge at the top shows it.",
@@ -924,8 +980,10 @@ export const en: Messages = {
   "design.sheet.needRecipient": "Nobody receives the answer: choose who does, then Enter",
   "design.sheet.needText": "Write your answer in the note, then press Ctrl+Enter",
   "design.sheet.keys": "1–9 choose · Enter records · ← → browse · Esc closes",
-  "design.sheet.queued.none": (count) => `${count === 1 ? "1 answer" : `${count} answers`} queued: no session receives them`,
-  "design.sheet.queued.idle": (count) => `${count === 1 ? "1 answer" : `${count} answers`} queued: the chosen session isn't running`,
+  "design.sheet.queued.none": (count) =>
+    `${count === 1 ? "1 answer" : `${count} answers`} queued: no session receives them`,
+  "design.sheet.queued.idle": (count) =>
+    `${count === 1 ? "1 answer" : `${count} answers`} queued: the chosen session isn't running`,
   "design.sheet.status.sent": (key, choice, recipient) => `${key}: ${choice}, to ${recipient}`,
   "design.sheet.status.idle": (key, choice, recipient) => `${key}: ${choice}, queued (${recipient} is not running)`,
   "design.sheet.status.none": (key, choice) => `${key}: ${choice}, queued (no session chosen)`,
@@ -950,7 +1008,8 @@ export const en: Messages = {
   "editor.nothingToSave": "Nothing to save.",
   "editor.noFile": "No file open.",
   "editor.loading": "Loading file…",
-  "editor.truncatedBanner": "This file is too large and was only partly loaded. Saving is turned off to protect the file on disk.",
+  "editor.truncatedBanner":
+    "This file is too large and was only partly loaded. Saving is turned off to protect the file on disk.",
   "editor.modified": "Modified",
   "editor.saved": "Saved",
   "editor.unsaved": "Unsaved changes",
@@ -966,7 +1025,8 @@ export const en: Messages = {
   "plugins.renderFailed": "This plugin couldn't draw its panel.",
   "plugins.sectionFailed": "Section unavailable.",
   "plugins.summary": (active) => `${active} ${active === 1 ? "plugin" : "plugins"} active.`,
-  "plugins.summary.failed": (active, failed) => `${active} ${active === 1 ? "plugin" : "plugins"} active, ${failed} failed to load.`,
+  "plugins.summary.failed": (active, failed) =>
+    `${active} ${active === 1 ? "plugin" : "plugins"} active, ${failed} failed to load.`,
   "plugins.commands": (count) => `${count} ${count === 1 ? "command" : "commands"}`,
   "plugins.panes": (count) => `${count} ${count === 1 ? "panel" : "panels"}`,
   "plugins.sections": (count) => `${count} ${count === 1 ? "section" : "sections"}`,
@@ -992,7 +1052,7 @@ export const en: Messages = {
   "shots.close": "close",
 
   // Extensions
-  "extensions.missingType": "no type \"http\": Claude Code won't load it, other clients will",
+  "extensions.missingType": 'no type "http": Claude Code won\'t load it, other clients will',
   "extensions.filter": "Filter",
   "extensions.filter.all": "All",
   "extensions.filter.oneClick": "One click",
@@ -1002,14 +1062,17 @@ export const en: Messages = {
   "extensions.transport.stdio": "local (stdio)",
   "extensions.after.oauth": "The agent asks you to sign in (OAuth) the first time it's used.",
   "extensions.after.none": "No credentials needed.",
-  "extensions.after.oauthOrEnv": (list) => `Sign in with OAuth on first use, or set ${list} in the agent's environment.`,
+  "extensions.after.oauthOrEnv": (list) =>
+    `Sign in with OAuth on first use, or set ${list} in the agent's environment.`,
   "extensions.after.env": (list) => `Set ${list} in the agent's environment. .mcp.json only keeps a reference to it.`,
-  "extensions.added": (name, file, hint) => `Added ${name} to ${file}. ${hint} It applies to sessions started from now on.`,
+  "extensions.added": (name, file, hint) =>
+    `Added ${name} to ${file}. ${hint} It applies to sessions started from now on.`,
   "extensions.removed": (name, file) => `Removed ${name} from ${file}.`,
   "extensions.tab.installed": (count) => `Installed · ${count}`,
   "extensions.tab.catalog": (count) => `MCP catalog · ${count}`,
   "extensions.tab.plugins": (count) => `Plugins · ${count}`,
-  "extensions.desc": (file) => `MCP servers and plugins. Add to project only writes the open project's ${file}, which agent CLIs read when a session starts. Credentials never go in that file.`,
+  "extensions.desc": (file) =>
+    `MCP servers and plugins. Add to project only writes the open project's ${file}, which agent CLIs read when a session starts. Credentials never go in that file.`,
   "extensions.noProject": (file) => `Open a project to add MCP servers. They're installed in its ${file}.`,
   "extensions.search": "Search servers: Stripe, calendar, database…",
   "extensions.search.label": "Search the catalog",
@@ -1045,7 +1108,8 @@ export const en: Messages = {
   "keys.added.today": "added today",
   "keys.added.yesterday": "added yesterday",
   "keys.added.days": (days) => `added ${days} days ago`,
-  "keys.desc": "Secret keys your sessions can use. The value stays in the system keychain (Windows Credential Manager, macOS Keychain). ADE never writes it to a file or shows it, and only passes it as an environment variable to the agents you choose for each key, when a session starts.",
+  "keys.desc":
+    "Secret keys your sessions can use. The value stays in the system keychain (Windows Credential Manager, macOS Keychain). ADE never writes it to a file or shows it, and only passes it as an environment variable to the agents you choose for each key, when a session starts.",
   "keys.noKeychain": "This version of ADE can't access the keychain.",
   "keys.none": "No saved keys.",
   "keys.hidden": "hidden value",
@@ -1075,7 +1139,8 @@ export const en: Messages = {
   "keys.request.says": "The agent writes:",
   "keys.request.goes": (agent) =>
     `It stays in the system keychain and goes to ${agent}, which gets it the next time the session starts. You can also ignore the request.`,
-  "keys.request.hint": "It stays in the system keychain, and the session gets it the next time it starts. You can also ignore the request.",
+  "keys.request.hint":
+    "It stays in the system keychain, and the session gets it the next time it starts. You can also ignore the request.",
 
   // Video, 3D model, simulator, recording, remote, quota
   "media.pick": "Choose a file",
@@ -1115,7 +1180,8 @@ export const en: Messages = {
   "panels.consent.someone": "An agent",
   "panels.consent.allow": "Allow",
   "panels.consent.deny": "Deny",
-  "record.consent.note": "The video captures everything on screen until you stop it with the REC button. Fields with keys and passwords are blurred.",
+  "record.consent.note":
+    "The video captures everything on screen until you stop it with the REC button. Fields with keys and passwords are blurred.",
   "record.consent.mic": "Also record the microphone",
   "record.consent.no": "No",
   "record.consent.yes": "Record",
@@ -1147,12 +1213,14 @@ export const en: Messages = {
   "quota.na.noWindows": "quota-axi reports no windows for this provider.",
   "quota.na.noTime": "The quota-axi report doesn't say when it was written.",
   "quota.na.future": (time) => `The report is dated ${time}, later than now: it can't be trusted.`,
-  "quota.na.claude.noFile": "Claude's quota file wasn't found (~/.llm-quota/official/claude.json): Claude Code's status line writes it.",
+  "quota.na.claude.noFile":
+    "Claude's quota file wasn't found (~/.llm-quota/official/claude.json): Claude Code's status line writes it.",
   "quota.na.claude.noWindows": "Claude's file reports no quota windows.",
   "quota.na.claude.noTime": "Claude's file doesn't say when it was written.",
   "quota.readClaude": (time) => `Read from Claude Code's status line at ${time}`,
   "quota.staleNote": "Not a recent reading: the quota now may differ.",
-  "quota.na.agy.noFile": "agy's quota file wasn't found (~/.llm-quota/official/antigravity.json): agy's status line writes it.",
+  "quota.na.agy.noFile":
+    "agy's quota file wasn't found (~/.llm-quota/official/antigravity.json): agy's status line writes it.",
   "quota.na.agy.noBuckets": "agy's file reports no quota windows.",
   "quota.na.agy.noTime": "agy's file doesn't say when it was written.",
   "quota.readAgy": (time) => `Read from agy's status line at ${time}`,
@@ -1169,9 +1237,11 @@ export const en: Messages = {
 
   // Notes in panels (what the user reads; the agents get their own Italian text)
   "note.someSession": "a session",
-  "resume.noMint": (agent) => `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
+  "resume.noMint": (agent) =>
+    `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
-  "resume.slowMint": (agent, seconds) => `${agent} is taking longer than usual to open the conversation: waiting up to ${seconds} more seconds.`,
+  "resume.slowMint": (agent, seconds) =>
+    `${agent} is taking longer than usual to open the conversation: waiting up to ${seconds} more seconds.`,
   "resume.lookingHere": (agent) => `Looking for ${agent}'s latest conversation in this folder…`,
   "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
   "resume.otherFolder": (dir) =>
@@ -1185,7 +1255,8 @@ export const en: Messages = {
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
   "note.panelReplyHeld": (why: string) => `Panel reply waiting (${why}): I will try again when the pane is free`,
-  "note.panelReplyStale": (n: number) => `Dropped ${n === 1 ? "one panel reply" : `${n} panel replies`}: waiting too long`,
+  "note.panelReplyStale": (n: number) =>
+    `Dropped ${n === 1 ? "one panel reply" : `${n} panel replies`}: waiting too long`,
   "note.dictationHeld": "Dictation not written: a question is open, answer it first and then dictate",
   "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
@@ -1217,7 +1288,8 @@ export const en: Messages = {
     `Starting with this version the assistant starts by voice: begin the sentence with “ei nik” or “nik”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
   "voice.shortcutOnly": (shortcut) =>
     `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
-  "voice.alwaysListening": (wakeWord, manual, toggle) => `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
+  "voice.alwaysListening": (wakeWord, manual, toggle) =>
+    `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "voice.listeningOff": (shortcut, always) =>
     `Starting with this version ADE no longer listens by itself: the microphone opens with ${shortcut} or the button at the top, and the name works inside it. Listening all the time costs money, because every voice in the room is sent to the transcription service: to have it back, turn on “${always}” in the voice settings.`,
   "voice.alert.permission": (pane, what) => `${pane} is requesting permission for: ${what}. Do you want to allow it?`,
@@ -1253,10 +1325,12 @@ export const en: Messages = {
   "mcp.error.notObject": "The MCP server configuration isn't an object.",
   "mcp.error.urlOrCommand": "The MCP configuration needs either url or command.",
   "mcp.error.urlAndCommand": "The MCP configuration needs url or command, not both.",
-  "mcp.error.remoteType": "A remote MCP server must declare type \"http\" or \"sse\"; without it, Claude Code ignores the server.",
-  "mcp.error.stdioType": "An MCP server with a command has type \"stdio\" or no type.",
+  "mcp.error.remoteType":
+    'A remote MCP server must declare type "http" or "sse"; without it, Claude Code ignores the server.',
+  "mcp.error.stdioType": 'An MCP server with a command has type "stdio" or no type.',
   "mcp.error.urlCredentials": "url can't contain embedded credentials.",
-  "mcp.error.urlSecret": (name) => `url contains a secret value in parameter ${name}; use a reference like "\${VARIABLE_NAME}".`,
+  "mcp.error.urlSecret": (name) =>
+    `url contains a secret value in parameter ${name}; use a reference like "\${VARIABLE_NAME}".`,
   "mcp.error.url": "url must be a valid URL.",
   "mcp.error.args": "args must be an array of strings.",
   "mcp.error.argSecret": (index) => `args[${index}] may contain a secret; use a reference like "\${VARIABLE_NAME}".`,
@@ -1351,7 +1425,8 @@ export const en: Messages = {
   "chat.model.label": "Model",
   "chat.model.free": "free",
   "voice.path.askFile": (path: string) => `Voice asks to open a file outside the project:\n\n${path}\n\nOpen it?`,
-  "voice.path.askProject": (root: string) => `Voice asks to open a folder that is not a recent project:\n\n${root}\n\nOpen it?`,
+  "voice.path.askProject": (root: string) =>
+    `Voice asks to open a folder that is not a recent project:\n\n${root}\n\nOpen it?`,
   "voice.path.refused": "Not opened: denied by the user.",
   "voice.path.open": "Open",
   "voice.path.cancel": "Do not open",
@@ -1395,7 +1470,8 @@ export const en: Messages = {
   "chat.agent.name.explore": "Explorer",
   "chat.new": "New conversation",
   "chat.empty.title": "Ask something.",
-  "chat.empty.body": "A conversation with nikcli in this project: it reads files on its own, and asks you before every command or edit.",
+  "chat.empty.body":
+    "A conversation with nikcli in this project: it reads files on its own, and asks you before every command or edit.",
   "chat.input.placeholder": "Type a message…",
   "chat.send": "Send",
   "chat.stop": "Stop",
@@ -1417,11 +1493,11 @@ export const en: Messages = {
   "chat.error.notOpen": "The chat is not open on a folder.",
   "chat.error.otherFolder": (open: string, other: string) =>
     `The chat is open on ${open}: a request for ${other} is not sent.`,
-  "chat.error.otherOrigin": (origin: string) =>
-    `The chat's transport only talks to nikcli's server, not to ${origin}.`,
+  "chat.error.otherOrigin": (origin: string) => `The chat's transport only talks to nikcli's server, not to ${origin}.`,
   "chat.error.requestAborted": "The request was stopped.",
   "chat.retry": (attempt: number) => `The provider returned an error: trying again, attempt ${attempt}…`,
-  "chat.attach.outside": (path: string) => `${path} is not a file of this project: the chat only attaches files of the open folder.`,
+  "chat.attach.outside": (path: string) =>
+    `${path} is not a file of this project: the chat only attaches files of the open folder.`,
   "chat.attach.notFile": (path: string) => `${path} is not a file: the chat only attaches files.`,
   "chat.attach.env": (path: string) =>
     `${path} is not attached: .env files usually hold keys and passwords, and an attachment reaches the model's provider.`,
@@ -1458,7 +1534,8 @@ export const en: Messages = {
   "bots.face.reset": "Reset to name default",
   "bots.subagent.isA": "This is a ",
   "bots.subagent.label": "subagent",
-  "bots.subagent.desc": ": it doesn't respond on its own; another agent calls it. You can still message it, but nikcli will use the default agent instead.",
+  "bots.subagent.desc":
+    ": it doesn't respond on its own; another agent calls it. You can still message it, but nikcli will use the default agent instead.",
   "bots.permission.request": "Permission request",
   "bots.permission.wantsToUse": "Wants to use",
   "bots.permission.on": "on",
@@ -1500,7 +1577,8 @@ export const en: Messages = {
   "bots.routine.off": (reason: string) => `This bot cannot have routines: ${reason}.`,
   "bots.routine.source": "Source",
   "bots.routine.checked": (date: string) => `read on ${date}`,
-  "bots.routine.empty": "No routines. A routine sends the bot a message on its own, on a schedule, only while ADE is open.",
+  "bots.routine.empty":
+    "No routines. A routine sends the bot a message on its own, on a schedule, only while ADE is open.",
   "bots.routine.new": "New routine",
   "bots.routine.prompt": "What it should do",
   "bots.routine.kind.hours": "Every few hours",
@@ -1534,7 +1612,8 @@ export const en: Messages = {
   "bots.routine.reconsentConfirm": "I agree",
   "bots.routine.remove": "Delete",
   "bots.routine.suspended.trust": "the bot or the project is not trusted: open the bot's conversation and answer.",
-  "bots.routine.suspended.noProject": "Codex on a subscription runs only in a project you trust: create the routine with a project open.",
+  "bots.routine.suspended.noProject":
+    "Codex on a subscription runs only in a project you trust: create the routine with a project open.",
   "bots.routine.mode.plan": "subscription",
   "bots.routine.mode.key": "API key",
   "bots.routine.mode.free": "free model",
@@ -1551,15 +1630,15 @@ export const en: Messages = {
   "bots.routine.problem.perDay": (max: number) => `The cap per day goes up to ${max} $.`,
   "bots.routine.problem.runOverDay": "The cap per run cannot exceed the one per day.",
   "bots.routine.suspended.noBot": "The bot's file is gone.",
-  "bots.routine.suspended.consent":
-    "The model, mode, key, prompt, schedule or cap changed: give your consent again.",
+  "bots.routine.suspended.consent": "The model, mode, key, prompt, schedule or cap changed: give your consent again.",
   "bots.routine.suspended.notFree": (cost: string) => `The model is not free: the last run cost ${cost}.`,
   "bots.routine.testOnlyFree": "ADE Test runs only free models and subscriptions",
   "bots.routine.suspended.overRun": (cost: string, max: string) =>
     `The last run cost ${cost}, over the cap of ${max} per run.`,
   "bots.routine.note.limit": "The plan reached its limit: no more routines today, they resume tomorrow.",
   "bots.routine.note.perDay": (runs: number) => `Today's ${runs} runs are done: they resume tomorrow.`,
-  "bots.routine.note.spendDay": (max: string) => `Today's spending cap (${max}) does not cover another run: it resumes tomorrow.`,
+  "bots.routine.note.spendDay": (max: string) =>
+    `Today's spending cap (${max}) does not cover another run: it resumes tomorrow.`,
   "bots.routine.note.missed": (missed: number) =>
     missed === 1
       ? "ADE was closed: a missed run is not made up; running one now."
@@ -1569,7 +1648,8 @@ export const en: Messages = {
   "bots.routine.note.stopped": "Stopped.",
   "bots.routine.note.failed": (why: string) => (why ? `Failed: ${why}` : "Failed."),
   "bots.memory.label": "Memory",
-  "bots.memory.hint": "The bot sees it at the start of every conversation and changes it from its answers; changes count from the next conversation.",
+  "bots.memory.hint":
+    "The bot sees it at the start of every conversation and changes it from its answers; changes count from the next conversation.",
   "bots.memory.usage": (block: string, size: number, limit: number) => `${block} · ${size}/${limit} characters`,
   "bots.memory.emptyBlock": "Empty.",
   "bots.memory.remove": "Remove",
@@ -1593,7 +1673,9 @@ export const en: Messages = {
   "bots.memory.error.manyMatches": (block: string, match: string) =>
     `Several entries (${block}) contain «${match}»: write a piece that points at only one.`,
   "bots.memory.error.unreadable": (count: number) =>
-    count === 1 ? "An ade-memory tag could not be read and was not applied." : `${count} ade-memory tags could not be read and were not applied.`,
+    count === 1
+      ? "An ade-memory tag could not be read and was not applied."
+      : `${count} ade-memory tags could not be read and were not applied.`,
   "bots.memory.done.add": (block: string) => `Memory: an entry added (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memory: an entry changed (${block}).`,
   "bots.memory.proposed": (block: string) =>
@@ -1622,9 +1704,11 @@ export const en: Messages = {
   "bots.room.delete": "Delete room",
   "bots.room.deleteAsk": (name: string) => `Delete the room «${name}» with its conversation? The bots stay.`,
   "bots.room.notTrusted": (name: string) => `@${name} does not have your trust: the room does not start.`,
-  "bots.room.empty": "Write a message: everyone answers, or only whoever you name with @name (@everyone for all). A round in which nobody has anything to say ends the exchange.",
+  "bots.room.empty":
+    "Write a message: everyone answers, or only whoever you name with @name (@everyone for all). A round in which nobody has anything to say ends the exchange.",
   "bots.room.speaking": (name: string) => `@${name} is writing…`,
-  "bots.room.askingTrust": "Waiting for your answer in ADE's trust dialog, open over ADE: if you cannot see it, bring ADE to the front.",
+  "bots.room.askingTrust":
+    "Waiting for your answer in ADE's trust dialog, open over ADE: if you cannot see it, bring ADE to the front.",
   "bots.room.stop": "Stop",
   "bots.room.everyone": "everyone",
   "bots.room.user": "user",
@@ -1673,7 +1757,8 @@ export const en: Messages = {
   "bots.when.now": "now",
   "bots.when.yesterday": "yesterday",
   "bots.when.weekday": (index) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][index] ?? `day ${index}`,
-  "bots.when.month": (index) => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][index] ?? `month ${index}`,
+  "bots.when.month": (index) =>
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][index] ?? `month ${index}`,
   "bots.turn.timeout": (label, span) => `${label} did not finish the turn in ${span}: I stopped it.`,
   "bots.turn.overBudget": (label, cost, max) =>
     `${label} spent ${cost}, over the ${max} cap for this run: I stopped it.`,
@@ -1683,7 +1768,8 @@ export const en: Messages = {
   "bots.turn.noHost": "No host: a turn only runs in the desktop app.",
   "bots.turn.cannotRefuse": (label) => `${label} cannot refuse the tools this turn leaves out.`,
   "bots.turn.didNotStart": (label, why) => `${label} did not start: ${why}`,
-  "bots.turn.nikcliOnServer": "A nikcli turn runs on ADE's nikcli server, with its session's rules: it does not start here.",
+  "bots.turn.nikcliOnServer":
+    "A nikcli turn runs on ADE's nikcli server, with its session's rules: it does not start here.",
   "bots.serve.noFolder": "A nikcli bot answers from a project: open a folder to talk to it.",
   "bots.serve.notAdmitted": (root) =>
     `The project ${root} is not admitted for nikcli yet, or it changed: open the bot in the panel, answer the question and try again.`,
@@ -1748,9 +1834,11 @@ export const en: Messages = {
   "bots.lastTurn.label": "last turn:",
   "bots.lastTurn.unknownModel": "model not reported",
   "bots.conversation.total": "this conversation:",
-  "bots.form.generateCostDefault": "nikcli writes the persona with its default model. If that model is paid, this call spends credit.",
+  "bots.form.generateCostDefault":
+    "nikcli writes the persona with its default model. If that model is paid, this call spends credit.",
   "bots.form.generateCostPaid": (model) => `nikcli writes the persona with ${model}. This call spends credit.`,
-  "bots.form.generateCostFree": (model) => `nikcli writes the persona with ${model}, a free model. This call does not spend credit.`,
+  "bots.form.generateCostFree": (model) =>
+    `nikcli writes the persona with ${model}, a free model. This call does not spend credit.`,
   "bots.scope.project": "project",
   "bots.scope.global": "global",
   "bots.terminal.subagentTip": "A subagent doesn't start on its own; another agent calls it",
@@ -1785,7 +1873,8 @@ export const en: Messages = {
   "bots.form.objectives": "Objectives",
   "bots.form.objectivesPlaceholder": "One per line. Kept active across conversations.",
   "bots.form.persona": "Persona",
-  "bots.form.personaPlaceholder": "Leave blank and nikcli will write it from the description. Or write your own: how it should behave, and what it should not do.",
+  "bots.form.personaPlaceholder":
+    "Leave blank and nikcli will write it from the description. Or write your own: how it should behave, and what it should not do.",
   "bots.form.cancel": "Cancel",
   "bots.form.creating": "Creating…",
   "bots.form.generateWithNikcli": "Generate with nikcli",
@@ -1796,7 +1885,8 @@ export const en: Messages = {
   "bots.runner.account.claude": "Anthropic subscription or Claude Code API key.",
   "bots.runner.account.codex": "ChatGPT subscription or Codex API key.",
   "bots.engine.accountHint": "Sign-ins are managed in Settings › Providers.",
-  "bots.terms.notice": "ADE launches the official CLI installed on your computer, using the account you signed in with, and never sees your credentials. The subscription is for personal use and consumes your plan limits: for intensive or unattended automation use an API key in the CLI.",
+  "bots.terms.notice":
+    "ADE launches the official CLI installed on your computer, using the account you signed in with, and never sees your credentials. The subscription is for personal use and consumes your plan limits: for intensive or unattended automation use an API key in the CLI.",
   "bots.engine.model": "Model",
   "bots.engine.modelDefaultOf": (label) => `${label} default`,
   "bots.engine.nikcliDefault": "nikcli default",

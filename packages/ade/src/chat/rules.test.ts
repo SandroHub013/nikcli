@@ -10,17 +10,26 @@ import { CHAT_PERMISSION, hasChatRules, type PermissionRule } from "./rules"
  */
 
 function matches(value: string, pattern: string) {
-  let escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
+  let escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
   if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?"
   return new RegExp("^" + escaped + "$", "s").test(value)
 }
 
 function decide(permission: string, pattern: string, ...rulesets: (readonly PermissionRule[])[]) {
-  const match = rulesets.flat().findLast((rule) => matches(permission, rule.permission) && matches(pattern, rule.pattern))
+  const match = rulesets
+    .flat()
+    .findLast((rule) => matches(permission, rule.permission) && matches(pattern, rule.pattern))
   return match?.action ?? "ask"
 }
 
-const rule = (permission: string, pattern: string, action: PermissionRule["action"]): PermissionRule => ({ permission, pattern, action })
+const rule = (permission: string, pattern: string, action: PermissionRule["action"]): PermissionRule => ({
+  permission,
+  pattern,
+  action,
+})
 
 /** nikcli's defaults for an agent (`agent/agent.ts`), then this machine's user config: `bash *: allow`. */
 const BUILD: PermissionRule[] = [
@@ -68,7 +77,11 @@ describe("the chat session's permission rules", () => {
       ["plan_enter", "*", "deny"],
     ]
     for (const [permission, pattern, action] of cases) {
-      expect([permission, pattern, decide(permission, pattern, BUILD, CHAT_PERMISSION)]).toEqual([permission, pattern, action])
+      expect([permission, pattern, decide(permission, pattern, BUILD, CHAT_PERMISSION)]).toEqual([
+        permission,
+        pattern,
+        action,
+      ])
     }
   })
 

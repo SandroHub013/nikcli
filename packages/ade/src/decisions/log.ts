@@ -170,7 +170,8 @@ export function toEvent(value: unknown): DecisionEvent | string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return t("decisions.log.notObject")
   const record = value as Record<string, unknown>
   const type = record.type
-  if (typeof type !== "string" || !DECISION_EVENT_TYPES.includes(type as DecisionEventType)) return t("decisions.log.type")
+  if (typeof type !== "string" || !DECISION_EVENT_TYPES.includes(type as DecisionEventType))
+    return t("decisions.log.type")
   const k = text(record.k)
   if (!k || !isDecisionKey(k)) return t("decisions.log.key")
   const at = text(record.at)
@@ -193,11 +194,18 @@ export function toEvent(value: unknown): DecisionEvent | string {
       if (facts && "error" in facts) return t("decisions.log.facts")
       const recommend = recommendationOf(record.recommend)
       if (recommend && "error" in recommend) return t("decisions.log.recommend")
-      if (recommend && !options.some((option) => option.label === recommend.option)) return t("decisions.log.recommendOption", recommend.option)
+      if (recommend && !options.some((option) => option.label === recommend.option))
+        return t("decisions.log.recommendOption", recommend.option)
       const question = text(record.question)
       const why = text(record.why)
       const context = text(record.context)
-      const newFormat = Boolean(question || why || facts || recommend || options.some((option) => option.title || option.effect || option.cost || option.risk))
+      const newFormat = Boolean(
+        question ||
+        why ||
+        facts ||
+        recommend ||
+        options.some((option) => option.title || option.effect || option.cost || option.risk),
+      )
       // A build that knows none of them shows the context alone: without one it would show an empty card.
       if (newFormat && !context) return t("decisions.log.contextNeeded")
       return compact({
@@ -222,7 +230,14 @@ export function toEvent(value: unknown): DecisionEvent | string {
       const choices = choicesOf(record.choices, t("decisions.log.choices"))
       if (choices && "error" in choices) return choices.error
       if (choices && record.choice !== undefined) return t("decisions.log.choiceAndChoices")
-      return compact({ type: "risposta", ...base, words, choice: text(record.choice), choices, note: text(record.note) }) as AnsweredEvent
+      return compact({
+        type: "risposta",
+        ...base,
+        words,
+        choice: text(record.choice),
+        choices,
+        note: text(record.note),
+      }) as AnsweredEvent
     }
     case "rimandata": {
       const until = text(record.until)

@@ -3,7 +3,12 @@ import { DENIED, isLocalAddress } from "./consent"
 
 describe("which addresses a panel opens without asking (review-alti, 1.3)", () => {
   test("this machine's own: localhost, 127.0.0.1 and ::1, on any port and path", () => {
-    for (const url of ["http://localhost:3000/x", "http://LOCALHOST:5173", "https://127.0.0.1:8443/", "http://[::1]:4000/a"]) {
+    for (const url of [
+      "http://localhost:3000/x",
+      "http://LOCALHOST:5173",
+      "https://127.0.0.1:8443/",
+      "http://[::1]:4000/a",
+    ]) {
       expect(isLocalAddress(url)).toBe(true)
     }
   })
@@ -39,7 +44,13 @@ describe("which addresses a panel opens without asking (review-alti, 1.3)", () =
   })
 
   test("a loopback written another way is the same loopback", () => {
-    for (const url of ["http://127.1", "http://127.1:3000/x", "http://2130706433", "http://2130706433:3000", "http://0x7f.1"]) {
+    for (const url of [
+      "http://127.1",
+      "http://127.1:3000/x",
+      "http://2130706433",
+      "http://2130706433:3000",
+      "http://0x7f.1",
+    ]) {
       expect([url, new URL(url).hostname]).toEqual([url, "127.0.0.1"])
       expect([url, isLocalAddress(url)]).toEqual([url, true])
     }
@@ -59,7 +70,13 @@ describe("which addresses a panel opens without asking (review-alti, 1.3)", () =
   test("a name that only looks local asks, the trailing dot included", () => {
     // The parser keeps the dot, so `localhost.` is not `localhost`.
     expect(new URL("http://localhost.").hostname).toBe("localhost.")
-    for (const url of ["http://localhost.", "http://localhost.:3000/x", "http://LOCALHOST.", "http://127.0.0.1.nip.io", "http://127.0.0.1.nip.io:3000"]) {
+    for (const url of [
+      "http://localhost.",
+      "http://localhost.:3000/x",
+      "http://LOCALHOST.",
+      "http://127.0.0.1.nip.io",
+      "http://127.0.0.1.nip.io:3000",
+    ]) {
       expect([url, isLocalAddress(url)]).toEqual([url, false])
     }
   })

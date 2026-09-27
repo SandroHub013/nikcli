@@ -29,13 +29,44 @@ export interface Material {
 }
 
 export const MATERIAL: Readonly<Record<ResolvedTheme, Material>> = {
-  light: { tone: { design: [26, 158, 135], dec: [154, 109, 40] }, neutral: [150, 144, 140], deep: 0.6, alpha: 1, wall: "rgba(26,24,23,.46)", body: "rgba(26,24,23,.05)", shade: "rgba(26,24,23,.18)", glint: "rgba(255,255,255,.95)" },
-  dark: { tone: { design: [127, 214, 196], dec: [217, 164, 95] }, neutral: [120, 115, 115], deep: 0.55, alpha: 1, wall: "rgba(236,235,235,.44)", body: "rgba(236,235,235,.06)", shade: "rgba(0,0,0,.35)", glint: "rgba(255,255,255,.55)" },
-  glass: { tone: { design: [127, 214, 196], dec: [217, 164, 95] }, neutral: [200, 200, 205], deep: 0.7, alpha: 0.6, wall: "rgba(255,255,255,.58)", body: "rgba(255,255,255,.08)", shade: "rgba(0,0,0,.28)", glint: "rgba(255,255,255,.7)" },
+  light: {
+    tone: { design: [26, 158, 135], dec: [154, 109, 40] },
+    neutral: [150, 144, 140],
+    deep: 0.6,
+    alpha: 1,
+    wall: "rgba(26,24,23,.46)",
+    body: "rgba(26,24,23,.05)",
+    shade: "rgba(26,24,23,.18)",
+    glint: "rgba(255,255,255,.95)",
+  },
+  dark: {
+    tone: { design: [127, 214, 196], dec: [217, 164, 95] },
+    neutral: [120, 115, 115],
+    deep: 0.55,
+    alpha: 1,
+    wall: "rgba(236,235,235,.44)",
+    body: "rgba(236,235,235,.06)",
+    shade: "rgba(0,0,0,.35)",
+    glint: "rgba(255,255,255,.55)",
+  },
+  glass: {
+    tone: { design: [127, 214, 196], dec: [217, 164, 95] },
+    neutral: [200, 200, 205],
+    deep: 0.7,
+    alpha: 0.6,
+    wall: "rgba(255,255,255,.58)",
+    body: "rgba(255,255,255,.08)",
+    shade: "rgba(0,0,0,.28)",
+    glint: "rgba(255,255,255,.7)",
+  },
 }
 
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x)
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+]
 
 /** The tube's shape in device pixels, for a canvas `w` × `h` at `dpr`. */
 export interface VialGeometry {
@@ -81,7 +112,14 @@ function insideTube(g: VialGeometry, x: number, y: number): number {
  * under its surface, darker towards the bottom, a line of light on the
  * surface, and the light gathered inside where the current carries it.
  */
-export function shadeLiquid(data: Uint8ClampedArray, w: number, h: number, dpr: number, vial: Vial, theme: ResolvedTheme): void {
+export function shadeLiquid(
+  data: Uint8ClampedArray,
+  w: number,
+  h: number,
+  dpr: number,
+  vial: Vial,
+  theme: ResolvedTheme,
+): void {
   const m = MATERIAL[theme]
   const g = vialGeometry(w, h, dpr)
   const { x0, x1, top, bottom, u } = g
@@ -92,12 +130,20 @@ export function shadeLiquid(data: Uint8ClampedArray, w: number, h: number, dpr: 
   const menH = vial.L > 0.02 ? Math.min(1.2 * u, innerH * 0.06) : 0
   const menisc = (x: number) => -menH * (Math.exp(-(x + 0.5 - x0) / menW) + Math.exp(-(x1 - x - 0.5) / menW))
   const cur = vial.current()
-  const caus = { x: x0 + (x1 - x0) * cur.x, y: level + (bottom - level) * cur.y, rx: (x1 - x0) * 0.32, ry: Math.max(1, (bottom - level) * 0.28), k: vial.tone }
+  const caus = {
+    x: x0 + (x1 - x0) * cur.x,
+    y: level + (bottom - level) * cur.y,
+    rx: (x1 - x0) * 0.32,
+    ry: Math.max(1, (bottom - level) * 0.28),
+    k: vial.tone,
+  }
   const surfAt = (x: number) => vial.s.at((x + 0.5 - x0) / (x1 - x0))
   const k = m.deep
   for (let x = x0; x < x1; x++) {
     const ys = level + menisc(x) + surfAt(x) * innerH
-    const slope = (vial.s.at((x + 1.5 - x0) / (x1 - x0)) - vial.s.at((x - 0.5 - x0) / (x1 - x0))) * innerH + (menisc(x + 1) - menisc(x - 1)) / 2
+    const slope =
+      (vial.s.at((x + 1.5 - x0) / (x1 - x0)) - vial.s.at((x - 0.5 - x0) / (x1 - x0))) * innerH +
+      (menisc(x + 1) - menisc(x - 1)) / 2
     const lit = clamp(0.55 - slope * 0.9, 0.2, 1)
     for (let y = Math.max(top, Math.floor(ys - 1)); y < bottom; y++) {
       const cov = insideTube(g, x, y)
@@ -124,7 +170,14 @@ export function shadeLiquid(data: Uint8ClampedArray, w: number, h: number, dpr: 
 }
 
 /** The falling drops and the glass, over the liquid. */
-export function drawGlass(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, vial: Vial, theme: ResolvedTheme): void {
+export function drawGlass(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  dpr: number,
+  vial: Vial,
+  theme: ResolvedTheme,
+): void {
   const m = MATERIAL[theme]
   const g = vialGeometry(w, h, dpr)
   const { u, lipW, lipH, wall, x0, x1, top, bottom, rr } = g

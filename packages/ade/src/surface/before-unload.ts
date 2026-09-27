@@ -15,7 +15,21 @@ export function mustConfirmLeaving(state: { unsavedBuffers: number; runningSessi
 }
 
 export type WorkingAgentPaneCandidate = Pick<Pane, "id"> &
-  Partial<Pick<Pane, "status" | "agent" | "model" | "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">>
+  Partial<
+    Pick<
+      Pane,
+      | "status"
+      | "agent"
+      | "model"
+      | "mode"
+      | "browserUrl"
+      | "filePath"
+      | "videoPath"
+      | "modelPath"
+      | "appUrl"
+      | "plugin"
+    >
+  >
 
 /**
  * Whether a pane is an active agent session currently at work (D81, option B).
@@ -29,10 +43,7 @@ export type WorkingAgentPaneCandidate = Pick<Pane, "id"> &
  * Includes:
  * - agent sessions alive with status "working" or "waiting" (e.g. permission prompt mid-turn)
  */
-export function isWorkingAgentPane(
-  pane: WorkingAgentPaneCandidate,
-  running: { has(id: string): boolean },
-): boolean {
+export function isWorkingAgentPane(pane: WorkingAgentPaneCandidate, running: { has(id: string): boolean }): boolean {
   if (!running.has(pane.id)) return false
   if (isPanelPane({ ...pane, mode: pane.mode ?? "" })) return false
   const agentId = pane.agent ?? pane.model

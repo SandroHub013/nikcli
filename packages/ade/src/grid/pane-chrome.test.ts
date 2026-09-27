@@ -25,7 +25,11 @@ function componentFile(component: string): string {
   const named = new RegExp(`export \\{[^}]*\\b${component}\\b[^}]*\\} from "\\./([^"]+)"`).exec(barrel)?.[1]
   const star = [...barrel.matchAll(/export \* from "\.\/([^"]+)"/g)]
     .map((match) => match[1]!)
-    .find((file) => existsSync(join(src, from, `${file}.tsx`)) && read(`${from}/${file}.tsx`).includes(`export function ${component}(`))
+    .find(
+      (file) =>
+        existsSync(join(src, from, `${file}.tsx`)) &&
+        read(`${from}/${file}.tsx`).includes(`export function ${component}(`),
+    )
   const inner = named ?? star
   if (!inner) throw new Error(`${component} is not exported by ${from}/index.ts`)
   return `${from}/${inner}.tsx`
@@ -41,7 +45,17 @@ const panes = [...renderer.matchAll(/const (\w+Pane) = \(\) => \(\s*<(\w+)([\s\S
 describe("pane chrome", () => {
   test("the renderer's panes are all found", () => {
     expect(panes.map((pane) => pane.name).sort()).toEqual(
-      ["browserPane", "decisionsPane", "designPane", "filePane", "modelPane", "pluginPane", "sessionPane", "simulatorPane", "videoPane"].sort(),
+      [
+        "browserPane",
+        "decisionsPane",
+        "designPane",
+        "filePane",
+        "modelPane",
+        "pluginPane",
+        "sessionPane",
+        "simulatorPane",
+        "videoPane",
+      ].sort(),
     )
   })
 
@@ -51,7 +65,10 @@ describe("pane chrome", () => {
       expect(pane.props).toMatch(/\bonExpand=\{/)
       const source = read(componentFile(pane.component))
       // Its own buttons, or the shared ones given both handlers.
-      const shared = /<PaneActions onExpand=\{\(\) => props\.onExpand\?\.\(\)\} onClose=\{\(\) => props\.onClose\?\.\(\)\}/.test(source)
+      const shared =
+        /<PaneActions onExpand=\{\(\) => props\.onExpand\?\.\(\)\} onClose=\{\(\) => props\.onClose\?\.\(\)\}/.test(
+          source,
+        )
       if (!shared) {
         expect(source).toMatch(/onClick=\{\(\) => props\.onExpand\?\.\(\)\}/)
         expect(source).toMatch(/onClick=\{\(\) => props\.onClose\?\.\(\)\}/)
@@ -127,7 +144,9 @@ describe("pane chrome", () => {
     expect(pill).not.toMatch(/position\s*:/)
     expect(pill).not.toMatch(/z-index\s*:/)
     const lifted = css.split("}").filter((rule) => /position\s*:\s*absolute/.test(rule) && /pane-header/.test(rule))
-    expect(lifted.map((rule) => rule.slice(0, rule.indexOf("{")).trim())).toEqual(['[data-component="session-pane"] > [data-slot="pane-header"]'])
+    expect(lifted.map((rule) => rule.slice(0, rule.indexOf("{")).trim())).toEqual([
+      '[data-component="session-pane"] > [data-slot="pane-header"]',
+    ])
     for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
       const file = entry.replace(/\\/g, "/")
       if (file === "grid/pane.css") continue

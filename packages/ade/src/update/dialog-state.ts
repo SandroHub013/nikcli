@@ -29,10 +29,20 @@ export function updateDialogView(input: {
   readonly error: string | undefined
 }): UpdateDialogView {
   if (input.error) {
-    return { stage: "error", ghost: { label: "close", enabled: true }, submit: { label: "retry", enabled: true }, dismissable: true }
+    return {
+      stage: "error",
+      ghost: { label: "close", enabled: true },
+      submit: { label: "retry", enabled: true },
+      dismissable: true,
+    }
   }
   if (!input.updating) {
-    return { stage: "ask", ghost: { label: "later", enabled: true }, submit: { label: "go", enabled: true }, dismissable: true }
+    return {
+      stage: "ask",
+      ghost: { label: "later", enabled: true },
+      submit: { label: "go", enabled: true },
+      dismissable: true,
+    }
   }
   const stage: UpdateStage = input.progress?.phase === "install" ? "install" : "download"
   return { stage, ghost: { label: "hide", enabled: true }, submit: { label: "go", enabled: false }, dismissable: true }

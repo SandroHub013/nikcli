@@ -76,7 +76,9 @@ export function canSuspend(pane: SuspendPane, ctx: SuspendContext): SuspendCheck
  * servers are its children — and waits for the kill to have run, so the pane
  * says "Sospesa" when the processes are gone. False when the kill failed.
  */
-export async function closeSuspendedTree(session: { kill: (options?: { tree?: boolean }) => void | Promise<boolean> } | undefined): Promise<boolean> {
+export async function closeSuspendedTree(
+  session: { kill: (options?: { tree?: boolean }) => void | Promise<boolean> } | undefined,
+): Promise<boolean> {
   if (!session) return true
   try {
     return (await session.kill({ tree: true })) !== false
@@ -95,7 +97,11 @@ type Killable = { kill: (options?: { tree?: boolean }) => void | Promise<boolean
  * same conversation. It is deaf, though — the kill already took its listeners
  * off — which is why the note asks the user to close the pane and reopen it.
  */
-export async function stopForSuspend<S extends Killable>(paneId: string, running: Map<string, S>, changed: () => void): Promise<boolean> {
+export async function stopForSuspend<S extends Killable>(
+  paneId: string,
+  running: Map<string, S>,
+  changed: () => void,
+): Promise<boolean> {
   const session = running.get(paneId)
   running.delete(paneId)
   changed()
@@ -145,9 +151,13 @@ export type SuspendedDelivery = { queue: true; receipt: string } | { queue: fals
  */
 export function suspendedDelivery(kind: string, title: string): SuspendedDelivery | undefined {
   if (kind === "send" || kind === "ask") {
-    return { queue: true, receipt: `ok: in coda: la sessione "${title}" è sospesa; la riceve quando l'utente la riprende` }
+    return {
+      queue: true,
+      receipt: `ok: in coda: la sessione "${title}" è sospesa; la riceve quando l'utente la riprende`,
+    }
   }
-  if (kind === "relaunch") return { queue: false, refusal: `errore: la sessione "${title}" è sospesa: la riprende l'utente` }
+  if (kind === "relaunch")
+    return { queue: false, refusal: `errore: la sessione "${title}" è sospesa: la riprende l'utente` }
   return undefined
 }
 
@@ -212,7 +222,13 @@ export function parseSuspendedMail(text: string | null | undefined): QueuedLine[
         if (typeof id !== "string" || (kind !== "ask" && kind !== "send") || typeof from !== "string") continue
         meta = { id, kind, from }
       }
-      lines.push({ paneId, text: line, ...(typeof full === "string" ? { full } : {}), ...(meta ? { inbox: meta } : {}), suspended: true })
+      lines.push({
+        paneId,
+        text: line,
+        ...(typeof full === "string" ? { full } : {}),
+        ...(meta ? { inbox: meta } : {}),
+        suspended: true,
+      })
     }
     return lines
   } catch {

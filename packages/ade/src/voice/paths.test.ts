@@ -14,7 +14,10 @@ const ROOT = "C:/Users/me/progetto"
 
 describe("a dictated file", () => {
   test("inside the project it opens on its own; a relative one is the project's", () => {
-    expect(dictatedFile("C:/Users/me/progetto/src/index.ts", ROOT)).toEqual({ path: "C:/Users/me/progetto/src/index.ts", inside: true })
+    expect(dictatedFile("C:/Users/me/progetto/src/index.ts", ROOT)).toEqual({
+      path: "C:/Users/me/progetto/src/index.ts",
+      inside: true,
+    })
     expect(dictatedFile("src/index.ts", ROOT)).toEqual({ path: "C:/Users/me/progetto/src/index.ts", inside: true })
     expect(dictatedFile("c:\\users\\me\\progetto\\README.md", ROOT).inside).toBe(true)
   })

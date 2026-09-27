@@ -74,6 +74,9 @@ export function designForVariant(
 }
 
 /** The pane to reuse for proposal `k`: the one already showing one of its variants. */
-export function designPaneFor<P extends { id: string; browserDesign?: PaneDesign }>(panes: readonly P[], k: string): P | undefined {
+export function designPaneFor<P extends { id: string; browserDesign?: PaneDesign }>(
+  panes: readonly P[],
+  k: string,
+): P | undefined {
   return panes.find((pane) => pane.browserDesign?.k === k)
 }

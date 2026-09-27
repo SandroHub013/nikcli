@@ -46,9 +46,13 @@ describe("il composer dei bot", () => {
 
   test("un invio che fallisce con un errore rimette il testo", async () => {
     const draft = field("ciao")
-    await submitDraft("ciao", async () => {
-      throw new Error("host sparito")
-    }, draft)
+    await submitDraft(
+      "ciao",
+      async () => {
+        throw new Error("host sparito")
+      },
+      draft,
+    )
     expect(draft.get()).toBe("ciao")
   })
 })
@@ -60,7 +64,9 @@ describe("il composer dei bot", () => {
  */
 describe("i chip del composer dei bot", () => {
   test("un modello scelto si scrive; il predefinito toglie il modello", () => {
-    expect(modelChange("openrouter/google/gemma-4-31b-it:free", "", undefined)).toEqual({ model: "openrouter/google/gemma-4-31b-it:free" })
+    expect(modelChange("openrouter/google/gemma-4-31b-it:free", "", undefined)).toEqual({
+      model: "openrouter/google/gemma-4-31b-it:free",
+    })
     const cleared = modelChange("", "", undefined)
     expect("model" in cleared).toBe(true)
     expect(cleared.model).toBeUndefined()
@@ -86,10 +92,20 @@ describe("i chip del composer dei bot", () => {
   })
 
   test("per Claude Code e Codex: il predefinito, i nomi del runner, e il nome del bot se la lista non lo ha", () => {
-    const values = (items: ReturnType<typeof runnerModelItems>) => items.map((item) => (item.kind === "option" ? item.value : ""))
+    const values = (items: ReturnType<typeof runnerModelItems>) =>
+      items.map((item) => (item.kind === "option" ? item.value : ""))
     expect(values(runnerModelItems(["sonnet", "opus"], "", "predefinito"))).toEqual(["", "sonnet", "opus"])
-    expect(values(runnerModelItems(["sonnet", "opus"], "claude-sonnet-5", "predefinito"))).toEqual(["", "sonnet", "opus", "claude-sonnet-5"])
+    expect(values(runnerModelItems(["sonnet", "opus"], "claude-sonnet-5", "predefinito"))).toEqual([
+      "",
+      "sonnet",
+      "opus",
+      "claude-sonnet-5",
+    ])
     expect(values(runnerModelItems(["sonnet", "opus"], "opus", "predefinito"))).toEqual(["", "sonnet", "opus"])
-    expect(runnerModelItems([], "", "predefinito di Codex")[0]).toEqual({ kind: "option", value: "", label: "predefinito di Codex" })
+    expect(runnerModelItems([], "", "predefinito di Codex")[0]).toEqual({
+      kind: "option",
+      value: "",
+      label: "predefinito di Codex",
+    })
   })
 })

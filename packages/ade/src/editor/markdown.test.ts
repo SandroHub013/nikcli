@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { ALLOWED_ATTR, ALLOWED_TAGS, folderOf, handlePreviewClick, imageSource, joinPath, linkTarget, renderMarkdown, safeDecodeURI, sanitizerWorks } from "./markdown"
+import {
+  ALLOWED_ATTR,
+  ALLOWED_TAGS,
+  folderOf,
+  handlePreviewClick,
+  imageSource,
+  joinPath,
+  linkTarget,
+  renderMarkdown,
+  safeDecodeURI,
+  sanitizerWorks,
+} from "./markdown"
 
 /*
  * happy-dom and DOMPurify 3.4. The known trap is that `sanitize` drops the
@@ -19,7 +30,7 @@ describe.skipIf(!sanitizerWorks())("renderMarkdown with a DOM that cleans (S56)"
         [
           "# Titolo",
           "<script>document.title='MD'</script>",
-          '<img src=x onerror="document.title=\'MD\'">',
+          "<img src=x onerror=\"document.title='MD'\">",
           "[clic](javascript:alert(1))",
           '<iframe src="https://example.com"></iframe>',
           '<a href="#" onclick="alert(1)">a</a>',
@@ -35,7 +46,10 @@ describe.skipIf(!sanitizerWorks())("renderMarkdown with a DOM that cleans (S56)"
   })
 
   test("removes an image on the web, so nothing reports the file was opened", () => {
-    const html = renderMarkdown(SACRIFICE + "![pixel](https://tracker.example/p.gif)\n\n![inline](data:image/png;base64,AAAA)", () => "ade")
+    const html = renderMarkdown(
+      SACRIFICE + "![pixel](https://tracker.example/p.gif)\n\n![inline](data:image/png;base64,AAAA)",
+      () => "ade",
+    )
     expect(html).not.toContain("tracker.example")
     expect(html).not.toContain("data:image")
     expect(html).not.toContain("<img")
@@ -52,30 +66,60 @@ describe.skipIf(!sanitizerWorks())("renderMarkdown with a DOM that cleans (S56)"
   })
 })
 
-describe.skipIf(!sanitizerWorks())("what the preview may contain, with a DOM that cleans (S56, Architect's ALTO)", () => {
-  test("form, button, area, audio, video, source and style are removed", () => {
-    const html = renderMarkdown(
-      SACRIFICE +
-        [
-          '<form action="https://example.com/form"><button>vai</button><input type="text" name="q"></form>',
-          '<map name="m"><area href="https://example.com/area" shape="rect" coords="0,0,9,9"></map>',
-          '<audio src="https://example.com/a.mp3"></audio><video><source src="https://example.com/v.mp4"></video>',
-          '<p style="background:url(https://example.com/sfondo.png)" id="x">testo</p>',
-          "- [x] fatto",
-        ].join("\n\n"),
-      noImages,
-    )
-    for (const gone of ["<form", "<button", "<area", "<map", "<audio", "<video", "<source", "style=", "sfondo.png", 'type="text"', "id=", "name="]) {
-      expect(html).not.toContain(gone)
-    }
-    expect(html).toContain("testo")
-    expect(html).toContain('type="checkbox"')
-  })
-})
+describe.skipIf(!sanitizerWorks())(
+  "what the preview may contain, with a DOM that cleans (S56, Architect's ALTO)",
+  () => {
+    test("form, button, area, audio, video, source and style are removed", () => {
+      const html = renderMarkdown(
+        SACRIFICE +
+          [
+            '<form action="https://example.com/form"><button>vai</button><input type="text" name="q"></form>',
+            '<map name="m"><area href="https://example.com/area" shape="rect" coords="0,0,9,9"></map>',
+            '<audio src="https://example.com/a.mp3"></audio><video><source src="https://example.com/v.mp4"></video>',
+            '<p style="background:url(https://example.com/sfondo.png)" id="x">testo</p>',
+            "- [x] fatto",
+          ].join("\n\n"),
+        noImages,
+      )
+      for (const gone of [
+        "<form",
+        "<button",
+        "<area",
+        "<map",
+        "<audio",
+        "<video",
+        "<source",
+        "style=",
+        "sfondo.png",
+        'type="text"',
+        "id=",
+        "name=",
+      ]) {
+        expect(html).not.toContain(gone)
+      }
+      expect(html).toContain("testo")
+      expect(html).toContain('type="checkbox"')
+    })
+  },
+)
 
 describe("the preview's allowlist and clicks (S56, Architect's ALTO)", () => {
   test("nothing that submits, navigates by itself, plays or styles is allowed", () => {
-    for (const tag of ["form", "button", "area", "map", "audio", "video", "source", "iframe", "object", "embed", "svg", "style", "script"]) {
+    for (const tag of [
+      "form",
+      "button",
+      "area",
+      "map",
+      "audio",
+      "video",
+      "source",
+      "iframe",
+      "object",
+      "embed",
+      "svg",
+      "style",
+      "script",
+    ]) {
       expect(ALLOWED_TAGS).not.toContain(tag)
     }
     for (const attribute of ["style", "id", "name", "usemap", "action", "formaction", "srcset"]) {
@@ -116,7 +160,13 @@ describe("imageSource (S56)", () => {
   const resolve = (src: string) => `ade:${src}`
 
   test("an image on the web or inline never loads", () => {
-    for (const src of ["https://tracker.example/p.gif", "http://x/a.png", "//cdn.example/a.png", "data:image/png;base64,AAAA", ""]) {
+    for (const src of [
+      "https://tracker.example/p.gif",
+      "http://x/a.png",
+      "//cdn.example/a.png",
+      "data:image/png;base64,AAAA",
+      "",
+    ]) {
       expect(imageSource(src, resolve)).toBeUndefined()
     }
   })
@@ -148,7 +198,10 @@ describe("links in a markdown preview (S56)", () => {
 
   test("handles malformed percent sequences like 100%.png without throwing (Punto 9)", () => {
     expect(linkTarget("100%.png", "C:/p/docs")).toEqual({ kind: "file", path: "C:/p/docs/100%.png" })
-    expect(linkTarget("folder/100%.png#heading", "C:/p/docs")).toEqual({ kind: "file", path: "C:/p/docs/folder/100%.png" })
+    expect(linkTarget("folder/100%.png#heading", "C:/p/docs")).toEqual({
+      kind: "file",
+      path: "C:/p/docs/folder/100%.png",
+    })
   })
 })
 
@@ -171,4 +224,3 @@ describe("safeDecodeURI (Punto 9)", () => {
     expect(() => renderMarkdown("![graphic](100%.png)", resolve)).not.toThrow()
   })
 })
-

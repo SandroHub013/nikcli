@@ -58,7 +58,10 @@ const NEGATION_TOKENS: ReadonlySet<string> = new Set(["non", "no", "mai"])
 
 /** True when the normalized utterance carries a negation anywhere. */
 export function hasNegation(normalized: string): boolean {
-  return normalized.split(/\s+/).filter(Boolean).some((token) => NEGATION_TOKENS.has(token))
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .some((token) => NEGATION_TOKENS.has(token))
 }
 
 // ---------------------------------------------------------------------------

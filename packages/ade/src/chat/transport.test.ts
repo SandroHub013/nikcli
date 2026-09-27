@@ -69,7 +69,11 @@ describe("il trasporto della chat", () => {
     const fake = fakeBridge()
     fake.answer(json(200, { healthy: true, version: "1.384.0" }))
     fake.answer(json(200, { all: [], default: {}, connected: [] }))
-    const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch: serverFetch(fake.bridge), directory: "C:/progetto" })
+    const client = createNikcliClient({
+      baseUrl: SERVER_BASE,
+      fetch: serverFetch(fake.bridge),
+      directory: "C:/progetto",
+    })
 
     const health = await client.global.health()
     expect(health.data).toEqual({ healthy: true, version: "1.384.0" })

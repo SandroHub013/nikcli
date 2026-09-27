@@ -8,7 +8,12 @@ const deep = "body > div.comparison-grid:nth-of-type(2) > section.cards > div.de
 describe("noteLine", () => {
   test("variant, name, short selector, text and instruction", () => {
     expect(
-      noteLine({ variant: 2, name: "Vetro", elements: [{ selector: deep, innerText: "Il titolo" }], instruction: "più grande" }),
+      noteLine({
+        variant: 2,
+        name: "Vetro",
+        elements: [{ selector: deep, innerText: "Il titolo" }],
+        instruction: "più grande",
+      }),
     ).toBe("Variante 2 «Vetro» · div.decision-card:nth-of-type(3) > h2.title «Il titolo»: più grande")
   })
 
@@ -24,21 +29,30 @@ describe("noteLine", () => {
   })
 
   test("the text is cut at 60 characters, the selector at 80", () => {
-    const line = noteLine({ variant: 1, elements: [{ selector: `div.${"a".repeat(200)}`, innerText: "t".repeat(200) }], instruction: "" })
+    const line = noteLine({
+      variant: 1,
+      elements: [{ selector: `div.${"a".repeat(200)}`, innerText: "t".repeat(200) }],
+      instruction: "",
+    })
     expect(line).toContain(`«${"t".repeat(60)}...»`)
     expect(line).toContain(`div.${"a".repeat(76)}...`)
   })
 
   test("several elements: one line, the selectors separated by commas, no text", () => {
     expect(
-      noteLine({ variant: 3, name: "Rail", elements: [{ selector: "a > h1", innerText: "x" }, { selector: "p.lead" }], instruction: "allinea" }),
+      noteLine({
+        variant: 3,
+        name: "Rail",
+        elements: [{ selector: "a > h1", innerText: "x" }, { selector: "p.lead" }],
+        instruction: "allinea",
+      }),
     ).toBe("Variante 3 «Rail» · a > h1, p.lead: allinea")
   })
 
   test("an empty instruction: the line only says where", () => {
-    expect(noteLine({ variant: 1, name: "Vetro", elements: [{ selector: "h1", innerText: "Ciao" }], instruction: "  " })).toBe(
-      "Variante 1 «Vetro» · h1 «Ciao»",
-    )
+    expect(
+      noteLine({ variant: 1, name: "Vetro", elements: [{ selector: "h1", innerText: "Ciao" }], instruction: "  " }),
+    ).toBe("Variante 1 «Vetro» · h1 «Ciao»")
   })
 
   test("no element: the variant and the instruction", () => {
@@ -71,7 +85,9 @@ describe("appendNoteLine", () => {
 /* D2 review, BASSO 2: a name that already carries the number is not numbered twice. */
 describe("a numbered variant name", () => {
   test("«1 · A linea» on variant 1 is written once", () => {
-    expect(noteLine({ variant: 1, name: "1 · A linea", elements: [{ selector: "h1" }], instruction: "" })).toBe("Variante 1 «A linea» · h1")
+    expect(noteLine({ variant: 1, name: "1 · A linea", elements: [{ selector: "h1" }], instruction: "" })).toBe(
+      "Variante 1 «A linea» · h1",
+    )
     expect(noteLine({ variant: 2, name: "2. Vetro", elements: [], instruction: "" })).toBe("Variante 2 «Vetro»")
     expect(noteLine({ variant: 3, name: "3) Rail", elements: [], instruction: "" })).toBe("Variante 3 «Rail»")
   })

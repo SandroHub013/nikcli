@@ -229,7 +229,16 @@ describe("the guard in a hidden window", () => {
     return {
       calls,
       ticks: () => ticks,
-      stop: pollListenGuard({ tick: async () => { ticks++; await guard.tick() } }, () => true, 100),
+      stop: pollListenGuard(
+        {
+          tick: async () => {
+            ticks++
+            await guard.tick()
+          },
+        },
+        () => true,
+        100,
+      ),
     }
   }
 

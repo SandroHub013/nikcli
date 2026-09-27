@@ -48,11 +48,7 @@ async function readRegister(io: DesignIo, path: string): Promise<string> {
   return read.text
 }
 
-export async function appendDesignEvent(
-  io: DesignIo,
-  path: string,
-  event: DesignEvent,
-): Promise<DesignState> {
+export async function appendDesignEvent(io: DesignIo, path: string, event: DesignEvent): Promise<DesignState> {
   const line = serializeDesignEvent(event)
   const text = await readRegister(io, path)
   const parsed = parseDesignLog(text)

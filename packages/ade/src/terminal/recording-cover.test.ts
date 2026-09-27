@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { CLEAN_ATTRIBUTE, judgeRows, logicalLine, rowIsClean, selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
+import {
+  CLEAN_ATTRIBUTE,
+  judgeRows,
+  logicalLine,
+  rowIsClean,
+  selectionReachesSecret,
+  watchRows,
+  type CoverBuffer,
+} from "./recording-cover"
 import { RECORDING_ATTRIBUTE } from "../record/sensitive"
 import { coverTerminals, createTerminalKeyHandler, disposeTerminal, getTerminal } from "./registry"
 
@@ -55,14 +63,20 @@ describe("rowIsClean (D68)", () => {
 })
 
 /** A buffer of rows; `wrapped` marks a row the width continued from the one above. */
-function fakeBuffer(rows: Array<{ text: string; wrapped?: boolean }>, viewportY = 0): CoverBuffer & { rows: typeof rows } {
+function fakeBuffer(
+  rows: Array<{ text: string; wrapped?: boolean }>,
+  viewportY = 0,
+): CoverBuffer & { rows: typeof rows } {
   return {
     rows,
     viewportY,
     getLine: (y) => {
       const row = rows[y]
       if (!row) return undefined
-      return { isWrapped: Boolean(row.wrapped), translateToString: (trim?: boolean) => (trim ? row.text.trimEnd() : row.text) }
+      return {
+        isWrapped: Boolean(row.wrapped),
+        translateToString: (trim?: boolean) => (trim ? row.text.trimEnd() : row.text),
+      }
     },
   }
 }
@@ -113,10 +127,14 @@ describe("the row reader (D68)", () => {
     const buffer = fakeBuffer([{ text: "npm test" }, { text: "ls" }])
     const container = fakeRows(["npm test", "ls"])
     let broken = false
-    const stop = watchRows(container, () => buffer, (text) => {
-      if (broken) throw new Error("rotto")
-      return rowIsClean(text)
-    })
+    const stop = watchRows(
+      container,
+      () => buffer,
+      (text) => {
+        if (broken) throw new Error("rotto")
+        return rowIsClean(text)
+      },
+    )
     expect(marks(container)).toEqual([true, true])
     broken = true
     container.children[0].firstChild!.textContent = "npm test"
@@ -229,11 +247,17 @@ describe("a copy refused during a take says so (D68, Architect)", () => {
     }
     const original = navigator.clipboard
     let written = 0
-    Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => void written++ }, configurable: true })
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async () => void written++ },
+      configurable: true,
+    })
     let blocked = 0
     coverTerminals(true)
     try {
-      const handled = createTerminalKeyHandler(terminal, () => blocked++)(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }))
+      const handled = createTerminalKeyHandler(
+        terminal,
+        () => blocked++,
+      )(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }))
       expect(handled).toBe(false)
       expect([blocked, written, forgot]).toEqual([1, 0, true])
     } finally {

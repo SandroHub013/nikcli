@@ -381,12 +381,7 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * the voice that reads such a reply is decided per reply, so there is nothing on
  * disk to move and nothing to put back.
  */
-export type VoiceMigration =
-  | "wake-word"
-  | "always-listen"
-  | "shortcut-only"
-  | "name-only"
-  | "listening-off"
+export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only" | "listening-off"
 
 /**
  * The locale a profile written before version 8 was really speaking in.

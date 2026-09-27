@@ -447,7 +447,8 @@ describe("parseModelList", () => {
   })
 
   test("JSON lines around multi-slash ids are still dropped", () => {
-    const verbose = 'openrouter/nvidia/nemotron-3.5-lightning:free\n{\n  "id": "nvidia/nemotron-3.5-lightning:free",\n  "url": "https://x/y"\n}\nbaseten/a/b'
+    const verbose =
+      'openrouter/nvidia/nemotron-3.5-lightning:free\n{\n  "id": "nvidia/nemotron-3.5-lightning:free",\n  "url": "https://x/y"\n}\nbaseten/a/b'
     expect(parseModelList(verbose)).toEqual(["openrouter/nvidia/nemotron-3.5-lightning:free", "baseten/a/b"])
   })
 

@@ -10,7 +10,13 @@ import { createInitialDialogState, transition } from "./session"
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa")], focusedPaneId: "pA" }
 
@@ -22,7 +28,9 @@ describe("a third held message is refused, not lost", () => {
     const third = transition(state, { type: "send_requested", id: "m3", to: "Beta", text: "tre" }, 10_200, ctx)
 
     expect(third.effects).toContainEqual({ type: "confirm_send", id: "m3", approved: false })
-    expect(third.effects.some((e) => e.type === "speak" && e.text.includes("in coda") && !e.text.includes("non"))).toBe(false)
+    expect(third.effects.some((e) => e.type === "speak" && e.text.includes("in coda") && !e.text.includes("non"))).toBe(
+      false,
+    )
     expect(third.state.pendingSend?.id).toBe("m1")
     expect(third.state.queuedSend?.id).toBe("m2")
   })
@@ -35,14 +43,23 @@ const plan = (text: string) => ({
 
 describe("a second plan waiting is refused, not lost", () => {
   test("P2, with P1 in line, is refused and said so; P1 is still asked and still runs", () => {
-    const asked = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx).state
+    const asked = transition(
+      createInitialDialogState("idle"),
+      { type: "permission_requested", paneId: "pA", what: "cat README" },
+      10_000,
+      ctx,
+    ).state
     const p1 = transition(asked, { type: "plan_ready", ...plan("primo") }, 10_100, ctx).state
     const refused = transition(p1, { type: "plan_ready", ...plan("secondo") }, 10_200, ctx)
 
     expect(
-      refused.effects.some((e) => e.type === "speak" && e.text === "Ho già un piano in coda: non chiedo il nuovo, chiedo il primo."),
+      refused.effects.some(
+        (e) => e.type === "speak" && e.text === "Ho già un piano in coda: non chiedo il nuovo, chiedo il primo.",
+      ),
     ).toBe(true)
-    expect(refused.effects.some((e) => e.type === "speak" && e.text.includes("in coda") && !e.text.includes("non"))).toBe(false)
+    expect(
+      refused.effects.some((e) => e.type === "speak" && e.text.includes("in coda") && !e.text.includes("non")),
+    ).toBe(false)
     expect(refused.state.queuedPlan?.steps).toEqual(plan("primo").steps)
 
     const promoted = transition(refused.state, { type: "utterance", text: "sì" }, 20_000, ctx)

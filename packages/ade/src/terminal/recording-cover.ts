@@ -46,7 +46,10 @@ function secretRules(): RegExp[] {
     // A credential's name given a value: `API_KEY=…`, `token: …`, `Authorization: Bearer …`.
     new RegExp(`[A-Za-z0-9_-]*(?:${words})[A-Za-z0-9_-]*["']?\\s*[:=]\\s*\\S`, "i"),
     new RegExp(`(?:^|[^A-Za-z0-9_])(?:${exact})["']?\\s*[:=]\\s*\\S`, "i"),
-    new RegExp(`(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9_-]*_)?(?:${TERMINAL_PASSWORD_NAMES.join("|")})["']?\\s*[:=]\\s*\\S`, "i"),
+    new RegExp(
+      `(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9_-]*_)?(?:${TERMINAL_PASSWORD_NAMES.join("|")})["']?\\s*[:=]\\s*\\S`,
+      "i",
+    ),
     // A password inside a URL: `postgresql://admin:…@`, `https://user:…@github.com`.
     /[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i,
     /-----BEGIN/,
@@ -188,7 +191,12 @@ export function watchRows(
  * would put the secret, in the clear, wherever it is pasted next. Rows are
  * 0-based buffer rows.
  */
-export function selectionReachesSecret(buffer: CoverBuffer, startRow: number, endRow: number, isClean = rowIsClean): boolean {
+export function selectionReachesSecret(
+  buffer: CoverBuffer,
+  startRow: number,
+  endRow: number,
+  isClean = rowIsClean,
+): boolean {
   for (let y = startRow; y <= endRow; y++) {
     const line = logicalLine(buffer, y)
     if (!isClean(line.text)) return true

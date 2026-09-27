@@ -69,15 +69,33 @@ describe("routeFor", () => {
 
   /** Every fallback is a reason ADE can show, never a silent keyboard. */
   test("anything else is typed, and says why", () => {
-    expect(routeFor({ ...both, senderAgent: "nikcli" })).toEqual({ via: "digitata", reason: "il mittente non è una sessione Claude" })
+    expect(routeFor({ ...both, senderAgent: "nikcli" })).toEqual({
+      via: "digitata",
+      reason: "il mittente non è una sessione Claude",
+    })
     expect(routeFor({ ...both, senderAgent: undefined })).toMatchObject({ via: "digitata" })
-    expect(routeFor({ ...both, targetAgent: "agy" })).toEqual({ via: "digitata", reason: "il destinatario non è una sessione Claude" })
-    expect(routeFor({ ...both, targetSessionId: undefined })).toMatchObject({ via: "digitata", reason: expect.stringContaining("non ancora nota") })
-    expect(routeFor({ ...both, listed: undefined })).toMatchObject({ via: "digitata", reason: expect.stringContaining("claude agents --json") })
-    expect(routeFor({ ...both, listed: [] })).toEqual({ via: "digitata", reason: "destinatario non nell'elenco del CLI" })
+    expect(routeFor({ ...both, targetAgent: "agy" })).toEqual({
+      via: "digitata",
+      reason: "il destinatario non è una sessione Claude",
+    })
+    expect(routeFor({ ...both, targetSessionId: undefined })).toMatchObject({
+      via: "digitata",
+      reason: expect.stringContaining("non ancora nota"),
+    })
+    expect(routeFor({ ...both, listed: undefined })).toMatchObject({
+      via: "digitata",
+      reason: expect.stringContaining("claude agents --json"),
+    })
+    expect(routeFor({ ...both, listed: [] })).toEqual({
+      via: "digitata",
+      reason: "destinatario non nell'elenco del CLI",
+    })
     expect(routeFor({ ...both, typedRequested: true })).toEqual({ via: "digitata", reason: "chiesta dal mittente" })
     // Told "in coda" once, the sender is gone: a handoff now would reach nobody.
-    expect(routeFor({ ...both, alreadyQueued: true })).toEqual({ via: "digitata", reason: "già in coda per la digitazione" })
+    expect(routeFor({ ...both, alreadyQueued: true })).toEqual({
+      via: "digitata",
+      reason: "già in coda per la digitazione",
+    })
   })
 
   /** A pane renamed by the CLI (its title was taken) is still found: by conversation, not by name. */
@@ -97,7 +115,7 @@ describe("formatHandoff", () => {
     expect(receipt).toContain(line)
     expect(receipt).toContain("ade-msg delivered 1790000000000-aaaa")
     expect(receipt).toContain("ade-msg delivered 1790000000000-aaaa no")
-    expect(isHandoff("ok: consegnato a 3 \"Fabio\"")).toBe(false)
+    expect(isHandoff('ok: consegnato a 3 "Fabio"')).toBe(false)
   })
 })
 
@@ -150,7 +168,9 @@ describe("parseHandoffs", () => {
   test("drops what is not a handoff", () => {
     expect(parseHandoffs(null)).toEqual([])
     expect(parseHandoffs("{")).toEqual([])
-    expect(parseHandoffs(JSON.stringify([{ ...handoff, kind: "reply" }, { ...handoff, at: "10" }, null, 7]))).toEqual([])
+    expect(parseHandoffs(JSON.stringify([{ ...handoff, kind: "reply" }, { ...handoff, at: "10" }, null, 7]))).toEqual(
+      [],
+    )
   })
 
   /** Replayed at start, an old handoff is exactly one the clock has run out on. */

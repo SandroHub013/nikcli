@@ -99,7 +99,14 @@ describe("Enter with nobody to receive the answer (audit 0.7.7, MEDIO 7)", () =>
     const { io } = memory(opened("D1"))
     await createRoot(async (dispose) => {
       const register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
-      const hub = createDecisionsHub({ register, recipient: () => ({ state: "non scelta" }), sessions: () => [], choose: () => {}, delivery: () => ({ state: "in coda" }), onAnswered: () => {} })
+      const hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
       await register.refresh()
       const decision = register.state()!.decisions[0] as Decision
       hub.setDraft("D1", { picked: 0, note: "" })
@@ -118,7 +125,8 @@ describe("keys aimed at a field of the window (audit 0.7.7, MEDIO 7)", () => {
   test("arrows, digits and Enter on the «who receives» select stay the select's; Escape still closes", () => {
     const select = { tagName: "SELECT" }
     expect(isFormField(select)).toBe(true)
-    for (const key of ["ArrowRight", "ArrowLeft", "1", "Enter"]) expect(sheetKey({ key }, 2, false, true, isFormField(select))).toBeUndefined()
+    for (const key of ["ArrowRight", "ArrowLeft", "1", "Enter"])
+      expect(sheetKey({ key }, 2, false, true, isFormField(select))).toBeUndefined()
     expect(sheetKey({ key: "Escape" }, 2, false, true, true)).toEqual({ kind: "close" })
   })
 
@@ -357,7 +365,9 @@ describe("reopening an answered decision (ALTO 5)", () => {
     await register.refresh()
 
     // Find the «Cambia risposta» button
-    const changeBtn = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    const changeBtn = host.querySelector(
+      '[data-slot="decision-actions"] button[data-slot="decision-ghost"]',
+    ) as HTMLButtonElement
     expect(changeBtn).not.toBeNull()
     expect(changeBtn.textContent).toBe(t("decisions.change"))
 
@@ -381,9 +391,13 @@ describe("reopening an answered decision (ALTO 5)", () => {
     expect(reopened).toBe(false)
 
     // Open confirmation again and confirm
-    const changeBtnAgain = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    const changeBtnAgain = host.querySelector(
+      '[data-slot="decision-actions"] button[data-slot="decision-ghost"]',
+    ) as HTMLButtonElement
     changeBtnAgain.click()
-    const confirmBtnAgain = host.querySelector('[data-slot="decision-actions"][role="alert"] button[data-slot="decision-submit"]') as HTMLButtonElement
+    const confirmBtnAgain = host.querySelector(
+      '[data-slot="decision-actions"][role="alert"] button[data-slot="decision-submit"]',
+    ) as HTMLButtonElement
     confirmBtnAgain.click()
     await new Promise((resolve) => setTimeout(resolve, 50))
 
@@ -424,7 +438,9 @@ describe("reopening an answered decision (ALTO 5)", () => {
 
     await register.refresh()
 
-    const changeBtn = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    const changeBtn = host.querySelector(
+      '[data-slot="decision-actions"] button[data-slot="decision-ghost"]',
+    ) as HTMLButtonElement
     changeBtn.click()
 
     const alert = host.querySelector('[data-slot="decision-actions"][role="alert"]') as HTMLElement

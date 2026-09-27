@@ -73,7 +73,8 @@ export function designPathOf(url: string, projectRoots: readonly string[], windo
   }
   const onScheme =
     (parsed.protocol === `${MEDIA_SCHEME}:` && parsed.hostname === "localhost") ||
-    ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.toLowerCase() === `${MEDIA_SCHEME}.localhost`)
+    ((parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      parsed.hostname.toLowerCase() === `${MEDIA_SCHEME}.localhost`)
   if (!onScheme || parsed.username || parsed.password || parsed.port) return undefined
 
   let path: string

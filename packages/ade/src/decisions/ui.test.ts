@@ -6,7 +6,23 @@ import type { DecisionsRegister } from "./register"
 import type { RecipientStatus } from "./delivery"
 import type { Decision } from "./state"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
-import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, recipientOptions, resolveRecipient, reopenLine, resolveDeliveryTarget, type DeliveryCandidate } from "./delivery"
+import {
+  deliveryLine,
+  deliveryState,
+  enqueue,
+  markDelivered,
+  parseOutbox,
+  pendingFor,
+  pruneOutbox,
+  chooseRecipient,
+  parseRecipients,
+  recipientChange,
+  recipientOptions,
+  resolveRecipient,
+  reopenLine,
+  resolveDeliveryTarget,
+  type DeliveryCandidate,
+} from "./delivery"
 import type { DecisionEvent } from "./log"
 import { foldDecisions } from "./state"
 
@@ -96,9 +112,21 @@ describe("who hears about an answer", () => {
     expect(resolveRecipient(panes, undefined)).toEqual({ state: "non scelta" })
     expect(resolveRecipient(panes, { id: "a", title: "Dario" })).toEqual({ state: "pronta", id: "a", title: "Dario" })
     // Another project's session is as good as one here.
-    expect(resolveRecipient(panes, { id: "b", title: "vecchio nome" })).toEqual({ state: "pronta", id: "b", title: "Master" })
-    expect(resolveRecipient(panes, { id: "c", title: "master · S18" })).toEqual({ state: "non attiva", id: "c", title: "master · S18" })
-    expect(resolveRecipient(panes, { id: "z", title: "Chiusa" })).toEqual({ state: "non attiva", id: "z", title: "Chiusa" })
+    expect(resolveRecipient(panes, { id: "b", title: "vecchio nome" })).toEqual({
+      state: "pronta",
+      id: "b",
+      title: "Master",
+    })
+    expect(resolveRecipient(panes, { id: "c", title: "master · S18" })).toEqual({
+      state: "non attiva",
+      id: "c",
+      title: "master · S18",
+    })
+    expect(resolveRecipient(panes, { id: "z", title: "Chiusa" })).toEqual({
+      state: "non attiva",
+      id: "z",
+      title: "Chiusa",
+    })
   })
 
   test("moving through the selector sends nothing queued without a confirmation", () => {
@@ -111,26 +139,40 @@ describe("who hears about an answer", () => {
   })
 
   test("the selector shows the real recipient, not its first entry", () => {
-    const shown = (options: { value: string; selected: boolean }[]) => options.filter((option) => option.selected).map((option) => option.value)
+    const shown = (options: { value: string; selected: boolean }[]) =>
+      options.filter((option) => option.selected).map((option) => option.value)
     // After "Consegna": the recipient is chosen and nothing is pending.
     expect(shown(recipientOptions(panes, { state: "pronta", id: "b", title: "Master" }))).toEqual(["b"])
     // Rebuilt from fresh session objects, as a delivery note causes: still "b".
-    expect(shown(recipientOptions(panes.map((pane) => ({ ...pane })), { state: "pronta", id: "b", title: "Master" }))).toEqual(["b"])
+    expect(
+      shown(
+        recipientOptions(
+          panes.map((pane) => ({ ...pane })),
+          { state: "pronta", id: "b", title: "Master" },
+        ),
+      ),
+    ).toEqual(["b"])
     expect(shown(recipientOptions(panes, { state: "non scelta" }))).toEqual([""])
     // A pick waiting for confirmation is what the select shows meanwhile.
     expect(shown(recipientOptions(panes, { state: "non scelta" }, "a"))).toEqual(["a"])
     const closed = recipientOptions(panes, { state: "non attiva", id: "z", title: "Vecchia" })
     expect(closed.at(-1)).toEqual({ value: "z", label: "Vecchia (chiusa)", selected: true })
-    expect(recipientOptions(panes, { state: "non scelta" }).map((option) => option.label)).toContain("master · S18 · nikcli (ferma)")
+    expect(recipientOptions(panes, { state: "non scelta" }).map((option) => option.label)).toContain(
+      "master · S18 · nikcli (ferma)",
+    )
   })
 
   test("the choice is kept per project and survives a bad value", () => {
     let all = chooseRecipient({}, "/p/.ade/decisions.jsonl", { id: "a", title: "Dario" })
     all = chooseRecipient(all, "/q/.ade/decisions.jsonl", { id: "b", title: "Coordina" })
     expect(parseRecipients(JSON.stringify(all))).toEqual(all)
-    expect(chooseRecipient(all, "/p/.ade/decisions.jsonl", undefined)).toEqual({ "/q/.ade/decisions.jsonl": { id: "b", title: "Coordina" } })
+    expect(chooseRecipient(all, "/p/.ade/decisions.jsonl", undefined)).toEqual({
+      "/q/.ade/decisions.jsonl": { id: "b", title: "Coordina" },
+    })
     expect(parseRecipients("{rotto")).toEqual({})
-    expect(parseRecipients(JSON.stringify({ x: { id: 3 }, y: { id: "d", title: "T" } }))).toEqual({ y: { id: "d", title: "T" } })
+    expect(parseRecipients(JSON.stringify({ x: { id: 3 }, y: { id: "d", title: "T" } }))).toEqual({
+      y: { id: "d", title: "T" },
+    })
   })
 
   test("the line starts with who it is from and the verb", () => {
@@ -161,7 +203,10 @@ describe("the outbox", () => {
     expect(pendingFor(outbox, path)).toHaveLength(0)
     expect(parseOutbox(JSON.stringify(outbox))).toEqual(outbox)
 
-    const closed = foldDecisions([...events, { type: "chiusa", k: "D1", at: "2026-09-15T11:00:00Z", by: "Master" }]).decisions
+    const closed = foldDecisions([
+      ...events,
+      { type: "chiusa", k: "D1", at: "2026-09-15T11:00:00Z", by: "Master" },
+    ]).decisions
     expect(pruneOutbox(outbox, path, closed)).toEqual([])
     const other = enqueue([], { path: "/q/.ade/decisions.jsonl", k: "D1", answeredAt: "x", queuedAt: 1 })
     expect(pruneOutbox(other, path, closed)).toEqual(other)
@@ -265,7 +310,11 @@ describe("the outbox", () => {
       current,
     )
     expect(byId).toEqual({ id: "s-2", title: "Master" })
-    const byTitle = resolveDeliveryTarget({ path, k: "D1", answeredAt: "t", queuedAt: 1, to: "Master" }, candidates, current)
+    const byTitle = resolveDeliveryTarget(
+      { path, k: "D1", answeredAt: "t", queuedAt: 1, to: "Master" },
+      candidates,
+      current,
+    )
     expect(byTitle).toEqual({ id: "s-1", title: "Master" })
     let outbox = enqueue([], { path, k: "D1", answeredAt: "t", queuedAt: 1 })
     outbox = markDelivered(outbox, outbox[0]!, { id: "s-2", title: "Master" }, 50)
@@ -379,12 +428,22 @@ describe("answering with nobody to receive", () => {
  * `togglePick` for the box, `enterReady` for Enter, the hub for the answer.
  */
 describe("a multiple question", () => {
-  const multi = { k: "M1", options: [{ label: "opzione 1" }, { label: "opzione 2" }, { label: "opzione 3" }], multi: true as const }
+  const multi = {
+    k: "M1",
+    options: [{ label: "opzione 1" }, { label: "opzione 2" }, { label: "opzione 3" }],
+    multi: true as const,
+  }
 
   test("answerEvent: boxes 3 and 1 give choices in the options' order, and the words", () => {
     const at = new Date("2026-09-23T10:00:00Z")
-    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({ choices: ["opzione 1", "opzione 3"], words: "opzione 1 + opzione 3" })
-    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({ words: "opzione 1 + opzione 3 — ma piano", note: "ma piano" })
+    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({
+      choices: ["opzione 1", "opzione 3"],
+      words: "opzione 1 + opzione 3",
+    })
+    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({
+      words: "opzione 1 + opzione 3 — ma piano",
+      note: "ma piano",
+    })
     expect(answerEvent(multi, [], "", at)).toBeTypeOf("string")
     expect((answerEvent(multi, [0], "", at) as { choice?: string }).choice).toBeUndefined()
   })
@@ -411,11 +470,19 @@ describe("a multiple question", () => {
       delivery: () => ({ state: "in coda" }),
       onAnswered: () => {},
     })
-    const decision = { ...multi, title: "Quali", raisedBy: "fable", openedAt: "2026-09-23T10:00:00Z", status: "aperta", history: [] } as never
+    const decision = {
+      ...multi,
+      title: "Quali",
+      raisedBy: "fable",
+      openedAt: "2026-09-23T10:00:00Z",
+      status: "aperta",
+      history: [],
+    } as never
     const press = (key: string) => {
       const draft = hub.draft("M1")
       const action = sheetKey({ key }, 3, false, enterReady(true, draft.picked, draft.note, true))
-      if (action?.kind === "pick") hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
+      if (action?.kind === "pick")
+        hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
       return action
     }
     press("1")

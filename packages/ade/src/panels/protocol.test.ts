@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { acceptsRequests, describeCapabilities, formatReply, inert, panelsHelp, parseRequest, REPLY_PREFIX, REQUEST_PREFIX } from "./protocol"
+import {
+  acceptsRequests,
+  describeCapabilities,
+  formatReply,
+  inert,
+  panelsHelp,
+  parseRequest,
+  REPLY_PREFIX,
+  REQUEST_PREFIX,
+} from "./protocol"
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
@@ -197,7 +206,10 @@ describe("a request cannot become a shell command (review, ALTO 1)", () => {
     // From `onLine`, and from the screen of an agent that draws one (`screenRequests`).
     expect(calls.length).toBe(2)
     expect(calls[0]).toContain("onRequest: (paneId, line) =>")
-    const screen = source.slice(source.indexOf("const screenRequests = createScreenRequests("), source.indexOf("onRequest: (paneId, line) =>"))
+    const screen = source.slice(
+      source.indexOf("const screenRequests = createScreenRequests("),
+      source.indexOf("onRequest: (paneId, line) =>"),
+    )
     expect(screen).toContain("if (!pane || !acceptsRequests(pane.agent ?? pane.model)")
     expect(calls[1]).toContain("if (acceptsRequests(agentId) && !onAlternateScreen(paneId))")
   })

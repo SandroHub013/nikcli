@@ -48,7 +48,8 @@ function paneRoots(): Set<string> {
 
 /** What the shell owns on a pane root; a pane's own rules may not set any of it. */
 const SHELL_OWNED = ["background", "border", "outline", "flex", "display", "position", "overflow", "min-", "height"]
-const ownedByShell = (prop: string) => SHELL_OWNED.some((owned) => prop === owned || prop.startsWith(owned.endsWith("-") ? owned : `${owned}-`))
+const ownedByShell = (prop: string) =>
+  SHELL_OWNED.some((owned) => prop === owned || prop.startsWith(owned.endsWith("-") ? owned : `${owned}-`))
 
 /*
  * The differences a root may draw over the shell, each for a state that is not
@@ -108,7 +109,9 @@ function namesRoot(compound: string, roots: Set<string>): boolean {
 function shellViolations(css: string, where: string, roots: Set<string>): string[] {
   const found: string[] = []
   postcss.parse(css).walkRules((rule: Rule) => {
-    const optsOut = rule.nodes.some((node) => node.type === "decl" && node.prop === "--ade-pane-focus" && node.value.trim() === "none")
+    const optsOut = rule.nodes.some(
+      (node) => node.type === "decl" && node.prop === "--ade-pane-focus" && node.value.trim() === "none",
+    )
     for (const selector of rule.selectors) {
       const compound = lastCompound(selector)
       if (!namesRoot(compound, roots)) continue
@@ -241,10 +244,13 @@ describe("the focused session shows its focus", () => {
   function resolveVars(element: Element, value: string): string {
     const style = getComputedStyle(element)
     for (let round = 0; round < 10 && value.includes("var("); round++) {
-      value = value.replace(/var\(\s*(--[\w-]+)\s*(?:,((?:[^()]|\((?:[^()]|\([^()]*\))*\))*))?\)/g, (_, name: string, fallback?: string) => {
-        const own = style.getPropertyValue(name).trim()
-        return own || (fallback ?? "").trim()
-      })
+      value = value.replace(
+        /var\(\s*(--[\w-]+)\s*(?:,((?:[^()]|\((?:[^()]|\([^()]*\))*\))*))?\)/g,
+        (_, name: string, fallback?: string) => {
+          const own = style.getPropertyValue(name).trim()
+          return own || (fallback ?? "").trim()
+        },
+      )
     }
     return value
   }

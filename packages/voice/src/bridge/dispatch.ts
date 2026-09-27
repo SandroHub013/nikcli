@@ -58,7 +58,9 @@ export function resolveTargetPane(
     const targetIdx = Number(slots.paneIndex)
     const found = panes.find((p) => p.index === targetIdx)
     if (!found) {
-      return { error: lang === "en" ? `Panel number ${targetIdx} not found.` : `Pannello numero ${targetIdx} non trovato.` }
+      return {
+        error: lang === "en" ? `Panel number ${targetIdx} not found.` : `Pannello numero ${targetIdx} non trovato.`,
+      }
     }
     return { pane: found }
   }
@@ -69,10 +71,7 @@ export function resolveTargetPane(
     let bestPane: PaneSummary | undefined
 
     for (const pane of panes) {
-      const hit = fuzzyMatch(
-        String(slots.paneTitle).toLowerCase(),
-        pane.title.toLowerCase()
-      )
+      const hit = fuzzyMatch(String(slots.paneTitle).toLowerCase(), pane.title.toLowerCase())
       if (hit && hit.score > bestScore) {
         bestScore = hit.score
         bestPane = pane
@@ -136,7 +135,7 @@ export function resolveTargetPane(
 export async function dispatch(
   result: ParseResult,
   host: VoiceHost,
-  ctx: DispatchContext = {}
+  ctx: DispatchContext = {},
 ): Promise<DispatchOutcome> {
   const lang = ctx.lang ?? "it"
   if (result.outcome !== "matched" || !result.intent) {
@@ -166,7 +165,10 @@ export async function dispatch(
       case "session.new": {
         // It opens the form that starts one; nothing is running yet.
         await host.runCommand("session.new")
-        return { success: true, spoken: lang === "en" ? "Opening new session screen." : "Apro la schermata per avviare una nuova sessione." }
+        return {
+          success: true,
+          spoken: lang === "en" ? "Opening new session screen." : "Apro la schermata per avviare una nuova sessione.",
+        }
       }
 
       case "video.new":
@@ -184,7 +186,10 @@ export async function dispatch(
 
       case "project.open": {
         await host.runCommand("project.open")
-        return { success: true, spoken: lang === "en" ? "Opening project selection." : "Apro la selezione del progetto." }
+        return {
+          success: true,
+          spoken: lang === "en" ? "Opening project selection." : "Apro la selezione del progetto.",
+        }
       }
 
       case "project.recent": {
@@ -195,7 +200,10 @@ export async function dispatch(
           return { success: true, spoken: lang === "en" ? "Opening project picker." : "Apro la scelta del progetto." }
         }
         await host.runCommand(`project.recent.${slots.path}`)
-        return { success: true, spoken: lang === "en" ? "Opening requested recent project." : "Apro il progetto recente richiesto." }
+        return {
+          success: true,
+          spoken: lang === "en" ? "Opening requested recent project." : "Apro il progetto recente richiesto.",
+        }
       }
 
       case "pane.close": {
@@ -209,9 +217,7 @@ export async function dispatch(
         return {
           success: true,
           spoken:
-            lang === "en"
-              ? `Panel «${resolved.pane!.title}» closed.`
-              : `Pannello «${resolved.pane!.title}» chiuso.`,
+            lang === "en" ? `Panel «${resolved.pane!.title}» closed.` : `Pannello «${resolved.pane!.title}» chiuso.`,
         }
       }
 
@@ -225,7 +231,10 @@ export async function dispatch(
         await host.runCommand("pane.expand")
         return {
           success: true,
-          spoken: lang === "en" ? `Panel ${resolved.pane!.index} size changed.` : `Dimensione del pannello ${resolved.pane!.index} modificata.`,
+          spoken:
+            lang === "en"
+              ? `Panel ${resolved.pane!.index} size changed.`
+              : `Dimensione del pannello ${resolved.pane!.index} modificata.`,
         }
       }
 
@@ -298,7 +307,10 @@ export async function dispatch(
         const summaries = panes.map((p) => `${p.index}: ${p.title}`).join(", ")
         return {
           success: true,
-          spoken: lang === "en" ? `There are ${panes.length} open panels: ${summaries}.` : `Ci sono ${panes.length} pannelli aperti: ${summaries}.`,
+          spoken:
+            lang === "en"
+              ? `There are ${panes.length} open panels: ${summaries}.`
+              : `Ci sono ${panes.length} pannelli aperti: ${summaries}.`,
           data: panes,
         }
       }
@@ -357,7 +369,8 @@ export async function dispatch(
         if (!slots.path) {
           return {
             success: false,
-            spoken: lang === "en" ? "Specify the path of the file to open." : "Specificare il percorso del file da aprire.",
+            spoken:
+              lang === "en" ? "Specify the path of the file to open." : "Specificare il percorso del file da aprire.",
             error: "missing_path",
           }
         }
@@ -391,7 +404,8 @@ export async function dispatch(
         if (host.setPaneView(resolved.pane!.id, viewMode) === false) {
           return {
             success: false,
-            spoken: lang === "en" ? "This panel has no view to change." : "Questo pannello non ha una vista da cambiare.",
+            spoken:
+              lang === "en" ? "This panel has no view to change." : "Questo pannello non ha una vista da cambiare.",
             error: "unsupported",
           }
         }
@@ -409,9 +423,7 @@ export async function dispatch(
         const hasExplicitPane =
           slots.paneIndex !== undefined || slots.paneTitle !== undefined || slots.paneId !== undefined
         const candidatePanes =
-          hasExplicitPane || panes.filter((p) => p.isBrowser).length === 0
-            ? panes
-            : panes.filter((p) => p.isBrowser)
+          hasExplicitPane || panes.filter((p) => p.isBrowser).length === 0 ? panes : panes.filter((p) => p.isBrowser)
         const resolved = resolveTargetPane(slots, candidatePanes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
@@ -420,7 +432,10 @@ export async function dispatch(
         if (host.browserNavigate(resolved.pane!.id, url) === false) {
           return {
             success: false,
-            spoken: lang === "en" ? "Could not find browser panel to navigate." : "Non ho trovato il pannello browser da far navigare.",
+            spoken:
+              lang === "en"
+                ? "Could not find browser panel to navigate."
+                : "Non ho trovato il pannello browser da far navigare.",
             error: "pane_not_found",
           }
         }
@@ -437,10 +452,14 @@ export async function dispatch(
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         // What was asked, when the question named it (V1-ter, ALTO 3): the host grants that request only.
-        if (host.answerPermission(resolved.pane!.id, "allow", typeof slots.what === "string" ? slots.what : undefined) === false) {
+        if (
+          host.answerPermission(resolved.pane!.id, "allow", typeof slots.what === "string" ? slots.what : undefined) ===
+          false
+        ) {
           return {
             success: false,
-            spoken: lang === "en" ? "No permission request is pending." : "Non c'è nessuna richiesta di permesso in attesa.",
+            spoken:
+              lang === "en" ? "No permission request is pending." : "Non c'è nessuna richiesta di permesso in attesa.",
             error: "no_permission",
           }
         }
@@ -456,7 +475,10 @@ export async function dispatch(
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        if (host.answerPermission(resolved.pane!.id, "deny", typeof slots.what === "string" ? slots.what : undefined) === false) {
+        if (
+          host.answerPermission(resolved.pane!.id, "deny", typeof slots.what === "string" ? slots.what : undefined) ===
+          false
+        ) {
           return {
             success: false,
             spoken:
@@ -478,8 +500,12 @@ export async function dispatch(
         return {
           success: true,
           spoken: cols
-            ? (lang === "en" ? `Grid set to ${cols} columns.` : `Disposta la griglia su ${cols} colonne.`)
-            : (lang === "en" ? "Column layout reset." : "Disposizione colonne reimpostata."),
+            ? lang === "en"
+              ? `Grid set to ${cols} columns.`
+              : `Disposta la griglia su ${cols} colonne.`
+            : lang === "en"
+              ? "Column layout reset."
+              : "Disposizione colonne reimpostata.",
         }
       }
 
@@ -495,7 +521,10 @@ export async function dispatch(
         if (!available.includes(targetView)) {
           return {
             success: false,
-            spoken: lang === "en" ? `The ${targetView} section is not available right now.` : `La sezione ${targetView} non è disponibile per ora.`,
+            spoken:
+              lang === "en"
+                ? `The ${targetView} section is not available right now.`
+                : `La sezione ${targetView} non è disponibile per ora.`,
             error: "view_unavailable",
           }
         }
@@ -516,7 +545,10 @@ export async function dispatch(
         host.scrollTranscript(resolved.pane!.id, delta)
         return {
           success: true,
-          spoken: lang === "en" ? `Panel ${resolved.pane!.index} transcript scrolled.` : `Trascrizione del pannello ${resolved.pane!.index} scorsa.`,
+          spoken:
+            lang === "en"
+              ? `Panel ${resolved.pane!.index} transcript scrolled.`
+              : `Trascrizione del pannello ${resolved.pane!.index} scorsa.`,
         }
       }
 
@@ -560,11 +592,19 @@ export async function dispatch(
        * «Confermato» for an action that never ran.
        */
       case "dialog.confirm": {
-        return { success: false, spoken: lang === "en" ? "Nothing to confirm." : "Non c'è niente da confermare.", error: "nothing_pending" }
+        return {
+          success: false,
+          spoken: lang === "en" ? "Nothing to confirm." : "Non c'è niente da confermare.",
+          error: "nothing_pending",
+        }
       }
 
       case "dialog.cancel": {
-        return { success: false, spoken: lang === "en" ? "Nothing to cancel." : "Non c'è niente da annullare.", error: "nothing_pending" }
+        return {
+          success: false,
+          spoken: lang === "en" ? "Nothing to cancel." : "Non c'è niente da annullare.",
+          error: "nothing_pending",
+        }
       }
 
       case "dialog.repeat": {
@@ -582,13 +622,20 @@ export async function dispatch(
       }
 
       case "dictation.finish": {
-        return { success: false, spoken: lang === "en" ? "No ongoing dictation to send." : "Non c'è una dettatura in corso da inviare.", error: "nothing_pending" }
+        return {
+          success: false,
+          spoken: lang === "en" ? "No ongoing dictation to send." : "Non c'è una dettatura in corso da inviare.",
+          error: "nothing_pending",
+        }
       }
 
       default:
         return {
           success: false,
-          spoken: lang === "en" ? `Intent '${intentId}' not handled by dispatcher.` : `Intento '${intentId}' non gestito dal dispatcher.`,
+          spoken:
+            lang === "en"
+              ? `Intent '${intentId}' not handled by dispatcher.`
+              : `Intento '${intentId}' non gestito dal dispatcher.`,
           error: "unhandled_intent",
         }
     }

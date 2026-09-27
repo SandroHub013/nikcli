@@ -42,7 +42,11 @@ export function BarQueueButton(props: {
       onClick={() => props.onOpen()}
     >
       <span data-slot="bar-queue-vial" aria-hidden="true">
-        <VialMark fam={props.family === "decisions" ? "dec" : "design"} count={props.counts.waiting} theme={props.theme} />
+        <VialMark
+          fam={props.family === "decisions" ? "dec" : "design"}
+          count={props.counts.waiting}
+          theme={props.theme}
+        />
       </span>
       <span data-slot="bar-queue-name">{text().name}</span>
       <span data-slot="bar-queue-pill">{text().pill}</span>

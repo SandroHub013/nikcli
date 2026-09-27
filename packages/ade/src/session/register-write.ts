@@ -13,9 +13,19 @@
  */
 
 import { parseDecisionLog, serializeDecisionEvent, type DecisionEvent } from "../decisions/log"
-import { bucketDecisions, describeProblems as describeDecisionProblems, foldDecisions, nextDecisionKey } from "../decisions/state"
+import {
+  bucketDecisions,
+  describeProblems as describeDecisionProblems,
+  foldDecisions,
+  nextDecisionKey,
+} from "../decisions/state"
 import { parseDesignLog, serializeDesignEvent, type DesignEvent } from "../design/log"
-import { bucketProposals, describeProblems as describeDesignProblems, foldProposals, nextDesignKey } from "../design/state"
+import {
+  bucketProposals,
+  describeProblems as describeDesignProblems,
+  foldProposals,
+  nextDesignKey,
+} from "../design/state"
 import type { RegisterName } from "./mailbox"
 import { belongsTo, type ProjectRef } from "../surface/pane-project"
 
@@ -70,7 +80,8 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
 
   if (message.register === "design" && (message.op === "aperta" || message.op === "riaperta")) {
     const twice = samePreview(parsed.variants ?? [])
-    if (twice) return `errore: due varianti con la stessa anteprima (${twice}): una pagina per variante, vedi S75 punto 3`
+    if (twice)
+      return `errore: due varianti con la stessa anteprima (${twice}): una pagina per variante, vedi S75 punto 3`
   }
 
   const refused = book.refusal(before, JSON.parse(line), deps.now())
@@ -87,7 +98,8 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
 
   const after = await readText(deps)
   const expected = expectedState(message.op, parsed.again === true)
-  if (typeof after !== "string") return `errore: scritta ma non risulta ${expected.word}: ${after.error.replace(/^errore: /, "")}`
+  if (typeof after !== "string")
+    return `errore: scritta ma non risulta ${expected.word}: ${after.error.replace(/^errore: /, "")}`
   if (!book.holds(after, k, expected.test, deps.now())) {
     const problems = book.problems(after, deps.now())
     return `errore: scritta ma non risulta ${expected.word}: ${problems.length > 0 ? problems.join("; ") : "la riga non è nel file"}`
@@ -156,7 +168,9 @@ function ownVerdict<E extends { k?: unknown; type?: unknown; at?: unknown; by?: 
   rejected: readonly { event: unknown; reason: string }[],
   event: OwnEvent,
 ): true | string {
-  const found = events.find((item) => item.k === event.k && item.type === event.type && item.at === event.at && item.by === event.by)
+  const found = events.find(
+    (item) => item.k === event.k && item.type === event.type && item.at === event.at && item.by === event.by,
+  )
   if (!found) return "la riga non è nel file"
   return rejected.find((item) => item.event === found)?.reason ?? true
 }
@@ -235,7 +249,9 @@ export function withPlace(reply: string, register: RegisterName, place: Register
   const shown = place.shown
   // Two projects of one name are told apart by their folders.
   const named = (project: ProjectRef, beside: ProjectRef | undefined) =>
-    beside && beside.name === project.name && !belongsTo({ workspaceId: project.name, projectRoot: project.root }, beside)
+    beside &&
+    beside.name === project.name &&
+    !belongsTo({ workspaceId: project.name, projectRoot: project.root }, beside)
       ? `${project.name} (${project.root})`
       : project.name
   let text =
@@ -244,7 +260,10 @@ export function withPlace(reply: string, register: RegisterName, place: Register
       : `${reply} (progetto ${written.name})`
   if (place.asked && !belongsTo(place.asked, written)) {
     const sameName = place.asked.workspaceId === written.name
-    const asked = sameName && place.asked.projectRoot ? `${written.name} (${place.asked.projectRoot})` : place.asked.workspaceId ?? place.asked.projectRoot
+    const asked =
+      sameName && place.asked.projectRoot
+        ? `${written.name} (${place.asked.projectRoot})`
+        : (place.asked.workspaceId ?? place.asked.projectRoot)
     const into = sameName ? `${written.name} (${written.root})` : written.name
     text += `; la sessione è del progetto ${asked}, che non è fra i recenti: scritto in ${into}`
   }

@@ -181,14 +181,20 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
 describe("i permessi concessi dal nikcli.json del progetto", () => {
   const granting: [string, string][] = [
     ['{"agent":{"mio":{"permission":{"bash":"allow"}}}}', 'agent."mio".permission."bash"'],
-    ['{"agent":{"mio":{"permission":{"bash":{"*":"ask","git push *":"allow"}}}}}', 'agent."mio".permission."bash"."git push *"'],
+    [
+      '{"agent":{"mio":{"permission":{"bash":{"*":"ask","git push *":"allow"}}}}}',
+      'agent."mio".permission."bash"."git push *"',
+    ],
     ['{"agent":{"mio":{"permission":{"*":"allow"}}}}', 'agent."mio".permission."*"'],
     ['{"agent":{"mio":{"permission":"allow"}}}', 'agent."mio".permission'],
     ['{"agent":{"mio":{"tools":{"bash":true}}}}', 'agent."mio".tools."bash"'],
     ['{"mode":{"mio":{"permission":{"external_directory":"allow"}}}}', 'mode."mio".permission."external_directory"'],
     ['{"permission":{"bash":"ask","*":"allow"}}', 'permission."*"'],
     ['{"permission":{"bash":{"rm *":"allow"}}}', 'permission."bash"."rm *"'],
-    ['{\n  // commento\n  "agent": { "mio": { "permission": { "bash": "allow", }, }, },\n}', 'agent."mio".permission."bash"'],
+    [
+      '{\n  // commento\n  "agent": { "mio": { "permission": { "bash": "allow", }, }, },\n}',
+      'agent."mio".permission."bash"',
+    ],
   ]
   for (const [config, key] of granting) {
     test(`configGrant: ${config.replace(/\s+/g, " ")}`, () => {
@@ -215,9 +221,14 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
   /* B8d: the session's rules on ADE's server come after any grant, so the panel admits the project and nothing else. */
   test("lint: admitTurn admits the project and never reads a grant; the panel's turn and a routine's run pass through it", () => {
     const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-    const checks = view.slice(view.indexOf("async function admitTurn"), view.indexOf("return { ok: true, bot: trusted }"))
+    const checks = view.slice(
+      view.indexOf("async function admitTurn"),
+      view.indexOf("return { ok: true, bot: trusted }"),
+    )
     expect(checks).not.toContain("grantProblem")
-    expect(checks).toMatch(/const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"[\s\S]*if \(root && nikcli\) \{\s*const project = await admitProject\(/)
+    expect(checks).toMatch(
+      /const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"[\s\S]*if \(root && nikcli\) \{\s*const project = await admitProject\(/,
+    )
     // The panel's turn and a routine's run (B11) both pass there before they start.
     const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(verdict.bot"))
     expect(start).toContain("await admitTurn(bot, props.projectRoot, askTrust)")

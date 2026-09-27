@@ -36,7 +36,9 @@ describe("the mouse hint leaves a narrow pane's header", () => {
 
   test("a container query hides it at 420px or wider, with cost and tokens", () => {
     const widest = hiddenAt()
-      .filter((block) => block.selectors.some((selector) => selector === ".hA .tok" || selector === '[data-slot="pane-mouse-hint"]'))
+      .filter((block) =>
+        block.selectors.some((selector) => selector === ".hA .tok" || selector === '[data-slot="pane-mouse-hint"]'),
+      )
       .map((block) => block.width)
     expect(Math.max(0, ...widest)).toBeGreaterThanOrEqual(420)
   })

@@ -4,7 +4,14 @@ import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
 import { gatewayVisible } from "../../surface/state"
 import type { GatewayMessage } from "./controller"
-import { createGatewayPanel, type GatewayPanelApi, type GatewayStatus, type LinkStatus, type PairingInfo, type PairingRequest } from "./panel-state"
+import {
+  createGatewayPanel,
+  type GatewayPanelApi,
+  type GatewayStatus,
+  type LinkStatus,
+  type PairingInfo,
+  type PairingRequest,
+} from "./panel-state"
 import { memoryRemoteStore, REMOTE_OFF } from "./remote"
 
 /*
@@ -89,7 +96,10 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
   }
 }
 
-type Approve = (bot: AgentFile, project: string) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
+type Approve = (
+  bot: AgentFile,
+  project: string,
+) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
 
 function panelWith(
   fake: ReturnType<typeof fakeApi>,
@@ -133,7 +143,13 @@ describe("the Gateway section of a bot's card", () => {
     await saving
     expect(fake.calls).toEqual([`setToken ${BOT.path} telegram ${TOKEN}`])
     expect(panel.link().hasToken).toBe(true)
-    const everything = JSON.stringify({ link: panel.link(), pairing: panel.pairing(), draft: panel.draft(), problem: panel.problem(), probed: panel.probed() })
+    const everything = JSON.stringify({
+      link: panel.link(),
+      pairing: panel.pairing(),
+      draft: panel.draft(),
+      problem: panel.problem(),
+      probed: panel.probed(),
+    })
     expect(everything).not.toContain(TOKEN)
     expect(everything).not.toContain("FINTO")
     // The test says the bot's name, not the token.
@@ -151,12 +167,27 @@ describe("the Gateway section of a bot's card", () => {
     fake.handlers.status!({ bot: BOT.path, platform: "telegram", running: true, connected: true, lastMessageMs: 5 })
     expect(panel.link().connected).toBe(true)
     expect(panel.link().lastMessageMs).toBe(5)
-    fake.handlers.status!({ bot: BOT.path, platform: "telegram", running: false, connected: false, lastError: "il token è in uso altrove" })
+    fake.handlers.status!({
+      bot: BOT.path,
+      platform: "telegram",
+      running: false,
+      connected: false,
+      lastError: "il token è in uso altrove",
+    })
     expect(panel.link().running).toBe(false)
     expect(panel.link().lastError).toBe("il token è in uso altrove")
     // A message a key was taken out of is said in the panel too.
     expect(panel.redactedAt()).toBeUndefined()
-    fake.handlers.message!({ bot: BOT.path, platform: "telegram", chat: "c", sender: { id: "42", name: "Ale" }, text: "x", id: "1", redacted: true, button: false })
+    fake.handlers.message!({
+      bot: BOT.path,
+      platform: "telegram",
+      chat: "c",
+      sender: { id: "42", name: "Ale" },
+      text: "x",
+      id: "1",
+      redacted: true,
+      button: false,
+    })
     expect(panel.redactedAt()).toBe(Date.UTC(2026, 8, 25, 10, 30))
     panel.dispose()
     expect(fake.stopped()).toBe(true)
@@ -166,7 +197,14 @@ describe("the Gateway section of a bot's card", () => {
     const fake = fakeApi()
     const { panel } = panelWith(fake)
     await panel.ready
-    const request: PairingRequest = { bot: BOT.path, platform: "telegram", request: "r1", sender: { id: "42", name: "Ale" }, createdMs: 1, expiresMs: 2 }
+    const request: PairingRequest = {
+      bot: BOT.path,
+      platform: "telegram",
+      request: "r1",
+      sender: { id: "42", name: "Ale" },
+      createdMs: 1,
+      expiresMs: 2,
+    }
     fake.setPairing({ open: true, pending: [request], authorized: [], attemptsLeft: 5 })
     fake.handlers.pairing!(request)
     await new Promise((resolve) => setTimeout(resolve, 5))
@@ -194,7 +232,9 @@ describe("the Gateway section of a bot's card", () => {
     expect(fake.calls.at(-1)).toBe("setEnabled false -")
 
     const refused = fakeApi({ hasToken: true })
-    const { panel: other } = panelWith(refused, { approve: async () => ({ ok: false, problem: t("gateway.selfGrant", "aiuto", "bash") }) })
+    const { panel: other } = panelWith(refused, {
+      approve: async () => ({ ok: false, problem: t("gateway.selfGrant", "aiuto", "bash") }),
+    })
     await other.refresh()
     await other.setEnabled(true)
     expect(refused.calls).toEqual([])
@@ -256,7 +296,13 @@ describe("the Gateway section of a bot's card", () => {
     expect(panel.live()).toBe(false)
     await panel.setEnabled(true)
     expect(panel.live()).toBe(true)
-    fake.handlers.status!({ bot: BOT.path, platform: "telegram", running: false, connected: false, lastError: "il token è in uso altrove" })
+    fake.handlers.status!({
+      bot: BOT.path,
+      platform: "telegram",
+      running: false,
+      connected: false,
+      lastError: "il token è in uso altrove",
+    })
     expect(panel.live()).toBe(false)
   })
 
@@ -317,8 +363,24 @@ describe("the Gateway section of a bot's card", () => {
       const seen: string[] = []
       const api: GatewayPanelApi = {
         status: async () => [
-          { bot: BOT.path, platform: "telegram", enabled: true, running: true, connected: true, hasToken: true, authorized: [] },
-          { bot: BOT.path, platform: "discord", enabled: false, running: false, connected: false, hasToken: true, authorized: [] },
+          {
+            bot: BOT.path,
+            platform: "telegram",
+            enabled: true,
+            running: true,
+            connected: true,
+            hasToken: true,
+            authorized: [],
+          },
+          {
+            bot: BOT.path,
+            platform: "discord",
+            enabled: false,
+            running: false,
+            connected: false,
+            hasToken: true,
+            authorized: [],
+          },
         ],
         setToken: async (bot, platform) => void seen.push("setToken:" + platform),
         clearToken: async (bot, platform) => void seen.push("clearToken:" + platform),
@@ -496,7 +558,15 @@ describe("the Gateway section of a bot's card", () => {
       const asked: string[] = []
       const api: GatewayPanelApi = {
         status: async () => [
-          { bot: BOT.path, platform: "telegram", enabled: true, running: true, connected: true, hasToken: true, authorized: [] },
+          {
+            bot: BOT.path,
+            platform: "telegram",
+            enabled: true,
+            running: true,
+            connected: true,
+            hasToken: true,
+            authorized: [],
+          },
         ],
         setToken: async () => {},
         clearToken: async () => {},
@@ -505,8 +575,18 @@ describe("the Gateway section of a bot's card", () => {
         pairingList: async (bot, platform) => {
           asked.push(platform)
           return platform === "telegram"
-            ? { open: true, pending: [], authorized: [{ id: "tg1", name: "Sandro su Telegram", addedMs: 0 }], attemptsLeft: 0 }
-            : { open: false, pending: [], authorized: [{ id: "dc1", name: "Sandro su Discord", addedMs: 0 }], attemptsLeft: 0 }
+            ? {
+                open: true,
+                pending: [],
+                authorized: [{ id: "tg1", name: "Sandro su Telegram", addedMs: 0 }],
+                attemptsLeft: 0,
+              }
+            : {
+                open: false,
+                pending: [],
+                authorized: [{ id: "dc1", name: "Sandro su Discord", addedMs: 0 }],
+                attemptsLeft: 0,
+              }
         },
         pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
         pairingReject: async () => {},
@@ -550,7 +630,16 @@ describe("the Gateway section of a bot's card", () => {
    * is theirs, so no later refresh takes it back.
    */
   const twoLinks = (links: Partial<GatewayStatus>[]) => async (): Promise<GatewayStatus[]> =>
-    links.map((link) => ({ enabled: false, running: false, connected: false, hasToken: false, ...link, bot: BOT.path, platform: link.platform ?? "telegram", authorized: [] }))
+    links.map((link) => ({
+      enabled: false,
+      running: false,
+      connected: false,
+      hasToken: false,
+      ...link,
+      bot: BOT.path,
+      platform: link.platform ?? "telegram",
+      authorized: [],
+    }))
 
   const panelOver = (status: () => Promise<GatewayStatus[]>) =>
     createGatewayPanel({
@@ -630,4 +719,5 @@ describe("the Gateway section of a bot's card", () => {
         panel.dispose()
       }
     })
-  })})
+  })
+})

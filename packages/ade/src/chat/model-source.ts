@@ -40,7 +40,12 @@ export function createModelSource(load: (key: string) => Promise<ModelRead>): Mo
       const under = reading.get(key)
       if (under) return under
       const read = load(key)
-        .catch((error: unknown): ModelRead => ({ ok: false, reason: error instanceof Error ? error.message : String(error) }))
+        .catch(
+          (error: unknown): ModelRead => ({
+            ok: false,
+            reason: error instanceof Error ? error.message : String(error),
+          }),
+        )
         .then((result) => {
           // Only a list is kept: the next open reads again after a failure.
           if (result.ok) done.set(key, result.models)

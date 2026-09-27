@@ -189,7 +189,12 @@ export const KEY_REASON_MAX = 300
  * said it. Now it names the pane and the agent, gives the reason as the
  * agent's words, and says the key goes to that agent at its next start.
  */
-export function keyRequestText(input: { readonly env: string; readonly reason: string; readonly asker?: KeyAsker; readonly agentLabel: (id: string) => string }): {
+export function keyRequestText(input: {
+  readonly env: string
+  readonly reason: string
+  readonly asker?: KeyAsker
+  readonly agentLabel: (id: string) => string
+}): {
   readonly title: string
   /** The agent's reason, cut short, without control characters; undefined when it gave none. */
   readonly says?: string
@@ -199,14 +204,19 @@ export function keyRequestText(input: { readonly env: string; readonly reason: s
   const says = reason.length > KEY_REASON_MAX ? `${reason.slice(0, KEY_REASON_MAX - 1)}…` : reason
   const agent = input.asker ? input.agentLabel(input.asker.agentId) : undefined
   return {
-    title: input.asker ? t("keys.request.from", input.asker.title, agent!, input.env) : t("keys.request.title", input.env),
+    title: input.asker
+      ? t("keys.request.from", input.asker.title, agent!, input.env)
+      : t("keys.request.title", input.env),
     ...(says ? { says } : {}),
     goes: agent ? t("keys.request.goes", agent) : t("keys.request.hint"),
   }
 }
 
 /** The agents a requested key is given to: the ones it has, and the asking agent. */
-export function keyRequestAgents(existing: readonly string[] | undefined, asker: KeyAsker | undefined): readonly string[] {
+export function keyRequestAgents(
+  existing: readonly string[] | undefined,
+  asker: KeyAsker | undefined,
+): readonly string[] {
   const agents = [...(existing ?? [])]
   if (asker && !agents.includes(asker.agentId)) agents.push(asker.agentId)
   return agents

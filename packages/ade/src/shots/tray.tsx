@@ -142,128 +142,128 @@ export function ShotTray(props: ShotTrayProps) {
             data-slot="shot-tray-row"
             data-more={`${edges().left ? "l" : ""}${edges().right ? "r" : ""}` || undefined}
           >
-          <div
-            data-slot="shot-tray-strip"
-            ref={setStrip}
-            onScroll={readEdges}
-            /*
-             * The wheel, turned sideways by hand.
-             *
-             * Chromium only sends a vertical wheel to a row that scrolls
-             * sideways when no ancestor can take it, and here the sidebar can:
-             * the column scrolled and the tray never moved, so the screenshots
-             * past the second one were unreachable with a mouse. Measured in
-             * ADE Test: three notches of deltaY 120 left scrollLeft at 0.
-             */
-            onWheel={(event) => {
-              const el = strip()
-              if (!el || el.scrollWidth <= el.clientWidth) return
-              // A trackpad swipe already arrives as deltaX and the browser
-              // handles it; adding it here would move the row twice.
-              if (!event.deltaY) return
-              const before = el.scrollLeft
-              el.scrollLeft = before + event.deltaY
-              if (el.scrollLeft !== before) event.preventDefault()
-            }}
-          >
-            <For each={props.shots}>
-              {(shot) => (
-                /*
-                 * The tile is the drag handle and the open button at once.
-                 *
-                 * It used to wrap a <button> around the thumbnail, and in
-                 * Chromium a button swallows the press that would have started
-                 * the drag: `draggable` on the ancestor is simply never
-                 * honoured, so the thumbnails looked draggable and were not.
-                 * The tile carries the role instead, and the only real button
-                 * left inside it is the dismiss, which is meant to be pressed.
-                 */
-                <figure
-                  data-slot="shot"
-                  title={shot.name}
-                  draggable={true}
-                  role="button"
-                  tabindex={0}
-                  aria-label={`Apri ${shot.name}`}
-                  onClick={() => setOpened(shot)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return
-                    event.preventDefault()
-                    setOpened(shot)
-                  }}
-                  onDragStart={(event) => {
-                    /*
-                     * The path travels as plain text so any drop target that
-                     * accepts text — a pane, the composer, a field ADE does not
-                     * own yet — receives something it can use, rather than a
-                     * private format only this tray understands.
-                     */
-                    event.dataTransfer?.setData("text/plain", shot.path)
-                    event.dataTransfer?.setData("application/x-ade-shot", shot.path)
-                    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
-                  }}
-                >
-                  <Thumb shot={shot} load={props.load} />
+            <div
+              data-slot="shot-tray-strip"
+              ref={setStrip}
+              onScroll={readEdges}
+              /*
+               * The wheel, turned sideways by hand.
+               *
+               * Chromium only sends a vertical wheel to a row that scrolls
+               * sideways when no ancestor can take it, and here the sidebar can:
+               * the column scrolled and the tray never moved, so the screenshots
+               * past the second one were unreachable with a mouse. Measured in
+               * ADE Test: three notches of deltaY 120 left scrollLeft at 0.
+               */
+              onWheel={(event) => {
+                const el = strip()
+                if (!el || el.scrollWidth <= el.clientWidth) return
+                // A trackpad swipe already arrives as deltaX and the browser
+                // handles it; adding it here would move the row twice.
+                if (!event.deltaY) return
+                const before = el.scrollLeft
+                el.scrollLeft = before + event.deltaY
+                if (el.scrollLeft !== before) event.preventDefault()
+              }}
+            >
+              <For each={props.shots}>
+                {(shot) => (
+                  /*
+                   * The tile is the drag handle and the open button at once.
+                   *
+                   * It used to wrap a <button> around the thumbnail, and in
+                   * Chromium a button swallows the press that would have started
+                   * the drag: `draggable` on the ancestor is simply never
+                   * honoured, so the thumbnails looked draggable and were not.
+                   * The tile carries the role instead, and the only real button
+                   * left inside it is the dismiss, which is meant to be pressed.
+                   */
+                  <figure
+                    data-slot="shot"
+                    title={shot.name}
+                    draggable={true}
+                    role="button"
+                    tabindex={0}
+                    aria-label={`Apri ${shot.name}`}
+                    onClick={() => setOpened(shot)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return
+                      event.preventDefault()
+                      setOpened(shot)
+                    }}
+                    onDragStart={(event) => {
+                      /*
+                       * The path travels as plain text so any drop target that
+                       * accepts text — a pane, the composer, a field ADE does not
+                       * own yet — receives something it can use, rather than a
+                       * private format only this tray understands.
+                       */
+                      event.dataTransfer?.setData("text/plain", shot.path)
+                      event.dataTransfer?.setData("application/x-ade-shot", shot.path)
+                      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+                    }}
+                  >
+                    <Thumb shot={shot} load={props.load} />
+                    <button
+                      type="button"
+                      data-slot="shot-dismiss"
+                      onClick={(event) => {
+                        // Or the tile behind it opens the picture being put away.
+                        event.stopPropagation()
+                        props.onDismiss(shot.path)
+                      }}
+                      aria-label={t("shots.dismiss.named", shot.name)}
+                      title={t("shots.dismiss")}
+                    >
+                      <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                        <path
+                          d="M3 3l6 6M9 3l-6 6"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.4"
+                          stroke-linecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </figure>
+                )}
+              </For>
+            </div>
+            {/*
+             * Two ways of saying the row continues, because the scrollbar is
+             * hidden: the edge fades out under the thumbnail that is half
+             * there, and an arrow sits on the fade for anyone who would rather
+             * press than scroll. Both appear only on the side that has more.
+             */}
+            <For each={["left", "right"] as const}>
+              {(side) => (
+                <Show when={side === "left" ? edges().left : edges().right}>
                   <button
                     type="button"
-                    data-slot="shot-dismiss"
-                    onClick={(event) => {
-                      // Or the tile behind it opens the picture being put away.
-                      event.stopPropagation()
-                      props.onDismiss(shot.path)
+                    data-slot="shot-tray-more"
+                    data-side={side}
+                    aria-label={side === "left" ? t("shots.more.left") : t("shots.more.right")}
+                    title={side === "left" ? t("shots.more.left") : t("shots.more.right")}
+                    onClick={() => {
+                      const el = strip()
+                      if (!el) return
+                      el.scrollBy({ left: (side === "left" ? -1 : 1) * el.clientWidth * 0.8, behavior: "smooth" })
                     }}
-                    aria-label={t("shots.dismiss.named", shot.name)}
-                    title={t("shots.dismiss")}
                   >
                     <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                       <path
-                        d="M3 3l6 6M9 3l-6 6"
+                        d={side === "left" ? "M7.5 2.5L4 6l3.5 3.5" : "M4.5 2.5L8 6l-3.5 3.5"}
                         fill="none"
                         stroke="currentColor"
-                        stroke-width="1.4"
+                        stroke-width="1.5"
                         stroke-linecap="round"
+                        stroke-linejoin="round"
                       />
                     </svg>
                   </button>
-                </figure>
+                </Show>
               )}
             </For>
-          </div>
-          {/*
-           * Two ways of saying the row continues, because the scrollbar is
-           * hidden: the edge fades out under the thumbnail that is half
-           * there, and an arrow sits on the fade for anyone who would rather
-           * press than scroll. Both appear only on the side that has more.
-           */}
-          <For each={["left", "right"] as const}>
-            {(side) => (
-              <Show when={side === "left" ? edges().left : edges().right}>
-                <button
-                  type="button"
-                  data-slot="shot-tray-more"
-                  data-side={side}
-                  aria-label={side === "left" ? t("shots.more.left") : t("shots.more.right")}
-                  title={side === "left" ? t("shots.more.left") : t("shots.more.right")}
-                  onClick={() => {
-                    const el = strip()
-                    if (!el) return
-                    el.scrollBy({ left: (side === "left" ? -1 : 1) * el.clientWidth * 0.8, behavior: "smooth" })
-                  }}
-                >
-                  <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-                    <path
-                      d={side === "left" ? "M7.5 2.5L4 6l3.5 3.5" : "M4.5 2.5L8 6l-3.5 3.5"}
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </Show>
-            )}
-          </For>
           </div>
         </Show>
       </aside>

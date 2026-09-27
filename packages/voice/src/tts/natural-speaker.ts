@@ -464,7 +464,11 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     }
   }
 
-  function invokeSynthesize(voice: string, locale: TtsLocale, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
+  function invokeSynthesize(
+    voice: string,
+    locale: TtsLocale,
+    sentence: string,
+  ): { token: number; pending: Promise<ArrayBuffer> } {
     const token = ++tokenSeq
     inflight.add(token)
     const send = (): Promise<ArrayBuffer> => {
@@ -500,7 +504,11 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
    * has to be able to drop the units it is not going to play: they are all queued
    * in the host, and the next voice in the chain stands behind them.
    */
-  function synthesize(voice: string, locale: TtsLocale, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
+  function synthesize(
+    voice: string,
+    locale: TtsLocale,
+    sentence: string,
+  ): { token: number; pending: Promise<ArrayBuffer> } {
     // The voice is needed again, so a stop in flight has nothing left to free.
     askedFor = true
     residentStarted = true
@@ -579,7 +587,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
    * decision because reaching it is worth telling the user about.
    */
   function chainOf(voice: string, locale: TtsLocale): string[] {
-    return replyVoiceChainFrom(voice, locale).filter((candidate) => candidate !== "system");
+    return replyVoiceChainFrom(voice, locale).filter((candidate) => candidate !== "system")
   }
 
   /** Where in the chain the reading starts: the first voice that can speak. */
@@ -591,12 +599,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       // to be there, and not being there is not a reason to go and get it — the
       // 219 MB of Kokoro in particular, which the panel promises arrive when the
       // button is pressed, and one English sentence is enough to break that.
-      if (await usable(chain[step]!, step === 0)) return step;
+      if (await usable(chain[step]!, step === 0)) return step
       // An abandoned reply stops asking: the next step belongs to whoever is
       // speaking now.
-      if (mine !== generation) return -1;
+      if (mine !== generation) return -1
     }
-    return -1;
+    return -1
   }
 
   /**
@@ -614,40 +622,40 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
    */
   async function speakWith(voice: string, units: string[], locale: TtsLocale, mine: number): Promise<number> {
     // Requested together, played in order: the host works through them while the first plays.
-    const asked = units.map((unit) => synthesize(voice, locale, unit));
-    const audio = asked.map((entry) => entry.pending);
-    audio.forEach((pending) => pending.catch(() => {}));
+    const asked = units.map((unit) => synthesize(voice, locale, unit))
+    const audio = asked.map((entry) => entry.pending)
+    audio.forEach((pending) => pending.catch(() => {}))
     // The one in course finishes alone, so it is left alone too: the host drops
     // each token when it reaches the front of its own queue.
     const dropFrom = (index: number): number => {
-      const abandoned = asked.slice(index + 1).map((entry) => entry.token);
-      if (abandoned.length > 0) void deps.cancel?.(abandoned);
-      return index;
-    };
+      const abandoned = asked.slice(index + 1).map((entry) => entry.token)
+      if (abandoned.length > 0) void deps.cancel?.(abandoned)
+      return index
+    }
     for (let i = 0; i < units.length; i++) {
-      let wav: ArrayBuffer;
+      let wav: ArrayBuffer
       try {
         // Timed from when this unit is due, not when it was queued behind the others.
-        wav = await withinLimit(audio[i]!, limitMs());
+        wav = await withinLimit(audio[i]!, limitMs())
       } catch {
         // Synthesised nothing: the rest of the reply goes out in another voice
         // rather than not at all.
-        return dropFrom(i);
+        return dropFrom(i)
       }
-      if (mine !== generation) return dropFrom(i);
-      const controller = new AbortController();
-      playing = controller;
-      markVoice("audio-start", units[i]);
+      if (mine !== generation) return dropFrom(i)
+      const controller = new AbortController()
+      playing = controller
+      markVoice("audio-start", units[i])
       try {
-        await deps.play(wav, controller.signal);
+        await deps.play(wav, controller.signal)
       } catch {
         // Synthesised but not playable: the old voice still gets the words out.
-        return dropFrom(i);
+        return dropFrom(i)
       }
-      if (mine !== generation) return dropFrom(i);
+      if (mine !== generation) return dropFrom(i)
     }
-    playing = undefined;
-    return units.length;
+    playing = undefined
+    return units.length
   }
 
   /**
@@ -763,7 +771,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       // a Kokoro voice that is not installed yet is not the one reading this
       // reply, and Piper is. `ready` is what is known installed here, so no
       // status call is made on a sentence that has not been asked for.
-      const speaking = replyVoiceChainFrom(voice, locale).find((candidate) => candidate !== "system" && ready.has(candidate))
+      const speaking = replyVoiceChainFrom(voice, locale).find(
+        (candidate) => candidate !== "system" && ready.has(candidate),
+      )
       if (speaking === undefined) return
       cancelIdleTimer()
       for (const sentence of unitsOf(speaking, clean)) {

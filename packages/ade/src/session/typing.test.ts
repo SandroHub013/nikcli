@@ -130,4 +130,3 @@ describe("submitCheck", () => {
     expect(confirmDeadline(0, HOOK_TIMEOUT)).toBeGreaterThanOrEqual(12_000)
   })
 })
-

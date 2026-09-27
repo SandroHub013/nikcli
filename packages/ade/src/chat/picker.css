@@ -27,7 +27,9 @@
   font: inherit;
   font-size: var(--ade-font-sm);
   cursor: pointer;
-  transition: border-color var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="chip"]:hover:not(:disabled),
@@ -59,7 +61,9 @@
   color: var(--ade-text-weak);
 }
 
-[data-slot="chip"][aria-expanded="true"] [data-slot="chip-caret"] { transform: rotate(180deg); }
+[data-slot="chip"][aria-expanded="true"] [data-slot="chip-caret"] {
+  transform: rotate(180deg);
+}
 
 [data-slot="chip-popover"] {
   position: absolute;
@@ -140,7 +144,9 @@
   overflow-y: auto;
 }
 
-[data-slot="chip-list"]:focus { outline: none; }
+[data-slot="chip-list"]:focus {
+  outline: none;
+}
 
 [data-slot="chip-group"] {
   padding: var(--ade-space-3) var(--ade-space-4) var(--ade-space-1);
@@ -196,10 +202,16 @@
   font-size: var(--ade-font-xs);
 }
 
-[data-slot="chip-footer"] { border-top: 1px solid var(--ade-border-subtle); }
+[data-slot="chip-footer"] {
+  border-top: 1px solid var(--ade-border-subtle);
+}
 
-[data-slot="chip-note"][data-state="error"] { color: var(--ade-error); }
-[data-slot="chip-note"][data-state="warn"] { color: var(--ade-warning); }
+[data-slot="chip-note"][data-state="error"] {
+  color: var(--ade-error);
+}
+[data-slot="chip-note"][data-state="warn"] {
+  color: var(--ade-warning);
+}
 
 /* A model the catalog no longer has: the chip says it in the warning's colour, the id is in its tooltip. */
 [data-slot="chip-menu"][data-tone="warn"] > [data-slot="chip"] {

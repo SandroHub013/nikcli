@@ -910,8 +910,7 @@
 [data-component="session-pane"][data-focused] {
   --ade-pane-focus: none;
   --ade-pane-shadow:
-    0 0 0 1.5px var(--ade-border-strong),
-    0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
+    0 0 0 1.5px var(--ade-border-strong), 0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
 }
 
 /* ── the header: a pill of glass over the first lines ── */

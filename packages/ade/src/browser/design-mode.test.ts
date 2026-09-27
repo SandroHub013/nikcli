@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { BROWSE_SANDBOX, DESIGN_SANDBOX, frameSandbox, INITIAL_DESIGN_WATCH, watchDesign, type DesignWatchEvent } from "./design-mode"
+import {
+  BROWSE_SANDBOX,
+  DESIGN_SANDBOX,
+  frameSandbox,
+  INITIAL_DESIGN_WATCH,
+  watchDesign,
+  type DesignWatchEvent,
+} from "./design-mode"
 import { fitViewport } from "./viewport"
 
 /* D1: the frame of a design page, and how the pane knows it is still there. */
@@ -45,7 +52,12 @@ describe("watchDesign", () => {
 
 describe("the size a design page declares", () => {
   test("is the viewport, scaled to fit and never up", () => {
-    const fit = fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900, size: { width: 1200, height: 800 } })
+    const fit = fitViewport({
+      preset: "responsive",
+      containerWidth: 600,
+      containerHeight: 900,
+      size: { width: 1200, height: 800 },
+    })
     expect(fit.isResponsive).toBe(false)
     expect(fit.viewportWidth).toBe(1200)
     expect(fit.viewportHeight).toBe(800)
@@ -53,7 +65,12 @@ describe("the size a design page declares", () => {
   })
 
   test("a small page is not blown up", () => {
-    const fit = fitViewport({ preset: "responsive", containerWidth: 2000, containerHeight: 2000, size: { width: 360, height: 240 } })
+    const fit = fitViewport({
+      preset: "responsive",
+      containerWidth: 2000,
+      containerHeight: 2000,
+      size: { width: 360, height: 240 },
+    })
     expect(fit.scale).toBe(1)
   })
 

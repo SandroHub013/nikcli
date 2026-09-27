@@ -80,7 +80,10 @@ const unquoteKey = (key: string) => key.replace(/^(["'])(.*)\1$/, "$2")
  * and a YAML tag before the value allowed for.
  */
 const GRANT = (value: string) =>
-  new RegExp(`(?:"([^"]*)"|'([^']*)'|([A-Za-z0-9_*./-]+))\\s*:\\s*(?:!\\S*\\s+)?["']?${value}["']?(?![A-Za-z0-9_])`, "gi")
+  new RegExp(
+    `(?:"([^"]*)"|'([^']*)'|([A-Za-z0-9_*./-]+))\\s*:\\s*(?:!\\S*\\s+)?["']?${value}["']?(?![A-Za-z0-9_])`,
+    "gi",
+  )
 
 /** One grant a bot file gives itself: what, under which permission, and the line that says it. */
 export interface Grant {
@@ -141,7 +144,9 @@ function topKeyAt(value: string, index: number): string | undefined {
   })
   const indentOf = (start: number) => /^[ \t]*/.exec(value.slice(start))![0].length
   const least = Math.min(...content.map(indentOf))
-  const candidates = content.filter((start) => start <= index && indentOf(start) === least && depthBefore(value, start).depth === 0)
+  const candidates = content.filter(
+    (start) => start <= index && indentOf(start) === least && depthBefore(value, start).depth === 0,
+  )
   const top = candidates.at(-1)
   if (top === undefined) return undefined
   const key = LEADING_KEY.exec(value.slice(top))
@@ -200,7 +205,10 @@ export function selfApproval(text: string): string | undefined {
 
 /** `*` and `?` as nikcli's `Wildcard.match` reads them in a permission's name. */
 function wildcard(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
   return new RegExp(`^${escaped}$`, "s")
 }
 

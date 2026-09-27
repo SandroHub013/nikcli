@@ -38,14 +38,22 @@ describe("ade-msg registro", () => {
 
   test("an invalid event: nothing appended, with the serializer's reason", async () => {
     const { deps, appended } = file()
-    const reply = await registerWrite(deps, { register: "design", op: "aperta", text: JSON.stringify({ k: "DS1", variants: [] }) })
+    const reply = await registerWrite(deps, {
+      register: "design",
+      op: "aperta",
+      text: JSON.stringify({ k: "DS1", variants: [] }),
+    })
     expect(reply).toBe("errore: evento non valido: titolo mancante")
     expect(appended).toEqual([])
   })
 
   test("an answer on a key never opened: nothing appended, with the fold's reason", async () => {
     const { deps, appended } = file()
-    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D9", words: "sì" }) })
+    const reply = await registerWrite(deps, {
+      register: "decisioni",
+      op: "risposta",
+      text: JSON.stringify({ k: "D9", words: "sì" }),
+    })
     expect(reply).toBe("errore: D9 non è mai stata aperta")
     expect(appended).toEqual([])
   })
@@ -60,8 +68,16 @@ describe("ade-msg registro", () => {
 
   test("aperta without k takes the next key", async () => {
     const { deps } = file()
-    await registerWrite(deps, { register: "decisioni", op: "aperta", text: JSON.stringify({ k: "D4", title: "prima" }) })
-    const reply = await registerWrite(deps, { register: "decisioni", op: "aperta", text: JSON.stringify({ title: "seconda" }) })
+    await registerWrite(deps, {
+      register: "decisioni",
+      op: "aperta",
+      text: JSON.stringify({ k: "D4", title: "prima" }),
+    })
+    const reply = await registerWrite(deps, {
+      register: "decisioni",
+      op: "aperta",
+      text: JSON.stringify({ title: "seconda" }),
+    })
     expect(reply).toBe("ok: D5 aperta, nel tasto Decisioni entro 3 s")
   })
 
@@ -91,7 +107,12 @@ describe("ade-msg registro", () => {
 
   test("by and at in the JSON are ignored", async () => {
     const { deps, text } = file()
-    const forged = JSON.stringify({ ...JSON.parse(openedDesign), by: "utente", at: "2020-01-01T00:00:00Z", type: "chiusa" })
+    const forged = JSON.stringify({
+      ...JSON.parse(openedDesign),
+      by: "utente",
+      at: "2020-01-01T00:00:00Z",
+      type: "chiusa",
+    })
     expect(await registerWrite(deps, { register: "design", op: "aperta", text: forged })).toStartWith("ok")
     expect(JSON.parse(text())).toMatchObject({ type: "aperta", by: "fable", at: NOW.toISOString() })
   })
@@ -99,22 +120,41 @@ describe("ade-msg registro", () => {
   test("another round is reported as giro, and a riaperta brings it back open", async () => {
     const { deps } = file()
     await registerWrite(deps, { register: "design", op: "aperta", text: openedDesign })
-    expect(await registerWrite(deps, { register: "design", op: "risposta", text: JSON.stringify({ k: "DS1", words: "meno vetro", again: true }) })).toBe(
-      "ok: DS1 giro, nel tasto Design entro 3 s",
-    )
+    expect(
+      await registerWrite(deps, {
+        register: "design",
+        op: "risposta",
+        text: JSON.stringify({ k: "DS1", words: "meno vetro", again: true }),
+      }),
+    ).toBe("ok: DS1 giro, nel tasto Design entro 3 s")
     const next = JSON.stringify({ k: "DS1", variants: [{ name: "C", preview: ".ade/design/DS1/3.html" }] })
-    expect(await registerWrite(deps, { register: "design", op: "riaperta", text: next })).toBe("ok: DS1 aperta, nel tasto Design entro 3 s")
+    expect(await registerWrite(deps, { register: "design", op: "riaperta", text: next })).toBe(
+      "ok: DS1 aperta, nel tasto Design entro 3 s",
+    )
   })
 
   test("a missing line break at the end of the file is added before the line", async () => {
-    const { deps, appended } = file(`${JSON.stringify({ type: "aperta", k: "D1", at: NOW.toISOString(), by: "x", title: "t" })}`)
-    await registerWrite(deps, { register: "decisioni", op: "chiusa", text: JSON.stringify({ k: "D1", evidence: "commit" }) })
+    const { deps, appended } = file(
+      `${JSON.stringify({ type: "aperta", k: "D1", at: NOW.toISOString(), by: "x", title: "t" })}`,
+    )
+    await registerWrite(deps, {
+      register: "decisioni",
+      op: "chiusa",
+      text: JSON.stringify({ k: "D1", evidence: "commit" }),
+    })
     expect(appended[0]).toStartWith("\n{")
   })
 })
 
 describe("the check after the write looks for this very event (audit 0.7.7, MEDIO 5)", () => {
-  const opened = JSON.stringify({ type: "aperta", k: "D1", at: "2026-09-23T11:00:00.000Z", by: "Master", title: "Quale?", options: ["A", "B"] })
+  const opened = JSON.stringify({
+    type: "aperta",
+    k: "D1",
+    at: "2026-09-23T11:00:00.000Z",
+    by: "Master",
+    title: "Quale?",
+    options: ["A", "B"],
+  })
 
   test("another answer lands just before this one: the key is answered, but not by this write", async () => {
     let text = `${opened}\n`
@@ -127,13 +167,21 @@ describe("the check after the write looks for this very event (audit 0.7.7, MEDI
       now: () => NOW,
       sender: "fable",
     }
-    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    const reply = await registerWrite(deps, {
+      register: "decisioni",
+      op: "risposta",
+      text: JSON.stringify({ k: "D1", words: "B" }),
+    })
     expect(reply).toStartWith("errore: scritta ma non conta: ")
   })
 
   test("its own answer, alone: ok as before", async () => {
     const { deps } = file(`${opened}\n`)
-    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    const reply = await registerWrite(deps, {
+      register: "decisioni",
+      op: "risposta",
+      text: JSON.stringify({ k: "D1", words: "B" }),
+    })
     expect(reply).toStartWith("ok: D1 risposta")
   })
 })
@@ -145,7 +193,9 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
   const pane = (project: { name: string; root: string }) => ({ workspaceId: project.name, projectRoot: project.root })
 
   test("the open project: said, and the button promise stands", () => {
-    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: pane(nikcli) })).toBe(`${ok} (progetto nikcli)`)
+    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: pane(nikcli) })).toBe(
+      `${ok} (progetto nikcli)`,
+    )
   })
 
   test("another project: the button does not show it, and the reply says where to look", () => {
@@ -175,10 +225,14 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
   })
 
   test("a pane saved without a folder is still judged by name", () => {
-    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "nikcli" } })).toBe(`${ok} (progetto nikcli)`)
+    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "nikcli" } })).toBe(
+      `${ok} (progetto nikcli)`,
+    )
   })
 
   test("an error is left as it is", () => {
-    expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: nikcli })).toBe("errore: manca la chiave k")
+    expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: nikcli })).toBe(
+      "errore: manca la chiave k",
+    )
   })
 })

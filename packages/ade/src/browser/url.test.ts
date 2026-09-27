@@ -358,7 +358,9 @@ describe("a take on the browser pane (D78)", () => {
     `
     const veil = document.querySelector('[data-slot="browser-record-veil"]')
     expect(veil).not.toBeNull()
-    expect(document.querySelector('[data-slot="browser-record-veil-title"]')?.textContent).toBe("Pagina nascosta durante la ripresa")
+    expect(document.querySelector('[data-slot="browser-record-veil-title"]')?.textContent).toBe(
+      "Pagina nascosta durante la ripresa",
+    )
     document.body.innerHTML = ""
   })
 
@@ -380,7 +382,9 @@ describe("a take on the browser pane (D78)", () => {
 
     // Rule 2: In glass theme, --ade-bg is transparent, so an explicit override is declared
     // covering both html[data-theme="glass"] and [data-component="ade-shell"][data-theme="glass"].
-    const glassVeilRule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}][data-theme="glass"] [data-slot="browser-record-veil"]`))
+    const glassVeilRule = css.slice(
+      css.indexOf(`html[${RECORDING_ATTRIBUTE}][data-theme="glass"] [data-slot="browser-record-veil"]`),
+    )
     const glassVeilBody = glassVeilRule.slice(glassVeilRule.indexOf("{"), glassVeilRule.indexOf("}"))
     expect(glassVeilBody).toMatch(/background:\s*#131111/)
 

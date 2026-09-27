@@ -16,7 +16,10 @@ function diskOf(): ThreadDisk & { readonly data: Map<string, string> } {
 
 function talkWith(output: string): Talk {
   return {
-    messages: [{ id: "t1", role: "tool", tool: "bash", text: "env", output, at: 1 }, { id: "u1", role: "user", text: "ciao", at: 2 }],
+    messages: [
+      { id: "t1", role: "tool", tool: "bash", text: "env", output, at: 1 },
+      { id: "u1", role: "user", text: "ciao", at: 2 },
+    ],
     status: "idle",
     tokens: 4,
     costUsd: 0,
@@ -44,7 +47,10 @@ describe("a gateway chat's thread", () => {
     const other = gatewayThreadKey("C:/p/.nikcli/agent/revisore.md", "telegram", "c99")
     createGatewayThreads(disk).save(key, keptThread(talkWith("ok"), talkWith("ancora")))
     const reloaded = createGatewayThreads(disk).read(key)
-    expect(reloaded.messages.filter((message) => message.role === "user").map((message) => message.text)).toEqual(["ciao", "ciao"])
+    expect(reloaded.messages.filter((message) => message.role === "user").map((message) => message.text)).toEqual([
+      "ciao",
+      "ciao",
+    ])
     expect(reloaded.sessionId).toBe("s-1")
     expect(createGatewayThreads(disk).read(other).messages).toHaveLength(0)
     createGatewayThreads(disk).forget(key)

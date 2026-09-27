@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold, PANEL_REPLY_MAX_AGE_MS, ECHO_WINDOW_MS, REPEAT_WINDOW_MS, type HandledRequest, type PanelHandler } from "./router"
+import {
+  createPanelRouter,
+  createPendingPanelReplies,
+  dictationHold,
+  panelReplyHold,
+  PANEL_REPLY_MAX_AGE_MS,
+  ECHO_WINDOW_MS,
+  REPEAT_WINDOW_MS,
+  type HandledRequest,
+  type PanelHandler,
+} from "./router"
 import { isQuestionOpen } from "../session/mailbox"
 import { REPLY_PREFIX } from "./protocol"
 
@@ -265,14 +275,18 @@ describe("dictated words are not written over a question", () => {
     expect(asking()).toBe(true)
     expect(dictationHold({ alive: true, questionOpen: asking() })).toBe("prompt aperto")
     // The screen's own reading holds it too, as it always did for the Enter.
-    expect(dictationHold({ alive: true, questionOpen: isQuestionOpen({ what: "Bash" }, undefined) })).toBe("prompt aperto")
+    expect(dictationHold({ alive: true, questionOpen: isQuestionOpen({ what: "Bash" }, undefined) })).toBe(
+      "prompt aperto",
+    )
   })
 
   test("with no question the words are written, as before", () => {
     expect(dictationHold({ alive: true, questionOpen: false })).toBeUndefined()
     // A turn in progress is not a question, and dictation has always been allowed
     // into a line the user has begun: neither is what this guard is about.
-    expect(dictationHold({ alive: true, questionOpen: isQuestionOpen(undefined, { state: "busy", at: now }) })).toBeUndefined()
+    expect(
+      dictationHold({ alive: true, questionOpen: isQuestionOpen(undefined, { state: "busy", at: now }) }),
+    ).toBeUndefined()
     expect(dictationHold({ alive: false, questionOpen: false })).toBe("sessione chiusa")
   })
 })

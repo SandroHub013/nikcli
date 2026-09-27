@@ -100,9 +100,18 @@
   background: currentColor;
 }
 
-[data-slot="sidebar-pill"][data-tone="working"] { background: var(--ade-working-bg); color: var(--ade-working); }
-[data-slot="sidebar-pill"][data-tone="waiting"] { background: var(--ade-waiting-bg); color: var(--ade-waiting); }
-[data-slot="sidebar-pill"][data-tone="error"]   { background: var(--ade-error-bg);   color: var(--ade-error); }
+[data-slot="sidebar-pill"][data-tone="working"] {
+  background: var(--ade-working-bg);
+  color: var(--ade-working);
+}
+[data-slot="sidebar-pill"][data-tone="waiting"] {
+  background: var(--ade-waiting-bg);
+  color: var(--ade-waiting);
+}
+[data-slot="sidebar-pill"][data-tone="error"] {
+  background: var(--ade-error-bg);
+  color: var(--ade-error);
+}
 
 /* ── sections ─────────────────────────────────────────────────────────────── */
 
@@ -295,7 +304,9 @@
   transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="section-header"]:hover { color: var(--ade-text-soft); }
+[data-slot="section-header"]:hover {
+  color: var(--ade-text-soft);
+}
 
 [data-slot="section-header"]:focus-visible {
   outline: none;
@@ -335,7 +346,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-slot="section-chevron"] { transition: none; }
+  [data-slot="section-chevron"] {
+    transition: none;
+  }
 }
 
 /*
@@ -472,7 +485,9 @@
 
 /* A closed section is a header and nothing else, with no border doubling up
    against the next one. */
-[data-slot="sidebar-section"]:last-of-type { border-bottom: 0; }
+[data-slot="sidebar-section"]:last-of-type {
+  border-bottom: 0;
+}
 
 [data-slot="search-box"] {
   padding: var(--ade-space-3) var(--ade-space-6);
@@ -990,7 +1005,10 @@
   color: var(--ade-text-weak);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--ade-dur-fast) var(--ade-ease), background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    opacity var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="workspace-header"]:hover [data-slot="workspace-open-project"],
@@ -1045,9 +1063,10 @@
   color: var(--ade-text);
   text-align: left;
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease),
-              border-color var(--ade-dur-fast) var(--ade-ease),
-              box-shadow var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="session-row"]:hover,
@@ -1118,7 +1137,9 @@
   border-radius: 50%;
   flex: 0 0 7px;
   margin-left: auto;
-  transition: transform var(--ade-dur-fast) var(--ade-ease), background-color var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    transform var(--ade-dur-fast) var(--ade-ease),
+    background-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 /* 1. Disponibile (Green / Idle) */
@@ -1210,7 +1231,8 @@
 }
 
 @keyframes ade-agent-pulse-yellow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -1221,7 +1243,8 @@
 }
 
 @keyframes ade-agent-pulse-amber {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -1233,7 +1256,8 @@
 
 /* The ring of the two pulses above; see the comment on the rules that use it. */
 @keyframes ade-agent-ripple {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -1423,7 +1447,7 @@ aside[data-component="ade-sidebar"] {
    * proprio la riga dritta che l'ombra doveva evitare. 3+10 stanno comodi nel
    * varco, quindi la sfumatura finisce dove finisce lo spazio.
    */
-  box-shadow: 0 3px 10px light-dark(rgba(0, 0, 0, 0.10), rgba(0, 0, 0, 0.50));
+  box-shadow: 0 3px 10px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.5));
 }
 
 /* ── la testata, senza linea sotto ── */
@@ -1585,7 +1609,6 @@ aside[data-component="ade-sidebar"] {
 [data-slot="sidebar-footer"] {
   border-radius: 0 0 20px 20px;
 }
-
 
 /* ── ricerca: filtro file/cartelle, conteggio, risultati con icona ── */
 [data-slot="search-field"] {

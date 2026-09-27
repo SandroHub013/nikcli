@@ -20,13 +20,24 @@ describe("no text over a permission prompt (audit 0.7.7, MEDIO 1)", () => {
     const written: string[] = []
     const queue = createLineQueue()
     let prompt = false
-    const line = (text: string, wait: () => Promise<void> = async () => {}) => () =>
-      typeThenEnter({ text, write: (data) => written.push(data), wait, alive: () => true, permissionOpen: () => prompt })
+    const line =
+      (text: string, wait: () => Promise<void> = async () => {}) =>
+      () =>
+        typeThenEnter({
+          text,
+          write: (data) => written.push(data),
+          wait,
+          alive: () => true,
+          permissionOpen: () => prompt,
+        })
     // A delivery checked the pane when it was queued, found it free, and waits behind A.
-    const first = queue("p1", line("A", async () => {
-      prompt = true
-      await new Promise((resolve) => setTimeout(resolve, 5))
-    }))
+    const first = queue(
+      "p1",
+      line("A", async () => {
+        prompt = true
+        await new Promise((resolve) => setTimeout(resolve, 5))
+      }),
+    )
     const delivery = queue("p1", line("[Messaggio da B]: ciao"))
     expect(await first).toBe("typed-no-enter")
     expect(await delivery).toBe("not-typed")
@@ -54,9 +65,14 @@ describe("no Enter over what the user started writing during the wait (review ar
   })
 
   test("lint: the workbench says when the user typed during the wait", () => {
-    const source = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = require("node:fs").readFileSync(
+      require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
+      "utf8",
+    )
     const call = source.slice(source.indexOf("const outcome = await typeThenEnter({"))
-    expect(call.slice(0, 1_200)).toContain("typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt")
+    expect(call.slice(0, 1_200)).toContain(
+      "typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt",
+    )
   })
 })
 
@@ -78,7 +94,11 @@ describe("deliveryResult", () => {
 })
 
 describe("the Enter pressed again: resend and re-ring (audit 0.7.7, MEDIO 2 and 3)", () => {
-  const again = (state: { typing?: boolean; prompt?: boolean; alive?: boolean }, written: string[], queue = createLineQueue()) =>
+  const again = (
+    state: { typing?: boolean; prompt?: boolean; alive?: boolean },
+    written: string[],
+    queue = createLineQueue(),
+  ) =>
     enterAgain({
       queue,
       key: "p1",
@@ -122,7 +142,11 @@ describe("the Enter pressed again: resend and re-ring (audit 0.7.7, MEDIO 2 and 
     // The resend comes due while B waits for its Enter.
     const resend = again({}, written, queue)
     await Promise.all([line, resend])
-    expect(written).toEqual([`line:${JSON.stringify("B")}`, `line:${JSON.stringify("\r")}`, `again:${JSON.stringify("\r")}`])
+    expect(written).toEqual([
+      `line:${JSON.stringify("B")}`,
+      `line:${JSON.stringify("\r")}`,
+      `again:${JSON.stringify("\r")}`,
+    ])
   })
 })
 
@@ -130,7 +154,11 @@ describe("a re-ring that did not press Enter gives its count back", () => {
   test("counted at once, so the next round does not ring again while it waits", async () => {
     const request: { rings?: number } = {}
     let release!: (pressed: boolean) => void
-    const pending = ringAgain(request, () => new Promise((resolve) => (release = resolve)), () => {})
+    const pending = ringAgain(
+      request,
+      () => new Promise((resolve) => (release = resolve)),
+      () => {},
+    )
     expect(request.rings).toBe(1)
     release(true)
     expect(await pending).toBe(true)
@@ -140,14 +168,24 @@ describe("a re-ring that did not press Enter gives its count back", () => {
   test("no Enter (a draft or a prompt): back to 0 and saved", async () => {
     const request: { rings?: number } = {}
     const saved: (number | undefined)[] = []
-    expect(await ringAgain(request, async () => false, () => saved.push(request.rings))).toBe(false)
+    expect(
+      await ringAgain(
+        request,
+        async () => false,
+        () => saved.push(request.rings),
+      ),
+    ).toBe(false)
     expect(request.rings).toBe(0)
     expect(saved).toEqual([1, 0])
   })
 
   test("a later ring that did not go keeps the rings before it", async () => {
     const request = { rings: 1 }
-    await ringAgain(request, async () => false, () => {})
+    await ringAgain(
+      request,
+      async () => false,
+      () => {},
+    )
     expect(request.rings).toBe(1)
   })
 })

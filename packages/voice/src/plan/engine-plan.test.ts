@@ -354,7 +354,9 @@ describe("il pianificatore dentro il motore", () => {
 
     // The sentence the user hears, and the thing that explains it, both.
     expect(speaker.lastSpoken).toContain("troppe richieste")
-    expect(details).toEqual(["429 Too Many Requests: rate limit reached for Bearer sk-or-v1-0123456789abcdefghijklmnop"])
+    expect(details).toEqual([
+      "429 Too Many Requests: rate limit reached for Bearer sk-or-v1-0123456789abcdefghijklmnop",
+    ])
     // And the detail never becomes something said out loud.
     expect(speaker.spoken.every((said) => !said.includes("sk-or-v1"))).toBe(true)
 
@@ -441,9 +443,7 @@ describe("il pianificatore dentro il motore", () => {
   })
 
   test("«no» a un piano con send_prompt non invia niente", async () => {
-    const { engine, host, transcriber } = setup(
-      JSON.stringify([{ action: "send_prompt", paneIndex: 1, text: "ciao" }]),
-    )
+    const { engine, host, transcriber } = setup(JSON.stringify([{ action: "send_prompt", paneIndex: 1, text: "ciao" }]))
     host.panes.push({
       id: "p1",
       title: "Uno",

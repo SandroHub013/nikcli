@@ -93,10 +93,13 @@ describe("fiducia nei bot di progetto", () => {
   test("una domanda aperta non se ne apre una seconda per lo stesso bot (review B3, BASSO 1)", async () => {
     const s = setup({ [projectBot.path]: "contenuto" })
     let answer: (yes: boolean) => void = () => {}
-    const deps = { ...s.deps, confirm: (question: string) => {
-      s.asked.push(question)
-      return new Promise<boolean>((resolve) => (answer = resolve))
-    } }
+    const deps = {
+      ...s.deps,
+      confirm: (question: string) => {
+        s.asked.push(question)
+        return new Promise<boolean>((resolve) => (answer = resolve))
+      },
+    }
     const first = admit(projectBot, deps)
     while (s.asked.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     expect(await admit(projectBot, deps)).toEqual({ ok: false })

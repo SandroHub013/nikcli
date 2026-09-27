@@ -64,7 +64,13 @@ function mountSession(pane: { suspended?: true; status: "idle" | "done"; activit
       restart: (pane: { id: string }) => void calls.restart.push(pane.id),
     } as never)
     render(
-      () => createComponent(For, { get each() { return panes() }, children: (entry: { render: () => unknown }) => entry.render() } as never),
+      () =>
+        createComponent(For, {
+          get each() {
+            return panes()
+          },
+          children: (entry: { render: () => unknown }) => entry.render(),
+        } as never),
       host,
     )
     return dispose

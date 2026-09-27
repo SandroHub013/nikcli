@@ -189,7 +189,10 @@ export async function admitProject(
   }
 }
 
-async function checkProject(root: string, deps: AdmitProjectDeps): Promise<{ ok: true } | { ok: false; problem?: string }> {
+async function checkProject(
+  root: string,
+  deps: AdmitProjectDeps,
+): Promise<{ ok: true } | { ok: false; problem?: string }> {
   const files = await deps.surface()
   if (files.length === 0) return { ok: true }
   const fingerprint = await surfaceFingerprint(files)
@@ -300,7 +303,8 @@ export function configGrant(text: string, identifier: string): string | null | u
     if (agent === undefined) continue
     if (!isMap(agent)) return `${section}.${identifier}`
     const at = `${section}.${JSON.stringify(identifier)}`
-    const own = grantIn("permission", agent["permission"], `${at}.permission`) ?? grantIn("tools", agent["tools"], `${at}.tools`)
+    const own =
+      grantIn("permission", agent["permission"], `${at}.permission`) ?? grantIn("tools", agent["tools"], `${at}.tools`)
     if (own) return own
   }
   return undefined

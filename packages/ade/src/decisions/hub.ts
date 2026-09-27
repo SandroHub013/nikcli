@@ -129,7 +129,9 @@ export function createDecisionsHub(deps: {
     setInlineRecipient: (id) => {
       setInline(id)
       // A session picked: the note asking for one is done with.
-      setProblems((all) => Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("decisions.sheet.needRecipient"))))
+      setProblems((all) =>
+        Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("decisions.sheet.needRecipient"))),
+      )
     },
     submit: (decision, press) => {
       const control = submitControl({
@@ -152,7 +154,8 @@ export function createDecisionsHub(deps: {
         answer: () => answer(decision),
       })
     },
-    defer: (decision, until) => write(decision.k, () => deps.register.append(deferEvent(decision.k, until, new Date()))),
+    defer: (decision, until) =>
+      write(decision.k, () => deps.register.append(deferEvent(decision.k, until, new Date()))),
     reopen: (decision) =>
       write(decision.k, async () => {
         const delivery = deps.delivery(decision)

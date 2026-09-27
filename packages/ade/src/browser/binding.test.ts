@@ -111,7 +111,13 @@ describe("@ade browser", () => {
 
   test("a dev server on this machine opens without asking; a name that only looks local asks", async () => {
     const { host, questions } = makeHost()
-    for (const line of ["open 3000/x", "open :5173", "open localhost:8080", "open http://127.0.0.1:9000", "open http://[::1]:4000"]) {
+    for (const line of [
+      "open 3000/x",
+      "open :5173",
+      "open localhost:8080",
+      "open http://127.0.0.1:9000",
+      "open http://[::1]:4000",
+    ]) {
       expect((await run(host, `@ade browser ${line}`, "n1-1")).ok).toBe(true)
     }
     expect(questions).toEqual([])

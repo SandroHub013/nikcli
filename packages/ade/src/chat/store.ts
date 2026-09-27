@@ -197,7 +197,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   const checkAttachment = deps.checkAttachment ?? (async () => "outside" as const)
 
   const [state, setState] = createStore<ChatState>({ status: "idle", data: emptyChatData() })
-  const setData = ((...args: unknown[]) => (setState as (...a: unknown[]) => void)("data", ...args)) as SetStoreFunction<ChatData>
+  const setData = ((...args: unknown[]) =>
+    (setState as (...a: unknown[]) => void)("data", ...args)) as SetStoreFunction<ChatData>
 
   /** Bumped by every `open` and `close`: work of an older one stops touching the state. */
   let generation = 0
@@ -250,7 +251,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     if (mine !== generation) return
     const list = (result.data ?? []) as unknown as { info: Message; parts: Part[] }[]
     setData("message", sessionID, reconcile(list.map((m) => m.info).sort(byId), { key: "id" }))
-    for (const message of list) setData("part", message.info.id, reconcile([...message.parts].sort(byId), { key: "id" }))
+    for (const message of list)
+      setData("part", message.info.id, reconcile([...message.parts].sort(byId), { key: "id" }))
   }
 
   /** The folder's sessions, their status and the watched messages; false when it did not load. */
@@ -401,7 +403,10 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       }
       let id = sessionID
       if (!id) {
-        const created = await connection.client.session.create({ title: titleFrom(text), permission: [...CHAT_PERMISSION] })
+        const created = await connection.client.session.create({
+          title: titleFrom(text),
+          permission: [...CHAT_PERMISSION],
+        })
         id = (created.data as unknown as Session).id
         if (mine === generation) ours.add(id)
       } else mustBeOurs(id)
@@ -426,7 +431,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const result = await opened().client.session.update({ sessionID, title: name })
       // The server's event says the same; this shows it at once, stream down or not.
       const updated = result.data as unknown as Session | undefined
-      if (mine === generation && updated?.id === sessionID) applyChatEvent({ type: "session.updated", properties: { info: updated } }, state.data, setData)
+      if (mine === generation && updated?.id === sessionID)
+        applyChatEvent({ type: "session.updated", properties: { info: updated } }, state.data, setData)
     },
     async abort(sessionID) {
       mustBeOurs(sessionID)

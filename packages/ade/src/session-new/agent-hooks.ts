@@ -578,7 +578,13 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
     const exec = await usesExecForm(host, target)
     await write(
       target.id,
-      installHook(current, command, target.matcher, target.activityEvents, exec ? hookExec(files.scriptPath) : undefined),
+      installHook(
+        current,
+        command,
+        target.matcher,
+        target.activityEvents,
+        exec ? hookExec(files.scriptPath) : undefined,
+      ),
       hookScript(target.agent),
     )
   } else {

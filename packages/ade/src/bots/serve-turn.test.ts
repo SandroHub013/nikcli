@@ -6,7 +6,15 @@ import type { ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
-import { agentProblem, catalogCache, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
+import {
+  agentProblem,
+  catalogCache,
+  modelRef,
+  runServeTurn,
+  serveClientOf,
+  type ServeClient,
+  type ServeConnection,
+} from "./serve-turn"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -36,7 +44,9 @@ function turnOf(events: readonly ChatEvent[], index: number): ChatEvent[] {
 }
 
 const sessionIdOf = (events: readonly ChatEvent[]) =>
-  events.map((event) => (event.properties as { sessionID?: string } | undefined)?.sessionID).find((id) => typeof id === "string")!
+  events
+    .map((event) => (event.properties as { sessionID?: string } | undefined)?.sessionID)
+    .find((id) => typeof id === "string")!
 
 /** A short recorded turn, and its session. */
 const FIRST = turnOf(fixture("conversazione"), 0)
@@ -122,9 +132,14 @@ function server(
   const stream = channel()
   const calls: Calls = { connect: [], created: [], prompts: [], aborted: [], replies: [], rejectedQuestions: [] }
   const client: ServeClient = {
-    agents: async () => options.agents ?? [{ name: "build", prompt: "" }, { name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" }],
+    agents: async () =>
+      options.agents ?? [
+        { name: "build", prompt: "" },
+        { name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" },
+      ],
     session: async (id) => options.existing?.[id],
-    catalog: async () => options.catalog ?? { providerList: catalogOf("openrouter/nvidia/nemotron-3-super-120b-a12b:free") },
+    catalog: async () =>
+      options.catalog ?? { providerList: catalogOf("openrouter/nvidia/nemotron-3-super-120b-a12b:free") },
     create: async (input) => {
       calls.created.push(input)
       return options.session ?? SESSION
@@ -159,7 +174,10 @@ function thread() {
   }
 }
 
-const busyOf = (): ChatEvent => ({ type: "session.status", properties: { sessionID: SESSION, status: { type: "busy" } } })
+const busyOf = (): ChatEvent => ({
+  type: "session.status",
+  properties: { sessionID: SESSION, status: { type: "busy" } },
+})
 const askedOf = (id: string, command: string): ChatEvent => ({
   type: "permission.asked",
   properties: { id, sessionID: SESSION, permission: "bash", patterns: [command], metadata: {}, always: [] },
@@ -228,8 +246,12 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(fresh.talk.messages.some((message) => message.text === t("bots.serve.newSession"))).toBe(false)
 
     const kept = server({
-      events: FIRST.map((event) => JSON.parse(JSON.stringify(event).replaceAll(FIRST_SESSION, "ses_mine")) as ChatEvent),
-      existing: { ses_mine: { permission: [{ permission: "*", pattern: "*", action: "allow" }, ...botPermission("ask")] } },
+      events: FIRST.map(
+        (event) => JSON.parse(JSON.stringify(event).replaceAll(FIRST_SESSION, "ses_mine")) as ChatEvent,
+      ),
+      existing: {
+        ses_mine: { permission: [{ permission: "*", pattern: "*", action: "allow" }, ...botPermission("ask")] },
+      },
     })
     const going = thread()
     const result = await runServeTurn(panel({ sessionId: "ses_mine", onChange: going.onChange }), kept.deps).result
@@ -265,7 +287,10 @@ describe("B8d: a bot's turn on ADE's server", () => {
       const fake = server({ events: FIRST, session: FIRST_SESSION })
       const mine = thread()
       await runServeTurn(panel({ ...extra, sessionId: "ses_panel", onChange: mine.onChange }), fake.deps).result
-      expect([profile, fake.calls.created[0]?.permission]).toEqual([profile, [BOT_SESSION_MARK, ...botPermission(profile as never)]])
+      expect([profile, fake.calls.created[0]?.permission]).toEqual([
+        profile,
+        [BOT_SESSION_MARK, ...botPermission(profile as never)],
+      ])
       if (extra.unattended) {
         expect(mine.talk.sessionId).toBeUndefined()
         expect(mine.talk.messages.some((message) => message.text === t("bots.serve.newSession"))).toBe(false)
@@ -290,7 +315,10 @@ describe("B8d: a bot's turn on ADE's server", () => {
   test("a model missing from the catalog is refused before any session: the bot's, else its agent's, else the configured one", async () => {
     const gone = server({ catalog: { providerList: catalogOf("openrouter/nvidia/nemotron-3.5-lightning:free") } })
     const result = await runServeTurn(panel(), gone.deps).result
-    expect(result).toMatchObject({ status: "error", problem: t("bots.serve.noModel", "openrouter/nvidia/nemotron-3-super-120b-a12b:free") })
+    expect(result).toMatchObject({
+      status: "error",
+      problem: t("bots.serve.noModel", "openrouter/nvidia/nemotron-3-super-120b-a12b:free"),
+    })
     expect(gone.calls.created).toEqual([])
     expect(gone.calls.prompts).toEqual([])
 
@@ -299,13 +327,19 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect((await runServeTurn(panel(), unplugged.deps).result).problem).toBe(t("bots.serve.noModel", BOT.model!))
 
     const { model: _none, ...noModel } = BOT
-    const agent = { name: "alfa", prompt: BOT.prompt, model: { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" } }
+    const agent = {
+      name: "alfa",
+      prompt: BOT.prompt,
+      model: { providerID: "openrouter", modelID: "nex-agi/nex-n2.5-mini:free" },
+    }
     const byAgent = server({ agents: [agent], catalog: { providerList: catalogOf(BOT.model!) } })
     expect((await runServeTurn(panel({ bot: noModel }), byAgent.deps).result).problem).toBe(
       t("bots.serve.noModel", "openrouter/nex-agi/nex-n2.5-mini:free"),
     )
 
-    const byConfig = server({ catalog: { providerList: catalogOf(BOT.model!), configModel: "openrouter/nex-agi/nex-n2.5-mini:free" } })
+    const byConfig = server({
+      catalog: { providerList: catalogOf(BOT.model!), configModel: "openrouter/nex-agi/nex-n2.5-mini:free" },
+    })
     expect((await runServeTurn(panel({ bot: noModel }), byConfig.deps).result).problem).toBe(
       t("bots.serve.noModel", "openrouter/nex-agi/nex-n2.5-mini:free"),
     )
@@ -316,7 +350,11 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const unknown = server({ events: FIRST, session: FIRST_SESSION, catalog: {} })
     expect((await runServeTurn(panel(), unknown.deps).result).status).toBe("done")
     const { model: _none, ...noModel } = BOT
-    const nothing = server({ events: FIRST, session: FIRST_SESSION, catalog: { providerList: catalogOf("openrouter/x:free") } })
+    const nothing = server({
+      events: FIRST,
+      session: FIRST_SESSION,
+      catalog: { providerList: catalogOf("openrouter/x:free") },
+    })
     expect((await runServeTurn(panel({ bot: noModel }), nothing.deps).result).status).toBe("done")
   })
 
@@ -324,8 +362,12 @@ describe("B8d: a bot's turn on ADE's server", () => {
     let reloads = 0
     const fake = server({ events: FIRST, session: FIRST_SESSION })
     const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
-    const agents = async () => (reloads === 0 ? [{ name: "build", prompt: "" }] : [{ name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" }])
-    const connect = async () => ({ ...connection, client: { ...connection.client, agents, reload: async () => void reloads++ } })
+    const agents = async () =>
+      reloads === 0 ? [{ name: "build", prompt: "" }] : [{ name: "alfa", prompt: "Sei alfa.\r\nRispondi breve.\n" }]
+    const connect = async () => ({
+      ...connection,
+      client: { ...connection.client, agents, reload: async () => void reloads++ },
+    })
     const result = await runServeTurn(panel(), { ...fake.deps, connect }).result
     expect(result.status).toBe("done")
     expect(reloads).toBe(1)
@@ -335,25 +377,40 @@ describe("B8d: a bot's turn on ADE's server", () => {
     let reloads = 0
     const fake = server({ agents: [{ name: "build", prompt: "" }] })
     const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
-    const connect = async () => ({ ...connection, client: { ...connection.client, reload: async () => void reloads++ } })
-    expect((await runServeTurn(panel(), { ...fake.deps, connect }).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+    const connect = async () => ({
+      ...connection,
+      client: { ...connection.client, reload: async () => void reloads++ },
+    })
+    expect((await runServeTurn(panel(), { ...fake.deps, connect }).result).problem).toBe(
+      t("bots.serve.noAgent", "alfa"),
+    )
     expect(reloads).toBe(1)
     expect(fake.calls.prompts).toEqual([])
-    expect((await runServeTurn(panel(), server({ agents: [] }).deps).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+    expect((await runServeTurn(panel(), server({ agents: [] }).deps).result).problem).toBe(
+      t("bots.serve.noAgent", "alfa"),
+    )
   })
 
   test("a reload that does not answer, or fails, leaves the refusal as it was, within the limit", async () => {
     const fake = server({ agents: [{ name: "build", prompt: "" }] })
     const connection = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
-    const hanging = async () => ({ ...connection, client: { ...connection.client, reload: () => new Promise<void>(() => {}) } })
+    const hanging = async () => ({
+      ...connection,
+      client: { ...connection.client, reload: () => new Promise<void>(() => {}) },
+    })
     const warned: string[] = []
     const warn = (line: string) => void warned.push(line)
     const started = Date.now()
     const late = await runServeTurn(panel(), { ...fake.deps, connect: hanging, reloadTimeoutMs: 50, warn }).result
     expect(late.problem).toBe(t("bots.serve.noAgent", "alfa"))
     expect(Date.now() - started).toBeLessThan(5_000)
-    const failing = async () => ({ ...connection, client: { ...connection.client, reload: async () => Promise.reject(new Error("500")) } })
-    expect((await runServeTurn(panel(), { ...fake.deps, connect: failing, warn }).result).problem).toBe(t("bots.serve.noAgent", "alfa"))
+    const failing = async () => ({
+      ...connection,
+      client: { ...connection.client, reload: async () => Promise.reject(new Error("500")) },
+    })
+    expect((await runServeTurn(panel(), { ...fake.deps, connect: failing, warn }).result).problem).toBe(
+      t("bots.serve.noAgent", "alfa"),
+    )
     expect(fake.calls.prompts).toEqual([])
     // Neither is silent (Verifiche: a reload the proxy refused vanished), and
     // neither line carries what the user wrote.
@@ -375,7 +432,8 @@ describe("B8d: a bot's turn on ADE's server", () => {
 
     // A project's bot is that file: it runs.
     const own = server({ events: FIRST, session: FIRST_SESSION })
-    const mine = await runServeTurn(panel({ bot: { ...BOT, scope: "project" } }), { ...own.deps, projectHasAgent }).result
+    const mine = await runServeTurn(panel({ bot: { ...BOT, scope: "project" } }), { ...own.deps, projectHasAgent })
+      .result
     expect(mine.status).toBe("done")
     // No such file: the user's bot runs.
     const free = server({ events: FIRST, session: FIRST_SESSION })
@@ -401,7 +459,10 @@ describe("B8d: a bot's turn on ADE's server", () => {
       type: "permission.asked",
       properties: { id, sessionID: SESSION, permission: "bash", patterns: [command], metadata: {}, always: [] },
     })
-    const status = (type: string): ChatEvent => ({ type: "session.status", properties: { sessionID: SESSION, status: { type } } })
+    const status = (type: string): ChatEvent => ({
+      type: "session.status",
+      properties: { sessionID: SESSION, status: { type } },
+    })
     const seen: PendingPermission[] = []
     let turn: ReturnType<typeof runServeTurn> | undefined
     const fake = server({
@@ -438,16 +499,23 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const mine = thread()
     await runServeTurn(panel({ approvals: false, onChange: mine.onChange }), alone.deps).result
     expect(alone.calls.replies).toEqual([["per_0da520816001IQYwLvYn7EtWvH", "reject"]])
-    expect(mine.talk.messages.some((message) => message.text === t("bots.serve.refused", "bash", "mkdir prova-permesso"))).toBe(true)
+    expect(
+      mine.talk.messages.some((message) => message.text === t("bots.serve.refused", "bash", "mkdir prova-permesso")),
+    ).toBe(true)
   })
 
   /* B8d review, M1. */
   test("an answer to a question the server settled meanwhile goes nowhere, not to the one shown in its place", async () => {
     const seen: string[] = []
-    const fake = server({ onPrompt: (stream) => stream.push(busyOf(), askedOf("per_A", "git push --force"), askedOf("per_B", "rm -r x")) })
+    const fake = server({
+      onPrompt: (stream) => stream.push(busyOf(), askedOf("per_A", "git push --force"), askedOf("per_B", "rm -r x")),
+    })
     const turn = runServeTurn(panel({ onPermission: (question) => void seen.push(question.requestID!) }), fake.deps)
     await settleUntil(() => seen.length === 1)
-    fake.stream.push({ type: "permission.replied", properties: { sessionID: SESSION, requestID: "per_A", reply: "reject" } })
+    fake.stream.push({
+      type: "permission.replied",
+      properties: { sessionID: SESSION, requestID: "per_A", reply: "reject" },
+    })
     await settleUntil(() => seen.length === 2)
     expect(seen).toEqual(["per_A", "per_B"])
     turn.answer!("per_A", "once")
@@ -474,7 +542,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
   test("Ferma ends the turn while a call to the server hangs (review area 2)", async () => {
     // A server that never answers the prompt, or the session: the turn and its
     // slot stayed taken, while /ferma had already said «fermato».
-    const within = <T,>(promise: Promise<T>) =>
+    const within = <T>(promise: Promise<T>) =>
       Promise.race([promise, new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 200))])
     for (const hang of ["prompt", "create"] as const) {
       const hanging = server()
@@ -508,7 +576,10 @@ describe("B8d: a bot's turn on ADE's server", () => {
           const prompt = connection.client.prompt
           return {
             ...connection,
-            client: { ...connection.client, prompt: async (input) => (await prompt(input), setTimeout(() => turn!.stop(), 5), undefined) },
+            client: {
+              ...connection.client,
+              prompt: async (input) => (await prompt(input), setTimeout(() => turn!.stop(), 5), undefined),
+            },
           }
         }
         return connection
@@ -632,47 +703,78 @@ describe("a bot's effort is one its model has", () => {
   const MODEL = { providerID: "openrouter", modelID: "nvidia/nemotron-3-super-120b-a12b:free" }
   const configured = (variants: Record<string, object> | undefined) =>
     ({
-      providers: [{ id: "openrouter", name: "OpenRouter", models: { [MODEL.modelID]: { id: MODEL.modelID, ...(variants ? { variants } : {}) } } }],
+      providers: [
+        {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: { [MODEL.modelID]: { id: MODEL.modelID, ...(variants ? { variants } : {}) } },
+        },
+      ],
       default: {},
     }) as unknown as ConfigProviders
 
   test("one of the model's variants is sent", async () => {
     const events = turnOf(fixture("conversazione"), 0)
-    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, high: {} }) } })
+    const fake = server({
+      events,
+      session: sessionIdOf(events),
+      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, high: {} }) },
+    })
     await runServeTurn(panel(), fake.deps).result
     expect(fake.calls.prompts.map((prompt) => prompt.variant)).toEqual(["high"])
   })
 
   test("a name the model does not have is not sent, and the thread says so", async () => {
     const events = turnOf(fixture("conversazione"), 0)
-    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, medium: {} }) } })
+    const fake = server({
+      events,
+      session: sessionIdOf(events),
+      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ low: {}, medium: {} }) },
+    })
     const mine = thread()
     const result = await runServeTurn(panel({ onChange: mine.onChange }), fake.deps).result
     expect(result.status).toBe("done")
     expect(fake.calls.prompts).toHaveLength(1)
     expect("variant" in fake.calls.prompts[0]!).toBe(false)
     const note = t("bots.serve.effortDropped", "high", BOT.model!, "low, medium")
-    expect(mine.talk.messages.filter((message) => message.text === note).map((message) => message.tool)).toEqual(["ade"])
+    expect(mine.talk.messages.filter((message) => message.text === note).map((message) => message.tool)).toEqual([
+      "ade",
+    ])
   })
 
   test("a model without variants sends none, and says it has no levels", async () => {
     const events = turnOf(fixture("conversazione"), 0)
-    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured(undefined) } })
+    const fake = server({
+      events,
+      session: sessionIdOf(events),
+      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured(undefined) },
+    })
     const mine = thread()
     await runServeTurn(panel({ onChange: mine.onChange }), fake.deps).result
     expect("variant" in fake.calls.prompts[0]!).toBe(false)
-    expect(mine.talk.messages.some((message) => message.text === t("bots.serve.effortDropped", "high", BOT.model!, ""))).toBe(true)
+    expect(
+      mine.talk.messages.some((message) => message.text === t("bots.serve.effortDropped", "high", BOT.model!, "")),
+    ).toBe(true)
   })
 
   /* Review of bot-sforzo, BASSO 1: with no model known, the effort went unchecked. */
   test("no model on the bot, its agent or the configuration: the effort is not sent, and the thread says so", async () => {
     const events = turnOf(fixture("conversazione"), 0)
-    const fake = server({ events, session: sessionIdOf(events), catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ high: {} }) } })
+    const fake = server({
+      events,
+      session: sessionIdOf(events),
+      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ high: {} }) },
+    })
     const mine = thread()
-    const result = await runServeTurn(panel({ bot: { ...BOT, model: undefined }, onChange: mine.onChange }), fake.deps).result
+    const result = await runServeTurn(panel({ bot: { ...BOT, model: undefined }, onChange: mine.onChange }), fake.deps)
+      .result
     expect(result.status).toBe("done")
     expect("variant" in fake.calls.prompts[0]!).toBe(false)
-    expect(mine.talk.messages.filter((message) => message.text === t("bots.serve.effortNoModel", "high")).map((message) => message.tool)).toEqual(["ade"])
+    expect(
+      mine.talk.messages
+        .filter((message) => message.text === t("bots.serve.effortNoModel", "high"))
+        .map((message) => message.tool),
+    ).toEqual(["ade"])
   })
 
   test("the configured model counts as the bot's: its levels are checked", async () => {
@@ -680,7 +782,11 @@ describe("a bot's effort is one its model has", () => {
     const fake = server({
       events,
       session: sessionIdOf(events),
-      catalog: { providerList: catalogOf(BOT.model!), configProviders: configured({ high: {} }), configModel: BOT.model! },
+      catalog: {
+        providerList: catalogOf(BOT.model!),
+        configProviders: configured({ high: {} }),
+        configModel: BOT.model!,
+      },
     })
     await runServeTurn(panel({ bot: { ...BOT, model: undefined } }), fake.deps).result
     expect(fake.calls.prompts.map((prompt) => prompt.variant)).toEqual(["high"])

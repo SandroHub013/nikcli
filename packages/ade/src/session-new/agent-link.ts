@@ -114,7 +114,10 @@ export function parseReport(text: string): LinkReport | undefined {
 
   const at = typeof raw.at === "number" && Number.isFinite(raw.at) ? raw.at : undefined
   const source = asId(raw.source)
-  const sessionDir = typeof raw.sessionDir === "string" && raw.sessionDir.trim() && raw.sessionDir.length <= 4096 ? raw.sessionDir.trim() : undefined
+  const sessionDir =
+    typeof raw.sessionDir === "string" && raw.sessionDir.trim() && raw.sessionDir.length <= 4096
+      ? raw.sessionDir.trim()
+      : undefined
   return {
     pane,
     nonce,

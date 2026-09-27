@@ -116,10 +116,7 @@ const RELIABLE_COST_PROVIDERS: ReadonlySet<string> = new Set(["opencode"])
  * a model that costs nothing to run is free.
  */
 export function hasReliableCost(providerID: string | undefined): boolean {
-  return (
-    providerID !== undefined &&
-    (LOCAL_PROVIDERS.has(providerID) || RELIABLE_COST_PROVIDERS.has(providerID))
-  )
+  return providerID !== undefined && (LOCAL_PROVIDERS.has(providerID) || RELIABLE_COST_PROVIDERS.has(providerID))
 }
 
 /**
@@ -172,10 +169,7 @@ function isChatModel(model: {
  * catalogue is then saying nothing useful: a model whose per-token price is
  * not known gets a dash, which is the honest answer in every language.
  */
-export function formatModelPrice(
-  cost?: { readonly input: number; readonly output: number },
-  free?: boolean,
-): string {
+export function formatModelPrice(cost?: { readonly input: number; readonly output: number }, free?: boolean): string {
   if (free) {
     return t("chat.model.free")
   }
@@ -309,7 +303,9 @@ function choicesOf(
         providerName: provider.name || providerId,
         free,
         cost,
-        ...(typeof model.limit?.context === "number" && model.limit.context > 0 ? { context: model.limit.context } : {}),
+        ...(typeof model.limit?.context === "number" && model.limit.context > 0
+          ? { context: model.limit.context }
+          : {}),
         label: formatModelLabel(name, cost, free),
         ...(withVariants ? { variants: variantNames(model.variants) } : {}),
         ...(typeof model.capabilities?.reasoning === "boolean" ? { reasoning: model.capabilities.reasoning } : {}),
@@ -363,7 +359,10 @@ export function configuredHasModel(configured: ConfigProviders | null | undefine
 }
 
 /** The effort levels of `ref` in a catalog; undefined when the catalog does not know them. */
-export function variantsOf(models: readonly ChatModelChoice[], ref: ModelRef | undefined): readonly string[] | undefined {
+export function variantsOf(
+  models: readonly ChatModelChoice[],
+  ref: ModelRef | undefined,
+): readonly string[] | undefined {
   if (!ref) return undefined
   return models.find((model) => sameModel(model, ref))?.variants
 }
@@ -462,7 +461,12 @@ export function defaultModelChoice(
  * nikcli's agents by name, for the chip (model-picker review of chat-chip,
  * b): the chip showed the raw «build». A name not listed stays as it is.
  */
-const AGENT_NAMES: Readonly<Record<string, "chat.agent.name.build" | "chat.agent.name.plan" | "chat.agent.name.general" | "chat.agent.name.explore">> = {
+const AGENT_NAMES: Readonly<
+  Record<
+    string,
+    "chat.agent.name.build" | "chat.agent.name.plan" | "chat.agent.name.general" | "chat.agent.name.explore"
+  >
+> = {
   build: "chat.agent.name.build",
   plan: "chat.agent.name.plan",
   general: "chat.agent.name.general",
@@ -540,12 +544,7 @@ export function validateSelectedModel(
     }
   }
 
-  const match = models.find(
-    (m) =>
-      m.id === selected ||
-      m.modelID === selected ||
-      serializeModelRef(m) === selected,
-  )
+  const match = models.find((m) => m.id === selected || m.modelID === selected || serializeModelRef(m) === selected)
   if (match) {
     if (isTest && !match.free) return undefined
     return { providerID: match.providerID, modelID: match.modelID }

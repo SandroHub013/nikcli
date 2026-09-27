@@ -29,8 +29,8 @@ export function keptThread(previous: Talk, turn: Talk): Talk {
     status: "idle",
     tokens: previous.tokens + turn.tokens,
     costUsd: previous.costUsd + turn.costUsd,
-    ...(turn.sessionId ?? previous.sessionId ? { sessionId: turn.sessionId ?? previous.sessionId } : {}),
-    ...(turn.updatedAt ?? previous.updatedAt ? { updatedAt: turn.updatedAt ?? previous.updatedAt } : {}),
+    ...((turn.sessionId ?? previous.sessionId) ? { sessionId: turn.sessionId ?? previous.sessionId } : {}),
+    ...((turn.updatedAt ?? previous.updatedAt) ? { updatedAt: turn.updatedAt ?? previous.updatedAt } : {}),
   }
 }
 

@@ -15,7 +15,9 @@ function world(identifier: string | Error) {
     homeDir: async () => "C:/Users/finto",
     readTextFile: async (path) => {
       reads.push(path)
-      return path === "C:/Users/finto/AppData/Local/nikcli/auth.json" ? { text: JSON.stringify({ openrouter: { key: FAKE_KEY } }) } : undefined
+      return path === "C:/Users/finto/AppData/Local/nikcli/auth.json"
+        ? { text: JSON.stringify({ openrouter: { key: FAKE_KEY } }) }
+        : undefined
     },
     save: async (key) => void saved.push(key),
     removed: () => false,

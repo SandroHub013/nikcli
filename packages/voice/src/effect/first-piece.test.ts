@@ -106,9 +106,7 @@ describe("dictation without a clear target asks instead of picking the first pan
     for (const mode of ["auto", "manual"] as const) {
       const host = new DictationHost()
       const result = await Effect.runPromise(
-        Effect.either(
-          dispatchTranscription("aggiungi un test", host, mode, undefined)
-        )
+        Effect.either(dispatchTranscription("aggiungi un test", host, mode, undefined)),
       )
       expect(result._tag).toBe("Left")
       if (result._tag === "Left") {

@@ -2,9 +2,7 @@
  * What the updater has done so far, as the Rust side reports it on the
  * `ade-update-progress` event (see `src-tauri/src/update.rs`).
  */
-export type UpdateProgress =
-  | { phase: "download"; downloaded: number; total: number | null }
-  | { phase: "install" }
+export type UpdateProgress = { phase: "download"; downloaded: number; total: number | null } | { phase: "install" }
 
 /** The event name the Rust side emits on. */
 export const UPDATE_PROGRESS_EVENT = "ade-update-progress"

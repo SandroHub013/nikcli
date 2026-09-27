@@ -27,7 +27,16 @@ import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, spendKind, turnCommand, type RemoteTools, type RunnerId } from "./runners"
+import {
+  applyRunnerLine,
+  enforcesDisabledTools,
+  finalText,
+  runnerById,
+  spendKind,
+  turnCommand,
+  type RemoteTools,
+  type RunnerId,
+} from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type PendingPermission, type Talk } from "./talk"
 
 export interface TurnRequest {
@@ -308,7 +317,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
               // stderr shares the stream: an error the CLI printed is the last plain line (review B7, BASSO 3).
               const plain = stripAnsi(line).trim()
               // Scrub before the cut, so a key that runs past the 300th character is not sliced in half and kept.
-              if (plain && !before.partial && !talk.partial && !plain.startsWith("{")) lastWords = scrubSecrets(plain).slice(0, 300)
+              if (plain && !before.partial && !talk.partial && !plain.startsWith("{"))
+                lastWords = scrubSecrets(plain).slice(0, 300)
               if (!before.sessionId && talk.sessionId) markTurn("cli-init")
               if (!before.streaming && talk.streaming) markTurn("cli-first-text")
               if (!before.ended && talk.ended) markTurn("cli-result")
@@ -363,7 +373,9 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         return finish("error", problem)
       }
       update(applyExit(talk, code, Date.now(), runner.label, lastWords))
-      return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text, code) : finish("done", undefined, code)
+      return talk.status === "error"
+        ? finish("error", talk.messages.at(-1)?.text, code)
+        : finish("done", undefined, code)
     } catch (error) {
       const said = error instanceof Error ? error.message : String(error)
       update(applyProblem(talk, t("bots.turn.didNotStart", runner.label, said), Date.now()))

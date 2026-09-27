@@ -66,7 +66,9 @@ describe("the conversation's folder", () => {
     expect(parseReport(withDir)?.sessionDir).toBe("C:\\Users\\me\\altro")
     expect(parseReport(good)?.sessionDir).toBeUndefined()
     expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: 7 }))?.sessionDir).toBeUndefined()
-    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: "x".repeat(5000) }))?.sessionDir).toBeUndefined()
+    expect(
+      parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: "x".repeat(5000) }))?.sessionDir,
+    ).toBeUndefined()
   })
 })
 
@@ -238,11 +240,9 @@ describe("followReports", () => {
   }
 
   test("a /clear or /resume inside the CLI moves the pane after the first report", async () => {
-    expect(await run([report("first", "startup"), null, report("cleared", "clear"), report("other", "resume")])).toEqual([
-      "first",
-      "cleared",
-      "other",
-    ])
+    expect(
+      await run([report("first", "startup"), null, report("cleared", "clear"), report("other", "resume")]),
+    ).toEqual(["first", "cleared", "other"])
   })
 
   test("a nested agent's startup, with the inherited nonce, does not", async () => {
@@ -254,11 +254,9 @@ describe("followReports", () => {
   })
 
   test("nikcli's switch of tab, /new or /sessions moves the pane", async () => {
-    expect(await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")])).toEqual([
-      "ses_first",
-      "ses_new",
-      "ses_tab",
-    ])
+    expect(
+      await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")]),
+    ).toEqual(["ses_first", "ses_new", "ses_tab"])
   })
 
   test("a switch written under another spawn's nonce does not", async () => {
@@ -336,7 +334,16 @@ describe("lastReportedId", () => {
 /* nikcli's tabs are shared by every project: a pane can be moved to another folder's conversation. */
 describe("otherFolder", () => {
   const report = (sessionDir?: string) =>
-    parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "nikcli", sessionId: "ses_x", source: "switch", ...(sessionDir ? { sessionDir } : {}) }))!
+    parseReport(
+      JSON.stringify({
+        pane: "p",
+        nonce: "n",
+        agent: "nikcli",
+        sessionId: "ses_x",
+        source: "switch",
+        ...(sessionDir ? { sessionDir } : {}),
+      }),
+    )!
 
   test("another folder is named", () => {
     expect(otherFolder(report("C:\\Users\\me\\altro"), "C:\\Users\\me\\progetto")).toBe("C:\\Users\\me\\altro")
@@ -355,7 +362,16 @@ describe("otherFolder", () => {
  */
 describe("followedFolder", () => {
   const report = (sessionId: string, sessionDir?: string) =>
-    parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "nikcli", sessionId, source: "switch", ...(sessionDir ? { sessionDir } : {}) }))!
+    parseReport(
+      JSON.stringify({
+        pane: "p",
+        nonce: "n",
+        agent: "nikcli",
+        sessionId,
+        source: "switch",
+        ...(sessionDir ? { sessionDir } : {}),
+      }),
+    )!
   const here = "C:\\Users\\me\\progetto"
   const known = { resumeId: "ses_uno", otherDir: "C:\\Users\\me\\altro" }
 

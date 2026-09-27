@@ -54,13 +54,18 @@ interface Subscription {
 
 /** The part of xterm's private render service this reads: the same one `cellHeightOf` reads. */
 interface CellSource {
-  readonly _core?: { readonly _renderService?: { readonly onDimensionsChange?: (listener: () => void) => Subscription } }
+  readonly _core?: {
+    readonly _renderService?: { readonly onDimensionsChange?: (listener: () => void) => Subscription }
+  }
 }
 
 /** The part of `window` the fallback needs. */
 export interface ScaleWindow {
   readonly devicePixelRatio: number
-  matchMedia(query: string): { addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void }
+  matchMedia(query: string): {
+    addEventListener(type: "change", listener: () => void): void
+    removeEventListener(type: "change", listener: () => void): void
+  }
   requestAnimationFrame(callback: () => void): number
 }
 
@@ -77,7 +82,8 @@ export interface ScaleWindow {
  */
 export function watchCellSize(terminal: unknown, changed: () => void, win?: ScaleWindow): () => void {
   const service = (terminal as CellSource)._core?._renderService
-  const subscription = typeof service?.onDimensionsChange === "function" ? service.onDimensionsChange.call(service, changed) : undefined
+  const subscription =
+    typeof service?.onDimensionsChange === "function" ? service.onDimensionsChange.call(service, changed) : undefined
   let stopped = false
   let query: ReturnType<ScaleWindow["matchMedia"]> | undefined
   const listen = () => {

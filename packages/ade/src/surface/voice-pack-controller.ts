@@ -6,7 +6,13 @@
  * watched only while an install runs, the last reading is kept, a host
  * without a command is a pack that is not available rather than an error.
  */
-import { watchInstall, type InstallProgress, type LocalProvider, type PackState, type PackStatus } from "@nikcli-ai/voice"
+import {
+  watchInstall,
+  type InstallProgress,
+  type LocalProvider,
+  type PackState,
+  type PackStatus,
+} from "@nikcli-ai/voice"
 
 /** The commands of the host facade this needs; each may be missing. */
 export interface VoicePackHost {

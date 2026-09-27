@@ -17,7 +17,15 @@
 
 import { Binary } from "@nikcli-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
-import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus, Todo } from "@nikcli-ai/sdk/httpapi"
+import type {
+  Message,
+  Part,
+  PermissionRequest,
+  QuestionRequest,
+  Session,
+  SessionStatus,
+  Todo,
+} from "@nikcli-ai/sdk/httpapi"
 
 export interface ChatData {
   /** Sorted by id. Child sessions (a subagent's) included: the view picks the roots. */
@@ -79,7 +87,11 @@ function upsert<T extends { id: string }>(
   write.insert(result.index, item)
 }
 
-export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetStoreFunction<ChatData>): ChatEventOutcome {
+export function applyChatEvent(
+  event: ChatEvent,
+  store: ChatData,
+  setStore: SetStoreFunction<ChatData>,
+): ChatEventOutcome {
   switch (event.type) {
     case "server.instance.disposed":
       return "resync"
@@ -88,18 +100,30 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(store.session, info.id, (s) => s.id)
       if (info.time?.archived) {
-        if (result.found) setStore("session", produce((draft) => void draft.splice(result.index, 1)))
+        if (result.found)
+          setStore(
+            "session",
+            produce((draft) => void draft.splice(result.index, 1)),
+          )
         forget(setStore, info.id)
         return
       }
       if (result.found) setStore("session", result.index, reconcile(info))
-      else setStore("session", produce((draft) => void draft.splice(result.index, 0, info)))
+      else
+        setStore(
+          "session",
+          produce((draft) => void draft.splice(result.index, 0, info)),
+        )
       return
     }
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(store.session, info.id, (s) => s.id)
-      if (result.found) setStore("session", produce((draft) => void draft.splice(result.index, 1)))
+      if (result.found)
+        setStore(
+          "session",
+          produce((draft) => void draft.splice(result.index, 1)),
+        )
       forget(setStore, info.id)
       return
     }
@@ -118,7 +142,12 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
       upsert(store.message[info.sessionID], info, {
         create: (items) => setStore("message", info.sessionID, items),
         replace: (index, value) => setStore("message", info.sessionID, index, reconcile(value)),
-        insert: (index, value) => setStore("message", info.sessionID, produce((draft) => void draft.splice(index, 0, value))),
+        insert: (index, value) =>
+          setStore(
+            "message",
+            info.sessionID,
+            produce((draft) => void draft.splice(index, 0, value)),
+          ),
       })
       return
     }
@@ -141,7 +170,12 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
       upsert(store.part[part.messageID], part, {
         create: (items) => setStore("part", part.messageID, items),
         replace: (index, value) => setStore("part", part.messageID, index, reconcile(value)),
-        insert: (index, value) => setStore("part", part.messageID, produce((draft) => void draft.splice(index, 0, value))),
+        insert: (index, value) =>
+          setStore(
+            "part",
+            part.messageID,
+            produce((draft) => void draft.splice(index, 0, value)),
+          ),
       })
       return
     }
@@ -165,14 +199,22 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
         create: (items) => setStore("permission", permission.sessionID, items),
         replace: (index, value) => setStore("permission", permission.sessionID, index, reconcile(value)),
         insert: (index, value) =>
-          setStore("permission", permission.sessionID, produce((draft) => void draft.splice(index, 0, value))),
+          setStore(
+            "permission",
+            permission.sessionID,
+            produce((draft) => void draft.splice(index, 0, value)),
+          ),
       })
       return
     }
     case "permission.replied": {
       const props = event.properties as { sessionID: string; requestID: string }
       removeRequest(store.permission[props.sessionID], props.requestID, (index) =>
-        setStore("permission", props.sessionID, produce((draft) => void draft.splice(index, 1))),
+        setStore(
+          "permission",
+          props.sessionID,
+          produce((draft) => void draft.splice(index, 1)),
+        ),
       )
       return
     }
@@ -182,7 +224,11 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
         create: (items) => setStore("question", question.sessionID, items),
         replace: (index, value) => setStore("question", question.sessionID, index, reconcile(value)),
         insert: (index, value) =>
-          setStore("question", question.sessionID, produce((draft) => void draft.splice(index, 0, value))),
+          setStore(
+            "question",
+            question.sessionID,
+            produce((draft) => void draft.splice(index, 0, value)),
+          ),
       })
       return
     }
@@ -190,7 +236,11 @@ export function applyChatEvent(event: ChatEvent, store: ChatData, setStore: SetS
     case "question.rejected": {
       const props = event.properties as { sessionID: string; requestID: string }
       removeRequest(store.question[props.sessionID], props.requestID, (index) =>
-        setStore("question", props.sessionID, produce((draft) => void draft.splice(index, 1))),
+        setStore(
+          "question",
+          props.sessionID,
+          produce((draft) => void draft.splice(index, 1)),
+        ),
       )
       return
     }

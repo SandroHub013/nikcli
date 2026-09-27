@@ -76,10 +76,19 @@ function setup(options: {
     turns: {
       room: (entry, message, thread, cwd, maxCostUsd) => {
         if (options.busy?.includes(entry.identifier)) return undefined
-        calls.push({ bot: entry.identifier, message, thread, ...(cwd ? { cwd } : {}), ...(maxCostUsd !== undefined ? { maxCostUsd } : {}) })
+        calls.push({
+          bot: entry.identifier,
+          message,
+          thread,
+          ...(cwd ? { cwd } : {}),
+          ...(maxCostUsd !== undefined ? { maxCostUsd } : {}),
+        })
         const n = (spoken[entry.identifier] = (spoken[entry.identifier] ?? -1) + 1)
         const line = options.scripts?.[entry.identifier]?.[n] ?? "(pass)"
-        const turn: Turn = { result: typeof line === "string" ? Promise.resolve(result(line)) : line(), stop: () => undefined }
+        const turn: Turn = {
+          result: typeof line === "string" ? Promise.resolve(result(line)) : line(),
+          stop: () => undefined,
+        }
         return turn
       },
       stop: (entry) => void stopped.push(entry.identifier),
@@ -89,7 +98,10 @@ function setup(options: {
     newId: () => `e${++id}`,
   })
   const current = () => store.get().rooms[0]!
-  const said = () => current().log.entries.map((entry) => (entry.from.kind === "user" ? `utente: ${entry.text}` : `${entry.from.name}: ${entry.text}`))
+  const said = () =>
+    current().log.entries.map((entry) =>
+      entry.from.kind === "user" ? `utente: ${entry.text}` : `${entry.from.name}: ${entry.text}`,
+    )
   return { runner, store, calls, stopped, current, said }
 }
 
@@ -209,7 +221,10 @@ describe("B8b: the rooms as saved", () => {
       name: "prova",
       members: [alfa.path, beta.path],
       spend: { perRoundUsd: 0.1 },
-      log: { entries: [{ id: "e1", from: { kind: "bot", id: alfa.path, name: "alfa" }, text: "ciao", at: 3 }], seen: { [alfa.path]: 1 } },
+      log: {
+        entries: [{ id: "e1", from: { kind: "bot", id: alfa.path, name: "alfa" }, text: "ciao", at: 3 }],
+        seen: { [alfa.path]: 1 },
+      },
       needsYou: true,
       note: "ferma",
       noteKind: "end",
@@ -222,7 +237,9 @@ describe("B8b: the rooms as saved", () => {
 
   test("a cap outside the range and a place past the log are not read back", () => {
     const saved = JSON.stringify({
-      rooms: [{ id: "r1", name: "x", members: ["a", "b"], spend: { perRoundUsd: 99 }, log: { entries: [], seen: { a: 5 } } }],
+      rooms: [
+        { id: "r1", name: "x", members: ["a", "b"], spend: { perRoundUsd: 99 }, log: { entries: [], seen: { a: 5 } } },
+      ],
     })
     const room = parseRooms(saved).rooms[0]!
     expect(room.spend).toBeUndefined()
@@ -235,7 +252,9 @@ describe("a room waiting on a trust dialog", () => {
   test("says so while the dialog is open, and stops saying it when the answer comes, or the check fails", async () => {
     const said: [string, boolean][] = []
     let answer: (() => void) | undefined
-    const store = memoryRoomStore({ rooms: [{ id: "r", name: "stanza", members: [], log: EMPTY_LOG, needsYou: false, createdAt: 0 }] })
+    const store = memoryRoomStore({
+      rooms: [{ id: "r", name: "stanza", members: [], log: EMPTY_LOG, needsYou: false, createdAt: 0 }],
+    })
     const runner = createRoomRunner({
       store,
       seats: async (_room, asking) => {

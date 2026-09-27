@@ -45,13 +45,23 @@ export function UpdateDialog(props: {
   const opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
   const keepFocusInside = () => {
     if (!surface || surface.contains(document.activeElement)) return
-    ;(surface.querySelector<HTMLElement>('[data-slot="decision-ghost"]:not(:disabled)') ?? stops()[0] ?? surface).focus()
+    ;(
+      surface.querySelector<HTMLElement>('[data-slot="decision-ghost"]:not(:disabled)') ??
+      stops()[0] ??
+      surface
+    ).focus()
   }
   onMount(() => {
     queueMicrotask(() => surface?.querySelector<HTMLElement>('[data-slot="decision-ghost"]')?.focus())
   })
   // A button that goes disabled drops the focus on the body; pick it up again.
-  createEffect(on(() => view().stage, () => queueMicrotask(keepFocusInside), { defer: true }))
+  createEffect(
+    on(
+      () => view().stage,
+      () => queueMicrotask(keepFocusInside),
+      { defer: true },
+    ),
+  )
   onCleanup(() => {
     if (opener?.isConnected) opener.focus()
   })

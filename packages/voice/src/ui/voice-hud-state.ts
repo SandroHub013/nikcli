@@ -114,7 +114,12 @@ export function agentHudState(input: HudInput): HudState {
       return { tone: "armed", label: t("vui.hud.waiting"), line: t("vui.hud.say", wakeWord), quoted: false }
 
     case "confirming":
-      return { tone: "asking", label: t("vui.hud.confirm"), line: confirmationPrompt ?? readback ?? spoken, quoted: false }
+      return {
+        tone: "asking",
+        label: t("vui.hud.confirm"),
+        line: confirmationPrompt ?? readback ?? spoken,
+        quoted: false,
+      }
 
     case "executing":
       /*

@@ -30,3 +30,8 @@ packages/mobile/android/
 # `ade / checks / test` ever looks at. Verified 2026-09-18: prettier's output is
 # byte-identical at v1.369.0 and v1.370.0.
 packages/ade/src-tauri/scripts/browser-frame.js
+
+# Written by the Tauri build (tauri-build) on every `cargo build`, in its own
+# layout. Formatted, they differ from what the next build writes, and every
+# build shows them as changed.
+packages/ade/src-tauri/gen/

@@ -36,7 +36,9 @@ async function loadPlugin() {
   dirs.push(dir)
   const file = join(dir, NIKCLI_PLUGIN_NAME)
   writeFileSync(file, nikcliPluginScript())
-  const module = (await import(pathToFileURL(file).href)) as { default: { id: string; tui: (api: unknown, options?: unknown) => Promise<void> } }
+  const module = (await import(pathToFileURL(file).href)) as {
+    default: { id: string; tui: (api: unknown, options?: unknown) => Promise<void> }
+  }
   return module.default
 }
 
@@ -48,10 +50,18 @@ function fakeTui(sessions: Record<string, { directory: string; parentID?: string
         return route
       },
     },
-    client: { session: { get: async ({ sessionID }: { sessionID: string }) => ({ data: { id: sessionID, ...sessions[sessionID] } }) } },
+    client: {
+      session: {
+        get: async ({ sessionID }: { sessionID: string }) => ({ data: { id: sessionID, ...sessions[sessionID] } }),
+      },
+    },
     lifecycle: { onDispose: (fn: () => void) => (disposers.push(fn), () => {}) },
   }
-  return { api, show: (sessionID: string) => void (route = { name: "session", params: { sessionID } }), home: () => void (route = { name: "home" }) }
+  return {
+    api,
+    show: (sessionID: string) => void (route = { name: "session", params: { sessionID } }),
+    home: () => void (route = { name: "home" }),
+  }
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 40))
@@ -84,7 +94,13 @@ describe("nikcli's TUI plugin", () => {
     await plugin.tui(tui.api, { intervalMs: 5 })
     await settle()
     const first = parseReport(readFileSync(report, "utf8"))!
-    expect(first).toMatchObject({ pane: "pane-3", agent: "nikcli", sessionId: "ses_one", source: "switch", sessionDir: "C:\\p" })
+    expect(first).toMatchObject({
+      pane: "pane-3",
+      agent: "nikcli",
+      sessionId: "ses_one",
+      source: "switch",
+      sessionDir: "C:\\p",
+    })
     expect(acceptsReport(first, { pane: "pane-3", nonce: "a1b2c3d4e5f6a1b2c3d4e5f6" })).toBe(true)
 
     tui.show("ses_two")

@@ -106,7 +106,11 @@ export function enterAgain(input: {
  * draft or a prompt stopped it — so a skipped ring does not use one up.
  * The count goes back to what it was, which is 0 on the first ring.
  */
-export async function ringAgain(request: { rings?: number }, press: () => Promise<boolean>, save: () => void): Promise<boolean> {
+export async function ringAgain(
+  request: { rings?: number },
+  press: () => Promise<boolean>,
+  save: () => void,
+): Promise<boolean> {
   const before = request.rings ?? 0
   request.rings = before + 1
   save()

@@ -25,7 +25,8 @@ beforeAll(() => {
   HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
     const before = document.activeElement
     nativeFocus.call(this, options)
-    if (document.activeElement === this && before !== this) this.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+    if (document.activeElement === this && before !== this)
+      this.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
   }
 })
 afterAll(() => {
@@ -82,7 +83,8 @@ function workbench(guarded: boolean) {
 }
 
 /** A key typed where the focus is, as the keyboard would. */
-const type = (key: string) => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
+const type = (key: string) =>
+  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
 
 describe("the palette's shortcut with a sheet open", () => {
   test("guarded, as runCommand is: the palette does not open, and the sheet keeps the focus", async () => {

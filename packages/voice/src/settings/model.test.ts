@@ -168,7 +168,9 @@ describe("settings/model - normalizeSettings", () => {
     // Dictation on the wake word is not told about the name.
     expect(normalizeSettings({ version: 2, mode: "transcription", activation: "wake-word" }).migrations).toEqual([])
     // Not a boolean: the default.
-    expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
+    expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, alwaysListen: "si" }).alwaysListen).toBe(
+      DEFAULT_VOICE_SETTINGS.alwaysListen,
+    )
   })
 
   test("spoken alerts are off by default and can be turned on", () => {

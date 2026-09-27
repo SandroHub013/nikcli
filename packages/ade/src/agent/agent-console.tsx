@@ -133,24 +133,30 @@ export function AgentConsole(props: AgentConsoleProps) {
       </Show>
 
       {/* A4: Guided onboarding checklist: shown if any prerequisite is missing */}
-      <Show when={!isVoiceReady({
-        hasKey: props.hasKey ?? props.canPlan,
-        hasAgent: props.hasAgent ?? true,
-        hasVoice: props.hasVoice ?? true,
-      })}>
+      <Show
+        when={
+          !isVoiceReady({
+            hasKey: props.hasKey ?? props.canPlan,
+            hasAgent: props.hasAgent ?? true,
+            hasVoice: props.hasVoice ?? true,
+          })
+        }
+      >
         <section data-slot="agent-onboarding" aria-label={t("agent.onboarding.title")}>
           <div data-slot="agent-onboarding-head">
             <span data-slot="agent-onboarding-title">{t("agent.onboarding.title")}</span>
             <span data-slot="agent-onboarding-sub">{t("agent.onboarding.subtitle")}</span>
           </div>
           <div data-slot="agent-onboarding-items">
-            <For each={voicePrerequisitesList({
-              hasKey: props.hasKey ?? props.canPlan,
-              hasAgent: props.hasAgent ?? true,
-              hasVoice: props.hasVoice ?? true,
-              isVoiceDownloading: props.isVoiceDownloading,
-              voiceError: props.voiceError,
-            })}>
+            <For
+              each={voicePrerequisitesList({
+                hasKey: props.hasKey ?? props.canPlan,
+                hasAgent: props.hasAgent ?? true,
+                hasVoice: props.hasVoice ?? true,
+                isVoiceDownloading: props.isVoiceDownloading,
+                voiceError: props.voiceError,
+              })}
+            >
               {(item) => (
                 <div data-slot="agent-onboarding-row" data-done={item.done ? "true" : "false"}>
                   <label data-slot="agent-onboarding-check">
@@ -206,9 +212,7 @@ export function AgentConsole(props: AgentConsoleProps) {
           fallback={
             <div data-slot="agent-empty">
               <p data-slot="agent-empty-title">{t("agent.empty.title")}</p>
-              <p data-slot="agent-empty-body">
-                {t("agent.empty.body")}
-              </p>
+              <p data-slot="agent-empty-body">{t("agent.empty.body")}</p>
               <ul data-slot="agent-examples">
                 <li>{t("agent.empty.example1")}</li>
                 <li>{t("agent.empty.example2")}</li>
@@ -292,9 +296,7 @@ function Reply(props: { entry: Exclude<AgentEntry, { kind: "user" }> }) {
       <div data-slot="agent-plan">
         <div data-slot="agent-plan-head">
           {t("agent.plan")}
-          <span data-slot="agent-plan-count">
-            {t("agent.plan.count", entry.ok, entry.ok + entry.failed)}
-          </span>
+          <span data-slot="agent-plan-count">{t("agent.plan.count", entry.ok, entry.ok + entry.failed)}</span>
         </div>
         <ol data-slot="agent-plan-steps">
           <For each={entry.steps}>

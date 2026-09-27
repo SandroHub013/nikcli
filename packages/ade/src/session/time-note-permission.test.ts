@@ -13,7 +13,11 @@ describe("a time note never goes over a permission prompt (B1)", () => {
   const asking = { typing: false, permissionPending: true }
 
   test("with a prompt open the note is not due, and the round leaves timeNotes as it was", () => {
-    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = {
+      at: 0,
+      deliveredAt: 0,
+      budget: 120,
+    }
     // What the workbench does each round: type and mark only what is due.
     const round = (now: number, target: { typing: boolean; permissionPending: boolean }) => {
       const due = timeNoteFor(request, now, target)
@@ -99,7 +103,11 @@ describe("a prompt only the hook knows about holds every Enter (P1)", () => {
     expect(asking()).toBe(true)
     // `unlessBusy`'s check, in the line queue, at the moment of writing.
     expect(lineIsTaken({ typing: false, permissionPending: asking() })).toBe(true)
-    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = {
+      at: 0,
+      deliveredAt: 0,
+      budget: 120,
+    }
     expect(timeNoteFor(request, 61_000, { typing: false, permissionPending: asking() })).toBeUndefined()
     // A draft is not what is holding it, so the two are not confused.
     expect(lineIsTaken({ typing: true, permissionPending: asking() })).toBe(true)
@@ -124,23 +132,30 @@ describe("a prompt only the hook knows about holds every Enter (P1)", () => {
     const request = { rings: 0 }
     const queue = createLineQueue()
     // The workbench's re-ring, with the count put back when no Enter went.
-    const pressed = await ringAgain(request, () =>
-      enterAgain({
-        queue,
-        key: "p1",
-        write: (data) => written.push(data),
-        alive: () => true,
-        typing: () => false,
-        permissionOpen: asking,
-      }),
-    () => {},
+    const pressed = await ringAgain(
+      request,
+      () =>
+        enterAgain({
+          queue,
+          key: "p1",
+          write: (data) => written.push(data),
+          alive: () => true,
+          typing: () => false,
+          permissionOpen: asking,
+        }),
+      () => {},
     )
     expect(pressed).toBe(false)
     expect(written).toEqual([])
     // A skipped ring does not use one up, so the next round still rings.
     expect(request.rings).toBe(0)
     // The same path with the screen's own reading: the Enter goes, as it always did.
-    expect(pressEnter((data) => written.push(data), () => false)).toBe(true)
+    expect(
+      pressEnter(
+        (data) => written.push(data),
+        () => false,
+      ),
+    ).toBe(true)
     expect(written).toEqual(["\r"])
   })
 })
@@ -156,7 +171,14 @@ describe("the Enter is pressed only when no prompt is open at that moment (B1 bi
         prompt = true // the agent asked for a permission while its record was read
       })
       const check = "resend"
-      if (check === "resend" && !pressEnter((data) => written.push(data), () => prompt)) return "held"
+      if (
+        check === "resend" &&
+        !pressEnter(
+          (data) => written.push(data),
+          () => prompt,
+        )
+      )
+        return "held"
       return "resent"
     }
     expect(await round()).toBe("held")
@@ -165,13 +187,22 @@ describe("the Enter is pressed only when no prompt is open at that moment (B1 bi
 
   test("without a prompt the second Enter goes, as before", () => {
     const written: string[] = []
-    expect(pressEnter((data) => written.push(data), () => false)).toBe(true)
+    expect(
+      pressEnter(
+        (data) => written.push(data),
+        () => false,
+      ),
+    ).toBe(true)
     expect(written).toEqual(["\r"])
   })
 
   test("a line typed without its Enter counts as given: the next round does not type it again", async () => {
     const box: string[] = []
-    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = {
+      at: 0,
+      deliveredAt: 0,
+      budget: 120,
+    }
     let prompt = false
     // The workbench's round: counted when queued, given back only if the line was not given.
     const round = async (now: number) => {

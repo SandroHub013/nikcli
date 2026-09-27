@@ -155,7 +155,12 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
           case "head": {
             settled = true
             const responseHeaders = new Headers(event.headers.map(([name, value]) => [name, value] as [string, string]))
-            resolve(new Response(NO_BODY.has(event.status) ? null : stream, { status: event.status, headers: responseHeaders }))
+            resolve(
+              new Response(NO_BODY.has(event.status) ? null : stream, {
+                status: event.status,
+                headers: responseHeaders,
+              }),
+            )
             if (NO_BODY.has(event.status)) done()
             return
           }

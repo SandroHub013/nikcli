@@ -89,7 +89,9 @@ export function summariseForSpeech(
     const collapsed = text.replace(/\s+/g, " ").trim()
     if (!collapsed || !HAS_WORDS.test(collapsed)) continue
 
-    kept.push(line.kind === "error" ? (options.lang === "en" ? `Error: ${collapsed}` : `Errore: ${collapsed}`) : collapsed)
+    kept.push(
+      line.kind === "error" ? (options.lang === "en" ? `Error: ${collapsed}` : `Errore: ${collapsed}`) : collapsed,
+    )
   }
 
   if (kept.length === 0) return undefined
@@ -129,8 +131,11 @@ export function replySpeech(
   }
 
   if (result.reason === "timeout") return lang === "en" ? "It is still working." : "Sta ancora lavorando."
-  if (result.reason === "error") return lang === "en" ? "The session reported an error." : "La sessione ha segnalato un errore."
-  return lang === "en" ? "It finished, but left no reply to read out." : "Ha finito, ma non ha lasciato una risposta da leggere."
+  if (result.reason === "error")
+    return lang === "en" ? "The session reported an error." : "La sessione ha segnalato un errore."
+  return lang === "en"
+    ? "It finished, but left no reply to read out."
+    : "Ha finito, ma non ha lasciato una risposta da leggere."
 }
 
 /**

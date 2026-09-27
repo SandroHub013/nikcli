@@ -58,7 +58,13 @@ describe("waiting for a CLI's answer", () => {
     const { timers, advance } = clock()
     const cli = command(timers, ID.split("\n"), 2_000)
     let said = 0
-    const answer = waitForAnswer({ start: cli.start, read: mintedNikcliId, timeoutMs: MINT_MS, slow: { afterMs: MINT_SLOW_MS, say: () => said++ }, timers })
+    const answer = waitForAnswer({
+      start: cli.start,
+      read: mintedNikcliId,
+      timeoutMs: MINT_MS,
+      slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
+      timers,
+    })
     await settle()
     await advance(2_000)
     expect(await answer).toBe("ses_f2187fa39ffea42ThcJIS6p5l5")
@@ -77,7 +83,13 @@ describe("waiting for a CLI's answer", () => {
     const cli = command(timers, ID.split("\n"), 20_000)
     let said = 0
     let answered: string | null | undefined
-    const answer = waitForAnswer({ start: cli.start, read: mintedNikcliId, timeoutMs: MINT_MS, slow: { afterMs: MINT_SLOW_MS, say: () => said++ }, timers })
+    const answer = waitForAnswer({
+      start: cli.start,
+      read: mintedNikcliId,
+      timeoutMs: MINT_MS,
+      slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
+      timers,
+    })
     void answer.then((id) => (answered = id))
     await settle()
     await advance(MINT_SLOW_MS)
@@ -93,7 +105,13 @@ describe("waiting for a CLI's answer", () => {
     const cli = command(timers, [], 0)
     let said = 0
     let done = false
-    const answer = waitForAnswer({ start: cli.start, read: mintedNikcliId, timeoutMs: MINT_MS, slow: { afterMs: MINT_SLOW_MS, say: () => said++ }, timers })
+    const answer = waitForAnswer({
+      start: cli.start,
+      read: mintedNikcliId,
+      timeoutMs: MINT_MS,
+      slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
+      timers,
+    })
     void answer.then(() => (done = true))
     await settle()
     await advance(MINT_MS - 1)
@@ -118,7 +136,12 @@ describe("waiting for a CLI's answer", () => {
     await settle()
     await advance(5)
     expect(await ended).toBeNull()
-    const refused = await waitForAnswer({ start: async () => Promise.reject(new Error("no")), read: mintedNikcliId, timeoutMs: LIST_MS, timers })
+    const refused = await waitForAnswer({
+      start: async () => Promise.reject(new Error("no")),
+      read: mintedNikcliId,
+      timeoutMs: LIST_MS,
+      timers,
+    })
     expect(refused).toBeUndefined()
   })
 })
@@ -161,31 +184,67 @@ describe("the mint's trace", () => {
 
   test("the answer's JSON is said by its size only, the title in it or not", () => {
     const json = `{ "title": ${ESCAPED}, "id": "ses_x" }`
-    const line = mintTrace({ agent: "nikcli", ms: 16_234.6, outcome: "id", first: { ms: 15_900.2, line: `  ${json}` }, title: TITLE })
+    const line = mintTrace({
+      agent: "nikcli",
+      ms: 16_234.6,
+      outcome: "id",
+      first: { ms: 15_900.2, line: `  ${json}` },
+      title: TITLE,
+    })
     expect(line).toBe(`[ade.mint] nikcli: id in 16235 ms, first output at 15900 ms: json, ${json.length} chars`)
     expect(line).not.toContain("login")
-    expect(mintTrace({ agent: "nikcli", ms: 1, outcome: "none", first: { ms: 1, line: "[]" }, title: TITLE })).toEndWith(": json, 2 chars")
+    expect(
+      mintTrace({ agent: "nikcli", ms: 1, outcome: "none", first: { ms: 1, line: "[]" }, title: TITLE }),
+    ).toEndWith(": json, 2 chars")
   })
 
   test("another first line is kept, the title taken out raw and escaped", () => {
-    const raw = mintTrace({ agent: "nikcli", ms: 2_000, outcome: "id", first: { ms: 1_500, line: `creating ${TITLE} now` }, title: TITLE })
-    const escaped = mintTrace({ agent: "nikcli", ms: 2_000, outcome: "id", first: { ms: 1_500, line: `creating ${ESCAPED} now` }, title: TITLE })
+    const raw = mintTrace({
+      agent: "nikcli",
+      ms: 2_000,
+      outcome: "id",
+      first: { ms: 1_500, line: `creating ${TITLE} now` },
+      title: TITLE,
+    })
+    const escaped = mintTrace({
+      agent: "nikcli",
+      ms: 2_000,
+      outcome: "id",
+      first: { ms: 1_500, line: `creating ${ESCAPED} now` },
+      title: TITLE,
+    })
     expect(raw).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \u2026 now"')
     expect(escaped).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \\"\u2026\\" now"')
     expect(raw + escaped).not.toContain("login")
-    const plain = mintTrace({ agent: "nikcli", ms: 9, outcome: "timeout", first: { ms: 8, line: "Installing @nikcli-ai/plugin" }, title: TITLE })
+    const plain = mintTrace({
+      agent: "nikcli",
+      ms: 9,
+      outcome: "timeout",
+      first: { ms: 8, line: "Installing @nikcli-ai/plugin" },
+      title: TITLE,
+    })
     expect(plain).toEndWith(': "Installing @nikcli-ai/plugin"')
   })
 
   test("a mint that printed nothing says so; a long first line is cut", () => {
-    expect(mintTrace({ agent: "nikcli", ms: 30_000, outcome: "timeout", title: "x" })).toBe("[ade.mint] nikcli: timeout in 30000 ms, nothing printed")
-    const long = mintTrace({ agent: "nikcli", ms: 10, outcome: "none", first: { ms: 5, line: "a".repeat(500) }, title: "" })
+    expect(mintTrace({ agent: "nikcli", ms: 30_000, outcome: "timeout", title: "x" })).toBe(
+      "[ade.mint] nikcli: timeout in 30000 ms, nothing printed",
+    )
+    const long = mintTrace({
+      agent: "nikcli",
+      ms: 10,
+      outcome: "none",
+      first: { ms: 5, line: "a".repeat(500) },
+      title: "",
+    })
     expect(long).toContain(`"${"a".repeat(200)}"`)
     expect(long).not.toContain("a".repeat(201))
   })
 
   test("lint: the workbench logs a mint trace for every mint", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
-    expect(workbench).toContain("console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))")
+    expect(workbench).toContain(
+      "console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))",
+    )
   })
 })

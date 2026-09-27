@@ -249,7 +249,11 @@ export interface VoiceEngine {
    */
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
-  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void>
+  handlePermissionRequest(
+    paneId: string,
+    what: string,
+    options?: { silent?: boolean; kind?: PermissionSpeechKind },
+  ): Promise<void>
   /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
   handlePermissionResolved(paneId: string): Promise<void>
   /**
@@ -259,7 +263,11 @@ export interface VoiceEngine {
    */
   /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
   requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
-  openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void>
+  openResponseWindow(options?: {
+    durationMs?: number
+    rescheduleMs?: number
+    permission?: { paneId: string; what: string; kind?: PermissionSpeechKind }
+  }): Promise<void>
   cancel(): Promise<void>
   /**
    * A tap while the assistant talks or works: it stops, and the next sentence
@@ -626,8 +634,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     if (transcriber.finish) transcriber.finish()
     else transcriber.commit?.()
 
-    const settled = async () =>
-      !transcriber.hasInFlight && (await Effect.runPromise(handle.isIdle))
+    const settled = async () => !transcriber.hasInFlight && (await Effect.runPromise(handle.isIdle))
 
     /*
      * Settled twice, one macrotask apart: a final transcript can sit between
@@ -736,7 +743,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         return
       }
       const seconds = Math.max(1, Math.round(after / 1000))
-      const idle = after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
+      const idle =
+        after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
       stopListening(
         current.alwaysListen
           ? `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`
@@ -768,17 +776,19 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const credit = await (options.creditLeft ?? ((apiKey: string) => openRouterCreditLeft(apiKey)))(key)
     if (!credit) return
     if ("refused" in credit) {
-      setListenWarning("La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.")
+      setListenWarning(
+        "La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.",
+      )
       return
     }
     if (credit.left > (options.lowCreditUsd ?? LOW_CREDIT_USD)) return
     setListenWarning(
       credit.left <= 0
         ? "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente."
-        // The sentence is Italian, so the sum in it is written the Italian way.
-        // Without the locale the machine's own decided: «1,21 USD» here and
-        // «$1.21» on CI, which is what turned this test red there and not here.
-        : `Sul credito OpenRouter restano ${formatSpendCost(credit.left, "it-IT")}: ricaricalo prima che la voce si fermi a metà frase.`,
+        : // The sentence is Italian, so the sum in it is written the Italian way.
+          // Without the locale the machine's own decided: «1,21 USD» here and
+          // «$1.21» on CI, which is what turned this test red there and not here.
+          `Sul credito OpenRouter restano ${formatSpendCost(credit.left, "it-IT")}: ricaricalo prima che la voce si fermi a metà frase.`,
     )
   }
 
@@ -834,7 +844,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await startListening("agent", { waitForName: true, automatic: true })
     }
   }
-  let startListening: (mode: VoiceMode, o: { waitForName: boolean; automatic?: boolean }) => Promise<void> = async () => {}
+  let startListening: (
+    mode: VoiceMode,
+    o: { waitForName: boolean; automatic?: boolean },
+  ) => Promise<void> = async () => {}
 
   const stopNow = async (keepAgent = false, drain = true): Promise<void> => {
     clearPttTimers()
@@ -1072,39 +1085,39 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
   /** What the program says through: nothing in pure transcription mode. */
   const speakerService: SpeakerService = {
-      speak: (text: string) => {
-        // Pure transcription mode must NEVER speak: it is strictly a silent speech-to-text bridge.
-        if (activeMode() === "transcription") {
-          return Effect.void
-        }
-        return Effect.tryPromise({
-          try: () => {
-            // A whole reply replaces whatever was queued.
-            speechGeneration++
-            speechTail = Promise.resolve()
-            return Promise.resolve(speaker.speak(text))
-          },
-          catch: (err) =>
-            new HostActionFailed({
-              action: "speak",
-              cause: err,
-              message: "Errore durante la sintesi vocale.",
-            }),
-        })
-      },
-      cancel: Effect.sync(() => cancelSpeech()),
-      append: (text: string) => {
-        if (activeMode() === "transcription") return Effect.void
-        return Effect.tryPromise({
-          try: () => appendSpeech(text),
-          catch: (err) =>
-            new HostActionFailed({
-              action: "speak",
-              cause: err,
-              message: "Errore durante la sintesi vocale.",
-            }),
-        })
-      },
+    speak: (text: string) => {
+      // Pure transcription mode must NEVER speak: it is strictly a silent speech-to-text bridge.
+      if (activeMode() === "transcription") {
+        return Effect.void
+      }
+      return Effect.tryPromise({
+        try: () => {
+          // A whole reply replaces whatever was queued.
+          speechGeneration++
+          speechTail = Promise.resolve()
+          return Promise.resolve(speaker.speak(text))
+        },
+        catch: (err) =>
+          new HostActionFailed({
+            action: "speak",
+            cause: err,
+            message: "Errore durante la sintesi vocale.",
+          }),
+      })
+    },
+    cancel: Effect.sync(() => cancelSpeech()),
+    append: (text: string) => {
+      if (activeMode() === "transcription") return Effect.void
+      return Effect.tryPromise({
+        try: () => appendSpeech(text),
+        catch: (err) =>
+          new HostActionFailed({
+            action: "speak",
+            cause: err,
+            message: "Errore durante la sintesi vocale.",
+          }),
+      })
+    },
   }
 
   const programOptions = (): Parameters<typeof makeVoiceProgram>[0] => ({
@@ -1201,10 +1214,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const message =
         typeof err === "string"
           ? err
-          : spokenMessage(err) ||
-            (err && typeof err === "object" && err instanceof Error
-              ? err.message
-              : undefined)
+          : spokenMessage(err) || (err && typeof err === "object" && err instanceof Error ? err.message : undefined)
       noteError(err, message)
       if (message) record({ kind: "error", text: message, at: now() })
       if (activeMode() !== "agent" && pressHolds() && !chordHeld && !openedWithoutChord) {
@@ -1359,11 +1369,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
   }
 
-  const restartNow = async (
-    normalized: VoiceSettings,
-    previous: VoiceSettings,
-    generation: number,
-  ): Promise<void> => {
+  const restartNow = async (normalized: VoiceSettings, previous: VoiceSettings, generation: number): Promise<void> => {
     if (generation !== sessionGeneration) {
       await discardSession()
       return
@@ -1539,7 +1545,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await Effect.runPromise(handle.submitText(text))
     },
 
-    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void> {
+    async handlePermissionRequest(
+      paneId: string,
+      what: string,
+      options?: { silent?: boolean; kind?: PermissionSpeechKind },
+    ): Promise<void> {
       if (programHandle) {
         await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
@@ -1557,7 +1567,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       return true
     },
 
-    async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void> {
+    async openResponseWindow(options?: {
+      durationMs?: number
+      rescheduleMs?: number
+      permission?: { paneId: string; what: string; kind?: PermissionSpeechKind }
+    }): Promise<void> {
       if (isBusy()) return
       const durationMs = options?.durationMs ?? 8_000
       const rescheduleMs = options?.rescheduleMs ?? 1_000

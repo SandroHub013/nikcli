@@ -15,10 +15,7 @@ import { createGatewayPanel, type GatewayPanelDeps } from "./panel-state"
 
 const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-export function GatewaySection(props: {
-  bot: AgentFile
-  deps: Omit<GatewayPanelDeps, "bot">
-}) {
+export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelDeps, "bot"> }) {
   const panel = createGatewayPanel({ ...props.deps, bot: () => props.bot })
   const [code, setCode] = createSignal("")
   onMount(() => void panel.refresh())
@@ -27,7 +24,8 @@ export function GatewaySection(props: {
   const onDiscord = () => panel.platform() === "discord"
   const onSlack = () => panel.platform() === "slack"
   /** The platform's own text for `key`, the Telegram one when it has none. */
-  const said = (telegram: string, discord: string, slack: string) => (onSlack() ? slack : onDiscord() ? discord : telegram)
+  const said = (telegram: string, discord: string, slack: string) =>
+    onSlack() ? slack : onDiscord() ? discord : telegram
   const platforms = [
     { id: "telegram", label: () => t("gateway.panel.platformTelegram") },
     { id: "discord", label: () => t("gateway.panel.platformDiscord") },
@@ -38,7 +36,9 @@ export function GatewaySection(props: {
     const link = panel.link()
     if (!link.enabled) return { tone: "off", text: t("gateway.panel.off") }
     if (!link.running) return { tone: "error", text: t("gateway.panel.stopped") }
-    return link.connected ? { tone: "on", text: t("gateway.panel.connected") } : { tone: "wait", text: t("gateway.panel.connecting") }
+    return link.connected
+      ? { tone: "on", text: t("gateway.panel.connected") }
+      : { tone: "wait", text: t("gateway.panel.connecting") }
   }
 
   const approve = () => {
@@ -70,16 +70,26 @@ export function GatewaySection(props: {
         </For>
       </div>
 
-      <p data-slot="bots-hint">{said(t("gateway.panel.intro"), t("gateway.panel.introDiscord"), t("gateway.panel.introSlack"))}</p>
+      <p data-slot="bots-hint">
+        {said(t("gateway.panel.intro"), t("gateway.panel.introDiscord"), t("gateway.panel.introSlack"))}
+      </p>
 
       <div data-slot="gateway-state" data-tone={state().tone}>
         <span data-slot="gateway-dot" aria-hidden="true" />
         <span>{state().text}</span>
-        <Show when={panel.link().lastMessageMs}>{(at) => <span data-slot="gateway-meta">{t("gateway.panel.lastMessage", time(at()))}</span>}</Show>
+        <Show when={panel.link().lastMessageMs}>
+          {(at) => <span data-slot="gateway-meta">{t("gateway.panel.lastMessage", time(at()))}</span>}
+        </Show>
       </div>
-      <Show when={panel.link().enabled && panel.link().lastError}>{(error) => <p data-slot="bots-problem">{error()}</p>}</Show>
+      <Show when={panel.link().enabled && panel.link().lastError}>
+        {(error) => <p data-slot="bots-problem">{error()}</p>}
+      </Show>
       <Show when={panel.redactedAt()}>
-        {(at) => <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.redacted", time(at()))}</p>}
+        {(at) => (
+          <p data-slot="bots-hint" data-state="warn">
+            {t("gateway.panel.redacted", time(at()))}
+          </p>
+        )}
       </Show>
 
       {/* The token: typed once, never shown again. */}
@@ -89,7 +99,11 @@ export function GatewaySection(props: {
           when={panel.link().hasToken}
           fallback={
             <p data-slot="bots-hint">
-              {said(t("gateway.panel.tokenHelp"), t("gateway.panel.tokenHelpDiscord"), t("gateway.panel.tokenHelpSlack"))}
+              {said(
+                t("gateway.panel.tokenHelp"),
+                t("gateway.panel.tokenHelpDiscord"),
+                t("gateway.panel.tokenHelpSlack"),
+              )}
             </p>
           }
         >
@@ -116,7 +130,11 @@ export function GatewaySection(props: {
             placeholder={
               panel.link().hasToken
                 ? t("gateway.panel.tokenReplace")
-                : said(t("gateway.panel.tokenPlaceholder"), t("gateway.panel.tokenPlaceholderDiscord"), t("gateway.panel.tokenPlaceholderSlack"))
+                : said(
+                    t("gateway.panel.tokenPlaceholder"),
+                    t("gateway.panel.tokenPlaceholderDiscord"),
+                    t("gateway.panel.tokenPlaceholderSlack"),
+                  )
             }
             aria-label={t("gateway.panel.token")}
             value={panel.draft()}
@@ -131,7 +149,13 @@ export function GatewaySection(props: {
             <button type="button" data-slot="bots-btn" disabled={panel.busy()} onClick={() => void panel.probe()}>
               {t("gateway.panel.probe")}
             </button>
-            <button type="button" data-slot="bots-link" data-tone="danger" disabled={panel.busy()} onClick={() => void panel.clearToken()}>
+            <button
+              type="button"
+              data-slot="bots-link"
+              data-tone="danger"
+              disabled={panel.busy()}
+              onClick={() => void panel.clearToken()}
+            >
               {t("gateway.panel.clearToken")}
             </button>
           </div>
@@ -142,7 +166,10 @@ export function GatewaySection(props: {
       <Show when={panel.needsAppToken()}>
         <div data-slot="gateway-block">
           <span data-slot="gateway-subtitle">{t("gateway.panel.appToken")}</span>
-          <Show when={panel.link().hasAppToken} fallback={<p data-slot="bots-hint">{t("gateway.panel.appTokenHelp")}</p>}>
+          <Show
+            when={panel.link().hasAppToken}
+            fallback={<p data-slot="bots-hint">{t("gateway.panel.appTokenHelp")}</p>}
+          >
             <p data-slot="bots-hint" data-state="saved">
               {t("gateway.panel.appTokenSaved")}
             </p>
@@ -161,7 +188,9 @@ export function GatewaySection(props: {
               type="password"
               autocomplete="off"
               spellcheck={false}
-              placeholder={panel.link().hasAppToken ? t("gateway.panel.tokenReplace") : t("gateway.panel.appTokenPlaceholder")}
+              placeholder={
+                panel.link().hasAppToken ? t("gateway.panel.tokenReplace") : t("gateway.panel.appTokenPlaceholder")
+              }
               aria-label={t("gateway.panel.appToken")}
               value={panel.appDraft()}
               onInput={(event) => panel.setAppDraft(event.currentTarget.value)}
@@ -179,7 +208,12 @@ export function GatewaySection(props: {
             when={panel.manifest()}
             fallback={
               <div data-slot="gateway-row">
-                <button type="button" data-slot="bots-btn" disabled={panel.busy()} onClick={() => void panel.showManifest()}>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  disabled={panel.busy()}
+                  onClick={() => void panel.showManifest()}
+                >
                   {t("gateway.panel.slackManifestShow")}
                 </button>
               </div>
@@ -198,9 +232,13 @@ export function GatewaySection(props: {
               />
             )}
           </Show>
-          <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.slackReinstall")}</p>
+          <p data-slot="bots-hint" data-state="warn">
+            {t("gateway.panel.slackReinstall")}
+          </p>
           <p data-slot="bots-hint">{t("gateway.panel.slackInvite")}</p>
-          <p data-slot="bots-hint" data-state="warn">{t("gateway.noProxySlack")}</p>
+          <p data-slot="bots-hint" data-state="warn">
+            {t("gateway.noProxySlack")}
+          </p>
         </div>
       </Show>
 
@@ -208,9 +246,13 @@ export function GatewaySection(props: {
         <div data-slot="gateway-block">
           <span data-slot="gateway-subtitle">{t("gateway.panel.portal")}</span>
           <p data-slot="bots-hint">{t("gateway.panel.portalWhere")}</p>
-          <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.intentsOff")}</p>
+          <p data-slot="bots-hint" data-state="warn">
+            {t("gateway.panel.intentsOff")}
+          </p>
           <p data-slot="bots-hint">{t("gateway.panel.invite")}</p>
-          <p data-slot="bots-hint" data-state="warn">{t("gateway.noProxy")}</p>
+          <p data-slot="bots-hint" data-state="warn">
+            {t("gateway.noProxy")}
+          </p>
         </div>
       </Show>
 
@@ -222,7 +264,11 @@ export function GatewaySection(props: {
           </Show>
         </p>
         <Show when={panel.previous()}>
-          {(before) => <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.previousProject", before())}</p>}
+          {(before) => (
+            <p data-slot="bots-hint" data-state="warn">
+              {t("gateway.panel.previousProject", before())}
+            </p>
+          )}
         </Show>
         <Show when={!panel.link().enabled && !panel.link().hasToken}>
           <p data-slot="bots-hint">{t("gateway.panel.needToken")}</p>
@@ -245,7 +291,12 @@ export function GatewaySection(props: {
               </button>
             }
           >
-            <button type="button" data-slot="bots-btn" disabled={panel.busy()} onClick={() => void panel.setEnabled(false)}>
+            <button
+              type="button"
+              data-slot="bots-btn"
+              disabled={panel.busy()}
+              onClick={() => void panel.setEnabled(false)}
+            >
               {t("gateway.panel.switchOff")}
             </button>
           </Show>
@@ -255,14 +306,27 @@ export function GatewaySection(props: {
       {/* Who may write, and who asks to. */}
       <div data-slot="gateway-block">
         <span data-slot="gateway-subtitle">{t("gateway.panel.authorized")}</span>
-        <Show when={panel.pairing().authorized.length > 0} fallback={<p data-slot="bots-hint">{said(t("gateway.panel.nobody"), t("gateway.panel.nobodyDiscord"), t("gateway.panel.nobodySlack"))}</p>}>
+        <Show
+          when={panel.pairing().authorized.length > 0}
+          fallback={
+            <p data-slot="bots-hint">
+              {said(t("gateway.panel.nobody"), t("gateway.panel.nobodyDiscord"), t("gateway.panel.nobodySlack"))}
+            </p>
+          }
+        >
           <ul data-slot="gateway-list">
             <For each={panel.pairing().authorized}>
               {(account) => (
                 <li>
                   <span>{account.name}</span>
                   <span data-slot="gateway-meta">{account.id}</span>
-                  <button type="button" data-slot="bots-link" data-tone="danger" disabled={panel.busy()} onClick={() => void panel.revoke(account.id)}>
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    data-tone="danger"
+                    disabled={panel.busy()}
+                    onClick={() => void panel.revoke(account.id)}
+                  >
                     {t("gateway.panel.revoke")}
                   </button>
                 </li>
@@ -272,10 +336,15 @@ export function GatewaySection(props: {
         </Show>
 
         <span data-slot="gateway-subtitle">{t("gateway.panel.pairing")}</span>
-        <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.onlyYours")}</p>
+        <p data-slot="bots-hint" data-state="warn">
+          {t("gateway.panel.onlyYours")}
+        </p>
         <Show when={onDiscord() || onSlack()}>
           <p data-slot="bots-hint" data-state="warn">
-            {t("gateway.channelIsPublic", onSlack() ? t("gateway.panel.platformSlack") : t("gateway.panel.platformDiscord"))}
+            {t(
+              "gateway.channelIsPublic",
+              onSlack() ? t("gateway.panel.platformSlack") : t("gateway.panel.platformDiscord"),
+            )}
           </p>
         </Show>
         <Show when={panel.pairing().pending.length > 0}>
@@ -287,7 +356,13 @@ export function GatewaySection(props: {
                   <span data-slot="gateway-meta">
                     {request.sender.id} · {t("gateway.panel.expires", time(request.expiresMs))}
                   </span>
-                  <button type="button" data-slot="bots-link" data-tone="danger" disabled={panel.busy()} onClick={() => void panel.reject(request.request)}>
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    data-tone="danger"
+                    disabled={panel.busy()}
+                    onClick={() => void panel.reject(request.request)}
+                  >
                     {t("gateway.panel.reject")}
                   </button>
                 </li>
@@ -324,7 +399,12 @@ export function GatewaySection(props: {
         <Show
           when={panel.pairing().open}
           fallback={
-            <button type="button" data-slot="bots-link" disabled={panel.busy()} onClick={() => void panel.openPairing()}>
+            <button
+              type="button"
+              data-slot="bots-link"
+              disabled={panel.busy()}
+              onClick={() => void panel.openPairing()}
+            >
               {t("gateway.panel.openPairing")}
             </button>
           }
@@ -342,10 +422,15 @@ export function GatewaySection(props: {
       {/* The shell from a chat: off, and for nikcli only. */}
       <div data-slot="gateway-block">
         <span data-slot="gateway-subtitle">{t("gateway.panel.remote")}</span>
-        <Show when={panel.offersRemote()} fallback={<p data-slot="bots-hint">{t("gateway.panel.remoteNever", runnerById(props.bot.runner).label)}</p>}>
-          <p data-slot="bots-hint">{panel.remote().commands
+        <Show
+          when={panel.offersRemote()}
+          fallback={<p data-slot="bots-hint">{t("gateway.panel.remoteNever", runnerById(props.bot.runner).label)}</p>}
+        >
+          <p data-slot="bots-hint">
+            {panel.remote().commands
               ? said(t("gateway.panel.remoteOn"), t("gateway.panel.remoteOnDiscord"), t("gateway.panel.remoteOnSlack"))
-              : t("gateway.panel.remoteOff")}</p>
+              : t("gateway.panel.remoteOff")}
+          </p>
           <Show
             when={panel.confirmingRemote()}
             fallback={
@@ -357,7 +442,12 @@ export function GatewaySection(props: {
                   </button>
                 }
               >
-                <button type="button" data-slot="bots-btn" disabled={panel.busy()} onClick={() => void panel.remoteOff()}>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  disabled={panel.busy()}
+                  onClick={() => void panel.remoteOff()}
+                >
                   {t("gateway.panel.remoteSwitchOff")}
                 </button>
               </Show>
@@ -365,13 +455,23 @@ export function GatewaySection(props: {
           >
             <div data-slot="gateway-confirm">
               <p data-slot="bots-hint" data-state="warn">
-                {said(t("gateway.panel.remoteWhat"), t("gateway.panel.remoteWhatDiscord"), t("gateway.panel.remoteWhatSlack"))}
+                {said(
+                  t("gateway.panel.remoteWhat"),
+                  t("gateway.panel.remoteWhatDiscord"),
+                  t("gateway.panel.remoteWhatSlack"),
+                )}
               </p>
               <div data-slot="gateway-row">
                 <button type="button" data-slot="bots-btn" onClick={() => panel.cancelRemote()}>
                   {t("gateway.panel.cancel")}
                 </button>
-                <button type="button" data-slot="bots-btn" data-tone="danger" disabled={panel.busy()} onClick={() => void panel.confirmRemote()}>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  data-tone="danger"
+                  disabled={panel.busy()}
+                  onClick={() => void panel.confirmRemote()}
+                >
                   {t("gateway.panel.remoteConfirm")}
                 </button>
               </div>

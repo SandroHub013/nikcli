@@ -13,9 +13,19 @@ export function InstallBar(props: { view: PackView; onCancel?: () => void }) {
         <span>{t("vui.pack.installing")}</span>
         <span>
           {props.view.bytesTotal
-            ? t("vui.pack.bytesOf", props.view.bytesDone ?? "0 MB", props.view.bytesTotal, String(props.view.percent ?? 0))
+            ? t(
+                "vui.pack.bytesOf",
+                props.view.bytesDone ?? "0 MB",
+                props.view.bytesTotal,
+                String(props.view.percent ?? 0),
+              )
             : props.view.filesTotal
-              ? t("vui.pack.filesOf", props.view.bytesDone ?? "0 MB", String(props.view.filesDone ?? 0), String(props.view.filesTotal))
+              ? t(
+                  "vui.pack.filesOf",
+                  props.view.bytesDone ?? "0 MB",
+                  String(props.view.filesDone ?? 0),
+                  String(props.view.filesTotal),
+                )
               : (props.view.bytesDone ?? "")}
         </span>
       </div>
@@ -30,12 +40,7 @@ export function InstallBar(props: { view: PackView; onCancel?: () => void }) {
         <div data-slot="progressbar-fill" style={{ width: `${props.view.percent ?? 0}%` }} />
       </div>
       <Show when={props.onCancel}>
-        <button
-          type="button"
-          data-slot="ghost-btn"
-          disabled={!props.view.canCancel}
-          onClick={() => props.onCancel?.()}
-        >
+        <button type="button" data-slot="ghost-btn" disabled={!props.view.canCancel} onClick={() => props.onCancel?.()}>
           {props.view.canCancel ? t("vui.pack.cancel") : t("vui.pack.cancelling")}
         </button>
       </Show>

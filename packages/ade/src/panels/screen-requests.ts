@@ -123,7 +123,10 @@ export function createScreenRequests(deps: ScreenRequestsDeps): ScreenRequests {
     fed(paneId) {
       const pending = timers.get(paneId)
       if (pending !== undefined) clearTimer(pending)
-      timers.set(paneId, setTimer(() => read(paneId), deps.quietMs ?? SCREEN_QUIET_MS))
+      timers.set(
+        paneId,
+        setTimer(() => read(paneId), deps.quietMs ?? SCREEN_QUIET_MS),
+      )
     },
     start(paneId, restored) {
       this.forget(paneId)

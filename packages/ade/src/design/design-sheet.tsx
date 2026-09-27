@@ -15,7 +15,8 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
-    [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length
+    [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda")
+      .length
   const [index, setIndex] = createSignal(0)
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
@@ -38,7 +39,8 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   onMount(() => {
     for (const proposal of open()) {
       const draft = props.hub.draft(proposal.k)
-      if (draft.picked !== undefined && !props.hub.chosen(proposal.k)) props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
+      if (draft.picked !== undefined && !props.hub.chosen(proposal.k))
+        props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
     }
     surface?.focus()
   })
@@ -80,7 +82,9 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const onKeyDown = (event: KeyboardEvent) => {
     const proposal = current()
     const draft = proposal ? props.hub.draft(proposal.k) : undefined
-    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)))
+    const picked = Boolean(
+      proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)),
+    )
     const inText = event.target === note
     const action = sheetKey(event, proposal?.variants.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return
@@ -96,7 +100,13 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   }
 
   return (
-    <Sheet component="design-sheet" onClose={props.onClose} size="lg" ref={(element) => (surface = element)} onKeyDown={onKeyDown}>
+    <Sheet
+      component="design-sheet"
+      onClose={props.onClose}
+      size="lg"
+      ref={(element) => (surface = element)}
+      onKeyDown={onKeyDown}
+    >
       <header data-slot="sheet-head">
         <SheetTitle as="strong">{t("palette.design.open")}</SheetTitle>
         <Show when={open().length > 0}>
@@ -107,14 +117,22 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
         </Show>
         <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label={t("new.close")}>
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-            <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            <path
+              d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
       </header>
 
       <div data-slot="sheet-body">
         <Show when={props.hub.register.error()}>
-          <div data-slot="design-problem" role="alert">{t("design.unreadable", String(props.hub.register.error()))}</div>
+          <div data-slot="design-problem" role="alert">
+            {t("design.unreadable", String(props.hub.register.error()))}
+          </div>
         </Show>
         <Show
           when={current()?.k}
@@ -134,10 +152,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 picked={props.hub.draft(k).picked}
                 note={props.hub.draft(k).note}
                 busy={props.hub.busy(k)}
-                problem={
-                  props.hub.problem(k) ??
-                  (needChoice() === k ? t("design.sheet.needChoice") : undefined)
-                }
+                problem={props.hub.problem(k) ?? (needChoice() === k ? t("design.sheet.needChoice") : undefined)}
                 control={submitControl({
                   recipient: props.hub.recipient(),
                   sessions: props.hub.sessions(),
@@ -170,11 +185,16 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
       <footer data-slot="sheet-foot">
         <span>{t("design.sheet.keys")}</span>
         <Show when={statusMessage()}>
-          <span data-slot="sheet-status" role="status" aria-live="polite">{statusMessage()}</span>
+          <span data-slot="sheet-status" role="status" aria-live="polite">
+            {statusMessage()}
+          </span>
         </Show>
         <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
           <span data-tone="warn">
-            {t(props.hub.recipient().state === "non scelta" ? "design.sheet.queued.none" : "design.sheet.queued.idle", queued())}
+            {t(
+              props.hub.recipient().state === "non scelta" ? "design.sheet.queued.none" : "design.sheet.queued.idle",
+              queued(),
+            )}
           </span>
         </Show>
         <button type="button" data-slot="design-ghost" onClick={() => props.onOpenPanel()}>

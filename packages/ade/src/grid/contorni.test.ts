@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import postcss from "postcss";
+import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import postcss from "postcss"
 
 /*
  * No green outlines, in any theme (contorni-e-statusline, parte A). The user:
@@ -18,9 +18,9 @@ import postcss from "postcss";
  * the accent underline on the pane title while it is being renamed.
  */
 
-const src = join(import.meta.dir, "..");
-const read = (file: string) => readFileSync(join(src, file), "utf-8");
-const sheet = (file: string) => postcss.parse(read(file));
+const src = join(import.meta.dir, "..")
+const read = (file: string) => readFileSync(join(src, file), "utf-8")
+const sheet = (file: string) => postcss.parse(read(file))
 
 /** `--ade-accent` and its glow, in the properties that draw a contour. */
 const CONTOUR = /^(border|border-.*|outline|outline-.*|box-shadow)$/
@@ -79,7 +79,7 @@ function glassGround(opacity: number, desktop: number[]): number[] {
   const over = (alpha: number) => desktop.map((d, i) => veil[i]! * alpha + d * (1 - alpha))
   const under = over(veilAlpha)
   return under.map((u, i) => veil[i]! * readAlpha + u * (1 - readAlpha))
-};
+}
 
 /** The rules that draw a pane's focus. */
 const FOCUS_RULES = [
@@ -93,56 +93,47 @@ const FOCUS_RULES = [
   },
   {
     file: "grid/pane.css",
-    selector:
-      '[data-component="session-pane"][data-focused] > [data-slot="pane-header"]',
+    selector: '[data-component="session-pane"][data-focused] > [data-slot="pane-header"]',
   },
-];
+]
 
 describe("lint: no pane draws its focus in accent", () => {
   test("lint: the focused pane's line, the session's ring and its header's edge are the neutral border", () => {
     for (const { file, selector } of FOCUS_RULES) {
-      let found = 0;
+      let found = 0
       sheet(file).walkRules(selector, (rule) => {
-        found++;
+        found++
         for (const node of rule.nodes) {
-          if (node.type !== "decl" || !CONTOUR.test(node.prop)) continue;
-          const offenders = [node.prop, node.value].filter((value) =>
-            /var\(--ade-accent/.test(value),
-          );
-          expect([`${file} ${selector}`, offenders]).toEqual([
-            `${file} ${selector}`,
-            [],
-          ]);
+          if (node.type !== "decl" || !CONTOUR.test(node.prop)) continue
+          const offenders = [node.prop, node.value].filter((value) => /var\(--ade-accent/.test(value))
+          expect([`${file} ${selector}`, offenders]).toEqual([`${file} ${selector}`, []])
         }
-      });
+      })
       // The rule has to be there: a renamed slot would otherwise pass on a `false`.
-      expect([`${file} ${selector}`, found]).toEqual([
-        `${file} ${selector}`,
-        1,
-      ]);
+      expect([`${file} ${selector}`, found]).toEqual([`${file} ${selector}`, 1])
     }
-  });
+  })
 
   test("lint: the focus ring token is grey in every theme, not the accent", () => {
     // The one declaration every sheet reaches for. It is defined once, so this is
     // where the ~20 focus rings change at the same time.
-    const values: string[] = [];
+    const values: string[] = []
     sheet("index.css").walkDecls("--ade-focus-ring", (decl) => {
-      values.push(decl.value);
-    });
-    expect([values.length, values.length > 0]).toEqual([values.length, true]);
+      values.push(decl.value)
+    })
+    expect([values.length, values.length > 0]).toEqual([values.length, true])
     for (const value of values) {
-      const offenders = [value].filter((one) => /var\(--ade-accent/.test(one));
-      expect(offenders).toEqual([]);
+      const offenders = [value].filter((one) => /var\(--ade-accent/.test(one))
+      expect(offenders).toEqual([])
       // And it is a real grey, so the focus is still visible: it steps up from
       // the resting border rather than becoming nothing. `--ade-text-weak`, not
       // `--ade-border-strong`: the latter is 1.5:1 off its own surface, which a
       // keyboard user never sees. The next test is the arithmetic.
-      expect(value).toContain("var(--ade-text-weak)");
+      expect(value).toContain("var(--ade-text-weak)")
     }
     // The old definition, so the change is what a reader sees when they look.
-    expect(read("index.css")).not.toContain("0 0 0 2px var(--ade-accent)");
-  });
+    expect(read("index.css")).not.toContain("0 0 0 2px var(--ade-accent)")
+  })
 
   test("lint: the focus ring is 3:1 or better against every surface it lands on", () => {
     // A focus ring is an indicator, and an indicator nobody can see is not one.
@@ -254,25 +245,18 @@ describe("lint: no pane draws its focus in accent", () => {
     // Only that one declaration needs it: the plain value beside it is the
     // fallback for a UA without `light-dark()`, and the later rule wins. So this
     // asks that a `light-dark()` value exists, not that every one carries it.
-    const decls: string[] = [];
+    const decls: string[] = []
     for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
-      sheet(entry.replace(/\\/g, "/")).walkDecls(
-        "--ade-border-strong",
-        (decl) => {
-          decls.push(decl.value);
-        },
-      );
+      sheet(entry.replace(/\\/g, "/")).walkDecls("--ade-border-strong", (decl) => {
+        decls.push(decl.value)
+      })
     }
-    expect([decls.length, decls.length > 0]).toEqual([decls.length, true]);
-    expect([decls.some((value) => value.includes("light-dark("))]).toEqual([
-      true,
-    ]);
+    expect([decls.length, decls.length > 0]).toEqual([decls.length, true])
+    expect([decls.some((value) => value.includes("light-dark("))]).toEqual([true])
     // And no theme's grey is the accent, wherever it is written.
-    expect(decls.filter((value) => /var\(--ade-accent/.test(value))).toEqual(
-      [],
-    );
-  });
-});
+    expect(decls.filter((value) => /var\(--ade-accent/.test(value))).toEqual([])
+  })
+})
 
 /*
  * Left on purpose, and named so a reader can tell they were read:
@@ -290,33 +274,36 @@ describe("lint: no accent outline, in any sheet of packages/ade", () => {
     // per-file habit. On the parsed sheet, so a reformat cannot hide one.
     // The voice panel's sheets too: in ADE they are drawn inside its settings,
     // and the selected cards there still wore a teal border (contorni-terzo, 5).
-    const voice = join(src, "..", "..", "voice", "src");
+    const voice = join(src, "..", "..", "voice", "src")
     const files = [
       ...Array.from(new Bun.Glob("**/*.css").scanSync(src)).map((entry) => ({ path: join(src, entry), file: entry })),
-      ...Array.from(new Bun.Glob("**/*.css").scanSync(voice)).map((entry) => ({ path: join(voice, entry), file: `voice/${entry}` })),
-    ];
-    expect(files.some((f) => f.file.startsWith("voice/"))).toBe(true);
-    const offenders: string[] = [];
+      ...Array.from(new Bun.Glob("**/*.css").scanSync(voice)).map((entry) => ({
+        path: join(voice, entry),
+        file: `voice/${entry}`,
+      })),
+    ]
+    expect(files.some((f) => f.file.startsWith("voice/"))).toBe(true)
+    const offenders: string[] = []
     for (const { path, file: raw } of files) {
-      const file = raw.replace(/\\/g, "/");
+      const file = raw.replace(/\\/g, "/")
       postcss.parse(readFileSync(path, "utf-8")).walkRules((rule) => {
-        const decls = new Map<string, string>();
+        const decls = new Map<string, string>()
         for (const node of rule.nodes) {
-          if (node.type === "decl") decls.set(node.prop, node.value.trim());
+          if (node.type === "decl") decls.set(node.prop, node.value.trim())
         }
-        const fill = `${decls.get("background") ?? ""} ${decls.get("background-color") ?? ""}`;
+        const fill = `${decls.get("background") ?? ""} ${decls.get("background-color") ?? ""}`
         for (const prop of decls.keys()) {
-          if (!CONTOUR.test(prop)) continue;
-          const value = decls.get(prop) ?? "";
-          if (!/var\(--ade-accent/.test(value)) continue;
+          if (!CONTOUR.test(prop)) continue
+          const value = decls.get(prop) ?? ""
+          if (!/var\(--ade-accent/.test(value)) continue
           // A border the colour of the fill it sits on is that same surface seen
           // edge-on, not a contour: anything else would draw a seam inside a
           // solid chip. So the fill decides, and the border follows it.
-          if (/var\(--ade-accent/.test(fill)) continue;
-          offenders.push(`${file} ${prop}: ${value} in ${rule.selector}`);
+          if (/var\(--ade-accent/.test(fill)) continue
+          offenders.push(`${file} ${prop}: ${value} in ${rule.selector}`)
         }
-      });
+      })
     }
-    expect(offenders).toEqual([]);
-  });
-});
+    expect(offenders).toEqual([])
+  })
+})

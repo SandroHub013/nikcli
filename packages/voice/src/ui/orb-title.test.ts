@@ -9,7 +9,12 @@ describe("ui/orb-title", () => {
   test("«Microfono · <chord>», with the chord of the mode the orb opens", () => {
     const before = localePreference()
     setLocalePreference("it")
-    const agent = { ...DEFAULT_VOICE_SETTINGS, mode: "agent" as const, agentChord: "mod+shift+k", transcriptionChord: "mod+shift+j" }
+    const agent = {
+      ...DEFAULT_VOICE_SETTINGS,
+      mode: "agent" as const,
+      agentChord: "mod+shift+k",
+      transcriptionChord: "mod+shift+j",
+    }
     expect(orbTitle(agent, "other")).toBe("Microfono · Ctrl+Shift+K")
     expect(orbTitle({ ...agent, mode: "transcription" }, "other")).toBe("Microfono · Ctrl+Shift+J")
     setLocalePreference("en")

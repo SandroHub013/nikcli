@@ -51,7 +51,11 @@ describe("a pane whose nikcli conversation is gone", () => {
 
   test("still there, it is reopened by id as before", () => {
     const missing = nikcliConversationThere(HERE, ID) === "gone"
-    expect(planResume({ agentId: "nikcli", resumeId: ID, missing })).toEqual({ kind: "resume", via: "id", args: ["--session", ID] })
+    expect(planResume({ agentId: "nikcli", resumeId: ID, missing })).toEqual({
+      kind: "resume",
+      via: "id",
+      args: ["--session", ID],
+    })
   })
 
   test("a CLI that starts under a given id keeps doing so: Claude Code is not `gone`", () => {

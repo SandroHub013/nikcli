@@ -12,21 +12,35 @@ import { createInitialDialogState, transition, type DialogState } from "./sessio
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const panes = [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta")]
 const ctx: ParseContext = { panes, focusedPaneId: "pA" }
 
 function askingToClose(): DialogState {
-  return transition(createInitialDialogState("idle"), { type: "utterance", text: "chiudi il pannello" }, 10_000, ctx).state
+  return transition(createInitialDialogState("idle"), { type: "utterance", text: "chiudi il pannello" }, 10_000, ctx)
+    .state
 }
 function askingPermission(): DialogState {
-  return transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "rm -rf build" }, 10_000, ctx).state
+  return transition(
+    createInitialDialogState("idle"),
+    { type: "permission_requested", paneId: "pA", what: "rm -rf build" },
+    10_000,
+    ctx,
+  ).state
 }
 const say = (state: DialogState, text: string) => transition(state, { type: "utterance", text }, 20_000, ctx)
 const acted = (effects: { type: string }[]) => effects.some((e) => e.type === "execute_intent")
-const granted = (effects: { type: string; answer?: string }[]) => effects.some((e) => e.type === "answer_permission" && e.answer === "allow")
-const denied = (effects: { type: string; answer?: string }[]) => effects.some((e) => e.type === "answer_permission" && e.answer === "deny")
+const granted = (effects: { type: string; answer?: string }[]) =>
+  effects.some((e) => e.type === "answer_permission" && e.answer === "allow")
+const denied = (effects: { type: string; answer?: string }[]) =>
+  effects.some((e) => e.type === "answer_permission" && e.answer === "deny")
 
 describe("a yes is only a yes", () => {
   for (const text of ["sì", "si", "confermo", "va bene", "procedi", "certo", "ok", "sì sì", "sì, va bene"]) {
@@ -36,7 +50,14 @@ describe("a yes is only a yes", () => {
     })
   }
 
-  for (const text of ["sì però aspetta", "va bene, anzi", "confermo dopo", "va bene ma dopo", "sì ma aspetta", "ok stop"]) {
+  for (const text of [
+    "sì però aspetta",
+    "va bene, anzi",
+    "confermo dopo",
+    "va bene ma dopo",
+    "sì ma aspetta",
+    "ok stop",
+  ]) {
     test(`«${text}» is a veto`, () => {
       const closing = say(askingToClose(), text)
       expect(acted(closing.effects)).toBe(false)

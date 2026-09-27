@@ -168,7 +168,9 @@
   padding: var(--ade-space-2) var(--ade-space-3);
   gap: var(--ade-space-2);
   min-width: 0;
-  transition: border-color var(--ade-dur-fast, 120ms) ease, box-shadow var(--ade-dur-fast, 120ms) ease;
+  transition:
+    border-color var(--ade-dur-fast, 120ms) ease,
+    box-shadow var(--ade-dur-fast, 120ms) ease;
 }
 
 [data-slot="design-variant-item"]:hover {
@@ -322,7 +324,9 @@
   font-weight: 500;
   cursor: pointer;
   margin-top: var(--ade-space-1);
-  transition: background var(--ade-dur-fast, 120ms) ease, border-color var(--ade-dur-fast, 120ms) ease;
+  transition:
+    background var(--ade-dur-fast, 120ms) ease,
+    border-color var(--ade-dur-fast, 120ms) ease;
 }
 
 [data-slot="variant-open-large"]:hover:not(:disabled) {

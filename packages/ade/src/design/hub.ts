@@ -88,8 +88,7 @@ export function createDesignHub(deps: {
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
   const [inline, setInline] = createSignal<string>()
 
-  const setProblem = (k: string, text: string | undefined) =>
-    setProblems((all) => ({ ...all, [k]: text }))
+  const setProblem = (k: string, text: string | undefined) => setProblems((all) => ({ ...all, [k]: text }))
   const setBusy = (k: string, on: boolean) =>
     setBusyKeys((keys) => {
       const next = new Set(keys)
@@ -174,7 +173,9 @@ export function createDesignHub(deps: {
     setInlineRecipient: (id) => {
       setInline(id)
       // A session picked: the note asking for one is done with.
-      setProblems((all) => Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("design.sheet.needRecipient"))))
+      setProblems((all) =>
+        Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("design.sheet.needRecipient"))),
+      )
     },
     submit: (proposal, press) => {
       const control = submitControl({

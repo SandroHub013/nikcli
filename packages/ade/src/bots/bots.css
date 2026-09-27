@@ -59,22 +59,51 @@
   border-radius: var(--ade-radius-full);
   background: #fff;
   transform: rotate(-14deg);
-  transition: transform var(--ade-dur) var(--ade-ease), height var(--ade-dur) var(--ade-ease);
+  transition:
+    transform var(--ade-dur) var(--ade-ease),
+    height var(--ade-dur) var(--ade-ease);
 }
-[data-slot="bots-face"]::before { left: 39%; }
-[data-slot="bots-face"]::after { left: 56%; }
+[data-slot="bots-face"]::before {
+  left: 39%;
+}
+[data-slot="bots-face"]::after {
+  left: 56%;
+}
 
-[data-slot="bots-face"][data-shape="circle"] [data-slot="bots-face-shape"] { border-radius: 50%; }
-[data-slot="bots-face"][data-shape="square"] [data-slot="bots-face-shape"] { border-radius: 24%; }
-[data-slot="bots-face"][data-shape="egg"] [data-slot="bots-face-shape"] { border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; }
-[data-slot="bots-face"][data-shape="blob"] [data-slot="bots-face-shape"] { border-radius: 62% 38% 55% 45% / 48% 60% 40% 52%; }
-[data-slot="bots-face"][data-shape="hex"] [data-slot="bots-face-shape"] { clip-path: polygon(50% 2%, 96% 26%, 96% 74%, 50% 98%, 4% 74%, 4% 26%); }
-[data-slot="bots-face"][data-shape="tri"] [data-slot="bots-face-shape"] { clip-path: polygon(50% 4%, 100% 100%, 0 100%); }
+[data-slot="bots-face"][data-shape="circle"] [data-slot="bots-face-shape"] {
+  border-radius: 50%;
+}
+[data-slot="bots-face"][data-shape="square"] [data-slot="bots-face-shape"] {
+  border-radius: 24%;
+}
+[data-slot="bots-face"][data-shape="egg"] [data-slot="bots-face-shape"] {
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+}
+[data-slot="bots-face"][data-shape="blob"] [data-slot="bots-face-shape"] {
+  border-radius: 62% 38% 55% 45% / 48% 60% 40% 52%;
+}
+[data-slot="bots-face"][data-shape="hex"] [data-slot="bots-face-shape"] {
+  clip-path: polygon(50% 2%, 96% 26%, 96% 74%, 50% 98%, 4% 74%, 4% 26%);
+}
+[data-slot="bots-face"][data-shape="tri"] [data-slot="bots-face-shape"] {
+  clip-path: polygon(50% 4%, 100% 100%, 0 100%);
+}
 [data-slot="bots-face"][data-shape="tri"]::before,
-[data-slot="bots-face"][data-shape="tri"]::after { top: 52%; }
-[data-slot="bots-face"][data-shape="drop"] [data-slot="bots-face-shape"] { border-radius: 0 50% 50% 50%; transform: rotate(45deg) scale(0.86); }
-[data-slot="bots-face"][data-shape="pill"] [data-slot="bots-face-shape"] { border-radius: var(--ade-radius-full); inset: 12% 0; }
-[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"] { border-radius: 50%; transform: scale(0.72) translate(-4%, 14%); }
+[data-slot="bots-face"][data-shape="tri"]::after {
+  top: 52%;
+}
+[data-slot="bots-face"][data-shape="drop"] [data-slot="bots-face-shape"] {
+  border-radius: 0 50% 50% 50%;
+  transform: rotate(45deg) scale(0.86);
+}
+[data-slot="bots-face"][data-shape="pill"] [data-slot="bots-face-shape"] {
+  border-radius: var(--ade-radius-full);
+  inset: 12% 0;
+}
+[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"] {
+  border-radius: 50%;
+  transform: scale(0.72) translate(-4%, 14%);
+}
 [data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::before,
 [data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::after {
   content: "";
@@ -82,24 +111,50 @@
   background: inherit;
   border-radius: 50%;
 }
-[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::before { width: 74%; height: 74%; left: 34%; top: -22%; }
-[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::after { width: 78%; height: 78%; left: 62%; top: 6%; }
+[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::before {
+  width: 74%;
+  height: 74%;
+  left: 34%;
+  top: -22%;
+}
+[data-slot="bots-face"][data-shape="cloud"] [data-slot="bots-face-shape"]::after {
+  width: 78%;
+  height: 78%;
+  left: 62%;
+  top: 6%;
+}
 
 /* The eyes: where they look is what the bot is doing. Two strokes, never a drawing. */
 [data-slot="bots-face"][data-expression="busy"]::before,
-[data-slot="bots-face"][data-expression="busy"]::after { transform: rotate(-14deg) translateY(-22%); }
+[data-slot="bots-face"][data-expression="busy"]::after {
+  transform: rotate(-14deg) translateY(-22%);
+}
 [data-slot="bots-face"][data-expression="waiting"]::before,
-[data-slot="bots-face"][data-expression="waiting"]::after { height: calc(var(--bot-size) * 0.34); transform: rotate(0) translateY(-8%); }
+[data-slot="bots-face"][data-expression="waiting"]::after {
+  height: calc(var(--bot-size) * 0.34);
+  transform: rotate(0) translateY(-8%);
+}
 [data-slot="bots-face"][data-expression="off"]::before,
-[data-slot="bots-face"][data-expression="off"]::after { height: calc(var(--bot-size) * 0.09); transform: rotate(0) translateY(60%); }
-[data-slot="bots-face"][data-expression="off"] [data-slot="bots-face-shape"] { opacity: 0.55; }
-[data-slot="bots-face"][data-expression="error"]::before { transform: rotate(-30deg); }
-[data-slot="bots-face"][data-expression="error"]::after { transform: rotate(30deg); }
+[data-slot="bots-face"][data-expression="off"]::after {
+  height: calc(var(--bot-size) * 0.09);
+  transform: rotate(0) translateY(60%);
+}
+[data-slot="bots-face"][data-expression="off"] [data-slot="bots-face-shape"] {
+  opacity: 0.55;
+}
+[data-slot="bots-face"][data-expression="error"]::before {
+  transform: rotate(-30deg);
+}
+[data-slot="bots-face"][data-expression="error"]::after {
+  transform: rotate(30deg);
+}
 
 @media (prefers-reduced-motion: reduce) {
   [data-slot="bots-face"]::before,
   [data-slot="bots-face"]::after,
-  [data-slot="bots-face-shape"] { transition: none; }
+  [data-slot="bots-face-shape"] {
+    transition: none;
+  }
 }
 
 /* ── the roster ──────────────────────────────────────────────────────────── */
@@ -182,9 +237,17 @@
   cursor: pointer;
 }
 
-[data-slot="bots-pin"]:hover { background: var(--ade-hover); }
-[data-slot="bots-pin"][data-active="true"] { background: var(--ade-active); color: var(--ade-text); }
-[data-slot="bots-pin"]:focus-visible { outline: none; box-shadow: var(--ade-focus-ring); }
+[data-slot="bots-pin"]:hover {
+  background: var(--ade-hover);
+}
+[data-slot="bots-pin"][data-active="true"] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+}
+[data-slot="bots-pin"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
 
 [data-slot="bots-pin-name"] {
   max-width: 100%;
@@ -218,9 +281,16 @@
   cursor: pointer;
 }
 
-[data-slot="bots-row"]:hover { background: var(--ade-hover); }
-[data-slot="bots-row"][data-active="true"] { background: var(--ade-active); }
-[data-slot="bots-row"]:focus-visible { outline: none; box-shadow: var(--ade-focus-ring); }
+[data-slot="bots-row"]:hover {
+  background: var(--ade-hover);
+}
+[data-slot="bots-row"][data-active="true"] {
+  background: var(--ade-active);
+}
+[data-slot="bots-row"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
 
 [data-slot="bots-row-text"] {
   display: flex;
@@ -245,9 +315,15 @@
   text-overflow: ellipsis;
 }
 
-[data-slot="bots-row"][data-status="working"] [data-slot="bots-row-line"] { color: var(--ade-working); }
-[data-slot="bots-row"][data-status="waiting"] [data-slot="bots-row-line"] { color: var(--ade-waiting); }
-[data-slot="bots-row"][data-status="error"] [data-slot="bots-row-line"] { color: var(--ade-error); }
+[data-slot="bots-row"][data-status="working"] [data-slot="bots-row-line"] {
+  color: var(--ade-working);
+}
+[data-slot="bots-row"][data-status="waiting"] [data-slot="bots-row-line"] {
+  color: var(--ade-waiting);
+}
+[data-slot="bots-row"][data-status="error"] [data-slot="bots-row-line"] {
+  color: var(--ade-error);
+}
 
 [data-slot="bots-row-when"] {
   align-self: start;
@@ -258,8 +334,12 @@
   white-space: nowrap;
 }
 
-[data-slot="bots-row"][data-status="working"] [data-slot="bots-row-when"] { color: var(--ade-working); }
-[data-slot="bots-row"][data-status="waiting"] [data-slot="bots-row-when"] { color: var(--ade-waiting); }
+[data-slot="bots-row"][data-status="working"] [data-slot="bots-row-when"] {
+  color: var(--ade-working);
+}
+[data-slot="bots-row"][data-status="waiting"] [data-slot="bots-row-when"] {
+  color: var(--ade-waiting);
+}
 
 /* ── the middle ──────────────────────────────────────────────────────────── */
 
@@ -389,9 +469,16 @@
   list-style: none;
 }
 
-[data-slot="bots-tool-head"]::-webkit-details-marker { display: none; }
-[data-slot="bots-tool-head"]::before { content: "▸"; color: var(--ade-text-weak); }
-[data-slot="bots-tool"][open] [data-slot="bots-tool-head"]::before { content: "▾"; }
+[data-slot="bots-tool-head"]::-webkit-details-marker {
+  display: none;
+}
+[data-slot="bots-tool-head"]::before {
+  content: "▸";
+  color: var(--ade-text-weak);
+}
+[data-slot="bots-tool"][open] [data-slot="bots-tool-head"]::before {
+  content: "▾";
+}
 
 [data-slot="bots-tool-name"] {
   color: var(--ade-text);
@@ -430,8 +517,14 @@
   font-size: var(--ade-font-md);
 }
 
-[data-slot="bots-permission-text"] { flex: 1 1 auto; min-width: 0; }
-[data-slot="bots-permission-text"] code { font-family: var(--ade-mono); font-size: var(--ade-font-sm); }
+[data-slot="bots-permission-text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+[data-slot="bots-permission-text"] code {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
 [data-slot="bots-permission-why"] {
   display: block;
   margin-top: var(--ade-space-1);
@@ -472,7 +565,10 @@
   cursor: pointer;
 }
 
-[data-slot="bots-mention"]:hover { border-color: var(--ade-waiting); color: var(--ade-waiting); }
+[data-slot="bots-mention"]:hover {
+  border-color: var(--ade-waiting);
+  color: var(--ade-waiting);
+}
 
 /*
  * One box, as the Chat's (chat-riquadro) and Claude's and Codex's apps: the
@@ -527,7 +623,10 @@
 
 /* The composer draws the ring around the field: the global :focus-visible
    drew a second one inside it (bot-sforzo, A occhio). */
-[data-slot="bots-composer-field"]:focus { outline: none; box-shadow: none; }
+[data-slot="bots-composer-field"]:focus {
+  outline: none;
+  box-shadow: none;
+}
 
 /* The chips, the figures and Invia, under the text. */
 [data-slot="bots-composer-row"] {
@@ -538,7 +637,9 @@
   min-width: 0;
 }
 
-[data-slot="bots-composer-gap"] { flex: 1 1 auto; }
+[data-slot="bots-composer-gap"] {
+  flex: 1 1 auto;
+}
 
 /*
  * Invia as the Chat's (`chat-send`), not the form's primary button: neutral
@@ -562,8 +663,12 @@
   transition: var(--ade-btn-transition);
 }
 
-[data-slot="bots-send"]:active:not(:disabled) { transform: var(--ade-press); }
-[data-slot="bots-send"]:hover:not(:disabled):not([data-stop]) { background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface)); }
+[data-slot="bots-send"]:active:not(:disabled) {
+  transform: var(--ade-press);
+}
+[data-slot="bots-send"]:hover:not(:disabled):not([data-stop]) {
+  background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface));
+}
 
 [data-slot="bots-send"]:disabled {
   background: var(--ade-surface);
@@ -578,7 +683,9 @@
 }
 
 /* The card's line for a model the catalog no longer has (bot-riquadro, a). */
-[data-slot="bots-card-gone"] { color: var(--ade-warning); }
+[data-slot="bots-card-gone"] {
+  color: var(--ade-warning);
+}
 
 /* The caption gives way to the chips and Invia: it shrinks, and wraps on its own lines. */
 [data-slot="bots-composer-cap"] {
@@ -823,9 +930,16 @@
   transition: var(--ade-btn-transition);
 }
 
-[data-slot="bots-btn"]:hover { background: var(--ade-hover); }
-[data-slot="bots-btn"]:active { background: var(--ade-active); transform: var(--ade-press); }
-[data-slot="bots-btn"][data-active="true"] { background: var(--ade-active); }
+[data-slot="bots-btn"]:hover {
+  background: var(--ade-hover);
+}
+[data-slot="bots-btn"]:active {
+  background: var(--ade-active);
+  transform: var(--ade-press);
+}
+[data-slot="bots-btn"][data-active="true"] {
+  background: var(--ade-active);
+}
 
 [data-slot="bots-btn"][data-tone="primary"] {
   border-color: var(--ade-accent);
@@ -861,7 +975,9 @@
   text-decoration: underline;
 }
 
-[data-slot="bots-link"][data-tone="danger"] { color: var(--ade-error); }
+[data-slot="bots-link"][data-tone="danger"] {
+  color: var(--ade-error);
+}
 
 /* ── the Gateway section (G6) ───────────────────────────────────────────── */
 
@@ -900,9 +1016,13 @@
   font-family: var(--ade-sans);
 }
 
-[data-slot="gateway-row"] [data-slot="bots-link"] { align-self: center; }
+[data-slot="gateway-row"] [data-slot="bots-link"] {
+  align-self: center;
+}
 
-[data-slot="gateway-block"] > [data-slot="bots-btn"] { align-self: flex-start; }
+[data-slot="gateway-block"] > [data-slot="bots-btn"] {
+  align-self: flex-start;
+}
 
 /* The Slack manifest is JSON to copy: shown as code, one line per line. */
 [data-component="bot-gateway"] [data-role="manifest"] {
@@ -929,9 +1049,15 @@
   background: var(--ade-text-weak);
 }
 
-[data-slot="gateway-state"][data-tone="on"] [data-slot="gateway-dot"] { background: var(--ade-done, var(--ade-accent)); }
-[data-slot="gateway-state"][data-tone="wait"] [data-slot="gateway-dot"] { background: var(--ade-warning, var(--ade-accent)); }
-[data-slot="gateway-state"][data-tone="error"] [data-slot="gateway-dot"] { background: var(--ade-error); }
+[data-slot="gateway-state"][data-tone="on"] [data-slot="gateway-dot"] {
+  background: var(--ade-done, var(--ade-accent));
+}
+[data-slot="gateway-state"][data-tone="wait"] [data-slot="gateway-dot"] {
+  background: var(--ade-warning, var(--ade-accent));
+}
+[data-slot="gateway-state"][data-tone="error"] [data-slot="gateway-dot"] {
+  background: var(--ade-error);
+}
 
 [data-slot="gateway-meta"] {
   font-family: var(--ade-mono);
@@ -957,7 +1083,9 @@
   font-size: var(--ade-font-md);
 }
 
-[data-slot="gateway-list"] li [data-slot="bots-link"] { margin-left: auto; }
+[data-slot="gateway-list"] li [data-slot="bots-link"] {
+  margin-left: auto;
+}
 
 [data-slot="gateway-confirm"] {
   display: flex;
@@ -995,9 +1123,13 @@
   line-height: var(--ade-leading);
 }
 
-[data-slot="routine-consent"] input { margin-top: 3px; }
+[data-slot="routine-consent"] input {
+  margin-top: 3px;
+}
 
-[data-slot="routine-item"] [data-slot="gateway-row"] [data-slot="bots-link"] { margin-left: 0; }
+[data-slot="routine-item"] [data-slot="gateway-row"] [data-slot="bots-link"] {
+  margin-left: 0;
+}
 
 [data-slot="routine-source"] {
   display: flex;
@@ -1015,7 +1147,9 @@
   flex: 0 0 auto;
 }
 
-[data-slot="memory-actions"] [data-slot="bots-link"] { margin-left: 0; }
+[data-slot="memory-actions"] [data-slot="bots-link"] {
+  margin-left: 0;
+}
 
 [data-slot="memory-text"] {
   flex: 1 1 auto;
@@ -1032,15 +1166,25 @@
 /* ── narrow ──────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {
-  [data-slot="bots-card"] { width: 220px; }
+  [data-slot="bots-card"] {
+    width: 220px;
+  }
 }
 
 @media (max-width: 860px) {
-  [data-slot="bots-card"] { display: none; }
-  [data-slot="bots-row-fields"] { grid-template-columns: 1fr; }
+  [data-slot="bots-card"] {
+    display: none;
+  }
+  [data-slot="bots-row-fields"] {
+    grid-template-columns: 1fr;
+  }
   [data-slot="bots-messages"],
-  [data-slot="bots-composer"] { padding-inline: var(--ade-space-6); }
-  [data-slot="bots-composer"] { margin-inline: var(--ade-space-6); }
+  [data-slot="bots-composer"] {
+    padding-inline: var(--ade-space-6);
+  }
+  [data-slot="bots-composer"] {
+    margin-inline: var(--ade-space-6);
+  }
 }
 
 /* ── choosing a face ─────────────────────────────────────────────────────── */
@@ -1076,8 +1220,13 @@
   cursor: pointer;
 }
 
-[data-slot="bots-picker-option"]:hover { background: var(--ade-hover); }
-[data-slot="bots-picker-option"][data-on="true"] { border-color: var(--ade-border-strong); background: var(--ade-accent-soft); }
+[data-slot="bots-picker-option"]:hover {
+  background: var(--ade-hover);
+}
+[data-slot="bots-picker-option"][data-on="true"] {
+  border-color: var(--ade-border-strong);
+  background: var(--ade-accent-soft);
+}
 
 [data-slot="bots-picker-swatch"] {
   width: 22px;
@@ -1089,16 +1238,27 @@
   cursor: pointer;
 }
 
-[data-slot="bots-picker-swatch"][data-on="true"] { border-color: var(--ade-text); box-shadow: 0 0 0 2px var(--ade-surface) inset; }
+[data-slot="bots-picker-swatch"][data-on="true"] {
+  border-color: var(--ade-text);
+  box-shadow: 0 0 0 2px var(--ade-surface) inset;
+}
 [data-slot="bots-picker-option"]:focus-visible,
-[data-slot="bots-picker-swatch"]:focus-visible { outline: none; box-shadow: var(--ade-focus-ring); }
+[data-slot="bots-picker-swatch"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
 
 /* Inside the card the picker is narrow: the face above the rows, not beside them. */
-[data-slot="bots-form"][data-compact="true"] [data-slot="bots-picker"] { flex-direction: column; gap: var(--ade-space-4); }
+[data-slot="bots-form"][data-compact="true"] [data-slot="bots-picker"] {
+  flex-direction: column;
+  gap: var(--ade-space-4);
+}
 /* And model and effort one under the other: side by side in a column about
    280 px wide the model read «openrouter/nvidia/n…» and the effort «predef»
    (bot-sforzo, A occhio). */
-[data-slot="bots-form"][data-compact="true"] [data-slot="bots-row-fields"] { grid-template-columns: minmax(0, 1fr); }
+[data-slot="bots-form"][data-compact="true"] [data-slot="bots-row-fields"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 /* ── rooms (B8b) ─────────────────────────────────────────────────────────── */
 
@@ -1151,13 +1311,22 @@
   border-bottom: 1px solid var(--ade-border);
 }
 
-[data-slot="room-name"] { font-weight: var(--ade-weight-semibold); }
+[data-slot="room-name"] {
+  font-weight: var(--ade-weight-semibold);
+}
 [data-slot="room-members"],
-[data-slot="room-cap"] { color: var(--ade-text-weak); font-size: var(--ade-font-sm); }
-[data-slot="room-head"] [data-slot="bots-link"] { margin-left: auto; }
+[data-slot="room-cap"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+[data-slot="room-head"] [data-slot="bots-link"] {
+  margin-left: auto;
+}
 
 /* No faces in a room: the speaker's name over what it said. */
-[data-room="true"] [data-slot="bots-msg"] { grid-template-columns: minmax(0, 1fr); }
+[data-room="true"] [data-slot="bots-msg"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 [data-slot="room-speaker"] {
   display: block;

@@ -99,7 +99,9 @@ const normalize = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "")
 export function scopeOf(path: string, globalRoot: string | undefined): "project" | "global" {
   const file = normalize(path)
   if (!globalRoot || file.split("/").includes("..")) return "project"
-  return agentDirs(globalRoot, "global").some((directory) => file.startsWith(`${normalize(directory)}/`)) ? "global" : "project"
+  return agentDirs(globalRoot, "global").some((directory) => file.startsWith(`${normalize(directory)}/`))
+    ? "global"
+    : "project"
 }
 
 export interface RecheckDeps {
@@ -156,7 +158,8 @@ export async function recheckTrust(
    */
   if (runnerById(bot.runner).id === "nikcli") {
     const configuration = await admitProject(project, { store: deps.projects, surface: deps.surface, confirm: never })
-    if (!configuration.ok) return { ok: false, problem: scope === "project" ? retrust : t("bots.serve.notAdmitted", project) }
+    if (!configuration.ok)
+      return { ok: false, problem: scope === "project" ? retrust : t("bots.serve.notAdmitted", project) }
   }
   // The file as it was read: what the remote commands were turned on for is compared with it.
   return { ok: true, bot, fingerprint: await fileFingerprint(text) }

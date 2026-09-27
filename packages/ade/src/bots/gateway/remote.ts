@@ -45,7 +45,9 @@ const STORAGE_KEY = "ade.gateway.remote"
 function parse(value: unknown): RemoteSetting {
   if (!value || typeof value !== "object") return REMOTE_OFF
   const { commands, fingerprint } = value as { commands?: unknown; fingerprint?: unknown }
-  return commands === true && typeof fingerprint === "string" && fingerprint ? { commands: true, fingerprint } : REMOTE_OFF
+  return commands === true && typeof fingerprint === "string" && fingerprint
+    ? { commands: true, fingerprint }
+    : REMOTE_OFF
 }
 
 export function localRemoteStore(key: string = STORAGE_KEY): RemoteStore {

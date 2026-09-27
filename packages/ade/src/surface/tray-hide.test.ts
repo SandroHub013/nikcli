@@ -26,7 +26,10 @@ describe("the X with a gateway on", () => {
 
   test("the note is remembered; storage that fails does not bring it back every time", () => {
     const store = new Map<string, string>()
-    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) }
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    }
     expect(trayNoticed(storage)).toBe(false)
     markTrayNoticed(storage)
     expect(store.get(TRAY_NOTICE_KEY)).toBe("1")
@@ -59,7 +62,9 @@ describe("the X with a gateway on", () => {
   })
 
   test("lint: the main window capability grants dialog:allow-message", () => {
-    const capabilities = JSON.parse(readFileSync(new URL("../../src-tauri/capabilities/default.json", import.meta.url), "utf8"))
+    const capabilities = JSON.parse(
+      readFileSync(new URL("../../src-tauri/capabilities/default.json", import.meta.url), "utf8"),
+    )
     expect(capabilities.permissions).toContain("dialog:allow-message")
   })
 })

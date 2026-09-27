@@ -26,7 +26,8 @@ export function chooseCdpPort(env: string | undefined, record: TestAppRecord | u
     return { port, source: "CDP_PORT" }
   }
   if (record?.cdpPort) return { port: record.cdpPort, source: "record" }
-  if (record) return "ADE Test di questa worktree è partita senza --cdp: fermala e riavviala con `bun run test:app --cdp`"
+  if (record)
+    return "ADE Test di questa worktree è partita senza --cdp: fermala e riavviala con `bun run test:app --cdp`"
   return "nessuna ADE Test registrata per questa worktree: avviala con `bun run test:app --cdp`, o passa CDP_PORT"
 }
 
@@ -47,7 +48,10 @@ export function pickPage(targets: unknown): CdpTarget | string {
   if (!Array.isArray(targets)) return "la risposta di /json/list non è un elenco"
   const page = targets.find(
     (target): target is CdpTarget =>
-      !!target && typeof target === "object" && (target as CdpTarget).type === "page" && typeof (target as CdpTarget).webSocketDebuggerUrl === "string",
+      !!target &&
+      typeof target === "object" &&
+      (target as CdpTarget).type === "page" &&
+      typeof (target as CdpTarget).webSocketDebuggerUrl === "string",
   )
   return page ?? "nessuna finestra fra i bersagli di /json/list"
 }
@@ -81,7 +85,10 @@ export type BuildVerdict = "test" | "waiting" | "other"
  * window still loading, said as such.
  */
 export function buildVerdict(answer: unknown, waited = false): BuildVerdict {
-  const { build, workbench } = (answer && typeof answer === "object" ? answer : {}) as { build?: unknown; workbench?: unknown }
+  const { build, workbench } = (answer && typeof answer === "object" ? answer : {}) as {
+    build?: unknown
+    workbench?: unknown
+  }
   if (build === "test") return "test"
   if (build === null || build === undefined) return waited && workbench ? "other" : "waiting"
   return "other"
@@ -154,11 +161,14 @@ function parsePointer(command: "drag" | "click", args: readonly string[]): Point
   const count = command === "drag" ? 3 : 2
   const numbers = args.slice(0, count).map(Number)
   if (numbers.length < count || numbers.some((n) => !Number.isInteger(n) || n < 0)) {
-    return command === "drag" ? "drag: servono riga, colonna di partenza e colonna di arrivo, da 0" : "click: servono riga e colonna, da 0"
+    return command === "drag"
+      ? "drag: servono riga, colonna di partenza e colonna di arrivo, da 0"
+      : "click: servono riga e colonna, da 0"
   }
   const modifier = args[count]
   const allowed: readonly string[] = command === "drag" ? ["alt", "shift"] : ["ctrl", "alt"]
-  if (modifier !== undefined && !allowed.includes(modifier)) return `${command}: modificatore non previsto: ${modifier} (${allowed.join(", ")})`
+  if (modifier !== undefined && !allowed.includes(modifier))
+    return `${command}: modificatore non previsto: ${modifier} (${allowed.join(", ")})`
   return {
     row: numbers[0],
     col: numbers[1],
@@ -198,6 +208,7 @@ export const CONNECT_TIMEOUT_MS = 3000
 
 /** The one message for a port nobody answers on, with what was tried. */
 export function notListening(choice: CdpChoice, cause: string): string {
-  const where = choice.source === "CDP_PORT" ? `CDP_PORT=${choice.port}` : `porta ${choice.port} dal record di questa worktree`
+  const where =
+    choice.source === "CDP_PORT" ? `CDP_PORT=${choice.port}` : `porta ${choice.port} dal record di questa worktree`
   return `ADE Test non risponde su 127.0.0.1:${choice.port} (${where}): ${cause}. È aperta? Va avviata con \`bun run test:app --cdp\`.`
 }

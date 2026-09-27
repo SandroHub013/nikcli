@@ -24,10 +24,7 @@ export type ResolvedTheme = "dark" | "light" | "glass"
  * safest fallback because it honours whatever the user already chose at
  * OS level without us having to guess.
  */
-export function resolveTheme(
-  pref: Theme | undefined | null,
-  systemPrefersDark: boolean,
-): ResolvedTheme {
+export function resolveTheme(pref: Theme | undefined | null, systemPrefersDark: boolean): ResolvedTheme {
   if (pref === "glass") return "glass"
   if (pref === "dark") return "dark"
   if (pref === "light") return "light"
@@ -97,4 +94,3 @@ export function parseGlassOpacity(raw: string | null | undefined): number {
   const parsed = parseInt(raw, 10)
   return clampGlassOpacity(parsed)
 }
-

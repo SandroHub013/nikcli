@@ -42,10 +42,7 @@ export function cleanForSpeech(text: string): string {
   // Trailing list of links or footnote definitions at the end of the text
   // Only strips genuine lists of sources (bulleted or numbered items on new lines)
   // e.g. "\n- https://..." or "\n[1] https://..."
-  result = result.replace(
-    /(?:\r?\n\s*(?:[-*•]\s+|\d+\.\s+|\[\^?\d+\]:?\s*)(?:https?:\/\/|www\.)\S+\s*)+$/i,
-    "",
-  )
+  result = result.replace(/(?:\r?\n\s*(?:[-*•]\s+|\d+\.\s+|\[\^?\d+\]:?\s*)(?:https?:\/\/|www\.)\S+\s*)+$/i, "")
 
   // 2. Remove inline footnote citation markers like [1], [2], [^1]
   result = result.replace(/\s*\[\^?\d+\](?!\()/g, "")
@@ -53,16 +50,13 @@ export function cleanForSpeech(text: string): string {
   // 3. Unwrap Markdown links: [label](url)
   // If label is descriptive (e.g. [documentazione](url)), keep the label.
   // If label is itself an URL, unwrap to the URL so subsequent rules format it with context.
-  result = result.replace(
-    /\[([^\]]+)\]\(((?:https?:\/\/|www\.)[^\)]+)\)/gi,
-    (_match, label: string, url: string) => {
-      const trimmed = label.trim()
-      if (/^(?:https?:\/\/|www\.)/i.test(trimmed)) {
-        return url
-      }
-      return trimmed
-    },
-  )
+  result = result.replace(/\[([^\]]+)\]\(((?:https?:\/\/|www\.)[^\)]+)\)/gi, (_match, label: string, url: string) => {
+    const trimmed = label.trim()
+    if (/^(?:https?:\/\/|www\.)/i.test(trimmed)) {
+      return url
+    }
+    return trimmed
+  })
 
   // 4. Remove parenthetical URLs or paths: (https://...), (vedi https://...), (C:/...)
   // In speech, parenthetical links/paths are citations that can be cleanly omitted.
@@ -92,18 +86,7 @@ export function cleanForSpeech(text: string): string {
       const isCap = prevWord[0] === prevWord[0].toUpperCase()
 
       // If the preceding word already names the link, keep the noun and drop the raw URL
-      if (
-        [
-          "link",
-          "links",
-          "url",
-          "sito",
-          "pagina",
-          "indirizzo",
-          "portale",
-          "fonte",
-        ].includes(lower)
-      ) {
+      if (["link", "links", "url", "sito", "pagina", "indirizzo", "portale", "fonte"].includes(lower)) {
         return `${prefix}${prevWord}${punct}`
       }
 

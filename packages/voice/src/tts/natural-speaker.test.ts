@@ -44,7 +44,16 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
     onInstall: (voice, state) => events.push(`${voice}:${state}`),
     ...overrides,
   }
-  return { deps, fallback, played, installs, events, stops, locales, setInstalled: (value: boolean) => (installed = value) }
+  return {
+    deps,
+    fallback,
+    played,
+    installs,
+    events,
+    stops,
+    locales,
+    setInstalled: (value: boolean) => (installed = value),
+  }
 }
 
 describe("tts/natural-speaker", () => {

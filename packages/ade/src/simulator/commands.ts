@@ -7,14 +7,7 @@
 
 import type { PanelOutcome, PanelRequest } from "../panels/protocol"
 import { DENIED, isLocalAddress } from "../panels/consent"
-import {
-  DEVICES,
-  describeSimulator,
-  parseAppUrl,
-  parseSize,
-  SIMULATOR_VERBS,
-  type SimulatorState,
-} from "./simulator"
+import { DEVICES, describeSimulator, parseAppUrl, parseSize, SIMULATOR_VERBS, type SimulatorState } from "./simulator"
 
 export interface SimulatorController {
   state(): SimulatorState
@@ -65,7 +58,8 @@ export async function runSimulatorCommand(
     }
 
     case "size": {
-      if (controller.state().device.kind !== "window") return fail("size vale per la finestra desktop; prima device window")
+      if (controller.state().device.kind !== "window")
+        return fail("size vale per la finestra desktop; prima device window")
       const size = parseSize(argument)
       if (!size) return fail("dimensione non valida; es. 1280x800")
       controller.setWindowSize(size)

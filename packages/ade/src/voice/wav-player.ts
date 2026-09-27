@@ -47,7 +47,8 @@ export function playWav(
       audio.removeAttribute("src")
       URL.revokeObjectURL(url)
       signal.removeEventListener("abort", done)
-      if (error && !signal.aborted) reject(error instanceof Error ? error : new Error("Riproduzione della voce non riuscita."))
+      if (error && !signal.aborted)
+        reject(error instanceof Error ? error : new Error("Riproduzione della voce non riuscita."))
       else resolve()
     }
     const done = () => finish()
@@ -55,21 +56,22 @@ export function playWav(
     audio.addEventListener("ended", done, { once: true })
     audio.addEventListener("error", () => failed(), { once: true })
     signal.addEventListener("abort", done, { once: true })
-    const sink = outputDeviceId && "setSinkId" in audio
-      ? (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(outputDeviceId).then(
-          () => {
-            // It is there. A pair of headphones that comes back and goes again
-            // is news the second time, and the set is only there to keep one
-            // notice per sentence — not to keep one per page.
-            reportedSinks.delete(outputDeviceId)
-          },
-          () => {
-            if (!onSinkLost || reportedSinks.has(outputDeviceId)) return
-            reportedSinks.add(outputDeviceId)
-            onSinkLost(outputDeviceId)
-          },
-        )
-      : Promise.resolve()
+    const sink =
+      outputDeviceId && "setSinkId" in audio
+        ? (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(outputDeviceId).then(
+            () => {
+              // It is there. A pair of headphones that comes back and goes again
+              // is news the second time, and the set is only there to keep one
+              // notice per sentence — not to keep one per page.
+              reportedSinks.delete(outputDeviceId)
+            },
+            () => {
+              if (!onSinkLost || reportedSinks.has(outputDeviceId)) return
+              reportedSinks.add(outputDeviceId)
+              onSinkLost(outputDeviceId)
+            },
+          )
+        : Promise.resolve()
     void sink.then(() => {
       if (signal.aborted) return
       if (meter && envelope) untrack = meter.track(envelope, () => audio.currentTime)

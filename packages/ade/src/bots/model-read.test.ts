@@ -8,8 +8,8 @@ import { readModelCatalog } from "./store"
  * happened. The read now says why it failed.
  */
 
-const hostRunning = (run: (args: string[], cwd?: string) => Promise<RunResult>) =>
-  async () => ({ nikcliBot: run }) as unknown as Host
+const hostRunning = (run: (args: string[], cwd?: string) => Promise<RunResult>) => async () =>
+  ({ nikcliBot: run }) as unknown as Host
 
 describe("reading nikcli's catalog, and why it failed", () => {
   test("the list, from the folder, with every provider", async () => {
@@ -42,12 +42,27 @@ describe("reading nikcli's catalog, and why it failed", () => {
   })
 
   test("a nikcli that does not start, a host that cannot run it, and an empty list each say so", async () => {
-    expect(await readModelCatalog(undefined, "C:/p", hostRunning(async () => Promise.reject(new Error("program not found"))))).toEqual({
+    expect(
+      await readModelCatalog(
+        undefined,
+        "C:/p",
+        hostRunning(async () => Promise.reject(new Error("program not found"))),
+      ),
+    ).toEqual({
       ok: false,
       reason: t("bots.models.notFound"),
     })
-    expect(await readModelCatalog(undefined, "C:/p", async () => undefined)).toEqual({ ok: false, reason: t("bots.models.noHost") })
-    expect(await readModelCatalog(undefined, "C:/p", hostRunning(async () => ({ code: 0, stdout: " \n", stderr: "" })))).toEqual({
+    expect(await readModelCatalog(undefined, "C:/p", async () => undefined)).toEqual({
+      ok: false,
+      reason: t("bots.models.noHost"),
+    })
+    expect(
+      await readModelCatalog(
+        undefined,
+        "C:/p",
+        hostRunning(async () => ({ code: 0, stdout: " \n", stderr: "" })),
+      ),
+    ).toEqual({
       ok: false,
       reason: t("bots.models.empty"),
     })

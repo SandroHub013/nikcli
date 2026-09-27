@@ -3,7 +3,17 @@ import { USAGE } from "./mailbox"
 
 /* `ade-msg help` says how to write in the registers (polish-aaa, point 3; TEAM.md, «Come si scrive nei registri»). */
 test("the registro help names the new fields and the six writing rules", () => {
-  for (const field of ["question", "why", "recommend {option, because}", "facts", "effect", "cost", "risk", "keeps", "changes"]) {
+  for (const field of [
+    "question",
+    "why",
+    "recommend {option, because}",
+    "facts",
+    "effect",
+    "cost",
+    "risk",
+    "keeps",
+    "changes",
+  ]) {
     expect(USAGE).toContain(field)
   }
   expect(USAGE).toContain("context resta obbligatorio")

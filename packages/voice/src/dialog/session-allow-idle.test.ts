@@ -13,7 +13,13 @@ import { answersWithoutName } from "./name-gate"
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 let open: Record<string, string> = {}
 let kinds: Record<string, PermissionSpeechKind> = {}
@@ -93,7 +99,11 @@ describe("«consenti» from idle grants the request it named", () => {
       what: original,
     })
     expect(answered.effects.some((effect) => effect.type === "execute_intent")).toBe(false)
-    expect(answered.effects.some((effect) => effect.type === "answer_permission" && effect.what === "curl https://example.test/other-secret")).toBe(false)
+    expect(
+      answered.effects.some(
+        (effect) => effect.type === "answer_permission" && effect.what === "curl https://example.test/other-secret",
+      ),
+    ).toBe(false)
   })
 
   test("answered by hand meanwhile: the question leaves, and the next request is not granted by that yes", () => {
@@ -101,9 +111,16 @@ describe("«consenti» from idle grants the request it named", () => {
     const asked = say(createInitialDialogState("idle"), "consenti", 10_000).state
     const resolved = transition(asked, { type: "permission_resolved", paneId: "pA" }, 11_000, ctx).state
     open = { pA: "rm -rf ~" }
-    const next = transition(resolved, { type: "permission_requested", paneId: "pA", what: "rm -rf ~" }, 12_000, ctx).state
+    const next = transition(
+      resolved,
+      { type: "permission_requested", paneId: "pA", what: "rm -rf ~" },
+      12_000,
+      ctx,
+    ).state
     const yes = say(next, "sì", 12_300)
-    expect(yes.effects.some((e) => e.type === "answer_permission" && e.answer === "allow" && e.what !== "rm -rf ~")).toBe(false)
+    expect(
+      yes.effects.some((e) => e.type === "answer_permission" && e.answer === "allow" && e.what !== "rm -rf ~"),
+    ).toBe(false)
     // Nor through the intent road, which answered whatever was pending without saying what.
     expect(yes.effects.some((e) => e.type === "execute_intent")).toBe(false)
   })

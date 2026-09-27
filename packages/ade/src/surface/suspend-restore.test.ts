@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { resetLocaleForTests } from "../i18n"
-import { createWorkbench, exitedToReopen, fromWorkspaceState, isResumable, sessionsToResume, toWorkspaceState, type Pane } from "./state"
+import {
+  createWorkbench,
+  exitedToReopen,
+  fromWorkspaceState,
+  isResumable,
+  sessionsToResume,
+  toWorkspaceState,
+  type Pane,
+} from "./state"
 
 /* A suspended session survives ADE's restart, and the restart does not wake it (P1-C6, point 5). */
 
@@ -15,7 +23,9 @@ function claude(overrides: Partial<Pane> = {}): Pane {
     mode: "auto",
     agent: "claude-code",
     resumeId: "5f0c3a52-0000-4000-8000-000000000001",
-    lines: [{ kind: "note", text: "Sessione sospesa: processi chiusi, conversazione salvata. Riprendi per continuare." }],
+    lines: [
+      { kind: "note", text: "Sessione sospesa: processi chiusi, conversazione salvata. Riprendi per continuare." },
+    ],
     workspaceId: "ws",
     ...overrides,
   }
@@ -40,14 +50,22 @@ describe("the suspended mark across a restart", () => {
     expect(pane.activity).toBe("suspended")
     expect(pane.resumeId).toBe("5f0c3a52-0000-4000-8000-000000000001")
     // Its note is not followed by one saying the session is being reopened.
-    expect(pane.lines.map((line) => line.text)).toEqual(["Sessione sospesa: processi chiusi, conversazione salvata. Riprendi per continuare."])
+    expect(pane.lines.map((line) => line.text)).toEqual([
+      "Sessione sospesa: processi chiusi, conversazione salvata. Riprendi per continuare.",
+    ])
   })
 
   test("the sanitiser keeps true and drops anything else", () => {
     const text = (value: unknown) =>
-      JSON.stringify({ version: 2, panes: [{ id: "a", title: "A", agent: "claude-code", cwd: "", branch: "", status: "idle", suspended: value }], sidebarWidth: 260, currentView: "code" })
+      JSON.stringify({
+        version: 2,
+        panes: [{ id: "a", title: "A", agent: "claude-code", cwd: "", branch: "", status: "idle", suspended: value }],
+        sidebarWidth: 260,
+        currentView: "code",
+      })
     expect(parseWorkspace(text(true))!.panes[0]!.suspended).toBe(true)
-    for (const value of ["true", 1, false, null, {}]) expect(parseWorkspace(text(value))!.panes[0]!.suspended).toBeUndefined()
+    for (const value of ["true", 1, false, null, {}])
+      expect(parseWorkspace(text(value))!.panes[0]!.suspended).toBeUndefined()
   })
 
   test("a suspended pane is not resumable", () => {
@@ -65,7 +83,11 @@ describe("the restore does not wake a suspended session", () => {
   })
 
   test("not reopened by the second round, while an exited session that is not suspended still is", () => {
-    const panes = [claude({ suspended: true }), claude({ id: "gone", status: "done", activity: "done" }), claude({ id: "planned" })]
+    const panes = [
+      claude({ suspended: true }),
+      claude({ id: "gone", status: "done", activity: "done" }),
+      claude({ id: "planned" }),
+    ]
     expect(exitedToReopen(panes, new Set(["planned"])).map((pane) => pane.id)).toEqual(["gone"])
   })
 })

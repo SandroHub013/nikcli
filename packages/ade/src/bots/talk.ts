@@ -198,7 +198,12 @@ function spentAs(talk: Talk, mode: TalkSpend): Talk {
     const left = { tokens: byMode![from]!.tokens - pending.tokens, costUsd: byMode![from]!.costUsd - pending.costUsd }
     const rest = { ...byMode }
     delete rest[from]
-    byMode = addMode(left.tokens > 0 || left.costUsd > 0 ? { ...rest, [from]: left } : rest, mode, pending.tokens, pending.costUsd)
+    byMode = addMode(
+      left.tokens > 0 || left.costUsd > 0 ? { ...rest, [from]: left } : rest,
+      mode,
+      pending.tokens,
+      pending.costUsd,
+    )
   }
   return { ...talk, turnMode: mode, ...(byMode ? { byMode } : {}) }
 }
@@ -214,7 +219,12 @@ function isTalkSpend(value: unknown): value is TalkSpend {
   return typeof value === "string" && (TALK_SPENDS as readonly string[]).includes(value)
 }
 
-function addMode(byMode: Talk["byMode"], mode: TalkSpend, tokens: number, costUsd: number): NonNullable<Talk["byMode"]> {
+function addMode(
+  byMode: Talk["byMode"],
+  mode: TalkSpend,
+  tokens: number,
+  costUsd: number,
+): NonNullable<Talk["byMode"]> {
   const prev = byMode?.[mode] ?? { tokens: 0, costUsd: 0 }
   return { ...byMode, [mode]: { tokens: prev.tokens + tokens, costUsd: prev.costUsd + costUsd } }
 }
@@ -371,7 +381,9 @@ export function limitToolOutput(text: string): string {
   return clean.slice(0, TOOL_OUTPUT_MAX - mark.length) + mark
 }
 
-function forStorage<T extends { readonly role: TalkRole; readonly text: string; readonly output?: string }>(message: T): T {
+function forStorage<T extends { readonly role: TalkRole; readonly text: string; readonly output?: string }>(
+  message: T,
+): T {
   if (message.role === "tool") {
     return {
       ...message,
@@ -413,7 +425,13 @@ export function appendMessage(
  */
 export function upsertMessage(
   talk: Talk,
-  message: { readonly id: string; readonly role: TalkRole; readonly text: string; readonly tool?: string; readonly output?: string },
+  message: {
+    readonly id: string
+    readonly role: TalkRole
+    readonly text: string
+    readonly tool?: string
+    readonly output?: string
+  },
   at: number,
 ): Talk {
   const index = talk.messages.findIndex((existing) => existing.id === message.id)

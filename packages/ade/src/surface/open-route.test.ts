@@ -289,7 +289,6 @@ describe("terminal links (openPathLink with roots and outside confirmation)", ()
   })
 })
 
-
 describe("a refused markdown link is shown in the file pane (D1-2)", () => {
   const roots = ["C:/project"]
 
@@ -305,7 +304,10 @@ describe("a refused markdown link is shown in the file pane (D1-2)", () => {
   test("the file pane's handler flashes that note, and flashes nothing for a link that opened", () => {
     const flashed: string[] = []
     // The chain the pane is wired with: workbench's openFileLink, then FilePane's flash.
-    const click = flashRefusal((path) => markdownLinkRefusal(path, roots, () => {}), (note) => flashed.push(note))
+    const click = flashRefusal(
+      (path) => markdownLinkRefusal(path, roots, () => {}),
+      (note) => flashed.push(note),
+    )
     click("C:/Users/alice/.ssh/id_rsa")
     click("C:/project/docs/readme.md")
     expect(flashed).toEqual([t("pane.link.outside")])

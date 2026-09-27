@@ -84,9 +84,7 @@ export function pickBestVoice(
   return matching[0]
 }
 
-export function createWebSpeechSpeaker(
-  options: WebSpeechSpeakerOptions = {}
-): Speaker {
+export function createWebSpeechSpeaker(options: WebSpeechSpeakerOptions = {}): Speaker {
   const getLang = () => (typeof options.lang === "function" ? options.lang() : (options.lang ?? "it-IT"))
   const rate = options.rate ?? 1.02
 

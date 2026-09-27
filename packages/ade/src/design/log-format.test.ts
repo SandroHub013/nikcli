@@ -26,7 +26,12 @@ const newFormat = {
   keeps: ["I colori dei temi", "Le scorciatoie da tastiera"],
   spec: "polish-aaa",
   variants: [
-    { name: "1 · Documento", description: "Domanda, raccomandazione, perché, opzioni in colonna.", preview: ".ade/design/DS-A/1.html", changes: ["La raccomandazione in alto", "Testo a 13 px"] },
+    {
+      name: "1 · Documento",
+      description: "Domanda, raccomandazione, perché, opzioni in colonna.",
+      preview: ".ade/design/DS-A/1.html",
+      changes: ["La raccomandazione in alto", "Testo a 13 px"],
+    },
     { name: "2 · Confronto", description: "Opzioni affiancate.", preview: ".ade/design/DS-A/2.html" },
   ],
 }
@@ -51,7 +56,9 @@ describe("the new format in the design register", () => {
   })
 
   test("a recommendation that is not one of the variants refuses the line", () => {
-    expect(toEvent({ ...newFormat, recommend: { option: "3 · Compatta" } })).toBe("la raccomandazione «3 · Compatta» non è una delle varianti")
+    expect(toEvent({ ...newFormat, recommend: { option: "3 · Compatta" } })).toBe(
+      "la raccomandazione «3 · Compatta» non è una delle varianti",
+    )
     expect(toEvent({ ...newFormat, recommend: ["1 · Documento"] })).toBe("recommend vuole { option, because }")
   })
 

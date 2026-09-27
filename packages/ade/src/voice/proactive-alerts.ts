@@ -265,13 +265,13 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         // 2. Open single response window
         if (event.type !== "decision" && deps.isEnabled() && !deps.isBusy?.()) {
           const permissionParam =
-            event.type === "permission"
-              ? { paneId: event.paneId, what: event.what, kind: event.kind }
-              : undefined
-          await deps.openResponseWindow({
-            durationMs: RESPONSE_WINDOW_MS,
-            permission: permissionParam,
-          }).catch(() => {})
+            event.type === "permission" ? { paneId: event.paneId, what: event.what, kind: event.kind } : undefined
+          await deps
+            .openResponseWindow({
+              durationMs: RESPONSE_WINDOW_MS,
+              permission: permissionParam,
+            })
+            .catch(() => {})
         }
       }
     } finally {
@@ -311,12 +311,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
   }
 
   return {
-    notifyPermission(
-      paneId: string,
-      paneTitle: string,
-      what: string,
-      kind?: PermissionRequest["kind"],
-    ): void {
+    notifyPermission(paneId: string, paneTitle: string, what: string, kind?: PermissionRequest["kind"]): void {
       enqueue({
         type: "permission",
         key: `perm:${paneId}:${what}`,

@@ -61,29 +61,31 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
         <h3 data-slot="section-title" tabIndex={-1}>
           {t("settings.keys")}
         </h3>
-        <p data-slot="section-desc">
-          {t("keys.desc")}
-        </p>
+        <p data-slot="section-desc">{t("keys.desc")}</p>
       </div>
 
       <Show when={!props.host}>
         <p data-slot="section-desc">{t("keys.noKeychain")}</p>
       </Show>
       <Show when={loadProblem()}>
-        <p data-slot="keys-problem" role="alert">{loadProblem()}</p>
+        <p data-slot="keys-problem" role="alert">
+          {loadProblem()}
+        </p>
       </Show>
       <Show when={notice()}>
-        <p data-slot="keys-notice" role="status">{notice()}</p>
+        <p data-slot="keys-notice" role="status">
+          {notice()}
+        </p>
       </Show>
 
       <Show when={props.host}>
         <Show when={keys().length > 0} fallback={<p data-slot="settings-meta">{t("keys.none")}</p>}>
           {/*
-            * Marcata come zona di segreti, non campo per campo: qui dentro
-            * vivono i valori delle chiavi, e una riga aggiunta domani nasce
-            * coperta durante una registrazione senza che nessuno si ricordi
-            * di marcarla. Vedi record/sensitive.ts.
-            */}
+           * Marcata come zona di segreti, non campo per campo: qui dentro
+           * vivono i valori delle chiavi, e una riga aggiunta domani nasce
+           * coperta durante una registrazione senza che nessuno si ricordi
+           * di marcarla. Vedi record/sensitive.ts.
+           */}
           <ul data-slot="settings-list" data-secrets>
             <For each={keys()}>
               {(key) => (
@@ -232,7 +234,9 @@ export function KeyForm(props: {
   const [envTouched, setEnvTouched] = createSignal(Boolean(props.existing || props.initialEnv))
   // A requested key goes to the asking agent too, even one that exists (`keyRequestAgents`).
   const [agents, setAgents] = createSignal<readonly string[]>(
-    props.existing ? [...new Set([...props.existing.agents, ...(props.initialAgents ?? [])])] : (props.initialAgents ?? []),
+    props.existing
+      ? [...new Set([...props.existing.agents, ...(props.initialAgents ?? [])])]
+      : (props.initialAgents ?? []),
   )
   const [busy, setBusy] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
@@ -244,7 +248,11 @@ export function KeyForm(props: {
   const effectiveEnv = () => (envTouched() ? env() : suggestEnv(name()))
   const toggle = (id: string) =>
     setAgents((current) => (current.includes(id) ? current.filter((agent) => agent !== id) : [...current, id]))
-  const warnings = createMemo(() => agents().map((agent) => billingWarning(effectiveEnv(), agent)).filter(Boolean))
+  const warnings = createMemo(() =>
+    agents()
+      .map((agent) => billingWarning(effectiveEnv(), agent))
+      .filter(Boolean),
+  )
 
   const submit = async (event: Event) => {
     event.preventDefault()
@@ -309,7 +317,7 @@ export function KeyForm(props: {
         <input
           ref={valueField}
           type="password"
-          placeholder={props.existing ? props.existing.masked ?? "" : t("keys.field.paste")}
+          placeholder={props.existing ? (props.existing.masked ?? "") : t("keys.field.paste")}
           spellcheck={false}
           autocomplete="new-password"
         />
@@ -327,7 +335,9 @@ export function KeyForm(props: {
       </fieldset>
       <For each={warnings()}>{(warning) => <span data-slot="keys-warning">{warning}</span>}</For>
       <Show when={problem()}>
-        <p data-slot="keys-problem" role="alert">{problem()}</p>
+        <p data-slot="keys-problem" role="alert">
+          {problem()}
+        </p>
       </Show>
       <div data-slot="keys-actions">
         <button type="submit" data-slot="settings-choice" data-active="true" disabled={busy()}>
@@ -361,7 +371,12 @@ export function KeyRequestDialog(props: {
 }) {
   const [keys, setKeys] = createSignal<KeyInfo[]>([])
   const text = createMemo(() =>
-    keyRequestText({ env: props.env, reason: props.reason, ...(props.asker ? { asker: props.asker } : {}), agentLabel }),
+    keyRequestText({
+      env: props.env,
+      reason: props.reason,
+      ...(props.asker ? { asker: props.asker } : {}),
+      agentLabel,
+    }),
   )
   const given = (existing?: KeyInfo) => keyRequestAgents(existing?.agents, props.asker)
   onMount(() => void props.host.list().then(setKeys, () => undefined))
@@ -386,11 +401,25 @@ export function KeyRequestDialog(props: {
           when={existing()}
           keyed
           fallback={
-            <KeyForm host={props.host} agents={props.agents} others={keys()} initialEnv={props.env} initialAgents={given()} onDone={props.onClose} />
+            <KeyForm
+              host={props.host}
+              agents={props.agents}
+              others={keys()}
+              initialEnv={props.env}
+              initialAgents={given()}
+              onDone={props.onClose}
+            />
           }
         >
           {(key) => (
-            <KeyForm host={props.host} agents={props.agents} existing={key} others={keys()} initialAgents={given(key)} onDone={props.onClose} />
+            <KeyForm
+              host={props.host}
+              agents={props.agents}
+              existing={key}
+              others={keys()}
+              initialAgents={given(key)}
+              onDone={props.onClose}
+            />
           )}
         </Show>
       </div>

@@ -103,7 +103,11 @@ describe("una routine parte come gli altri spawn", () => {
     const deps: TurnDeps = {
       host: async () =>
         ({
-          spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[]; onExit: (code: number | null) => void }) => {
+          spawn: async (options: {
+            flags?: readonly string[]
+            secrets?: readonly string[]
+            onExit: (code: number | null) => void
+          }) => {
             seen.push({
               ...(options.flags ? { flags: options.flags } : {}),
               ...(options.secrets ? { secrets: options.secrets } : {}),
@@ -113,7 +117,11 @@ describe("una routine parte come gli altri spawn", () => {
           },
         }) as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
     }
-    const turn = runRoutine({ runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } }, {}, deps)
+    const turn = runRoutine(
+      { runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } },
+      {},
+      deps,
+    )
     while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     exit(0)
     await turn.result
@@ -135,7 +143,11 @@ describe("una routine parte come gli altri spawn", () => {
     const before = root.document
     root.document = { documentElement: { dataset: { adeBuild: "test" } } }
     try {
-      const refused = await runRoutine({ runner: "nikcli", message: "ciao", bot: { ...bot("nikcli"), model: "openrouter/openai/gpt-4o" } }).result
+      const refused = await runRoutine({
+        runner: "nikcli",
+        message: "ciao",
+        bot: { ...bot("nikcli"), model: "openrouter/openai/gpt-4o" },
+      }).result
       expect(refused.status).toBe("error")
       expect(refused.problem).toContain("ADE Test")
     } finally {

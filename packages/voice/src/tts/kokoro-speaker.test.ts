@@ -1,11 +1,19 @@
-import { describe, expect, test } from "bun:test";
-import { createNaturalSpeaker, type NaturalSpeakerDeps } from "./natural-speaker";
-import { createFakeSpeaker } from "./speaker";
-import { detectReplyLanguage, interfaceLocale, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
-import type { ReplyVoice, TtsLocale } from "../settings/model";
+import { describe, expect, test } from "bun:test"
+import { createNaturalSpeaker, type NaturalSpeakerDeps } from "./natural-speaker"
+import { createFakeSpeaker } from "./speaker"
+import {
+  detectReplyLanguage,
+  interfaceLocale,
+  replyLocale,
+  replyVoiceChain,
+  replyVoiceChainFrom,
+  speakingReplyVoice,
+  type ReplyLanguage,
+} from "../settings/reply-voices"
+import type { ReplyVoice, TtsLocale } from "../settings/model"
 
-const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
-const said = (buffer: ArrayBuffer) => new TextDecoder().decode(buffer);
+const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer
+const said = (buffer: ArrayBuffer) => new TextDecoder().decode(buffer)
 
 /**
  * A host that answers, with the bridge of K4 replaced by a plain function: what
@@ -23,13 +31,13 @@ function host(chosen: ReplyVoice = "af_heart", over: Partial<NaturalSpeakerDeps>
   const fallback = createFakeSpeaker()
   const deps: NaturalSpeakerDeps = {
     voiceFor: (detected) => {
-      const spoken = replyLocale(chosen, detected, "it-IT");
+      const spoken = replyLocale(chosen, detected, "it-IT")
       return { voice: speakingReplyVoice(chosen, spoken, "it"), locale: spoken }
     },
     status: async () => ({ supported: true, installed: true }),
     install: async () => {},
     synthesize: async (voice, text, _token, locale) => {
-      asked.push({ voice, text, locale });
+      asked.push({ voice, text, locale })
       return wav(text)
     },
     play: async (buffer) => {
@@ -43,49 +51,49 @@ function host(chosen: ReplyVoice = "af_heart", over: Partial<NaturalSpeakerDeps>
 
 describe("la lingua della risposta viene dal suo testo", () => {
   test("un testo italiano lo dice, e lo dice anche quando l'inglese è più lungo", () => {
-    expect(detectReplyLanguage("Ho aperto la sessione e i test sono verdi.")).toBe("it");
+    expect(detectReplyLanguage("Ho aperto la sessione e i test sono verdi.")).toBe("it")
     // Una riga di identificatori non è un indizio, e non viene tirata a italianità.
-    expect(detectReplyLanguage("RSSMRA80A01H501U")).toBeUndefined();
-    expect(detectReplyLanguage("OK 42 3.5 2026-09-26")).toBeUndefined();
-  });
+    expect(detectReplyLanguage("RSSMRA80A01H501U")).toBeUndefined()
+    expect(detectReplyLanguage("OK 42 3.5 2026-09-26")).toBeUndefined()
+  })
 
   test("un testo inglese lo dice, e senza le vocali accentate italiane", () => {
-    expect(detectReplyLanguage("I opened the session and the tests are green.")).toBe("en");
-    expect(detectReplyLanguage("Ho aperto la sessione, ma i test non sono verdi.")).toBe("it");
-  });
+    expect(detectReplyLanguage("I opened the session and the tests are green.")).toBe("en")
+    expect(detectReplyLanguage("Ho aperto la sessione, ma i test non sono verdi.")).toBe("it")
+  })
 
   test("quando il testo non dice niente, decide l'interfaccia, non la voce", () => {
     // Le risposte corte di un assistente non hanno parole da contare, e sono
     // italiane più spesso di quanto sembri: se decidesse la voce, una voce
     // Kokoro le leggerebbe in inglese.
-    expect(replyLocale("af_heart", undefined, "it-IT")).toBe("it-IT");
-    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT");
+    expect(replyLocale("af_heart", undefined, "it-IT")).toBe("it-IT")
+    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT")
     // E in una finestra inglese la stessa risposta va in inglese.
-    expect(replyLocale("af_heart", undefined, "en-US")).toBe("en-US");
-    expect(replyLocale("bf_emma", undefined, "en-GB")).toBe("en-GB");
-  });
+    expect(replyLocale("af_heart", undefined, "en-US")).toBe("en-US")
+    expect(replyLocale("bf_emma", undefined, "en-GB")).toBe("en-GB")
+  })
 
   test("la variante inglese la dà la voce, ma solo su una risposta già in inglese", () => {
-    expect(replyLocale("bf_emma", "en", "it-IT")).toBe("en-GB");
-    expect(replyLocale("af_heart", "en", "it-IT")).toBe("en-US");
+    expect(replyLocale("bf_emma", "en", "it-IT")).toBe("en-GB")
+    expect(replyLocale("af_heart", "en", "it-IT")).toBe("en-US")
     // Sul "non so" l'interfaccia decide, anche per una voce britannica.
-    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT");
-  });
+    expect(replyLocale("bf_emma", undefined, "it-IT")).toBe("it-IT")
+  })
 
   test("una risposta italiana resta italiana anche con la voce inglese scelta", () => {
-    expect(replyLocale("af_heart", "it", "en-US")).toBe("it-IT");
-    expect(replyLocale("bm_george", "it", "en-US")).toBe("it-IT");
-  });
+    expect(replyLocale("af_heart", "it", "en-US")).toBe("it-IT")
+    expect(replyLocale("bm_george", "it", "en-US")).toBe("it-IT")
+  })
 
   test("una risposta inglese tiene la variante della voce scelta", () => {
-    expect(replyLocale("bf_emma", "en", "it-IT")).toBe("en-GB");
-    expect(replyLocale("af_heart", "en", "it-IT")).toBe("en-US");
-  });
-});
+    expect(replyLocale("bf_emma", "en", "it-IT")).toBe("en-GB")
+    expect(replyLocale("af_heart", "en", "it-IT")).toBe("en-US")
+  })
+})
 
 describe("la voce che parla è quella che il testo chiede", () => {
-  const italian = "Ho aperto la sessione sul parser e adesso i test sono verdi.";
-  const english = "I opened the session on the parser and the tests are green.";
+  const italian = "Ho aperto la sessione sul parser e adesso i test sono verdi."
+  const english = "I opened the session on the parser and the tests are green."
 
   test("testo italiano con una voce Kokoro scelta: parla Ugo o Paola", async () => {
     for (const [kokoro, piper] of [
@@ -94,89 +102,90 @@ describe("la voce che parla è quella che il testo chiede", () => {
       ["am_fenrir", "ugo"],
       ["bm_george", "ugo"],
     ] as const) {
-      const h = host(kokoro);
-      await createNaturalSpeaker(h.deps).speak(italian);
-      expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set([piper]));
+      const h = host(kokoro)
+      await createNaturalSpeaker(h.deps).speak(italian)
+      expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set([piper]))
     }
-  });
+  })
 
   test("e il testo inglese con la stessa voce parla la voce Kokoro", async () => {
-    const h = host("af_heart");
-    await createNaturalSpeaker(h.deps).speak(english);
-    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]));
-  });
+    const h = host("af_heart")
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]))
+  })
 
   test("una risposta troppo corta da contare resta nella lingua dell'interfaccia", async () => {
     // «Salvato.» non ha una parola che si possa contare, e in una finestra
     // italiana lo dice Ugo o Paola: non è il caso in cui la voce decide.
     for (const line of ["Salvato.", "Ok, aperto.", "Tutto a posto: 3 test verdi."]) {
-      const h = host("af_heart");
-      await createNaturalSpeaker(h.deps).speak(line);
-      expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["paola"]));
-      expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["it-IT"]));
+      const h = host("af_heart")
+      await createNaturalSpeaker(h.deps).speak(line)
+      expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["paola"]))
+      expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["it-IT"]))
     }
-  });
+  })
 
   test("la lingua che arriva al bridge è quella della risposta", async () => {
-    const h = host("af_heart");
-    await createNaturalSpeaker(h.deps).speak(english);
-    expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["en-US"]));
-  });
+    const h = host("af_heart")
+    await createNaturalSpeaker(h.deps).speak(english)
+    expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["en-US"]))
+  })
 
   test("il prefetch porta la lingua del testo che prefetcha", async () => {
-    const h = host("af_heart");
-    const speaker = createNaturalSpeaker(h.deps);
+    const h = host("af_heart")
+    const speaker = createNaturalSpeaker(h.deps)
     // Una risposta in inglese tiene la voce Kokoro e la rende pronta, così il
     // prefetch ha qualcosa su cui lavorare.
-    await speaker.speak(english);
-    h.asked.length = 0;
-    speaker.prefetch?.(english);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(h.asked.length).toBeGreaterThan(1);
-    expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["en-US"]));
-  });
+    await speaker.speak(english)
+    h.asked.length = 0
+    speaker.prefetch?.(english)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(h.asked.length).toBeGreaterThan(1)
+    expect(new Set(h.asked.map((unit) => unit.locale))).toEqual(new Set(["en-US"]))
+  })
 
   test("un warm-up non ha testo da leggere, e usa la voce delle impostazioni", async () => {
-    const h = host("ugo");
-    await createNaturalSpeaker(h.deps).prepare();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(h.asked.map((unit) => unit.voice)).toEqual(["ugo"]);
+    const h = host("ugo")
+    await createNaturalSpeaker(h.deps).prepare()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["ugo"])
     // E dice quello che non sente nessuno nella lingua di quella voce.
-    expect(h.asked.map((unit) => unit.locale)).toEqual(["it-IT"]);
-  });
-});
+    expect(h.asked.map((unit) => unit.locale)).toEqual(["it-IT"])
+  })
+})
 
 describe("il taglio che spetta alla voce", () => {
   // Tre frasi, e la prima pesa più dei 30 caratteri del primo pezzo: è il
   // taglio progressivo di K1, non una novità di questo punto.
   const kokoroReply =
-    "I opened the Codex session on the parser and the toolchain. Then I ran the whole suite on the worktree, twice, because the first run looked green. Now I am reading the diff and the numbers again.";
-  const piperReply = "Ho aperto la sessione Codex sul parser, poi ho lanciato la suite del worktree e adesso guardo i test.";
+    "I opened the Codex session on the parser and the toolchain. Then I ran the whole suite on the worktree, twice, because the first run looked green. Now I am reading the diff and the numbers again."
+  const piperReply =
+    "Ho aperto la sessione Codex sul parser, poi ho lanciato la suite del worktree e adesso guardo i test."
 
   test("Kokoro riceve pezzi, e il primo è corto", async () => {
-    const h = host("af_heart");
-    await createNaturalSpeaker(h.deps).speak(kokoroReply);
-    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]));
-    expect(h.asked.length).toBeGreaterThan(1);
-    expect(h.asked[0]!.text.length).toBeLessThan(kokoroReply.length);
-  });
+    const h = host("af_heart")
+    await createNaturalSpeaker(h.deps).speak(kokoroReply)
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]))
+    expect(h.asked.length).toBeGreaterThan(1)
+    expect(h.asked[0]!.text.length).toBeLessThan(kokoroReply.length)
+  })
 
   test("Piper riceve la frase intera, come prima", async () => {
-    const h = host("ugo");
-    await createNaturalSpeaker(h.deps).speak(piperReply);
-    expect(h.asked.map((unit) => unit.text)).toEqual([piperReply]);
-  });
+    const h = host("ugo")
+    await createNaturalSpeaker(h.deps).speak(piperReply)
+    expect(h.asked.map((unit) => unit.text)).toEqual([piperReply])
+  })
 
   test("e le unità escono in ordine, con la prima che suona prima delle altre", async () => {
-    const h = host("af_heart");
-    await createNaturalSpeaker(h.deps).speak(kokoroReply);
-    expect(h.asked.map((unit) => unit.text).join(" ")).toBe(kokoroReply);
-    expect(h.played).toEqual(h.asked.map((unit) => unit.text));
-  });
-});
+    const h = host("af_heart")
+    await createNaturalSpeaker(h.deps).speak(kokoroReply)
+    expect(h.asked.map((unit) => unit.text).join(" ")).toBe(kokoroReply)
+    expect(h.played).toEqual(h.asked.map((unit) => unit.text))
+  })
+})
 
 describe("la catena è quella che si prova davvero", () => {
-  const italian = "Ho aperto la sessione Codex sul parser e adesso i test sono verdi.";
+  const italian = "Ho aperto la sessione Codex sul parser e adesso i test sono verdi."
 
   /**
    * A host where Kokoro is the voice the settings ask for and the host has never
@@ -185,10 +194,11 @@ describe("la catena è quella che si prova davvero", () => {
    */
   function withoutKokoro(chosen: ReplyVoice) {
     const h = host(chosen, {
-      status: async (voice) => (voice.startsWith("af_") || voice.startsWith("am_") || voice.startsWith("bf_") || voice.startsWith("bm_")
-        ? { supported: false, installed: false }
-        : { supported: true, installed: true }),
-    });
+      status: async (voice) =>
+        voice.startsWith("af_") || voice.startsWith("am_") || voice.startsWith("bf_") || voice.startsWith("bm_")
+          ? { supported: false, installed: false }
+          : { supported: true, installed: true },
+    })
     return h
   }
 
@@ -288,7 +298,7 @@ describe("la catena è quella che si prova davvero", () => {
       "La voce naturale non è pronta.",
       italian,
       "E adesso guardo i numeri del worktree.",
-    ]);
+    ])
   })
 
   test("Kokoro pronto che poi fallisce: Piper risponde tutto, senza la voce di sistema", async () => {
@@ -318,12 +328,12 @@ describe("la catena è quella che si prova davvero", () => {
     // I pezzi sono chiesti tutti insieme, quindi quando Kokoro non risponte
     // quelli dopo il primo restano in coda sull'host: la voce dopo deve poter
     // passare, non aspettare un pezzo che nessuno suona.
-    const cancelled: number[][] = [];
+    const cancelled: number[][] = []
     const english = [
       "I opened the session on the parser and the toolchain.",
       "Then I ran the whole suite on the worktree, twice, because the first run looked green.",
       "Now I am reading the diff and the numbers again.",
-    ].join(" ");
+    ].join(" ")
     const h = host("af_heart", {
       status: async () => ({ supported: true, installed: true }),
       cancel: async (tokens) => {
@@ -333,16 +343,16 @@ describe("la catena è quella che si prova davvero", () => {
         // Kokoro non risponde: nessun pezzo arriva, e gli altri restano in coda
         // sull'host anche se nessuno li suona.
         if (voice === "af_heart") throw new Error("runtime crash")
-        return wav(text);
+        return wav(text)
       },
-    });
+    })
     await createNaturalSpeaker(h.deps).speak(english)
     // I pezzi di Kokoro dopo quello in corso sono stati annullati, e la risposta
     // l'ha letta Lessac dall'inizio, tutta quanta e a frasi intere.
-    expect(cancelled.flat().length).toBeGreaterThan(0);
-    expect(h.played.join(" ")).toBe(english);
-    expect(h.fallback.spoken).toEqual([]);
-  });
+    expect(cancelled.flat().length).toBeGreaterThan(0)
+    expect(h.played.join(" ")).toBe(english)
+    expect(h.fallback.spoken).toEqual([])
+  })
 
   test("Kokoro che parte a metà: la voce non cambia sotto una risposta già iniziata", async () => {
     const english = [
@@ -368,7 +378,7 @@ describe("la catena è quella che si prova davvero", () => {
     expect(h.fallback.spoken.length).toBe(1)
     expect(h.fallback.spoken[0]).toContain("Now I am reading the diff")
   })
-});
+})
 
 describe("il profilo di default non si rimappa da solo", () => {
   test("Ugo, finestra italiana, risposta inglese: resta Ugo e non scarica Lessac", async () => {
@@ -404,7 +414,7 @@ describe("il profilo di default non si rimappa da solo", () => {
     // Mentre per un id Kokoro la catena scende, che è il suo punto.
     expect(replyVoiceChainFrom("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"])
   })
-});
+})
 
 describe("il ripiego viene dalla lingua dell'interfaccia, non dall'impostazione", () => {
   /**
@@ -414,51 +424,51 @@ describe("il ripiego viene dalla lingua dell'interfaccia, non dall'impostazione"
    * order, so a test that says the wrong voice is caught here and not in the app.
    */
   const voiceFor = (chosen: ReplyVoice, ui: "it" | "en", ttsLocale: TtsLocale, text: string) => {
-    const spoken = replyLocale(chosen, detectReplyLanguage(text), interfaceLocale(ui, ttsLocale));
-    return { voice: speakingReplyVoice(chosen, spoken, ui), locale: spoken };
-  };
+    const spoken = replyLocale(chosen, detectReplyLanguage(text), interfaceLocale(ui, ttsLocale))
+    return { voice: speakingReplyVoice(chosen, spoken, ui), locale: spoken }
+  }
 
   test("interfaccia inglese, voce Kokoro, «Done.»: la voce inglese", () => {
     // ttsLocale rimasto it-IT, come sta su un profilo che non l'ha toccato: se il
     // ripiego venisse da lì, «Done.» andrebbe a Paola.
-    expect(voiceFor("af_heart", "en", "it-IT", "Done.")).toEqual({ voice: "af_heart", locale: "en-US" });
-  });
+    expect(voiceFor("af_heart", "en", "it-IT", "Done.")).toEqual({ voice: "af_heart", locale: "en-US" })
+  })
 
   test("interfaccia italiana, voce Kokoro, «Salvato.»: Paola", () => {
-    expect(voiceFor("af_heart", "it", "it-IT", "Salvato.")).toEqual({ voice: "paola", locale: "it-IT" });
-  });
+    expect(voiceFor("af_heart", "it", "it-IT", "Salvato.")).toEqual({ voice: "paola", locale: "it-IT" })
+  })
 
   test("la variante britannica si conserva quando l'impostazione la ha già", () => {
-    expect(voiceFor("bf_emma", "en", "en-GB", "Done.")).toEqual({ voice: "bf_emma", locale: "en-GB" });
+    expect(voiceFor("bf_emma", "en", "en-GB", "Done.")).toEqual({ voice: "bf_emma", locale: "en-GB" })
     // E una finestra italiana non la riporta indietro: l'inglese è una scelta.
-    expect(voiceFor("bf_emma", "it", "en-GB", "Done.")).toEqual({ voice: "paola", locale: "it-IT" });
-  });
+    expect(voiceFor("bf_emma", "it", "en-GB", "Done.")).toEqual({ voice: "paola", locale: "it-IT" })
+  })
 
   test("un testo riconosciuto vince sull'interfaccia, in entrambe le direzioni", () => {
     // Finestra inglese, ma la risposta è italiana: la risposta comanda.
     expect(voiceFor("af_heart", "en", "en-US", "Ho aperto la sessione e i test sono verdi.")).toEqual({
       voice: "paola",
       locale: "it-IT",
-    });
+    })
     // Finestra italiana, ma la risposta è inglese: idem, e su Ugo resta Ugo.
     expect(voiceFor("ugo", "it", "it-IT", "I opened the session and the tests are green.")).toEqual({
       voice: "ugo",
       locale: "en-US",
-    });
-  });
+    })
+  })
 
   test("l'impostazione non può più essere la risposta, quale che sia", () => {
     // Il punto della condizione: qualunque valore abbia ttsLocale, un testo che
     // non dice la lingua prende la lingua dell'interfaccia.
     for (const ttsLocale of ["it-IT", "en-US", "en-GB"] as const) {
-      expect(interfaceLocale("en", ttsLocale).startsWith("en")).toBe(true);
-      expect(interfaceLocale("it", ttsLocale)).toBe("it-IT");
+      expect(interfaceLocale("en", ttsLocale).startsWith("en")).toBe(true)
+      expect(interfaceLocale("it", ttsLocale)).toBe("it-IT")
     }
-  });
-});
+  })
+})
 
 describe("una risposta non scarica mai niente", () => {
-  const english = "I opened the session and the tests are green.";
+  const english = "I opened the session and the tests are green."
 
   test("Kokoro scelto e non installato: nessun download, e la catena scende", async () => {
     // Il pannello promette che i 219 MB arrivano premendo Installa. Una risposta
@@ -548,33 +558,33 @@ describe("una risposta non scarica mai niente", () => {
     expect(h.fallback.spoken.length).toBe(1)
     await speaker.speak("And now the second one.")
     expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["ugo"]))
-  });
-});
+  })
+})
 
 describe("la catena di ripiego è quella del dominio", () => {
   test("Kokoro, poi Piper nella stessa lingua, poi il sistema", () => {
-    expect(replyVoiceChain("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"]);
-    expect(replyVoiceChain("bm_george", "en-GB")).toEqual(["bm_george", "lessac", "system"]);
-  });
+    expect(replyVoiceChain("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"])
+    expect(replyVoiceChain("bm_george", "en-GB")).toEqual(["bm_george", "lessac", "system"])
+  })
 
   test("su una risposta italiana la catena comincia da Piper, e resta offline", () => {
-    expect(replyVoiceChain("af_heart", "it-IT")).toEqual(["paola", "system"]);
-    expect(replyVoiceChain("am_fenrir", "it-IT")).toEqual(["ugo", "system"]);
-  });
+    expect(replyVoiceChain("af_heart", "it-IT")).toEqual(["paola", "system"])
+    expect(replyVoiceChain("am_fenrir", "it-IT")).toEqual(["ugo", "system"])
+  })
 
   test("mai Kokoro nel mezzo di un utente che non l'ha scelto", () => {
     // È la regola che 219 MB non arrivano senza che qualcuno li chieda.
     for (const id of ["ugo", "paola", "lessac"] as const) {
       for (const locale of ["it-IT", "en-US", "en-GB"] as const) {
-        expect(replyVoiceChain(id, locale)).not.toContain("af_heart");
+        expect(replyVoiceChain(id, locale)).not.toContain("af_heart")
       }
     }
-  });
+  })
 
   test("la catena segue la lingua della risposta, non quella delle impostazioni", () => {
-    const chosen: ReplyVoice = "af_heart";
-    const italian: ReplyLanguage = "it";
-    const spoken = replyLocale(chosen, italian, "en-US");
-    expect(replyVoiceChain(chosen, spoken)).toEqual(["paola", "system"]);
-  });
-});
+    const chosen: ReplyVoice = "af_heart"
+    const italian: ReplyLanguage = "it"
+    const spoken = replyLocale(chosen, italian, "en-US")
+    expect(replyVoiceChain(chosen, spoken)).toEqual(["paola", "system"])
+  })
+})

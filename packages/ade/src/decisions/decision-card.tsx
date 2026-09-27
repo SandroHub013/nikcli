@@ -65,7 +65,11 @@ export function DecisionCard(props: {
       </Show>
 
       <Show when={props.decision.options.length > 0}>
-        <div data-slot="decision-options" role={props.decision.multi ? "group" : "radiogroup"} aria-label={t("decisions.options")}>
+        <div
+          data-slot="decision-options"
+          role={props.decision.multi ? "group" : "radiogroup"}
+          aria-label={t("decisions.options")}
+        >
           <For each={props.decision.options}>
             {(option, index) => (
               <button
@@ -108,11 +112,22 @@ export function DecisionCard(props: {
       </Show>
 
       <div data-slot="decision-actions">
-        <button type="button" data-slot="decision-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
+        <button
+          type="button"
+          data-slot="decision-submit"
+          disabled={props.control.disabled}
+          onClick={() => props.onSubmit()}
+        >
           {props.control.label}
         </button>
         <Show when={props.control.recordOnly}>
-          <button type="button" data-slot="decision-ghost" data-action="record" disabled={props.busy} onClick={() => props.onRecord()}>
+          <button
+            type="button"
+            data-slot="decision-ghost"
+            data-action="record"
+            disabled={props.busy}
+            onClick={() => props.onRecord()}
+          >
             {t("decisions.submit.record")}
           </button>
         </Show>
@@ -133,8 +148,13 @@ export function DecisionCard(props: {
       <Show when={props.control.options}>
         {(options) => (
           <label data-slot="recipient-inline-wrap">
-            <span data-slot="decision-hint" data-tone="warn">{t("decisions.recipient.inline")}</span>
-            <select data-slot="recipient-inline" onChange={(event) => props.onInline(event.currentTarget.value || undefined)}>
+            <span data-slot="decision-hint" data-tone="warn">
+              {t("decisions.recipient.inline")}
+            </span>
+            <select
+              data-slot="recipient-inline"
+              onChange={(event) => props.onInline(event.currentTarget.value || undefined)}
+            >
               <For each={options()}>
                 {(option) => (
                   <option value={option.value} selected={option.selected}>

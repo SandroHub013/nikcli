@@ -64,7 +64,10 @@ function machine(options: { refuse?: string } = {}) {
   }
 }
 
-function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mode: "plan" } | { mode: "key"; key: string }) {
+function panel(
+  m: ReturnType<typeof machine>,
+  accountOf?: (path: string) => { mode: "plan" } | { mode: "key"; key: string },
+) {
   const talks: Record<string, Talk> = {}
   const kept: Record<string, string[]> = {}
   const timers: { run: () => void; ms: number; cancelled: boolean }[] = []
@@ -314,7 +317,11 @@ describe("a bot's memory in its turns", () => {
     expect(p.requests[0]!.message.endsWith("ciao")).toBe(true)
     // The bot answers with a write; its session is under way.
     p.talks[nikcli.path] = {
-      ...appendMessage(p.talks[nikcli.path]!, { role: "bot", text: 'Ciao!\n<ade-memory op="add" block="user">Si chiama Mario.</ade-memory>' }, 1),
+      ...appendMessage(
+        p.talks[nikcli.path]!,
+        { role: "bot", text: 'Ciao!\n<ade-memory op="add" block="user">Si chiama Mario.</ade-memory>' },
+        1,
+      ),
       sessionId: "s1",
     }
     await p.done()
@@ -385,7 +392,11 @@ describe("a bot's memory in its turns", () => {
     const nikcli = bot("nikcli")
     p.turns.routine(nikcli, "fai il punto")
     p.talks[nikcli.path] = {
-      ...appendMessage(p.talks[nikcli.path]!, { role: "bot", text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>' }, 1),
+      ...appendMessage(
+        p.talks[nikcli.path]!,
+        { role: "bot", text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>' },
+        1,
+      ),
       sessionId: "s1",
     }
     await p.done()
@@ -402,7 +413,11 @@ describe("a bot's memory in its turns", () => {
     const thread = `room:r1:${nikcli.path}`
     p.turns.room(nikcli, "tocca a te", thread)
     p.talks[thread] = {
-      ...appendMessage(p.talks[thread]!, { role: "bot", text: 'Ecco.\n<ade-memory op="add" block="notes">Usa bun.</ade-memory>' }, 1),
+      ...appendMessage(
+        p.talks[thread]!,
+        { role: "bot", text: 'Ecco.\n<ade-memory op="add" block="notes">Usa bun.</ade-memory>' },
+        1,
+      ),
       sessionId: "s1",
     }
     await p.done()

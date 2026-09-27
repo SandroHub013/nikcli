@@ -219,8 +219,10 @@ function sanitisePane(raw: unknown): PaneState {
   const model = asOptionalString(raw.model)
   const resumeId = asOptionalString(raw.resumeId)
   // A nonce names a file: anything but hex is dropped.
-  const linkNonce = typeof raw.linkNonce === "string" && /^[0-9a-f]{1,64}$/i.test(raw.linkNonce) ? raw.linkNonce : undefined
-  const otherDir = typeof raw.otherDir === "string" && raw.otherDir.trim() && raw.otherDir.length <= 4096 ? raw.otherDir : undefined
+  const linkNonce =
+    typeof raw.linkNonce === "string" && /^[0-9a-f]{1,64}$/i.test(raw.linkNonce) ? raw.linkNonce : undefined
+  const otherDir =
+    typeof raw.otherDir === "string" && raw.otherDir.trim() && raw.otherDir.length <= 4096 ? raw.otherDir : undefined
   const lines = sanitiseLines(raw.lines)
   const span = sanitiseSpan(raw.span)
   return {

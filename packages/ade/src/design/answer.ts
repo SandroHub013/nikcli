@@ -147,9 +147,7 @@ export function formatMoment(ms: number, now: Date): string {
   const date = new Date(ms)
   const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
   const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
+    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
   return sameDay ? time : `${date.getDate()} ${month(date.getMonth())} ${time}`
 }
 

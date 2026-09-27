@@ -27,7 +27,13 @@
 
 import type { Agent, ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
-import { appChatConnectionDeps, CATALOG_TIMEOUT_MS, openChat, within, type ChatConnectionDeps } from "../chat/connection"
+import {
+  appChatConnectionDeps,
+  CATALOG_TIMEOUT_MS,
+  openChat,
+  within,
+  type ChatConnectionDeps,
+} from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
 import { catalogHasModel, parseModelRef, serializeModelRef } from "../chat/model"
 import { readEvents } from "../chat/stream"
@@ -52,7 +58,15 @@ import {
 } from "./talk"
 import { acquireTurn } from "./terms"
 import { effortToSend, modelVariants } from "./effort"
-import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
+import {
+  runTurn,
+  timeoutProblem,
+  TURN_TIMEOUT_MS,
+  type Turn,
+  type TurnDeps,
+  type TurnRequest,
+  type TurnResult,
+} from "./turn"
 import type { PermissionRule } from "../chat/rules"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
@@ -72,7 +86,10 @@ export interface ServeClient {
   readonly reload?: () => Promise<void>
   /** The session, or undefined when the server has none by that id. */
   readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
-  readonly create: (input: { readonly title: string; readonly permission: readonly PermissionRule[] }) => Promise<string>
+  readonly create: (input: {
+    readonly title: string
+    readonly permission: readonly PermissionRule[]
+  }) => Promise<string>
   readonly prompt: (input: {
     readonly sessionID: string
     readonly text: string
@@ -119,7 +136,11 @@ export function catalogCache(ttlMs = CATALOG_FRESH_MS, now: () => number = Date.
 }
 
 export type ServeConnection =
-  | { readonly ok: true; readonly client: ServeClient; readonly events: (signal: AbortSignal) => AsyncIterable<ChatEvent> }
+  | {
+      readonly ok: true
+      readonly client: ServeClient
+      readonly events: (signal: AbortSignal) => AsyncIterable<ChatEvent>
+    }
   | { readonly ok: false; readonly problem?: string }
 
 export interface ServeTurnDeps {
@@ -136,7 +157,12 @@ export interface ServeTurnDeps {
 
 /** An error as one short line: the reason, not a body to dump. */
 function brief(error: unknown): string {
-  const text = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error) ?? String(error)
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : (JSON.stringify(error) ?? String(error))
   return text.replace(/\s+/g, " ").slice(0, 200)
 }
 
@@ -147,7 +173,8 @@ export function modelRef(model: string | undefined): { providerID: string; model
   return { providerID: model.slice(0, at), modelID: model.slice(at + 1) }
 }
 
-const samePrompt = (a: string | undefined, b: string) => (a ?? "").replace(/\r\n/g, "\n").trim() === b.replace(/\r\n/g, "\n").trim()
+const samePrompt = (a: string | undefined, b: string) =>
+  (a ?? "").replace(/\r\n/g, "\n").trim() === b.replace(/\r\n/g, "\n").trim()
 
 /**
  * Why the server's agent by the bot's name is not the bot, if it is not: the
@@ -168,7 +195,13 @@ interface ServePart {
   readonly type: string
   readonly text?: string
   readonly tool?: string
-  readonly state?: { readonly status?: string; readonly title?: string; readonly input?: unknown; readonly output?: unknown; readonly error?: unknown }
+  readonly state?: {
+    readonly status?: string
+    readonly title?: string
+    readonly input?: unknown
+    readonly output?: unknown
+    readonly error?: unknown
+  }
 }
 
 /** A part on the thread: a text as the bot's words, a tool as what it did. Nothing for the rest. */
@@ -185,7 +218,8 @@ function partChange(part: ServePart, at: number): ((talk: Talk) => Talk) | undef
     const tool = part.tool ?? "tool"
     const input = state.input
     const title =
-      state.title || (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : tool)
+      state.title ||
+      (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : tool)
     const said = state.status === "completed" ? state.output : state.status === "error" ? state.error : undefined
     const output = typeof said === "string" && said.trim().length > 0 ? said : undefined
     return (talk) => upsertMessage(talk, { id, role: "tool", tool, text: title, ...(output ? { output } : {}) }, at)
@@ -203,7 +237,9 @@ function sessionOf(event: ChatEvent): string | undefined {
   return typeof id === "string" ? id : undefined
 }
 
-type End = { readonly kind: "done" | "stopped" | "timeout" | "budget" } | { readonly kind: "lost"; readonly why: string }
+type End =
+  | { readonly kind: "done" | "stopped" | "timeout" | "budget" }
+  | { readonly kind: "lost"; readonly why: string }
 
 export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
   const now = deps.now ?? Date.now
@@ -224,7 +260,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
    * its slot, until it did, while `/ferma` had already said «fermato». The
    * end wins the race, the turn settles, and the call's late answer is dropped.
    */
-  const orEnd = <T,>(call: Promise<T>): Promise<{ readonly value: T } | End> =>
+  const orEnd = <T>(call: Promise<T>): Promise<{ readonly value: T } | End> =>
     Promise.race([call.then((value) => ({ value })), ended])
 
   const result = (async (): Promise<TurnResult> => {
@@ -308,7 +344,8 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             ),
             limit,
           )
-          if (reloaded === undefined) warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
+          if (reloaded === undefined)
+            warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
           if (reloaded) {
             const again = await orEnd(server.agents())
             if ("kind" in again) return settled(again)
@@ -361,7 +398,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       if (request.sessionId && hasBotRules(previous, profile)) sessionId = request.sessionId
       else {
         // The mark first: `hasBotRules` reads the tail, and «here» in a pane reads the mark.
-        const created = await orEnd(server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] }))
+        const created = await orEnd(
+          server.create({ title: bot.identifier || "bot", permission: [BOT_SESSION_MARK, ...botPermission(profile)] }),
+        )
         if ("kind" in created) return settled(created)
         sessionId = created.value
         /*
@@ -374,7 +413,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
           const at = now()
           change((thread) => {
             const next = { ...thread, sessionId: id }
-            return restarted ? appendMessage(next, { role: "tool", tool: "ade", text: t("bots.serve.newSession") }, at) : next
+            return restarted
+              ? appendMessage(next, { role: "tool", tool: "ade", text: t("bots.serve.newSession") }, at)
+              : next
           })
         }
       }
@@ -444,7 +485,12 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
               const extra = cost - before.cost
               if (more !== 0 || extra !== 0) {
                 change((thread) =>
-                  noteTurnUsage({ ...thread, tokens: thread.tokens + more, costUsd: thread.costUsd + extra }, more, extra, false),
+                  noteTurnUsage(
+                    { ...thread, tokens: thread.tokens + more, costUsd: thread.costUsd + extra },
+                    more,
+                    extra,
+                    false,
+                  ),
                 )
               }
               if (request.maxCostUsd !== undefined && talk.costUsd > request.maxCostUsd) end({ kind: "budget" })
@@ -481,7 +527,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
               // Nobody to answer: refused as it comes, and said.
               void server.reply(id, "reject").catch(() => {})
               const at = now()
-              change((thread) => appendMessage(thread, { role: "error", text: t("bots.serve.refused", permission, patterns) }, at))
+              change((thread) =>
+                appendMessage(thread, { role: "error", text: t("bots.serve.refused", permission, patterns) }, at),
+              )
               return
             }
             questions.push({ requestID: id, permission, patterns, askedAt: now() })
@@ -526,7 +574,8 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       })()
 
       // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
-      const text = !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
+      const text =
+        !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
       if (stopped) return settled({ kind: "stopped" })
       if (effort.dropped) {
         const note = wanted
@@ -551,7 +600,10 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       if (how.kind === "done") return failed !== undefined ? finish("error", failed, 1) : finish("done", undefined, 0)
       return settled(how)
     } catch (error) {
-      return finish("error", t("bots.turn.didNotStart", "nikcli", error instanceof Error ? error.message : String(error)))
+      return finish(
+        "error",
+        t("bots.turn.didNotStart", "nikcli", error instanceof Error ? error.message : String(error)),
+      )
     } finally {
       clearTimeout(timer)
       stream.abort()
@@ -599,7 +651,11 @@ export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "conf
  * question has an id (B8d) — the panel's, a room's, a routine's and a chat's;
  * the others as `runTurn` runs them.
  */
-export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = appServeTurnDeps, deps: TurnDeps = {}): Turn {
+export function runBotTurn(
+  request: TurnRequest,
+  serve: () => ServeTurnDeps = appServeTurnDeps,
+  deps: TurnDeps = {},
+): Turn {
   if (request.runner === "nikcli") return runServeTurn(request, serve())
   return runTurn(request, deps)
 }
@@ -637,7 +693,12 @@ export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_T
         return (await client.session.get({ sessionID })).data as { permission?: unknown } | undefined
       } catch (error) {
         // Gone, or never on this server: a session of `nikcli run` from another folder, say.
-        if (/\b404\b|not ?found/i.test(error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error))) return undefined
+        if (
+          /\b404\b|not ?found/i.test(
+            error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error),
+          )
+        )
+          return undefined
         throw error
       }
     },

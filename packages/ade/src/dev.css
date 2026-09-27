@@ -101,7 +101,9 @@
   background: transparent;
   color: var(--ade-text-subtle);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 [data-slot="ade-win-btn"]:hover {
@@ -436,8 +438,12 @@
 }
 
 @keyframes ade-notice-progress-slide {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(250%); }
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -690,7 +696,9 @@
     box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="ade-view-tab"]:hover { color: var(--ade-text); }
+[data-slot="ade-view-tab"]:hover {
+  color: var(--ade-text);
+}
 
 /* Raised, not tinted: the selected cell should look like it sits above the
    track. An accent fill here would shout over the primary action in the bar. */
@@ -724,7 +732,6 @@
   }
 }
 
-
 /* ── bar actions ──────────────────────────────────────────────────────────── */
 /*
  * Two levels, and only one of them is primary. Opening a browser preview and
@@ -743,7 +750,9 @@
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
   white-space: nowrap;
-  transition: var(--ade-btn-transition), box-shadow var(--ade-dur-fast) var(--ade-ease);
+  transition:
+    var(--ade-btn-transition),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-add"]:hover {
@@ -944,7 +953,9 @@
 /* The family's ring (closure 6): the global teal is 2.99:1 in light, under 3:1. */
 [data-slot="bar-queue"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--queue-tone), 0 0 0 4px var(--queue-glow);
+  box-shadow:
+    0 0 0 2px var(--queue-tone),
+    0 0 0 4px var(--queue-glow);
 }
 
 [data-slot="bar-queue-vial"] {
@@ -1161,4 +1172,3 @@
   border-color: var(--ade-border);
   color: var(--ade-text-weak);
 }
-

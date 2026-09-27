@@ -240,13 +240,7 @@ export interface Host {
   ttsLocalStatus?: (provider: string) => Promise<PackStatus | undefined>
   ttsLocalInstall?: (provider: string) => Promise<void>
   /** One unit as WAV bytes. `lang` is the G2P language, not a locale. */
-  ttsLocalSpeak?: (
-    provider: string,
-    voiceId: string,
-    text: string,
-    token: number,
-    lang: string,
-  ) => Promise<ArrayBuffer>
+  ttsLocalSpeak?: (provider: string, voiceId: string, text: string, token: number, lang: string) => Promise<ArrayBuffer>
   /** Ends the resident child of the second backend. One child, so no provider. */
   ttsLocalStop?: () => Promise<void>
   /** Takes the second backend away again; the host answers with the bytes freed. */
@@ -502,7 +496,23 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, onRefused, link, pane, paneToken, secrets, pipe, flags }) {
+    async spawn({
+      command,
+      args,
+      cwd,
+      cols,
+      rows,
+      onData,
+      onLine,
+      onExit,
+      onRefused,
+      link,
+      pane,
+      paneToken,
+      secrets,
+      pipe,
+      flags,
+    }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -751,9 +761,14 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalStatus(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       // `sizeBytes` comes with K4b's LocalStatus; until it does, the panel uses the size it knows.
-      const status = await invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", { provider })
+      const status = await invoke<{ supported: boolean; installed: boolean; sizeBytes?: number }>("tts_local_status", {
+        provider,
+      })
       if (!status.supported) return undefined
-      return { installed: Boolean(status.installed), ...(typeof status.sizeBytes === "number" ? { sizeBytes: status.sizeBytes } : {}) }
+      return {
+        installed: Boolean(status.installed),
+        ...(typeof status.sizeBytes === "number" ? { sizeBytes: status.sizeBytes } : {}),
+      }
     },
 
     async ttsLocalInstall(provider) {

@@ -58,7 +58,10 @@ describe("closing an agent at work (ALTO 6)", () => {
 
   test("lint: the pane.close command closes with confirmRunning (ALTO 6)", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
-    const command = source.slice(source.indexOf('} else if (id === "pane.close") {'), source.indexOf('} else if (id === "pane.expand") {'))
+    const command = source.slice(
+      source.indexOf('} else if (id === "pane.close") {'),
+      source.indexOf('} else if (id === "pane.expand") {'),
+    )
     expect(command).toContain("{ confirmRunning: true }")
   })
 })

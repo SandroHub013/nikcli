@@ -6,7 +6,13 @@ import type { TurnRequest, TurnResult } from "../bots/turn"
 import { limitNotice } from "../bots/terms"
 import { setLocalePreference, resetLocaleForTests } from "../i18n/locale"
 import { runnerById, turnCommand } from "../bots/runners"
-import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS, VOICE_AGENT_TIMEOUT_MS } from "./agent"
+import {
+  createVoiceAgent,
+  resolveVoiceAgentRunner,
+  VOICE_AGENT_DISABLED_TOOLS,
+  VOICE_AGENT_INSTRUCTIONS,
+  VOICE_AGENT_TIMEOUT_MS,
+} from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
   ({ agent: { id, label: id, command: id }, availability }) as AgentStatus
@@ -18,7 +24,14 @@ function fakeRunner(results: Partial<TurnResult>[]) {
     requests.push(request)
     const next = results.shift() ?? {}
     return {
-      result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult),
+      result: Promise.resolve({
+        status: "done",
+        text: "",
+        tokens: 0,
+        costUsd: 0,
+        talk: {} as never,
+        ...next,
+      } as TurnResult),
       stop: () => stops++,
     }
   }
@@ -32,10 +45,19 @@ describe("voice/agent", () => {
     })
     expect(resolveVoiceAgentRunner("auto", undefined)).toEqual({ runner: "claude" })
     expect(resolveVoiceAgentRunner("codex", [status("codex", "assente")])).toEqual({ runner: "codex" })
-    const none = resolveVoiceAgentRunner("auto", ["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")))
+    const none = resolveVoiceAgentRunner(
+      "auto",
+      ["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")),
+    )
     expect("problem" in none && none.problem).toContain("Claude Code")
     // nikcli cannot be held to read-only for one turn: never picked, and refused when named.
-    expect(resolveVoiceAgentRunner("auto", [status("claude-code", "assente"), status("codex", "assente"), status("nikcli", "presente")])).toHaveProperty("problem")
+    expect(
+      resolveVoiceAgentRunner("auto", [
+        status("claude-code", "assente"),
+        status("codex", "assente"),
+        status("nikcli", "presente"),
+      ]),
+    ).toHaveProperty("problem")
     expect(resolveVoiceAgentRunner("nikcli", undefined)).toHaveProperty("problem")
   })
 
@@ -62,7 +84,9 @@ describe("voice/agent", () => {
       requests.push(request)
       return {
         result: new Promise<TurnResult>((resolve) =>
-          pending.push((next) => resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult)),
+          pending.push((next) =>
+            resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult),
+          ),
         ),
         stop: () => {},
       }
@@ -102,7 +126,13 @@ describe("voice/agent", () => {
       request.onUpdate?.(talk("Ci sono"))
       request.onUpdate?.(talk("Ci sono due sessioni."))
       return {
-        result: Promise.resolve({ status: "done", text: "Ci sono due sessioni.", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+        result: Promise.resolve({
+          status: "done",
+          text: "Ci sono due sessioni.",
+          tokens: 0,
+          costUsd: 0,
+          talk: {} as never,
+        } as TurnResult),
         stop: () => {},
       }
     }
@@ -146,7 +176,11 @@ describe("voice/agent", () => {
     const runner = fakeRunner([{ status: "error", problem: "claude non si avvia: ENOENT" }, { status: "stopped" }])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => undefined })
 
-    expect(await agent.ask({ text: "x", engine: "claude" })).toEqual({ ok: false, text: "claude non si avvia: ENOENT", ran: true })
+    expect(await agent.ask({ text: "x", engine: "claude" })).toEqual({
+      ok: false,
+      text: "claude non si avvia: ENOENT",
+      ran: true,
+    })
     // No runner at all: nothing ran, so the planner may still take the sentence.
     expect(await agent.ask({ text: "x", engine: "nikcli" })).toMatchObject({ ok: false, ran: false })
 
@@ -224,9 +258,7 @@ describe("voice/agent", () => {
 
   describe("M4: fallback to Codex on limit in auto mode", () => {
     test("when codexFallback is off (default), reports limit and does not call Codex", async () => {
-      const runner = fakeRunner([
-        { status: "error", problem: limitNotice("Claude Code") },
-      ])
+      const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
       const agent = createVoiceAgent({
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
@@ -243,9 +275,7 @@ describe("voice/agent", () => {
     })
 
     test("when codexFallback is explicitly false, reports limit and does not call Codex", async () => {
-      const runner = fakeRunner([
-        { status: "error", problem: limitNotice("Claude Code") },
-      ])
+      const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
       const agent = createVoiceAgent({
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
@@ -285,9 +315,7 @@ describe("voice/agent", () => {
     })
 
     test("in auto mode when Claude hits limit and Codex is missing, says so clearly without retrying", async () => {
-      const runner = fakeRunner([
-        { status: "error", problem: "Claude AI usage limit reached|1757880000" },
-      ])
+      const runner = fakeRunner([{ status: "error", problem: "Claude AI usage limit reached|1757880000" }])
       const agent = createVoiceAgent({
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "assente")],
@@ -325,9 +353,7 @@ describe("voice/agent", () => {
     })
 
     test("manual agent choice does not fallback on limit", async () => {
-      const runner = fakeRunner([
-        { status: "error", problem: limitNotice("Claude Code") },
-      ])
+      const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
       const agent = createVoiceAgent({
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
@@ -342,18 +368,32 @@ describe("voice/agent", () => {
     })
 
     test("in auto mode fallback streams updates with prefix", async () => {
-      const talk = (streaming: string) => ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never
+      const talk = (streaming: string) =>
+        ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never
       const runTurn = (request: TurnRequest) => {
         if (request.runner === "claude") {
           return {
-            result: Promise.resolve({ status: "error", problem: limitNotice("Claude Code"), text: "", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+            result: Promise.resolve({
+              status: "error",
+              problem: limitNotice("Claude Code"),
+              text: "",
+              tokens: 0,
+              costUsd: 0,
+              talk: {} as never,
+            } as TurnResult),
             stop: () => {},
           }
         }
         request.onUpdate?.(talk("Ci sono"))
         request.onUpdate?.(talk("Ci sono due sessioni."))
         return {
-          result: Promise.resolve({ status: "done", text: "Ci sono due sessioni.", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+          result: Promise.resolve({
+            status: "done",
+            text: "Ci sono due sessioni.",
+            tokens: 0,
+            costUsd: 0,
+            talk: {} as never,
+          } as TurnResult),
           stop: () => {},
         }
       }
@@ -436,7 +476,14 @@ describe("the warm process", () => {
     let forgotten = 0
     let closed = 0
     const done = (text: string) => ({
-      result: Promise.resolve({ status: "done", text, sessionId: "s1", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+      result: Promise.resolve({
+        status: "done",
+        text,
+        sessionId: "s1",
+        tokens: 0,
+        costUsd: 0,
+        talk: {} as never,
+      } as TurnResult),
       stop: () => {},
     })
     const agent = createVoiceAgent({
@@ -470,9 +517,32 @@ describe("the warm process", () => {
     const heard: string[] = []
     const agent = createVoiceAgent({
       runTurn: (request) => {
-        request.onUpdate?.({ messages: [{ role: "user", text: "q", at: 0 }], status: "running", tokens: 0, costUsd: 0, streaming: "Fa" } as never)
-        request.onUpdate?.({ messages: [{ role: "user", text: "q", at: 0 }, { role: "bot", text: "Fa 4", at: 0 }], status: "running", tokens: 0, costUsd: 0 } as never)
-        return { result: Promise.resolve({ status: "done", text: "Fa 4", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult), stop: () => {} }
+        request.onUpdate?.({
+          messages: [{ role: "user", text: "q", at: 0 }],
+          status: "running",
+          tokens: 0,
+          costUsd: 0,
+          streaming: "Fa",
+        } as never)
+        request.onUpdate?.({
+          messages: [
+            { role: "user", text: "q", at: 0 },
+            { role: "bot", text: "Fa 4", at: 0 },
+          ],
+          status: "running",
+          tokens: 0,
+          costUsd: 0,
+        } as never)
+        return {
+          result: Promise.resolve({
+            status: "done",
+            text: "Fa 4",
+            tokens: 0,
+            costUsd: 0,
+            talk: {} as never,
+          } as TurnResult),
+          stop: () => {},
+        }
       },
       statuses: () => undefined,
       cwd: () => "C:/p",
@@ -515,7 +585,10 @@ describe("the warm process", () => {
         prepare: (r) => {
           preparedReq = r
         },
-        run: () => ({ result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never }), stop: () => {} }),
+        run: () => ({
+          result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never }),
+          stop: () => {},
+        }),
         forget: () => {},
         close: () => {},
       },

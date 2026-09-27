@@ -17,7 +17,15 @@ test("the sidebar dot of a suspended session is grey and still, not the green of
 })
 
 test("the sidebar is told which sessions are suspended", () => {
-  const pane = { id: "p1", title: "Claude", status: "idle", workspaceId: "w", agent: "claude-code", lines: [], suspended: true } as unknown as Pane
+  const pane = {
+    id: "p1",
+    title: "Claude",
+    status: "idle",
+    workspaceId: "w",
+    agent: "claude-code",
+    lines: [],
+    suspended: true,
+  } as unknown as Pane
   const [workspace] = deriveWorkspaces([pane])
   expect(workspace?.sessions[0]?.suspended).toBe(true)
 })

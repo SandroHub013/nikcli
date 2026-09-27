@@ -70,7 +70,13 @@ function mountFile(path: string, fileGoTo?: { line: number; at: number }) {
       browserControllers: new Map(),
     } as never)
     render(
-      () => createComponent(For, { get each() { return panes() }, children: (pane: { render: () => unknown }) => pane.render() } as never),
+      () =>
+        createComponent(For, {
+          get each() {
+            return panes()
+          },
+          children: (pane: { render: () => unknown }) => pane.render(),
+        } as never),
       host,
     )
     return dispose

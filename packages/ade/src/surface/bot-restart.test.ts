@@ -42,7 +42,16 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
   })
 
   test("a sign-in is not saved, so ADE opening does not start one", () => {
-    let wb = addPane(createWorkbench(), { id: "a", title: "A", status: "idle", mode: "auto", lines: [], model: "codex", agent: "codex", workspaceId: "web" })
+    let wb = addPane(createWorkbench(), {
+      id: "a",
+      title: "A",
+      status: "idle",
+      mode: "auto",
+      lines: [],
+      model: "codex",
+      agent: "codex",
+      workspaceId: "web",
+    })
     wb = addPane(wb, {
       id: "login",
       title: "Claude Code · accesso",
@@ -60,7 +69,9 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
   test("lint: a sign-in pane keeps signIn, and reopen runs it before planning a resume (ALTO 5)", () => {
     expect(body("const openLoginSession = ")).toContain("signIn: [...runner.login]")
     const reopen = body("const reopenPane = async ")
-    expect(reopen).toContain('if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])')
+    expect(reopen).toContain(
+      'if (restart.kind === "signIn") return startProcess(given.id, agentId, "", undefined, [...restart.extra])',
+    )
     // Before anything that would plan a resume of a conversation it does not have.
     expect(reopen.indexOf("restartOf(given)")).toBeGreaterThan(-1)
     expect(reopen.indexOf("restartOf(given)")).toBeLessThan(reopen.indexOf("planResume"))

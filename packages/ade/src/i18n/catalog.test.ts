@@ -10,7 +10,43 @@ import { it } from "./it"
  */
 
 /** Texts that are the same word in both languages, or are names. */
-const SAME_IN_BOTH = new Set<string>(["settings.language.it", "settings.language.en", "preset.solo", "sidebar.spaces", "pane.quota", "settings.grid.auto", "gateway.panel.platformTelegram", "gateway.panel.platformDiscord", "gateway.panel.platformSlack", "gateway.panel.tokenPlaceholderSlack", "gateway.panel.appTokenPlaceholder", "record.consent.no", "bots.ask.no", "vui.hud.no", "pane.video.title", "vui.audio.title", "browser.owner.ready", "bots.card.file", "bots.form.persona", "settings.providers.desc2After", "agent.empty.example1", "agent.empty.example2", "agent.empty.example3", "design.title", "newPane.design", "update.dialog.escKey", "vui.backend.piper", "vui.backend.kokoro", "vui.reply.kokoro.af_heart", "vui.reply.kokoro.am_fenrir", "vui.reply.kokoro.bf_emma", "vui.reply.kokoro.bm_george", "vui.replies.sample.it", "vui.replies.sample.en", "bar.meta.ade"])
+const SAME_IN_BOTH = new Set<string>([
+  "settings.language.it",
+  "settings.language.en",
+  "preset.solo",
+  "sidebar.spaces",
+  "pane.quota",
+  "settings.grid.auto",
+  "gateway.panel.platformTelegram",
+  "gateway.panel.platformDiscord",
+  "gateway.panel.platformSlack",
+  "gateway.panel.tokenPlaceholderSlack",
+  "gateway.panel.appTokenPlaceholder",
+  "record.consent.no",
+  "bots.ask.no",
+  "vui.hud.no",
+  "pane.video.title",
+  "vui.audio.title",
+  "browser.owner.ready",
+  "bots.card.file",
+  "bots.form.persona",
+  "settings.providers.desc2After",
+  "agent.empty.example1",
+  "agent.empty.example2",
+  "agent.empty.example3",
+  "design.title",
+  "newPane.design",
+  "update.dialog.escKey",
+  "vui.backend.piper",
+  "vui.backend.kokoro",
+  "vui.reply.kokoro.af_heart",
+  "vui.reply.kokoro.am_fenrir",
+  "vui.reply.kokoro.bf_emma",
+  "vui.reply.kokoro.bm_george",
+  "vui.replies.sample.it",
+  "vui.replies.sample.en",
+  "bar.meta.ade",
+])
 
 type Key = keyof typeof it
 
@@ -66,7 +102,10 @@ describe("the catalogs", () => {
   test("every value a text takes shows up in it, in both languages", () => {
     const dropped: string[] = []
     for (const key of Object.keys(it) as Key[]) {
-      for (const [name, entry] of [["it", it[key]], ["en", en[key]]] as const) {
+      for (const [name, entry] of [
+        ["it", it[key]],
+        ["en", en[key]],
+      ] as const) {
         if (typeof entry !== "function") continue
         const text = sample(entry)
         for (let i = 0; i < entry.length; i++) if (!text.includes(`«${i}»`)) dropped.push(`${name} ${key} #${i}`)

@@ -330,7 +330,10 @@ describe("B8a: the snapshot", () => {
 describe("B8a: the panel", () => {
   test("lint: the panel's turns carry the bots' memory, its card shows it, and each write and each proposal has its own answer", () => {
     const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-    const turns = view.slice(view.indexOf("const turns = createBotTurns("), view.indexOf("})", view.indexOf("const turns = createBotTurns(")))
+    const turns = view.slice(
+      view.indexOf("const turns = createBotTurns("),
+      view.indexOf("})", view.indexOf("const turns = createBotTurns(")),
+    )
     expect(turns).toContain("memory: memories")
     expect(view).toContain("<MemorySection bot={props.bot.path} store={memories} />")
     // Each write's line in the thread has its «Annulla» (review).

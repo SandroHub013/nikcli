@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, spendLine, turnCommand } from "./runners"
+import {
+  answerSoFar,
+  applyRunnerLine,
+  enforcesDisabledTools,
+  finalText,
+  formatUsd,
+  generationSpend,
+  readLoginStatus,
+  runnerById,
+  spendLine,
+  turnCommand,
+} from "./runners"
 import { t } from "../i18n"
 import { emptyTalk, parseTalk, sendMessage, serializeTalk, type Talk } from "./talk"
 
@@ -30,9 +41,9 @@ describe("il motore di un bot", () => {
 describe("gli argomenti di un turno", () => {
   /* B8d: a nikcli turn runs on ADE's server; there is no `nikcli run` to build. */
   test("nikcli non ha un comando: il suo turno gira sul server di ADE", () => {
-    expect(() => turnCommand(runnerById("nikcli"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" })).toThrow(
-      t("bots.turn.nikcliOnServer"),
-    )
+    expect(() =>
+      turnCommand(runnerById("nikcli"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" }),
+    ).toThrow(t("bots.turn.nikcliOnServer"))
   })
 
   test("una riga JSON non cambia il filo di nikcli: i suoi eventi vengono dal server", () => {
@@ -89,7 +100,11 @@ describe("gli argomenti di un turno", () => {
 
   test("un turno vocale non scrive e non esegue altro che ade-msg, su ogni motore che lo sa rifiutare", () => {
     // As `turn.ts` builds it: the voice's bot is ADE's, not a project's.
-    const voice: AgentFile = { ...bot, scope: "global", disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
+    const voice: AgentFile = {
+      ...bot,
+      scope: "global",
+      disabledTools: ["edit", "write", "bash", "webfetch", "websearch"],
+    }
 
     const claude = turnCommand(runnerById("claude"), { bot: voice, message: "x", lean: true }).args
     const allowed = claude[claude.indexOf("--allowedTools") + 1]!.split(",")
@@ -99,7 +114,8 @@ describe("gli argomenti di un turno", () => {
     expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("")
     expect(allowed).toContain("Bash(ade-msg *)")
     expect(allowed).toContain("PowerShell(ade-msg *)")
-    for (const tool of ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]) expect(allowed).not.toContain(tool)
+    for (const tool of ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"])
+      expect(allowed).not.toContain(tool)
     expect(disallowed).toEqual(expect.arrayContaining(["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]))
     // A refusal beats an allow: refusing Bash would refuse ade-msg too.
     expect(disallowed).not.toContain("Bash")
@@ -227,7 +243,6 @@ describe("la risposta finale di un turno", () => {
     expect(finalText(talk)).toBe("Controllo.\n\nCi sono 3 file.")
     expect(finalText(sendMessage(talk, "e poi?", 2))).toBe("")
   })
-
 })
 
 describe("lo stato di accesso", () => {
@@ -261,7 +276,10 @@ describe("lo stato di accesso", () => {
       "\u001b[34m●\u001b[39m  Z.AI Coding Plan \u001b[90mapi",
       "\u001b[90m└\u001b[39m  2 credentials",
     ].join("\r\n")
-    expect(readLoginStatus(runnerById("nikcli"), output, 0)).toEqual({ state: "in", detail: "OpenAI, Z.AI Coding Plan" })
+    expect(readLoginStatus(runnerById("nikcli"), output, 0)).toEqual({
+      state: "in",
+      detail: "OpenAI, Z.AI Coding Plan",
+    })
   })
 })
 
@@ -303,7 +321,9 @@ describe("la risposta mentre Claude Code la scrive", () => {
   })
 
   test("un secondo messaggio si aggiunge al primo", () => {
-    let talk = fold("claude", ['{"type":"assistant","message":{"content":[{"type":"text","text":"Controllo."}]},"session_id":"s"}'])
+    let talk = fold("claude", [
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Controllo."}]},"session_id":"s"}',
+    ])
     talk = applyRunnerLine(runnerById("claude"), talk, ev({ type: "content_block_start", index: 0 }), 0)
     talk = applyRunnerLine(runnerById("claude"), talk, delta("Ci sono due"), 0)
     expect(answerSoFar(talk)).toBe("Controllo.\n\nCi sono due")
@@ -313,7 +333,14 @@ describe("la risposta mentre Claude Code la scrive", () => {
 describe("Claude Code reading its messages from stdin", () => {
   test("asks for stream-json input and passes no message", () => {
     const { args } = turnCommand(runnerById("claude"), { bot, message: "ignorato", stdin: true })
-    expect(args.slice(0, 6)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json"])
+    expect(args.slice(0, 6)).toEqual([
+      "-p",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--input-format",
+      "stream-json",
+    ])
     expect(args).not.toContain("--")
     expect(args).not.toContain("ignorato")
   })
@@ -344,18 +371,28 @@ describe("gli argomenti di Codex non portano altro", () => {
     expect(args.join(" ")).not.toContain("INIETTATO")
     expect(args).not.toContain("-m")
     expect(args.some((arg) => arg.startsWith("model_reasoning_effort"))).toBe(false)
-    const newline = turnCommand(runnerById("codex"), { bot: { ...bot, effort: 'low"\nsandbox_mode="danger-full-access' }, message: "x" })
+    const newline = turnCommand(runnerById("codex"), {
+      bot: { ...bot, effort: 'low"\nsandbox_mode="danger-full-access' },
+      message: "x",
+    })
     expect(newline.args.join(" ")).not.toContain("danger-full-access")
   })
 
   test("valori normali passano come prima", () => {
-    const { args } = turnCommand(runnerById("codex"), { bot: { ...bot, effort: "xhigh", model: "gpt-5.1-codex" }, message: "x" })
+    const { args } = turnCommand(runnerById("codex"), {
+      bot: { ...bot, effort: "xhigh", model: "gpt-5.1-codex" },
+      message: "x",
+    })
     expect(args).toContain('model_reasoning_effort="xhigh"')
     expect(args[args.indexOf("-m") + 1]).toBe("gpt-5.1-codex")
   })
 
   test("nel seguito, un messaggio che comincia con - resta un messaggio", () => {
-    const { args } = turnCommand(runnerById("codex"), { bot, message: "--dangerously-bypass-approvals-and-sandbox", sessionId: "t-1" })
+    const { args } = turnCommand(runnerById("codex"), {
+      bot,
+      message: "--dangerously-bypass-approvals-and-sandbox",
+      sessionId: "t-1",
+    })
     expect(args.slice(-3)).toEqual(["--", "t-1", "--dangerously-bypass-approvals-and-sandbox"])
   })
 })
@@ -401,7 +438,7 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
     expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
   })
 
-  test("Codex: nessun approval_policy per un bot di progetto (codex-cli 0.154 esce con 1 su \"untrusted\", B7)", () => {
+  test('Codex: nessun approval_policy per un bot di progetto (codex-cli 0.154 esce con 1 su "untrusted", B7)', () => {
     for (const spec of [
       { bot: fromRepo, message: "x" },
       { bot: fromRepo, message: "x", sessionId: "t-1" },
@@ -457,7 +494,11 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
   /* B8d: nikcli's rules are its session's on ADE's server (`serve-rules.ts`), not a spawn flag. */
   test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
     for (const runner of ["claude", "codex"]) {
-      const flags = turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags
+      const flags = turnCommand(runnerById(runner), {
+        bot: { ...bot, scope: "global" },
+        message: "x",
+        lean: true,
+      }).flags
       expect(flags).toEqual(["account-plan"])
       expect(flags).not.toContain("no-project-config")
     }
@@ -519,7 +560,6 @@ describe("un turno da chat non ha la shell", () => {
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
   })
-
 })
 
 describe("abbonamento o chiave", () => {
@@ -643,10 +683,12 @@ describe("il costo di un turno", () => {
     expect(generationSpend()).toEqual({ model: "", paid: true })
     expect(generationSpend("  ")).toEqual({ model: "", paid: true })
     expect(generationSpend("openai/gpt-4o")).toEqual({ model: "openai/gpt-4o", paid: true })
-    expect(generationSpend("google/gemini-2.0-flash:free")).toEqual({ model: "google/gemini-2.0-flash:free", paid: false })
+    expect(generationSpend("google/gemini-2.0-flash:free")).toEqual({
+      model: "google/gemini-2.0-flash:free",
+      paid: false,
+    })
   })
 })
-
 
 /* B8c: Claude Code cannot ask mid-turn, so what would be a question is a refusal. */
 describe("B8c: Claude Code e le approvazioni", () => {
@@ -657,7 +699,13 @@ describe("B8c: Claude Code e le approvazioni", () => {
   }
 
   test("un bot del pannello: la lista di blocco sempre, i pericoli tranne quelli su «Sempre»", () => {
-    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true, approvals: true, always: ["gitRewrite"] })
+    const { args } = turnCommand(runnerById("claude"), {
+      bot: mine,
+      message: "x",
+      lean: true,
+      approvals: true,
+      always: ["gitRewrite"],
+    })
     const refused = refusedOf(args)
     expect(refused).toContain("Bash(rm -rf /:*)")
     expect(refused).toContain("PowerShell(Format-Volume:*)")
@@ -702,7 +750,12 @@ describe("a turn nobody watches (B11, a routine)", () => {
     const own = { ...bot, scope: "global" as const }
     const codex = turnCommand(runnerById("codex"), { bot: { ...own, runner: "codex" }, message: "x", unattended: true })
     expect(codex.args.join(" ")).toContain('sandbox_mode="read-only"')
-    const claude = turnCommand(runnerById("claude"), { bot: { ...own, runner: "claude" }, message: "x", lean: true, unattended: true })
+    const claude = turnCommand(runnerById("claude"), {
+      bot: { ...own, runner: "claude" },
+      message: "x",
+      lean: true,
+      unattended: true,
+    })
     const allowed = claude.args[claude.args.indexOf("--allowedTools") + 1] ?? ""
     expect(allowed).not.toContain("Bash")
     expect(allowed).not.toContain("ade-msg")

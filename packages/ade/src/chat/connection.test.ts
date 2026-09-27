@@ -95,7 +95,8 @@ describe("the chat on a folder", () => {
 
     trusted = false
     clock += FRESH_MS
-    const refusal = (error: unknown) => isChatRefused(error) && String(error).includes("Il progetto è cambiato e non ti fidi più.")
+    const refusal = (error: unknown) =>
+      isChatRefused(error) && String(error).includes("Il progetto è cambiato e non ti fidi più.")
     expect(await opened.client.session.list({ roots: true }).then(() => undefined, refusal)).toBe(true)
     // Trusted again meanwhile, it stays closed: the store opens a new chat, nothing retries into a dialog.
     trusted = true
@@ -158,7 +159,11 @@ describe("the chat on a folder", () => {
       },
     })
     if (!opened.ok) throw new Error("non aperta")
-    await Promise.all([opened.client.session.list({ roots: true }), opened.client.session.status(), opened.client.session.list({})])
+    await Promise.all([
+      opened.client.session.list({ roots: true }),
+      opened.client.session.status(),
+      opened.client.session.list({}),
+    ])
     expect(asked).toBe(2)
     clock += FRESH_MS - 1
     await opened.client.session.status()
@@ -181,10 +186,17 @@ describe("the chat on a folder", () => {
     // Opening itself needs a yes: with a bare no it does not open.
     expect(opened).toEqual({ ok: false })
     pending = false
-    const again = await openChat(PROJECT, { bridge: fake.bridge, now: () => clock, admit: async () => (pending ? { ok: false } : { ok: true }) })
+    const again = await openChat(PROJECT, {
+      bridge: fake.bridge,
+      now: () => clock,
+      admit: async () => (pending ? { ok: false } : { ok: true }),
+    })
     if (!again.ok) throw new Error("non aperta")
     pending = true
-    const failed = await again.client.session.status().then(() => undefined, (error: unknown) => error)
+    const failed = await again.client.session.status().then(
+      () => undefined,
+      (error: unknown) => error,
+    )
     expect(failed).toBeDefined()
     expect(isChatRefused(failed)).toBe(false)
     pending = false

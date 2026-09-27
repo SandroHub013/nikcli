@@ -9,7 +9,10 @@ import { t } from "@nikcli-ai/ade/i18n"
 import type { VoiceSettings } from "../settings/model"
 import { describeShortcut } from "../settings/shortcuts"
 
-export function orbTitle(settings: Pick<VoiceSettings, "mode" | "agentChord" | "transcriptionChord">, platform: Platform): string {
+export function orbTitle(
+  settings: Pick<VoiceSettings, "mode" | "agentChord" | "transcriptionChord">,
+  platform: Platform,
+): string {
   const chord = settings.mode === "transcription" ? settings.transcriptionChord : settings.agentChord
   return t("vui.orb.title", describeShortcut(chord, platform))
 }

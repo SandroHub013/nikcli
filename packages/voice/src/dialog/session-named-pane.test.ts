@@ -11,18 +11,39 @@ import { createInitialDialogState, transition, type DialogState } from "./sessio
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
-const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta"), pane("pC", 3, "Gamma")], focusedPaneId: "pA" }
+const ctx: ParseContext = {
+  panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta"), pane("pC", 3, "Gamma")],
+  focusedPaneId: "pA",
+}
 
 /** A asked, B waiting behind it. */
 function askingAWithBQueued(): DialogState {
-  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README", kind: "shell" }, 10_000, ctx).state
-  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf build", kind: "shell" }, 11_000, ctx).state
+  const s1 = transition(
+    createInitialDialogState("idle"),
+    { type: "permission_requested", paneId: "pA", what: "cat README", kind: "shell" },
+    10_000,
+    ctx,
+  ).state
+  return transition(
+    s1,
+    { type: "permission_requested", paneId: "pB", what: "rm -rf build", kind: "shell" },
+    11_000,
+    ctx,
+  ).state
 }
 const say = (state: DialogState, text: string, now = 30_000) => transition(state, { type: "utterance", text }, now, ctx)
 const answers = (effects: { type: string }[]) =>
-  effects.filter((e): e is { type: "answer_permission"; paneId: string; answer: "allow" | "deny" } => e.type === "answer_permission")
+  effects.filter(
+    (e): e is { type: "answer_permission"; paneId: string; answer: "allow" | "deny" } => e.type === "answer_permission",
+  )
 
 describe("a named pane is the pane acted on", () => {
   test("«consenti pannello 2» does not grant A: B's own question is asked", () => {

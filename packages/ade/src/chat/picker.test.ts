@@ -78,7 +78,11 @@ describe("the model menu's sections", () => {
 
   test("the lines: the default, a kept model the catalog lacks, then the sections under their headings", () => {
     const items = modelMenuItems({
-      sections: pickerSections({ models: [QWEN, SONNET], recent: [{ providerID: "openrouter", modelID: "qwen/qwen3-coder:free" }], showPaid: true }),
+      sections: pickerSections({
+        models: [QWEN, SONNET],
+        recent: [{ providerID: "openrouter", modelID: "qwen/qwen3-coder:free" }],
+        showPaid: true,
+      }),
       models: [QWEN, SONNET],
       defaultLabel: "predefinito di nikcli",
       kept: "openrouter/old/model:free",
@@ -86,16 +90,37 @@ describe("the model menu's sections", () => {
     })
     expect(items).toEqual([
       { kind: "option", value: "", label: "predefinito di nikcli" },
-      { kind: "option", value: "openrouter/old/model:free", label: "«openrouter/old/model:free»", hint: "openrouter/old/model:free" },
+      {
+        kind: "option",
+        value: "openrouter/old/model:free",
+        label: "«openrouter/old/model:free»",
+        hint: "openrouter/old/model:free",
+      },
       { kind: "group", label: t("picker.recent") },
-      { kind: "option", value: "openrouter/qwen/qwen3-coder:free", label: QWEN.label, hint: "OpenRouter · openrouter/qwen/qwen3-coder:free", detail: "OpenRouter" },
+      {
+        kind: "option",
+        value: "openrouter/qwen/qwen3-coder:free",
+        label: QWEN.label,
+        hint: "OpenRouter · openrouter/qwen/qwen3-coder:free",
+        detail: "OpenRouter",
+      },
       { kind: "group", label: t("picker.paidGroup") },
-      { kind: "option", value: "openrouter/anthropic/claude-sonnet-5", label: SONNET.label, hint: "OpenRouter · openrouter/anthropic/claude-sonnet-5", detail: "OpenRouter" },
+      {
+        kind: "option",
+        value: "openrouter/anthropic/claude-sonnet-5",
+        label: SONNET.label,
+        hint: "OpenRouter · openrouter/anthropic/claude-sonnet-5",
+        detail: "OpenRouter",
+      },
     ])
   })
 
   test("a kept model the catalog has is not listed twice; a search lists only what it found", () => {
-    const listed = modelMenuItems({ sections: pickerSections({ models: [QWEN] }), models: [QWEN], kept: "openrouter/qwen/qwen3-coder:free" })
+    const listed = modelMenuItems({
+      sections: pickerSections({ models: [QWEN] }),
+      models: [QWEN],
+      kept: "openrouter/qwen/qwen3-coder:free",
+    })
     expect(listed.filter((item) => item.kind === "option").length).toBe(1)
     const searched = modelMenuItems({
       sections: pickerSections({ models: [QWEN], query: "qwen" }),
@@ -115,7 +140,12 @@ describe("the keys in the menu", () => {
   const values = pickerValues(pickerSections({ models: [QWEN, GEMMA, SONNET], showPaid: true }), true)
 
   test("the values in the order shown, the default first", () => {
-    expect(values).toEqual(["", "openrouter/qwen/qwen3-coder:free", "openrouter/google/gemma-4-31b-it:free", "openrouter/anthropic/claude-sonnet-5"])
+    expect(values).toEqual([
+      "",
+      "openrouter/qwen/qwen3-coder:free",
+      "openrouter/google/gemma-4-31b-it:free",
+      "openrouter/anthropic/claude-sonnet-5",
+    ])
   })
 
   test("the arrows step through and wrap around the ends", () => {
@@ -139,7 +169,9 @@ describe("what the chip says", () => {
     const fallback = (value: string) => `id ${value}`
     expect(chipText("openrouter/qwen/qwen3-coder:free", ALL, fallback, "predefinito")).toBe(modelChipLabel(QWEN))
     // The catalog not read yet, or failed: the current model all the same, never an empty chip.
-    expect(chipText("openrouter/qwen/qwen3-coder:free", [], fallback, "predefinito")).toBe("id openrouter/qwen/qwen3-coder:free")
+    expect(chipText("openrouter/qwen/qwen3-coder:free", [], fallback, "predefinito")).toBe(
+      "id openrouter/qwen/qwen3-coder:free",
+    )
     expect(chipText("", ALL, fallback, "predefinito")).toBe("predefinito")
   })
 })
@@ -172,10 +204,21 @@ describe("the effort chip", () => {
   /* Model-picker review, BASSO c: the provider on every row, not only where a name repeats. */
   test("every model row says its provider apart", () => {
     const zen = { ...QWEN, providerID: "opencode", modelID: "qwen3", providerName: "OpenCode Zen" }
-    const items = modelMenuItems({ sections: pickerSections({ models: [QWEN, zen, GEMMA] }), models: [QWEN, zen, GEMMA] })
+    const items = modelMenuItems({
+      sections: pickerSections({ models: [QWEN, zen, GEMMA] }),
+      models: [QWEN, zen, GEMMA],
+    })
     const rows = items.filter((item) => item.kind === "option")
-    expect(rows.map((row) => (row.kind === "option" ? row.detail : undefined))).toEqual(["OpenRouter", "OpenCode Zen", "OpenRouter"])
-    expect(rows.map((row) => (row.kind === "option" ? row.label : undefined))).toEqual([QWEN.label, QWEN.label, GEMMA.label])
+    expect(rows.map((row) => (row.kind === "option" ? row.detail : undefined))).toEqual([
+      "OpenRouter",
+      "OpenCode Zen",
+      "OpenRouter",
+    ])
+    expect(rows.map((row) => (row.kind === "option" ? row.label : undefined))).toEqual([
+      QWEN.label,
+      QWEN.label,
+      GEMMA.label,
+    ])
   })
 })
 
@@ -193,7 +236,9 @@ describe("a model the catalog no longer has", () => {
   })
 
   test("the chip says it by name, as no longer available", () => {
-    expect(t("picker.gone", readableModelName("openrouter/nex-agi/nex-n2.5-mini:free"))).toBe("Nex N2.5 Mini · non più disponibile")
+    expect(t("picker.gone", readableModelName("openrouter/nex-agi/nex-n2.5-mini:free"))).toBe(
+      "Nex N2.5 Mini · non più disponibile",
+    )
     expect(t("picker.goneTitle", "openrouter/nex-agi/nex-n2.5-mini:free")).toContain("scegline un altro")
   })
 
@@ -208,7 +253,7 @@ describe("a model the catalog no longer has", () => {
 
   test("lint: the model chip shows a gone model by name and in the warning's tone, the id only in its tooltip", () => {
     const view = readFileSync(join(import.meta.dir, "model-picker.tsx"), "utf8")
-    expect(view).toContain('? goneLabel(props.value)')
+    expect(view).toContain("? goneLabel(props.value)")
     expect(view).toContain('title: t("picker.goneTitle", props.value), tone: "warn" as const')
     expect(view).toContain("props.state ? modelGoneFrom(props.value, props.state) : false")
     const menu = readFileSync(join(import.meta.dir, "chip-menu.tsx"), "utf8")

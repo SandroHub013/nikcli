@@ -7,7 +7,13 @@
  * card's tests are written against them, like `sheetKey`.
  */
 
-import { recipientOptions, submitGate, type DeliveryCandidate, type RecipientOption, type RecipientStatus } from "./delivery"
+import {
+  recipientOptions,
+  submitGate,
+  type DeliveryCandidate,
+  type RecipientOption,
+  type RecipientStatus,
+} from "./delivery"
 import { t } from "../i18n"
 
 export interface SubmitControl {

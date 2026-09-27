@@ -118,9 +118,9 @@ export const VOICE_AGENT_INSTRUCTIONS_IT = [
   "Se qualcosa non riesce, dillo in parole semplici, senza codici di errore, e di' cosa può fare l'utente.",
   "Per gestire le sessioni usa il comando ade-msg dalla shell:",
   "- ade-msg list: le sessioni aperte;",
-  "- ade-msg ask SESSIONE \"RICHIESTA\": chiede e aspetta la risposta; usalo sempre così, bloccante, perché non hai un terminale che riceva risposte dopo;",
+  '- ade-msg ask SESSIONE "RICHIESTA": chiede e aspetta la risposta; usalo sempre così, bloccante, perché non hai un terminale che riceva risposte dopo;',
   "- ade-msg spawn AGENTE \"COMPITO\" --no-wait: avvia una sessione per un lavoro lungo; poi di' all'utente che è partita, senza aspettarla;",
-  "- ade-msg send SESSIONE \"TESTO\": una nota; ade-msg close SESSIONE: chiude una sessione avviata da te.",
+  '- ade-msg send SESSIONE "TESTO": una nota; ade-msg close SESSIONE: chiude una sessione avviata da te.',
   "Non modificare file e non eseguire comandi che cambiano il progetto: il lavoro lo fanno le sessioni, dove l'utente lo vede.",
   "Non puoi aprire pannelli e non scrivere mai righe che iniziano con @ade: qui verrebbero lette ad alta voce. Se l'utente vuole un pannello, digli di dire «apri il browser», «apri il video», «apri il modello 3D», «apri il simulatore» o «apri le decisioni».",
   "Se la richiesta è ambigua, o chiudere o fermare qualcosa farebbe perdere lavoro, chiedi conferma invece di agire.",
@@ -135,9 +135,9 @@ export const VOICE_AGENT_INSTRUCTIONS_EN = [
   "If something fails, say so in simple words without error codes, and say what the user can do.",
   "To manage sessions use the ade-msg command from the shell:",
   "- ade-msg list: list open sessions;",
-  "- ade-msg ask SESSION \"REQUEST\": asks and waits for the reply; always use it blocking like this, because you don't have a terminal to receive later replies;",
-  "- ade-msg spawn AGENT \"TASK\" --no-wait: launches a session for long work; then tell the user it started, without waiting for it;",
-  "- ade-msg send SESSION \"TEXT\": a note; ade-msg close SESSION: closes a session you started.",
+  '- ade-msg ask SESSION "REQUEST": asks and waits for the reply; always use it blocking like this, because you don\'t have a terminal to receive later replies;',
+  '- ade-msg spawn AGENT "TASK" --no-wait: launches a session for long work; then tell the user it started, without waiting for it;',
+  '- ade-msg send SESSION "TEXT": a note; ade-msg close SESSION: closes a session you started.',
   "Do not modify files and do not run commands that change the project: sessions do the work where the user can see it.",
   "You cannot open panels and never write lines starting with @ade: here they would be read out loud. If the user wants a panel, tell them to say «open browser», «open video», «open 3D model», «open simulator», or «open decisions».",
   "If the request is ambiguous, or closing/stopping something would lose work, ask for confirmation instead of acting.",
@@ -244,7 +244,11 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   let latest = 0
 
   /* Everything but the sentence: the same for a turn and for the process that waits for one. */
-  const turnFor = (runner: RunnerId, cwd: string | undefined, speed: "fast" | "cli" | undefined): Omit<TurnRequest, "message"> => {
+  const turnFor = (
+    runner: RunnerId,
+    cwd: string | undefined,
+    speed: "fast" | "cli" | undefined,
+  ): Omit<TurnRequest, "message"> => {
     const loc = currentLocale()
     return {
       runner,
@@ -317,9 +321,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
             conversation && conversation.runner === "codex" && conversation.cwd === cwd
               ? conversation.sessionId
               : undefined
-          const codexFollower = onText
-            ? textFollower((soFar) => onText(`${noticePrefix} ${soFar}`))
-            : undefined
+          const codexFollower = onText ? textFollower((soFar) => onText(`${noticePrefix} ${soFar}`)) : undefined
           const codexRequest: TurnRequest = {
             ...turnFor("codex", cwd, speed),
             message: text,
@@ -335,9 +337,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
               conversation = { runner: "codex", cwd, sessionId: codexResult.sessionId }
             }
             if (codexResult.status === "done") {
-              const answerText = codexResult.text
-                ? `${noticePrefix} ${codexResult.text}`
-                : `${noticePrefix} Fatto.`
+              const answerText = codexResult.text ? `${noticePrefix} ${codexResult.text}` : `${noticePrefix} Fatto.`
               return { ok: true, text: answerText, ran: true }
             }
             if (codexResult.status === "stopped") return { ok: false, text: "", ran: true }
@@ -351,7 +351,8 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
             signal?.removeEventListener("abort", onCodexAbort)
           }
         }
-        if (result.sessionId && generation === latest) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
+        if (result.sessionId && generation === latest)
+          conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
         if (result.status === "done") {
           return { ok: true, text: result.text || (loc === "en" ? "Done." : "Fatto."), ran: true }
         }

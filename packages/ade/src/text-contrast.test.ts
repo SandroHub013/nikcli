@@ -77,7 +77,9 @@ describe("text contrast of the tokens (AA, 4.5:1)", () => {
     test(`${scheme}: soft stays a step above weak on every ground`, () => {
       for (const ground of GROUNDS) {
         const g = lightDark(ground)[scheme]
-        expect(contrast(lightDark("--ade-text-soft")[scheme], g)).toBeGreaterThan(contrast(lightDark("--ade-text-weak")[scheme], g))
+        expect(contrast(lightDark("--ade-text-soft")[scheme], g)).toBeGreaterThan(
+          contrast(lightDark("--ade-text-weak")[scheme], g),
+        )
       }
     })
   }
@@ -90,7 +92,11 @@ describe("text contrast of the tokens (AA, 4.5:1)", () => {
     const reading = over([255, 255, 255, 0.06], over([19, 17, 17, read], white))
     for (const text of TEXT) {
       const color = hex(glass(text))
-      expect({ text, overlay: contrast(color, overlay) >= 4.5, reading: contrast(color, reading) >= 4.5 }).toEqual({ text, overlay: true, reading: true })
+      expect({ text, overlay: contrast(color, overlay) >= 4.5, reading: contrast(color, reading) >= 4.5 }).toEqual({
+        text,
+        overlay: true,
+        reading: true,
+      })
     }
   })
 

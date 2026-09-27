@@ -159,7 +159,12 @@ export function foldDecisions(
         }
         {
           // The log does not know how the question was opened: the fold does.
-          const wrong = choiceProblem(current, event.choice, event.choices, current.options.map((option) => option.label))
+          const wrong = choiceProblem(
+            current,
+            event.choice,
+            event.choices,
+            current.options.map((option) => option.label),
+          )
           if (wrong) {
             reject(event, t(wrong, event.k))
             continue

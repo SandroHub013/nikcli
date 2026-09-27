@@ -65,14 +65,18 @@ describe("the design log on disk", () => {
   })
 
   test("an answer without the user's words is not an answer", () => {
-    expect(toEvent({ type: "risposta", k: "DS1", at: at(1), by: "utente", choice: "A" })).toBe("risposta senza le parole dell'utente")
+    expect(toEvent({ type: "risposta", k: "DS1", at: at(1), by: "utente", choice: "A" })).toBe(
+      "risposta senza le parole dell'utente",
+    )
   })
 
   test("keys, dates and variants are checked", () => {
     expect(toEvent({ ...opened("DS1"), k: "DS 1" })).toBe("chiave mancante o non valida")
     expect(toEvent({ ...opened("DS1"), at: "ieri" })).toBe("data mancante o non valida")
     expect(toEvent({ ...opened("DS1"), variants: [] })).toBe("varianti mancanti o non valide")
-    expect(toEvent({ ...opened("DS1"), variants: [{ description: "senza nome", preview: "" }] })).toBe("variante senza nome")
+    expect(toEvent({ ...opened("DS1"), variants: [{ description: "senza nome", preview: "" }] })).toBe(
+      "variante senza nome",
+    )
   })
 })
 
@@ -121,11 +125,7 @@ describe("folding events into design proposals", () => {
   })
 
   test("duplicate open or events on unknown proposal are rejected", () => {
-    const { proposals, rejected } = foldProposals([
-      opened("DS1"),
-      opened("DS1"),
-      answered("UNKNOWN", "parole"),
-    ])
+    const { proposals, rejected } = foldProposals([opened("DS1"), opened("DS1"), answered("UNKNOWN", "parole")])
     expect(proposals.length).toBe(1)
     expect(rejected.length).toBe(2)
   })
@@ -159,9 +159,7 @@ describe("buckets and messages", () => {
   })
 
   test("foldProposals preserves keeps on DesignProposal (D3)", () => {
-    const { proposals } = foldProposals([
-      opened("DS1", { keeps: ["Titolo principale", "Colore di sfondo"] } as never),
-    ])
+    const { proposals } = foldProposals([opened("DS1", { keeps: ["Titolo principale", "Colore di sfondo"] } as never)])
     expect(proposals[0]?.keeps).toEqual(["Titolo principale", "Colore di sfondo"])
   })
 
@@ -179,8 +177,18 @@ describe("buckets and messages", () => {
       keeps: ["Sidebar invariata", "Header 48px"],
       spec: "S54",
       variants: [
-        { name: "1 · Vetro", description: "Sfondo semitrasparente", preview: "C:/path/1.html", changes: ["Pannello opaco rimosso", "Effetto blur"] },
-        { name: "2 · Solido", description: "Sfondo opaco classico", preview: "C:/path/2.html", changes: ["Bordo più spesso"] },
+        {
+          name: "1 · Vetro",
+          description: "Sfondo semitrasparente",
+          preview: "C:/path/1.html",
+          changes: ["Pannello opaco rimosso", "Effetto blur"],
+        },
+        {
+          name: "2 · Solido",
+          description: "Sfondo opaco classico",
+          preview: "C:/path/2.html",
+          changes: ["Bordo più spesso"],
+        },
       ],
     }
     const { proposals } = foldProposals([event])
@@ -243,7 +251,15 @@ describe("the answer button's gate", () => {
 
 describe("another round (S75 point 2)", () => {
   const again = (k: string, extra: Record<string, unknown> = {}, minute = 5) =>
-    ({ type: "risposta", k, at: at(minute), by: "utente", words: "più contrasto, meno vetro", again: true, ...extra }) as unknown as DesignEvent
+    ({
+      type: "risposta",
+      k,
+      at: at(minute),
+      by: "utente",
+      words: "più contrasto, meno vetro",
+      again: true,
+      ...extra,
+    }) as unknown as DesignEvent
   const reopened = (k: string, extra: Record<string, unknown> = {}, minute = 7) =>
     ({ type: "riaperta", k, at: at(minute), by: "fable", ...extra }) as unknown as DesignEvent
 
@@ -311,7 +327,16 @@ describe("another round (S75 point 2)", () => {
 
 describe("multiple answers (S75 point 6)", () => {
   const open = (extra: Record<string, unknown> = {}) =>
-    ({ ...opened("DS40"), variants: [{ name: "A", description: "", preview: "" }, { name: "B", description: "", preview: "" }, { name: "C", description: "", preview: "" }], multi: true, ...extra }) as unknown as DesignEvent
+    ({
+      ...opened("DS40"),
+      variants: [
+        { name: "A", description: "", preview: "" },
+        { name: "B", description: "", preview: "" },
+        { name: "C", description: "", preview: "" },
+      ],
+      multi: true,
+      ...extra,
+    }) as unknown as DesignEvent
   const answer = (extra: Record<string, unknown>) =>
     ({ type: "risposta", k: "DS40", at: at(5), by: "utente", words: "A + C", ...extra }) as unknown as DesignEvent
 
@@ -324,8 +349,12 @@ describe("multiple answers (S75 point 6)", () => {
     const good = foldProposals([open(), answer({ choices: ["A", "C"] })])
     expect(good.rejected).toEqual([])
     expect(good.proposals[0]).toMatchObject({ status: "risposta", answer: { choices: ["A", "C"] } })
-    expect(foldProposals([open(), answer({ choices: ["Z"] })]).rejected.map((r) => r.reason)).toEqual(["DS40: una delle scelte non è una variante"])
-    expect(foldProposals([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual(["DS40 è a scelta multipla: si risponde con choices"])
+    expect(foldProposals([open(), answer({ choices: ["Z"] })]).rejected.map((r) => r.reason)).toEqual([
+      "DS40: una delle scelte non è una variante",
+    ])
+    expect(foldProposals([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual([
+      "DS40 è a scelta multipla: si risponde con choices",
+    ])
   })
 
   test("on a single proposal choices is refused", () => {
@@ -334,7 +363,9 @@ describe("multiple answers (S75 point 6)", () => {
 
   test("the message says scelte: A + C", () => {
     const { proposals } = foldProposals([open(), answer({ choices: ["A", "C"] })])
-    expect(resolvedMessage(proposals[0]!)).toBe('design [k=DS40] Titolo DS40 — scelte: A + C — parole: "A + C" — spec: S54')
+    expect(resolvedMessage(proposals[0]!)).toBe(
+      'design [k=DS40] Titolo DS40 — scelte: A + C — parole: "A + C" — spec: S54',
+    )
   })
 })
 

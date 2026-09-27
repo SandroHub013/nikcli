@@ -14,7 +14,12 @@ import {
   type SuspendPane,
 } from "./suspend"
 
-const pane: SuspendPane = { id: "p1", agent: "claude-code", status: "idle", resumeId: "5f0c3a52-0000-4000-8000-000000000001" }
+const pane: SuspendPane = {
+  id: "p1",
+  agent: "claude-code",
+  status: "idle",
+  resumeId: "5f0c3a52-0000-4000-8000-000000000001",
+}
 const free: SuspendContext = {
   running: true,
   conversationMissing: false,
@@ -67,7 +72,12 @@ describe("closeSuspendedTree (P1-C6)", () => {
   test("kills the whole tree and waits for the kill to have run", async () => {
     const calls: { tree?: boolean }[] = []
     let finish: (ok: boolean) => void = () => {}
-    const session = { kill: (options?: { tree?: boolean }) => (calls.push(options ?? {}), new Promise<boolean>((resolve) => (finish = resolve))) }
+    const session = {
+      kill: (options?: { tree?: boolean }) => (
+        calls.push(options ?? {}),
+        new Promise<boolean>((resolve) => (finish = resolve))
+      ),
+    }
     let done = false
     const closing = closeSuspendedTree(session).then((ok) => ((done = true), ok))
     await Promise.resolve()
@@ -105,18 +115,28 @@ describe("mail for a suspended session (P1-C6)", () => {
   })
 
   test("restart is refused: nothing wakes a suspended session", () => {
-    expect(suspendedDelivery("relaunch", "A")).toEqual({ queue: false, refusal: 'errore: la sessione "A" è sospesa: la riprende l\'utente' })
+    expect(suspendedDelivery("relaunch", "A")).toEqual({
+      queue: false,
+      refusal: 'errore: la sessione "A" è sospesa: la riprende l\'utente',
+    })
   })
 
   test("the other kinds take their usual way", () => {
-    for (const kind of ["interrupt", "close", "reply", "update", "spawn"]) expect(suspendedDelivery(kind, "A")).toBeUndefined()
+    for (const kind of ["interrupt", "close", "reply", "update", "spawn"])
+      expect(suspendedDelivery(kind, "A")).toBeUndefined()
   })
 
   test("the saved queue is read back after a restart, in the order it came", () => {
     const held = [
       { paneId: "a", text: "uno", inbox: { id: "1", kind: "send" as const, from: "m" }, suspended: true as const },
       { paneId: "b", text: "di un'altra", suspended: true as const },
-      { paneId: "a", text: "due", full: "due\nrighe", inbox: { id: "2", kind: "ask" as const, from: "m" }, suspended: true as const },
+      {
+        paneId: "a",
+        text: "due",
+        full: "due\nrighe",
+        inbox: { id: "2", kind: "ask" as const, from: "m" },
+        suspended: true as const,
+      },
       { paneId: "a", text: "non sospesa" },
     ]
     const saved = JSON.stringify(suspendedMailToSave(held, (id) => id === "a"))
@@ -168,7 +188,9 @@ describe("the Sospendi button", () => {
 
 describe("the queue after Riprendi (Fabio, BASSO 2)", () => {
   test("still saved until typed: ADE closing right after Riprendi loses nothing", () => {
-    const held = [{ paneId: "a", text: "uno", inbox: { id: "1", kind: "send" as const, from: "m" }, suspended: true as const }]
+    const held = [
+      { paneId: "a", text: "uno", inbox: { id: "1", kind: "send" as const, from: "m" }, suspended: true as const },
+    ]
     // The pane is no longer suspended, but its mail is not typed yet.
     const saved = suspendedMailToSave(held, (id) => id === "a")
     expect(parseSuspendedMail(JSON.stringify(saved))).toEqual(held)

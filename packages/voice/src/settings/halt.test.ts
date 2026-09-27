@@ -18,7 +18,10 @@ describe("listening that stopped itself is still stopped tomorrow", () => {
     const { store, storage } = memory()
     createHaltStore(storage).write({ reason: "Ho smesso di ascoltare: troppe frasi.", at: 1_000 })
     expect(JSON.parse(store.get(VOICE_HALT_STORAGE_KEY)!)).toMatchObject({ at: 1_000 })
-    expect(createHaltStore(storage).read()).toMatchObject({ reason: "Ho smesso di ascoltare: troppe frasi.", at: 1_000 })
+    expect(createHaltStore(storage).read()).toMatchObject({
+      reason: "Ho smesso di ascoltare: troppe frasi.",
+      at: 1_000,
+    })
   })
 
   test("the user starting it again clears it, for good", () => {

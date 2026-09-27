@@ -840,7 +840,9 @@
 [data-component="voice-settings-panel"] [data-slot="mode-card"][aria-checked="true"]:focus-visible {
   background: var(--ade-raised);
   border-color: var(--ade-text-weak);
-  box-shadow: var(--ade-focus-ring), inset 0 1px 0 0 var(--ade-highlight);
+  box-shadow:
+    var(--ade-focus-ring),
+    inset 0 1px 0 0 var(--ade-highlight);
 }
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"]:focus-visible {
@@ -1355,7 +1357,9 @@
 
 /* The selected card keeps its ring; focus must layer on top, not replace. */
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-checked="true"]:focus-within {
-  box-shadow: var(--ade-focus-ring), inset 0 1px 0 0 var(--ade-highlight);
+  box-shadow:
+    var(--ade-focus-ring),
+    inset 0 1px 0 0 var(--ade-highlight);
 }
 
 [data-component="voice-settings-panel"] [data-slot="backend-card"][data-unusable="true"]:not([data-checked="true"]) {

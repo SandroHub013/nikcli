@@ -11,7 +11,13 @@ import { createInitialDialogState, transition, type DialogState } from "./sessio
  */
 
 const pane = (id: string, index: number, title: string): PaneSummary => ({
-  id, index, title, status: "idle", hasLiveProcess: true, isBrowser: false, isFile: false,
+  id,
+  index,
+  title,
+  status: "idle",
+  hasLiveProcess: true,
+  isBrowser: false,
+  isFile: false,
 })
 const ctx: ParseContext = { panes: [pane("pA", 1, "Alfa"), pane("pB", 2, "Beta")], focusedPaneId: "pA" }
 const say = (state: DialogState, text: string, now: number) => transition(state, { type: "utterance", text }, now, ctx)
@@ -19,8 +25,14 @@ const grants = (effects: { type: string; answer?: string; paneId?: string }[]) =
   effects.filter((e) => e.type === "answer_permission" && e.answer === "allow").map((e) => e.paneId)
 
 function aAskedBQueued(): DialogState {
-  const s1 = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "ls", kind: "shell" }, 10_000, ctx).state
-  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf /", kind: "shell" }, 11_000, ctx).state
+  const s1 = transition(
+    createInitialDialogState("idle"),
+    { type: "permission_requested", paneId: "pA", what: "ls", kind: "shell" },
+    10_000,
+    ctx,
+  ).state
+  return transition(s1, { type: "permission_requested", paneId: "pB", what: "rm -rf /", kind: "shell" }, 11_000, ctx)
+    .state
 }
 
 describe("a promoted question is heard before it is answered", () => {
