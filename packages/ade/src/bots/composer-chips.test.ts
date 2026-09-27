@@ -76,7 +76,7 @@ describe("lint: the bot's Invia", () => {
     }
     for (const rule of [...rules(bots, "bots-send"), ...rules(chat, "chat-send")]) {
       expect([rule, rule.includes("--ade-accent")]).toEqual([rule, false])
-      expect([rule, rule.includes("--ade-focus-ring")]).toEqual([rule, false])
+      // The focus ring is the shared grey token since contorni-neutri; only the accent is barred.
     }
     expect(body(bots, '[data-slot="bots-send"]')).toContain("background: var(--ade-text);")
   })

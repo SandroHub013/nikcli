@@ -717,8 +717,10 @@ body,
   border-radius: var(--ade-radius-full);
   font-size: 12px;
   font-weight: var(--ade-weight-semibold);
-  color: var(--ade-accent-fg);
-  background: var(--ade-accent);
+  /* The zone's own neutral, inverted so the word reads over the wash: the
+     accent pill was the one green left in a grey zone (contorni-terzo, 3). */
+  color: var(--ade-bg);
+  background: var(--ade-text);
 }
 
 /* A corner grip, visible when the tile is hovered or focused, so resting

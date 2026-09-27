@@ -79,8 +79,8 @@ describe("lint: the composer's focus", () => {
   test("lint: one ring, the composer's, and it is grey: the field draws none of its own", () => {
     expect(rule("bots-composer")).toBeDefined()
     const focused = /\[data-slot="bots-composer"\]:focus-within\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
-    expect(focused).toContain("box-shadow: 0 0 0 2px")
-    expect([focused, focused.includes("--ade-focus-ring")]).toEqual([focused, false])
+    // The shared grey ring (contorni-terzo, 1): the mix of --ade-border-strong it had was under 3:1.
+    expect(focused).toContain("box-shadow: var(--ade-focus-ring)")
     const field = /\[data-slot="bots-composer-field"\]:focus\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
     expect(field).toContain("box-shadow: none")
     expect(field).toContain("outline: none")

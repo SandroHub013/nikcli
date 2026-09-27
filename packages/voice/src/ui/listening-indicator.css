@@ -39,7 +39,7 @@
 
 /* Listening without the name, for a few seconds after an answer. */
 [data-component="listening-indicator"][data-state="follow-up"] {
-  border-color: var(--ade-accent, #1a73e8);
+  border-color: var(--ade-text-weak);
   color: var(--ade-accent, #1a73e8);
 }
 

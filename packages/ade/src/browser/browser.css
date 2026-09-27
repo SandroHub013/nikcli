@@ -703,7 +703,7 @@
 }
 
 [data-slot="browser-edit-field"] input:focus {
-  outline: 1px solid var(--ade-border-strong);
+  outline: 1px solid var(--ade-text-weak);
 }
 
 [data-slot="browser-edit-row"] {

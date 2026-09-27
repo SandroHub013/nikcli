@@ -520,7 +520,7 @@
  */
 [data-slot="chat-composer"]:focus-within {
   border-color: var(--ade-border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* The field inside the box draws no ring of its own: one ring, the box's. */
@@ -575,7 +575,7 @@
 
 [data-slot="chat-send"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* ── narrow ───────────────────────────────────────────────────────────────── */

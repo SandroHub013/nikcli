@@ -368,8 +368,12 @@
  * Said with the pane's own border rather than an overlay: an overlay would sit
  * between the cursor and the terminal, and a drop target that swallows the drop
  * it was advertising is worse than no highlight at all.
+ *
+ * The second selector is for the pane that has the focus: its rule in index.css
+ * sets the outline too, and is more specific, so the drop did not show there.
  */
-[data-component="session-pane"][data-dropping] {
+[data-component="session-pane"][data-dropping],
+[data-slot="grid-cell"] > [data-component][data-focused][data-dropping] {
   outline: 2px solid var(--ade-text-weak);
   outline-offset: -2px;
 }

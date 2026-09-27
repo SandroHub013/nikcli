@@ -176,6 +176,75 @@ describe("lint: no pane draws its focus in accent", () => {
     }
   })
 
+  test("lint: every focus ring of every sheet is 3:1 or better, not only the token", () => {
+    // The token passes, but a sheet can draw its own ring beside it: the two
+    // composers did, with `--ade-border-strong` mixed 70% into transparent —
+    // 1.77:1 in light and 1.47:1 in dark (contorni-terzo, 1). So every
+    // `box-shadow` and `outline` in a `:focus` rule, in ADE's sheets and the
+    // voice panel's, is either the token or a colour read here at 3:1 or more.
+    // A `color-mix` is refused outright: its share of transparent is a
+    // contrast this arithmetic cannot vouch for.
+    const grounds = ["--ade-surface", "--ade-bg"].map(readToken)
+    const passes = (token: string) => {
+      const ring = readToken(token)
+      return grounds.every((ground) => contrast(ring.light, ground.light) >= 3 && contrast(ring.dark, ground.dark) >= 3)
+    }
+    // A queue item's ring is its own state colour (dev.css): a signal, like the
+    // drop zone, not a neutral contour. Named so it is read, not missed.
+    const OWN_TONE = /var\(--queue-(tone|glow)\)/
+    const offenders: string[] = []
+    const roots = [src, join(src, "..", "..", "voice", "src")]
+    let rings = 0
+    for (const root of roots) {
+      for (const entry of new Bun.Glob("**/*.css").scanSync(root)) {
+        const file = join(root, entry)
+        postcss.parse(readFileSync(file, "utf-8")).walkRules((rule) => {
+          if (!/:focus/.test(rule.selector)) return
+          for (const node of rule.nodes) {
+            if (node.type !== "decl" || !/^(box-shadow|outline)$/.test(node.prop)) continue
+            const value = node.value.trim()
+            if (/^(none|0)$/.test(value) || OWN_TONE.test(value)) continue
+            rings++
+            // The token, with or without the fallback the voice package gives it
+            // for a host that does not define it.
+            if (/^var\(--ade-focus-ring[,)]/.test(value)) continue
+            const tokens = [...value.matchAll(/var\((--ade-[a-z-]+)\)/g)].map((m) => m[1]!)
+            const ok = !value.includes("color-mix") && tokens.length > 0 && tokens.every(passes)
+            if (!ok) offenders.push(`${entry.split("\\").join("/")} ${rule.selector} { ${node.prop}: ${value} }`)
+          }
+        })
+      }
+    }
+    // Rule 22: a scan that found nothing proves nothing.
+    expect([rings, rings > 20]).toEqual([rings, true])
+    expect(offenders).toEqual([])
+  })
+
+  test("lint: the drop zone's pill is neutral like the zone, and readable in both themes", () => {
+    // «Sotto», «Sopra», «Scambia»… sat on a solid accent pill in the middle of a
+    // grey dashed zone (contorni-terzo, 3). The pill is the zone's, so it is the
+    // zone's colour: no accent, and its text 4.5:1 or better on its ground.
+    let found = 0
+    sheet("index.css").walkRules('[data-slot="drop-zone-label"]', (rule) => {
+      found++
+      const decls = new Map<string, string>()
+      rule.walkDecls((decl) => {
+        decls.set(decl.prop, decl.value.trim())
+      })
+      const accents = [...decls].filter(([, value]) => /--ade-accent/.test(value)).map(([prop]) => prop)
+      expect(accents).toEqual([])
+      const ink = /^var\((--ade-[a-z-]+)\)$/.exec(decls.get("color") ?? "")?.[1]
+      const ground = /^var\((--ade-[a-z-]+)\)$/.exec(decls.get("background") ?? "")?.[1]
+      expect([ink !== undefined, ground !== undefined]).toEqual([true, true])
+      const [a, b] = [readToken(ink!), readToken(ground!)]
+      for (const theme of ["light", "dark"] as const) {
+        const value = contrast(a[theme], b[theme])
+        expect([theme, value >= 4.5, value.toFixed(2)]).toEqual([theme, true, value.toFixed(2)])
+      }
+    })
+    expect(found).toBe(1)
+  })
+
   test("lint: the neutral token has a light-dark value, so the ring follows the theme", () => {
     // A ring that reads an undefined token draws nothing, and a focus that draws
     // nothing is the accessibility cost of this change. ADE's themes are `light`,
@@ -219,10 +288,18 @@ describe("lint: no accent outline, in any sheet of packages/ade", () => {
   test("lint: an accent border, outline or shadow only sits on an accent fill", () => {
     // Every sheet, not the panes' three: the rule is the user's, and it is not a
     // per-file habit. On the parsed sheet, so a reformat cannot hide one.
+    // The voice panel's sheets too: in ADE they are drawn inside its settings,
+    // and the selected cards there still wore a teal border (contorni-terzo, 5).
+    const voice = join(src, "..", "..", "voice", "src");
+    const files = [
+      ...Array.from(new Bun.Glob("**/*.css").scanSync(src)).map((entry) => ({ path: join(src, entry), file: entry })),
+      ...Array.from(new Bun.Glob("**/*.css").scanSync(voice)).map((entry) => ({ path: join(voice, entry), file: `voice/${entry}` })),
+    ];
+    expect(files.some((f) => f.file.startsWith("voice/"))).toBe(true);
     const offenders: string[] = [];
-    for (const entry of Array.from(new Bun.Glob("**/*.css").scanSync(src))) {
-      const file = entry.replace(/\\/g, "/");
-      sheet(file).walkRules((rule) => {
+    for (const { path, file: raw } of files) {
+      const file = raw.replace(/\\/g, "/");
+      postcss.parse(readFileSync(path, "utf-8")).walkRules((rule) => {
         const decls = new Map<string, string>();
         for (const node of rule.nodes) {
           if (node.type === "decl") decls.set(node.prop, node.value.trim());
