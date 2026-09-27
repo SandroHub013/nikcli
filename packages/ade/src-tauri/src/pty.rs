@@ -263,21 +263,45 @@ fn apply_pane_env(builder: &mut CommandBuilder) {
 /// a pane lost them: another provider, another login, no Git Bash. (The token's
 /// name is spelt in pieces in the test: ADE's source never names a CLI's
 /// credential, `bots/terms.test.ts`.)
+///
+/// The Claude Code names are the ones it puts on every command it runs
+/// (2.1.283: `CLAUDECODE`, `AI_AGENT`, `CLAUDE_CODE_SESSION_ID`,
+/// `_CHILD_SESSION`, `_SESSION_ATTENDED`, `CLAUDE_PID`, `TRACEPARENT`,
+/// `_EXECPATH`, `CLAUDE_EFFORT`, `_INVOKED_SKILLS`), plus its messaging and IDE
+/// ones. Not `GIT_EDITOR`, `TMP` and the like, which it sets too: those are
+/// also the user's.
 const INHERITED_SESSION_MARKERS: &[&str] = &[
     "CLAUDE_CODE_CHILD_SESSION",
     "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_SESSION_ATTENDED",
     "CLAUDE_CODE_MESSAGING_SOCKET",
     "CLAUDE_CODE_MESSAGING_TOKEN",
     "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_INVOKED_SKILLS",
     "CLAUDE_CODE_SSE_PORT",
     "CLAUDECODE",
     "CLAUDE_PID",
+    "CLAUDE_EFFORT",
+    "AI_AGENT",
+    "TRACEPARENT",
     "ADE_MAILBOX_ROOT",
 ];
 
 /// Whether `key`, inherited from whatever launched ADE, is another session's.
+///
+/// Besides the names above, the shapes a new one of Claude Code's takes, so it
+/// does not reach the child just because it is new: anything under
+/// `CLAUDE_CODE_SESSION_` (its id, its access token, its kind, name and
+/// origin) and any `CLAUDE_CODE_…_SESSION_ID` or `_SESSION_UUID` (a bridge's,
+/// a host's, a remote or cloud session's). The user's settings that mention a
+/// session have other shapes: `_PER_SESSION`, `_SESSIONEND_…`,
+/// `_SUPPRESS_SESSION_…`.
 fn is_session_marker(key: &str) -> bool {
-    INHERITED_SESSION_MARKERS.iter().any(|name| name.eq_ignore_ascii_case(key))
+    let upper = key.to_ascii_uppercase();
+    INHERITED_SESSION_MARKERS.contains(&upper.as_str())
+        || upper.starts_with("CLAUDE_CODE_SESSION_")
+        || (upper.starts_with("CLAUDE_CODE_") && (upper.ends_with("_SESSION_ID") || upper.ends_with("_SESSION_UUID")))
 }
 
 /// Takes out of `builder` what the child must not inherit of `inherited`: other
@@ -1982,6 +2006,51 @@ mod tests {
             "claude_code_session_id",
         ] {
             assert!(is_session_marker(leaked), "{leaked} should not reach a spawned agent");
+        }
+    }
+
+    #[test]
+    fn a_session_variable_new_in_claude_code_does_not_reach_the_child() {
+        // What Claude Code 2.1.283 puts on every command it runs, read from its
+        // binary and from a session's own environment on 2026-09-27: the ones
+        // that are its session's, not the user's.
+        for leaked in [
+            "CLAUDE_CODE_SESSION_ATTENDED",
+            "CLAUDE_CODE_EXECPATH",
+            "CLAUDE_CODE_INVOKED_SKILLS",
+            "CLAUDE_EFFORT",
+            "AI_AGENT",
+            "TRACEPARENT",
+        ] {
+            assert!(is_session_marker(leaked), "{leaked} is the launching session's");
+        }
+        // Names the binary knows and ADE's list does not: a session's by their
+        // shape. The last two are made up, as the next version could name them.
+        for leaked in [
+            "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+            "CLAUDE_CODE_SESSION_KIND",
+            "CLAUDE_CODE_SESSION_NAME",
+            "CLAUDE_CODE_SESSION_ORIGIN",
+            "CLAUDE_CODE_BRIDGE_SESSION_ID",
+            "CLAUDE_CODE_HOST_SESSION_ID",
+            "CLAUDE_CODE_CLOUD_SESSION_ID",
+            "CLAUDE_CODE_REMOTE_SESSION_UUID",
+            "CLAUDE_CODE_SESSION_PARENT",
+            "claude_code_teammate_session_id",
+        ] {
+            assert!(is_session_marker(leaked), "{leaked} is shaped like a session's own");
+        }
+        // The user's settings that mention a session keep reaching the child.
+        for kept in [
+            "CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION",
+            "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS",
+            "CLAUDE_CODE_SUPPRESS_SESSION_ATTRIBUTION",
+            "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE",
+            "CLAUDE_CODE_SCROLL_SPEED",
+            "CLAUDE_CODE_TMPDIR",
+            "GIT_EDITOR",
+        ] {
+            assert!(!is_session_marker(kept), "{kept} is the user's and must reach the child");
         }
     }
 
