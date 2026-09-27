@@ -213,3 +213,8 @@ export function isFormField(target: unknown): boolean {
   const tag = (target as { tagName?: unknown } | null)?.tagName
   return tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA"
 }
+
+/** «D1: rimandata · domani»: what the sheet says after Rimanda, and the toast after it (rifiniture 2). */
+export function deferredStatus(k: string, until: string, now: Date): string {
+  return t("decisions.sheet.status.deferred", k, formatDay(until, now))
+}

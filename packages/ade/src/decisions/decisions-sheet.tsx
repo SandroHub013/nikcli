@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
-import { enterReady, isFormField, sheetKey, togglePick } from "./answer"
+import { deferredStatus, enterReady, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { answeredStatus, type RecipientStatus } from "./delivery"
@@ -197,6 +197,7 @@ export function DecisionsSheet(props: {
                 onSubmit={() => void submit()}
                 onDefer={(until) =>
                   void props.hub.defer(decision(), until).then((done) => {
+                    if (done) showStatus(deferredStatus(decision().k, until, props.hub.register.now()))
                     if (done) setAnswered(true)
                     if (done) surface?.focus()
                   })

@@ -2,10 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createComponent, render } from "solid-js/web"
+import { deferredStatus } from "../decisions/answer"
 import { submitControl as decisionControl } from "../decisions/card"
 import { parseDecisionLog } from "../decisions/log"
 import { foldDecisions } from "../decisions/state"
 import { submitControl as designControl } from "../design/card"
+import { answeredStatus as designAnsweredStatus, recipientFor as designRecipientFor } from "../design/delivery"
 import { parseDesignLog } from "../design/log"
 import { foldProposals } from "../design/state"
 import { createToast } from "../surface/toast"
@@ -173,6 +175,38 @@ describe("rifiniture 2: the sheet's last line outlives the sheet", () => {
     const workbench = read("surface/workbench.tsx")
     expect(workbench.split("if (said) toast.show(said)")).toHaveLength(3)
     expect(workbench).toContain('<div data-slot="ade-toast" role="status"')
+  })
+})
+
+/*
+ * After the toast came: «Ho scelto sul foglio» and Rimanda closed the sheet
+ * too, and said nothing (Master, after 7fa40dc20). They say it now.
+ */
+describe("rifiniture 2, the other ways out: «Ho scelto sul foglio» and Rimanda", () => {
+  test("«Ho scelto sul foglio» says where the choice went, as «Scegli questa» does", () => {
+    const running = [{ id: "p1", title: "Sessione 1 — Terminal (1)", running: true }]
+    const line = designAnsweredStatus(
+      "DS2",
+      "scelta sul foglio claude.ai",
+      designRecipientFor("p1", running, { state: "non scelta" }),
+    )
+    expect(line).toBe("DS2: scelta sul foglio claude.ai, a Sessione 1 — Terminal (1)")
+  })
+
+  test("Rimanda says until when", () => {
+    const now = new Date(2026, 8, 27, 12)
+    expect(deferredStatus("D1", "2026-09-28", now)).toBe("D1: rimandata · domani")
+  })
+
+  test("lint: both write the sheet's status before the sheet leaves", () => {
+    const design = read("design/design-sheet.tsx")
+    const chosen = design.slice(design.indexOf("props.hub.sheetChosen(proposal())"))
+    expect(chosen.indexOf('answeredStatus(proposal().k, t("design.url.words")')).toBeGreaterThan(-1)
+    expect(chosen.indexOf("showStatus(")).toBeLessThan(chosen.indexOf("setAnswered(true)"))
+    const decisions = read("decisions/decisions-sheet.tsx")
+    const deferred = decisions.slice(decisions.indexOf("props.hub.defer(decision(), until)"))
+    expect(deferred.indexOf("showStatus(deferredStatus(decision().k, until")).toBeGreaterThan(-1)
+    expect(deferred.indexOf("showStatus(")).toBeLessThan(deferred.indexOf("setAnswered(true)"))
   })
 })
 

@@ -941,6 +941,7 @@ export const it = {
     `${key}: ${choice}, a ${recipient}`,
   "decisions.sheet.status.idle": (key: string, choice: string, recipient: string) =>
     `${key}: ${choice}, in coda (${recipient} non è in esecuzione)`,
+  "decisions.sheet.status.deferred": (key: string, day: string) => `${key}: rimandata · ${day}`,
   "decisions.sheet.status.none": (key: string, choice: string) =>
     `${key}: ${choice}, in coda (nessuna sessione scelta)`,
   "decisions.sheet.full": "Vista completa",
