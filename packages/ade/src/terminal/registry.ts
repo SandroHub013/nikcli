@@ -375,7 +375,7 @@ export function copyOnRelease(
 /**
  * Key event handler for terminal emulator:
  * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
- * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and clears selection
+ * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and forgets the selection
  * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
  */
 export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () => void): (event: KeyboardEvent) => boolean {
@@ -393,7 +393,8 @@ export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () 
         if (event.type === "keydown") {
           if (copyIsCovered(terminal)) onCopyBlocked?.()
           else void copyToClipboard(selectionText(terminal))
-          terminal.clearSelection()
+          // Not `clearSelection`: its teal comes back on a resize (see `forgetSelection`).
+          forgetSelection(terminal)
         }
         return false
       }
