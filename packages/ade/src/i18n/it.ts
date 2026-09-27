@@ -1224,7 +1224,6 @@ export const it = {
   "record.partial": (problems: string) => `Video salvato, ma non tutte le tracce: ${problems}`,
   "record.busy": "Una registrazione è già in corso.",
   "record.closingPrevious": "La registrazione precedente sta chiudendo il file: riprova tra un istante.",
-  "remote.label": "Aggiungi ambiente remoto",
   "remote.title": "Ambiente remoto (ssh)",
   "remote.noSsh": "ssh non trovato nel PATH",
   "remote.target": "Host, utente@host o utente@host:porta",

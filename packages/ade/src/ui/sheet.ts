@@ -42,6 +42,8 @@ export interface SheetProps {
   readonly surface?: boolean
   /** The id of the title, for a panel whose title is not a `SheetTitle`. */
   readonly labelledBy?: string
+  /** The name, for a panel with no title to show (the palette: its field says what it is). */
+  readonly label?: string
   /** `alertdialog` for a question that must be answered (the recording consent). */
   readonly role?: "dialog" | "alertdialog"
 }
@@ -102,6 +104,7 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
     "mount",
     "surface",
     "labelledBy",
+    "label",
     "role",
     "children",
   ])
@@ -176,6 +179,9 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
                 },
                 get "aria-labelledby"() {
                   return own.labelledBy
+                },
+                get "aria-label"() {
+                  return own.label
                 },
                 get role() {
                   return own.role

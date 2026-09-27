@@ -98,14 +98,21 @@ describe("the palette's shortcut with a sheet open", () => {
     expect(wb.panel()!.contains(document.activeElement)).toBe(true)
   })
 
-  test("unguarded, the old way: the palette shows, and a digit typed for it goes to the sheet", async () => {
+  /*
+   * Unguarded, the palette on the old Overlay opened under the sheet's trap
+   * and a digit typed for it went to the sheet. On a Sheet of its own it comes
+   * on top with the keys, as a second sheet does (sheets-stacked.test.ts).
+   */
+  test("unguarded, the palette is a sheet too: it comes on top, and a digit typed for it stays in it", async () => {
     const wb = workbench(false)
     await tick()
     await wb.runCommand("palette.open")
     await tick()
-    expect(document.querySelector('[data-component="palette"]')).not.toBeNull()
+    const palette = document.querySelector('[data-component="palette"]')
+    expect(palette).not.toBeNull()
+    expect(palette!.contains(document.activeElement)).toBe(true)
     type("1")
-    expect(wb.sheetKeys).toEqual(["1"])
+    expect(wb.sheetKeys).toEqual([])
   })
 
   test("with the sheet closed, the same guarded command opens the palette, with the focus in it", async () => {
@@ -119,5 +126,59 @@ describe("the palette's shortcut with a sheet open", () => {
     const palette = document.querySelector('[data-component="palette"]')
     expect(palette).not.toBeNull()
     expect(palette!.contains(document.activeElement)).toBe(true)
+  })
+})
+
+/*
+ * Review area 2, MEDIO: the palette was the Overlay that trapped nothing, so
+ * Tab walked out of it into the terminals behind. It is a Sheet now, like the
+ * dialogs of kobalte-overlay, and gives the focus back when it goes.
+ */
+describe("the palette on its own", () => {
+  async function openPalette() {
+    const opener = document.createElement("button")
+    const outside = document.createElement("button")
+    document.body.append(opener, outside)
+    opener.focus()
+    const [open, setOpen] = createSignal(true)
+    cleanup = render(
+      () =>
+        createComponent(CommandPalette, {
+          get open() {
+            return open()
+          },
+          commands: [{ id: "view.toggle", title: "Cambia vista", group: "Vista" }],
+          onRun: () => {},
+          onClose: () => setOpen(false),
+          platform: "other",
+        }),
+      document.body.appendChild(document.createElement("div")),
+    )
+    await tick()
+    const palette = document.querySelector<HTMLElement>('[data-component="palette"]')!
+    return { opener, outside, palette, setOpen }
+  }
+
+  test("the focus is in its field, and moved outside it comes back in", async () => {
+    const { outside, palette } = await openPalette()
+    expect(document.activeElement?.getAttribute("data-slot")).toBe("input")
+    outside.focus()
+    await tick()
+    expect(palette.contains(document.activeElement)).toBe(true)
+  })
+
+  test("it is a modal dialog named for what it is", async () => {
+    const { palette } = await openPalette()
+    const dialog = palette.querySelector('[role="dialog"]')!
+    expect(dialog.getAttribute("aria-modal")).toBe("true")
+    expect(dialog.getAttribute("aria-label")).toBeTruthy()
+  })
+
+  test("closed, the focus goes back to what had it", async () => {
+    const { opener, setOpen } = await openPalette()
+    setOpen(false)
+    await tick()
+    expect(document.querySelector('[data-component="palette"]')).toBeNull()
+    expect(document.activeElement).toBe(opener)
   })
 })
