@@ -111,7 +111,8 @@ export function DesignSheet(props: {
     <Sheet
       component="design-sheet"
       onClose={props.onClose}
-      size="lg"
+      // The one sheet of a proposal: every variant at its own size, one under the other or side by side.
+      size="xl"
       ref={(element) => (surface = element)}
       onKeyDown={onKeyDown}
     >
@@ -177,11 +178,10 @@ export function DesignSheet(props: {
                 onPick={(index) => pick(k, index, Boolean(proposal().multi))}
                 onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                 onSubmit={() => void submit()}
-                onOpenVariant={async (variantNumber) => {
-                  const problem = await props.hub.openVariant(proposal(), variantNumber)
-                  if (!problem) {
-                    props.onClose()
-                  }
+                onChoose={(index) => {
+                  // One press: picked and sent; on a question of several, ticked.
+                  pick(k, index, Boolean(proposal().multi))
+                  if (!proposal().multi) void submit()
                 }}
                 noteRef={(element) => (note = element)}
               />

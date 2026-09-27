@@ -55,7 +55,10 @@ export function DesignPane(props: {
       onPick={(index) => props.hub.pick(proposal, index)}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
-      onOpenVariant={(variantNumber) => void props.hub.openVariant(proposal, variantNumber)}
+      onChoose={(index) => {
+        props.hub.pick(proposal, index)
+        if (!proposal.multi) void props.hub.submit(proposal, "primary")
+      }}
     />
   )
 

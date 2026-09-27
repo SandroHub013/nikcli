@@ -973,7 +973,8 @@ export const it = {
   "design.variants": "Varianti",
   "design.keeps": "Resta invariato",
   "design.variant.changes": "Cosa cambia",
-  "design.variant.openLarge": "Apri grande",
+  "design.variant.choose": "Scegli questa",
+  "design.variant.chosen": "Scelta",
   "design.preview": "Anteprima",
   "design.preview.source": "Fonte",
   "design.preview.outside": (path: string, k: string) =>

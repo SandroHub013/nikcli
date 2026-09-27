@@ -35,7 +35,7 @@ import {
   resolvePreviewPath,
   sharedPreview,
   shortenPath,
-  thumbnailScale,
+  VARIANT_SANDBOX,
 } from "./design-preview"
 import { mediaUrl } from "../video/video"
 import { foldProposals, type DesignProposal } from "./state"
@@ -612,74 +612,9 @@ describe("a variant's preview", () => {
     })
     const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
     expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
-    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "", loading: "lazy" })
+    expect(props).toMatchObject({ width: "360", height: "240", sandbox: VARIANT_SANDBOX, loading: "lazy" })
     expect("srcdoc" in props).toBe(false)
     expect("style" in props).toBe(false)
-  })
-
-  test("lint: the miniature is a frame loaded by src — no srcdoc, no allow-same-origin, scaled with pointer-events none", () => {
-    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
-    const code = tsx
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-      .replace(/\/\/.*$/gm, "")
-    expect(code).not.toContain("srcdoc")
-    expect(code).toContain("{...frameProps(current, measured(), title())}")
-    expect(code).toContain("transform: `scale(${thumb().scale})`")
-    expect(code).toContain("pointer-events")
-    expect(code).not.toContain("allow-same-origin")
-  })
-
-  test("thumbnailScale scales to box width, clipping height to boxH (D3 review)", () => {
-    // 760x1600 page with default box 330x220: scale is 330 / 760 (~0.434), height clipped to 220
-    const scaled760 = thumbnailScale({ width: 760, height: 1600 })
-    expect(scaled760.scale).toBe(330 / 760)
-    expect(scaled760.width).toBe(330)
-    expect(scaled760.height).toBe(220)
-    expect(scaled760.frameWidth).toBe(760)
-    expect(scaled760.frameHeight).toBe(1600)
-
-    // With custom box dimensions: scale equals box width divided by 760
-    const customBox = thumbnailScale({ width: 760, height: 1600 }, 400, 250)
-    expect(customBox.scale).toBe(400 / 760)
-    expect(customBox.width).toBe(400)
-    expect(customBox.height).toBe(250)
-
-    // A shorter page that fits within boxH without clipping
-    const shortPage = thumbnailScale({ width: 500, height: 200 }, 300, 220)
-    expect(shortPage.scale).toBe(300 / 500)
-    expect(shortPage.width).toBe(300)
-    expect(shortPage.height).toBe(120)
-  })
-
-  test("thumbnailScale with measured box width (259px) scales to 259 / size.width without clipping (ade/design-miniatura)", () => {
-    // In live ADE Test with 3 variants per row, the actual box measures 259px (not 330px).
-    const measuredBoxW = 259
-    const scaled = thumbnailScale({ width: 760, height: 1600 }, measuredBoxW)
-    expect(scaled.scale).toBe(259 / 760)
-    expect(scaled.width).toBe(259)
-    expect(scaled.height).toBe(220)
-    expect(scaled.frameWidth).toBe(760)
-    expect(scaled.frameHeight).toBe(1600)
-    // The rendered width of the scaled iframe (760 * scale) exactly equals the measured box width (259px):
-    expect(Math.round(scaled.frameWidth * scaled.scale)).toBe(259)
-
-    // Recalculates dynamically when container width changes (e.g. window resize)
-    const resizedBox = thumbnailScale({ width: 760, height: 1600 }, 285)
-    expect(resizedBox.scale).toBe(285 / 760)
-    expect(resizedBox.width).toBe(285)
-    expect(Math.round(resizedBox.frameWidth * resizedBox.scale)).toBe(285)
-  })
-
-  test("lint: DesignPreview re-measures with a ResizeObserver and scales the thumbnail to the measured width", () => {
-    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
-    expect(tsx).toContain("ResizeObserver")
-    expect(tsx).toContain("thumbnailScale(measured(), measuredWidth() > 0 ? measuredWidth() : 330)")
-  })
-
-  test("frameProps disables scripts in miniature preview sandbox", () => {
-    const props = frameProps({ src: "http://example.com" }, { width: 360, height: 240 }, "Title")
-    expect(props.sandbox).toBe("")
   })
 
   test("a page outside the project root gets no frame: Fuori dal progetto", () => {

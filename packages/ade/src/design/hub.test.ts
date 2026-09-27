@@ -499,8 +499,12 @@ describe("the sheet keeps a choice made in this window", () => {
     expect(chosen).toBe(false)
   })
 
-  test("«Apri grande» from DesignSheet closes the sheet when variant opens without problem (MEDIO 2)", async () => {
-    let closed = false
+  /*
+   * notifiche-design: one press on «Scegli questa» chooses and sends. It was
+   * «Apri grande», which took the variant to the browser pane and closed the sheet.
+   */
+  test("«Scegli questa» in DesignSheet picks the variant and sends it, in one press", async () => {
+    const answered: string[] = []
     const proposal: DesignProposal = {
       k: "DS1",
       title: "Settings",
@@ -532,12 +536,11 @@ describe("the sheet keeps a choice made in this window", () => {
       hub = createDesignHub({
         register,
         projectRoot: () => "C:\\project",
-        recipient: () => ({ state: "non scelta" }),
-        sessions: () => [],
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
         choose: () => {},
         delivery: () => ({ state: "in coda" }),
-        onAnswered: () => {},
-        openVariant: async () => undefined,
+        onAnswered: (_proposal, event) => void answered.push(event.choice ?? ""),
       })
       return dispose
     })
@@ -548,21 +551,19 @@ describe("the sheet keeps a choice made in this window", () => {
       () =>
         createComponent(DesignSheet, {
           hub,
-          onClose: () => {
-            closed = true
-          },
+          onClose: () => {},
           onOpenPanel: () => {},
         }),
       host,
     )
 
     // The sheet is a portal (kobalte-overlay): it renders into the shell, not into `host`.
-    const openLargeBtn = document.querySelector<HTMLButtonElement>('[data-slot="variant-open-large"]')
-    expect(openLargeBtn).not.toBeNull()
-    openLargeBtn?.click()
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(closed).toBe(true)
+    expect(document.querySelector('[data-slot="variant-open-large"]')).toBeNull()
+    const choose = document.querySelector<HTMLButtonElement>('[data-slot="variant-choose"]')
+    expect(choose).not.toBeNull()
+    choose?.click()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(answered).toEqual(["A"])
 
     disposeSheet()
     disposeHub()
