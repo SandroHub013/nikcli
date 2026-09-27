@@ -1,0 +1,2 @@
+# The pty streams here are bytes as captured, CRLF included.
+*.bin binary

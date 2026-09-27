@@ -194,7 +194,11 @@ describe("a request cannot become a shell command (review, ALTO 1)", () => {
   test("lint: the workbench hands a line to the panels only behind acceptsRequests (ALTO 1)", () => {
     const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
     const calls = source.split("\n").filter((line) => line.includes("handlePanelRequest(paneId, line)"))
-    expect(calls.length).toBe(1)
-    expect(calls[0]).toContain("if (acceptsRequests(agentId))")
+    // From `onLine`, and from the screen of an agent that draws one (`screenRequests`).
+    expect(calls.length).toBe(2)
+    expect(calls[0]).toContain("onRequest: (paneId, line) =>")
+    const screen = source.slice(source.indexOf("const screenRequests = createScreenRequests("), source.indexOf("onRequest: (paneId, line) =>"))
+    expect(screen).toContain("if (!pane || !acceptsRequests(pane.agent ?? pane.model)")
+    expect(calls[1]).toContain("if (acceptsRequests(agentId) && !onAlternateScreen(paneId))")
   })
 })
