@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
+import { For, Show, children, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
 import { Badge } from "../ui/layout"
 import "./sidebar.css"
 import { getHost } from "../host/shell"
@@ -611,6 +611,19 @@ export function Sidebar(props: SidebarProps) {
   )
   const [width, setWidth] = createSignal(initialWidth)
   const [isResizing, setIsResizing] = createSignal(false)
+
+  /*
+   * The footer's buttons, built once.
+   *
+   * A JSX prop is a getter: every read builds its elements again. Read once
+   * by `<Show when>` and once for the content, the bell's menu existed twice,
+   * and the copy that was never inserted still bound its «click elsewhere
+   * closes it» to the document. Every press inside the real menu was
+   * elsewhere for that copy, so the menu closed on pointerdown and the click
+   * never reached «Aggiorna», «Controlla aggiornamenti» or the ×: pressed,
+   * and nothing happened (0.9.1, «Aggiorna non risponde»).
+   */
+  const footerActions = children(() => props.footerActions)
 
   /*
    * Which sections are open, and nothing about how tall they are.
@@ -1518,7 +1531,7 @@ export function Sidebar(props: SidebarProps) {
          * line it is what it is: the way out of the sidebar and into the
          * application's settings.
          */}
-        <Show when={props.onOpenSettings ?? props.footerActions}>
+        <Show when={props.onOpenSettings ?? footerActions()}>
           <div data-slot="sidebar-settings-strip">
             {/* Gear, theme and bell as one tight group on the left; what the
                 machine is spending fills the rest of the row. */}
@@ -1548,8 +1561,8 @@ export function Sidebar(props: SidebarProps) {
                   <span data-slot="sidebar-settings-label">{t("sidebar.settings")}</span>
                 </button>
               </Show>
-              <Show when={props.footerActions}>
-                <div data-slot="sidebar-footer-actions">{props.footerActions}</div>
+              <Show when={footerActions()}>
+                <div data-slot="sidebar-footer-actions">{footerActions()}</div>
               </Show>
             </div>
             <Show when={stats()}>
