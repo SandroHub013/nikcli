@@ -104,6 +104,17 @@ async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> 
     Ok(())
 }
 
+/// The file `ade-msg design` names, if a pane may show it: see `media::design_sheet`.
+///
+/// Checked here, against the folders ADE serves, because only this side can
+/// resolve a link; the page asks and shows the refusal it gets back.
+#[tauri::command]
+async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cwd: String) -> Result<String, String> {
+    let served = roots.0.lock().map(|guard| guard.clone()).unwrap_or_default();
+    let opened = roots.1.lock().map(|guard| guard.clone()).unwrap_or_default();
+    media::design_sheet(&served, &opened, &path, &cwd).map(|sheet| sheet.to_string_lossy().into_owned())
+}
+
 /// Why `dir` cannot be a write root, when it cannot.
 ///
 /// Any folder used to be accepted, so a caller could register the drive root or
@@ -2275,6 +2286,7 @@ pub fn run() {
             agent_link::agent_activity_read,
             agent_link::agent_activity_read_many,
             agent_link::agent_link_read,
+            design_sheet_path,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,
             agent_link::agent_hook_write,
