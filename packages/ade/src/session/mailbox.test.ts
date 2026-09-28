@@ -273,8 +273,7 @@ describe("a session's status follows its turn hooks", () => {
     expect(statusFromActivity("working", { state: "idle", at: 100 }, 150)).toBeUndefined()
   })
 
-  test("a permission question, an error or no hook data are left alone", () => {
-    expect(statusFromActivity("waiting", { state: "idle", at: 200 }, 0)).toBeUndefined()
+  test("an error or no hook data are left alone", () => {
     expect(statusFromActivity("error", { state: "busy", at: 200 }, 0)).toBeUndefined()
     expect(statusFromActivity("idle", undefined, 0)).toBeUndefined()
     expect(statusFromActivity("working", { state: "busy", at: 200 }, 0)).toBeUndefined()
@@ -436,9 +435,29 @@ describe("the permission prompt the hook says", () => {
     expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
   })
 
-  test("the status in the sidebar says working while a prompt stands", () => {
-    // The pane is not free, so it is not idle, whatever the previous state said.
-    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("working")
+  test("the status in the sidebar says Permesso while a prompt the hook reported stands (fix 3)", () => {
+    // The pane is not free, so it is not idle, whatever the previous state said;
+    // and it is not «Al lavoro» either: it waits on a key.
+    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("waiting")
+    expect(statusFromActivity("working", { state: "permission", at: now - 1_000 }, now - 5_000)).toBe("waiting")
+    expect(statusFromActivity("waiting", { state: "permission", at: now - 1_000 }, undefined)).toBeUndefined()
+  })
+
+  test("a newer turn start or end takes the prompt away (fix 3)", () => {
+    expect(statusFromActivity("waiting", { state: "busy", at: now }, now - 5_000)).toBe("working")
+    expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000)).toBe("idle")
+    // The previous turn's idle does not end a question asked in this one.
+    expect(statusFromActivity("waiting", { state: "idle", at: now - 9_000 }, now - 5_000)).toBeUndefined()
+  })
+
+  test("what ADE saw after the hook wrote wins, and at the same moment the hook wins (fix 4)", () => {
+    // The screen found a prompt after the turn's busy: the busy is older news.
+    expect(statusFromActivity("waiting", { state: "busy", at: now - 3_000 }, now - 5_000, now - 1_000)).toBeUndefined()
+    // The screen saw the question answered after the hook reported it: no going back to Permesso.
+    expect(statusFromActivity("working", { state: "permission", at: now - 3_000 }, now - 5_000, now - 1_000)).toBeUndefined()
+    // A Stop after the screen opened its prompt ends the turn.
+    expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000, now - 1_000)).toBe("idle")
+    expect(statusFromActivity("waiting", { state: "idle", at: now - 1_000 }, now - 5_000, now - 1_000)).toBe("idle")
   })
 })
 

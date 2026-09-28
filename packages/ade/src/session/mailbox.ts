@@ -871,23 +871,35 @@ export function sameDir(a: string, b: string): boolean {
  * a session working on a request typed in by `ade-msg` stayed "Disponibile"
  * for its whole turn, in the sidebar and in `ade-msg list`. Where the CLI has
  * turn hooks they are the truth both ways. An idle written before the pane was
- * last set working is the previous turn's and does not end this one; a
- * permission question, an error or a pane still opening is not overridden.
+ * last set working is the previous turn's and does not end this one; an error
+ * or a pane still opening is not overridden.
+ *
+ * `seenAt` is when ADE last saw a question in the pane open or close by
+ * itself: the reading of the screen, or an Enter typed into the prompt. Two
+ * sources that disagree: the more recent one wins, and a hook written at the
+ * same moment beats what ADE saw.
  */
 export function statusFromActivity(
   status: string,
   activity: Activity | undefined,
   workingSince: number | undefined,
-): "working" | "idle" | undefined {
+  seenAt?: number,
+): "working" | "idle" | "waiting" | undefined {
   if (!activity) return undefined
-  if (status !== "idle" && status !== "working") return undefined
-  // A prompt is work: the session is stopped on a question, and a pane that says
-  // "Disponibile" while a permission question stands is a pane someone will send
-  // a message into. Same as busy, and never downgraded to idle by it.
-  if (activity.state === "busy" || activity.state === "permission") {
-    return status === "working" ? undefined : "working"
-  }
-  if (status !== "working") return undefined
+  if (status !== "idle" && status !== "working" && status !== "waiting") return undefined
+  if (seenAt !== undefined && activity.at < seenAt) return undefined
+  /*
+   * A prompt is a question waiting, and it shows as one.
+   *
+   * It was mapped to working: never "Disponibile", which was the point, but
+   * not "Permesso" either. The sidebar shows a prompt only for a waiting pane
+   * or one whose question the screen reading understood, so the prompt the
+   * reading missed — the case the hook was added for — read «Al lavoro» in
+   * the sidebar and `working` in `ade-msg list`, while it waited on a key.
+   */
+  if (activity.state === "permission") return status === "waiting" ? undefined : "waiting"
+  if (activity.state === "busy") return status === "working" ? undefined : "working"
+  if (status === "idle") return undefined
   return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
 }
 

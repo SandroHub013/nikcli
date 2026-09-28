@@ -2732,6 +2732,11 @@ export function Workbench() {
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
   const activityOf = new Map<string, Activity>()
+  /**
+   * When ADE last saw a question in each pane open or close by itself, without
+   * the hook: a hook written before that is older news (`statusFromActivity`).
+   */
+  const questionSeenAt = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
@@ -2924,8 +2929,12 @@ export function Workbench() {
       const activity = read
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
-      const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
-      if (next === "working") {
+      const next = pane
+        ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
+        : undefined
+      if (next === "waiting") {
+        setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
+      } else if (next === "working") {
         panels.newTurn(paneId, activity.at)
         workingSince.set(paneId, Date.now())
         setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
@@ -6446,6 +6455,8 @@ export function Workbench() {
     paneTokens.delete(id)
     paneNonces.delete(id)
     activityOf.delete(id)
+    questionSeenAt.delete(id)
+    workingSince.delete(id)
     bracketedPaste.delete(id)
   }
 
@@ -6846,6 +6857,7 @@ export function Workbench() {
         return
       }
       permissions.forget(paneId)
+      questionSeenAt.set(paneId, Date.now())
       // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
       if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
@@ -6857,6 +6869,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
+    questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
       void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
