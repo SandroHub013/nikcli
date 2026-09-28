@@ -168,6 +168,16 @@ export function takesActivityExtension(agentId: string): boolean {
   return ACTIVITY_EXTENSION_AGENTS.includes(agentId)
 }
 
+/**
+ * The `agent` a pane's own CLI writes in its reports: the hook's, or `pi` for
+ * the extension (Prime is a fork of pi). A report of another family, with this
+ * spawn's nonce, comes from a CLI the session started, which inherited the
+ * pane's environment (review of activity-prime-pi, MEDIO 2).
+ */
+export function reportFamily(agentId: string): string | undefined {
+  return takesActivityExtension(agentId) ? "pi" : hookTarget(agentId)?.agent
+}
+
 /** Whether a spawn of this agent with a nonce reports its turns: a hook with activity events, or the extension. */
 export function reportsTurns(agentId: string): boolean {
   return Boolean(hookTarget(agentId)?.activityEvents?.length) || takesActivityExtension(agentId)

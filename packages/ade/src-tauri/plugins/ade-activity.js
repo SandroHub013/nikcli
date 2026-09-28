@@ -84,13 +84,16 @@ export default function adeActivity(pi) {
     write(ctx)
     const source = SOURCES[event && event.reason]
     const sessionId = sessionIdOf(ctx)
-    // Prime is a fork of pi, and ADE reads only the pane, the nonce and the id.
+    // "pi" for Prime too: it is the family, a fork of pi, and ADE takes a later
+    // report only from the pane's own family (`reportFamily`, MEDIO 2).
     if (source && sessionId) put(nonce + ".json", { pane, nonce, agent: "pi", sessionId, source, at: Date.now() })
   })
 
   pi.on("agent_start", (_event, ctx) => {
     if (!mine(ctx)) return
     clearRetry()
+    // A question left open (an Esc halfway through one) does not outlive the turn.
+    asking = 0
     active = true
     write(ctx)
   })
@@ -98,6 +101,7 @@ export default function adeActivity(pi) {
   pi.on("agent_end", (event, ctx) => {
     if (!mine(ctx) || !active) return
     active = false
+    asking = 0
     clearRetry()
     if (lastStopReason(event) === "error") {
       retry = setTimeout(() => {
