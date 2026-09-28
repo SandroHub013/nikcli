@@ -479,6 +479,27 @@ body[data-theme="glass"] #root,
    */
   --ade-font-body: 12px;
 
+  /*
+   * ── icons ──────────────────────────────────────────────────────────────────
+   * One set, drawn in line with a 1.5px stroke (DS-C = 1), for the marks a
+   * ::before or ::after used to take from the font (✓ ✕ ▸ ▾ ! ·), which drew
+   * each at another weight in each font. They are masks: the element paints
+   * `background-color: currentColor` through them, so an icon takes the
+   * colour of its text in every theme. A 12×12 box at --ade-icon-size keeps
+   * the stroke at 1.5px. Drawn as:
+   *   content: ""; display: inline-block;
+   *   width: var(--ade-icon-size); height: var(--ade-icon-size);
+   *   background-color: currentColor;
+   *   mask: var(--ade-icon-check) center / contain no-repeat;
+   */
+  --ade-icon-size: 12px;
+  --ade-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E");
+  --ade-icon-cross: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3l6 6M9 3l-6 6'/%3E%3C/svg%3E");
+  --ade-icon-chevron-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5'/%3E%3C/svg%3E");
+  --ade-icon-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+  --ade-icon-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2v5'/%3E%3Ccircle cx='6' cy='9.75' r='0.9' fill='black' stroke='none'/%3E%3C/svg%3E");
+  --ade-icon-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='1.25' fill='black' stroke='none'/%3E%3C/svg%3E");
+
   --ade-weight-normal: 400;
   --ade-weight-medium: 500;
   --ade-weight-semibold: 600;
