@@ -434,6 +434,7 @@ export const en: Messages = {
 
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
+  "pane.restore": "Restore",
   "pane.copied": "Copied",
   "pane.noticeDismiss": "Dismiss the note",
   "pane.copyBlocked": "Not copied: during the recording the selection reaches a covered line",
@@ -454,6 +455,7 @@ export const en: Messages = {
   "pane.link.outside": "outside the project",
   "pane.link.outsideConfirm": "outside the project: click again to open",
   "pane.mouseHint": "Shift+drag to select",
+  "pane.mouseHint.short": "Shift+drag",
   "pane.mouseHint.tip":
     "The program gets the clicks and the wheel. To select and copy text, hold Shift and drag. Ctrl+click opens a link.",
   "pane.close": "Close",

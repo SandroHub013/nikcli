@@ -250,12 +250,33 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
  * everywhere, as its hint does. The wheel and the right and middle buttons
  * were the program's already.
  */
-export function configureTerminalSelection(terminal: Terminal): void {
+export function configureTerminalSelection(terminal: Terminal, overLink: () => boolean = () => false): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
+    /*
+     * Ctrl (or Cmd) on a link is ADE's too: the click opens the link, and the
+     * program must not get it as well (`\e[<16;…M`, a Ctrl+click of its own).
+     * Forced, the press goes to the selection, which a click leaves empty.
+     */
     sel.shouldForceSelection = (event: MouseEvent) =>
-      (event.button === 0 || event.button === undefined) && event.shiftKey
+      (event.button === 0 || event.button === undefined) &&
+      (event.shiftKey || (Boolean(event.ctrlKey || event.metaKey) && overLink()))
+  }
+  /*
+   * A Shift+drag begun in a pane that had not the focus was cleared at once:
+   * the press focuses the terminal, xterm tells the program (`\e[I`), OpenCode
+   * answers by asking for the mouse again, and xterm's `disable()` clears the
+   * selection that has just started. While a drag is on (xterm's drag timer
+   * runs from press to release) the selection is kept; the mode still changes.
+   */
+  if (sel && typeof sel.disable === "function" && !sel.adeKeepsDrag) {
+    const disable = sel.disable.bind(sel)
+    sel.disable = () => {
+      if (sel._dragScrollIntervalTimer !== undefined) sel._enabled = false
+      else disable()
+    }
+    sel.adeKeepsDrag = true
   }
 }
 
@@ -445,6 +466,14 @@ export function getTerminal(id: string): SessionTerminal {
     minimumContrastRatio: contrastFor(currentThemeName()),
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
+    /*
+     * The page's document, not the pane's. The pane is opened while Solid still
+     * holds it in its template's document, an inert about:blank, and xterm
+     * listens there for the release and the drag of a click it gave the
+     * program: none ever came, and OpenCode highlighted an entry without
+     * running it (mouse sessions, Verifiche's test of step A, problem 1).
+     */
+    documentOverride: typeof document === "undefined" ? undefined : document,
   })
 
   const fit = new FitAddon()
@@ -641,7 +670,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     }
   }
   session.element = element
-  configureTerminalSelection(session.terminal)
+  let overLink = false
+  configureTerminalSelection(session.terminal, () => overLink)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 
@@ -656,7 +686,11 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
           })
         })
 
-  const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+  const stopLinks = options.onLink
+    ? registerLinks(terminal, element, options.onLink, (hovered) => {
+        overLink = hovered
+      })
+    : undefined
   const onInput = options.onInput
   const stopMenuClicks =
     options.menuClicks && onInput
