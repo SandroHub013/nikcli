@@ -1140,6 +1140,22 @@ export function isInterruptInput(data: string): boolean {
 }
 
 /**
+ * Whether what was typed into a pane standing on a prompt answers it.
+ *
+ * A digit, a letter, an Enter: Claude Code's permission menu takes «1», «2»,
+ * «3» as the answer itself. Not what only moves around it or is not a key at
+ * all — an arrow, Home, a function key, the focus reports xterm sends when the
+ * window gains or loses focus, all of which arrive as an escape sequence —
+ * and not a lone Esc, which is an interruption (`isInterruptInput`).
+ */
+export function answersPrompt(data: string): boolean {
+  if (data.length === 0) return false
+  const ESC = String.fromCharCode(27)
+  if (data === ESC) return false
+  return !(data.startsWith(`${ESC}[`) || data.startsWith(`${ESC}O`))
+}
+
+/**
  * Whether an interruption ended the turn the hook still reports.
  *
  * Claude Code runs no hook when the user interrupts it: `Stop` is for a turn

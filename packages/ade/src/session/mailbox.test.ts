@@ -9,6 +9,7 @@ import {
   statusFromActivity,
   hookClosesScreenPrompt,
   isInterruptInput,
+  answersPrompt,
   interruptEnds,
   afterInterrupt,
   holdsForAnswer,
@@ -883,6 +884,22 @@ describe("holdsForAnswer: a session without hooks is working until it answers", 
   test("any of several requests holds it", () => {
     const old = { to: "p1", at: 0, deliveredAt: 0 }
     expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("a key typed into a prompt answers it", () => {
+  const ESC = String.fromCharCode(27)
+
+  test("a digit, a letter or an Enter answer; arrows, focus reports and Esc do not", () => {
+    expect(answersPrompt("1")).toBe(true)
+    expect(answersPrompt("n")).toBe(true)
+    expect(answersPrompt(String.fromCharCode(13))).toBe(true)
+    expect(answersPrompt(`${ESC}[B`)).toBe(false)
+    expect(answersPrompt(`${ESC}OA`)).toBe(false)
+    expect(answersPrompt(`${ESC}[I`)).toBe(false)
+    expect(answersPrompt(`${ESC}[O`)).toBe(false)
+    expect(answersPrompt(ESC)).toBe(false)
+    expect(answersPrompt("")).toBe(false)
   })
 })
 

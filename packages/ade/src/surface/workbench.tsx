@@ -2920,19 +2920,27 @@ export function Workbench() {
    * set the pane idle again, until `UserPromptSubmit` came: a flicker of a
    * second or so on every Enter in a hooked Claude Code.
    *
-   * An Enter into a prompt only the hook reported is its answer. The screen
-   * reading, which closes the prompts it finds, never had this one, and the
-   * hook says nothing until the turn ends: without this the pane stayed on
-   * «Permesso» for the rest of the turn. The hook's `permission` still keeps
-   * mail out until its next write (`isQuestionOpen`); only the status moves.
+   * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
    */
   const turnSubmitted = (paneId: string) => {
-    const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    if (pane?.status === "waiting" && !permissions()[paneId] && activityOf.get(paneId)?.state === "permission") {
-      questionSeenAt.set(paneId, Date.now())
-      setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
-    }
+    promptAnswered(paneId)
     markWorking(paneId)
+  }
+
+  /*
+   * A key typed into a prompt only the hook reported: its answer.
+   *
+   * The screen reading, which closes the prompts it finds, never had this one,
+   * and the hook says nothing until the turn ends: without this the pane stayed
+   * on «Permesso» for the rest of the turn, after a «1» as after an Enter. The
+   * hook's `permission` still keeps mail out until its next write
+   * (`isQuestionOpen`); only the status moves.
+   */
+  const promptAnswered = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (pane?.status !== "waiting" || permissions()[paneId] || activityOf.get(paneId)?.state !== "permission") return
+    questionSeenAt.set(paneId, Date.now())
+    setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
   }
 
   /*
@@ -8166,6 +8174,7 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     answerPermission,
     turnSubmitted,
+    promptAnswered,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

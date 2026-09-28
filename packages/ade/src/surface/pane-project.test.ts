@@ -165,6 +165,15 @@ test("lint: Enter in the terminal and the composer start the turn through turnSu
   expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{[\s\S]*?markWorking\(paneId\)\r?\n  \}/)
 })
 
+test("lint: a key that answers a prompt only the hook reported takes the pane off Permesso", () => {
+  // A «1» in Claude Code's menu is the answer, and nothing else tells ADE until the Stop.
+  const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
+  expect(source).toContain("if (answersPrompt(data)) deps.promptAnswered(current().id)")
+  const workbench = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8")
+  expect(workbench).toMatch(/const promptAnswered = \(paneId: string\) => \{[\s\S]*?questionSeenAt\.set\(paneId/)
+  expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{\s+promptAnswered\(paneId\)/)
+})
+
 test("lint: a gone pane is offered to close, and is never restartable", () => {
   const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
   expect(source).toContain("current().gone && !deps.isRunning(current().id)")

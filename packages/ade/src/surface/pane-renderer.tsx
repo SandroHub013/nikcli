@@ -12,7 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
-import { isInterruptInput } from "../session/mailbox"
+import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
@@ -77,6 +77,8 @@ export interface PaneRendererDeps {
    * the turn starts now, so the previous turn's Stop does not end it.
    */
   turnSubmitted: (id: string) => void
+  /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
+  promptAnswered: (id: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -436,6 +438,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
+          if (answersPrompt(data)) deps.promptAnswered(current().id)
           if (data.includes("\r")) {
             deps.panels.newTurn(current().id)
             deps.turnSubmitted(current().id)
