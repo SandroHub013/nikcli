@@ -107,6 +107,8 @@ import {
   HOOK_TARGETS,
   HOOK_TIMEOUT,
   hookTarget,
+  reportsTurns,
+  takesActivityExtension,
   readHookStatus,
   refreshHookScript,
   type HookHost,
@@ -2754,7 +2756,7 @@ export function Workbench() {
   const interruptSettled = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
+    return paneNonces.has(paneId) && reportsTurns(pane?.agent ?? pane?.model ?? "")
   }
 
   /*
@@ -6388,7 +6390,8 @@ export function Workbench() {
    * nobody sends mail to.
    */
   const noticeWorkFromOutput = (pane: Pane) => {
-    if ((pane.agent ?? pane.model) === "terminal" || hooked(pane.id)) return
+    // A hooked pane whose hook has said nothing yet is guessed like any other.
+    if ((pane.agent ?? pane.model) === "terminal" || (hooked(pane.id) && activityOf.has(pane.id))) return
     const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
     if (!outputSaysWorking(run)) {
       if (run) outputRuns.set(pane.id, run)
@@ -7521,7 +7524,8 @@ export function Workbench() {
      * Only when the user has installed the hook — see the settings panel.
      * Without it the variables are not set, and nothing changes.
      */
-    const linked = hookStates()[agentId]?.installed ?? false
+    // Prime and pi need nothing installed: their reporter comes with the spawn (`takesActivityExtension`).
+    const linked = (hookStates()[agentId]?.installed ?? false) || takesActivityExtension(agentId)
     const nonce = linked ? newNonce() : undefined
     // Kept per pane so turn activity can be read for as long as this spawn lives.
     if (nonce) paneNonces.set(paneId, nonce)

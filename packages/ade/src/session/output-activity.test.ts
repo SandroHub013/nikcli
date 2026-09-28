@@ -98,7 +98,7 @@ describe("output that says an agent without hooks is working (fix 5)", () => {
     // The local spawn and the ssh one: without the stamp every echo would count.
     expect(source.match(/stampingInput\(session, \(\) => lastInputAt\.set\(paneId, Date\.now\(\)\)\)/g)).toHaveLength(2)
     expect(source).toMatch(
-      /const noticeWorkFromOutput = [\s\S]*?hooked\(pane\.id\)\) return[\s\S]*?markWorking\(pane\.id\)/,
+      /const noticeWorkFromOutput = [\s\S]*?\(hooked\(pane\.id\) && activityOf\.has\(pane\.id\)\)\) return[\s\S]*?markWorking\(pane\.id\)/,
     )
   })
 
