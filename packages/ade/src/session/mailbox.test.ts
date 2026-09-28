@@ -8,6 +8,9 @@ import {
   isFree,
   statusFromActivity,
   hookClosesScreenPrompt,
+  isInterruptInput,
+  interruptEnds,
+  afterInterrupt,
   holdsForAnswer,
   quietOutcome,
   ANSWER_HOLD_MS,
@@ -878,6 +881,56 @@ describe("holdsForAnswer: a session without hooks is working until it answers", 
   test("any of several requests holds it", () => {
     const old = { to: "p1", at: 0, deliveredAt: 0 }
     expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("an interrupted turn, which Claude Code reports to no hook (fix 1)", () => {
+  const ESC = String.fromCharCode(27)
+  const CTRL_C = String.fromCharCode(3)
+
+  test("Esc alone and Ctrl-C interrupt; an arrow, an Alt chord or a word do not", () => {
+    expect(isInterruptInput(ESC)).toBe(true)
+    expect(isInterruptInput(CTRL_C)).toBe(true)
+    expect(isInterruptInput(`abc${CTRL_C}`)).toBe(true)
+    expect(isInterruptInput(`${ESC}[A`)).toBe(false)
+    expect(isInterruptInput(`${ESC}b`)).toBe(false)
+    expect(isInterruptInput("ciao")).toBe(false)
+  })
+
+  test("a busy or a prompt written before the Esc is the turn it stopped", () => {
+    expect(interruptEnds({ state: "busy", at: 100 }, 200)).toBe(true)
+    expect(interruptEnds({ state: "permission", at: 100 }, 200)).toBe(true)
+    // A turn that began after it, a turn already over, no Esc at all: nothing to end.
+    expect(interruptEnds({ state: "busy", at: 300 }, 200)).toBe(false)
+    expect(interruptEnds({ state: "idle", at: 100 }, 200)).toBe(false)
+    expect(interruptEnds({ state: "busy", at: 100 }, undefined)).toBe(false)
+    expect(interruptEnds(undefined, 200)).toBe(false)
+  })
+
+  test("silence after an interruption settles a hooked pane the hook still calls busy", () => {
+    // The bug: `wait` for good, and mail held for the half hour of the stale-busy rule.
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false, interrupted: true })).toBe("settle")
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false, interrupted: false })).toBe("wait")
+  })
+
+  test("the file keeps saying busy; every read older than the Esc is the idle never written", () => {
+    expect(afterInterrupt({ state: "busy", at: 100, cwd: "C:/w" }, 200)).toEqual({ state: "idle", at: 200, cwd: "C:/w" })
+    expect(afterInterrupt({ state: "permission", at: 100 }, 200)).toEqual({ state: "idle", at: 200 })
+    // The next turn's busy stands, and so does everything without an interruption.
+    expect(afterInterrupt({ state: "busy", at: 300 }, 200)).toEqual({ state: "busy", at: 300 })
+    expect(afterInterrupt({ state: "busy", at: 100 }, undefined)).toEqual({ state: "busy", at: 100 })
+    expect(afterInterrupt(undefined, 200)).toBeUndefined()
+  })
+
+  test("an interrupted pane is free again, and a new turn after it is not", () => {
+    const now = 10_000
+    const read = { state: "busy" as const, at: now - 5_000 }
+    const target = { hooked: true, permissionPending: false, lastOutputAt: now - 3_000 }
+    expect(isFree({ ...target, activity: read }, now)).toBe(false)
+    expect(isFree({ ...target, activity: afterInterrupt(read, now - 4_000) }, now)).toBe(true)
+    expect(isFree({ ...target, activity: afterInterrupt({ state: "busy", at: now - 1_000 }, now - 4_000) }, now)).toBe(
+      false,
+    )
   })
 })
 

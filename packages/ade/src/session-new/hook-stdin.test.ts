@@ -95,8 +95,9 @@ describe("the Notification hook says a permission question is standing (P1)", ()
     // something to hold messages for.
     const { exit, activity } = run({ hook_event_name: "Notification", notification_type: "idle_prompt" })
     expect(exit).toBe(0)
-    // It writes nothing: the turn is over, and the Stop hook is what says so.
-    expect(activity).toBeUndefined()
+    // The turn is over. The Stop hook said so until an interruption, which sends
+    // no Stop: now the idle prompt says it too (fix 1, hook-activity.test.ts).
+    expect(activity?.state).toBe("idle")
   })
 
   test.skipIf(process.platform !== "win32")("the turn hooks still say busy and idle", () => {

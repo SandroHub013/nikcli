@@ -12,6 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
+import { isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
@@ -76,6 +77,8 @@ export interface PaneRendererDeps {
    * the turn starts now, so the previous turn's Stop does not end it.
    */
   turnSubmitted: (id: string) => void
+  /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
+  interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
   restart: (pane: Pane, line?: string) => void
@@ -437,6 +440,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
             deps.panels.newTurn(current().id)
             deps.turnSubmitted(current().id)
           }
+          if (isInterruptInput(data)) deps.interrupted(current().id)
           session.write(data)
         }}
         /*

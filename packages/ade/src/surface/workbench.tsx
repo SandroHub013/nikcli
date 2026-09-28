@@ -300,6 +300,8 @@ import {
   holdsForAnswer,
   quietOutcome,
   hookClosesScreenPrompt,
+  interruptEnds,
+  afterInterrupt,
   isFree,
   isQuestionOpen,
   activityOccupiesPane,
@@ -2439,7 +2441,10 @@ export function Workbench() {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
       activity = keptActivity(
         activity,
-        parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+        afterInterrupt(
+          parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+          interruptSettled.get(paneId),
+        ),
       )
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
@@ -2738,6 +2743,10 @@ export function Workbench() {
    * the hook: a hook written before that is older news (`statusFromActivity`).
    */
   const questionSeenAt = new Map<string, number>()
+  /** When each pane was last interrupted by an Esc or a Ctrl-C, typed or sent by `ade-msg interrupt`. */
+  const interruptedAt = new Map<string, number>()
+  /** The interruption that last ended a hooked pane's turn: older hook reads are its idle (`afterInterrupt`). */
+  const interruptSettled = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
@@ -2942,7 +2951,7 @@ export function Workbench() {
     const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
     for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = parseActivity(texts[index] ?? null, pane?.resumeId)
+      const read = afterInterrupt(parseActivity(texts[index] ?? null, pane?.resumeId), interruptSettled.get(paneId))
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
@@ -4019,6 +4028,7 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
+      interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
       tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
@@ -6307,7 +6317,12 @@ export function Workbench() {
       paneId,
       setTimeout(() => {
         quietTimers.delete(paneId)
-        if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
+        const status = wb().panes.find((pane) => pane.id === paneId)?.status
+        // Only where the hook reports turns: without it silence settles the pane
+        // anyway, and a prompt the screen found is not taken back on an Esc
+        // that another TUI may not honour.
+        const cut = hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))
+        if (status !== "working" && !(cut && status === "waiting")) return
         // Without turn hooks, a session that owes an answer is working until it answers (S14).
         // A prompt counts as work here too, so a pane waiting on a key is not offered
         // as idle: see `activityOccupiesPane`.
@@ -6315,14 +6330,42 @@ export function Workbench() {
           hooked: hooked(paneId),
           busy: activityOccupiesPane(activityOf.get(paneId)?.state),
           owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
+          interrupted: cut,
         })
         // The hold has to be re-armed: it ends with time passing, and nothing
         // else would come back to look at a pane whose terminal has gone quiet.
         if (outcome === "recheck") return settleWhenQuiet(paneId)
         if (outcome === "wait") return
+        if (cut) settleInterrupt(paneId)
         setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
       }, QUIET_MS),
     )
+  }
+  /*
+   * An Esc or a Ctrl-C in a pane: the turn may be over, and only silence will say.
+   *
+   * Claude Code reports an interruption to no hook, so its file goes on saying
+   * busy, or permission after an Esc on a prompt. The quiet timer is armed here
+   * as well as by the output that follows, because a pane on a prompt is not
+   * working and its output would not arm it.
+   */
+  const interrupted = (paneId: string) => {
+    interruptedAt.set(paneId, Date.now())
+    settleWhenQuiet(paneId)
+  }
+  /** The idle the CLI never wrote, for an interrupted turn that has gone quiet. */
+  const settleInterrupt = (paneId: string) => {
+    const at = interruptedAt.get(paneId)
+    if (at === undefined) return
+    interruptSettled.set(paneId, at)
+    const idle = afterInterrupt(activityOf.get(paneId), at)
+    if (idle) activityOf.set(paneId, idle)
+    // An Esc on a prompt the screen found cancels it: Claude Code answers no to the tool.
+    if (permissions()[paneId]) {
+      permissions.forget(paneId)
+      rawWindows.forget(paneId)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+    }
   }
   const forgetQuiet = (paneId: string) => {
     clearTimeout(quietTimers.get(paneId))
@@ -6346,6 +6389,8 @@ export function Workbench() {
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
     if (pane.status === "working") settleWhenQuiet(paneId)
+    // An interrupted pane on a prompt is not working, and still waits for its silence.
+    else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
 
     writeToTerminal(paneId, chunk)
     screenRequests.fed(paneId)
@@ -6487,6 +6532,8 @@ export function Workbench() {
     activityOf.delete(id)
     questionSeenAt.delete(id)
     workingSince.delete(id)
+    interruptedAt.delete(id)
+    interruptSettled.delete(id)
     bracketedPaste.delete(id)
   }
 
@@ -8119,6 +8166,7 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     answerPermission,
     turnSubmitted,
+    interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
     suspend: (id) => void suspendSession(id),

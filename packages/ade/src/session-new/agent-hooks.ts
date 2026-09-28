@@ -697,14 +697,22 @@ $event = "$($payload.hook_event_name)"
 # so; the reading of the screen stays as the fallback for a session whose hooks
 # were never installed.
 $permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq "permission_prompt"
-if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission) {
+# Claude Code waiting at its prompt for a while: the turn is over, even one that
+# ended with no Stop — an interruption, which no hook reports.
+$waiting = $event -eq "Notification" -and "$($payload.notification_type)" -eq "idle_prompt"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission -or $waiting) {
+  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
+  # Never over a prompt: an Enter from a delivery would answer it. Only a turn
+  # starting or ending says it was answered.
+  if ($waiting -and (Test-Path -LiteralPath $target)) {
+    try { if (([IO.File]::ReadAllText($target) | ConvertFrom-Json).state -eq "permission") { exit 0 } } catch {}
+  }
   $activity = [ordered]@{
-    state     = $(if ($event -eq "Stop") { "idle" } elseif ($permission) { "permission" } else { "busy" })
+    state     = $(if ($event -eq "UserPromptSubmit") { "busy" } elseif ($permission) { "permission" } else { "idle" })
     sessionId = "$sessionId"
     cwd       = "$($payload.cwd)"
     at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   }
-  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
   $staging = $target + ".part"
   try {
     [IO.File]::WriteAllText($staging, ($activity | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))

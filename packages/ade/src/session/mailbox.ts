@@ -1131,6 +1131,42 @@ export function formatWedged(request: OpenRequest, answerer: MailPane | undefine
 }
 
 /**
+ * Whether what was typed into a terminal interrupts the agent's turn: a lone
+ * Esc, which is the Escape key and not the start of an arrow or an Alt chord,
+ * or a Ctrl-C anywhere in it.
+ */
+export function isInterruptInput(data: string): boolean {
+  return data === String.fromCharCode(27) || data.includes(String.fromCharCode(3))
+}
+
+/**
+ * Whether an interruption ended the turn the hook still reports.
+ *
+ * Claude Code runs no hook when the user interrupts it: `Stop` is for a turn
+ * that finished, and nothing else is sent. So the file kept its `busy`, or
+ * the `permission` of the prompt the Esc cancelled, and the pane stayed «Al
+ * lavoro» with its mail held — for the half hour of the stale-busy rule, and
+ * for good on a prompt. A busy or a prompt written before the interruption is
+ * the turn it stopped; the caller still waits for the terminal to go quiet,
+ * because an agent that carries on repaints.
+ */
+export function interruptEnds(activity: Activity | undefined, interruptedAt: number | undefined): boolean {
+  if (interruptedAt === undefined || !activity) return false
+  return activityOccupiesPane(activity.state) && activity.at < interruptedAt
+}
+
+/**
+ * The activity to believe once an interruption at `interruptedAt` ended the
+ * turn: the hook's file still says busy or permission, and says it until the
+ * next turn writes it, so every read older than the interruption is the idle
+ * the CLI never wrote. A newer read is a new turn, and stands.
+ */
+export function afterInterrupt(read: Activity | undefined, interruptedAt: number | undefined): Activity | undefined {
+  if (!read || !interruptEnds(read, interruptedAt)) return read
+  return { ...read, state: "idle", at: interruptedAt! }
+}
+
+/**
  * The keys that stop what an agent is doing without closing it.
  *
  * Esc for the CLIs that cancel a turn on it and keep the session (Claude
@@ -1521,10 +1557,17 @@ export type QuietOutcome =
    */
   | "recheck"
 
-export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer: boolean }): QuietOutcome {
+export function quietOutcome(pane: {
+  hooked: boolean
+  busy: boolean
+  owesAnswer: boolean
+  /** The turn the hook reports was interrupted before this silence (`interruptEnds`). */
+  interrupted?: boolean
+}): QuietOutcome {
   // With turn hooks silence is not the end of a turn (a long tool call is
   // silent): the hook says when, and its `idle` settles the pane on its own.
-  if (pane.hooked) return pane.busy ? "wait" : "settle"
+  // Except after an interruption, which the hook never reports.
+  if (pane.hooked) return pane.busy && !pane.interrupted ? "wait" : "settle"
   return pane.owesAnswer ? "recheck" : "settle"
 }
 
