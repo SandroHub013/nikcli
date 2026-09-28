@@ -43,3 +43,15 @@ describe("the mouse hint leaves a narrow pane's header", () => {
     expect(Math.max(0, ...widest)).toBeGreaterThanOrEqual(420)
   })
 })
+
+/* Mouse sessions: the program has the clicks now, and the hint says how to select. */
+describe("the mouse hint says Shift+drag", () => {
+  test("in Italian and in English, with the link's Ctrl+click in the tip", async () => {
+    const it = (await import("../i18n/it")).it as Record<string, unknown>
+    const en = (await import("../i18n/en")).en as Record<string, unknown>
+    expect(it["pane.mouseHint"]).toBe("Maiusc+trascina per selezionare")
+    expect(en["pane.mouseHint"]).toBe("Shift+drag to select")
+    expect(String(it["pane.mouseHint.tip"])).toContain("Ctrl+clic")
+    expect(String(it["pane.mouseHint.tip"])).not.toContain("Alt")
+  })
+})

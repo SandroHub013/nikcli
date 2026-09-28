@@ -453,8 +453,9 @@ export const en: Messages = {
   "pane.link.unc": "network path not opened",
   "pane.link.outside": "outside the project",
   "pane.link.outsideConfirm": "outside the project: click again to open",
-  "pane.mouseHint": "Alt+click to the program",
-  "pane.mouseHint.tip": "The left click selects and copies. To send a click to the program, hold Alt.",
+  "pane.mouseHint": "Shift+drag to select",
+  "pane.mouseHint.tip":
+    "The program gets the clicks and the wheel. To select and copy text, hold Shift and drag. Ctrl+click opens a link.",
   "pane.close": "Close",
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
