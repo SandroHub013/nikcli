@@ -260,7 +260,7 @@
   width: 20px;
   height: 20px;
   border-radius: var(--ade-radius-sm);
-  font-size: 13px;
+  font-size: var(--ade-font-lg);
   font-weight: var(--ade-weight-bold);
   border: 1px solid var(--ade-border-strong);
   color: var(--ade-text-weak);
