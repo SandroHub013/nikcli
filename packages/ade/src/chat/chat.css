@@ -232,7 +232,7 @@
   background: var(--ade-waiting-bg);
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
 }
 

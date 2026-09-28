@@ -472,6 +472,12 @@ body[data-theme="glass"] #root,
   --ade-font-xl: 16px;
   --ade-font-2xl: 18px;
   --ade-font-3xl: 24px;
+  /*
+   * Text that is read rather than scanned: card bodies, messages, lists, the
+   * sidebar. The density the user chose (DS-B = compact) puts it at 12px;
+   * one token, so a denser or roomier ADE is one line.
+   */
+  --ade-font-body: 12px;
 
   --ade-weight-normal: 400;
   --ade-weight-medium: 500;
@@ -726,7 +732,7 @@ body,
 [data-slot="drop-zone-label"] {
   padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-full);
-  font-size: 12px;
+  font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-semibold);
   /* The zone's own neutral, inverted so the word reads over the wash: the
      accent pill was the one green left in a grey zone (contorni-terzo, 3). */
@@ -992,7 +998,7 @@ body,
   background: transparent;
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   text-align: left;
   cursor: pointer;
   transition:
@@ -1074,7 +1080,7 @@ body,
   background: transparent;
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   text-align: left;
   cursor: pointer;
   transition:
@@ -1208,7 +1214,7 @@ body,
   background: color-mix(in oklab, red 12%, var(--ade-surface));
   color: var(--ade-text);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: var(--ade-btn-transition);
@@ -1247,7 +1253,7 @@ body,
   display: grid;
   gap: 8px;
   padding: 12px 16px;
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
 }
 [data-component="record-consent"] [data-slot="record-consent-note"] {
   color: var(--ade-text-weak);
@@ -1276,7 +1282,7 @@ body,
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text-weak);
 }
@@ -1288,7 +1294,7 @@ body,
   display: grid;
   gap: 8px;
   padding: 0 16px 8px;
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
   color: var(--ade-text-soft);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-body"] p {
@@ -1299,13 +1305,13 @@ body,
 }
 [data-component="update-dialog"] [data-slot="update-dialog-problem"] {
   font-family: var(--ade-mono);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   overflow-wrap: anywhere;
 }
 [data-component="update-dialog"] [data-slot="update-dialog-link"] {
   width: fit-content;
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-accent);
   text-decoration: none;
   border-radius: 3px;
@@ -1341,12 +1347,12 @@ body,
 }
 [data-component="update-dialog"] [data-slot="update-dialog-hint"] {
   margin-right: auto;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-hint"] kbd {
   font-family: var(--ade-mono);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   padding: 0 4px;
   border: 1px solid currentColor;
   border-radius: 3px;

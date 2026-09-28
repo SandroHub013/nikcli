@@ -435,7 +435,7 @@
 [data-slot="bots-msg-text"] {
   margin: 0;
   max-width: 68ch;
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -762,7 +762,7 @@
 [data-slot="bots-card-desc"] {
   margin: 0;
   color: var(--ade-text-soft);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
 }
 
