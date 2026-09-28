@@ -188,6 +188,8 @@ export interface SessionPaneProps {
   onSubmit?: (line: string) => void
   onClose?: () => void
   onExpand?: () => void
+  /** The pane fills the grid: its expand button puts the grid back, and says so. */
+  expanded?: boolean
   onFocus?: () => void
   /**
    * Stores a new title. Absent when the name is not the user's to change,
@@ -790,11 +792,12 @@ export function SessionPane(props: SessionPaneProps) {
 
         <Show when={props.terminalId && mouseReporting()}>
           <span class="tok" data-slot="pane-mouse-hint" title={t("pane.mouseHint.tip")}>
-            {t("pane.mouseHint")}
+            <span class="hint-long">{t("pane.mouseHint")}</span>
+            <span class="hint-short">{t("pane.mouseHint.short")}</span>
           </span>
         </Show>
 
-        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} expanded={props.expanded}>
           <Show when={props.suspend}>
             {(suspend) => (
               <button
@@ -819,9 +822,9 @@ export function SessionPane(props: SessionPaneProps) {
         <button
           type="button"
           class="act more"
-          aria-label={t("pane.expand")}
-          title={t("pane.expand")}
-          data-tip={t("pane.expand")}
+          aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}
+          title={props.expanded ? t("pane.restore") : t("pane.expand")}
+          data-tip={props.expanded ? t("pane.restore") : t("pane.expand")}
           onClick={() => props.onExpand?.()}
         >
           <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">

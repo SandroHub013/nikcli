@@ -313,6 +313,89 @@ describe("terminal selection & copy (S50)", () => {
     })
   })
 
+  /* Verifiche's test of step A, live: ade-team/results/mouse-sessioni-prova.md. */
+  describe("the program's click, on the live page", () => {
+    it("xterm listens on the page's document, not on the template's that holds the pane when it opens", () => {
+      const pageId = "test-selection-page-document"
+      try {
+        expect(getTerminal(pageId).terminal.options.documentOverride).toBe(document)
+      } finally {
+        disposeTerminal(pageId)
+      }
+      /*
+       * And xterm's open() takes it over the parent's document. Read from its
+       * source: happy-dom's `document` is no `instanceof Document`, so open()
+       * cannot be watched doing it here; in WebView2 it is.
+       */
+      const source = readFileSync(
+        join(require.resolve("@xterm/xterm/package.json"), "..", "src/browser/CoreBrowserTerminal.ts"),
+        "utf8",
+      )
+      expect(source).toMatch(
+        /this\._document = parent\.ownerDocument;\s+if \(this\.options\.documentOverride && this\.options\.documentOverride instanceof Document\) \{\s+this\._document = this\.optionsService\.rawOptions\.documentOverride as Document;/,
+      )
+      expect(source).toContain("this._document!.addEventListener('mouseup', requestedEvents.mouseup);")
+    })
+
+    const service = () => {
+      const cleared: number[] = []
+      const sel: any = {
+        _enabled: true,
+        _dragScrollIntervalTimer: undefined as number | undefined,
+        shouldForceSelection: () => false,
+        disable() {
+          cleared.push(1)
+          this._enabled = false
+        },
+      }
+      return { sel, cleared }
+    }
+
+    it("the program asking for the mouse mid-drag does not clear a Shift+drag just begun", () => {
+      const { sel, cleared } = service()
+      configureTerminalSelection({ _core: { _selectionService: sel } } as any)
+      sel._dragScrollIntervalTimer = 7
+      sel.disable()
+      expect(cleared).toEqual([])
+      expect(sel._enabled).toBe(false)
+      sel._dragScrollIntervalTimer = undefined
+      sel.disable()
+      expect(cleared).toEqual([1])
+    })
+
+    it("attaching again does not wrap xterm's disable twice", () => {
+      const { sel, cleared } = service()
+      configureTerminalSelection({ _core: { _selectionService: sel } } as any)
+      configureTerminalSelection({ _core: { _selectionService: sel } } as any)
+      sel.disable()
+      expect(cleared).toEqual([1])
+    })
+
+    it("the names read from xterm's selection are the ones of the xterm installed", () => {
+      const source = readFileSync(
+        join(require.resolve("@xterm/xterm/package.json"), "..", "src/browser/services/SelectionService.ts"),
+        "utf8",
+      )
+      expect(source).toContain("private _dragScrollIntervalTimer: number | undefined;")
+      expect(source).toContain("this._dragScrollIntervalTimer = undefined;")
+      expect(source).toMatch(/public disable\(\): void \{\s+this\.clearSelection\(\);\s+this\._enabled = false;/)
+    })
+
+    it("Ctrl+click on a link is ADE's, and the program does not get it too; off a link it is the program's", () => {
+      let onLink = false
+      const { sel } = service()
+      configureTerminalSelection({ _core: { _selectionService: sel } } as any, () => onLink)
+      const press = (init: Partial<MouseEvent>) =>
+        sel.shouldForceSelection({ button: 0, shiftKey: false, ctrlKey: false, metaKey: false, ...init })
+      expect(press({ ctrlKey: true })).toBe(false)
+      onLink = true
+      expect(press({ ctrlKey: true })).toBe(true)
+      expect(press({ metaKey: true })).toBe(true)
+      expect(press({})).toBe(false)
+      expect(press({ button: 2, ctrlKey: true })).toBe(false)
+    })
+  })
+
   describe("selectionText (S76)", () => {
     const line = (text: string, isWrapped = false) => ({
       isWrapped,

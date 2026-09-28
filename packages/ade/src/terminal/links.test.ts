@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { findLinks, linkClick, linksOnRow, logicalLine, watchPress, type LinkBuffer, type LinkRequest } from "./links"
+import {
+  findLinks,
+  linkClick,
+  linksOnRow,
+  logicalLine,
+  registerLinks,
+  watchPress,
+  type LinkBuffer,
+  type LinkRequest,
+} from "./links"
 
 describe("findLinks (S76)", () => {
   test("drops the full stop after a URL", () => {
@@ -233,5 +242,35 @@ describe("a link under a program that has the mouse", () => {
     link!.activate({ ctrlKey: true } as MouseEvent, link!.text)
     expect(opened).toHaveLength(1)
     expect(opened[0]!.external).toBe(false)
+  })
+})
+
+describe("the pane knows when the pointer is on a link", () => {
+  test("registerLinks says so on hover and on leave, and no more once removed", () => {
+    const hovers: boolean[] = []
+    let provider: { provideLinks: (row: number, callback: (links?: any[]) => void) => void } | undefined
+    const terminal = {
+      buffer: { active: fakeBuffer([{ text: "see https://example.com" }]) },
+      modes: { mouseTrackingMode: "any" },
+      hasSelection: () => false,
+      registerLinkProvider: (given: typeof provider) => {
+        provider = given
+        return { dispose: () => {} }
+      },
+    }
+    const element = document.createElement("div")
+    const stop = registerLinks(
+      terminal as any,
+      element,
+      () => {},
+      (hovered) => hovers.push(hovered),
+    )
+    let links: any[] = []
+    provider!.provideLinks(1, (found) => (links = found ?? []))
+    links[0].hover({} as MouseEvent, links[0].text)
+    links[0].leave({} as MouseEvent, links[0].text)
+    expect(hovers).toEqual([true, false])
+    stop()
+    expect(hovers).toEqual([true, false, false])
   })
 })

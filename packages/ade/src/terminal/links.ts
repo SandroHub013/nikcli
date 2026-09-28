@@ -247,8 +247,11 @@ export function registerLinks(
   terminal: Terminal,
   element: HTMLElement,
   onLink: (request: LinkRequest) => void,
+  /** Whether the pointer is on a link now: a Ctrl+click there is ADE's, not the program's. */
+  onHover?: (hovered: boolean) => void,
 ): () => void {
   const setTitle = (title: string | undefined) => {
+    onHover?.(title !== undefined)
     if (title) element.title = title
     else element.removeAttribute("title")
   }

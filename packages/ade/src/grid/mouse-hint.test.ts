@@ -55,3 +55,77 @@ describe("the mouse hint says Shift+drag", () => {
     expect(String(it["pane.mouseHint.tip"])).not.toContain("Alt")
   })
 })
+
+/*
+ * Verifiche's point 4: at two columns (panes of 591 px) the hint had gone with
+ * the tokens, just where Shift+drag is needed. It stays there, short, and goes
+ * only with the cost, at 420 px. The cascade is read from the sources.
+ */
+type Rule = { at: number; width: number; selectors: string[]; display?: string }
+
+function rules(): Rule[] {
+  const out: Rule[] = []
+  const blocks = [...css.matchAll(/@container \(max-width: (\d+)px\) \{([\s\S]*?)\n\}/g)]
+  const read = (text: string, offset: number, width: number) => {
+    for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      out.push({
+        at: offset + rule.index!,
+        width,
+        selectors: rule[1].split(",").map((selector) => selector.trim()),
+        display: rule[2].match(/display:\s*([a-z-]+)/)?.[1],
+      })
+    }
+  }
+  let flat = css
+  for (const block of blocks) {
+    read(block[2], block.index!, Number(block[1]))
+    flat = flat.slice(0, block.index!) + " ".repeat(block[0].length) + flat.slice(block.index! + block[0].length)
+  }
+  read(flat, 0, Infinity)
+  return out.sort((a, b) => a.at - b.at)
+}
+
+/** The display the last of `selectors` to set one gives, in a pane `width` wide ("" when none sets it). */
+function displayAt(width: number, selectors: string[]): string {
+  let display = ""
+  for (const rule of rules()) {
+    if (width > rule.width || !rule.display) continue
+    if (rule.selectors.some((selector) => selectors.includes(selector))) display = rule.display
+  }
+  return display
+}
+
+const HINT = [".hA .tok", '.hA [data-slot="pane-mouse-hint"]']
+const LONG = ['.hA [data-slot="pane-mouse-hint"] .hint-long']
+const SHORT = ['[data-slot="pane-mouse-hint"] .hint-short', '.hA [data-slot="pane-mouse-hint"] .hint-short']
+
+describe("the mouse hint in the grid (Verifiche's point 4)", () => {
+  test("the pill carries a long and a short label", () => {
+    expect(pane).toContain('<span class="hint-long">{t("pane.mouseHint")}</span>')
+    expect(pane).toContain('<span class="hint-short">{t("pane.mouseHint.short")}</span>')
+  })
+
+  test("a wide pane shows the long label", () => {
+    expect(displayAt(1216, HINT)).not.toBe("none")
+    expect(displayAt(1216, LONG)).not.toBe("none")
+    expect(displayAt(1216, SHORT)).toBe("none")
+  })
+
+  test("two columns (591 px) show the short one", () => {
+    expect(displayAt(591, HINT)).not.toBe("none")
+    expect(displayAt(591, LONG)).toBe("none")
+    expect(displayAt(591, SHORT)).not.toBe("none")
+  })
+
+  test("at 420 px it goes, with the cost", () => {
+    expect(displayAt(420, HINT)).toBe("none")
+    expect(displayAt(300, HINT)).toBe("none")
+  })
+
+  test("the short label, in Italian and in English", async () => {
+    const it = (await import("../i18n/it")).it as Record<string, unknown>
+    const en = (await import("../i18n/en")).en as Record<string, unknown>
+    expect(it["pane.mouseHint.short"]).toBe("Maiusc+trascina")
+    expect(en["pane.mouseHint.short"]).toBe("Shift+drag")
+  })
+})
