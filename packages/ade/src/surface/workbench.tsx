@@ -2904,6 +2904,29 @@ export function Workbench() {
   }
 
   /*
+   * A line submitted by the user in the pane: Enter in the terminal, or the composer.
+   *
+   * It went straight to working without `workingSince`, so on the next mail
+   * pass the previous turn's Stop counted as newer than the turn just typed and
+   * set the pane idle again, until `UserPromptSubmit` came: a flicker of a
+   * second or so on every Enter in a hooked Claude Code.
+   *
+   * An Enter into a prompt only the hook reported is its answer. The screen
+   * reading, which closes the prompts it finds, never had this one, and the
+   * hook says nothing until the turn ends: without this the pane stayed on
+   * «Permesso» for the rest of the turn. The hook's `permission` still keeps
+   * mail out until its next write (`isQuestionOpen`); only the status moves.
+   */
+  const turnSubmitted = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (pane?.status === "waiting" && !permissions()[paneId] && activityOf.get(paneId)?.state === "permission") {
+      questionSeenAt.set(paneId, Date.now())
+      setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
+    }
+    markWorking(paneId)
+  }
+
+  /*
    * The turn activity of every running session with hooks, each mail pass.
    *
    * Not only of those that owe an answer: the status in the sidebar and in
@@ -8095,6 +8118,7 @@ export function Workbench() {
     close,
     saveFile: (id) => void saveFile(id),
     answerPermission,
+    turnSubmitted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
     suspend: (id) => void suspendSession(id),
