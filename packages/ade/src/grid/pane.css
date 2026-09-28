@@ -732,32 +732,17 @@
   color: var(--ade-text-weak);
 }
 
-[data-slot="pane-agent"] {
-  color: var(--ade-text-soft);
-}
-
-/* Agent and mode, activity and elapsed, are two facts each — without a mark
-   between them they read as one broken phrase ("agy auto", "Ragionando 41s"). */
-[data-slot="pane-agent"]::after,
-[data-slot="pane-tree"]::before,
-[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
+/* The tree is a fact of its own: a dot keeps it from reading as part of what comes before. */
+[data-slot="pane-tree"]::before {
   content: "";
   display: inline-block;
-  width: var(--ade-icon-size);
+  width: var(--ade-icon-dot-width);
   height: var(--ade-icon-size);
   background-color: currentColor;
-  mask: var(--ade-icon-dot) center / contain no-repeat;
+  mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
   vertical-align: middle;
-  color: var(--ade-text-weak);
-}
-
-[data-slot="pane-agent"]::after,
-[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  margin-left: var(--ade-space-2);
-}
-
-[data-slot="pane-tree"]::before {
   margin-right: var(--ade-space-2);
+  color: var(--ade-text-weak);
 }
 
 /* An orphaned separator would open the row with a dot that separates nothing. */
@@ -800,19 +785,6 @@
   color: var(--ade-working);
 }
 
-/* The state never truncates and never wraps: everything else on the row gives
-   way to it, because a pane that cannot say what it is doing is not useful. */
-[data-slot="pane-state"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  flex: 0 0 auto;
-  white-space: nowrap;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
-  color: var(--ade-text-weak);
-}
-
 [data-slot="pane-activity-word"] {
   color: var(--pane-status);
 }
@@ -842,7 +814,6 @@
 
 @container (max-width: 340px) {
   [data-slot="pane-tokens"],
-  [data-slot="pane-agent"],
   [data-slot="pane-meta"] {
     display: none;
   }
@@ -1067,7 +1038,6 @@
 /* Meta in the same face as the title: a pill of glass is one object, and a
    change of typeface halfway along splits it in two. */
 [data-component="session-pane"] [data-slot="pane-who"],
-[data-component="session-pane"] [data-slot="pane-state"],
 [data-component="session-pane"] [data-slot="pane-tokens"],
 [data-component="session-pane"] [data-slot="pane-cost"] {
   font-family: var(--ade-sans);
@@ -1079,13 +1049,6 @@
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--pane-status) 14%, transparent);
   font-weight: var(--ade-weight-medium);
-}
-
-/* The dot that split "Ragionando 41s" is drawn on the word itself, and a
-   word with a ground of its own would carry the dot inside the pill. The
-   pill is the separation now. */
-[data-component="session-pane"] [data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  content: none;
 }
 
 [data-component="session-pane"] [data-slot="pane-action"] {
