@@ -470,7 +470,9 @@ describe("the permission prompt the hook says", () => {
     // The screen found a prompt after the turn's busy: the busy is older news.
     expect(statusFromActivity("waiting", { state: "busy", at: now - 3_000 }, now - 5_000, now - 1_000)).toBeUndefined()
     // The screen saw the question answered after the hook reported it: no going back to Permesso.
-    expect(statusFromActivity("working", { state: "permission", at: now - 3_000 }, now - 5_000, now - 1_000)).toBeUndefined()
+    expect(
+      statusFromActivity("working", { state: "permission", at: now - 3_000 }, now - 5_000, now - 1_000),
+    ).toBeUndefined()
     // A Stop after the screen opened its prompt ends the turn.
     expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000, now - 1_000)).toBe("idle")
     expect(statusFromActivity("waiting", { state: "idle", at: now - 1_000 }, now - 5_000, now - 1_000)).toBe("idle")
@@ -914,7 +916,11 @@ describe("an interrupted turn, which Claude Code reports to no hook (fix 1)", ()
   })
 
   test("the file keeps saying busy; every read older than the Esc is the idle never written", () => {
-    expect(afterInterrupt({ state: "busy", at: 100, cwd: "C:/w" }, 200)).toEqual({ state: "idle", at: 200, cwd: "C:/w" })
+    expect(afterInterrupt({ state: "busy", at: 100, cwd: "C:/w" }, 200)).toEqual({
+      state: "idle",
+      at: 200,
+      cwd: "C:/w",
+    })
     expect(afterInterrupt({ state: "permission", at: 100 }, 200)).toEqual({ state: "idle", at: 200 })
     // The next turn's busy stands, and so does everything without an interruption.
     expect(afterInterrupt({ state: "busy", at: 300 }, 200)).toEqual({ state: "busy", at: 300 })
