@@ -26,13 +26,31 @@ describe("the browser pane has no Design mode", () => {
     expect(read("surface/state.ts")).not.toContain("browserDesign")
   })
 
-  test("lint: the pane's frame takes its one sandbox, BROWSE_SANDBOX", () => {
-    expect(read("browser/browser-pane.tsx")).toContain("sandbox={BROWSE_SANDBOX}")
+  /*
+   * The design sheet (`ade-msg design`, approved by the user 2026-09-27) brings
+   * back a second frame: an agent's page from `ade-media`, which must not have
+   * an origin. Browsing keeps BROWSE_SANDBOX; only a pane with a sheet changes.
+   */
+  test("lint: the pane's frame browses with BROWSE_SANDBOX and shows a sheet with DESIGN_SANDBOX", () => {
+    expect(read("browser/browser-pane.tsx")).toContain(
+      "sandbox={props.sheet === undefined ? BROWSE_SANDBOX : DESIGN_SANDBOX}",
+    )
   })
 
-  test("the frame always has its own origin", async () => {
-    const { BROWSE_SANDBOX } = await import("./sandbox")
+  test("the browsing frame has its own origin, the sheet's frame none", async () => {
+    const { BROWSE_SANDBOX, DESIGN_SANDBOX } = await import("./sandbox")
     expect(BROWSE_SANDBOX.split(" ")).toContain("allow-same-origin")
+    expect(DESIGN_SANDBOX.split(" ").sort()).toEqual(["allow-forms", "allow-scripts"])
+  })
+
+  test("lint: only the sheet's own address gets past the refusal of ADE's origins", () => {
+    const pane = read("browser/browser-pane.tsx")
+    expect(pane).toContain(
+      "const refused = (target: string) => !isSheet(target) && isAdeOrigin(target, window.location.origin)",
+    )
+    expect(pane).toContain("isSheetAddress(target, props.sheet)")
+    // Every ADE-origin check in the pane goes through `refused`.
+    expect(pane.match(/isAdeOrigin\(/g)).toHaveLength(1)
   })
 
   test("lint: the hub names no openVariant and no addNoteLine", () => {
