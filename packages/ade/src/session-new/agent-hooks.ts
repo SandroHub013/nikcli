@@ -105,8 +105,14 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
      * and it is the same hook the user already installed from the settings — no
      * new file in their home, no new permission, and the screen reading stays as
      * the fallback for a session whose hooks were never installed.
+     *
+     * StopFailure, for a turn that ends on an API error — a rate limit, an
+     * overload, an expired login. `Stop` is not sent then, and the pane stayed
+     * «Al lavoro» with its mail held, as after an interruption. Claude Code has
+     * had it since 2.1.78; an install from before is found missing and the
+     * panel offers the update.
      */
-    activityEvents: ["UserPromptSubmit", "Stop", "Notification"],
+    activityEvents: ["UserPromptSubmit", "Stop", "Notification", "StopFailure"],
     execForm: true,
   },
   {
@@ -700,7 +706,9 @@ $permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq
 # Claude Code waiting at its prompt for a while: the turn is over, even one that
 # ended with no Stop — an interruption, which no hook reports.
 $waiting = $event -eq "Notification" -and "$($payload.notification_type)" -eq "idle_prompt"
-if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission -or $waiting) {
+# A turn that ended on an API error ends like any other: back at the prompt.
+$failed = $event -eq "StopFailure"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $failed -or $permission -or $waiting) {
   $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
   # Never over a prompt: an Enter from a delivery would answer it. Only a turn
   # starting or ending says it was answered.

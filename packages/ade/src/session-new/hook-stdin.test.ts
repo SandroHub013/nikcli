@@ -112,6 +112,6 @@ describe("Claude Code is asked for the Notification event", () => {
     expect(claude?.activityEvents).toContain("Notification")
     // And the events it had before are still there: an install from before gets
     // the new one without losing the two old.
-    expect(claude?.activityEvents).toEqual(["UserPromptSubmit", "Stop", "Notification"])
+    expect(claude?.activityEvents).toEqual(["UserPromptSubmit", "Stop", "Notification", "StopFailure"])
   })
 })

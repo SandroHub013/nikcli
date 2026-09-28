@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { hookScript } from "./agent-hooks"
+import { hookCommand, hookTarget, hookScript, installHook, missingActivityEvents } from "./agent-hooks"
 
 /*
  * What the hook writes for each turn event, run for real with the PowerShell
@@ -31,6 +31,33 @@ function hookDir() {
 }
 
 describe("the hook's turn file", () => {
+  run(
+    "a turn that ended on an API error ends the turn (fix 2)",
+    () => {
+      const hook = hookDir()
+      try {
+        hook.write("busy")
+        hook.fire({ hook_event_name: "StopFailure", error: "rate_limit" })
+        expect(hook.state()).toBe("idle")
+      } finally {
+        hook.done()
+      }
+    },
+    60_000,
+  )
+
+  test("Claude Code is asked for StopFailure, and an install without it is found outdated (fix 2)", () => {
+    const events = hookTarget("claude-code")?.activityEvents ?? []
+    expect(events).toContain("StopFailure")
+    const before = installHook(
+      undefined,
+      hookCommand("C:/u/.claude/hooks/ade-agent-session.ps1"),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop", "Notification"],
+    )
+    expect(missingActivityEvents(before, events)).toEqual(["StopFailure"])
+  })
+
   run(
     "Claude Code waiting at its prompt ends a turn that had no Stop (fix 1)",
     () => {
