@@ -881,6 +881,7 @@ export function SessionPane(props: SessionPaneProps) {
               onCopyBlocked: () => flashCopied(t("pane.copyBlocked")),
               onMouseMode: setMouseReporting,
               onLink: (request) => props.onLink?.(request),
+              menuClicks: () => props.agent === "claude-code",
             })
             onCleanup(detach)
           }}
