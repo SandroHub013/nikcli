@@ -85,6 +85,45 @@ describe("claudeMenu reads a Claude Code menu, and nothing else", () => {
     ).toBeUndefined()
   })
 
+  /*
+   * `/export`, recorded from Claude Code 2.1.283 in a pty; in a pane the
+   * prompt's frame, with the session's name, stays under it (Verifiche, test 2).
+   */
+  const frame = `${"─".repeat(90)} Sessione 1 — Claude Code ─`
+  const EXPORT = [
+    "❯ /export",
+    "─".repeat(120),
+    "  Export conversation",
+    "  Select export method",
+    "  ❯ 1. Copy to clipboard  Copy the conversation to your system clipboard",
+    "    2. Save to file       Save the conversation to a file in the current directory",
+    "  Esc to cancel",
+  ]
+
+  test("`/export`, as Claude draws it, and with the prompt's frame left under it", () => {
+    for (const rows of [EXPORT, [...EXPORT, "", frame, "  ⏵⏵ bypass permissions on (shift+tab to cycle)"]]) {
+      const menu = claudeMenu(rows)!
+      expect(menu.options.map((option) => [option.number, option.row])).toEqual([
+        [1, 4],
+        [2, 5],
+      ])
+      expect(menu.current.number).toBe(1)
+    }
+    expect(menuStep([...EXPORT, frame], 5, undefined, 0)).toMatchObject({ kind: "move", keys: "\x1b[B" })
+  })
+
+  test("a rule under the entries before any «Esc to …» still means the prompt's frame", () => {
+    expect(claudeMenu([...EXPORT.slice(0, 6), frame, "  Esc to cancel"])).toBeUndefined()
+  })
+
+  test("a list typed in the prompt stays ignored, even with «Esc to cancel» typed under it", () => {
+    const rule = "─".repeat(100)
+    expect(claudeMenu(["● Done.", rule, "❯ 1. fix the lint", "  2. then the tests", rule])).toBeUndefined()
+    expect(
+      claudeMenu(["● Done.", rule, "❯ 1. fix the lint", "  2. then the tests", "  Esc to cancel", rule]),
+    ).toBeUndefined()
+  })
+
   test("a numbered list in Claude's answer, with no «❯» on it, is not a menu", () => {
     expect(claudeMenu(["● Steps:", "  1. build", "  2. test", "  3. ship", "", "  Esc to interrupt"])).toBeUndefined()
   })
