@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
+import { registerMenuClicks } from "./menu-click"
 import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
@@ -512,6 +513,8 @@ export interface AttachOptions {
   onMouseMode?: (reporting: boolean) => void
   /** A URL or a file path in the output was clicked. See `links.ts`. */
   onLink?: (request: LinkRequest) => void
+  /** Whether a click on a keyboard menu becomes its keys, through `onInput`: Claude Code's. See `menu-click.ts`. */
+  menuClicks?: () => boolean
 }
 
 /**
@@ -654,6 +657,11 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
         })
 
   const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+  const onInput = options.onInput
+  const stopMenuClicks =
+    options.menuClicks && onInput
+      ? registerMenuClicks(terminal, element, { enabled: options.menuClicks, send: onInput })
+      : undefined
 
   session.copyBlocked = options.onCopyBlocked
   session.copied = options.onCopied
@@ -730,6 +738,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     inputHandler?.dispose()
     stopCopy?.()
     stopLinks?.()
+    stopMenuClicks?.()
     modeWatch?.dispose()
     if (modeTimer) clearTimeout(modeTimer)
     session.uncover?.()
