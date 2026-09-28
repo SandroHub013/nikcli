@@ -334,6 +334,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
 import {
   deliveryResult,
@@ -2728,6 +2729,10 @@ export function Workbench() {
 
   /** When each pane last printed anything: a session silent for a while has stopped working. */
   const lastOutputAt = new Map<string, number>()
+  /** When anything was last typed or sent into each pane: the output after it is its echo. */
+  const lastInputAt = new Map<string, number>()
+  /** Each idle pane's run of windows with output (`session/output-activity.ts`). */
+  const outputRuns = new Map<string, OutputRun>()
 
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
@@ -6285,6 +6290,24 @@ export function Workbench() {
       }, QUIET_MS),
     )
   }
+  /*
+   * An idle agent printing without pause has started a turn ADE did not see begin.
+   *
+   * Only where no hook reports turns: there the hook is the truth both ways. Not
+   * for a plain terminal, whose running program is not an agent's turn and which
+   * nobody sends mail to.
+   */
+  const noticeWorkFromOutput = (pane: Pane) => {
+    if ((pane.agent ?? pane.model) === "terminal" || hooked(pane.id)) return
+    const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
+    if (!outputSaysWorking(run)) {
+      if (run) outputRuns.set(pane.id, run)
+      else outputRuns.delete(pane.id)
+      return
+    }
+    outputRuns.delete(pane.id)
+    markWorking(pane.id)
+  }
   const forgetQuiet = (paneId: string) => {
     clearTimeout(quietTimers.get(paneId))
     quietTimers.delete(paneId)
@@ -6307,6 +6330,7 @@ export function Workbench() {
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
     if (pane.status === "working") settleWhenQuiet(paneId)
+    else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
     writeToTerminal(paneId, chunk)
     screenRequests.fed(paneId)
@@ -6442,6 +6466,8 @@ export function Workbench() {
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
+    lastInputAt.delete(id)
+    outputRuns.delete(id)
     usageOf.delete(id)
     paneTokens.delete(id)
     paneNonces.delete(id)
@@ -7542,6 +7568,7 @@ export function Workbench() {
       })
 
       spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
+      stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -7777,7 +7804,7 @@ export function Workbench() {
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
-      spawned = session
+      spawned = stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
