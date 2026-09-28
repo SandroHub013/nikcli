@@ -39,6 +39,8 @@ const OPTION = /^(\s*)([❯↑↓])?\s*(\d{1,2})\.\s+(\S.*)$/
 const RULE = /^\s*[─━═╌┄]{12,}/
 // The hint Claude writes with a menu: «Esc to cancel», «(esc)».
 const HINT = /\besc\b/i
+// The menu's own hint row, «Esc to cancel», «· Esc to exit»: not a word typed in the prompt.
+const ESC_TO = /(?:^\s*|·\s*)Esc to \w+/
 /** At most this many rows under the menu: a menu is at the bottom of the screen. */
 const TAIL_ROWS = 8
 /** Continuation rows allowed between two entries (a long label wrapped). */
@@ -47,11 +49,12 @@ const GAP_ROWS = 2
 /**
  * The menu on this screen, or undefined when it is not surely one: two
  * entries at least, numbered one after the other, exactly one marked «❯», the
- * numbers in one column, an Esc hint in or under it, no rule under it, and
- * nothing but a few rows between it and the bottom of the screen.
+ * numbers in one column, an Esc hint in or under it, no rule under it but
+ * after that hint, and nothing but a few rows between it and the bottom of
+ * the screen.
  */
 export function claudeMenu(rows: readonly string[]): ClaudeMenu | undefined {
-  const found: { option: MenuOption; marker: string | undefined; column: number }[] = []
+  const found: { option: MenuOption; marker: string | undefined; indent: number; column: number }[] = []
   rows.forEach((text, row) => {
     const match = OPTION.exec(text)
     if (!match) return
@@ -59,6 +62,7 @@ export function claudeMenu(rows: readonly string[]): ClaudeMenu | undefined {
     found.push({
       option: { number: Number(match[3]), row, label: match[4]!.trim() },
       marker: match[2],
+      indent: match[1]!.length,
       column,
     })
   })
@@ -86,9 +90,17 @@ export function claudeMenu(rows: readonly string[]): ClaudeMenu | undefined {
   const first = block[0]!.option.row
   const last = block[block.length - 1]!.option.row
   const tail = rows.slice(last + 1)
-  // Nothing numbered, and no rule, between the entries or under them: not the prompt's frame.
+  // No rule between the entries: not the prompt's frame.
   for (let row = first; row <= last; row++) if (RULE.test(rows[row] ?? "")) return undefined
-  if (tail.some((text) => RULE.test(text))) return undefined
+  /*
+   * A rule under them only after the menu's own «Esc to …»: `/export` leaves
+   * the prompt's frame below it in a pane (Verifiche, mouse sessions test 2),
+   * while a list typed in the prompt has its frame right under it.
+   */
+  const rule = tail.findIndex((text) => RULE.test(text))
+  if (rule >= 0 && !tail.slice(0, rule).some((text) => ESC_TO.test(text))) return undefined
+  // And the «❯» is not the prompt's, which Claude draws in the first column.
+  if (rule >= 0 && marked[0]!.indent === 0) return undefined
   if (tail.filter((text) => text.trim()).length > TAIL_ROWS) return undefined
   const hinted = rows.slice(first, last + 1).some((text) => HINT.test(text)) || tail.some((text) => HINT.test(text))
   if (!hinted) return undefined
