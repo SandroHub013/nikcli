@@ -42,3 +42,37 @@ describe("the sidebar's footer buttons", () => {
     host.remove()
   })
 })
+
+describe("the sidebar's other element props", () => {
+  test("the bot roster in `content`, and the extra `sections`, are built once each", () => {
+    const built: Record<string, number> = { content: 0, sections: 0 }
+    const probe = (name: string) => {
+      built[name] = (built[name] ?? 0) + 1
+      const el = document.createElement("div")
+      el.dataset.probe = name
+      return el
+    }
+    const host = document.createElement("div")
+    document.body.append(host)
+    const dispose = createRoot((dispose) => {
+      render(
+        () =>
+          Sidebar({
+            workspaces: [],
+            storage: undefined,
+            get content() {
+              return probe("content")
+            },
+            get sections() {
+              return probe("sections")
+            },
+          }),
+        host,
+      )
+      return dispose
+    })
+    expect(built).toEqual({ content: 1, sections: 1 })
+    dispose()
+    host.remove()
+  })
+})
