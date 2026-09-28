@@ -835,10 +835,10 @@
 [data-slot="ade-meta-item"] + [data-slot="ade-meta-item"]::before {
   content: "";
   display: inline-block;
-  width: var(--ade-icon-size);
+  width: var(--ade-icon-dot-width);
   height: var(--ade-icon-size);
   background-color: currentColor;
-  mask: var(--ade-icon-dot) center / contain no-repeat;
+  mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
   margin-right: var(--ade-space-1);
   color: var(--ade-text-weak);
 }
