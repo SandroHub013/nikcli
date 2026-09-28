@@ -288,21 +288,28 @@ describe("terminal selection & copy (S50)", () => {
         service.shouldForceSelection({ button: 0, shiftKey: false, altKey: false, ...init } as MouseEvent)
     }
 
-    it("the left button selects with no modifier", () => {
-      expect(force()({})).toBe(true)
+    /*
+     * Mouse sessions: while the program has asked for the mouse, a plain click
+     * is the program's (OpenCode runs the entry clicked, Grok takes it), and
+     * Shift+drag selects, as in the common terminals. It was the other way
+     * round: the left button always selected, and the program had it only with Alt.
+     */
+    it("the plain left button goes to the program that asked for the mouse", () => {
+      expect(force()({})).toBe(false)
     })
 
-    it("the left button with Alt goes to the program", () => {
+    it("Shift+drag selects", () => {
+      expect(force()({ shiftKey: true })).toBe(true)
+    })
+
+    it("Alt no longer forces anything: the click is the program's", () => {
       expect(force()({ altKey: true })).toBe(false)
     })
 
     it("the right and middle buttons go to the program", () => {
       expect(force()({ button: 2 })).toBe(false)
       expect(force()({ button: 1 })).toBe(false)
-    })
-
-    it("the left button with Shift still selects", () => {
-      expect(force()({ shiftKey: true })).toBe(true)
+      expect(force()({ button: 2, shiftKey: true })).toBe(false)
     })
   })
 

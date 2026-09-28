@@ -178,6 +178,25 @@ export function watchPress(element: EventTarget): { moved: () => boolean; dispos
 }
 
 /**
+ * Whether a click on a link opens it, and where (mouse sessions).
+ *
+ * After a drag, or with a selection on screen, it does not. While the program
+ * has the mouse, the plain click is the program's, a menu entry for instance,
+ * and a link opens only with Ctrl (or Cmd) held, where a plain click would
+ * open it. Without the program's mouse, as before: a click opens, Ctrl sends
+ * it outside ADE.
+ */
+export function linkClick(
+  event: { readonly ctrlKey?: boolean; readonly metaKey?: boolean },
+  state: { readonly moved: boolean; readonly selected: boolean; readonly programMouse: boolean },
+): { open: false } | { open: true; external: boolean } {
+  if (state.moved || state.selected) return { open: false }
+  const modifier = Boolean(event.ctrlKey || event.metaKey)
+  if (state.programMouse) return modifier ? { open: true, external: false } : { open: false }
+  return { open: true, external: modifier }
+}
+
+/**
  * The links on a buffer row, as xterm wants them: 1-based, ends inclusive.
  *
  * `row` is the 1-based line xterm asks about. A link that spans rows is given
@@ -189,7 +208,9 @@ export function linksOnRow(
   row: number,
   onLink: (request: LinkRequest) => void,
   setTitle: (title: string | undefined) => void,
-  mayOpen: () => boolean = () => true,
+  mayOpen: (event: MouseEvent) => boolean = () => true,
+  /** Whether the click sends the link outside ADE: Ctrl (or Cmd) held, unless `linkClick` says otherwise. */
+  isExternal: (event: MouseEvent) => boolean = (event) => Boolean(event.ctrlKey || event.metaKey),
 ): ILink[] {
   const y0 = row - 1
   const { text, cells } = logicalLine(buffer, y0)
@@ -207,13 +228,13 @@ export function linksOnRow(
       hover: () => setTitle(title),
       leave: () => setTitle(undefined),
       activate: (event: MouseEvent) => {
-        if (!mayOpen()) return
+        if (!mayOpen(event)) return
         onLink({
           kind: found.kind,
           target: found.target,
           line: found.line,
           column: found.column,
-          external: Boolean(event.ctrlKey || event.metaKey),
+          external: isExternal(event),
         })
       },
     })
@@ -232,10 +253,20 @@ export function registerLinks(
     else element.removeAttribute("title")
   }
   const press = watchPress(element)
-  const mayOpen = () => !press.moved() && !terminal.hasSelection()
+  const click = (event: MouseEvent) =>
+    linkClick(event, {
+      moved: press.moved(),
+      selected: terminal.hasSelection(),
+      programMouse: terminal.modes.mouseTrackingMode !== "none",
+    })
+  const mayOpen = (event: MouseEvent) => click(event).open
+  const isExternal = (event: MouseEvent) => {
+    const decided = click(event)
+    return decided.open && decided.external
+  }
   const provider = terminal.registerLinkProvider({
     provideLinks: (row, callback) => {
-      const links = linksOnRow(terminal.buffer.active as LinkBuffer, row, onLink, setTitle, mayOpen)
+      const links = linksOnRow(terminal.buffer.active as LinkBuffer, row, onLink, setTitle, mayOpen, isExternal)
       callback(links.length ? links : undefined)
     },
   })

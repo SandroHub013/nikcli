@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { findLinks, linksOnRow, logicalLine, watchPress, type LinkBuffer, type LinkRequest } from "./links"
+import { findLinks, linkClick, linksOnRow, logicalLine, watchPress, type LinkBuffer, type LinkRequest } from "./links"
 
 describe("findLinks (S76)", () => {
   test("drops the full stop after a URL", () => {
@@ -184,5 +184,54 @@ describe("a drag over a link (S76, Architect's review)", () => {
     )
     link.activate({} as MouseEvent, link.text)
     expect(opened).toEqual([])
+  })
+})
+
+/*
+ * Mouse sessions: while the program has the mouse, its plain click goes to the
+ * program (a menu entry in OpenCode), and a link opens only with Ctrl held.
+ * Without the program's mouse, as before: a click opens, Ctrl sends it outside.
+ */
+describe("a link under a program that has the mouse", () => {
+  const still = { moved: false, selected: false }
+
+  test("a plain click does not open it; Ctrl+click opens it where a click would", () => {
+    expect(linkClick({}, { ...still, programMouse: true })).toEqual({ open: false })
+    expect(linkClick({ ctrlKey: true }, { ...still, programMouse: true })).toEqual({ open: true, external: false })
+    expect(linkClick({ metaKey: true }, { ...still, programMouse: true })).toEqual({ open: true, external: false })
+  })
+
+  test("without the program's mouse, as before", () => {
+    expect(linkClick({}, { ...still, programMouse: false })).toEqual({ open: true, external: false })
+    expect(linkClick({ ctrlKey: true }, { ...still, programMouse: false })).toEqual({ open: true, external: true })
+  })
+
+  test("after a drag or with a selection, never", () => {
+    for (const programMouse of [true, false]) {
+      expect(linkClick({ ctrlKey: true }, { moved: true, selected: false, programMouse }).open).toBe(false)
+      expect(linkClick({ ctrlKey: true }, { moved: false, selected: true, programMouse }).open).toBe(false)
+    }
+  })
+
+  test("linksOnRow asks with the click's own event, and says where it goes", () => {
+    const opened: LinkRequest[] = []
+    const buffer = fakeBuffer([{ text: "https://example.com" }])
+    const decide = (event: MouseEvent) => linkClick(event, { ...still, programMouse: true })
+    const [link] = linksOnRow(
+      buffer,
+      1,
+      (request) => opened.push(request),
+      () => {},
+      (event) => decide(event).open,
+      (event) => {
+        const decided = decide(event)
+        return decided.open && decided.external
+      },
+    )
+    link!.activate({} as MouseEvent, link!.text)
+    expect(opened).toEqual([])
+    link!.activate({ ctrlKey: true } as MouseEvent, link!.text)
+    expect(opened).toHaveLength(1)
+    expect(opened[0]!.external).toBe(false)
   })
 })

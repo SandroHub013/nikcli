@@ -237,23 +237,24 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
 }
 
 /**
- * The left button is ADE's: it selects, even when the program has asked for the mouse.
+ * When the program has asked for the mouse, the mouse is the program's, and
+ * Shift+drag selects: the rule of the common terminals (mouse sessions).
  *
- * xterm consults this only while the program has mouse reporting on, so a shell
- * or Codex keeps Alt+drag as today's column selection.
- *
- * The trade-off: a program that uses the left click, a clickable menu for
- * instance, gets it only with Alt held. Claude Code and Codex are driven from
- * the keyboard, and a plain drag in Claude Code was measured to do nothing at
- * all. The wheel and the right and middle buttons stay the program's, because
- * in the alternate buffer scrolling is the program's to do, not xterm's.
+ * xterm consults this only while the program has mouse reporting on; in a
+ * shell, or in Claude Code, Kimi and pi, which do not ask, the left button
+ * selects as before. It was ADE's always, the program getting it only with
+ * Alt: the clickable menus of OpenCode, nikcli and Grok, which were measured
+ * to act on a click (ade-team/results/mouse-sessioni-misura.md), could not be
+ * clicked. xterm's own rule is Shift, but Option on a Mac; ADE says Shift
+ * everywhere, as its hint does. The wheel and the right and middle buttons
+ * were the program's already.
  */
 export function configureTerminalSelection(terminal: Terminal): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
     sel.shouldForceSelection = (event: MouseEvent) =>
-      (event.button === 0 || event.button === undefined) && !event.altKey
+      (event.button === 0 || event.button === undefined) && event.shiftKey
   }
 }
 
