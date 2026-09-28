@@ -7,6 +7,7 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  hookClosesScreenPrompt,
   holdsForAnswer,
   quietOutcome,
   ANSWER_HOLD_MS,
@@ -448,6 +449,18 @@ describe("the permission prompt the hook says", () => {
     expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000)).toBe("idle")
     // The previous turn's idle does not end a question asked in this one.
     expect(statusFromActivity("waiting", { state: "idle", at: now - 9_000 }, now - 5_000)).toBeUndefined()
+  })
+
+  test("a Stop or a new turn after the screen found its prompt closes it (fix 4)", () => {
+    expect(hookClosesScreenPrompt({ state: "idle", at: now }, now - 1_000)).toBe(true)
+    expect(hookClosesScreenPrompt({ state: "busy", at: now }, now - 1_000)).toBe(true)
+    // At the same moment the hook wins.
+    expect(hookClosesScreenPrompt({ state: "idle", at: now }, now)).toBe(true)
+    // The turn's busy was there before the prompt appeared: it answers nothing.
+    expect(hookClosesScreenPrompt({ state: "busy", at: now - 3_000 }, now - 1_000)).toBe(false)
+    // The hook asking too is not an answer, and no hook is not one either.
+    expect(hookClosesScreenPrompt({ state: "permission", at: now }, now - 1_000)).toBe(false)
+    expect(hookClosesScreenPrompt(undefined, now - 1_000)).toBe(false)
   })
 
   test("what ADE saw after the hook wrote wins, and at the same moment the hook wins (fix 4)", () => {

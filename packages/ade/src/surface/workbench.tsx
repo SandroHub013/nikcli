@@ -299,6 +299,7 @@ import {
   formatDelivery,
   holdsForAnswer,
   quietOutcome,
+  hookClosesScreenPrompt,
   isFree,
   isQuestionOpen,
   activityOccupiesPane,
@@ -2929,6 +2930,12 @@ export function Workbench() {
       const activity = read
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
+      if (permissions()[paneId] && hookClosesScreenPrompt(activity, questionSeenAt.get(paneId))) {
+        permissions.forget(paneId)
+        // What is still in the window was answered: not to be found again on the next line.
+        rawWindows.forget(paneId)
+        if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+      }
       const next = pane
         ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
         : undefined

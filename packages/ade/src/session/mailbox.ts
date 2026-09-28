@@ -903,6 +903,21 @@ export function statusFromActivity(
   return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
 }
 
+/**
+ * Whether the hook's turn start or end closes a prompt the screen reading found.
+ *
+ * The screen reading was the only thing that closed its own prompts, and it
+ * reads a window of raw lines that can still hold the question after it was
+ * answered in a way the reading does not see. A Stop after that left the pane
+ * on «Permesso», and closed to mail, with the turn over. A busy or an idle
+ * written at or after the moment the prompt was seen is the CLI saying it has
+ * moved on; an older one was already there when the prompt appeared.
+ */
+export function hookClosesScreenPrompt(activity: Activity | undefined, seenAt: number | undefined): boolean {
+  if (!activity || activity.state === "permission") return false
+  return seenAt === undefined || activity.at >= seenAt
+}
+
 /** A CLI without turn hooks counts as free once it has printed nothing for this long. */
 export const QUIET_FREE_MS = 4000
 /**
