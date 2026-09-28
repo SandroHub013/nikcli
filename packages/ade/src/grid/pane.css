@@ -741,7 +741,13 @@
 [data-slot="pane-agent"]::after,
 [data-slot="pane-tree"]::before,
 [data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  content: "·";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-dot) center / contain no-repeat;
+  vertical-align: middle;
   color: var(--ade-text-weak);
 }
 
@@ -1380,7 +1386,13 @@
 }
 
 .hA [data-lv="crit"] .qv::before {
-  content: "!";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-alert) center / contain no-repeat;
+  vertical-align: middle;
   margin-right: 1px;
 }
 

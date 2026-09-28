@@ -833,7 +833,12 @@
 }
 
 [data-slot="ade-meta-item"] + [data-slot="ade-meta-item"]::before {
-  content: "·";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-dot) center / contain no-repeat;
   margin-right: var(--ade-space-1);
   color: var(--ade-text-weak);
 }

@@ -478,11 +478,18 @@
   display: none;
 }
 [data-slot="bots-tool-head"]::before {
-  content: "▸";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-chevron-right) center / contain no-repeat;
+  flex: 0 0 auto;
+  align-self: center;
   color: var(--ade-text-weak);
 }
 [data-slot="bots-tool"][open] [data-slot="bots-tool-head"]::before {
-  content: "▾";
+  mask-image: var(--ade-icon-chevron-down);
 }
 
 [data-slot="bots-tool-name"] {
