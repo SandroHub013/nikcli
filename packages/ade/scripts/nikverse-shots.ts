@@ -21,6 +21,7 @@ import { SHOTS, shotPicture } from "../src/nikverse/city/shots"
 import type { GpuTiming } from "../src/nikverse/city/bench"
 import type { ShotResult } from "../src/nikverse/city/shot-handle"
 import { GATE_LIMITS } from "../src/nikverse/gate"
+import { SCALE_DOWN_ABOVE_MS, SCALE_MIN } from "../src/nikverse/city/resolution"
 import { actAsAde, arg, startHarness } from "./nikverse-harness"
 
 const label = arg("--label") ?? "shots"
@@ -108,7 +109,7 @@ async function shots(level: string) {
       })
       const s = result.stats
       console.log(
-        `${found.length ? "FAIL" : "PASS"}  ${name} [${result.backend}]: luminance ${s.luminance.toFixed(3)} (band ${shot.luminance.join("..")}), sky ${(s.sky * 100).toFixed(1)} %, black ${(s.black * 100).toFixed(3)} %, burnt ${(s.burnt * 100).toFixed(3)} %, GPU ${gpu ? `p50 ${gpu.p50.toFixed(1)} ms, p95 ${gpu.p95.toFixed(1)} ms (${gpu.sync})` : "n/a"}${found.length ? ` — ${found.join("; ")}` : ""}`,
+        `${found.length ? "FAIL" : "PASS"}  ${name} [${result.backend}]: luminance ${s.luminance.toFixed(3)} (band ${shot.luminance.join("..")}), sky ${(s.sky * 100).toFixed(1)} %, black ${(s.black * 100).toFixed(3)} %, burnt ${(s.burnt * 100).toFixed(3)} %, GPU ${gpu ? `p50 ${gpu.p50.toFixed(1)} ms, p95 ${gpu.p95.toFixed(1)} ms (${gpu.sync}${gpu.scale !== undefined ? `, scale ${gpu.scale}` : ""})` : "n/a"}${found.length ? ` — ${found.join("; ")}` : ""}`,
       )
       for (const f of found) failures.push(`${name}: ${f}`)
     } catch (error) {
@@ -262,13 +263,20 @@ try {
     const worst = timed.reduce((a, b) => ((b.gpu?.p95 ?? 0) > (a.gpu?.p95 ?? 0) ? b : a))
     const limit = GATE_LIMITS.gpuFrameP95Ms
     const ok = (worst.gpu?.p95 ?? Number.NaN) <= limit
+    const scaled = timed.filter((r) => r.gpu?.scale !== undefined)
     console.log(
-      `${ok ? "PASS" : "FAIL"}  ${level} worst GPU p95 of the shots: ${worst.gpu?.p95.toFixed(1)} ms in shot ${worst.n} ${worst.name} (ceiling ${limit} ms)`,
+      `${ok ? "PASS" : "FAIL"}  ${level} worst GPU p95 of the shots: ${worst.gpu?.p95.toFixed(1)} ms in shot ${worst.n} ${worst.name}, at scale ${worst.gpu?.scale ?? 1} (ceiling ${limit} ms)`,
     )
     if (!ok)
       failures.push(
         `${level}: worst GPU p95 ${worst.gpu?.p95.toFixed(1)} ms in shot ${worst.n} ${worst.name}, over ${limit} ms`,
       )
+    // A shot that is still over the governor's line at the smallest scale would need less than 0.75: red, whatever the ceiling says.
+    for (const r of scaled)
+      if ((r.gpu!.scale ?? 1) <= SCALE_MIN && (r.gpu!.p95 ?? 0) > SCALE_DOWN_ABOVE_MS) {
+        console.log(`FAIL  ${level} shot ${r.n} ${r.name}: ${r.gpu!.p95.toFixed(1)} ms at the smallest scale (${SCALE_MIN}), it would need less`)
+        failures.push(`${level}: shot ${r.n} ${r.name} does not fit at scale ${SCALE_MIN} (${r.gpu!.p95.toFixed(1)} ms over ${SCALE_DOWN_ABOVE_MS})`)
+      }
   }
   if (!process.argv.includes("--no-clip")) for (const level of levels) await clip(level)
   const render = process.argv.includes("--checks") ? checks() : undefined

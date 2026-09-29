@@ -524,6 +524,8 @@ try {
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
       level,
       gpuTimings: timings,
+      // The scale the level's resolution settled at for the default view (1 where the level does not move it).
+      gpuScale: median(timings.map((t) => (t as { scale?: number }).scale ?? 1)),
       baselineGpuRuns,
       baselineGpuRunsAfter,
       idleTrace,

@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { benchDraw, gpuIdleOf, hasTimestampQuery, measureGpu, timestampFrames } from "./gpu-idle"
+import {
+  benchDraw,
+  benchScaled,
+  gpuIdleOf,
+  hasTimestampQuery,
+  liveGpuTimer,
+  measureGpu,
+  timestampFrames,
+} from "./gpu-idle"
+import type { Settled } from "./resolution"
 
 describe("waiting for the GPU", () => {
   test("WebGPU waits for the queue to drain", async () => {
@@ -154,6 +163,34 @@ describe("the GPU's own clock", () => {
     expect(times).toEqual([5.5, 4, 5.5, 4])
   })
 
+  test("the live timer tracks one frame on request: on at begin, the time at end, off after, and a frame it could not time is NaN", async () => {
+    const { renderer } = stamped([4], [1])
+    const timer = liveGpuTimer(renderer)!
+    expect(renderer.backend.trackTimestamp).toBe(false)
+    timer.begin()
+    expect(renderer.backend.trackTimestamp).toBe(true)
+    expect(await timer.end()).toBe(5)
+    expect(renderer.backend.trackTimestamp).toBe(false)
+    const lost = stamped([Number.NaN])
+    const other = liveGpuTimer(lost.renderer)!
+    other.begin()
+    expect(await other.end()).toBeNaN()
+    expect(lost.renderer.backend.trackTimestamp).toBe(false)
+  })
+
+  test("the live timer leaves tracking on when something else had it on, and is absent without timestamp-query", async () => {
+    const { renderer } = stamped([4])
+    renderer.backend.trackTimestamp = true
+    const timer = liveGpuTimer(renderer)!
+    timer.begin()
+    await timer.end()
+    expect(renderer.backend.trackTimestamp).toBe(true)
+    expect(
+      liveGpuTimer({ backend: { hasFeature: () => false }, resolveTimestampsAsync: async () => 1 }),
+    ).toBeUndefined()
+    expect(liveGpuTimer({})).toBeUndefined()
+  })
+
   test("a device with no timestamp-query answers nothing, so the caller falls back", async () => {
     const renderer = { backend: { hasFeature: () => false }, resolveTimestampsAsync: async () => 1 }
     expect(await timestampFrames(renderer, () => {}, 3)).toBeUndefined()
@@ -187,5 +224,53 @@ describe("the GPU's own clock", () => {
     const { renderer, draw } = stamped([6])
     const timing = await measureGpu({ ...renderer, getContext: () => ({ finish() {} }) }, "webgl2", draw, 5)
     expect(timing.sync).toBe("finish")
+  })
+})
+
+describe("timing at the scales the level would settle at", () => {
+  /** A WebGPU renderer whose frames cost `cost(width)` ms of GPU, in a target of the width it was last given. */
+  function scaledWorld(cost: (width: number) => number) {
+    let width = 0
+    const sizes: number[] = []
+    const renderer = {
+      backend: {
+        trackTimestamp: false,
+        hasFeature: (n: string) => n === "timestamp-query",
+        adapter: { features: { has: () => true } },
+      },
+      setRenderTarget() {},
+      render() {},
+      resolveTimestampsAsync: async (type = "render") => (type === "render" ? cost(width) : undefined),
+    }
+    return {
+      bench: {
+        renderer,
+        backend: "webgpu" as const,
+        scene: {},
+        camera: {},
+        makeTarget: (w: number) => ((width = w), sizes.push(w), { dispose() {} }),
+        width: 1600,
+        height: 900,
+        frames: 10,
+      },
+      sizes,
+    }
+  }
+
+  test("a level that moves its scale is timed at full size and steps down while over the line, and says where it settled", async () => {
+    // Fill-bound: 17 ms at 1600 wide, falling with the square of the width.
+    const { bench, sizes } = scaledWorld((w) => 17 * (w / 1600) ** 2)
+    const timing = (await benchScaled({ ...bench, dynamic: true })) as Settled
+    expect(timing.scale).toBe(0.9)
+    expect([...new Set(sizes)]).toEqual([1600, 1520, 1440])
+    expect(timing.p95).toBeCloseTo(13.77, 1)
+  })
+
+  test("a level that does not is timed once at full size and carries no scale", async () => {
+    const { bench, sizes } = scaledWorld(() => 20)
+    const timing = await benchScaled({ ...bench, dynamic: false })
+    expect("scale" in timing).toBe(false)
+    expect([...new Set(sizes)]).toEqual([1600])
+    expect(timing.p95).toBe(20)
   })
 })

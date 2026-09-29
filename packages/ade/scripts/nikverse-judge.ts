@@ -38,7 +38,7 @@ interface Row {
   jpg: string
   stats: { luminance: number; burnt: number; black: number }
   problems: string[]
-  gpu?: { p50: number; p95: number; sync: string }
+  gpu?: { p50: number; p95: number; sync: string; scale?: number }
 }
 interface Bench {
   label: string
@@ -78,6 +78,14 @@ for (const level of levels) {
     after: fmt(gpuOf(after), " ms"),
     ok: gpuOf(after) <= GATE_LIMITS.gpuFrameP95Ms,
   })
+  const scaleOf = (bench: Bench) => Math.min(...rows(bench).flatMap((r) => (r.gpu?.scale !== undefined ? [r.gpu.scale] : [])))
+  if (Number.isFinite(scaleOf(before)) || Number.isFinite(scaleOf(after)))
+    numbers.push({
+      name: `${level}: scala di risoluzione più bassa tra le inquadrature (da 1 a 0,75; sotto 0,75 è rosso)`,
+      before: fmt(scaleOf(before), "", 2),
+      after: fmt(scaleOf(after), "", 2),
+      ok: scaleOf(after) >= 0.75,
+    })
   numbers.push({
     name: `${level}: pixel bruciati, il peggiore degli scatti (tetto ${MAX_BURNT * 100} %)`,
     before: fmt(burntOf(before) * 100, " %", 2),
