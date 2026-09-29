@@ -30,6 +30,8 @@ describe("waiting for the GPU", () => {
     expect(hasTimestampQuery(withFeature)).toBe(true)
     expect(hasTimestampQuery({ backend: { adapter: { features: { has: () => false } } } })).toBe(false)
     expect(hasTimestampQuery({})).toBe(false)
+    // The device's own answer counts too: three asks it, and the adapter's list is not always where it looks.
+    expect(hasTimestampQuery({ backend: { hasFeature: (n: string) => n === "timestamp-query" } })).toBe(true)
   })
 })
 

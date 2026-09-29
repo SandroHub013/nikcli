@@ -67,14 +67,13 @@ for (const level of levels)
 const numbers: JudgeNumber[] = []
 const fmt = (n: number | undefined, unit = "", digits = 1) =>
   n === undefined || !Number.isFinite(n) ? "—" : `${n.toFixed(digits)}${unit}`
-const mean = (values: number[]) => (values.length ? values.reduce((x, y) => x + y, 0) / values.length : Number.NaN)
 for (const level of levels) {
   const rows = (bench: Bench) => bench.rows.filter((r) => r.level === level)
-  const gpuOf = (bench: Bench) => mean(rows(bench).flatMap((r) => (r.gpu ? [r.gpu.p95] : [])))
+  const gpuOf = (bench: Bench) => Math.max(...rows(bench).flatMap((r) => (r.gpu ? [r.gpu.p95] : [])))
   const burntOf = (bench: Bench) => Math.max(...rows(bench).map((r) => r.stats.burnt))
   const bandOk = (bench: Bench) => rows(bench).filter((r) => r.problems.length === 0).length
   numbers.push({
-    name: `${level}: tempo GPU del frame, p95 medio sugli scatti (tetto ${GATE_LIMITS.gpuFrameP95Ms} ms)`,
+    name: `${level}: tempo GPU del frame, p95 della peggiore inquadratura (tetto ${GATE_LIMITS.gpuFrameP95Ms} ms)`,
     before: fmt(gpuOf(before), " ms"),
     after: fmt(gpuOf(after), " ms"),
     ok: gpuOf(after) <= GATE_LIMITS.gpuFrameP95Ms,

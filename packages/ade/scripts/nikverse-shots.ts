@@ -20,6 +20,7 @@ import { join } from "node:path"
 import { SHOTS, shotPicture } from "../src/nikverse/city/shots"
 import type { GpuTiming } from "../src/nikverse/city/bench"
 import type { ShotResult } from "../src/nikverse/city/shot-handle"
+import { GATE_LIMITS } from "../src/nikverse/gate"
 import { actAsAde, arg, startHarness } from "./nikverse-harness"
 
 const label = arg("--label") ?? "shots"
@@ -254,6 +255,21 @@ function checks(): unknown {
 
 try {
   for (const level of levels) await shots(level)
+  // The Architect's ceiling: the worst of the eight shots, not the view a player starts in, at every level that has the GPU's own clock.
+  for (const level of levels) {
+    const timed = rows.filter((r) => r.level === level && r.gpu?.sync === "timestamp")
+    if (!timed.length) continue
+    const worst = timed.reduce((a, b) => ((b.gpu?.p95 ?? 0) > (a.gpu?.p95 ?? 0) ? b : a))
+    const limit = GATE_LIMITS.gpuFrameP95Ms
+    const ok = (worst.gpu?.p95 ?? Number.NaN) <= limit
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${level} worst GPU p95 of the shots: ${worst.gpu?.p95.toFixed(1)} ms in shot ${worst.n} ${worst.name} (ceiling ${limit} ms)`,
+    )
+    if (!ok)
+      failures.push(
+        `${level}: worst GPU p95 ${worst.gpu?.p95.toFixed(1)} ms in shot ${worst.n} ${worst.name}, over ${limit} ms`,
+      )
+  }
   if (!process.argv.includes("--no-clip")) for (const level of levels) await clip(level)
   const render = process.argv.includes("--checks") ? checks() : undefined
   writeFileSync(

@@ -32,9 +32,13 @@ export function gpuIdleOf(
   return { idle: () => {}, sync: "none" }
 }
 
-/** Whether the adapter offers `timestamp-query`: known, not used (see `bench.ts`). */
-export const hasTimestampQuery = (renderer: unknown): boolean =>
-  (renderer as WebGpuInternals).backend?.adapter?.features?.has("timestamp-query") === true
+/** Whether the device has `timestamp-query`: the GPU's own clock (see `bench.ts`). */
+export const hasTimestampQuery = (renderer: unknown): boolean => {
+  const backend = (renderer as WebGpuInternals & Timestamps).backend
+  return (
+    backend?.hasFeature?.("timestamp-query") === true || backend?.adapter?.features?.has("timestamp-query") === true
+  )
+}
 
 interface Timestamps {
   backend?: { trackTimestamp?: boolean; hasFeature?(name: string): boolean }

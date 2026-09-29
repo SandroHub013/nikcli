@@ -14,6 +14,10 @@ export const GATE_LIMITS = {
   movingFps: 60,
   /** The GPU time of a frame at its 95th percentile, in ms, with no cap and no display in the way (`src/nikverse/city/bench.ts`). */
   gpuFrameP95Ms: 15,
+  /** The GPU process with the world closed may not use more than this: above it ADE was busy and the measure is not valid. */
+  baselineMaxPercent: 5,
+  /** Frames of animation the page asks the browser for, a second, while it draws nothing: a loop of its own that never sleeps wakes the frame and the compositor at every vsync. */
+  idleAnimationFramesPerSecond: 2,
   /** How much the GPU process may grow while the world is open, in MB (the level's textures, geometry and targets). */
   gpuMemoryGrowthMb: 250,
 } as const
@@ -37,6 +41,8 @@ export interface GateMeasures {
   movingFps: number
   /** The GPU time of a frame at the 95th percentile, from the world's own bench. */
   gpuFrameP95Ms: number
+  /** Animation frames a second the page requested in the "immobile" mode (counted in a browser trace). */
+  idleAnimationFramesPerSecond: number
   /** The most the GPU process grew over its closed-world baseline while the world was open. */
   gpuMemoryGrowthMb: number
 }
@@ -73,6 +79,16 @@ export function gateChecks(measures: GateMeasures, limits = GATE_LIMITS): GateCh
       "immobile CPU (frame + GPU over baseline), %",
       immobileCost(measures.immobileFrameCpuPercent, measures.immobileGpuCpuPercent, measures.baselineGpuCpuPercent),
       limits.stillCpuPercent,
+    ),
+    under(
+      "GPU baseline with the world closed (valid up to 5), %",
+      measures.baselineGpuCpuPercent,
+      limits.baselineMaxPercent,
+    ),
+    under(
+      "animation frames a second while immobile",
+      measures.idleAnimationFramesPerSecond,
+      limits.idleAnimationFramesPerSecond,
     ),
     under("fps while moving", measures.movingFps, limits.movingFps + 1),
     under("GPU frame time p95, ms", measures.gpuFrameP95Ms, limits.gpuFrameP95Ms),

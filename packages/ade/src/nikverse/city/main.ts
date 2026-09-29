@@ -13,6 +13,7 @@
  * pixels per SVG unit, for the comparison with the SVG.
  */
 
+import { quietLoop } from "./quiet-loop"
 import { NoToneMapping, PerspectiveCamera, Raycaster, RenderTarget, Vector2, WebGPURenderer } from "three/webgpu"
 import { WebGLRenderer } from "three"
 import {
@@ -105,6 +106,8 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
     createWebGPU: async (canvas, options) => {
       const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
       await renderer.init()
+      // three's own frame loop would run at every vsync for a city that draws nothing.
+      if (!quietLoop(renderer)) console.warn("[nikverse] il ciclo interno di three non e stato fermato")
       // Never its WebGL backend: that is what the classic renderer is for.
       if (!(renderer as unknown as { backend?: { isWebGPUBackend?: boolean } }).backend?.isWebGPUBackend) {
         renderer.dispose()

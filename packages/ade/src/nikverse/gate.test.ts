@@ -10,6 +10,7 @@ const good: GateMeasures = {
   immobileGpuCpuPercent: 0.6,
   baselineGpuCpuPercent: 0.4,
   movingFps: 60,
+  idleAnimationFramesPerSecond: 0,
   gpuFrameP95Ms: 9,
   gpuMemoryGrowthMb: 160,
 }
@@ -31,6 +32,8 @@ describe("the NikVerse gate", () => {
     expect(red({ adeHeapGrowthMb: 6 })).toEqual(["ADE heap growth, MB"])
     expect(red({ immobileFrameCpuPercent: 3 })).toEqual(["immobile CPU (frame + GPU over baseline), %"])
     expect(red({ movingFps: 90 })).toEqual(["fps while moving"])
+    expect(red({ idleAnimationFramesPerSecond: 60 })).toEqual(["animation frames a second while immobile"])
+    expect(red({ baselineGpuCpuPercent: 5.5 })).toEqual(["GPU baseline with the world closed (valid up to 5), %"])
     expect(red({ gpuFrameP95Ms: GATE_LIMITS.gpuFrameP95Ms + 0.5 })).toEqual(["GPU frame time p95, ms"])
     expect(red({ gpuMemoryGrowthMb: GATE_LIMITS.gpuMemoryGrowthMb + 1 })).toEqual(["GPU memory growth, MB"])
   })
@@ -46,9 +49,13 @@ describe("the NikVerse gate", () => {
     expect(gatePasses(gateChecks({ ...good, frameMb: Number.NaN }))).toBe(false)
     expect(gatePasses(gateChecks({ ...good, immobileFrameCpuPercent: mean([]) }))).toBe(false)
     expect(red({ gpuFrameP95Ms: Number.NaN })).toEqual(["GPU frame time p95, ms"])
+    expect(red({ idleAnimationFramesPerSecond: Number.NaN })).toEqual(["animation frames a second while immobile"])
     expect(red({ gpuMemoryGrowthMb: Number.NaN })).toEqual(["GPU memory growth, MB"])
     // Without a baseline the GPU's share cannot be told from ADE's: not a pass either.
-    expect(red({ baselineGpuCpuPercent: Number.NaN })).toEqual(["immobile CPU (frame + GPU over baseline), %"])
+    expect(red({ baselineGpuCpuPercent: Number.NaN }).sort()).toEqual([
+      "GPU baseline with the world closed (valid up to 5), %",
+      "immobile CPU (frame + GPU over baseline), %",
+    ])
   })
 
   test("N2 as measured on the first live run is red on exactly the two things Dev is to fix, when the GPU baseline is taken as nothing", () => {
