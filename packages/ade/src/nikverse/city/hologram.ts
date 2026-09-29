@@ -254,9 +254,22 @@ export const HOLOGRAM_HEIGHT = 3.5
 
 type Halo = MeshBasicNodeMaterial | MeshBasicMaterial
 
-export function createHologram(logo: Logo, kind: HologramKind = "tsl"): Hologram {
+/** The lit ring around the projector, above the hologram's own origin. */
+const RING_HEIGHT = 0.27
+
+export interface HologramOptions {
+  /** The projector under it (a disc): off where the plaza brings its own pedestal. */
+  base?: boolean
+  /** Where its ring floats, above the ground; the projector's own height when not given. */
+  ringY?: number
+}
+
+export function createHologram(logo: Logo, kind: HologramKind = "tsl", options: HologramOptions = {}): Hologram {
   const group = new Group()
   group.name = "hologram"
+  const withBase = options.base ?? true
+  // The ring is at 0.27 in the hologram's own frame; the whole thing is lifted to put it where it should float.
+  if (options.ringY !== undefined) group.position.y = options.ringY - RING_HEIGHT
   const shaders: ShaderMaterial[] = []
 
   // Projector: a low dark disc with a lit ring.
@@ -264,8 +277,9 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl"): Hologram
   disc.position.y = 0.125
   const ring = new Mesh(new RingGeometry(1.7, 2.05, 64), new MeshBasicMaterial({ color: CYAN, side: DoubleSide }))
   ring.rotation.x = -Math.PI / 2
-  ring.position.y = 0.27
-  group.add(disc, ring)
+  ring.position.y = RING_HEIGHT
+  group.add(ring)
+  if (withBase) group.add(disc)
 
   // The cone of light: open, additive, brightest at the projector and gone at the logo.
   let coneMaterial: Halo
@@ -296,7 +310,7 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl"): Hologram
     })
   }
   const cone = new Mesh(new CylinderGeometry(1.6, 2.05, HOLOGRAM_HEIGHT + 0.8, 48, 1, true), coneMaterial)
-  cone.position.y = 0.27 + (HOLOGRAM_HEIGHT + 0.8) / 2
+  cone.position.y = RING_HEIGHT + (HOLOGRAM_HEIGHT + 0.8) / 2
   group.add(cone)
 
   // A glow behind the logo: the additive halo, a soft disc that always faces the camera.

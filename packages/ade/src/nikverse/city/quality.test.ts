@@ -12,7 +12,7 @@ describe("the levels", () => {
       expect(LEVELS[id].id).toBe(id)
       // Bassa and Media ship; Alta's 2K set is a download of its own, and the world falls back to Media without it.
       if (id !== "alta")
-        for (const file of BODIES.map((body) => `character_${body}.glb`)) expect(existsSync(join(LEVELS_DIR, id, file))).toBe(true)
+        for (const file of [...BODIES.map((body) => `character_${body}.glb`), "city.glb"]) expect(existsSync(join(LEVELS_DIR, id, file))).toBe(true)
       // The address the world asks for is the folder the assets were put in.
       expect(glbUrl("./assets/", id, "user")).toBe(`./assets/levels/${id}/character_user.glb`)
     }

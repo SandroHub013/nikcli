@@ -21,8 +21,8 @@ export const NO_INPUT: Input = { forward: false, back: false, left: false, right
 
 export const WALK_SPEED = 3.2
 export const RUN_SPEED = 6.4
-/** The character's radius on the ground, for the walls. */
-export const BODY_RADIUS = 0.35
+/** The character's radius on the ground, for the walls: a chibi is under half a metre across, and the aisle between the desks 0.54. */
+export const BODY_RADIUS = 0.22
 /** Metres per second the speed changes by: a quick start and stop, not a slide. */
 const ACCELERATION = 28
 

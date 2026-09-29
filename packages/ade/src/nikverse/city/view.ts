@@ -34,6 +34,7 @@ import {
 } from "three/webgpu"
 import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
+import type { CityKit } from "./kit"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
   CHAIR_SEAT_TOP,
@@ -62,11 +63,14 @@ const plane = new PlaneGeometry(1, 1)
 /** How far a shop is below the pavement when it has not come up yet. */
 const SUNK = WALL_HEIGHT + 0.8
 
-/** A sphere that holds a whole shop: its half diagonal and the sign above it. */
-const SHOP_RADIUS = 9
+/** A sphere that holds a whole shop: its half diagonal, the awning and the sign above it. */
+const SHOP_RADIUS = 5.5
 
-const SIGN_WIDTH = 6
-const SIGN_HEIGHT = 1.2
+/** The sign over the door, as N3 has its board: 3.5 wide, 0.56 tall, its middle 3.02 up and on the front face. */
+const SIGN_WIDTH = 3.3
+const SIGN_HEIGHT = 0.5
+const SIGN_Y = 3.02
+const SIGN_Z = SHOP_DEPTH / 2 + 0.16
 
 /** A name, drawn as a texture for the sign. Text only: the name is never parsed as anything. */
 function signTexture(name: string): CanvasTexture | undefined {
@@ -131,27 +135,32 @@ export interface CityView {
   dispose(): void
 }
 
-function buildShop(entity: ShopEntity): ShopView {
+function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   const group = new Group()
   group.name = `shop:${entity.id}`
   const own: Array<{ dispose(): void }> = []
 
-  const floor = new Mesh(box, FLOOR_MATERIAL)
-  floor.scale.set(SHOP_WIDTH, 0.12, SHOP_DEPTH)
-  floor.position.y = 0.06
-  group.add(floor)
-  for (const w of wallsLocal()) {
-    const wall = new Mesh(box, WALL_MATERIAL)
-    wall.scale.set(w.hx * 2, w.height, w.hz * 2)
-    wall.position.set(w.x, w.height / 2, w.z)
-    group.add(wall)
-  }
+  if (kit) {
+    // N3's shop: floor, walls, window, awning, desks, chairs, screens; the sign's text and the monitors' glow are ours.
+    group.add(kit.shop())
+  } else {
+    const floor = new Mesh(box, FLOOR_MATERIAL)
+    floor.scale.set(SHOP_WIDTH, 0.12, SHOP_DEPTH)
+    floor.position.y = 0.06
+    group.add(floor)
+    for (const w of wallsLocal()) {
+      const wall = new Mesh(box, WALL_MATERIAL)
+      wall.scale.set(w.hx * 2, w.height, w.hz * 2)
+      wall.position.set(w.x, w.height / 2, w.z)
+      group.add(wall)
+    }
 
-  // A lit strip over the door and the sign above it.
-  const strip = new Mesh(box, paint(0x38d8ff, { emissive: true }))
-  strip.scale.set(DOOR_WIDTH, 0.08, 0.1)
-  strip.position.set(0, WALL_HEIGHT - 0.1, SHOP_DEPTH / 2)
-  group.add(strip)
+    // A lit strip over the door.
+    const strip = new Mesh(box, paint(0x38d8ff, { emissive: true }))
+    strip.scale.set(DOOR_WIDTH, 0.08, 0.1)
+    strip.position.set(0, WALL_HEIGHT - 0.1, SHOP_DEPTH / 2)
+    group.add(strip)
+  }
 
   const texture = signTexture(entity.shop.name)
   const signMaterial = texture
@@ -161,7 +170,7 @@ function buildShop(entity: ShopEntity): ShopView {
   if (texture) own.push(texture)
   const sign = new Mesh(plane, signMaterial)
   sign.scale.set(SIGN_WIDTH, SIGN_HEIGHT, 1)
-  sign.position.set(0, WALL_HEIGHT + 0.9, SHOP_DEPTH / 2 + 0.05)
+  sign.position.set(0, SIGN_Y, SIGN_Z)
   group.add(sign)
 
   const deskGroup = new Group()
@@ -179,12 +188,23 @@ function disposeScreens(view: ShopView): void {
   view.screens.clear()
 }
 
-/** Draws `count` desks with their monitors and chairs, replacing the ones there. */
-function buildDesks(view: ShopView, count: number): void {
+/**
+ * Draws `count` desks with their monitors and chairs, replacing the ones there. With N3's shop the desks and
+ * chairs are in the file, all four always; what is drawn here is the glow over the monitors of the desks in use.
+ */
+function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
   view.deskGroup.clear()
   disposeScreens(view)
   for (let i = 0; i < count; i++) {
     const at = deskLocal(i)
+    const screen = new Mesh(plane, new MeshBasicMaterial({ color: GLOW_COLOR.off }))
+    screen.scale.set(0.56, 0.32, 1)
+    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.035)
+    view.monitors.push(screen)
+    if (kit) {
+      view.deskGroup.add(screen)
+      continue
+    }
     const desk = new Mesh(box, DESK_MATERIAL)
     desk.scale.set(DESK_HALF.hx * 2, 0.06, DESK_HALF.hz * 2)
     desk.position.set(at.desk.x, DESK_HEIGHT, at.desk.z)
@@ -195,21 +215,17 @@ function buildDesks(view: ShopView, count: number): void {
     chair.scale.set(0.5, 0.06, 0.5)
     chair.position.set(at.chair.x, CHAIR_SEAT_TOP - 0.03, at.chair.z)
     const back = new Mesh(box, CHAIR_MATERIAL)
-    back.scale.set(0.5, 0.55, 0.06)
-    back.position.set(at.chair.x, 0.78, at.chair.z + 0.25)
+    back.scale.set(0.5, 0.5, 0.06)
+    back.position.set(at.chair.x, CHAIR_SEAT_TOP + 0.25, at.chair.z + 0.25)
     const body = new Mesh(box, MONITOR_BODY)
-    body.scale.set(0.62, 0.4, 0.05)
+    body.scale.set(0.62, 0.38, 0.05)
     body.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z)
-    const screen = new Mesh(plane, new MeshBasicMaterial({ color: GLOW_COLOR.off }))
-    screen.scale.set(0.56, 0.34, 1)
-    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.03)
     view.deskGroup.add(desk, legs, chair, back, body, screen)
-    view.monitors.push(screen)
   }
   view.desks = count
 }
 
-export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast): CityView {
+export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast, kit?: CityKit): CityView {
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
   scene.fog = new Fog(0x0b1226, 70, 210)
@@ -223,33 +239,39 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   const ground = new Mesh(new CircleGeometry(140, 96), new MeshStandardMaterial({ color: 0x171a21, roughness: 0.95 }))
   ground.rotation.x = -Math.PI / 2
   scene.add(ground)
-  const plaza = new Mesh(new CircleGeometry(PLAZA_RADIUS, 72), new MeshStandardMaterial({ color: 0x2a303a, roughness: 0.8 }))
-  plaza.rotation.x = -Math.PI / 2
-  plaza.position.y = 0.02
-  scene.add(plaza)
-  const edge = new Mesh(new RingGeometry(PLAZA_RADIUS - 0.35, PLAZA_RADIUS, 96), new MeshBasicMaterial({ color: 0x38d8ff }))
-  edge.rotation.x = -Math.PI / 2
-  edge.position.y = 0.04
-  scene.add(edge)
+  if (kit) {
+    // N3's plaza: the paving with its plots, the pedestal and the kerb, two lamps.
+    scene.add(kit.plaza)
+  } else {
+    const plaza = new Mesh(new CircleGeometry(PLAZA_RADIUS, 72), new MeshStandardMaterial({ color: 0x2a303a, roughness: 0.8 }))
+    plaza.rotation.x = -Math.PI / 2
+    plaza.position.y = 0.02
+    scene.add(plaza)
+    const edge = new Mesh(new RingGeometry(PLAZA_RADIUS - 0.35, PLAZA_RADIUS, 96), new MeshBasicMaterial({ color: 0x38d8ff }))
+    edge.rotation.x = -Math.PI / 2
+    edge.position.y = 0.04
+    scene.add(edge)
 
-  // Lamps around the square: one instanced mesh of small bright spheres on poles.
-  const lamps = new InstancedMesh(new SphereGeometry(0.2, 12, 8), new MeshBasicMaterial({ color: 0xffe2a8 }), 12)
-  const lampMatrix = new Matrix4()
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2
-    lampMatrix.makeTranslation(Math.sin(a) * (PLAZA_RADIUS + 0.9), 3.2, -Math.cos(a) * (PLAZA_RADIUS + 0.9))
-    lamps.setMatrixAt(i, lampMatrix)
+    // Lamps around the square: one instanced mesh of small bright spheres on poles.
+    const lamps = new InstancedMesh(new SphereGeometry(0.2, 12, 8), new MeshBasicMaterial({ color: 0xffe2a8 }), 12)
+    const lampMatrix = new Matrix4()
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2
+      lampMatrix.makeTranslation(Math.sin(a) * (PLAZA_RADIUS + 0.9), 3.2, -Math.cos(a) * (PLAZA_RADIUS + 0.9))
+      lamps.setMatrixAt(i, lampMatrix)
+    }
+    scene.add(lamps)
+    const poles = new InstancedMesh(box, paint(0x20242c), 12)
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2
+      lampMatrix.makeScale(0.12, 3.2, 0.12).setPosition(Math.sin(a) * (PLAZA_RADIUS + 0.9), 1.6, -Math.cos(a) * (PLAZA_RADIUS + 0.9))
+      poles.setMatrixAt(i, lampMatrix)
+    }
+    scene.add(poles)
   }
-  scene.add(lamps)
-  const poles = new InstancedMesh(box, paint(0x20242c), 12)
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2
-    lampMatrix.makeScale(0.12, 3.2, 0.12).setPosition(Math.sin(a) * (PLAZA_RADIUS + 0.9), 1.6, -Math.cos(a) * (PLAZA_RADIUS + 0.9))
-    poles.setMatrixAt(i, lampMatrix)
-  }
-  scene.add(poles)
 
-  const hologram = createHologram(logo, kind)
+  // On N3's pedestal the hologram has no base of its own, and floats where the file's ring anchor says.
+  const hologram = createHologram(logo, kind, kit ? { base: false, ringY: kit.ringY } : undefined)
   scene.add(hologram.group)
 
   const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true }, cast?.get(USER_BODY))
@@ -260,7 +282,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   function reconcileShop(entity: ShopEntity, town: Town): ShopView {
     let view = shops.get(entity.id)
     if (!view) {
-      view = buildShop(entity)
+      view = buildShop(entity, kit)
       shops.set(entity.id, view)
       scene.add(view.group)
     }
@@ -273,7 +295,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       return reconcileShop(entity, town)
     }
     const wanted = town.deskCount(entity.id)
-    if (view.desks !== wanted) buildDesks(view, wanted)
+    if (view.desks !== wanted) buildDesks(view, wanted, kit)
     view.group.position.set(entity.placement.center.x, -SUNK * (1 - liftEase(entity.lift)), entity.placement.center.z)
     view.group.rotation.y = entity.placement.yaw
     return view

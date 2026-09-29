@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
+import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
 import { SIGNAL_MAX_SCALE } from "./characters"
 import { spawnPlayer } from "./controller"
-import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, WALL_HEIGHT, placementOf } from "./layout"
-import { castOf } from "./test-cast"
+import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, SHOP_DEPTH, WALL_HEIGHT, WALL_THICKNESS, placementOf } from "./layout"
+import { castOf, kitFor } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
 import { createCityScene } from "./view"
@@ -431,9 +431,9 @@ describe("the city with N3's people", () => {
       .getObjectByName("shop:a")!
       .children.flatMap((c) => c.children)
       .find((o) => (o as Mesh).isMesh && Math.abs(o.scale.y - 0.06) < 1e-6 && Math.abs(o.scale.x - 0.5) < 1e-6) as Mesh
-    // 0.51 m is the chair as N2 drew it (a 6 cm seat with its middle at 0.48); the number is in the test so that moving one moves both on purpose.
-    expect(chair.position.y + chair.scale.y / 2).toBeCloseTo(0.51, 6)
-    expect(CHAIR_SEAT_TOP).toBeCloseTo(0.51, 6)
+    // 0.5 m is the chair as N3 has it (a 6 cm seat drawn under its top); the number is in the test so that moving one moves both on purpose.
+    expect(chair.position.y + chair.scale.y / 2).toBeCloseTo(0.5, 6)
+    expect(CHAIR_SEAT_TOP).toBeCloseTo(0.5, 6)
   })
 
   test("near the whole body and its hat, farther a lighter one, the farthest without the hat, and past 30 metres the box", async () => {
@@ -485,6 +485,91 @@ describe("the city with N3's people", () => {
   test("without the cast the city is the placeholders, and nothing about them changed", () => {
     const view = createCityScene()
     expect(view.user.rig).toBeUndefined()
+  })
+})
+
+describe("the city with N3's shop and plaza", () => {
+  const withKit = async (agents: Agent[], shops = [shop("a", 0)]) => {
+    const town = createTown()
+    const kit = await kitFor("bassa")
+    const view = createCityScene(undefined, "shader", await castOf("bassa"), kit)
+    town.sync(picture(shops, agents))
+    for (let t = 0; t < 3; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 1, camera)
+    view.scene.updateMatrixWorld(true)
+    return { town, view, kit }
+  }
+  const names = (root: { traverse(fn: (o: { name: string }) => void): void }) => {
+    const found: string[] = []
+    root.traverse((o) => found.push(o.name))
+    return found
+  }
+
+  test("the plaza is N3's, and the placeholders' square, edge and lamps are not there", async () => {
+    const { view, kit } = await withKit([])
+    expect(view.scene.children).toContain(kit.plaza)
+    const all = names(view.scene)
+    for (const name of ["plaza_ground", "plaza_kerb", "plaza_base", "plaza_prop"]) expect(all).toContain(name)
+    expect(view.scene.children.filter((o) => (o as unknown as { isInstancedMesh?: boolean }).isInstancedMesh)).toHaveLength(0)
+  })
+
+  test("a shop is N3's pieces, not boxes: floor, shell, window, awning, desks, chairs, screens", async () => {
+    const { view } = await withKit([agent("p1", "a")])
+    const all = names(view.scene.getObjectByName("shop:a")!)
+    for (const name of ["shop_floor", "shop_shell", "shop_glass", "shop_trim", "shop_desk", "shop_chair", "shop_props"]) expect(all).toContain(name)
+  })
+
+  test("the shop's desks are all there, and what is added over them is the glow of the desks in use", async () => {
+    const { view } = await withKit([agent("p1", "a", { state: "perm" }), agent("p2", "a")])
+    const glows = view.scene.getObjectByName("shop:a")!.children.flatMap((c) => c.children).filter((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry")
+    // Two desks in use: two glow planes, at the layout's computers, in front of the monitors' faces.
+    expect(glows.length).toBeGreaterThanOrEqual(2)
+    const monitor = view.monitor("p1")!
+    expect(monitor.position.y).toBeCloseTo(COMPUTER_HEIGHT, 6)
+    expect((monitor.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.amber)
+  })
+
+  test("the sign's text is on the awning's board, at N3's height", async () => {
+    const { view } = await withKit([])
+    const sign = view.scene.getObjectByName("shop:a")!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
+    expect(sign.position.y).toBeCloseTo(3.02, 2)
+    expect(sign.position.z).toBeGreaterThan(SHOP_DEPTH / 2 + WALL_THICKNESS / 2)
+  })
+
+  test("the hologram has no projector of its own and floats where the file's anchor says", async () => {
+    const { view, kit } = await withKit([])
+    // The projector is a closed cylinder; the cone of light is an open one and stays.
+    const discs = (group: { children: Array<unknown> }) =>
+      group.children.filter((c) => {
+        const geometry = (c as Mesh).geometry as { type?: string; parameters?: { openEnded?: boolean } } | undefined
+        return geometry?.type === "CylinderGeometry" && !geometry.parameters?.openEnded
+      })
+    expect(discs(view.hologram.group)).toHaveLength(0)
+    expect(discs(createCityScene().hologram.group)).toHaveLength(1)
+    expect(view.hologram.group.position.y).toBeCloseTo(kit.ringY - 0.27, 6)
+    // The placeholders' plaza keeps its projector.
+    expect(createCityScene().hologram.group.position.y).toBe(0)
+  })
+
+  test("people sit on the seats of the shop's own chairs: the layout and the file agree on where they are", async () => {
+    const { view } = await withKit([agent("p1", "a"), agent("p2", "a"), agent("p3", "a"), agent("p4", "a")])
+    const chairs = (await kitFor("bassa")).shop().children.find((c) => c.name === "shop_chair") as Mesh
+    expect(chairs).toBeDefined()
+    const top = new Box3().setFromObject(chairs)
+    for (let i = 1; i <= 4; i++) {
+      const person = view.person(`p${i}`)!
+      // The pelvis is raised to the seat's height.
+      expect(person.body.position.y + person.rig!.seatY).toBeCloseTo(CHAIR_SEAT_TOP, 6)
+      expect(top.max.y).toBeGreaterThan(CHAIR_SEAT_TOP)
+    }
+  })
+
+  test("the shop is drawn within its sphere for the culling: the sign and awning are inside it", async () => {
+    const { view } = await withKit([])
+    const box = new Box3().setFromObject(view.scene.getObjectByName("shop:a")!)
+    const centre = placementOf(0).center
+    const farthest = Math.max(...[box.min.x, box.max.x].flatMap((x) => [box.min.z, box.max.z].map((z) => Math.hypot(x - centre.x, z - centre.z))))
+    expect(farthest).toBeLessThan(5.5 + 0.01)
   })
 })
 

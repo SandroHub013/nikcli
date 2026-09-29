@@ -128,26 +128,37 @@ describe("inside a shop", () => {
     expect(desks).toHaveLength(DESKS_PER_SHOP)
     for (let i = 0; i < DESKS_PER_SHOP; i++) {
       const at = deskLocal(i)
-      for (const spot of [at.desk, at.computer, at.chair]) {
+      for (const spot of [at.desk, at.computer]) {
         expect(Math.abs(spot.x)).toBeLessThan(interior.x)
         expect(Math.abs(spot.z)).toBeLessThan(interior.z)
       }
       expect(Math.abs(at.desk.x) + DESK_HALF.hx).toBeLessThan(interior.x)
-      // The person sits on the door's side of the desk, facing the back wall.
+      // The person sits on the door's side of the desk, facing the back wall; the monitor is between them and the desk's middle.
       expect(at.chair.z).toBeGreaterThan(at.desk.z)
-      expect(at.computer.z).toBeLessThan(at.desk.z)
+      expect(at.computer.z).toBeGreaterThan(at.desk.z)
+      expect(at.computer.z).toBeLessThan(at.chair.z)
+      // N3's front row sits in the window: a chair past the wall's line is in the gap of the door, not in the wall.
+      if (Math.abs(at.chair.z) >= interior.z) expect(Math.abs(at.chair.x) + 0.25).toBeLessThan(DOOR_WIDTH / 2)
+      else expect(Math.abs(at.chair.x)).toBeLessThan(interior.x)
       for (let j = i + 1; j < DESKS_PER_SHOP; j++) expect([i, j, overlap(desks[i], desks[j])]).toEqual([i, j, false])
     }
   })
 
-  test("people standing (no desk left) stand inside, in a row that is not on a desk", () => {
+  test("people standing (no desk left) stand inside, behind the desks, in ten places of their own", () => {
+    const desks = shopBoxes(placementOf(0), DESKS_PER_SHOP).slice(5)
+    const local = Array.from({ length: DESKS_PER_SHOP }, (_, i) => deskLocal(i).desk)
     for (let i = 0; i < 12; i++) {
       const at = standLocal(i)
       expect(Math.abs(at.x)).toBeLessThan(interior.x)
       expect(at.z).toBeLessThan(interior.z)
       expect(at.z).toBeGreaterThan(-interior.z)
+      // Behind every desk, along the back wall, clear of them by more than a body.
+      for (const d of local) expect(at.z).toBeLessThan(d.z - DESK_HALF.hz - 0.25)
     }
-    expect(new Set(Array.from({ length: 12 }, (_, i) => `${standLocal(i).x}:${standLocal(i).z}`)).size).toBe(12)
+    expect(desks).toHaveLength(DESKS_PER_SHOP)
+    // Two rows of five; past ten they share a place, which is a crowd and not a place.
+    expect(new Set(Array.from({ length: 10 }, (_, i) => `${standLocal(i).x}:${standLocal(i).z}`)).size).toBe(10)
+    expect(standLocal(10)).toEqual(standLocal(0))
   })
 })
 

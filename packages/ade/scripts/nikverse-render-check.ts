@@ -330,10 +330,10 @@ async function cityCheck(renderer: "classic" | "auto") {
     if ((await evaluate<string>(`document.documentElement.dataset.city`)) === "failed")
       throw new Error(`the city did not start: ${await evaluate(`document.documentElement.dataset.cityError`)}`)
     const backend = await evaluate<string>(`document.documentElement.dataset.backend`)
-    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " " + (document.documentElement.dataset.castWhy ?? "")`)
+    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " kit " + document.documentElement.dataset.kit + " " + (document.documentElement.dataset.castWhy ?? "")`)
     const levelState = await evaluate<string>(`document.documentElement.dataset.quality + " (" + document.documentElement.dataset.qualityWhy + ")"`)
     console.log(`  [${renderer}] cast: ${castState.trim()}; level: ${levelState}`)
-    const castOk = castState.startsWith("ok")
+    const castOk = castState.startsWith("ok kit ok")
     const ready = await evaluate<boolean>(asAde())
     // The shops rise in 0.8 s.
     await Bun.sleep(1800)
@@ -372,19 +372,22 @@ async function cityCheck(renderer: "classic" | "auto") {
     console.log(`  [${renderer}] W: ${from} -> ${first}`)
     // Round the projector, and on to the first shop's door, straight ahead of the square.
     const round = await holdUntil("d", (x) => x >= 4)
-    const along = await holdUntil("w", (_x, z) => z <= -22, true)
+    const along = await holdUntil("w", (_x, z) => z <= -10, true)
     await holdUntil("a", (x) => Math.abs(x) <= 0.4)
+    // The first shop stands at (0, -19) with its door, 3.8 wide, in the front wall at z = -16.5.
+    await holdUntil("w", (_x, z) => z <= -14.5)
     const [doorX, doorZ] = (await where()).split(",").map(Number)
     await shot(`city-${renderer}-3-at-the-door`)
-    const inside = await holdUntil("w", (_x, z) => z <= -28)
-    await shot(`city-${renderer}-4-inside`)
-    const [ix, iz] = inside.split(",").map(Number)
-    // At a desk: E next to a computer opens that session, and only there.
+    // E outside, in front of the door, opens nothing: no computer is within reach.
     const far = await evaluate<number>(`window.__ade.seen.filter((m) => m.type === "command").length`)
     await pressKey("e", "KeyE", 69)
     const farCommands = (await evaluate<number>(`window.__ade.seen.filter((m) => m.type === "command").length`)) - far
-    await holdUntil("a", (x) => x <= -1.3)
-    await holdUntil("w", (_x, z) => z <= -32)
+    // In, between the two desks of the window row (the aisle is 0.54 m and the body 0.44), to the chairs of the back row.
+    const inside = await holdUntil("w", (_x, z) => z <= -18.6)
+    await shot(`city-${renderer}-4-inside`)
+    const [ix, iz] = inside.split(",").map(Number)
+    // At a desk: E next to a computer opens that session.
+    await holdUntil("a", (x) => x <= -0.6)
     const hintShown = await evaluate<string>(`document.getElementById("hint").hidden ? "" : document.getElementById("hint").textContent`)
     await shot(`city-${renderer}-5-at-a-desk`)
     // The people up close, for a look: the camera raised over the wall, behind the character and then in front of it.
@@ -458,15 +461,15 @@ async function cityCheck(renderer: "classic" | "auto") {
     const woken = await frames()
     const modeOk = (still === "still" || still === "moving") && immobile === "immobile" && idle1 === idle2 && woken > idle2
     console.log(`  [${renderer}] draw modes: ${still} -> ${immobile}, frames ${idle1} -> ${idle2} while immobile, ${woken} after an event`)
-    // The first shop stands at (0, -30) with its door toward the square: inside is between its walls.
-    const entered = Math.abs(ix) < 5.5 && iz < -25.6 && iz > -34.4
+    // The first shop stands at (0, -19) with its door toward the square: inside is between its walls (6 wide, 5 deep).
+    const entered = Math.abs(ix) < 2.9 && iz < -17.6 && iz > -21
     console.log(`  [${renderer}] D: ${round}, run W: ${along}, at the door ${doorX},${doorZ}, inside: ${inside}`)
     const status = await evaluate<string>(`document.getElementById("status").textContent`)
     const changed = before !== after
     report(
       `city ${label} [${backend}]`,
       ready && castOk && changed && entered && eOk && pauseOk && positionOk && restoreOk && modeOk && problems.length === 0,
-      `cast ${castOk ? "loaded" : "NOT loaded"}, port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
+      `cast and city ${castOk ? "loaded" : "NOT loaded"}, port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
     )
   } catch (error) {
     report(`city ${label}`, false, String((error as Error).message ?? error))

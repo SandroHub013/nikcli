@@ -11,10 +11,11 @@ const fetchBytes = (missing: (url: string) => boolean = () => false) => async (u
 const deps = (missing?: (url: string) => boolean) => ({ base: "file:///assets/", fetchBytes: fetchBytes(missing) })
 
 describe("what a level loads", () => {
-  test("the people, at the level asked for", async () => {
+  test("the people and the city, both, at the level asked for", async () => {
     const loaded = await loadLevel(LEVELS.media, deps())
     expect(loaded.level.id).toBe("media")
     expect(loaded.cast?.size).toBe(4)
+    expect(loaded.kit).toBeDefined()
     expect(loaded.notes).toEqual([])
   })
 
@@ -22,29 +23,36 @@ describe("what a level loads", () => {
     const loaded = await loadLevel(LEVELS.alta, deps((url) => url.includes("/alta/")))
     expect(loaded.level.id).toBe("media")
     expect(loaded.cast?.size).toBe(4)
+    expect(loaded.kit).toBeDefined()
     expect(loaded.notes).toHaveLength(1)
     expect(loaded.notes[0]).toContain("Alta")
     expect(loaded.notes[0]).toContain("Media")
   })
 
-  test("one body missing fails the whole cast, and says which file: half a cast is worse than none", async () => {
+  test("the people can fail and the city stay, and the other way round: each keeps its placeholders on its own", async () => {
     const noPeople = await loadLevel(LEVELS.bassa, deps((url) => url.includes("character_agent_rogue")))
     expect(noPeople.cast).toBeUndefined()
-    expect(noPeople.notes).toHaveLength(1)
+    expect(noPeople.kit).toBeDefined()
     expect(noPeople.notes[0]).toContain("personaggi")
     expect(noPeople.notes[0]).toContain("character_agent_rogue")
+    const noCity = await loadLevel(LEVELS.bassa, deps((url) => url.endsWith("city.glb")))
+    expect(noCity.kit).toBeUndefined()
+    expect(noCity.cast?.size).toBe(4)
+    expect(noCity.notes[0]).toContain("negozio e piazza")
   })
 
   test("with nothing there at Bassa there is nothing, and no fallback below it", async () => {
     const none = await loadLevel(LEVELS.bassa, deps(() => true))
     expect(none.level.id).toBe("bassa")
     expect(none.cast).toBeUndefined()
-    expect(none.notes).toHaveLength(1)
+    expect(none.kit).toBeUndefined()
+    expect(none.notes).toHaveLength(2)
   })
 
-  test("a missing animations file fails the people: they share it", async () => {
+  test("a missing animations file fails the people, not the city: they share nothing but that file", async () => {
     const loaded = await loadLevel(LEVELS.media, deps((url) => url.endsWith("rig_animations.glb")))
     expect(loaded.cast).toBeUndefined()
+    expect(loaded.kit).toBeDefined()
     expect(loaded.notes[0]).toContain("rig_animations")
   })
 })

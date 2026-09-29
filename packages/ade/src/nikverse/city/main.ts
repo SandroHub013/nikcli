@@ -76,12 +76,12 @@ export interface CityHandle {
   /** Whether the mouse is captured (Esc lets it go first, and only then gives the focus back to ADE). */
   captured(): boolean
   releaseCapture(): void
-  info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean }
+  info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean; kit: boolean }
   dispose(): void
 }
 
 /** The projector under the hologram: the character walks around it, not through it. */
-const PROJECTOR: Box = { cx: 0, cz: 0, hx: 2.4, hz: 2.4, yaw: 0, height: 0.3 }
+const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
@@ -113,6 +113,7 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
 }
 
 export { decodePicture, loadCast } from "./assets"
+export { loadKit } from "./kit"
 export { LEVELS, resolveLevel } from "./quality"
 
 export async function startCity(deps: CityDeps): Promise<CityHandle> {
@@ -136,7 +137,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (check) return logoCheckHandle(deps, renderer, canvas, backend)
   doc.documentElement.dataset.qualityWhy = resolved.why
 
-  // N3's people; if they do not load they stay boxes, and the page says why.
+  // N3's people, shop and plaza; what does not load stays a placeholder, and the page says why.
   const base = deps.assets ?? new URL("./assets/", win.location.href).href
   const loaded = await loadLevel(level, {
     base,
@@ -147,16 +148,17 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     },
     decode: decodePicture,
   })
-  const { cast } = loaded
+  const { cast, kit } = loaded
   level = loaded.level
   const data = doc.documentElement.dataset
   data.quality = level.id
   data.cast = cast ? "ok" : "failed"
+  data.kit = kit ? "ok" : "failed"
   if (loaded.notes.length) data.castWhy = loaded.notes.join(" | ").slice(0, 400)
 
   const logo = parseLogo()
   const town = createTown()
-  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast)
+  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
@@ -427,7 +429,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     releaseCapture() {
       if (doc.pointerLockElement) doc.exitPointerLock()
     },
-    info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined }),
+    info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined, kit: kit !== undefined }),
     dispose() {
       running = false
       if (handle !== undefined) win.cancelAnimationFrame(handle)
@@ -463,7 +465,7 @@ function logoCheckHandle(deps: CityDeps, renderer: DrawingSurface, canvas: HTMLC
     restore() {},
     captured: () => false,
     releaseCapture() {},
-    info: () => ({ backend, mode: "logo-check", cast: false }),
+    info: () => ({ backend, mode: "logo-check", cast: false, kit: false }),
     dispose() {
       renderer.dispose()
       canvas.remove()

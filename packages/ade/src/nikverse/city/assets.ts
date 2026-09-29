@@ -1,5 +1,6 @@
 /**
- * Loads N3's files: the cast of a quality level (four `.glb`), parsed and dressed with their pictures.
+ * Loads N3's files: the cast of a quality level (four `.glb`) and the city's (`city.glb`), parsed and dressed
+ * with their pictures.
  *
  * Fetching and decoding a picture are passed in (`fetch` from the frame, `createImageBitmap`), so the same
  * code runs in a test on the files as they ship. The geometry is meshopt-compressed and decoded by the
@@ -98,4 +99,11 @@ export async function loadCast(deps: CastDeps): Promise<Cast> {
   ] as const)
   const templates = (bodies as unknown as Array<readonly [Body, Loaded]>).map(([body, loaded]): Template => templateOf(body, loaded, animations))
   return new Map(templates.map((t) => [t.body, t]))
+}
+
+/** The city's own file at a level: the shop, the plaza, the lamps. */
+export const cityUrl = (base: string, level: string) => `${base}levels/${level}/city.glb`
+
+export async function loadCityFile(deps: CastDeps): Promise<Loaded> {
+  return loadFile(newLoader(), deps, cityUrl(deps.base, deps.level))
 }
