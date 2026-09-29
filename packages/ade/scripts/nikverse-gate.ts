@@ -21,6 +21,7 @@
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
+import { profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
 import {
   gateChecks,
   gatePasses,
@@ -528,6 +529,8 @@ try {
         timeout: 480_000,
       },
     )
+    // A timeout kills the script and nothing of its own runs: the browser it left is taken here, not at somebody's next run.
+    sweepOrphans([profilesDir(adeDir)])
   }
   const benchRows: BenchRow[] = existsSync(benchFile)
     ? (JSON.parse(readFileSync(benchFile, "utf8")) as { rows: BenchRow[] }).rows
