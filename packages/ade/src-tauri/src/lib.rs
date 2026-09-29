@@ -20,6 +20,7 @@ mod browser_shot;
 mod frontend;
 mod gateway;
 mod media;
+mod nikverse;
 mod project_bytes;
 mod pty;
 mod record;
@@ -2216,6 +2217,11 @@ pub fn run() {
             let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
             media::respond(&roots, &opened, &request, origin.as_deref())
         })
+        /*
+         * NikVerse's world: the package's own files, in an origin of its own.
+         * Nothing on disk is reachable through it (`nikverse.rs`).
+         */
+        .register_uri_scheme_protocol(nikverse::SCHEME, |_ctx, request| nikverse::respond(&request))
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
             // is not listening yet shows its own error page and stays on it.
@@ -3031,6 +3037,28 @@ mod tests {
             tokens.contains(&"ade-media:"),
             "frame-src must contain ade-media:, found: {frame_src}"
         );
+    }
+
+    #[test]
+    fn frame_src_csp_allows_nikverse_and_nothing_wider() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let csp = config["app"]["security"]["csp"]
+            .as_str()
+            .expect("app.security.csp");
+        let frame_src = csp
+            .split(';')
+            .map(str::trim)
+            .find(|directive| directive.starts_with("frame-src"))
+            .expect("frame-src directive in CSP");
+        let tokens: Vec<&str> = frame_src.split_whitespace().collect();
+        assert!(
+            tokens.contains(&"nikverse:"),
+            "frame-src must contain nikverse:, found: {frame_src}"
+        );
+        // The world is a frame; ADE itself is never one.
+        assert!(csp.contains("frame-ancestors 'none'"), "frame-ancestors must stay 'none'");
+        assert!(!tokens.contains(&"*"), "frame-src must not be a wildcard: {frame_src}");
     }
 
     #[test]

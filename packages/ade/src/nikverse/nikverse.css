@@ -1,0 +1,36 @@
+[data-component="nikverse-pane"] {
+  --ade-pane-ground: var(--ade-bg);
+}
+
+[data-slot="nikverse-body"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+[data-slot="nikverse-frame"] {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+[data-slot="nikverse-unloaded"] {
+  margin: auto;
+  padding: 16px;
+  max-width: 32ch;
+  text-align: center;
+  color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="nikverse-ask"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ade-line, currentColor);
+}
+
+[data-slot="nikverse-ask"] span {
+  flex: 1;
+}

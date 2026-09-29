@@ -1,0 +1,161 @@
+:root {
+  color-scheme: dark light;
+  --bg: #14161a;
+  --panel: #1d2026;
+  --line: #2c313a;
+  --text: #e6e8ec;
+  --dim: #8b93a1;
+  --accent: #6aa9ff;
+  --work: #4ade80;
+  --perm: #fbbf24;
+  --ask: #60a5fa;
+  --err: #f87171;
+  --limit: #c084fc;
+  --radius: 6px;
+  --radius-lg: 8px;
+  /* The name every ADE sheet draws its focus with; here it is the world's own, since the frame has none of ADE's tokens. */
+  --ade-focus-ring: 0 0 0 2px var(--accent);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --line: #d9dde3;
+    --text: #1b1e23;
+    --dim: #5d6572;
+    --accent: #1f6feb;
+    --work: #15803d;
+    --perm: #b45309;
+    --ask: #1d4ed8;
+    --err: #b91c1c;
+    --limit: #7e22ce;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 0.8125rem/1.4 system-ui, sans-serif;
+}
+
+#world {
+  min-height: 100%;
+  padding: 16px;
+  outline: none;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+#status,
+#empty {
+  color: var(--dim);
+}
+
+#shops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.shop {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+}
+
+.shop h2 {
+  margin: 0 0 8px;
+  font-size: 0.875rem;
+}
+
+.shop ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex: none;
+}
+
+.agent[data-state="work"] .dot {
+  background: var(--work);
+}
+.agent[data-state="perm"] .dot {
+  background: var(--perm);
+}
+.agent[data-state="ask"] .dot {
+  background: var(--ask);
+}
+.agent[data-state="err"] .dot {
+  background: var(--err);
+}
+.agent[data-state="limit"] .dot {
+  background: var(--limit);
+}
+
+.agent .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent .state {
+  color: var(--dim);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[hidden] {
+  display: none !important;
+}
