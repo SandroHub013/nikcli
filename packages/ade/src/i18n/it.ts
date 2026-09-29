@@ -1329,6 +1329,7 @@ export const it = {
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
   "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
+  "note.mailNotTyped": (what: string) => `Posta non digitata (qui gira una shell): ${what}`,
   "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
   "note.nudged": (id: string) => `Promemoria inviato: la richiesta ${id} aspetta una risposta`,
