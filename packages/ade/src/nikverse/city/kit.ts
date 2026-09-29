@@ -14,6 +14,7 @@
 import { Group, Mesh, MeshStandardMaterial, SRGBColorSpace, type Object3D, type Texture } from "three/webgpu"
 import { cityUrl, loadCityFile, type CastDeps } from "./assets"
 import type { Loaded } from "./rig"
+import { releaseAfterUpload } from "./upload-release"
 
 export interface CityKit {
   /** The plaza, in the world's frame: ground, pedestal, kerb, plots and lamps. */
@@ -103,7 +104,8 @@ async function lightmap(deps: KitDeps, name: string, size: number): Promise<Text
   try {
     const texture = await deps.decode(new Uint8Array(bytes), true)
     texture.colorSpace = SRGBColorSpace
-    return texture
+    // Once the GPU has it, the CPU's copy goes (`upload-release.ts`).
+    return releaseAfterUpload(texture)
   } catch (error) {
     // The floor is drawn without its baked light instead of the shop not being drawn at all.
     deps.warn?.(`${url}: lightmap non decodificata (${String((error as Error)?.message ?? error).slice(0, 120)})`)

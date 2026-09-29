@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { LEVELS_DIR } from "./test-cast"
 import { loadLevel } from "./load-level"
 import { LEVELS } from "./quality"
+import { Texture } from "three/webgpu"
 
 const fetchBytes = (missing: (url: string) => boolean = () => false) => async (url: string) => {
   if (missing(url)) throw new Error("404")
@@ -43,6 +44,22 @@ describe("what a level loads", () => {
     expect(loaded.notes.filter((note) => note.includes("tinte unite")).length).toBeGreaterThanOrEqual(5)
     expect(loaded.notes.filter((note) => note.includes("lightmap")).length).toBe(2)
     expect(new Set(loaded.notes).size).toBe(loaded.notes.length)
+  })
+
+  test("every picture that is decoded gives its CPU copy back once three has uploaded it, and not before", async () => {
+    const made: Array<{ texture: Texture; closed: () => boolean }> = []
+    const decode = async () => {
+      let closed = false
+      const texture = new Texture({ width: 4, height: 4, close: () => void (closed = true) } as never)
+      made.push({ texture, closed: () => closed })
+      return texture
+    }
+    await loadLevel(LEVELS.bassa, { ...deps(), decode })
+    expect(made.length).toBeGreaterThan(10)
+    expect(made.filter((m) => m.closed())).toEqual([])
+    // three calls `onUpdate` when it has uploaded a texture.
+    for (const m of made) m.texture.onUpdate?.(m.texture)
+    expect(made.filter((m) => !m.closed())).toEqual([])
   })
 
   test("the people can fail and the city stay, and the other way round: each keeps its placeholders on its own", async () => {
