@@ -556,6 +556,13 @@ try {
     gpuMemoryGrowthMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
   }
   const checks = gateChecks(measures)
+  // No browser of the harness survives its script: the tests that start the stand-in and the real Edge, kept out of test:unit.
+  const guardRun = spawnSync(
+    "bun",
+    ["test", "--conditions=browser", "--preload", "./happydom.ts", "./src/nikverse/browser-guard.test.ts"],
+    { cwd: adeDir, stdio: "ignore", timeout: 300_000, env: { ...process.env, NIKVERSE_GUARD_TESTS: "1" } },
+  )
+  checks.push({ name: "browser guard tests (0 = green)", value: guardRun.status ?? 1, limit: 0, ok: guardRun.status === 0 })
   const ok = gatePasses(checks)
   finish(ok ? 0 : 1, {
     ok,
