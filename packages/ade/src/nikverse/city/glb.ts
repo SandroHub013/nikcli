@@ -6,7 +6,17 @@
  * which check the shipped files against the generator's ceilings.
  */
 
-import { ktx2Size } from "./ktx2-header"
+import { isKtx2, ktx2Refusal, ktx2Size } from "./ktx2-header"
+
+/**
+ * The extension the pictures of a KTX2 file are declared under. It is ours and it is required: the file says «this is a KTX2
+ * already in the GPU's format (BC, plain or zstd)», which `KHR_texture_basisu` does not (that one means Basis, and needs a
+ * transcoder the world cannot run). A viewer that does not know it must refuse the file, not show it without textures.
+ */
+export const KTX2_EXTENSION = "NIKVERSE_texture_ktx2"
+
+/** What a glb may not say: the Khronos name for Basis. A file that declares it is refused whatever its pictures are. */
+const BASIS_EXTENSION = "KHR_texture_basisu"
 
 export interface GltfJson {
   asset?: { version?: string }
@@ -18,7 +28,7 @@ export interface GltfJson {
   accessors?: Array<{ count: number }>
   bufferViews?: Array<{ byteOffset?: number; byteLength: number }>
   images?: Array<{ bufferView?: number; uri?: string; mimeType?: string; name?: string }>
-  textures?: Array<{ source?: number; sampler?: number; extensions?: { KHR_texture_basisu?: { source?: number } } }>
+  textures?: Array<{ source?: number; sampler?: number; extensions?: { NIKVERSE_texture_ktx2?: { source?: number }; KHR_texture_basisu?: { source?: number } } }>
   materials?: unknown[]
   animations?: Array<{ name?: string; channels: unknown[] }>
   skins?: unknown[]
@@ -131,14 +141,30 @@ export function unpack(glb: Glb): Unpacked {
     pbrMetallicRoughness?: { baseColorTexture?: Ref; metallicRoughnessTexture?: Ref }
   }
   const json = structuredClone(glb.json) as GltfJson & { samplers?: unknown; materials?: Material[] }
+  const declared = (list: "extensionsUsed" | "extensionsRequired") => glb.json[list] ?? []
+  if (declared("extensionsUsed").includes(BASIS_EXTENSION) || declared("extensionsRequired").includes(BASIS_EXTENSION) || glb.json.textures?.some((t) => t.extensions?.KHR_texture_basisu)) {
+    throw new Error(`${BASIS_EXTENSION}: the world reads KTX2 files in the GPU's format under ${KTX2_EXTENSION}, not Basis`)
+  }
+  const usesKtx2 = glb.json.textures?.some((t) => t.extensions?.NIKVERSE_texture_ktx2) ?? false
+  if (usesKtx2 && !declared("extensionsRequired").includes(KTX2_EXTENSION)) {
+    throw new Error(`${KTX2_EXTENSION} is used and not in extensionsRequired: a reader that does not know it would show the model without its textures`)
+  }
   const pictures = new Map<string, Partial<Record<Slot, Uint8Array>>>()
   const pngOf = (ref: Ref): Uint8Array | undefined => {
     if (!ref) return undefined
-    // A KTX2 picture is the texture's `KHR_texture_basisu` source; a PNG is its plain one.
+    // A KTX2 picture is the texture's `NIKVERSE_texture_ktx2` source; a PNG is its plain one.
     const texture = glb.json.textures?.[ref.index]
-    const image = glb.json.images?.[texture?.extensions?.KHR_texture_basisu?.source ?? texture?.source ?? -1]
+    const ktx2 = texture?.extensions?.NIKVERSE_texture_ktx2?.source
+    const image = glb.json.images?.[ktx2 ?? texture?.source ?? -1]
     const view = image?.bufferView === undefined ? undefined : glb.json.bufferViews?.[image.bufferView]
-    return view ? glb.bin.slice(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength) : undefined
+    const bytes = view ? glb.bin.slice(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength) : undefined
+    // What is under our name must be what the name says: BC, plain or zstd. Basis under it would only fail later, in the GPU or the loader.
+    if (bytes && ktx2 !== undefined) {
+      if (!isKtx2(bytes)) throw new Error(`${KTX2_EXTENSION}: image ${ktx2} is not a KTX2 file`)
+      const why = ktx2Refusal(bytes)
+      if (why) throw new Error(`${KTX2_EXTENSION}: image ${ktx2}: ${why}`)
+    }
+    return bytes
   }
   for (const material of json.materials ?? []) {
     const found: Partial<Record<Slot, Uint8Array>> = {}
@@ -159,9 +185,9 @@ export function unpack(glb: Glb): Unpacked {
   delete json.images
   delete json.textures
   delete json.samplers
-  // The loader is not given the KTX2 extension (it would need its own worker and a blob address): it must not be told to expect it.
+  // The loader is not given our extension (the pictures are put on the materials here, from the bytes): it must not be told to expect it.
   for (const list of ["extensionsUsed", "extensionsRequired"] as const) {
-    const left = json[list]?.filter((name) => name !== "KHR_texture_basisu")
+    const left = json[list]?.filter((name) => name !== KTX2_EXTENSION)
     if (left?.length) json[list] = left
     else delete json[list]
   }

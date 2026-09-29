@@ -81,20 +81,18 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the query options are ?check=logo and ?renderer=classic, and nothing else: WebGPURenderer's WebGL backend cannot be asked for", () => {
-    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, antialias: undefined })
-    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined, antialias: undefined })
-    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined, antialias: undefined })
+    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false })
+    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined, bench: false })
+    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined, bench: false })
     expect(readOptions("?quality=alta").quality).toBe("alta")
     expect(readOptions("?x=1").quality).toBeUndefined()
     // ?shot=1..8 is the bench; anything else is no shot.
-    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4, antialias: undefined })
-    // ?aa= overrides the level's edge smoothing, for the bench; anything else leaves the level's own.
-    expect(readOptions("?aa=msaa").antialias).toBe("msaa")
-    expect(readOptions("?aa=none").antialias).toBe("none")
-    for (const bad of ["?aa=", "?aa=fxaa", "?aa=MSAA"]) expect(readOptions(bad).antialias).toBeUndefined()
+    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4, bench: false })
+    expect(readOptions("?bench=1").bench).toBe(true)
+    expect(readOptions("?bench=true").bench).toBe(false)
     for (const bad of ["?shot=0", "?shot=9", "?shot=2.5", "?shot=x", "?shot="]) expect(readOptions(bad).shot).toBeUndefined()
     for (const other of ["?check=other&renderer=webgpu", "?renderer=webgl", "?forceWebGL=1"])
-      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, antialias: undefined })
+      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false })
     const source = readFileSync(join(import.meta.dir, "world", "world.js"), "utf8")
     expect(source).not.toMatch(/forceWebGL/)
   })
@@ -148,7 +146,7 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the GPU timing of the world's own drawing is on the window for the gate: it asks the city, and says so when there is none", async () => {
-    const { win } = page()
+    const { win } = page("?bench=1")
     const timing = { frames: 2, mean: 1, p50: 1, p95: 2, max: 2, sync: "queue", timestampQuery: false }
     const asked: unknown[] = []
     const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, bench: async (frames?: number) => (asked.push(frames), timing) }
@@ -158,10 +156,26 @@ describe("the 3D city the page starts", () => {
     expect(await bench(120)).toEqual(timing)
     expect(asked).toEqual([120])
     // A city without a bench (the logo check's) refuses, it does not answer with nothing.
-    const bare = page()
+    const bare = page("?bench=1")
     boot(bare.win, { loadCity: async () => ({ startCity: async () => ({ sync() {}, pause() {}, resume() {}, dispose() {} }) }) })
     await settled()
     await expect((bare.win as unknown as { __nikverseBench(): Promise<unknown> }).__nikverseBench()).rejects.toThrow("no bench")
+  })
+
+  test("a release build has no timing door on the window: it is there only for ?bench=1 (ADE's test build) and ?shot (the bench)", async () => {
+    const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, bench: async () => ({}) }
+    for (const [search, door] of [
+      ["", false],
+      ["?quality=alta", false],
+      ["?bench=0", false],
+      ["?bench=1", true],
+      ["?shot=4&quality=media", true],
+    ] as const) {
+      const { win } = page(search)
+      boot(win, { loadCity: async () => ({ startCity: async () => handle }) })
+      await settled()
+      expect([search, "__nikverseBench" in win]).toEqual([search, door])
+    }
   })
 
   test("ADE keeps where the character stands: the world sends its position, and takes it back when it is up again", async () => {

@@ -35,7 +35,7 @@ import type { Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
-import { movingIntervalMs, probeGpu, resolveLevel, type Antialias, type LevelId } from "./quality"
+import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
@@ -61,8 +61,6 @@ export interface CityDeps {
   /** ADE's picture as the world holds it right now. */
   picture(): Picture
   mode: "city" | "logo-check"
-  /** Edge smoothing instead of the level's (`?aa=`), to compare the two on one build. */
-  antialias?: Antialias
   /** Draw with the classic renderer even where WebGPU exists, to compare the two (`?renderer=classic`). */
   classic?: boolean
   /** The level asked for (`?quality=`): `auto`, or a level's id. Whatever the machine cannot run is lowered (`quality.ts`). */
@@ -93,7 +91,7 @@ const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
-async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean, msaa: boolean) {
+async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
   const doc = deps.win.document
   return chooseRenderer<HTMLCanvasElement>({
     makeCanvas: () => {
@@ -106,7 +104,7 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean, ms
     options: { antialias: !check, alpha: check },
     classic,
     createWebGPU: async (canvas, options) => {
-      const renderer = new WebGPURenderer({ canvas, antialias: options.antialias && msaa, alpha: options.alpha })
+      const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
       await renderer.init()
       // three's own frame loop would run at every vsync for a city that draws nothing.
       if (!quietLoop(renderer)) console.warn("[nikverse] il ciclo interno di three non e stato fermato")
@@ -138,8 +136,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
   const resolved = resolveLevel(deps.quality, gpu)
   const level = resolved.level
-  const antialias = deps.antialias ?? level.antialias
-  const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic", antialias === "msaa")
+  const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
   const { renderer, canvas, backend } = chosen
   stage.append(canvas)
   renderer.toneMapping = NoToneMapping
@@ -177,7 +174,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined)
-    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, antialias, cast: cast !== undefined, kit: kit !== undefined })
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -441,7 +438,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       handle = undefined
       timer = undefined
       // Into a target for WebGPU: the canvas would hold each frame for the display (see `benchDraw`).
-      const target = benchDraw(renderer, backend, view.scene, camera, () => new RenderTarget(canvas.width, canvas.height, { samples: antialias === "msaa" ? 4 : 0 }))
+      const target = benchDraw(renderer, backend, view.scene, camera, () => new RenderTarget(canvas.width, canvas.height, { samples: 4 }))
       try {
         return await measureGpu(renderer, backend, target.draw, frames)
       } finally {

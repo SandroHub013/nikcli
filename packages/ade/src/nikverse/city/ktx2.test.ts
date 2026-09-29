@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { RGB_S3TC_DXT1_Format, SRGBColorSpace, Texture, type CompressedTexture } from "three/webgpu"
-import { bc1Ktx2 } from "./fixtures/make-ktx2"
-import { imageSizes, readGlb, unpack, type Glb } from "./glb"
+import { bc1Ktx2, bc5Ktx2 } from "./fixtures/make-ktx2"
+import { KTX2_EXTENSION, imageSizes, readGlb, unpack, type Glb } from "./glb"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
-import { isKtx2, ktx2Size } from "./ktx2-header"
+import { isKtx2, ktx2Format, ktx2Refusal, ktx2Size } from "./ktx2-header"
 
 const fixture = bc1Ktx2(8, 8)
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
@@ -78,26 +78,27 @@ describe("the decoder of pictures", () => {
 
 /** A `.glb` with one material whose colour and normals are KTX2 pictures, the way the generator will pack them. */
 function ktx2Glb(): Glb {
-  const bin = new Uint8Array(64)
-  bin.set(fixture.subarray(0, 32), 0)
-  bin.set(fixture.subarray(0, 32), 32)
+  // The header is 48 bytes: what is kept of each picture must hold it.
+  const bin = new Uint8Array(128)
+  bin.set(fixture.subarray(0, 64), 0)
+  bin.set(fixture.subarray(0, 64), 64)
   return {
     bin,
     json: {
       asset: { version: "2.0" },
-      extensionsUsed: ["EXT_meshopt_compression", "KHR_texture_basisu"],
-      extensionsRequired: ["EXT_meshopt_compression", "KHR_texture_basisu"],
+      extensionsUsed: ["EXT_meshopt_compression", KTX2_EXTENSION],
+      extensionsRequired: ["EXT_meshopt_compression", KTX2_EXTENSION],
       bufferViews: [
-        { byteOffset: 0, byteLength: 32 },
-        { byteOffset: 32, byteLength: 32 },
+        { byteOffset: 0, byteLength: 64 },
+        { byteOffset: 64, byteLength: 64 },
       ],
       images: [
         { bufferView: 0, mimeType: "image/ktx2" },
         { bufferView: 1, mimeType: "image/ktx2" },
       ],
       textures: [
-        { extensions: { KHR_texture_basisu: { source: 0 } } },
-        { extensions: { KHR_texture_basisu: { source: 1 } } },
+        { extensions: { NIKVERSE_texture_ktx2: { source: 0 } } },
+        { extensions: { NIKVERSE_texture_ktx2: { source: 1 } } },
       ],
       materials: [{ name: "wall", pbrMetallicRoughness: { baseColorTexture: { index: 0 } }, normalTexture: { index: 1 } }],
     } as Glb["json"],
@@ -119,11 +120,61 @@ describe("unpacking a file with KTX2 pictures", () => {
 
   test("a file whose only extension was the KTX2 one has no extension list left, not an empty one", () => {
     const glb = ktx2Glb()
-    glb.json.extensionsUsed = ["KHR_texture_basisu"]
-    glb.json.extensionsRequired = ["KHR_texture_basisu"]
+    glb.json.extensionsUsed = [KTX2_EXTENSION]
+    glb.json.extensionsRequired = [KTX2_EXTENSION]
     const after = readGlb(new Uint8Array(unpack(glb).buffer)).json
     expect(after.extensionsUsed).toBeUndefined()
     expect(after.extensionsRequired).toBeUndefined()
+  })
+
+  test("the extension is ours and required: KHR_texture_basisu is refused even when the pictures inside are BC", () => {
+    // BC pictures under the Khronos name for Basis: the file lies about what it holds, and another reader would try to transcode it.
+    const glb = ktx2Glb()
+    glb.json.extensionsUsed = ["KHR_texture_basisu"]
+    glb.json.extensionsRequired = ["KHR_texture_basisu"]
+    glb.json.textures = [{ extensions: { KHR_texture_basisu: { source: 0 } } }, { extensions: { KHR_texture_basisu: { source: 1 } } }]
+    expect(ktx2Format(fixture).vkFormat).not.toBe(0)
+    expect(() => unpack(glb)).toThrow("KHR_texture_basisu")
+    // Declared and not used, or used without the declaration: also refused.
+    const named = ktx2Glb()
+    named.json.extensionsUsed = [...(named.json.extensionsUsed ?? []), "KHR_texture_basisu"]
+    expect(() => unpack(named)).toThrow("KHR_texture_basisu")
+  })
+
+  test("our extension not in extensionsRequired is refused: a reader that does not know it would show no textures", () => {
+    const glb = ktx2Glb()
+    glb.json.extensionsRequired = ["EXT_meshopt_compression"]
+    expect(() => unpack(glb)).toThrow("extensionsRequired")
+  })
+
+  test("Basis, or anything that is not a BC block format, under our name is refused with the reason", () => {
+    const basis = bc1Ktx2(8, 8)
+    new DataView(basis.buffer, basis.byteOffset).setUint32(12, 0, true)
+    expect(ktx2Refusal(basis)).toContain("Basis")
+    const etc1s = bc1Ktx2(8, 8)
+    new DataView(etc1s.buffer, etc1s.byteOffset).setUint32(44, 1, true)
+    expect(ktx2Refusal(etc1s)).toContain("supercompression 1")
+    const rgba8 = bc1Ktx2(8, 8)
+    new DataView(rgba8.buffer, rgba8.byteOffset).setUint32(12, 37, true)
+    expect(ktx2Refusal(rgba8)).toContain("not a BC format")
+    for (const bad of [basis, etc1s, rgba8]) {
+      const glb = ktx2Glb()
+      glb.bin.set(bad.subarray(0, 64), 0)
+      expect(() => unpack(glb)).toThrow(KTX2_EXTENSION)
+    }
+    // A PNG where a KTX2 was declared.
+    const png = ktx2Glb()
+    png.bin.set(PNG, 0)
+    expect(() => unpack(png)).toThrow("not a KTX2 file")
+  })
+
+  test("BC1 and BC5 are what the world takes: they are not refused, plain or with zstd", () => {
+    expect(ktx2Refusal(bc1Ktx2(8, 8))).toBeUndefined()
+    expect(ktx2Refusal(bc5Ktx2(8, 8))).toBeUndefined()
+    expect(ktx2Format(bc5Ktx2(8, 8)).vkFormat).toBe(141)
+    const zstd = bc5Ktx2(8, 8)
+    new DataView(zstd.buffer, zstd.byteOffset).setUint32(44, 2, true)
+    expect(ktx2Refusal(zstd)).toBeUndefined()
   })
 
   test("the size of a KTX2 picture inside a file is read from its header, like a PNG's", () => {

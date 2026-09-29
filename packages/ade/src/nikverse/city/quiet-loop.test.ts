@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { quietLoop } from "./quiet-loop"
 
 /** A renderer as three makes it: an animation loop it started, a node clock, counters, and `render`. */
@@ -90,5 +92,39 @@ describe("the renderer's own loop", () => {
     const { renderer, log } = fake({ _nodes: { nodeFrame: { frameId: 0 } } })
     expect(quietLoop(renderer)).toBe(false)
     expect(log).toEqual([])
+  })
+})
+
+/**
+ * `quietLoop` reaches into three's renderer (`_animation`, `_nodes`, `info`) and takes over what its frame loop did. Those are
+ * private names: a three update can move them, and then the loop would come back (60 wake-ups a second at rest, 1 to 2.6 % of
+ * a core and the GPU process's vsync) with nothing red. WebGPURenderer builds them only in `init()`, which needs a GPU, so the
+ * contract is read from the source of the three that is installed: what the module writes to and calls must still be there.
+ */
+describe("what the module relies on in the installed three", () => {
+  const src = join(dirname(Bun.resolveSync("three/package.json", import.meta.dir)), "src")
+  const file = (path: string) => readFileSync(join(src, path), "utf8")
+
+  test("the renderer builds an animation loop, a node manager with a node frame, and the counters, in init", () => {
+    const renderer = file("renderers/common/Renderer.js")
+    expect(renderer).toContain("this._animation = new Animation(")
+    expect(renderer).toContain("this._nodes = new NodeManager(")
+    expect(renderer).toContain("this.info = new Info()")
+    expect(renderer).toContain("this._animation.start()")
+    expect(file("renderers/common/nodes/NodeManager.js")).toContain("this.nodeFrame = new NodeFrame()")
+  })
+
+  test("the loop can be stopped, and its per-frame work is the counters' reset and the node frame's update", () => {
+    const animation = file("renderers/common/Animation.js")
+    expect(animation).toContain("stop() {")
+    expect(animation).toContain("if ( this.info.autoReset === true ) this.info.reset();")
+    expect(animation).toContain("this.nodes.nodeFrame.update();")
+    expect(animation).toContain("this.info.frame = this.nodes.nodeFrame.frameId;")
+  })
+
+  test("the counters are reset by `reset()` and reset on their own by default", () => {
+    const info = file("renderers/common/Info.js")
+    expect(info).toContain("this.autoReset = true;")
+    expect(info).toContain("reset() {")
   })
 })
