@@ -9,7 +9,7 @@
  * (CDP screencast, ffmpeg when it is installed). With `--checks` it also runs the render check with the logo held to
  * 100 % of the pixels within ΔE 3.
  *
- *   bun scripts/nikverse-shots.ts --label prima [--out DIR] [--levels bassa,media] [--shots 1,2,…] [--gpu real|software] [--no-clip] [--checks] [--browser PATH]
+ *   bun scripts/nikverse-shots.ts --label prima [--out DIR] [--levels bassa,media] [--shots 1,2,…] [--gpu real|software] [--no-clip] [--aa msaa|fxaa|none] [--checks] [--browser PATH]
  *
  * Writes `bench.json` next to the pictures. Exits 1 when a check fails. Time cap: 10 minutes.
  */
@@ -26,6 +26,8 @@ import { actAsAde, arg, startHarness } from "./nikverse-harness"
 const label = arg("--label") ?? "shots"
 const out = arg("--out") ?? join(tmpdir(), "nikverse-shots", label)
 const levels = (arg("--levels") ?? "bassa,media").split(",").filter(Boolean)
+// `--aa msaa|fxaa|none` draws with that edge smoothing instead of the level's, to compare them on one build.
+const aa = arg("--aa")
 const only = arg("--shots")?.split(",").map(Number)
 const NONCE = "0123456789abcdef".repeat(3)
 mkdirSync(out, { recursive: true })
@@ -73,7 +75,7 @@ async function shots(level: string) {
     const name = `${level}-${shot.n}-${shot.name}`
     try {
       problems.length = 0
-      await open(`/?shot=${shot.n}&quality=${level}#n=${NONCE}`, { width: 1600, height: 900 })
+      await open(`/?shot=${shot.n}&quality=${level}${aa ? `&aa=${aa}` : ""}#n=${NONCE}`, { width: 1600, height: 900 })
       await until(
         `document.documentElement.dataset.shot === "ready" || document.documentElement.dataset.shot === "failed" || document.documentElement.dataset.city === "failed"`,
         `shot ${name}`,

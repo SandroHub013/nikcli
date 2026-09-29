@@ -10,7 +10,7 @@ import { spawnPlayer } from "./controller"
 import { benchDraw, measureGpu } from "./gpu-idle"
 import { disposeTree, releaseRenderer } from "./release"
 import type { Backend, DrawingSurface } from "./renderers"
-import type { LevelId } from "./quality"
+import type { Antialias, LevelId } from "./quality"
 import { analyze, problemsOf, type ShotStats } from "./shot-stats"
 import { SHOT_CLOCK, SHOT_HEIGHT, SHOT_SHOPS, SHOT_WIDTH, shotOf, shotPicture } from "./shots"
 import { RISE_SECONDS, type Town } from "./town"
@@ -41,6 +41,7 @@ export interface ShotParts {
   view: CityView
   town: Town
   camera: PerspectiveCamera
+  antialias: Antialias
   /** Whether N3's people and shops loaded, for `info()`. */
   cast: boolean
   kit: boolean
@@ -159,7 +160,7 @@ export async function startShot(parts: ShotParts) {
         parts.backend as Backend,
         parts.view.scene,
         parts.camera,
-        () => new RenderTarget(parts.canvas.width, parts.canvas.height, { samples: 4 }),
+        () => new RenderTarget(parts.canvas.width, parts.canvas.height, { samples: parts.antialias === "msaa" ? 4 : 0 }),
       )
       try {
         return await measureGpu(parts.renderer, parts.backend as Backend, target.draw, frames)

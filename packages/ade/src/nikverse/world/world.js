@@ -211,6 +211,8 @@ export function readOptions(search) {
     check: params.get("check") === "logo",
     classic: params.get("renderer") === "classic",
     quality: params.get("quality") ?? undefined,
+    // `?aa=msaa|fxaa` overrides the level's edge smoothing: the bench compares the two on one build.
+    antialias: ["msaa", "none"].includes(params.get("aa")) ? params.get("aa") : undefined,
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
   }
 }
@@ -252,6 +254,7 @@ export function boot(win, options = {}) {
         mode: query.check ? "logo-check" : "city",
         classic: query.classic,
         quality: query.quality,
+        antialias: query.antialias,
         shot: query.shot,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),

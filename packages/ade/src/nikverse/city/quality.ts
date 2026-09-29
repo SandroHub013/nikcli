@@ -13,6 +13,9 @@
 
 export type LevelId = "bassa" | "media" | "alta"
 
+/** Edge smoothing: four samples in the canvas, or none. */
+export type Antialias = "msaa" | "none"
+
 export const LEVEL_IDS: readonly LevelId[] = ["bassa", "media", "alta"]
 
 export interface Level {
@@ -23,15 +26,21 @@ export interface Level {
   pixelRatio: number
   /** Frames a second while something moves: never above `MAX_FPS`, whatever the display offers. */
   fps: number
+  /**
+   * Media has no samples: on the integrated GPUs it is for, four samples cost a close-up interior about 3 ms of 15 (bench,
+   * shot 4), and its pixel ratio of 1.5 already draws more pixels than a 1x screen shows. FXAA was tried and is worse
+   * on both counts (slower than the samples on this GPU, and it blurs the sign's text): see the A1 report.
+   */
+  antialias: Antialias
 }
 
 /** The most frames a second the city draws at any level: a 144 Hz display does not make it run faster (and burn more). */
 export const MAX_FPS = 60
 
 export const LEVELS: Readonly<Record<LevelId, Level>> = {
-  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30 },
-  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS },
-  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS },
+  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30, antialias: "msaa" },
+  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS, antialias: "none" },
+  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS, antialias: "msaa" },
 }
 
 export const isLevelId = (value: unknown): value is LevelId => LEVEL_IDS.includes(value as LevelId)
