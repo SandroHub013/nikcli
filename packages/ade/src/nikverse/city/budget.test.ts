@@ -143,6 +143,27 @@ describe("the shipped assets against the generator's ceilings", () => {
         for (const file of lightmaps(level)) expect(file.endsWith(".png")).toBe(false)
       })
 
+      // A rewrite of a file's BIN that leaves out what nothing points to by `bufferView.byteOffset` drops the meshopt-compressed
+      // geometry too: it is addressed by the extension's own `buffer`/`byteOffset`/`byteLength` (the view's are of a virtual fallback
+      // buffer). The loader then fails with «Length out of range of buffer» on every model. N3's first KTX2 delivery did exactly that.
+      run("every byte range a file points to is inside its BIN, the meshopt-compressed geometry's included", () => {
+        const files = [...BODIES.map((body) => character(level, body)), city(level), glbOf(join(LEVELS_DIR, "rig_animations.glb"))]
+        for (const glb of files) {
+          const declared = glb.json.buffers?.[0]?.byteLength ?? 0
+          expect(declared).toBeLessThanOrEqual(glb.bin.byteLength)
+          for (const [i, view] of (glb.json.bufferViews ?? []).entries()) {
+            const meshopt = (view as { extensions?: { EXT_meshopt_compression?: { buffer: number; byteOffset?: number; byteLength: number } } }).extensions
+              ?.EXT_meshopt_compression
+            const range = meshopt
+              ? { buffer: meshopt.buffer, at: meshopt.byteOffset ?? 0, length: meshopt.byteLength }
+              : { buffer: (view as { buffer?: number }).buffer ?? 0, at: view.byteOffset ?? 0, length: view.byteLength }
+            // A fallback buffer (`extensions.EXT_meshopt_compression.fallback`) is virtual: no bytes are behind it.
+            if (!meshopt && range.buffer !== 0) continue
+            expect([i, range.at + range.length <= glb.bin.byteLength]).toEqual([i, true])
+          }
+        }
+      })
+
       run("what the world asks of the files is in them: the LODs, the anchors, the skin and the one extension the loader has a decoder for", () => {
         for (const body of BODIES) {
           const glb = character(level, body)
