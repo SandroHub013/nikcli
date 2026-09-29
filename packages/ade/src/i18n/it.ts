@@ -271,7 +271,7 @@ export const it = {
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
   "agent.noPlanner":
-    "Senza una chiave OpenRouter nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
+    "Senza un agente (Claude Code o Codex) acceso nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
   "agent.onboarding.title": "Prima di parlarci",
   "agent.onboarding.subtitle": "Per usare la voce servono tre elementi. Ecco cosa è pronto e cosa manca:",
   "agent.onboarding.key.title": "Chiave OpenRouter",

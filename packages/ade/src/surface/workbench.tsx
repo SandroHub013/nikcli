@@ -9156,7 +9156,7 @@ export function Workbench() {
               running={voiceEngine.isRunning()}
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
-              canPlan={Boolean(voiceSettings().openRouterApiKey)}
+              canPlan={hasVoiceAgent() && voiceSettings().agentEngine !== "off"}
               hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
               hasAgent={hasVoiceAgent()}
               hasVoice={voiceInstalled() && !voiceError()}

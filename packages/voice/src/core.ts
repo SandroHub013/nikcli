@@ -27,6 +27,9 @@ export type {
 // The agent console's record of the session
 export { appendEntry, groupIntoTurns, MAX_AGENT_ENTRIES, type AgentEntry, type AgentTurn } from "./agent/log"
 
+// What plans a sentence the grammar could not match: the rules a host holds once, and its completion type
+export { PLANNER_SYSTEM, type Completion } from "./plan/planner"
+
 export { dispatch, resolveTargetPane, type DispatchContext, type DispatchOutcome } from "./bridge/dispatch"
 
 // Intent recognition and parsing

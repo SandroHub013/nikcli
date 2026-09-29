@@ -266,7 +266,7 @@ export const en: Messages = {
   "agent.mic.stop": "Turn off microphone",
   "agent.settings": "Settings",
   "agent.noPlanner":
-    "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
+    "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
   "agent.onboarding.title": "Before speaking to nik",
   "agent.onboarding.subtitle":
     "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",

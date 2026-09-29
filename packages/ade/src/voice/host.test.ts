@@ -501,11 +501,45 @@ describe("createAdeVoiceHost", () => {
     expect(currentWb().panes[0].browserUrl).toBe("http://localhost:5173")
   })
 
+  test("listPanes carries the agent of a session, so the planner can tell «Mimo» from «Dario»", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", title: "Mimo", status: "waiting", agent: "opencode" }),
+        makePane({ id: "p2", title: "Nota" }),
+      ],
+    }))
+    const panes = createAdeVoiceHost(deps).listPanes()
+    expect(panes[0]).toMatchObject({ title: "Mimo", status: "waiting", agent: "opencode" })
+    expect(panes[1]).not.toHaveProperty("agent")
+  })
+
+  test("plan goes to the voice agent, with what the engine sent", async () => {
+    const seen: unknown[] = []
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: true, text: "", ran: true }),
+      plan: async (request) => {
+        seen.push(request)
+        return '{"speech":"ok","steps":[]}'
+      },
+      prepare: () => {},
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({ voiceAgentFactory: async () => agent })
+    const host = createAdeVoiceHost(deps)
+    const request = { system: "R", user: "U", engine: "claude" as const, speed: "fast" as const }
+    expect(await host.plan!(request)).toBe('{"speech":"ok","steps":[]}')
+    expect(seen).toEqual([request])
+  })
+
   test("releasing the voice cancels a prepare waiting for a project", async () => {
     let project: Project | undefined
     let prepares = 0
     const agent: VoiceAgent = {
       ask: async () => ({ ok: false, text: "", ran: false }),
+      plan: async () => "[]",
       prepare: () => {
         prepares++
       },

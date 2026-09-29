@@ -169,6 +169,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           createVoiceAgent({
             runTurn,
             warm: warmClaude(createWarmClaude()),
+            planWarm: warmClaude(createWarmClaude()),
             statuses: () => deps.agentAvailability?.(),
             cwd: () => deps.project()?.root,
             codexFallback: () => deps.codexFallback?.() ?? false,
@@ -178,6 +179,10 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   return {
     async askAgent(request) {
       return (await voiceAgent()).ask(request)
+    },
+
+    async plan(request) {
+      return (await voiceAgent()).plan(request)
     },
 
     prepareAgent(request) {
@@ -229,6 +234,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         hasLiveProcess: deps.isRunning(pane.id),
         isBrowser: Boolean(pane.browserUrl),
         isFile: Boolean(pane.filePath),
+        ...(pane.agent ? { agent: pane.agent } : {}),
       }))
     },
 
