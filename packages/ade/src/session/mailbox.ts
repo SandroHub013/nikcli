@@ -77,6 +77,12 @@ export type Message = { from: string; token?: string; text: string } &
     | { kind: "relaunch"; to: string; model?: string; effort?: string; fresh: boolean; note: string }
     /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
     | { kind: "interrupt"; to: string }
+    /**
+     * A page the sender wrote in `.ade/design/`, to show in a web pane beside it
+     * (`ade-msg design`). `path` is absolute, as the sender's shell resolved it;
+     * ADE checks it again (`media.rs`, `design_sheet`). `text` is empty.
+     */
+    | { kind: "design"; path: string; title?: string }
     /** Withdraws a request the sender made. `text` is empty. */
     | { kind: "cancel"; ref: string }
     /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
@@ -162,6 +168,11 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "interrupt") {
     const to = str("to")
     return to ? { kind, from, token, to, text: "" } : undefined
+  }
+  if (kind === "design") {
+    const path = str("path")
+    const title = str("title")
+    return path ? { kind, from, token, path, ...(title ? { title } : {}), text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
@@ -265,7 +276,14 @@ export function verifySender<M extends Message>(message: M, tokenOf: (paneId: st
   return proven ? message : { ...message, from: "" }
 }
 
-const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn", "interrupt", "close"])
+const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
+  "send",
+  "ask",
+  "spawn",
+  "interrupt",
+  "close",
+  "design",
+])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {
   if (message.from || !UNVERIFIED_ACTING.has(message.kind)) return undefined
@@ -1478,6 +1496,8 @@ export const USAGE =
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
   "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
+  "  ade-msg design <file.html> [--title T]  mostra una pagina di .ade/design/ accanto a te; riscrivila e si ricarica\n" +
+  "                                          un file solo: CSS e JS dentro, immagini data:, niente CDN né fetch\n" +
   '  ade-msg memory add decisione|fatto|trappola|todo "<testo>"\n' +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +

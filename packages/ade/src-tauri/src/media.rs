@@ -260,6 +260,95 @@ fn hardened(mut builder: tauri::http::response::Builder) -> tauri::http::respons
     builder
 }
 
+/*
+ * A design sheet's page, under `.ade/design/` (the design sheet, piece 1).
+ *
+ * The same sandbox, and nothing from outside: an agent writes the page, and
+ * "everything in one file, no CDN, no web font, no fetch" is a rule only if
+ * something holds it. This does, in the same header, so both halves apply. An
+ * image may still come from the same scheme, since an agent may put a
+ * screenshot beside its sheet.
+ */
+const DESIGN_SHEET_CSP: &str = "sandbox allow-scripts allow-forms; default-src 'none'; script-src 'unsafe-inline'; \
+style-src 'unsafe-inline'; img-src data: http://ade-media.localhost ade-media://localhost; font-src data:";
+
+/// Whether a path is a design sheet's: inside some `.ade/design/` folder.
+fn is_design_sheet(path: &Path) -> bool {
+    comparable(&path.to_string_lossy()).contains("/.ade/design/")
+}
+
+/// What a sheet answer carries: the hardening, with the sheet's policy in place of the plain sandbox.
+fn hardened_for(path: &Path, builder: tauri::http::response::Builder) -> tauri::http::response::Builder {
+    if !is_design_sheet(path) {
+        return hardened(builder);
+    }
+    builder
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Security-Policy", DESIGN_SHEET_CSP)
+}
+
+/*
+ * The file `ade-msg design <file>` names, checked before a pane shows it.
+ *
+ * A session asks ADE to open a page it wrote. What it may name is narrow: an
+ * `.html` inside `.ade/design/` of the folder it works in, inside a folder
+ * ADE already serves. Every refusal says why, and goes back to the session.
+ * The order matters as it does in `within_with`: the text is judged before
+ * anything is resolved, so a UNC path never reaches the network.
+ *
+ * The answer is the path as the session's folder spells it, not the
+ * resolved one: the frame's URL is checked again by `within` when it loads,
+ * and that check knows a root in the form it was opened.
+ */
+pub fn design_sheet(roots: &[PathBuf], opened: &[String], path: &str, cwd: &str) -> Result<PathBuf, String> {
+    design_sheet_with(roots, opened, path, cwd, |path| path.canonicalize().ok())
+}
+
+fn design_sheet_with(
+    roots: &[PathBuf],
+    opened: &[String],
+    path: &str,
+    cwd: &str,
+    resolve: impl Fn(&Path) -> Option<PathBuf>,
+) -> Result<PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("manca il file: ade-msg design .ade/design/<nome>.html".to_string());
+    }
+    if cwd.trim().is_empty() {
+        return Err("non so in che cartella lavora la sessione".to_string());
+    }
+    let is_html = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("htm"));
+    if !is_html {
+        return Err(format!("{path} non è una pagina .html"));
+    }
+    if path.split(['/', '\\']).any(|part| part == "..") {
+        return Err(format!("{path}: niente `..`, il foglio sta in .ade/design/ della tua cartella"));
+    }
+    let joined = if Path::new(path).is_absolute() { PathBuf::from(path) } else { Path::new(cwd.trim()).join(path) };
+    let design_dir = Path::new(cwd.trim()).join(".ade").join("design");
+    // As text first, in the session's own spelling: nothing is resolved for a path that is plainly elsewhere.
+    if !begins_with_root(&comparable(&joined.to_string_lossy()), &comparable(&design_dir.to_string_lossy())) {
+        return Err(format!("{path} non sta in .ade/design/ della tua cartella ({})", design_dir.display()));
+    }
+    if !within_with(roots, opened, &joined, &resolve) {
+        return Err(format!(
+            "{path} è fuori dalle cartelle aperte in ADE, o non esiste: il pannello non lo potrebbe mostrare"
+        ));
+    }
+    // A link inside `.ade/design/` that leads out is caught here: both sides resolved.
+    let (Some(real), Some(real_dir)) = (resolve(&joined), resolve(&design_dir)) else {
+        return Err(format!("{path} non esiste"));
+    };
+    if !real.starts_with(&real_dir) {
+        return Err(format!("{path} porta fuori da .ade/design/ (un collegamento)"));
+    }
+    Ok(joined)
+}
+
 fn deny(status: StatusCode) -> Response<Vec<u8>> {
     hardened(Response::builder())
         .status(status)
@@ -295,6 +384,7 @@ pub fn respond(roots: &[PathBuf], opened: &[String], request: &Request<Vec<u8>>,
         // project this window has opened, and that is the whole rule.
         return deny(StatusCode::FORBIDDEN);
     }
+    let hardened = |builder| hardened_for(&path, builder);
 
     let Ok(mut file) = File::open(&path) else {
         return deny(StatusCode::NOT_FOUND);
@@ -397,6 +487,94 @@ mod tests {
                 let _ = std::fs::remove_dir_all(&self.0);
             }
         }
+    }
+
+    /// A project with `.ade/design/menu.html` in it, served as a root.
+    fn sheet_project() -> (tempdir::Dir, PathBuf, Vec<PathBuf>) {
+        let dir = tempdir::Dir::new("ade-design");
+        let design = dir.path().join(".ade").join("design");
+        std::fs::create_dir_all(&design).expect("cartella");
+        std::fs::write(design.join("menu.html"), b"<p>ciao</p>").expect("foglio");
+        std::fs::write(dir.path().join("fuori.html"), b"<p>no</p>").expect("fuori");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let cwd = dir.path().to_path_buf();
+        (dir, cwd, roots)
+    }
+
+    #[test]
+    fn a_sheet_in_the_sessions_design_folder_is_accepted_absolute_or_relative() {
+        let (_dir, cwd, roots) = sheet_project();
+        let cwd_text = cwd.to_string_lossy().into_owned();
+        let absolute = cwd.join(".ade").join("design").join("menu.html");
+        assert_eq!(design_sheet(&roots, &[], &absolute.to_string_lossy(), &cwd_text), Ok(absolute.clone()));
+        assert_eq!(design_sheet(&roots, &[], ".ade/design/menu.html", &cwd_text), Ok(cwd.join(".ade/design/menu.html")));
+    }
+
+    #[test]
+    fn a_sheet_is_refused_with_the_reason() {
+        let (_dir, cwd, roots) = sheet_project();
+        let cwd_text = cwd.to_string_lossy().into_owned();
+        let refused = |path: &str| design_sheet(&roots, &[], path, &cwd_text).expect_err(path);
+        assert!(refused(".ade/design/menu.txt").contains("non è una pagina .html"));
+        assert!(refused(".ade/design/../../fuori.html").contains("niente `..`"));
+        assert!(refused("fuori.html").contains("non sta in .ade/design/"));
+        assert!(refused(".ade/design/manca.html").contains("non esiste"));
+        // Another project's design folder, even an open one: not this session's.
+        let other = tempdir::Dir::new("ade-design-altro");
+        let theirs = other.path().join(".ade").join("design");
+        std::fs::create_dir_all(&theirs).expect("cartella");
+        std::fs::write(theirs.join("x.html"), b"x").expect("foglio");
+        let both = vec![roots[0].clone(), other.path().canonicalize().expect("radice")];
+        let err = design_sheet(&both, &[], &theirs.join("x.html").to_string_lossy(), &cwd_text).expect_err("altro");
+        assert!(err.contains("non sta in .ade/design/"));
+        // A folder ADE does not serve: the frame could not load it.
+        assert!(design_sheet(&[], &[], ".ade/design/menu.html", &cwd_text).expect_err("radici").contains("fuori dalle cartelle"));
+    }
+
+    #[test]
+    fn a_link_inside_the_design_folder_that_leads_out_is_refused() {
+        let (_dir, cwd, roots) = sheet_project();
+        let sheet = cwd.join(".ade").join("design").join("menu.html");
+        let outside = cwd.join("fuori.html").canonicalize().expect("fuori");
+        // `menu.html` resolving to a file outside `.ade/design/`, as a symbolic link would.
+        let resolve = |path: &Path| {
+            if path == sheet.as_path() {
+                Some(outside.clone())
+            } else {
+                path.canonicalize().ok()
+            }
+        };
+        let err = design_sheet_with(&roots, &[], &sheet.to_string_lossy(), &cwd.to_string_lossy(), resolve).expect_err("link");
+        assert!(err.contains("porta fuori da .ade/design/"));
+    }
+
+    #[test]
+    fn a_unc_sheet_is_refused_before_anything_is_resolved() {
+        let resolved = std::cell::Cell::new(0);
+        let resolve = |_: &Path| {
+            resolved.set(resolved.get() + 1);
+            None
+        };
+        let roots = vec![PathBuf::from(r"\\host\share")];
+        let err = design_sheet_with(&roots, &[], r"\\host\share\.ade\design\a.html", r"\\host\share", resolve);
+        assert!(err.is_err());
+        assert_eq!(resolved.get(), 0);
+    }
+
+    #[test]
+    fn a_sheet_is_served_with_its_own_policy_and_other_files_are_not() {
+        let (_dir, cwd, roots) = sheet_project();
+        let csp = |path: &Path| {
+            respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), None)
+                .headers()
+                .get("Content-Security-Policy")
+                .map(|value| value.to_str().unwrap_or("").to_string())
+        };
+        let sheet = csp(&cwd.join(".ade").join("design").join("menu.html")).expect("csp");
+        assert!(sheet.starts_with("sandbox allow-scripts allow-forms;"));
+        assert!(sheet.contains("default-src 'none'"));
+        assert!(sheet.contains("font-src data:"));
+        assert_eq!(csp(&cwd.join("fuori.html")).as_deref(), Some("sandbox allow-scripts allow-forms"));
     }
 
     #[test]

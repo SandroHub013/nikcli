@@ -116,6 +116,8 @@ export interface BrowserPaneState {
   project?: string
   projectRoot?: string
   span?: { columns: number; rows: number }
+  /** A design sheet the pane shows, see `design/sheet.ts`. */
+  sheet?: { file: string; from: string; title?: string }
 }
 
 export interface WorkspaceState {
@@ -281,6 +283,13 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
     const projectRoot = asOptionalString(entry.projectRoot)
     const ownerId = isObject(entry.owner) ? asOptionalString(entry.owner.id) : undefined
     const owner = ownerId && isObject(entry.owner) ? { id: ownerId, title: asString(entry.owner.title, "") } : undefined
+    const sheetFile = isObject(entry.sheet) ? asOptionalString(entry.sheet.file) : undefined
+    const sheetFrom = isObject(entry.sheet) ? asOptionalString(entry.sheet.from) : undefined
+    const sheetTitle = isObject(entry.sheet) ? asOptionalString(entry.sheet.title) : undefined
+    const sheet =
+      sheetFile && sheetFrom
+        ? { file: sheetFile, from: sheetFrom, ...(sheetTitle ? { title: sheetTitle } : {}) }
+        : undefined
     browsers.push({
       id,
       title: asString(entry.title, ""),
@@ -290,6 +299,7 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
       ...(project ? { project } : {}),
       ...(projectRoot ? { projectRoot } : {}),
       ...(span ? { span } : {}),
+      ...(sheet ? { sheet } : {}),
     })
   }
   return browsers
