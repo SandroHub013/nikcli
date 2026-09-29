@@ -1,5 +1,5 @@
 import { Account } from "@/account"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { Effect } from "effect"
 import { runPromiseWithLayer } from "@/effect"

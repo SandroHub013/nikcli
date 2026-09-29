@@ -1,7 +1,7 @@
 import { Runtime } from "../../framework/runtime"
 import { passthrough } from "../../framework/args"
 import { Commands } from "../../commands"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { mcpSdk } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"

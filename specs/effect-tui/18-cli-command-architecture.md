@@ -243,3 +243,35 @@ Two rules, both already paid for elsewhere in this catalogue:
 `multiselect` without checking `isCancel`, and asserts the population is at
 least 20 files — so the gate cannot pass by measuring nothing after a refactor
 moves every prompt behind a wrapper.
+
+## Exit-Code Mapping, First Slice — 2026-09-30
+
+`src/cli/framework/runtime.ts` now exports `ExitCode` (requirement 9's table) and `exitCodeFor`, and the seam that
+runs every handler maps a raised `UI.CancelledError` — a cancelled prompt — to `130` without a report. It is the only
+typed failure mapped so far: any other defect is rethrown unchanged (`Effect.die`), so it keeps its report and its
+code `1`. The exit rides on `process.exitCode` because `runMain` lets a successful run exit naturally.
+
+Still open: `2` (usage), `64` (config), `66` (no input), `69` (service unavailable) have a name but no producer, and
+there is still no `CommandError.HeadlessFailure`. Pinned by `test/cli/exit-codes.test.ts`; `bun test test/cli/` (256
+tests) and `bun run typecheck` pass. End to end, on a real PTY (`nikcli connectors add`, Ctrl+C at the first prompt):
+before the change the process exited `1` and printed `ERROR UICancelledError`; after it, it exits `130` and prints
+nothing. Driven with a `pty.fork()` script, since clack cannot run under `bun test`.
+
+### Headless prompts hung instead of failing closed — 2026-09-30
+
+Measured, not read: `nikcli connectors add < /dev/null` did not exit in 120 s. Two causes, one layer each.
+
+1. **`isHeadless` never fired in production.** It tested `stdinIsTTY === false`, but a stream that is not a terminal
+   reports `isTTY === undefined` (`bun -e 'console.log(process.stdin.isTTY)' < /dev/null` prints `undefined`); only a
+   TTY sets the property. The tests injected `false`, so they passed on a value the runtime never produces. This also
+   meant the permission prompt in `run.ts` was not failing closed on a pipe. It now tests falsiness, and
+   `test/cli/headless.test.ts` pins the `undefined` case.
+2. **clack waits on a stdin nobody feeds.** `src/cli/prompts.ts` re-exports `@clack/prompts` and wraps the six
+   interactive prompts (`select`, `multiselect`, `autocomplete`, `text`, `password`, `confirm`) so that in headless mode
+   they reject with `UI.HeadlessFailure`; `intro`/`log`/`spinner`/`isCancel` are untouched. The handlers under
+   `src/cli/handlers/` import it instead of `@clack/prompts` (a mechanical swap of one import line).
+   `HeadlessFailure` maps to exit `66` and prints what it needs.
+
+After: `connectors add < /dev/null` exits `66` in ~1 s with `Cannot ask "Location" in headless mode…`; on a PTY, Ctrl+C
+still exits `130`. `bun test test/cli/` (262), `bun run typecheck`, prettier, oxlint and `check:routes --strict` pass.
+Not covered: the two `src/session` importers and `cli/headless.ts`'s own `select` keep importing clack directly.

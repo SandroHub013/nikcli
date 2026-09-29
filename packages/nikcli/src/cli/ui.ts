@@ -9,6 +9,15 @@ const log = Log.create({ service: "ui" })
 export namespace UI {
   export class CancelledError extends Schema.TaggedError<CancelledError>()("UICancelledError", {}) {}
 
+  /** A prompt with no default was reached where nobody can answer it (EOT-18 requirement 12). */
+  export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure>()("UIHeadlessFailure", {
+    prompt: Schema.String,
+  }) {
+    override get message() {
+      return `Cannot ask "${this.prompt}" in headless mode. Pass the value as a flag, or run in a terminal.`
+    }
+  }
+
   export const Style = {
     TEXT_HIGHLIGHT: "\x1b[96m",
     TEXT_HIGHLIGHT_BOLD: "\x1b[96m\x1b[1m",

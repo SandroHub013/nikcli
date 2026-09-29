@@ -1,5 +1,5 @@
 import { Auth } from "@/auth"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"

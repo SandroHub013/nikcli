@@ -1,5 +1,5 @@
 import path from "path"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { parse as parseJsonc } from "jsonc-parser"
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"

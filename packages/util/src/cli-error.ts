@@ -91,6 +91,7 @@ const formatters: Record<string, Formatter> = {
 
   // UI
   UICancelledError: () => "",
+  UIHeadlessFailure: (e) => e.message,
 
   // User-facing
   UserFacingError: (e) => {

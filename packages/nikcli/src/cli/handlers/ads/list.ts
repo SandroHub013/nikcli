@@ -1,6 +1,6 @@
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { Locale } from "@nikcli-ai/util/locale"
 import { withInstanceAsync } from "@/effect"
