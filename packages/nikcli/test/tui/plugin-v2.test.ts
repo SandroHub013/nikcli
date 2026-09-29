@@ -188,32 +188,50 @@ describe("tui plugin storage quota", () => {
       const writing = new Promise<void>((resolve) => (started = resolve))
       const paused = new Promise<void>((resolve) => (resume = resolve))
       const originalWrite = Bun.write
-      // Wrap the real `Bun.write` rather than retyping it. `Bun.write` is an
-      // overload set, and `mockImplementationOnce` demands a single signature
-      // assignable to *every* overload — a narrow `(PathLike, …)` is not, so the
-      // delegation has to happen through a wrapper typed as `typeof Bun.write`.
-      const write = spyOn(Bun, "write").mockImplementationOnce(((...args: Parameters<typeof Bun.write>) => {
+      // Start the real write, signal that it is in flight, and only *then*
+      // pause. The pause has to sit between "in flight" and "resolved",
+      // because that is the window eviction used to slip through: the temp
+      // file exists, yet the entry it belongs to is already gone.
+      //
+      // `Bun.write` is an overload set and `mockImplementationOnce` needs one
+      // signature assignable to every overload, hence the cast.
+      const write = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
         const pending = originalWrite(...args)
-        return (async () => {
-          const bytes = await pending
-          started()
-          await paused
-          return bytes
-        })()
-      }) as typeof Bun.write)
+        started()
+        await paused
+        return await pending
+      }) as unknown as typeof Bun.write)
       const pending = old[1]((draft) => {
         draft.text = "stale"
       })
-      // Attach the rejection handler before releasing the blocked write.
-      const rejected = expect(pending).rejects.toThrow("entry was evicted")
       try {
+        // Wait for the write to be in flight *before* arming the matcher.
+        // `expect(p).rejects` blocks while `p` is still pending-and-paused in
+        // this Bun build, so arming first deadlocks the whole file.
         await writing
         if (invalidate === "evict") evictPluginStorage("generation")
         else clearPluginStorage()
         const next = store("generation")
         expect(next).not.toBe(old)
+        // A plain `.then` rather than `expect(...).rejects`. The matcher is
+        // attached before `resume()` so the rejection is never unhandled, but
+        // the assertion is made after the promise settles: `expect(p).rejects`
+        // blocks while `p` is pending in this Bun build, and that pending write
+        // is deliberately paused until `resume()` — so arming the matcher on
+        // it first deadlocks the whole file.
+        const outcome = pending.then(
+          () => ({ rejected: false, message: "" }),
+          (error: unknown) => ({
+            rejected: true,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        )
         resume()
-        await rejected
+        // Substring, as `toThrow` was: the message names the file it refused to
+        // write, and that path is per-run.
+        const settled = await outcome
+        expect(settled.rejected).toBe(true)
+        expect(settled.message).toContain("entry was evicted")
         expect(await Bun.file(path.join(dir, "generation.state.json")).exists()).toBe(false)
         expect(next[0].text).toBe("")
         await next[1]((draft) => {
@@ -223,7 +241,7 @@ describe("tui plugin storage quota", () => {
         expect((await readdir(dir)).filter((file) => file.endsWith(".tmp"))).toEqual([])
       } finally {
         resume()
-        await rejected
+        await pending.catch(() => undefined)
         write.mockRestore()
       }
     })
