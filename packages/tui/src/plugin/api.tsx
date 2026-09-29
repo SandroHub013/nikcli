@@ -161,6 +161,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       params: {
         sessionID: route.data.sessionID,
         initialPrompt: route.data.initialPrompt,
+        workspaceID: route.data.workspaceID,
       },
     }
   }

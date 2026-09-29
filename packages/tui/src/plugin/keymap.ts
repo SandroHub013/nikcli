@@ -59,8 +59,11 @@ function buildRows(id: string, layer: TuiKeymapLayer, command: TuiPluginApi["com
       suggested: item.suggested,
       hidden: item.hidden,
       enabled: item.enabled,
-      slash: item.slashName ? { name: item.slashName, aliases: item.slashAliases } : undefined,
+      slash: item.slashName
+        ? { name: item.slashName, aliases: item.slashAliases, arguments: item.slashArguments }
+        : undefined,
       onSelect: () => item.run(),
+      onArguments: item.slashArguments ? (input) => item.run(input) : undefined,
     })
   }
 

@@ -52,6 +52,8 @@ import { SessionSync } from "./projectors"
 import { SyncEvent } from "@/sync/sync-event"
 import { SessionPending } from "./pending"
 import { SessionV2Write } from "./v2/write"
+import { LLM } from "./llm"
+import { stripDanglingXmlArtifacts } from "@/util/dangling-xml"
 
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -396,6 +398,8 @@ export namespace SessionPrompt {
     ): Effect.Effect<MessageV2.WithParts, unknown>
     shell(input: ShellInput): Effect.Effect<Awaited<ReturnType<typeof PromptCommands.shell>>, unknown>
     command(input: CommandInput): Effect.Effect<Awaited<ReturnType<typeof PromptCommands.command>>, unknown>
+    /** Transient side-question answer over the session context; writes nothing. */
+    generate(input: Omit<GenerateInput, "abort">): Effect.Effect<GenerateResult, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("SessionPrompt.Service") {}
@@ -2036,6 +2040,108 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     return input.messages
   }
 
+  export type GenerateInput = {
+    sessionID: string
+    prompt: string
+    abort: AbortSignal
+  }
+
+  /**
+   * One model call over the session's committed context plus a transient
+   * user prompt, for side questions (`/btw`). It must not mutate the session:
+   * no message, part, status, usage, summary or instruction commit is written,
+   * so the answer never reaches later turns. It runs alongside a busy turn —
+   * `toModelMessages` renders in-flight tool calls as interrupted, so the
+   * snapshot it reads is always a valid history.
+   *
+   * The request mirrors a loop step so the provider prompt cache is shared:
+   * the same system prefix (`InstructionSync.render` is the committed state
+   * `assemble` last sent, read without committing), the same message
+   * transform, and the agent's tool definitions. The definitions carry no
+   * `execute`, so a tool call the model emits is dropped rather than run —
+   * the same contract as upstream `session.generate`.
+   */
+  export type GenerateResult = {
+    text: string
+    /** Who answered — what a fork needs to carry the answer as a valid turn. */
+    agent: string
+    model: { providerID: string; modelID: string }
+    finish: string
+  }
+
+  async function generate(input: GenerateInput): Promise<GenerateResult> {
+    const session = await sessionGet(input.sessionID)
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+    const lastUser = msgs.findLast((msg) => msg.info.role === "user")?.info as MessageV2.User | undefined
+    if (!lastUser) throw new Error("This session has no conversation to ask about yet")
+
+    const agent = await agentRequired(lastUser.agent)
+    const model = await providerGetModel(lastUser.model.providerID, lastUser.model.modelID)
+    const noop = {
+      message: { id: Identifier.ascending("message") } as MessageV2.Assistant,
+      partFromToolCall: () => undefined,
+    }
+    const resolved = await resolveTools({
+      agent,
+      session,
+      model,
+      tools: lastUser.tools,
+      processor: noop,
+      bypassAgentCheck: false,
+    })
+    const tools = Object.fromEntries(
+      Object.entries(resolved).map(([name, item]) => [name, { ...item, execute: undefined }]),
+    ) as typeof resolved
+
+    const sessionMessages = clone(msgs)
+    const config = await configGet()
+    const wrap = (config.experimental?.queued_message_wrap ?? false) as
+      | { header: string; footer: string }
+      | "default"
+      | boolean
+      | null
+    await runPlugin(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+      }),
+    )
+    const rendered = InstructionSync.render(input.sessionID, session.projectID)
+
+    const result = await LLM.stream({
+      user: lastUser,
+      agent,
+      sessionID: input.sessionID,
+      model,
+      system: rendered.system,
+      abort: input.abort,
+      retries: 2,
+      tools,
+      messages: [
+        ...rendered.skillMessages.map((content) => ({ role: "user" as const, content })),
+        ...MessageV2.toModelMessages(sessionMessages, model, { wrap }),
+        ...rendered.updates,
+        { role: "user", content: input.prompt },
+      ],
+    })
+    // Read the stream, not `result.text`: the native runtime resolves `text`
+    // to "" and delivers the answer only as deltas.
+    let text = ""
+    let finish = "unknown"
+    for await (const event of result.fullStream) {
+      if (event.type === "text-delta") text += event.text
+      if (event.type === "error") throw event.error
+      if ((event.type === "finish-step" || event.type === "finish") && typeof event.finishReason === "string")
+        finish = event.finishReason
+    }
+    return {
+      text: stripDanglingXmlArtifacts(text).trim(),
+      agent: agent.name,
+      model: { providerID: lastUser.model.providerID, modelID: lastUser.model.modelID },
+      finish,
+    }
+  }
+
   export const ShellInput = PromptCommands.ShellInput
   export type ShellInput = PromptCommands.ShellInput
 
@@ -2133,6 +2239,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         withInstanceContext(() => loop(sessionID, options?.controller, options?.messageID, options?.waitFor)),
       shell: (input) => withInstanceContext(() => PromptCommands.shell(commandDeps, input, PromptState)),
       command: (input) => withInstanceContext(() => PromptCommands.command(commandDeps, input)),
+      // `tryPromise` hands over a signal that fires when the fiber is
+      // interrupted, so a client dropping the request cancels the model call.
+      generate: (input) =>
+        InstanceState.context.pipe(
+          Effect.flatMap((ctx) =>
+            Effect.tryPromise({
+              try: async (abort) =>
+                await Instance.provide({ directory: ctx.directory, fn: () => generate({ ...input, abort }) }),
+              catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            }),
+          ),
+        ),
     }),
   )
 

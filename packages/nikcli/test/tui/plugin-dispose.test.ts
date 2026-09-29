@@ -290,4 +290,28 @@ describe("plugin scope dispose", () => {
     expect(deadline).toBeGreaterThan(-1)
     expect(loop).toBeGreaterThan(deadline)
   })
+
+  test("the shutdown budget covers the load and reload waits, not only the deactivation loop", async () => {
+    // The regression this pins: the deadline used to be computed *after* the
+    // load and reload awaits, so it bounded only the phase that already had a
+    // budget. Both awaits are unbounded and `dispose()` is what the exit path
+    // blocks on before restoring the terminal, so a plugin that never settled
+    // held the terminal shut indefinitely. The deadline has to exist before
+    // either await, and each await has to be handed what is left of it.
+    const src = await Bun.file(path.join(TUI_SRC, "plugin/runtime.ts")).text()
+    const body = src.slice(src.indexOf("export async function dispose()"), src.indexOf("function schedule(state:"))
+    const deadline = body.indexOf("const deadline = Date.now() + SHUTDOWN_BUDGET_MS")
+    const loadWait = body.indexOf("await runCleanup(() => task,")
+    const reloadWait = body.indexOf("await runCleanup(() => reloading,")
+
+    expect(deadline).toBeGreaterThan(-1)
+    // Before both waits, not after them.
+    expect(loadWait).toBeGreaterThan(deadline)
+    expect(reloadWait).toBeGreaterThan(deadline)
+    // And each is bounded by the remainder, so neither can spend the budget twice.
+    expect(body).toContain("Math.max(0, deadline - Date.now())")
+    // The bare awaits this replaced must be gone: an unbounded one is the bug.
+    expect(body).not.toContain("await task")
+    expect(body).not.toContain("await reloading.catch")
+  })
 })

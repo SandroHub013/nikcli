@@ -48,7 +48,7 @@ import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { clearSlotErrors, setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 import { adaptV2TuiPlugin, readV2TuiPlugin } from "./v2"
-import { pluginStorage } from "./storage"
+import { evictPluginStorage, pluginStorage } from "./storage"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, type SourceWatcher } from "./reload"
 import { dbg } from "../feature-plugins/background/__debug"
 
@@ -85,6 +85,8 @@ type PluginScope = {
   track: (fn: (() => void) | undefined) => () => void
   /** `deadline` is an epoch-ms budget shared across scopes disposed together. */
   dispose: (deadline?: number) => Promise<void>
+  /** True once disposal has begun; registration against a dead scope is refused. */
+  readonly disposed: boolean
 }
 
 type PluginEntry = {
@@ -95,6 +97,11 @@ type PluginEntry = {
   options: PluginOptions | undefined
   enabled: boolean
   scope?: PluginScope
+  /**
+   * The in-flight activation for `scope`, so a second caller arriving before
+   * setup settles shares its result instead of racing it.
+   */
+  activating?: { scope: PluginScope; promise: Promise<boolean> }
 }
 
 type ServerPluginEntry = {
@@ -425,13 +432,13 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
  */
 export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISPOSE_TIMEOUT_MS) {
   const ctrl = new AbortController()
-  let list: { key: symbol; fn: TuiDispose }[] = []
+  let list: { key: symbol; fn: TuiDispose; host: boolean }[] = []
   let done = false
 
-  const onDispose = (fn: TuiDispose) => {
+  const add = (fn: TuiDispose, host: boolean) => {
     if (done) return () => {}
     const key = Symbol()
-    list.push({ key, fn })
+    list.push({ key, fn, host })
     let drop = false
     return () => {
       if (drop) return
@@ -440,18 +447,27 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
     }
   }
 
+  /** A callback the plugin itself registered. */
+  const onDispose = (fn: TuiDispose) => add(fn, false)
+
   const track = (fn: (() => void) | undefined) => {
     if (!fn) return () => {}
     let drop = false
-    let off = () => {}
-    const wrapped = () => {
+    const off = add(() => {
+      if (drop) return
+      drop = true
+      fn()
+    }, true)
+    // The returned handle *performs* the teardown, it does not merely
+    // deregister it. A caller holding one can call it after the scope is
+    // already disposed, when `add` queued nothing, and the resource it owns
+    // still has to be released exactly once.
+    return () => {
       if (drop) return
       drop = true
       off()
       fn()
     }
-    off = onDispose(wrapped)
-    return wrapped
   }
 
   const lifecycle: TuiPluginApi["lifecycle"] = {
@@ -476,8 +492,17 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
     // it is walked newest-first — so stopping at the first hung or throwing
     // callback left the plugin registered in the TUI after it was disposed.
     // Every entry runs; the budget only decides whether we still wait for one.
+    //
+    // Host deregistrations go first, as a block. Newest-first across one
+    // undifferentiated list is not enough on its own: a plugin callback that
+    // hangs gets entered *before* the host's deregistration has run, so the
+    // TUI kept routing to a plugin that was already being torn down for the
+    // whole time that callback hung — which is the exact window the
+    // deregistration exists to close. The host stops referring to the plugin
+    // first, and only then do we wait on the plugin itself.
+    const ordered = [...queue.filter((x) => x.host), ...queue.filter((x) => !x.host)]
     let reported = false
-    for (const item of queue) {
+    for (const item of ordered) {
       const left = until - Date.now()
       const out = await runCleanup(item.fn, Math.max(0, left))
       if (out.type === "ok") continue
@@ -507,6 +532,9 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
     lifecycle,
     track,
     dispose,
+    get disposed() {
+      return done
+    },
   }
 }
 
@@ -630,36 +658,70 @@ async function activateWithBudget(state: RuntimeState, plugin: PluginEntry) {
 export async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = true
   if (persist) writePluginEnabledState(state.api, plugin.id, true)
+  // A generation that is still initialising is already an owner: it holds the
+  // scope and it is running the plugin's setup. A second activation arriving
+  // mid-flight shares that outcome rather than starting a rival generation —
+  // otherwise both ran `plugin.plugin()` and the plugin ended up registered
+  // twice, with the loser's scope disposed by nobody. Keyed to the scope and
+  // not to the entry: after a deactivate the entry is free again, and a fresh
+  // activation has to be able to start instead of inheriting the revoked one.
+  const inFlight = plugin.activating
+  if (inFlight && inFlight.scope === plugin.scope) return inFlight.promise
   if (plugin.scope) return true
 
   const scope = createPluginScope(plugin.load, plugin.id)
   const api = pluginApi(state, plugin.load, scope, plugin.id)
-  const ok = await Promise.resolve()
-    .then(async () => {
-      await plugin.plugin(api, plugin.options, plugin.meta)
-      return true
-    })
-    .catch((error) => {
-      fail("failed to initialize tui plugin", {
-        path: plugin.load.spec,
-        id: plugin.id,
-        error,
-      })
-      return false
-    })
-
-  if (!ok) {
-    await scope.dispose()
-    return false
-  }
-
-  if (!plugin.enabled) {
-    await scope.dispose()
-    return true
-  }
-
+  // Published *before* setup runs, not after. While it was published only on
+  // success, a generation in flight was invisible: `deactivatePluginEntry`
+  // found no scope and returned without revoking anything, so a plugin
+  // deactivated during its own setup kept its registrations and ran to
+  // completion in a TUI that had already moved on.
   plugin.scope = scope
-  return true
+
+  const activating = (async () => {
+    const ok = await Promise.resolve()
+      .then(async () => {
+        await plugin.plugin(api, plugin.options, plugin.meta)
+        return true
+      })
+      .catch((error) => {
+        fail("failed to initialize tui plugin", {
+          path: plugin.load.spec,
+          id: plugin.id,
+          error,
+        })
+        return false
+      })
+
+    // A newer generation may have claimed the entry while this one was in
+    // setup. Ours is then already revoked, and reviving it would resurrect a
+    // plugin the host has already replaced.
+    if (plugin.scope !== scope) {
+      await scope.dispose()
+      return false
+    }
+
+    if (!ok) {
+      plugin.scope = undefined
+      await scope.dispose()
+      return false
+    }
+
+    if (!plugin.enabled) {
+      plugin.scope = undefined
+      await scope.dispose()
+      return true
+    }
+
+    return true
+  })()
+
+  plugin.activating = { scope, promise: activating }
+  try {
+    return await activating
+  } finally {
+    if (plugin.activating?.promise === activating) plugin.activating = undefined
+  }
 }
 
 async function activatePluginById(state: RuntimeState | undefined, id: string, persist: boolean) {
@@ -679,9 +741,25 @@ async function deactivatePluginById(state: RuntimeState | undefined, id: string,
 function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, base: string): TuiPluginApi {
   const api = runtime.api
   const host = runtime.slots
+  /**
+   * Registration is refused once the generation is gone.
+   *
+   * `scope.track` cannot do this alone: its argument *is* the host's disposer,
+   * so `scope.track(api.command.register(cb))` has already mutated the host by
+   * the time `track` learns the scope is closed. A late registration therefore
+   * used to attach a command, route or listener that nothing would ever
+   * release — the plugin stayed live inside a TUI that had replaced it. The
+   * host call is made here instead, behind the check.
+   */
+  const live = <T>(what: string, register: () => T): T => {
+    if (scope.disposed) {
+      throw new Error(`tui plugin ${base} tried to ${what} after its generation was disposed`)
+    }
+    return register()
+  }
   const command: TuiPluginApi["command"] = {
     register(cb) {
-      return scope.track(api.command.register(cb))
+      return scope.track(live("register a command", () => api.command.register(cb)))
     },
     trigger(value) {
       api.command.trigger(value)
@@ -694,7 +772,7 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
 
   const route: TuiPluginApi["route"] = {
     register(list) {
-      return scope.track(api.route.register(list))
+      return scope.track(live("register a route", () => api.route.register(list)))
     },
     navigate(name, params) {
       api.route.navigate(name, params)
@@ -710,10 +788,10 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
 
   const event: TuiPluginApi["event"] = {
     on(type, handler) {
-      return scope.track(api.event.on(type, handler))
+      return scope.track(live("subscribe to an event", () => api.event.on(type, handler)))
     },
     listen(handler) {
-      return scope.track(api.event.listen(handler))
+      return scope.track(live("subscribe to events", () => api.event.listen(handler)))
     },
   }
 
@@ -723,7 +801,7 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
     const id = count ? `${base}:${count}` : base
     count += 1
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dispose = scope.track(host.register({ ...plugin, id } as any))
+    const dispose = scope.track(live("register a slot", () => host.register({ ...plugin, id } as any)))
     return { id, dispose }
   }
 
@@ -960,6 +1038,10 @@ async function removePluginEntry(state: RuntimeState, plugin: PluginEntry) {
   if (state.plugins_by_id.get(plugin.id) === plugin) state.plugins_by_id.delete(plugin.id)
   state.failures.delete(plugin.id)
   clearSlotErrors(plugin.id)
+  // Removal, not reload: a hot reload deliberately keeps the plugin's stores,
+  // but an uninstalled plugin should not go on holding a live store and a
+  // watched file for the rest of the session.
+  evictPluginStorage(plugin.id)
   log.info("removed tui plugin", { path: plugin.load.spec, id: plugin.id })
 }
 
@@ -1433,19 +1515,51 @@ export namespace TuiPluginRuntime {
     await schedule(state)
   }
 
+  /**
+   * The budget starts on entry, not at the deactivation loop.
+   *
+   * It used to be computed after the two awaits below, so it bounded only the
+   * part of shutdown that was already bounded: a plugin load or a reload pass
+   * that never settled held `dispose()` open indefinitely, and this runs on the
+   * exit path that `context/exit.tsx` blocks on before the renderer is destroyed
+   * and the terminal is restored. A wedged plugin was therefore a terminal that
+   * never came back, which is the one outcome a cleanup budget exists to prevent.
+   *
+   * Timing out is not skipping. `load()` assigns `runtime` before its first
+   * await, so whatever has registered by the deadline is still reachable below
+   * and is still disposed; only the waiting stops. The straggler is named in the
+   * log rather than silently left behind, because "we stopped waiting" and "it
+   * finished" are different facts and the operator needs the first one.
+   */
   export async function dispose() {
+    const deadline = Date.now() + SHUTDOWN_BUDGET_MS
     const task = loaded
     loaded = undefined
     dir = ""
-    if (task) await task
+    if (task) {
+      const out = await runCleanup(() => task, Math.max(0, deadline - Date.now()))
+      if (out.type === "timeout") {
+        log.warn("tui plugin load outlived the shutdown budget; disposing what loaded without waiting", {
+          budget: SHUTDOWN_BUDGET_MS,
+        })
+      } else if (out.type === "error") {
+        fail("failed to load tui plugins during shutdown", {
+          error: out.error,
+        })
+      }
+    }
     const state = runtime
     runtime = undefined
     if (!state) return
     state.watcher?.dispose()
     state.watcher = undefined
-    await reloading.catch(() => undefined)
+    const reload = await runCleanup(() => reloading, Math.max(0, deadline - Date.now()))
+    if (reload.type === "timeout") {
+      log.warn("tui plugin reload outlived the shutdown budget; disposing without waiting for it", {
+        budget: SHUTDOWN_BUDGET_MS,
+      })
+    }
     const queue = [...state.plugins].reverse()
-    const deadline = Date.now() + SHUTDOWN_BUDGET_MS
     for (const plugin of queue) {
       await deactivatePluginEntry(state, plugin, false, deadline)
     }

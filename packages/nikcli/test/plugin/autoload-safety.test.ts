@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
-import { spawnSync } from "node:child_process"
 import path from "node:path"
 
 /**
@@ -24,12 +23,22 @@ const REGISTRY = path.join(REPO_ROOT, "packages", "nikcli", "src", "tool", "regi
 const FLAG_DEFS = path.join(REPO_ROOT, "packages", "util", "src", "flag.ts")
 const AGENTS = path.join(REPO_ROOT, "packages", "nikcli", "AGENTS.md")
 
+/**
+ * Matching lines as `line:content`, in the shape `rg -n` produced.
+ *
+ * This used to shell out to ripgrep, which made a structural gate depend on a
+ * binary being installed: where `rg` was absent, every call returned an empty
+ * list and the assertions below failed on a machine that had nothing wrong
+ * with it. The test's own contract is that it is static and hermetic, so it
+ * reads the file it was already reading anyway.
+ */
 function grep(pattern: string, file: string): string[] {
-  const result = spawnSync("rg", ["-n", "--no-messages", pattern, file], {
-    encoding: "utf8",
-  })
-  if (result.status === 1 || result.status === 2) return []
-  return result.stdout.trim().split("\n").filter(Boolean)
+  const hits: string[] = []
+  const lines = readFileSync(file, "utf8").split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(pattern)) hits.push(`${i + 1}:${lines[i]}`)
+  }
+  return hits
 }
 
 describe("EOT-14 custom-tool autoload safety", () => {

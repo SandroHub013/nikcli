@@ -64,8 +64,21 @@ export namespace SessionHttpApi {
       }),
     ),
   }).annotate({ identifier: "SessionUpdateInput" })
+  const ModelRef = Schema.Struct({
+    providerID: Schema.String,
+    modelID: Schema.String,
+  }).annotate({ identifier: "SessionModelRef" })
+  const ForkContinuation = Schema.Struct({
+    prompt: Schema.String,
+    response: Schema.String,
+    agent: Schema.String,
+    model: ModelRef,
+    finish: Schema.optionalKey(Schema.String),
+  }).annotate({ identifier: "SessionForkContinuation" })
   const ForkPayload = Schema.Struct({
     messageID: Schema.optionalKey(Schema.String),
+    /** A side answer carried into the fork as a finished turn (see `/btw`). */
+    continuation: Schema.optionalKey(ForkContinuation),
   }).annotate({ identifier: "SessionForkInput" })
   const RevertPayload = Schema.Struct({
     messageID: Schema.String,
@@ -76,6 +89,15 @@ export namespace SessionHttpApi {
     modelID: Schema.String,
     auto: Schema.optionalKey(Schema.Boolean),
   }).annotate({ identifier: "SessionSummarizeInput" })
+  const GeneratePayload = Schema.Struct({
+    prompt: Schema.String,
+  }).annotate({ identifier: "SessionGenerateInput" })
+  const GenerateResult = Schema.Struct({
+    text: Schema.String,
+    agent: Schema.String,
+    model: ModelRef,
+    finish: Schema.String,
+  }).annotate({ identifier: "SessionGenerateResult" })
   const CommandPayload = Schema.Struct({
     messageID: Schema.optionalKey(Schema.String),
     delivery: Schema.optionalKey(Schema.Literals(["steer", "queue"])),
@@ -288,6 +310,15 @@ export namespace SessionHttpApi {
     data: Schema.Record(Schema.String, Schema.Unknown),
   }).annotate({ identifier: "SessionPartMismatchError", httpApiStatus: 400 })
 
+  /** `generate` only: the model call could not produce an answer (no
+   * conversation to read yet, provider failure). An expected outcome of a
+   * transient request, not a server fault, so the client gets the message
+   * instead of an opaque 500. */
+  const GenerateFailed = Schema.Struct({
+    name: Schema.Literal("SessionGenerateError"),
+    data: Schema.Struct({ message: Schema.String }),
+  }).annotate({ identifier: "SessionGenerateError", httpApiStatus: 422 })
+
   type DeclaredError = typeof NotFound.Type | typeof Busy.Type
 
   /** Raised on the typed channel where the mismatch is detected. A tagged
@@ -346,6 +377,21 @@ export namespace SessionHttpApi {
       })
     }
     return asSessionError(cause)
+  }
+
+  /** `generate` never takes the busy lock — it runs beside a live turn — so
+   * its contract is 404 or a failed answer, never 409. */
+  function asGenerateError(cause: Error): Effect.Effect<never, typeof NotFound.Type | typeof GenerateFailed.Type> {
+    if (SessionError.isNotFound(cause)) {
+      return Effect.fail({
+        name: "NotFoundError" as const,
+        data: { message: cause.message } as Record<string, unknown>,
+      })
+    }
+    return Effect.fail({
+      name: "SessionGenerateError" as const,
+      data: { message: cause.message },
+    })
   }
 
   const partUpdateErrors = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.catch(asPartUpdateError))
@@ -475,6 +521,14 @@ export namespace SessionHttpApi {
         payload: SummarizePayload,
         success: BooleanResult,
         error: [NotFound, Busy],
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("generate", "/:sessionID/generate", {
+        params: SessionIDPath,
+        payload: GeneratePayload,
+        success: GenerateResult,
+        error: [NotFound, GenerateFailed],
       }),
     )
     .add(
@@ -736,6 +790,7 @@ export namespace SessionHttpApi {
         const forked = yield* session.fork({
           sessionID: params.sessionID,
           messageID: payload.messageID,
+          continuation: payload.continuation,
         })
         return forked
       }).pipe(declaredErrors),
@@ -819,6 +874,11 @@ export namespace SessionHttpApi {
         } as SessionPrompt.CommandInput)
         return msg
       }).pipe(declaredErrors),
+    generate: ({ params, payload }: { params: typeof SessionIDPath.Type; payload: typeof GeneratePayload.Type }) =>
+      Effect.gen(function* () {
+        const sessionPrompt = yield* SessionPrompt.Service
+        return yield* sessionPrompt.generate({ sessionID: params.sessionID, prompt: payload.prompt })
+      }).pipe(Effect.catch(asGenerateError)),
     shell: ({ params, payload }: { params: typeof SessionIDPath.Type; payload: typeof ShellPayload.Type }) =>
       Effect.gen(function* () {
         const sessionPrompt = yield* SessionPrompt.Service
@@ -1177,6 +1237,7 @@ export namespace SessionHttpApi {
       .handle("share", (request) => handlers.share(request))
       .handle("unshare", (request) => handlers.unshare(request))
       .handle("summarize", (request) => handlers.summarize(request))
+      .handle("generate", (request) => handlers.generate(request))
       .handle("command", (request) => handlers.command(request))
       .handle("shell", (request) => handlers.shell(request))
       .handle("permissionRespond", (request) => handlers.permissionRespond(request))

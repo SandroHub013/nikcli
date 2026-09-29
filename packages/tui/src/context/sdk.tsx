@@ -18,6 +18,17 @@ const log = Log.create({ service: "tui.sdk" })
 const EVENT_QUEUE_OVERLOAD = 2048
 
 /**
+ * Hard ceiling on a single batch, in envelopes.
+ *
+ * `EVENT_QUEUE_OVERLOAD` above is the alarm, this is the brake, and they are
+ * deliberately far apart: the alarm is a diagnostic threshold, this one is the
+ * point where the batch is flushed early. A cap that *dropped* envelopes would
+ * be unacceptable — the queue carries permission prompts and final session
+ * outcomes — so reaching it costs batching latency and nothing else.
+ */
+const EVENT_BATCH_CAP = 512
+
+/**
  * GlobalBus envelope as forwarded by `/global/event` (HTTP mode) and the
  * worker's `global.event` RPC channel (embedded mode). `directory` is the
  * instance directory the event was published on — worktree instances carry
@@ -105,7 +116,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
     let sse: AbortController | undefined
-    let transport: Transport = { url: props.url, fetch: props.fetch, events: props.events }
+    let transport: Transport = {
+      url: props.url,
+      fetch: props.fetch,
+      events: props.events,
+    }
 
     function createSDK() {
       return createNikcliClient({
@@ -169,9 +184,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let timer: Timer | undefined
     let last = 0
 
-    // The batch has no cap. Before one can be added, overload has to be
-    // observable: a cap that silently drops a permission prompt or a final
-    // outcome would trade correctness for a faster view.
+    // Overload is *observed* rather than prevented: the meter reports the depth
+    // so a batch that grows past the threshold is visible in the log.
     const queueMeter = createQueueMeter(EVENT_QUEUE_OVERLOAD, (snapshot) => {
       log.warn("event batch depth crossed the overload threshold", {
         depth: snapshot.depth,
@@ -247,6 +261,20 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (type === "server.heartbeat" || type === "server.connected") return
       queue.push(envelope)
       queueMeter.admit()
+      // A full batch is flushed now instead of waiting for the 16 ms window to
+      // close, and that is what bounds it. Dropping is the one option not
+      // available: this queue carries permission prompts and terminal
+      // outcomes, so a discarded envelope is a permission that never appears
+      // and a session that never reports how it ended. The cap costs batching,
+      // never events.
+      if (queue.length >= EVENT_BATCH_CAP) {
+        if (timer) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+        flush()
+        return
+      }
       const elapsed = Date.now() - last
 
       if (timer) return

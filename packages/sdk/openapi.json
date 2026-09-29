@@ -18749,6 +18749,97 @@
         ]
       }
     },
+    "/session/{sessionID}/generate": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.generate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SessionGenerateResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionGenerateResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "SessionGenerateError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionGenerateError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionGenerateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.generate({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/command": {
       "post": {
         "tags": ["session"],
@@ -59526,11 +59617,49 @@
         },
         "additionalProperties": false
       },
+      "SessionModelRef": {
+        "type": "object",
+        "properties": {
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          }
+        },
+        "required": ["providerID", "modelID"],
+        "additionalProperties": false
+      },
+      "SessionForkContinuation": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "response": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/components/schemas/SessionModelRef"
+          },
+          "finish": {
+            "type": "string"
+          }
+        },
+        "required": ["prompt", "response", "agent", "model"],
+        "additionalProperties": false
+      },
       "SessionForkInput": {
         "type": "object",
         "properties": {
           "messageID": {
             "type": "string"
+          },
+          "continuation": {
+            "$ref": "#/components/schemas/SessionForkContinuation"
           }
         },
         "additionalProperties": false
@@ -59562,6 +59691,56 @@
           }
         },
         "required": ["providerID", "modelID"],
+        "additionalProperties": false
+      },
+      "SessionGenerateInput": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["prompt"],
+        "additionalProperties": false
+      },
+      "SessionGenerateResult": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/components/schemas/SessionModelRef"
+          },
+          "finish": {
+            "type": "string"
+          }
+        },
+        "required": ["text", "agent", "model", "finish"],
+        "additionalProperties": false
+      },
+      "SessionGenerateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["SessionGenerateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "SessionCommandInput": {

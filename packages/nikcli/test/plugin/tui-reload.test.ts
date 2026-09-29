@@ -4,7 +4,7 @@ import { tmpdir } from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, localSource } from "@tui/plugin/reload"
-import { clearPluginStorage, pluginStorage } from "@tui/plugin/storage"
+import { clearPluginStorage, evictPluginStorage, pluginStorage } from "@tui/plugin/storage"
 
 async function scratch() {
   const dir = await mkdtemp(path.join(tmpdir(), "nikcli-tui-reload-"))
@@ -210,5 +210,69 @@ describe("tui plugin durable store", () => {
     expect(files.sort()).toEqual(["acme.a.state.json", "acme.b.state.json"])
     // No temp files left behind by the rename-based write.
     expect(files.every((file) => !file.includes(".tmp"))).toBe(true)
+  })
+
+  it("refuses a write that would exceed the storage budget instead of evicting silently", async () => {
+    await using tmp = await scratch()
+    process.env.NIKCLI_TEST_HOME = tmp.path
+    clearPluginStorage()
+
+    const [, update] = pluginStorage("acme.big").store("blob", {
+      initial: { value: "" },
+    })
+    // Over the 32 MiB budget in one write, so the check trips before anything
+    // reaches the disk. The in-memory value still updates — what is refused is
+    // the unbounded durable write, and the caller is told.
+    await expect(
+      update((draft) => {
+        draft.value = "x".repeat(33 * 1024 * 1024)
+      }),
+    ).rejects.toThrow(/quota exhausted/)
+    await Bun.write(path.join(tmp.path, "state", "tui", "plugin", "acme.big.blob.json"), "unused")
+  })
+
+  it("evicts one plugin's stores on removal and leaves the others alone", async () => {
+    await using tmp = await scratch()
+    process.env.NIKCLI_TEST_HOME = tmp.path
+    clearPluginStorage()
+
+    const [a, updateA] = pluginStorage("acme.gone").store("state", {
+      initial: { value: "a" },
+    })
+    await updateA((draft) => {
+      draft.value = "a1"
+    })
+    const [b, updateB] = pluginStorage("acme.kept").store("state", {
+      initial: { value: "b" },
+    })
+    await updateB((draft) => {
+      draft.value = "b1"
+    })
+    const [memory] = pluginStorage("acme.gone").memory("draft", {
+      initial: { text: "draft" },
+    })
+
+    evictPluginStorage("acme.gone")
+
+    // Eviction releases the live store and stops tracking it; it does not
+    // delete the plugin's data. Reopening therefore builds a *new* store that
+    // reads the file back off disk, which is why the value survives where
+    // `memory` (no file, deliberately) does not.
+    const [aAgain] = pluginStorage("acme.gone").store("state", {
+      initial: { value: "a" },
+    })
+    expect(aAgain).not.toBe(a)
+    expect(aAgain.value).toBe("a1")
+    const [memoryAgain] = pluginStorage("acme.gone").memory("draft", {
+      initial: { text: "draft" },
+    })
+    expect(memoryAgain.text).toBe("draft")
+    expect(memory).not.toBe(memoryAgain)
+    // Untouched: a different plugin's store keeps its live value and tracking.
+    const [bAgain] = pluginStorage("acme.kept").store("state", {
+      initial: { value: "b" },
+    })
+    expect(bAgain.value).toBe("b1")
+    expect(bAgain).toBe(b)
   })
 })

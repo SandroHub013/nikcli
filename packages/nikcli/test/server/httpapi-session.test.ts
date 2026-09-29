@@ -494,10 +494,12 @@ describe("Session HttpApi bridge", () => {
       parentID: string
       title: string
     }
-    expect(forked).toEqual(expect.objectContaining({ parentID: created.id }))
+    // A fork is its own conversation (upstream semantics), not a child.
+    expect(forked).not.toHaveProperty("parentID")
+    expect(forked.title).toEndWith("(fork #1)")
 
     const forkedChildren = (await request(`/session/${created.id}/children`, directory)) as unknown[]
-    expect(forkedChildren).toContainEqual(expect.objectContaining({ id: forked.id, parentID: created.id }))
+    expect(forkedChildren).not.toContainEqual(expect.objectContaining({ id: forked.id }))
 
     const aborted = (await post(`/session/${created.id}/abort`, directory, {})) as boolean
     expect(aborted).toBe(true)
@@ -644,6 +646,37 @@ describe("Session HttpApi bridge", () => {
     expect(response.status).toBe(404)
     const body = (await response.json()) as { name: string }
     expect(body.name).toBe("NotFoundError")
+  })
+
+  it("bridges generate: 404 for a missing session, 422 with the reason when there is nothing to answer from", async () => {
+    const directory = await makeProjectDir()
+    await request("/session", directory)
+    expect(HttpApiBridge.supports("/session/ses_x/generate", "POST")).toBe(true)
+
+    const call = (sessionID: string) => {
+      const url = new URL(`/session/${sessionID}/generate`, "http://nikcli.local")
+      url.searchParams.set("directory", directory)
+      return Server.fetch(
+        new Request(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt: "what changed?" }),
+        }),
+      )
+    }
+
+    const missing = await call("ses_does_not_exist")
+    expect(missing.status).toBe(404)
+    expect(((await missing.json()) as NotFoundBody).name).toBe("NotFoundError")
+
+    const created = (await post("/session", directory, { title: "generate" })) as { id: string }
+    const empty = await call(created.id)
+    expect(empty.status).toBe(422)
+    const body = (await empty.json()) as { name: string; data: { message: string } }
+    expect(body.name).toBe("SessionGenerateError")
+    expect(body.data.message).toContain("no conversation")
+    // A transient request: the session gained no messages from it.
+    expect(await request(`/session/${created.id}/message`, directory)).toEqual([])
   })
 
   it("returns the declared 404 body for a missing message", async () => {

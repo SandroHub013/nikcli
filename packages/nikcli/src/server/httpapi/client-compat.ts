@@ -287,6 +287,7 @@ export const PublicClientCompat = {
   "session.diff": ["result", "session.diff"],
   "session.fork": ["result", "session.fork"],
   "session.get": ["result", "session.get"],
+  "session.generate": ["result", "session.generate"],
   "session.goal": ["result", "session.goal"],
   "session.instructions": ["result", "session.instructions"],
   "session.list": ["resultAt", "session.list"],

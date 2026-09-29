@@ -1,4 +1,4 @@
-import { useDialog } from "@tui/ui/dialog"
+import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import {
   createContext,
@@ -45,6 +45,12 @@ const ctx = createContext<Context>()
 export type Slash = {
   name: string
   aliases?: string[]
+  /**
+   * `/name <text>` hands `<text>` to `onArguments` instead of running the
+   * command on selection. Picking it from autocomplete inserts `/name ` so the
+   * user can type the rest; the palette still calls `onSelect`.
+   */
+  arguments?: boolean
 }
 
 export type CommandOption = DialogSelectOption<string> & {
@@ -53,6 +59,7 @@ export type CommandOption = DialogSelectOption<string> & {
   slash?: Slash
   hidden?: boolean
   enabled?: boolean
+  onArguments?: (input: string, ctx: DialogContext) => void
 }
 
 function init() {
@@ -142,9 +149,23 @@ function init() {
           display: "/" + slash.name,
           description: option.description ?? option.title,
           aliases: slash.aliases?.map((alias) => "/" + alias),
+          name: slash.name,
+          arguments: slash.arguments === true && option.onArguments !== undefined,
           onSelect: () => result.trigger(option.value),
         }
       })
+    },
+    /**
+     * Runs the argument-taking slash command `text` names, if any: the first
+     * token of the first line picks the command, and everything after it —
+     * later lines included — is the input. Returns whether one ran, so the
+     * prompt knows not to send the text to the model.
+     */
+    runSlashArguments(text: string) {
+      const match = matchSlashArguments(text, visibleOptions())
+      if (!match) return false
+      match.run(dialog)
+      return true
     },
     keybinds(enabled: boolean) {
       setSuspendCount((count) => count + (enabled ? -1 : 1))
@@ -176,6 +197,29 @@ function init() {
     },
   }
   return result
+}
+
+/**
+ * The argument-taking slash command `text` invokes, if any. The first token of
+ * the first line names the command (or an alias); everything after it, later
+ * lines included, is the input. Commands without `slash.arguments` never
+ * match — they run on selection, and their text goes to the model as before.
+ */
+export function matchSlashArguments(text: string, options: CommandOption[]) {
+  const head = /^\/(\S+)(?:[ \t]+|\n|$)/.exec(text)
+  if (!head) return undefined
+  const name = head[1]
+  const option = options.find(
+    (item) =>
+      item.slash?.arguments === true &&
+      item.onArguments !== undefined &&
+      item.enabled !== false &&
+      (item.slash.name === name || item.slash.aliases?.includes(name)),
+  )
+  if (!option?.onArguments) return undefined
+  const input = text.slice(head[0].length).trim()
+  const handler = option.onArguments
+  return { option, input, run: (ctx: DialogContext) => handler(input, ctx) }
 }
 
 export function registerGlobalCommand(accessor: Accessor<CommandOption[]>): () => void {

@@ -444,6 +444,8 @@ import type {
   SessionUnshareOutput,
   SessionSummarizeInput,
   SessionSummarizeOutput,
+  SessionGenerateInput,
+  SessionGenerateOutput,
   SessionCommandInput,
   SessionCommandOutput,
   SessionShellInput,
@@ -3503,7 +3505,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/session/${encodeURIComponent(input.sessionID)}/fork`,
-            body: { messageID: input["messageID"] },
+            body: { messageID: input["messageID"], continuation: input["continuation"] },
             successStatus: 200,
             declaredStatuses: [404, 409],
             empty: false,
@@ -3574,6 +3576,18 @@ export function make(options: ClientOptions) {
             body: { providerID: input["providerID"], modelID: input["modelID"], auto: input["auto"] },
             successStatus: 200,
             declaredStatuses: [404, 409],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      generate: (input: SessionGenerateInput, requestOptions?: RequestOptions) =>
+        request<SessionGenerateOutput>(
+          {
+            method: "POST",
+            path: `/session/${encodeURIComponent(input.sessionID)}/generate`,
+            body: { prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [404, 422],
             empty: false,
           },
           requestOptions,

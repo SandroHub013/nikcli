@@ -342,6 +342,7 @@ export namespace PublicHttpApi {
       .handle("share", (request) => SessionHttpApi.handlers.share(request))
       .handle("unshare", (request) => SessionHttpApi.handlers.unshare(request))
       .handle("summarize", (request) => SessionHttpApi.handlers.summarize(request))
+      .handle("generate", (request) => SessionHttpApi.handlers.generate(request))
       .handle("command", (request) => SessionHttpApi.handlers.command(request))
       .handle("shell", (request) => SessionHttpApi.handlers.shell(request))
       .handle("permissionRespond", (request) => SessionHttpApi.handlers.permissionRespond(request))

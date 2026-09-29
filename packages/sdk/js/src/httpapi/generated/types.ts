@@ -1926,6 +1926,8 @@ export type SessionStatus2 =
 
 export type BooleanResult = boolean
 
+export type SessionModelRef = { providerID: string; modelID: string }
+
 export type TextPartInput = {
   type: "text"
   text: string
@@ -3097,6 +3099,8 @@ export type LoopRun = {
 }
 
 export type SessionStatusMap = { [x: string]: SessionStatus2 }
+
+export type SessionGenerateResult = { text: string; agent: string; model: SessionModelRef; finish: string }
 
 export type SessionContextBreakdown = {
   model?: { providerID: string; modelID: string; name: string; contextLimit: number }
@@ -4612,6 +4616,11 @@ export type SessionNotFoundError = { readonly name: "NotFoundError"; readonly da
 
 export type SessionBusyErrorBody = { readonly name: "SessionBusyError"; readonly data: { readonly [x: string]: any } }
 
+export type SessionGenerateError = {
+  readonly name: "SessionGenerateError"
+  readonly data: { readonly message: string }
+}
+
 export type SessionPartMismatchError = {
   readonly name: "PartMismatchError"
   readonly data: { readonly [x: string]: any }
@@ -5662,11 +5671,22 @@ export type SessionCreatePayload = {
 
 export type SessionUpdatePayload = { readonly title?: string; readonly time?: { readonly archived?: number } }
 
-export type SessionForkPayload = { readonly messageID?: string }
+export type SessionForkPayload = {
+  readonly messageID?: string
+  readonly continuation?: {
+    readonly prompt: string
+    readonly response: string
+    readonly agent: string
+    readonly model: { readonly providerID: string; readonly modelID: string }
+    readonly finish?: string
+  }
+}
 
 export type SessionRevertPayload = { readonly messageID: string; readonly partID?: string }
 
 export type SessionSummarizePayload = { readonly providerID: string; readonly modelID: string; readonly auto?: boolean }
+
+export type SessionGeneratePayload = { readonly prompt: string }
 
 export type SessionCommandPayload = {
   readonly messageID?: string
@@ -8340,6 +8360,7 @@ export type SessionUpdateOutput = Session2
 export type SessionForkInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly messageID?: SessionForkPayload["messageID"]
+  readonly continuation?: SessionForkPayload["continuation"]
 }
 
 export type SessionForkOutput = Session2
@@ -8376,6 +8397,13 @@ export type SessionSummarizeInput = {
 }
 
 export type SessionSummarizeOutput = BooleanResult
+
+export type SessionGenerateInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly prompt: SessionGeneratePayload["prompt"]
+}
+
+export type SessionGenerateOutput = SessionGenerateResult
 
 export type SessionCommandInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

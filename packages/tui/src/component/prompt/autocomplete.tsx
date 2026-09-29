@@ -425,17 +425,23 @@ export function Autocomplete(props: {
   })
 
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...command.slashes()]
+    const insert = (targetName: string) => {
+      const newText = "/" + targetName + " "
+      const cursor = props.input().logicalCursor
+      props.input().deleteRange(0, 0, cursor.row, cursor.col)
+      props.input().insertText(newText)
+      props.input().cursorOffset = Bun.stringWidth(newText)
+    }
+    // A slash that takes arguments is completed like a server command — the
+    // rest of the line is its input — instead of running on selection.
+    const results: AutocompleteOption[] = command
+      .slashes()
+      .map(({ name, arguments: takesInput, ...option }) =>
+        takesInput ? { ...option, onSelect: () => insert(name) } : option,
+      )
 
     for (const serverCommand of sync.data.command as Array<Command & { aliases?: string[] }>) {
       const suffix = serverCommand.skill ? " (Skill)" : serverCommand.mcp ? " (MCP)" : ""
-      const insert = (targetName: string) => {
-        const newText = "/" + targetName + " "
-        const cursor = props.input().logicalCursor
-        props.input().deleteRange(0, 0, cursor.row, cursor.col)
-        props.input().insertText(newText)
-        props.input().cursorOffset = Bun.stringWidth(newText)
-      }
       results.push({
         display: "/" + serverCommand.name + suffix,
         aliases: serverCommand.aliases?.map((a: string) => "/" + a),

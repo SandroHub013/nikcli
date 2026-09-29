@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.406.0 (September 2026)
+
+## Core
+
+- Add generate functionality for transient side-questions (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(session): add generate functionality for transient side-questions
+
 ## v1.405.0 (September 2026)
 
 ## Core
