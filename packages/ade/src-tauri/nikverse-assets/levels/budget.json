@@ -46,7 +46,12 @@
     "char_lod2_tris": 1500,
     "shop_tris": 12000,
     "plaza_tris": 20000,
-    "desk_tris": 2500
+    "desk_tris": 2500,
+    "draw_call_max": 120,
+    "tris_in_view_max": 250000,
+    "materiali_per_negozio_max": 8,
+    "_materiali_per_negozio": "Il negozio oggi usa 8 materiali e 8 primitive: intonaco, legno (fasce), scrivania (legno ma materiale separato), vetro, sedia, schermo (monitor, libri, tende), insegna, pavement. Con 8 negozi in vista fa 70 draw call, tetto 120. I due passaggi che lo portano a 6, quando si potra' guardare il render: unire m_desk a m_wood (le due usano gia' le texture del legno, quindi non si vede niente, e si uniscono anche le due mesh in una, da 70 a 62 draw call) e passare la sedia al legno. Non li ho fatti qui perche' cambiare i materiali senza poter guardare il render e' una scommessa.",
+    "negozi_in_vista": 8
   },
   "cast": {
     "user": "Mage",

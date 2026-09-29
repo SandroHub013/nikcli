@@ -26,6 +26,7 @@ export interface GltfJson {
   nodes?: Array<{ name?: string; mesh?: number; skin?: number; children?: number[]; translation?: number[] }>
   meshes?: Array<{ name?: string; primitives: Array<{ indices?: number; attributes: Record<string, number>; material?: number }> }>
   accessors?: Array<{ count: number }>
+  buffers?: Array<{ byteLength: number }>
   bufferViews?: Array<{ byteOffset?: number; byteLength: number }>
   images?: Array<{ bufferView?: number; uri?: string; mimeType?: string; name?: string }>
   textures?: Array<{ source?: number; sampler?: number; extensions?: { NIKVERSE_texture_ktx2?: { source?: number }; KHR_texture_basisu?: { source?: number } } }>

@@ -81,7 +81,7 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = {}): CityKit {
 
 export interface KitDeps extends CastDeps {
   /** Decodes the lightmaps too; without it the floors stay unlit by them (a test). */
-  decode?(png: Uint8Array, srgb: boolean): Promise<Texture>
+  decode?(bytes: Uint8Array, srgb: boolean): Promise<Texture>
 }
 
 /** Loads `city.glb` of a level and its two lightmaps. */
@@ -97,7 +97,7 @@ export async function loadKit(deps: KitDeps): Promise<CityKit> {
 
 async function lightmap(deps: KitDeps, name: string, size: number): Promise<Texture | undefined> {
   if (!deps.decode) return undefined
-  const url = `${deps.base}levels/${deps.level}/lightmap/${name}_${size}.png`
+  const url = `${deps.base}levels/${deps.level}/lightmap/${name}_${size}.ktx2`
   const bytes = await deps.fetchBytes(url).catch((error) => {
     throw new Error(`${url}: ${String(error?.message ?? error)}`)
   })

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { RGB_S3TC_DXT1_Format, SRGBColorSpace, Texture, type CompressedTexture } from "three/webgpu"
 import { bc1Ktx2, bc5Ktx2 } from "./fixtures/make-ktx2"
 import { KTX2_EXTENSION, imageSizes, readGlb, unpack, type Glb } from "./glb"
-import { createPictureDecoder, type Ktx2Support } from "./ktx2"
+import { createPictureDecoder, serveDataWasm, type Ktx2Support } from "./ktx2"
 import { isKtx2, ktx2Format, ktx2Refusal, ktx2Size } from "./ktx2-header"
 
 const fixture = bc1Ktx2(8, 8)
@@ -15,6 +15,58 @@ describe("KTX2 files", () => {
     expect(isKtx2(PNG)).toBe(false)
     expect(isKtx2(new Uint8Array(3))).toBe(false)
     expect(() => ktx2Size(PNG)).toThrow("not a ktx2")
+  })
+})
+
+/** The fixture with its one level zstd-compressed, as N3's files are: supercompression 2 and the level index saying both sizes. */
+function zstdOf(file: Uint8Array): Uint8Array {
+  const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
+  const at = Number(view.getBigUint64(80, true))
+  const size = Number(view.getBigUint64(88, true))
+  const packed = Bun.zstdCompressSync(file.subarray(at, at + size))
+  const out = new Uint8Array(at + packed.length)
+  out.set(file.subarray(0, at))
+  out.set(packed, at)
+  const edit = new DataView(out.buffer)
+  edit.setUint32(44, 2, true)
+  edit.setBigUint64(88, BigInt(packed.length), true)
+  edit.setBigUint64(96, BigInt(size), true)
+  return out
+}
+
+describe("the zstd decoder's WebAssembly, under a policy with no data: in connect-src", () => {
+  const wasm = "AGFzbQEAAAA="
+  const saved = globalThis.fetch
+  const noData = ((input: RequestInfo | URL) =>
+    typeof input === "string" && input.startsWith("data:") ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(new Response("page"))) as typeof fetch
+
+  test("that one address is answered from its own bytes, and every other fetch goes on to the page's", async () => {
+    const scope = { fetch: noData }
+    serveDataWasm(scope)
+    const served = await scope.fetch(`data:application/wasm;base64,${wasm}`)
+    expect([...new Uint8Array(await served.arrayBuffer())]).toEqual([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0])
+    expect(served.headers.get("content-type")).toBe("application/wasm")
+    expect(await (await scope.fetch("http://nikverse.localhost/assets/x.glb")).text()).toBe("page")
+    await expect(scope.fetch("data:text/plain;base64,QQ==")).rejects.toThrow("Failed to fetch")
+    // Twice is once: the wrapper is not wrapped again.
+    const once = scope.fetch
+    serveDataWasm(scope)
+    expect(scope.fetch).toBe(once)
+  })
+
+  test("a zstd BC1 file decodes with the policy in force", async () => {
+    globalThis.fetch = noData
+    try {
+      const decoder = createPictureDecoder({ extensions: { has: () => false, get: () => undefined } } as unknown as Ktx2Support)
+      const texture = (await decoder.decode(zstdOf(fixture), false)) as CompressedTexture
+      expect(texture.isCompressedTexture).toBe(true)
+      expect(texture.format).toBe(RGB_S3TC_DXT1_Format)
+      expect([texture.image.width, texture.image.height]).toEqual([8, 8])
+      expect(texture.mipmaps![0].data).toEqual(fixture.subarray(Number(new DataView(fixture.buffer, fixture.byteOffset).getBigUint64(80, true)), fixture.length))
+      decoder.dispose()
+    } finally {
+      globalThis.fetch = saved
+    }
   })
 })
 

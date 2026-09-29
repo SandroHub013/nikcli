@@ -232,7 +232,13 @@ async function openWorldOnce() {
     if ((await ev(browser, `document.documentElement.dataset.ready`, session).catch(() => "")) === "1") return session
     await sleep(250)
   }
-  throw new Error("la città non ha disegnato il primo fotogramma")
+  // What the page says about itself, so a red run says why and not only that.
+  const why = await ev(
+    browser,
+    `JSON.stringify({ city: document.documentElement.dataset.city, error: document.documentElement.dataset.cityError, backend: document.documentElement.dataset.backend, quality: document.documentElement.dataset.quality, why: document.documentElement.dataset.qualityWhy })`,
+    session,
+  ).catch(() => "?")
+  throw new Error(`la città non ha disegnato il primo fotogramma ${why}`)
 }
 async function openWorld() {
   // Right after a start the workbench may still be restoring its panes: the first click can land on nothing.

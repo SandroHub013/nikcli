@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { LEVELS_DIR, presentLevels } from "./test-cast"
-import { characterTriangles, imageSizes, nodeNamed, pngSize, readGlb, subtree, trianglesOf, wearsAccessories, type Glb } from "./glb"
+import { characterTriangles, imageSizes, nodeNamed, readGlb, subtree, trianglesOf, wearsAccessories, type Glb } from "./glb"
+import { ktx2Format, ktx2GpuBytes, ktx2Size } from "./ktx2-header"
 import { CLIP_NAME, BODIES, ROLES } from "./rig"
 import { LEVEL_IDS } from "./quality"
 import { LIGHTMAP_SIZE } from "./kit"
@@ -37,10 +38,15 @@ const levelFile = (level: string, name: string) => join(LEVELS_DIR, level, name)
 const glbOf = (path: string): Glb => readGlb(new Uint8Array(readFileSync(path)))
 const character = (level: string, body: string) => glbOf(levelFile(level, `character_${body}.glb`))
 const city = (level: string) => glbOf(levelFile(level, "city.glb"))
-const lightmaps = (level: string) => ["plaza_ground", "shop_floor"].map((name) => levelFile(level, `lightmap/${name}_${LIGHTMAP_SIZE[level]}.png`))
+const lightmaps = (level: string) => ["plaza_ground", "shop_floor"].map((name) => levelFile(level, `lightmap/${name}_${LIGHTMAP_SIZE[level]}.ktx2`))
 
-/** RGBA, 8 bits, and a third more for the mip chain: what the GPU holds for a PNG (it is not compressed there). */
-const gpuBytes = ({ width, height }: { width: number; height: number }) => width * height * 4 * (4 / 3)
+/** The picture files inside a glb, as bytes: the KTX2 the extension carries. */
+const picturesOf = (glb: Glb): Uint8Array[] =>
+  (glb.json.images ?? []).map((image) => {
+    const view = glb.json.bufferViews![image.bufferView!]
+    const start = view.byteOffset ?? 0
+    return glb.bin.subarray(start, start + view.byteLength)
+  })
 
 /** The triangles of every node whose name starts with `prefix`. */
 const trianglesNamed = (glb: Glb, prefix: string) =>
@@ -106,41 +112,50 @@ describe("the shipped assets against the generator's ceilings", () => {
         expect(trianglesNamed(glb, "shop_")).toBeGreaterThan(100)
       })
 
-      // The `.glb` carry PNG, which the GPU holds raw (four bytes a texel): Media's pictures alone are 104 MB of the frame's
-      // 130, and Alta's 392. N3's KTX2 files would be 13 MB and 49 MB, but nothing loads them yet (the loader needs a
-      // worker from a blob, which the world's policy does not allow, and its transcoder). `failing` turns red the day the
-      // pictures come from KTX2, and the test is then written for that.
-      const memory = skip ? test.skip : level === "alta" ? test.failing : test
-      memory("the pictures inside are square and no larger than the level's, and what the GPU holds for all of them is under the frame's budget", () => {
+      // The pictures are KTX2 in the GPU's own block format (BC1/BC5), which the GPU holds as they are: what it holds for them
+      // is what the files say (the level index's uncompressed sizes). Media's are 14 MB and Bassa's 5, where the same pictures as
+      // PNG were 104 and 30 (RGBA, four bytes a texel): that is how the frame gets under its 130 MB.
+      run("the pictures inside are square and no larger than the level's, and what the GPU holds for all of them is under the frame's budget", () => {
         let bytes = 0
         for (const body of BODIES) {
-          const sizes = imageSizes(character(level, body))
+          const glb = character(level, body)
+          const sizes = imageSizes(glb)
           expect(sizes).toHaveLength(1)
           expect(sizes[0]).toEqual({ width: budget.levels[level].texture, height: budget.levels[level].texture })
-          bytes += gpuBytes(sizes[0])
+          bytes += picturesOf(glb).reduce((sum, file) => sum + ktx2GpuBytes(file), 0)
         }
-        for (const size of imageSizes(city(level))) {
+        const shop = city(level)
+        for (const size of imageSizes(shop)) {
           expect(size.width).toBe(size.height)
           expect(size.width).toBeLessThanOrEqual(budget.levels[level].texture)
-          bytes += gpuBytes(size)
         }
+        bytes += picturesOf(shop).reduce((sum, file) => sum + ktx2GpuBytes(file), 0)
         for (const file of lightmaps(level)) {
-          const size = pngSize(new Uint8Array(readFileSync(file)))
-          expect(size).toEqual({ width: budget.levels[level].lightmap, height: budget.levels[level].lightmap })
-          bytes += gpuBytes(size)
+          const picture = new Uint8Array(readFileSync(file))
+          expect(ktx2Size(picture)).toEqual({ width: budget.levels[level].lightmap, height: budget.levels[level].lightmap })
+          bytes += ktx2GpuBytes(picture)
         }
-        // The frame's whole budget is 130 MB, and the pictures are not all of what it holds.
-        expect(bytes).toBeLessThan(130 * MB)
+        // The plan's ceiling for the pictures in memory is 40 MB; Alta's 2K set is 60 MB (lightmaps included) and is a download of its own (the plan lets
+        // Alta use Media's 1K until it exists), so it gets room for that set and no more.
+        expect(bytes).toBeLessThan((level === "alta" ? 64 : 40) * MB)
       })
 
-      // The architect's rule: no PNG in the package, not even at Bassa. The generator's `.glb` still embed PNG (its KTX2
-      // files are beside them, and are not yet packed in, nor are the lightmaps'); `failing` turns red the day they are,
-      // and the test is then written as a plain one.
-      const noPng = skip ? test.skip : test.failing
-      noPng("the pictures in the package are KTX2 and none is a PNG, the lightmaps' included", () => {
+      // The architect's rule: no PNG in the package, not even at Bassa; every picture is KTX2 in a block format the GPU reads as it is
+      // (BC1 for colour and data, BC5 for normals), zstd, and says so under our extension.
+      run("the pictures in the package are KTX2 in BC and none is a PNG, the lightmaps' included", () => {
         const glbs = [...BODIES.map((body) => character(level, body)), city(level)]
-        for (const glb of glbs) for (const image of glb.json.images ?? []) expect(image.mimeType).toBe("image/ktx2")
-        for (const file of lightmaps(level)) expect(file.endsWith(".png")).toBe(false)
+        for (const glb of glbs) {
+          for (const image of glb.json.images ?? []) expect(image.mimeType).toBe("image/ktx2")
+          for (const file of picturesOf(glb)) {
+            const { vkFormat, supercompression } = ktx2Format(file)
+            expect([131, 132, 141]).toContain(vkFormat)
+            expect(supercompression).toBe(2)
+          }
+        }
+        for (const file of lightmaps(level)) {
+          expect(file.endsWith(".ktx2")).toBe(true)
+          expect([131, 132, 141]).toContain(ktx2Format(new Uint8Array(readFileSync(file))).vkFormat)
+        }
       })
 
       // A rewrite of a file's BIN that leaves out what nothing points to by `bufferView.byteOffset` drops the meshopt-compressed
@@ -171,9 +186,9 @@ describe("the shipped assets against the generator's ceilings", () => {
           expect(nodeNamed(glb, `${body}_anchor_seat`)).toBeGreaterThanOrEqual(0)
           expect(nodeNamed(glb, `${body}_anchor_head`)).toBeGreaterThanOrEqual(0)
           expect(glb.json.skins).toHaveLength(1)
-          expect(glb.json.extensionsRequired ?? []).toEqual(["EXT_meshopt_compression"])
+          expect([...(glb.json.extensionsRequired ?? [])].sort()).toEqual(["EXT_meshopt_compression", "NIKVERSE_texture_ktx2"])
         }
-        expect(city(level).json.extensionsRequired ?? []).toEqual(["EXT_meshopt_compression"])
+        expect([...(city(level).json.extensionsRequired ?? [])].sort()).toEqual(["EXT_meshopt_compression", "NIKVERSE_texture_ktx2"])
       })
     })
   }

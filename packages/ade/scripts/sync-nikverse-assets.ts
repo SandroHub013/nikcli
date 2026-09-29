@@ -10,9 +10,10 @@
  * generator.
  *
  * Alta's 2K set is not in the installer (the plan's fourth decision: it is downloaded on its own, 14 MB), so
- * it is copied only with `--alta`, into a folder `.gitignore` leaves out. Left out on purpose: the KTX2
- * textures, which no file refers to yet (the `.glb` carry PNG). `--check` copies nothing and lists what
- * would change.
+ * it is copied only with `--alta`, into a folder `.gitignore` leaves out. The pictures are KTX2 in the GPU's own
+ * block format (BC1/BC5, zstd): inside each `.glb` (the extension `NIKVERSE_texture_ktx2`, no PNG anywhere) and, for
+ * the two lightmaps, as `.ktx2` files beside them. The generator's `textures/` folder is what went into the `.glb`
+ * and is not copied. `--check` copies nothing and lists what would change.
  *
  *   bun scripts/sync-nikverse-assets.ts [--from DIR] [--alta] [--check]
  */
@@ -50,7 +51,7 @@ for (const level of levels) {
   for (const name of cast) put(join(out, `character_${name}.glb`), join(to, level, `character_${name}.glb`))
   put(join(out, "city.glb"), join(to, level, "city.glb"))
   const size = config.levels[level].lightmap
-  for (const map of ["plaza_ground", "shop_floor"]) put(join(out, "lightmap", `${map}_${size}.png`), join(to, level, "lightmap", `${map}_${size}.png`))
+  for (const map of ["plaza_ground", "shop_floor"]) put(join(out, "lightmap", `${map}_${size}.ktx2`), join(to, level, "lightmap", `${map}_${size}.ktx2`))
 }
 
 // The animations are one file for everybody: the skeleton is the same at every level, and so must the file be.

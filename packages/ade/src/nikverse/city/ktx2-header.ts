@@ -38,3 +38,12 @@ export function ktx2Refusal(bytes: Uint8Array): string | undefined {
   if (supercompression !== NONE && supercompression !== ZSTD) return `supercompression ${supercompression} (only none and zstd are read)`
   return undefined
 }
+
+/** What the GPU holds for the file: the uncompressed bytes of every mip, as the level index says (zstd is undone on the way up). */
+export function ktx2GpuBytes(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const levels = view.getUint32(40, true)
+  let total = 0
+  for (let i = 0; i < Math.max(levels, 1); i++) total += Number(view.getBigUint64(80 + i * 24 + 16, true))
+  return total
+}
