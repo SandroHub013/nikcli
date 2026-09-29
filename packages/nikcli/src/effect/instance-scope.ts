@@ -1,4 +1,5 @@
 import { Instance } from "@/project/instance"
+import { AsyncResource } from "node:async_hooks"
 import { Cause, Effect, Exit, Fiber } from "effect"
 import { locallyInstance, locallyWorkspace, type InstanceContext } from "./instance-ref"
 import { FINALIZER_GRACE_MS, increment as lifecycleIncrement } from "./lifecycle-counters"
@@ -44,6 +45,16 @@ export const InstanceScope = {
   with<A, E, R>(input: WithInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | Error> {
     return Effect.callback<A, E | Error>((resume) => {
       let inner: Fiber.Fiber<A, E> | undefined
+      /**
+       * Starts the inner fiber's interruption from inside the instance's ALS scope.
+       *
+       * Finalizers run on whatever async context begins the interruption. Started
+       * from the caller — usually outside any instance — they lost the scope, and a
+       * finalizer that reads `Instance.directory` (legacy code in effect bodies
+       * does) threw `No context found for instance` and never finished. Bound
+       * while the scope is active, so the store travels with it.
+       */
+      let interruptInScope: ((fiber: Fiber.Fiber<A, E>) => void) | undefined
       let cancelled = false
       let leakTimer: ReturnType<typeof setTimeout> | undefined
       lifecycleIncrement("scope.created")
@@ -74,6 +85,7 @@ export const InstanceScope = {
           // keeps the same ctx the ALS scope just installed.
           const fiber = Instance.runtime.runFork(scoped as Effect.Effect<A, E, never>)
           inner = fiber
+          interruptInScope = AsyncResource.bind((target: Fiber.Fiber<A, E>) => target.interruptUnsafe())
           if (cancelled) fiber.interruptUnsafe()
           return new Promise<Exit.Exit<A, E>>((resolve) => {
             fiber.addObserver(resolve)
@@ -131,7 +143,10 @@ export const InstanceScope = {
         leakTimer.unref?.()
         const fiber = inner
         if (!fiber) return Effect.void
-        return Effect.asVoid(Fiber.interrupt(fiber))
+        // Same contract as `Fiber.interrupt` — start the interruption, then wait for
+        // the fiber, finalizers included — with the start made in scope.
+        interruptInScope?.(fiber)
+        return Effect.asVoid(Fiber.await(fiber))
       })
     })
   },

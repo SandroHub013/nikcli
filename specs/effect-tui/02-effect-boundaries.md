@@ -131,3 +131,20 @@ catch it.
 
 Both bridges now classify through one function, so they cannot drift into naming the same
 outcome two ways — asserted by running the same effect through each and comparing.
+
+## Interrupting a Scope Lost Its Instance Context — 2026-09-30
+
+`test/effect/multi-instance-teardown.test.ts` was failing on `live-main` (two of four tests, both timing out at 5 s; it
+is not in CI, which is how it stayed red). Measured: the finalizer of an interrupted `InstanceScope.with` read the legacy
+`Instance.directory` and got `No context found for instance` — the finalizer died before it finished, so the caller,
+which waits for finalizers, waited for a release that never came.
+
+Cause: finalizers run on whatever async context starts the interruption. `InstanceScope.with` started it with
+`Fiber.interrupt` from the caller, usually outside any instance, so the `AsyncLocalStorage` store the effect body relies on
+(legacy code inside effect bodies reads it) was gone by the time cleanup ran. The bridge now binds the interruption to the
+scope while it is active (`AsyncResource.bind`) and then awaits the fiber, which keeps the contract — interrupt, then wait
+for finalizers — and the `Cause.hasInterruptsOnly` outcome.
+
+Verified: that file 4/4 (was 2/4), `test/effect` + `test/workspace` 75/75, the 28 suites that use `InstanceScope` or
+`withInstanceAsync` each in its own process 0 failures, typecheck, oxlint, prettier, `check:workspace-isolation`, and the
+instance-bootstrap benchmark. The cost is one `AsyncResource.bind` per scope, not measured separately.
