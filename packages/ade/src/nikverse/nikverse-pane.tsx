@@ -59,7 +59,11 @@ export function NikversePane(props: {
    */
   let nonce = newNonce()
   // ADE's test build asks the world for its GPU timing (`?bench=1`), which the gate reads; a release build does not.
-  const benchQuery = () => (document.documentElement.dataset.adeBuild === "test" ? "?bench=1" : "")
+  const benchQuery = () =>
+    document.documentElement.dataset.adeBuild === "test"
+      ? // The gate's `--tune` (`samples=1&maxscale=0.9`) rides on the same door, and only in the test build.
+        `?bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
+      : ""
   const sourceFor = (secret: string) => `${worldUrl()}${benchQuery()}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })

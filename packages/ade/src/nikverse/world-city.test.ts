@@ -81,18 +81,25 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the query options are ?check=logo and ?renderer=classic, and nothing else: WebGPURenderer's WebGL backend cannot be asked for", () => {
-    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false })
-    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined, bench: false })
-    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined, bench: false })
+    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false, tune: undefined })
+    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined, bench: false, tune: undefined })
+    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined, bench: false, tune: undefined })
     expect(readOptions("?quality=alta").quality).toBe("alta")
     expect(readOptions("?x=1").quality).toBeUndefined()
+    // For measuring, `?samples=1|4` and `?maxscale=0.75..1`, and only through the bench's door: a page without it ignores them.
+    expect(readOptions("?bench=1&samples=1&maxscale=0.9").tune).toEqual({ samples: 1, maxScale: 0.9 })
+    expect(JSON.parse(JSON.stringify(readOptions("?shot=3&samples=4").tune))).toEqual({ samples: 4 })
+    expect(readOptions("?samples=1&maxscale=0.9").tune).toBeUndefined()
+    // WebGPU has no 2x, and a scale outside the governor's range is nothing.
+    expect(readOptions("?bench=1&samples=2&maxscale=0.5").tune).toBeUndefined()
+    expect(readOptions("?bench=1&maxscale=1.5").tune).toBeUndefined()
     // ?shot=1..8 is the bench; anything else is no shot.
-    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4, bench: false })
+    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4, bench: false, tune: undefined })
     expect(readOptions("?bench=1").bench).toBe(true)
     expect(readOptions("?bench=true").bench).toBe(false)
     for (const bad of ["?shot=0", "?shot=9", "?shot=2.5", "?shot=x", "?shot="]) expect(readOptions(bad).shot).toBeUndefined()
     for (const other of ["?check=other&renderer=webgpu", "?renderer=webgl", "?forceWebGL=1"])
-      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false })
+      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined, bench: false, tune: undefined })
     const source = readFileSync(join(import.meta.dir, "world", "world.js"), "utf8")
     expect(source).not.toMatch(/forceWebGL/)
   })

@@ -165,7 +165,10 @@ describe("where the world lives", () => {
     // The secret is in the address' fragment, fresh for each load of the frame.
     expect(source).toContain("`${worldUrl()}${benchQuery()}#n=${secret}`")
     // The bench door is asked for by the test build only.
-    expect(source).toContain('dataset.adeBuild === "test" ? "?bench=1" : ""')
+    expect(source).toContain('dataset.adeBuild === "test"')
+    expect(source).toContain("?bench=1")
+    // The gate's `--tune` rides on the same door, and on no other: nothing is added to a release build's address.
+    expect(source.slice(source.indexOf("const benchQuery"), source.indexOf("const sourceFor"))).toMatch(/adeBuild === "test"\s*\?[\s\S]*__nikverseTune[\s\S]*:\s*""/)
     expect(source).toContain("src={frameSrc()}")
     expect(source).toContain("nonce = newNonce()")
     // Every load of the frame asks the link whether its document is still there.

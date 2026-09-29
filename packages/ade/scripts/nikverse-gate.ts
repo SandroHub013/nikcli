@@ -39,6 +39,8 @@ const arg = (name: string) => {
 }
 const flag = (name: string) => process.argv.includes(name)
 const CYCLES = Number(arg("--cycles") ?? 3)
+/** For measuring an option of the renderer: `--tune "samples=1&maxscale=0.9"` reaches the world through the pane and the shot pages (`CityDeps.tune`). */
+const TUNE = arg("--tune")
 const REST_S = Number(arg("--rest") ?? 30)
 const CAP_S = Number(arg("--cap") ?? 600)
 const OUT = arg("--out")
@@ -53,12 +55,30 @@ const recordPath = join(root, ".ade-test", "record.json")
 
 const result: Record<string, unknown> = { startedAt: new Date().toISOString(), worktree: basename(root) }
 let startedByUs = false
+/** ADE Test is shut when this script started it, on any way out: the end, an error nobody caught, a signal (rule 26: nothing left running). */
+function stopApp() {
+  if (!startedByUs) return
+  startedByUs = false
+  spawnSync("bun", ["scripts/test-app.ts", "stop"], { cwd: adeDir, stdio: "ignore" })
+}
+process.on("exit", stopApp)
+for (const event of ["uncaughtException", "unhandledRejection"] as const)
+  process.on(event, (error) => {
+    console.error(`[nikverse-gate] ${event}:`, error)
+    stopApp()
+    process.exit(2)
+  })
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
+  process.on(signal, () => {
+    stopApp()
+    process.exit(130)
+  })
 function finish(code: number, extra: Record<string, unknown> = {}): never {
   Object.assign(result, extra)
   const json = JSON.stringify(result, null, 2)
   if (OUT) writeFileSync(OUT, json)
   console.log(json)
-  if (startedByUs) spawnSync("bun", ["scripts/test-app.ts", "stop"], { cwd: adeDir, stdio: "ignore" })
+  stopApp()
   process.exit(code)
 }
 // ---- the app -------------------------------------------------------------------------------------
@@ -139,7 +159,9 @@ async function connect(url: string): Promise<Send> {
     })
   return Object.assign(send, { on: (fn: (method: string, params: any) => void) => void listeners.push(fn) })
 }
-const page = await connect((await pageTarget(PORT))!.webSocketDebuggerUrl)
+const pageAtStart = await pageTarget(PORT)
+if (!pageAtStart) finish(2, { ok: false, error: "ADE Test answers but has no page to drive" })
+const page = await connect(pageAtStart!.webSocketDebuggerUrl)
 const browser = await connect(
   ((await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json()) as { webSocketDebuggerUrl: string })
     .webSocketDebuggerUrl,
@@ -210,6 +232,7 @@ async function frameSession() {
 }
 async function openWorldOnce() {
   showWindow()
+  await ev(page, `window.__nikverseTune = ${JSON.stringify(TUNE ?? "")}`)
   await ev(page, `document.querySelector('button[aria-label="Nuovo pannello"]')?.click()`)
   await sleep(600)
   await ev(
@@ -526,6 +549,7 @@ try {
         "--no-clip",
         "--label",
         "gate",
+        ...(TUNE ? ["--tune", TUNE] : []),
         "--out",
         join(root, ".ade-test", "gate-bench"),
       ],
@@ -583,6 +607,7 @@ try {
       stillCpuPercentMedian: median(rows.map((r) => r.still.frameCpu + r.still.gpuCpu)),
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
       level,
+      tune: TUNE ?? null,
       gpuTimings: timings,
       // The worst shot the ceiling was held to, and where the bench came from.
       worstShot: { ...worst, level: benchLevel, bench: benchFile },
