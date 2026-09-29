@@ -25,6 +25,7 @@
 
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
+import { orbSpins } from "./orb-spin"
 import "./orb-mark.css"
 
 export interface OrbMarkProps {
@@ -67,6 +68,7 @@ export function OrbMark(props: OrbMarkProps) {
       data-component="orb-mark"
       data-status={props.awake ? props.status : "asleep"}
       data-awake={props.awake ? "true" : undefined}
+      data-spin={orbSpins(props.awake, props.status, props.mode) ? "true" : undefined}
       data-mode={props.awake ? props.mode : undefined}
       data-rim={props.rim}
       style={{ "--orb-level": String(props.level) }}
