@@ -31,6 +31,7 @@ import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import { NikversePane } from "../nikverse/nikverse-pane"
 import type { Snapshot } from "../nikverse/protocol"
+import type { ForwardedChord } from "../nikverse/chords"
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -110,6 +111,7 @@ export interface PaneRendererDeps {
     picture: () => Snapshot | undefined
     openSession: (paneId: string) => void
     focusProject: (shopId: string) => void
+    chord: (chord: ForwardedChord) => void
     ignored: (reason: string) => void
   }
   /** Writes a captured frame and resolves to where it went. */
@@ -367,6 +369,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         focused={isFocused()}
         onOpenSession={deps.world.openSession}
         onFocusProject={deps.world.focusProject}
+        onChord={deps.world.chord}
         onIgnored={deps.world.ignored}
         onFocus={focus}
         onClose={() => deps.close(current().id)}

@@ -87,7 +87,8 @@ export type CommandName = Command["cmd"]
 export const ALLOWLIST: Readonly<Record<CommandName, { confirm: boolean }>> = {
   "open-session": { confirm: false },
   "focus-project": { confirm: false },
-  // Only with a modifier: a bare key is the world's own, and ADE's shortcuts all have one.
+  // Only with a modifier: a bare key is the world's own, and ADE's shortcuts all have one. ADE reads
+  // it as one of its own bindings and runs the command only if it is navigation (`chords.ts`).
   chord: { confirm: false },
   "release-focus": { confirm: false },
 }
@@ -175,7 +176,9 @@ const isWindowsWebview = () => typeof navigator !== "undefined" && /Windows/i.te
 /**
  * Where the world is served from. WebView2 answers a custom scheme only as
  * `http://<scheme>.localhost`, the other webviews as `<scheme>://localhost`
- * (the same rule as `mediaUrl`); the origin is what the port is offered to.
+ * (the same rule as `mediaUrl`). The frame's own origin is opaque (it is
+ * sandboxed without `allow-same-origin`), so this is where its files come from,
+ * not what it is.
  */
 export function worldOrigin(windows = isWindowsWebview()): string {
   return windows ? `http://${NIKVERSE_SCHEME}.localhost` : `${NIKVERSE_SCHEME}://localhost`
@@ -183,21 +186,4 @@ export function worldOrigin(windows = isWindowsWebview()): string {
 
 export function worldUrl(windows = isWindowsWebview()): string {
   return `${worldOrigin(windows)}/`
-}
-
-/**
- * The keydown ADE's own shortcut handler hears for a `chord` from the world.
- * Dispatched on the body so it goes through the same capture listener as a
- * real key, and never with the frame as its target.
- */
-export function chordEvent(chord: Extract<Command, { cmd: "chord" }>): KeyboardEvent {
-  return new KeyboardEvent("keydown", {
-    key: chord.key,
-    ctrlKey: chord.ctrl,
-    altKey: chord.alt,
-    shiftKey: chord.shift,
-    metaKey: chord.meta,
-    bubbles: true,
-    cancelable: true,
-  })
 }

@@ -1,23 +1,16 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createLifecycle } from "./lifecycle"
 import { createLink } from "./link"
-import {
-  PORT_OFFER,
-  PROTOCOL_VERSION,
-  chordEvent,
-  worldOrigin,
-  worldUrl,
-  type Command,
-  type Snapshot,
-} from "./protocol"
+import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
+import type { ForwardedChord } from "./chords"
 import "./nikverse.css"
 import { t } from "../i18n"
 
 /**
  * The NikVerse panel: a frame with the world in it, and ADE's end of the channel.
  *
- * The frame has an origin of its own (`worldUrl`) and no Tauri IPC, so what
- * runs in it can only ask ADE for the few things on the allowlist. The panel
+ * The frame is sandboxed to an opaque origin, so Tauri's IPC refuses it, and
+ * what runs in it can only ask ADE for the few things on the allowlist. The panel
  * pauses it when it cannot be seen and lets the frame go after five minutes
  * (`createLifecycle`); when it comes back the frame starts again from a fresh
  * picture. Anything that changes something asks in this panel's own DOM, never
@@ -32,6 +25,8 @@ export function NikversePane(props: {
   focused: boolean
   onOpenSession: (paneId: string) => void
   onFocusProject: (shopId: string) => void
+  /** A shortcut the world forwarded: ADE reads it as its own binding and runs it only if it is navigation. */
+  onChord: (chord: ForwardedChord) => void
   /** A message the world sent that ADE ignored, and why. */
   onIgnored?: (reason: string) => void
   onFocus?: () => void
@@ -51,7 +46,7 @@ export function NikversePane(props: {
       case "focus-project":
         return props.onFocusProject(command.project)
       case "chord":
-        return void document.body.dispatchEvent(chordEvent(command))
+        return props.onChord(command)
       case "release-focus":
         // The frame cannot give the focus back; blurring it hands it to ADE's own document, whose shortcuts listen on the window.
         return frame?.blur()
@@ -72,7 +67,9 @@ export function NikversePane(props: {
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
-    target.postMessage({ type: PORT_OFFER, version: PROTOCOL_VERSION }, worldOrigin(), [channel.port2])
+    // "*" because the frame's origin is opaque and no target origin can name it; the offer goes only to the
+    // window of the frame this panel made, once per load, and the world takes it only from its parent.
+    target.postMessage({ type: PORT_OFFER, version: PROTOCOL_VERSION }, "*", [channel.port2])
   }
 
   const lifecycle = createLifecycle({
@@ -202,8 +199,9 @@ export function NikversePane(props: {
             title={t("newPane.nikverse")}
             name="ade-nikverse"
             src={worldUrl()}
-            // The origin is its own (`allow-same-origin` keeps it, for the world's own storage); no top navigation, no popups, no forms.
-            sandbox="allow-scripts allow-same-origin"
+            // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
+            // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
+            sandbox="allow-scripts"
             referrerpolicy="no-referrer"
             onLoad={connect}
           />

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import type { SessionQuota } from "../session/quota"
 import { resolvePaneState, type PaneState, type PaneStatus } from "../grid/pane-state"
 import {
   BODIES,
@@ -112,6 +115,29 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
             compared++
           }
     expect(compared).toBe(6 * 5 * 4 * 2)
+  })
+
+  test("a session at its provider's limit reads as `limit`, as in its header, and as work or a question when those come first", () => {
+    const atLimit = { isLimit: true } as unknown as SessionQuota
+    const idle = pane("n1", { status: "idle" })
+    expect(snap({ open, panes: [idle], facts: () => ({ quota: atLimit }) }).agents[0]!.state).toBe("limit")
+    expect(snap({ open, panes: [idle], facts: () => ({}) }).agents[0]!.state).toBe("idle")
+    // A turn running or a prompt standing is this session's own, and ranks above the shared quota.
+    expect(snap({ open, panes: [pane("n1", { status: "working" })], facts: () => ({ quota: atLimit }) }).agents[0]!.state).toBe("work")
+    expect(snap({ open, panes: [idle], facts: () => ({ quota: atLimit, hasActions: true }) }).agents[0]!.state).toBe("perm")
+    // A quota that could not be read is not a limit.
+    const unread = { unavailable: true } as unknown as SessionQuota
+    expect(snap({ open, panes: [idle], facts: () => ({ quota: unread }) }).agents[0]!.state).toBe("idle")
+  })
+
+  test("the workbench hands the picture the quota the pane header reads, from the shared store", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const start = source.indexOf("const worldPicture = createMemo")
+    const body = source.slice(start, source.indexOf("const rootOfShop", start))
+    expect(body).toContain("quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now())")
+    expect(body).toContain("worldQuota ??= useSharedQuota()")
+    // Given back when the last NikVerse panel closes.
+    expect(source).toContain("worldQuota?.release()")
   })
 
   test("the agent's own report beats the label ADE guessed, as in the pane's header", () => {

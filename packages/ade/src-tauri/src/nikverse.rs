@@ -17,6 +17,16 @@
 //!
 //! Every answer carries the world's content security policy: its own files
 //! only, no network, no inline script.
+//!
+//! **The frame's origin is opaque, on purpose.** In Tauri every scheme registered
+//! with `register_uri_scheme_protocol` is a *local* origin for the IPC's ACL, so a
+//! world framed with `allow-same-origin` would have `http://nikverse.localhost`
+//! as its origin and the window's own capabilities with it. The panel frames it
+//! with `sandbox="allow-scripts"` alone: the origin becomes `null`, which Tauri
+//! refuses. Two consequences live here. `'self'` no longer matches anything on
+//! an opaque origin, so the policy names the host. And a module script or a
+//! `fetch` from an opaque origin is a CORS request, so the package, which is
+//! static and public, answers `Access-Control-Allow-Origin: *`.
 
 use tauri::http::{Method, Request, Response, StatusCode};
 
@@ -55,12 +65,16 @@ const INDEX: &str = "index.html";
 
 /// The policy of every answer: the world's own files, WebAssembly for its decoders, and no network.
 ///
-/// `connect-src 'self'` lets the world load its own assets and nothing else; the data it needs
-/// from ADE arrives on the channel, which is not a request.
-pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self'";
+/// The host is named, not `'self'`, because the frame's origin is opaque (see the top of the file):
+/// `http://nikverse.localhost` is the scheme as Windows answers it, `nikverse:` as the others do.
+/// `connect-src` lets the world load its own assets and nothing else; the data it needs from ADE
+/// arrives on the channel, which is not a request.
+pub const CSP: &str = "default-src http://nikverse.localhost nikverse:; script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'; img-src http://nikverse.localhost nikverse: data: blob:; connect-src http://nikverse.localhost nikverse:";
 
-const HEADERS: [(&str, &str); 3] = [
+const HEADERS: [(&str, &str); 4] = [
     ("Content-Security-Policy", CSP),
+    // The package is public and static, and an opaque origin can only load it through CORS.
+    ("Access-Control-Allow-Origin", "*"),
     ("X-Content-Type-Options", "nosniff"),
     // The world is served from the binary, so a stale copy would only ever be one from an older build.
     ("Cache-Control", "no-store"),
@@ -187,7 +201,11 @@ mod tests {
             assert_eq!(header(&response, "content-security-policy"), CSP, "{uri}");
             assert_eq!(header(&response, "x-content-type-options"), "nosniff", "{uri}");
         }
-        for directive in ["default-src 'self'", "script-src 'self' 'wasm-unsafe-eval'", "connect-src 'self'"] {
+        for directive in [
+            "default-src http://nikverse.localhost nikverse:",
+            "script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'",
+            "connect-src http://nikverse.localhost nikverse:",
+        ] {
             assert!(CSP.contains(directive), "manca {directive}");
         }
         let tokens: Vec<&str> = CSP.split(|c: char| c == ';' || c.is_whitespace()).collect();
@@ -196,6 +214,21 @@ mod tests {
         }
         let script = CSP.split(';').map(str::trim).find(|d| d.starts_with("script-src")).unwrap();
         assert!(!script.contains("data:") && !script.contains("blob:"), "script-src: {script}");
+    }
+
+    #[test]
+    fn the_policy_names_the_host_because_the_frame_is_opaque_and_the_package_answers_cors() {
+        // On an opaque origin `'self'` matches nothing: a policy that relied on it would load no script at all.
+        assert!(!CSP.contains("'self'"), "{CSP}");
+        // Public and static, so any origin may read it; nothing else is opened up.
+        for uri in ["nikverse://localhost/", "nikverse://localhost/world.js", "nikverse://localhost/nope", "nikverse://localhost/../x"] {
+            assert_eq!(header(&get(uri), "access-control-allow-origin"), "*", "{uri}");
+        }
+        // Not credentials: the world never carries any.
+        assert_eq!(header(&get("nikverse://localhost/"), "access-control-allow-credentials"), "");
+        // Both spellings of the scheme are allowed, and no other host.
+        assert!(CSP.contains("http://nikverse.localhost") && CSP.contains(" nikverse:"));
+        assert!(!CSP.contains("tauri") && !CSP.contains("ade-media"));
     }
 
     #[test]

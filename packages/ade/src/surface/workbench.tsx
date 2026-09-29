@@ -344,6 +344,9 @@ import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../
 import { createLineQueue } from "../session/line-queue"
 import type { Snapshot } from "../nikverse/protocol"
 import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
+import { forwardedCommand } from "../nikverse/chords"
+import { quotaForAgent } from "../session/quota"
+import { useSharedQuota } from "../session/quota-store"
 import {
   deliveryResult,
   enterAgain,
@@ -8309,9 +8312,25 @@ export function Workbench() {
    * standing permission prompt, and whether the process is there.
    */
   const worldSlots = createSlotBook()
+  /*
+   * The quota store, held only while a NikVerse panel exists, so a session at
+   * its limit reads as one in the world as it does in its header (`limit`).
+   * Taken in the memo and not in an effect: the effect would run after the
+   * first picture, and the store's signals would not be read by it.
+   */
+  let worldQuota: ReturnType<typeof useSharedQuota> | undefined
+  const worldOpen = createMemo(() => wb().panes.some((pane) => pane.mode === "nikverse"))
+  createEffect(() => {
+    if (worldOpen()) return
+    worldQuota?.release()
+    worldQuota = undefined
+  })
+  onCleanup(() => worldQuota?.release())
   const worldPicture = createMemo<Snapshot | undefined>((previous) => {
     const panes = wb().panes
-    if (!panes.some((pane) => pane.mode === "nikverse")) return undefined
+    if (!worldOpen()) return undefined
+    worldQuota ??= useSharedQuota()
+    const quotas = worldQuota.store
     const open = project()
     return worldSnapshot({
       panes,
@@ -8320,6 +8339,7 @@ export function Workbench() {
         activity: records.reports()[pane.id]?.activity,
         exited: !isRunning(pane.id),
         hasActions: Boolean(records.permissions()[pane.id]),
+        quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now()),
       }),
       decisions: choicesCounts().waiting,
       now: Date.now(),
@@ -8373,6 +8393,12 @@ export function Workbench() {
       focusProject: (id) => {
         const root = rootOfShop(id)
         if (root) void switchProjectTo(root)
+      },
+      // Read as one of ADE's own bindings, and run by its id only if it is navigation: no key event is made for the world.
+      chord: (chord) => {
+        const id = forwardedCommand(bindings, chord, platform)
+        if (id) void runCommand(id)
+        else console.warn("[nikverse] scorciatoia non inoltrata: non è di navigazione")
       },
       ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
     },

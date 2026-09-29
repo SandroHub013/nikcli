@@ -5,7 +5,6 @@ import {
   ALLOWLIST,
   NIKVERSE_SCHEME,
   PORT_OFFER,
-  chordEvent,
   decide,
   parseCommand,
   readFromWorld,
@@ -144,25 +143,18 @@ describe("where the world lives", () => {
     expect(PORT_OFFER).toBe(WORLD_PORT_OFFER)
   })
 
-  test("lint: the frame is loaded from the world's origin, sandboxed, with no way to navigate ADE", () => {
+  test("lint: the frame's origin is opaque, so Tauri's IPC refuses it, and it has no way to navigate ADE", () => {
     const source = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
     const frame = source.slice(source.indexOf("<iframe"), source.indexOf("/>", source.indexOf("<iframe")))
     expect(frame).toContain("src={worldUrl()}")
     expect(frame).not.toContain("srcdoc")
     const sandbox = /sandbox="([^"]*)"/.exec(frame)?.[1]?.split(/\s+/) ?? []
-    expect(sandbox).toEqual(["allow-scripts", "allow-same-origin"])
-    // The port is offered to the world's origin, never to "*".
-    expect(source).toContain("worldOrigin(), [channel.port2]")
-    expect(source).not.toContain('"*"')
-  })
-})
-
-describe("a chord from the world", () => {
-  test("becomes the keydown ADE's shortcut handler hears, with the modifiers it was sent", () => {
-    const event = chordEvent({ cmd: "chord", key: "k", ctrl: true, alt: false, shift: true, meta: false })
-    expect(event.type).toBe("keydown")
-    expect([event.key, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey]).toEqual(["k", true, false, true, false])
-    expect(event.bubbles).toBe(true)
-    expect(event.cancelable).toBe(true)
+    // Every scheme Tauri registers is a local origin for its IPC: the world must not have its own.
+    expect(sandbox).toEqual(["allow-scripts"])
+    expect(sandbox).not.toContain("allow-same-origin")
+    // No target origin can name an opaque one: the offer goes to "*", but only to the window of the frame this panel made.
+    expect(source).toContain('const target = frame?.contentWindow')
+    expect(source).toContain('PROTOCOL_VERSION }, "*", [channel.port2])')
+    expect(source.match(/postMessage\(/g)).toHaveLength(1)
   })
 })

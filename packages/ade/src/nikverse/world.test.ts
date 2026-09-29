@@ -222,6 +222,10 @@ describe("what the world's page is allowed to be", () => {
     expect(script).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|fetch\(|XMLHttpRequest|WebSocket|importScripts/)
   })
 
+  test("lint: it keeps nothing in the browser: an opaque origin has no storage, and the position is ADE's to save", () => {
+    expect(script).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie|caches\./)
+  })
+
   test("lint: it takes the port only from its parent, only once, and speaks nowhere else on `window`", () => {
     expect(script).toContain("message.source !== win.parent")
     expect(script).toContain("if (port ||")
