@@ -20,6 +20,7 @@ interface Budget {
   levels: Record<string, { label: string; texture: number; lightmap: number; lods: number[] }>
   budget: {
     asset_bassa_media_mb: number
+    alta_download_mb: number
     char_lod0_tris: number
     char_lod1_tris: number
     char_lod2_tris: number
@@ -81,9 +82,8 @@ describe("the shipped assets against the generator's ceilings", () => {
           statSync(levelFile(level, "city.glb")).size +
           lightmaps(level).reduce((sum, file) => sum + statSync(file).size, 0) +
           statSync(join(LEVELS_DIR, "rig_animations.glb")).size
-        // The ceiling is for Bassa and Media together in the installer's words, but each alone is held to it: Alta's is a separate download.
-        if (level !== "alta") expect(bytes).toBeLessThan(budget.budget.asset_bassa_media_mb * MB)
-        else expect(bytes).toBeLessThan(2 * budget.budget.asset_bassa_media_mb * MB)
+        // The ceiling is for Bassa and Media together in the installer's words, but each alone is held to it: Alta's is a separate download, with a ceiling of its own.
+        expect(bytes).toBeLessThan((level === "alta" ? budget.budget.alta_download_mb : budget.budget.asset_bassa_media_mb) * MB)
       })
 
       run("each body's triangles at each LOD are within the ceiling for that LOD, and each LOD is lighter than the one before", () => {
@@ -131,6 +131,16 @@ describe("the shipped assets against the generator's ceilings", () => {
         }
         // The frame's whole budget is 130 MB, and the pictures are not all of what it holds.
         expect(bytes).toBeLessThan(130 * MB)
+      })
+
+      // The architect's rule: no PNG in the package, not even at Bassa. The generator's `.glb` still embed PNG (its KTX2
+      // files are beside them, and are not yet packed in, nor are the lightmaps'); `failing` turns red the day they are,
+      // and the test is then written as a plain one.
+      const noPng = skip ? test.skip : test.failing
+      noPng("the pictures in the package are KTX2 and none is a PNG, the lightmaps' included", () => {
+        const glbs = [...BODIES.map((body) => character(level, body)), city(level)]
+        for (const glb of glbs) for (const image of glb.json.images ?? []) expect(image.mimeType).toBe("image/ktx2")
+        for (const file of lightmaps(level)) expect(file.endsWith(".png")).toBe(false)
       })
 
       run("what the world asks of the files is in them: the LODs, the anchors, the skin and the one extension the loader has a decoder for", () => {

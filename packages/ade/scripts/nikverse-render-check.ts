@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { buildWorld } from "../src/nikverse/city/build-world"
+import { bc1Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
 
 const root = join(import.meta.dir, "..")
 const world = join(root, "src", "nikverse", "world")
@@ -80,6 +81,8 @@ const server = Bun.serve({
       const type = level[2].endsWith(".png") ? "image/png" : "model/gltf-binary"
       return new Response(file, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
     }
+    // A KTX2 file in the GPU's own format (BC1), made here, for the check of the KTX2 path.
+    if (url.pathname === "/fixtures/bc1.ktx2") return new Response(bc1Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
     switch (url.pathname) {
       case "/":
       case "/index.html":
@@ -330,7 +333,7 @@ async function cityCheck(renderer: "classic" | "auto") {
     if ((await evaluate<string>(`document.documentElement.dataset.city`)) === "failed")
       throw new Error(`the city did not start: ${await evaluate(`document.documentElement.dataset.cityError`)}`)
     const backend = await evaluate<string>(`document.documentElement.dataset.backend`)
-    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " kit " + document.documentElement.dataset.kit + " " + (document.documentElement.dataset.castWhy ?? "")`)
+    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " kit " + document.documentElement.dataset.kit + " " + (document.documentElement.dataset.qualityWhy ?? "")`)
     const levelState = await evaluate<string>(`document.documentElement.dataset.quality + " (" + document.documentElement.dataset.qualityWhy + ")"`)
     console.log(`  [${renderer}] cast: ${castState.trim()}; level: ${levelState}`)
     const castOk = castState.startsWith("ok kit ok")
@@ -514,8 +517,43 @@ async function levelsCheck() {
   }
 }
 
+/**
+ * A KTX2 file decoded by three's loader under the world's real policy: read on the main thread, with the
+ * policy as it is (no `blob:`, no eval): a violation would be a browser error and the check would fail.
+ */
+async function ktx2Check() {
+  try {
+    problems.length = 0
+    await open(`/?check=logo&ktx2=1`, { width: 400, height: 300 })
+    await until(`document.documentElement.dataset.ready === "1"`, "the page")
+    const result = await evaluate<{ width: number; height: number; compressed: boolean; srgb: boolean; ms: number }>(`(async () => {
+      const m = await import("/assets/world/city.js")
+      // What the loader asks of a renderer, from a real WebGL context: the compressed formats it offers.
+      const gl = document.createElement("canvas").getContext("webgl2")
+      const renderer = { extensions: { has: (n) => !!gl.getExtension(n), get: (n) => gl.getExtension(n) } }
+      const decoder = m.createPictureDecoder(renderer)
+      const bytes = new Uint8Array(await (await fetch("/fixtures/bc1.ktx2")).arrayBuffer())
+      const t0 = performance.now()
+      const texture = await Promise.race([
+        decoder.decode(bytes, false),
+        new Promise((_, no) => setTimeout(() => no(new Error("no answer from the KTX2 loader in 15 s")), 15000)),
+      ])
+      decoder.dispose()
+      return { width: texture.image.width, height: texture.image.height, compressed: texture.isCompressedTexture === true, srgb: texture.colorSpace === "srgb", ms: Math.round(performance.now() - t0) }
+    })()`)
+    report(
+      "ktx2: a KTX2 file in the GPU's format decodes under the world's policy",
+      result.width === 8 && result.height === 8 && result.compressed && result.srgb && problems.length === 0,
+      `${result.width}x${result.height}, compressed texture, ${result.srgb ? "sRGB from the file" : "colour space WRONG"}, ${result.ms} ms${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
+    )
+  } catch (error) {
+    report("ktx2", false, `${String((error as Error).message ?? error)}${problems.length ? ` (browser errors: ${problems.slice(0, 3).join(" | ")})` : ""}`)
+  }
+}
+
 try {
   await levelsCheck()
+  await ktx2Check()
   await logoCheck("classic")
   await logoCheck("auto")
   await cityCheck("classic")

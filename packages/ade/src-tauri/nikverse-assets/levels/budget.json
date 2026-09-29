@@ -40,6 +40,7 @@
   },
   "budget": {
     "asset_bassa_media_mb": 12,
+    "alta_download_mb": 20,
     "char_lod0_tris": 15000,
     "char_lod1_tris": 5000,
     "char_lod2_tris": 1500,

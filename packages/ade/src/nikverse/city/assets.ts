@@ -20,6 +20,11 @@ export interface AssetDeps {
   fetchBytes(url: string): Promise<ArrayBuffer>
   /** A PNG as a texture, in the colour space its use needs; without it the materials keep their plain colours (a test). */
   decode?(png: Uint8Array, srgb: boolean): Promise<Texture>
+  /**
+   * A picture that could not be decoded (the KTX2 transcoder did not start, a file is damaged) does not fail the
+   * model: it keeps its plain colour, and this is told once per file.
+   */
+  warn?(message: string): void
 }
 
 export interface CastDeps extends AssetDeps {
@@ -63,6 +68,7 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
     const decode = deps.decode
     const seen = new Set<Material>()
     const jobs: Array<Promise<void>> = []
+    const failed = new Set<string>()
     loaded.scene.traverse((o) => {
       const material = (o as Mesh).material as MeshStandardMaterial | undefined
       if (!material || seen.has(material)) return
@@ -72,7 +78,10 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
       const put = async (slot: Slot) => {
         const png = own[slot]
         if (!png) return
-        const texture = await decode(png, slot === "map")
+        const texture = await decode(png, slot === "map").catch((error) => {
+          failed.add(String(error?.message ?? error).slice(0, 120))
+        })
+        if (!texture) return
         if (slot === "map") material.map = texture
         else if (slot === "normalMap") material.normalMap = texture
         else {
@@ -86,6 +95,7 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
       for (const slot of ["map", "normalMap", "ormMap"] as const) jobs.push(put(slot))
     })
     await Promise.all(jobs)
+    if (failed.size) deps.warn?.(`${url}: texture non decodificate (${[...failed].join("; ")}): tinte unite`)
   }
   return loaded
 }

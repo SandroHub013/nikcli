@@ -100,9 +100,15 @@ async function lightmap(deps: KitDeps, name: string, size: number): Promise<Text
   const bytes = await deps.fetchBytes(url).catch((error) => {
     throw new Error(`${url}: ${String(error?.message ?? error)}`)
   })
-  const texture = await deps.decode(new Uint8Array(bytes), true)
-  texture.colorSpace = SRGBColorSpace
-  return texture
+  try {
+    const texture = await deps.decode(new Uint8Array(bytes), true)
+    texture.colorSpace = SRGBColorSpace
+    return texture
+  } catch (error) {
+    // The floor is drawn without its baked light instead of the shop not being drawn at all.
+    deps.warn?.(`${url}: lightmap non decodificata (${String((error as Error)?.message ?? error).slice(0, 120)})`)
+    return undefined
+  }
 }
 
 export { cityUrl }

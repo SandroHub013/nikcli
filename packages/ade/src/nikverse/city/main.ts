@@ -33,11 +33,11 @@ import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } fro
 import type { Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
-import { decodePicture } from "./assets"
 import { loadLevel } from "./load-level"
 import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
+import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
 import { STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
@@ -111,6 +111,7 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
 }
 
 export { decodePicture, loadCast } from "./assets"
+export { createPictureDecoder } from "./ktx2"
 export { loadKit } from "./kit"
 export { LEVELS, resolveLevel } from "./quality"
 
@@ -124,7 +125,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   // The level decides the renderer and the assets: what the machine has, and what was asked for.
   const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
   const resolved = resolveLevel(deps.quality, gpu)
-  let level = resolved.level
+  const level = resolved.level
   const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
   const { renderer, canvas, backend } = chosen
   stage.append(canvas)
@@ -133,10 +134,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (chosen.why) doc.documentElement.dataset.backendWhy = chosen.why
 
   if (check) return logoCheckHandle(deps, renderer, canvas, backend)
-  doc.documentElement.dataset.qualityWhy = resolved.why
 
-  // N3's people, shop and plaza; what does not load stays a placeholder, and the page says why.
+  // N3's people, shop and plaza; what does not load stays a placeholder, and the page says why. The pictures
+  // are KTX2 in the GPU's own format, or PNG.
   const base = deps.assets ?? new URL("./assets/", win.location.href).href
+  const pictures = createPictureDecoder(renderer as unknown as Ktx2Support)
   const loaded = await loadLevel(level, {
     base,
     fetchBytes: async (url) => {
@@ -144,15 +146,17 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       if (!response.ok) throw new Error(`${response.status}`)
       return response.arrayBuffer()
     },
-    decode: decodePicture,
+    decode: pictures.decode,
   })
+  pictures.dispose()
   const { cast, kit } = loaded
-  level = loaded.level
   const data = doc.documentElement.dataset
   data.quality = level.id
+  data.assets = loaded.assets.id
+  // Why the level is what it is, and what is plain or missing in it.
+  data.qualityWhy = [resolved.why, ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
   data.cast = cast ? "ok" : "failed"
   data.kit = kit ? "ok" : "failed"
-  if (loaded.notes.length) data.castWhy = loaded.notes.join(" | ").slice(0, 400)
 
   const logo = parseLogo()
   const town = createTown()

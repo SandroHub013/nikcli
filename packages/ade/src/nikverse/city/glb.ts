@@ -6,6 +6,8 @@
  * which check the shipped files against the generator's ceilings.
  */
 
+import { ktx2Size } from "./ktx2-header"
+
 export interface GltfJson {
   asset?: { version?: string }
   extensionsUsed?: string[]
@@ -16,7 +18,7 @@ export interface GltfJson {
   accessors?: Array<{ count: number }>
   bufferViews?: Array<{ byteOffset?: number; byteLength: number }>
   images?: Array<{ bufferView?: number; uri?: string; mimeType?: string; name?: string }>
-  textures?: Array<{ source?: number; sampler?: number }>
+  textures?: Array<{ source?: number; sampler?: number; extensions?: { KHR_texture_basisu?: { source?: number } } }>
   materials?: unknown[]
   animations?: Array<{ name?: string; channels: unknown[] }>
   skins?: unknown[]
@@ -64,7 +66,8 @@ export function imageSizes(glb: Glb): Array<{ width: number; height: number }> {
     const view = glb.json.bufferViews?.[image.bufferView]
     if (!view) throw new Error(`image ${image.name ?? "?"} points at no buffer view`)
     const start = view.byteOffset ?? 0
-    return pngSize(glb.bin.subarray(start, start + view.byteLength))
+    const bytes = glb.bin.subarray(start, start + view.byteLength)
+    return image.mimeType === "image/ktx2" ? ktx2Size(bytes) : pngSize(bytes)
   })
 }
 
@@ -131,7 +134,9 @@ export function unpack(glb: Glb): Unpacked {
   const pictures = new Map<string, Partial<Record<Slot, Uint8Array>>>()
   const pngOf = (ref: Ref): Uint8Array | undefined => {
     if (!ref) return undefined
-    const image = glb.json.images?.[glb.json.textures?.[ref.index]?.source ?? -1]
+    // A KTX2 picture is the texture's `KHR_texture_basisu` source; a PNG is its plain one.
+    const texture = glb.json.textures?.[ref.index]
+    const image = glb.json.images?.[texture?.extensions?.KHR_texture_basisu?.source ?? texture?.source ?? -1]
     const view = image?.bufferView === undefined ? undefined : glb.json.bufferViews?.[image.bufferView]
     return view ? glb.bin.slice(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength) : undefined
   }
@@ -154,6 +159,12 @@ export function unpack(glb: Glb): Unpacked {
   delete json.images
   delete json.textures
   delete json.samplers
+  // The loader is not given the KTX2 extension (it would need its own worker and a blob address): it must not be told to expect it.
+  for (const list of ["extensionsUsed", "extensionsRequired"] as const) {
+    const left = json[list]?.filter((name) => name !== "KHR_texture_basisu")
+    if (left?.length) json[list] = left
+    else delete json[list]
+  }
 
   const text = new TextEncoder().encode(JSON.stringify(json))
   const padded = new Uint8Array(text.length + ((4 - (text.length % 4)) % 4)).fill(0x20)
