@@ -4,7 +4,26 @@ import { join } from "node:path"
 import type { BufferGeometry, Mesh, MeshBasicMaterial, Object3D } from "three/webgpu"
 import { readGlb } from "./glb"
 import { SHOP_TINTS, shopLook } from "./kit"
-import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, DESK_HALF, DESK_HEIGHT, DOOR_WIDTH, SHOP_DEPTH, SHOP_WIDTH, WALL_HEIGHT, WALL_THICKNESS, deskLocal, ringRadius, slotCenter, wallsLocal } from "./layout"
+import {
+  CHAIR_SEAT_TOP,
+  COMPUTER_HEIGHT,
+  DESKS_PER_SHOP,
+  DESK_HALF,
+  DESK_HEIGHT,
+  DOOR_WIDTH,
+  MOUTH,
+  PIER,
+  PLATFORM_RADIUS,
+  PLATFORM_TOP,
+  SHOP_DEPTH,
+  SHOP_WIDTH,
+  WALL_HEIGHT,
+  WALL_THICKNESS,
+  WATER_Y,
+  deskLocal,
+  islandHeight,
+  wallsLocal,
+} from "./layout"
 import { LEVELS_DIR, kitFor, presentLevels } from "./test-cast"
 
 /**
@@ -185,34 +204,57 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     }
   })
 
-  test("the plots on the paving are the twelve slots of the first ring, in its places", async () => {
-    const plots = parts(meshNamed(await plaza(), "plaza_lots").geometry)
-    expect(plots).toHaveLength(12)
-    const wanted = Array.from({ length: 12 }, (_, slot) => slotCenter(slot))
-    for (const slot of wanted) {
-      expect([slot.x, slot.z, plots.some((p) => Math.hypot(p.center[0] - slot.x, p.center[2] - slot.z) < 0.5)]).toEqual([slot.x, slot.z, true])
+  test("the island's ground is the layout's: where the character walks, the terrain is at islandHeight", async () => {
+    const terrain = meshNamed(await plaza(), "island_terrain")
+    const pos = terrain.geometry.attributes.position
+    let checked = 0
+    for (let i = 0; i < pos.count; i++) {
+      const p = { x: pos.getX(i), z: pos.getZ(i) }
+      const r = Math.hypot(p.x, p.z)
+      const onPier = Math.abs(p.x) <= PIER.halfWidth + 0.1 && p.z >= PIER.fromZ - 0.1 && p.z <= PIER.toZ + 0.1
+      // The mouth's banks are lowered a few degrees past its edge, where nobody walks.
+      const nearMouth = r > MOUTH.radius - 2 && Math.PI - Math.abs(Math.atan2(p.x, -p.z)) < MOUTH.halfAngle + (8 * Math.PI) / 180
+      if (r < PLATFORM_RADIUS + 0.05 || r > 33 || onPier || nearMouth) continue
+      expect([p.x.toFixed(2), p.z.toFixed(2), near(pos.getY(i), islandHeight(p), 0.02)]).toEqual([p.x.toFixed(2), p.z.toFixed(2), true])
+      checked++
     }
-    for (const plot of plots) expect(near(Math.hypot(plot.center[0], plot.center[2]), ringRadius(0), 0.2)).toBe(true)
+    expect(checked).toBeGreaterThan(1000)
   })
 
-  test("the paving reaches past the first ring, the hologram's ring floats at the anchor, and the pedestal is inside what stops the character", async () => {
+  test("the deck is the platform, the pier runs from it to the beach at its height, and the lagoon lies at the water's height", async () => {
     const kit = await kitFor(level)
-    const ground = parts(meshNamed(kit.plaza, "plaza_slabs").geometry)[0]
-    expect(ground.max[0]).toBeGreaterThan(ringRadius(0) + SHOP_WIDTH / 2)
-    expect(near(ground.max[1], 0, 0.001)).toBe(true)
+    const deck = parts(meshNamed(kit.plaza, "island_deck").geometry)[0]
+    expect(near(deck.max[1], PLATFORM_TOP, 0.005)).toBe(true)
+    expect(near(deck.max[0], PLATFORM_RADIUS, 0.05)).toBe(true)
+    const pier = parts(meshNamed(kit.plaza, "island_pier").geometry)
+    const planks = pier.filter((b) => near(b.max[1], PIER.top, 0.005))
+    expect(planks.length).toBeGreaterThan(10)
+    expect(Math.min(...planks.map((b) => b.min[2]))).toBeLessThanOrEqual(PIER.fromZ + 0.05)
+    expect(Math.max(...planks.map((b) => b.max[2]))).toBeGreaterThanOrEqual(PIER.toZ - 0.05)
+    for (const b of pier) expect(Math.max(Math.abs(b.min[0]), Math.abs(b.max[0]))).toBeLessThanOrEqual(PIER.halfWidth + 0.005)
+    const water = meshNamed(kit.plaza, "island_water")
+    expect(water.userData.nkv_shade).toBe("water")
+    expect(water.geometry.hasAttribute("color")).toBe(true)
+    // The file's compression shares one exponent across a vertex's coordinates: its step grows with the distance
+    // from the centre (a centimetre at the beach, 12 cm on the far sea). Where the character wades it is exact enough.
+    const pos = water.geometry.attributes.position
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.hypot(pos.getX(i), pos.getZ(i)) > 33) continue
+      expect([pos.getX(i).toFixed(1), pos.getZ(i).toFixed(1), near(pos.getY(i), WATER_Y, 0.01)]).toEqual([pos.getX(i).toFixed(1), pos.getZ(i).toFixed(1), true])
+    }
+  })
+
+  test("the hologram's ring floats at the anchor, and the pedestal is inside what stops the character", async () => {
+    const kit = await kitFor(level)
+    expect(kit.island).toBe(true)
     expect(kit.ringY).toBeGreaterThan(1)
     expect(kit.ringY).toBeLessThan(3)
     const kerb = parts(meshNamed(kit.plaza, "plaza_kerb").geometry)
-    expect(Math.max(...kerb.map((p) => p.max[0]))).toBeLessThanOrEqual(3.1 + 1e-6)
-  })
-
-  test("what the character walks on is flat at the ground's height, out to the far side of the road", async () => {
-    const kit = await kitFor(level)
-    for (const name of ["plaza_setts", "plaza_slabs", "env_garden", "env_road", "env_walk_out"]) {
-      const box = parts(meshNamed(kit.plaza, name).geometry)
-      const low = Math.min(...box.map((p) => p.min[1]))
-      const high = Math.max(...box.map((p) => p.max[1]))
-      expect([name, near(low, 0, 0.01) && near(high, 0, 0.01)]).toEqual([name, true])
+    expect(Math.max(...kerb.map((p) => p.max[0]))).toBeLessThanOrEqual(1.75 + 1e-3)
+    // Every piece of the projector stands on the deck, under the ring.
+    for (const p of parts(meshNamed(kit.plaza, "plaza_base").geometry)) {
+      expect(p.min[1]).toBeGreaterThanOrEqual(PLATFORM_TOP - 1e-3)
+      expect(p.max[1]).toBeLessThan(PLATFORM_TOP + kit.ringY)
     }
   })
 
@@ -253,7 +295,7 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     let drawn = kit.plaza.children.length
     for (let v = 0; v < kit.variants; v++) drawn += kit.shop(v).children.length
     expect(drawn).toBe(nodes.length)
-    const shades = ["lit", "vcol", "emit", "add", "mul"]
+    const shades = ["lit", "vcol", "emit", "add", "mul", "water", "sky"]
     for (const node of nodes) {
       const shade = (node.extras as { nkv_shade?: string } | undefined)?.nkv_shade
       expect([node.name, shades.includes(shade ?? "")]).toEqual([node.name, true])

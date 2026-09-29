@@ -6,7 +6,7 @@
  */
 
 import type { Agent, Shop } from "../protocol"
-import { COMPUTER_HEIGHT, deskLocal, placementOf, toWorld, type Vec2 } from "./layout"
+import { COMPUTER_HEIGHT, deskLocal, islandHeight, placementOf, toWorld, type Vec2 } from "./layout"
 import type { Picture } from "./town"
 
 /** The world clock of every shot, seconds: the hologram and the people are posed at this time. */
@@ -16,7 +16,8 @@ export const SHOT_WIDTH = 1600
 export const SHOT_HEIGHT = 900
 export const SHOT_COUNT = 8
 
-const SHOP_SLOTS = [0, 2, 4, 6, 8, 10]
+// Six chiringuiti on the north beach, from -65° to 65°.
+const SHOP_SLOTS = [0, 1, 2, 3, 4, 5]
 const SHOP_NAMES = ["nikcli", "ade", "voice", "web", "api", "docs"]
 /** Three people in each shop, by shop: every state that puts somebody at a desk shows up. */
 const STATES: ReadonlyArray<ReadonlyArray<Agent["state"]>> = [
@@ -65,62 +66,64 @@ export interface Shot {
   luminance: [number, number]
 }
 
-const at = (v: Vec2, y: number): [number, number, number] => [v.x, y, v.z]
+/** A ground point at `y` above the island's ground there (the beach is higher than the lagoon's floor). */
+const at = (v: Vec2, y: number): [number, number, number] => [v.x, y + islandHeight(v), v.z]
 const shop = (index: number) => placementOf(SHOP_SLOTS[index])
-/** A point of a shop's own frame, in the world. */
+/** A point of a shop's own frame, in the world, `y` above the ground. */
 const inShop = (index: number, x: number, y: number, z: number): [number, number, number] => at(toWorld(shop(index), { x, z }), y)
-/** A point on the ring's radius `r` at `degrees` clockwise from the direction the character first looks at. */
+/** A point on the radius `r` at `degrees` clockwise from the direction the character first looks at, `y` above the ground. */
 const ring = (degrees: number, r: number, y: number): [number, number, number] => {
   const a = (degrees * Math.PI) / 180
-  return [Math.sin(a) * r, y, -Math.cos(a) * r]
+  return at({ x: Math.sin(a) * r, z: -Math.cos(a) * r }, y)
 }
 
 const desk0 = deskLocal(0)
 const desk1 = deskLocal(1)
 
-// The luminance bands are from the first bench (2026-09-29, Bassa and Media on the same machine): 0.6 times the darker
-// level's mean to 1.6 times the lighter's. Wide enough for an effect that changes the mood, narrow enough to catch a
-// picture that goes dark or blows out.
+// The luminance bands are from the first bench on the island (Bassa and Media on the same machine): 0.6 times the
+// darker level's mean to 1.6 times the lighter's. Wide enough for an effect that changes the mood, narrow enough to
+// catch a picture that goes dark or blows out. Until that run they are wide.
+const FIRST_RUN: [number, number] = [0.02, 0.6]
 
 export const SHOTS: ReadonlyArray<Shot> = [
-  // 1. The square from the entrance of a shop, at a person's height: the hologram, and the shops across.
-  { n: 1, name: "plaza", eye: [0, 1.7, 14], look: [0, 2.3, 0], fov: 58,
-    about: "La piazza dall'ingresso, ad altezza d'uomo: l'ologramma e il selciato.", luminance: [0.08, 0.28] },
-  // 2. The ring from the air, three quarters.
-  { n: 2, name: "aerial", eye: [-30, 26, 34], look: [0, 0, 0], fov: 58,
-    about: "La vista aerea 3/4 dell'anello intero: il diorama.", luminance: [0.09, 0.27] },
-  // 3. A shop's front with its sign, close.
-  { n: 3, name: "facade", eye: [2.5, 1.6, -9], look: [0, 2.6, -16.5], fov: 58,
-    about: "Una facciata con l'insegna, da vicino: materiali e testo.", luminance: [0.08, 0.21] },
-  // 4. Inside a shop, over the shoulder of somebody typing, at their monitor.
+  // 1. From the north shore: the hologram against the glow, the mouth and its reefs, the reflection in the lagoon.
+  { n: 1, name: "lagoon", eye: ring(0, 17, 1.7), look: [0, 2.3, 0], fov: 58,
+    about: "Dalla riva nord: l'ologramma contro il bagliore, la bocca, gli scogli con la schiuma, il riflesso in laguna.", luminance: FIRST_RUN },
+  // 2. The island from the air: the mouth in front, the islet, the crescent of chiringuiti, the coloured terraces.
+  { n: 2, name: "aerial", eye: [-38, 42, 70], look: [0, 3, -14], fov: 50,
+    about: "Il diorama: la bocca, l'isolotto, la mezzaluna dei chiringuiti, le terrazze colorate, l'oceano.", luminance: FIRST_RUN },
+  // 3. A chiringuito's front: roof, sign, string lights, loungers.
+  { n: 3, name: "chiringuito", eye: inShop(0, 1.5, 1.6, 9), look: inShop(0, 0, 2.4, 0), fov: 58,
+    about: "Il fronte di un chiringuito: tetto, insegna, lucine, lettini, materiali.", luminance: FIRST_RUN },
+  // 4. Over the shoulder of somebody typing at the bar.
   {
     n: 4,
     name: "desk",
     eye: inShop(0, desk0.chair.x + 1.4, 1.7, desk0.chair.z + 1.2),
     look: inShop(0, desk0.computer.x, COMPUTER_HEIGHT, desk0.computer.z),
     fov: 58,
-    about: "Dentro un negozio, sopra la spalla di chi scrive: il personaggio.",
-    luminance: [0.15, 0.4],
+    about: "Sopra la spalla di chi scrive al portatile: il personaggio.",
+    luminance: FIRST_RUN,
   },
-  // 5. Somebody who asks for permission, from the far side of the ring, 38 m away: the mark over them must still read.
+  // 5. Somebody who asks for permission, from across the lagoon, about 38 m away: the mark over them must still read.
   {
     n: 5,
     name: "permission",
-    eye: [-6.5, 2.2, -19.5],
+    eye: ring(70, 19, 2.2),
     look: inShop(3, desk1.chair.x, 1.6, desk1.chair.z),
     fov: 22,
-    about: "Un agente che aspetta l'utente, visto da 38 m: la leggibilità.",
-    luminance: [0.11, 0.37],
+    about: "Un agente che aspetta l'utente, dall'altra riva della laguna: la leggibilità sopra l'acqua.",
+    luminance: FIRST_RUN,
   },
-  // 6. The hologram, close.
+  // 6. The hologram, close, with the north chiringuiti and the violet peak behind.
   { n: 6, name: "hologram", eye: [0, 2.4, 7], look: [0, 2.6, 0], fov: 58,
-    about: "L'ologramma da vicino.", luminance: [0.17, 0.48] },
-  // 7. The street between two shops, out to the edge of the world.
-  { n: 7, name: "street", eye: ring(90, 8, 1.7), look: ring(90, 70, 2.4), fov: 72,
-    about: "La strada tra due negozi verso l'esterno: skyline e periferia.", luminance: [0.08, 0.22] },
-  // 8. A shop coming up from the pavement, half way.
-  { n: 8, name: "rise", eye: [-7, 2, 2], look: [-16.45, 1, -9.5], fov: 58,
-    about: "Un negozio a metà della salita: la transizione.", rising: true, luminance: [0.07, 0.23] },
+    about: "L'ologramma da vicino, con dietro i chiringuiti nord e la vetta viola.", luminance: FIRST_RUN },
+  // 7. Between two chiringuiti up the slope: palms, the plants near and far, the fog. The vegetation's worst case.
+  { n: 7, name: "slopes", eye: ring(52, 24, 1.7), look: ring(52, 80, 22), fov: 62,
+    about: "Fra due chiringuiti verso il pendio: palme, piante vicine e lontane, nebbia.", luminance: FIRST_RUN },
+  // 8. A chiringuito coming up out of the sand, half way.
+  { n: 8, name: "rise", eye: inShop(5, -3, 2, 14), look: inShop(5, 0, 1, 0), fov: 58,
+    about: "Un chiringuito a metà della salita dalla sabbia: la transizione.", rising: true, luminance: FIRST_RUN },
 ]
 
 export function shotOf(n: number): Shot | undefined {

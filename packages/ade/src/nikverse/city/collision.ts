@@ -52,6 +52,26 @@ export interface World {
   boxes: ReadonlyArray<Box>
   /** The ground the character may walk on: a disc around the square. */
   radius: number
+  /** A sector of the disc that is water: around the south (straight behind the first look), past `radius`. */
+  mouth?: { halfAngle: number; radius: number }
+}
+
+/** Takes a circle out of the mouth's sector: back toward the centre, or sideways onto the shore, whichever is nearer. */
+export function outOfMouth(p: Vec2, radius: number, mouth: { halfAngle: number; radius: number }): Vec2 {
+  const d = Math.hypot(p.x, p.z)
+  const inner = mouth.radius - radius
+  if (d <= inner) return p
+  // Clockwise from straight ahead (-z), as the slots count; the mouth is centred on ±π.
+  const angle = Math.atan2(p.x, -p.z)
+  const fromSouth = Math.PI - Math.abs(angle)
+  const edge = mouth.halfAngle + Math.asin(Math.min(1, radius / d))
+  if (fromSouth >= edge) return p
+  const back = { x: (p.x / d) * inner, z: (p.z / d) * inner }
+  const side = Math.sign(angle) || 1
+  const onShore = side * (Math.PI - edge)
+  const aside = { x: Math.sin(onShore) * d, z: -Math.cos(onShore) * d }
+  const far = (q: Vec2) => Math.hypot(q.x - p.x, q.z - p.z)
+  return far(back) <= far(aside) ? back : aside
 }
 
 /** The thinnest thing a step must not skip. */
@@ -66,6 +86,7 @@ function settle(p: Vec2, radius: number, world: World): Vec2 {
   const d = Math.hypot(at.x, at.z)
   const limit = world.radius - radius
   if (d > limit) at = { x: (at.x / d) * limit, z: (at.z / d) * limit }
+  if (world.mouth) at = outOfMouth(at, radius, world.mouth)
   return at
 }
 

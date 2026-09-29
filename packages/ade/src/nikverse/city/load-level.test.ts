@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import { LEVELS_DIR } from "./test-cast"
 import { loadLevel } from "./load-level"
@@ -42,7 +43,10 @@ describe("what a level loads", () => {
     for (const note of loaded.notes) expect(note).toContain("transcoder non partito")
     // The models say plain colours; the floors say their baked light is missing.
     expect(loaded.notes.filter((note) => note.includes("tinte unite")).length).toBeGreaterThanOrEqual(5)
-    expect(loaded.notes.filter((note) => note.includes("lightmap")).length).toBe(2)
+    // One note for each lightmap the level ships.
+    const lightmaps = readdirSync(join(LEVELS_DIR, "bassa", "lightmap")).filter((f) => f.endsWith(".ktx2")).length
+    expect(lightmaps).toBeGreaterThan(0)
+    expect(loaded.notes.filter((note) => note.includes("lightmap")).length).toBe(lightmaps)
     expect(new Set(loaded.notes).size).toBe(loaded.notes.length)
   })
 

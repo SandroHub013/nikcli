@@ -3,12 +3,16 @@ import {
   DESKS_PER_SHOP,
   DESK_HALF,
   DOOR_WIDTH,
+  MOUTH,
+  PLATFORM_TOP,
   PLAZA_RADIUS,
   RING_SLOTS,
   SHOP_DEPTH,
   SHOP_WIDTH,
   WALL_THICKNESS,
+  WATER_Y,
   deskLocal,
+  islandHeight,
   placeShops,
   placementOf,
   ringRadius,
@@ -52,17 +56,47 @@ function overlap(a: Box, b: Box): boolean {
 }
 
 describe("the ring of shops", () => {
-  test("slot 0 is straight ahead of the square, and slots go clockwise from above, twelve to a ring", () => {
-    expect(slotCenter(0).x).toBeCloseTo(0, 9)
-    expect(slotCenter(0).z).toBeCloseTo(-ringRadius(0), 9)
-    // A quarter of the way round is to the right.
-    expect(slotCenter(3).x).toBeCloseTo(ringRadius(0), 9)
-    expect(slotCenter(3).z).toBeCloseTo(0, 9)
-    expect(slotCenter(6).z).toBeCloseTo(ringRadius(0), 9)
+  test("slot 0 is 13° to the right of straight ahead and slot 1 13° to the left, then 26° further each pair, twelve to a ring", () => {
+    const deg = (slot: number) => (slotCenter(slot).angle * 180) / Math.PI
+    expect(deg(0)).toBeCloseTo(13, 9)
+    expect(deg(1)).toBeCloseTo(-13, 9)
+    expect(deg(2)).toBeCloseTo(39, 9)
+    expect(deg(3)).toBeCloseTo(-39, 9)
+    expect(deg(10)).toBeCloseTo(143, 9)
+    expect(deg(11)).toBeCloseTo(-143, 9)
+    // Clockwise from above, from the first look (-z): a positive angle is to the right.
+    expect(slotCenter(0).x).toBeGreaterThan(0)
+    expect(slotCenter(0).z).toBeLessThan(0)
+    expect(Math.hypot(slotCenter(0).x, slotCenter(0).z)).toBeCloseTo(ringRadius(0), 9)
     // The next ring starts again at the front, further out.
     expect(Math.hypot(slotCenter(12).x, slotCenter(12).z)).toBeCloseTo(ringRadius(1), 9)
-    expect(slotCenter(12).z).toBeLessThan(slotCenter(0).z)
+    expect(slotCenter(12).angle).toBeCloseTo(slotCenter(0).angle, 9)
     expect(ringRadius(1)).toBeGreaterThan(ringRadius(0))
+  })
+
+  test("no slot's centre is in the lagoon's mouth, and neighbours are the same distance apart", () => {
+    for (let slot = 0; slot < 24; slot++) {
+      const fromSouth = Math.PI - Math.abs(slotCenter(slot).angle)
+      expect([slot, fromSouth >= MOUTH.halfAngle - 1e-9]).toEqual([slot, true])
+    }
+    const gap = (a: number, b: number) => Math.hypot(slotCenter(a).x - slotCenter(b).x, slotCenter(a).z - slotCenter(b).z)
+    expect(gap(0, 1)).toBeCloseTo(gap(0, 2), 9)
+    expect(gap(0, 1)).toBeGreaterThan(SHOP_WIDTH + 6)
+  })
+
+  test("the island's ground: the deck under the hologram, the lagoon's floor under the water, the beach above it", () => {
+    expect(islandHeight({ x: 0, z: 0 })).toBe(PLATFORM_TOP)
+    expect(islandHeight({ x: 0, z: 13 })).toBe(0)
+    expect(islandHeight({ x: 0, z: 13 })).toBeLessThan(WATER_Y)
+    const beach = placementOf(0).center
+    expect(islandHeight(beach)).toBeGreaterThan(WATER_Y)
+    // A chiringuito stands on flat sand, from its back wall to its bar.
+    for (const z of [-SHOP_DEPTH / 2, 0, SHOP_DEPTH / 2]) expect(islandHeight(toWorld(placementOf(0), { x: 0, z }))).toBeCloseTo(islandHeight(beach), 9)
+    // The ground never jumps more than the deck's step.
+    for (let r = 0; r < 40; r += 0.05) {
+      const step = Math.abs(islandHeight({ x: 0, z: r + 0.05 }) - islandHeight({ x: 0, z: r }))
+      expect(step).toBeLessThanOrEqual(PLATFORM_TOP - 0.1)
+    }
   })
 
   test("every shop's door faces the square: the door is nearer to the centre than the back wall", () => {

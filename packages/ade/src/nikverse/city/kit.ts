@@ -56,6 +56,8 @@ export interface CityKit {
   shop(variant?: number, tint?: ShopTint): Group
   /** Whether every lightmap the file asks for was loaded. */
   lit: boolean
+  /** Whether the file is the island (its ground has heights: `islandHeight`), not a flat city. */
+  island: boolean
 }
 
 /** How strongly the baked light is added to what the scene lights, on N3's older files. */
@@ -196,6 +198,7 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
     ringY,
     variants: kinds.length,
     lit: wanted.every((name) => maps.has(name)),
+    island: plaza.children.some((o) => named(o, "island_")),
     shop(variant = 0, tint) {
       const pieces = variants.get(kinds[((variant % kinds.length) + kinds.length) % kinds.length])!
       const group = new Group()

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { blocked, moveWithCollisions, pushOut } from "./collision"
 import { BODY_RADIUS } from "./controller"
-import { DOOR_WIDTH, SHOP_DEPTH, SHOP_WIDTH, placementOf, shopBoxes, toLocal, toWorld, type Vec2 } from "./layout"
+import { DOOR_WIDTH, MOUTH, SHOP_DEPTH, SHOP_WIDTH, placementOf, shopBoxes, toLocal, toWorld, type Vec2 } from "./layout"
 
 const SLOT = 2
 const placement = placementOf(SLOT)
@@ -67,15 +67,21 @@ describe("the character does not stand in a wall", () => {
       for (let step = 0; step < 300; step++) {
         if (next() < 0.05) heading += (next() - 0.5) * 2
         const speed = 3 + next() * 40
-        const was = insideLocal(toLocal(placement, at))
-        at = moveWithCollisions(at, { x: (Math.sin(heading) * speed) / 60, z: (Math.cos(heading) * speed) / 60 }, R, world)
-        const local = toLocal(placement, at)
-        expect(blocked(at, R - 1e-6, world)).toBe(false)
-        if (!was && insideLocal(local)) {
-          entered++
-          // Coming in, the centre is in line with the gap and on the door's side.
-          expect(Math.abs(local.x)).toBeLessThanOrEqual(DOOR_WIDTH / 2)
-          expect(local.z).toBeGreaterThan(0)
+        // A frame's move in pieces no longer than the collision's own steps: at 40 m/s a frame is 0.7 m, and where the
+        // centre is at the end of it says little about where it came in.
+        const move = { x: (Math.sin(heading) * speed) / 60, z: (Math.cos(heading) * speed) / 60 }
+        const pieces = Math.ceil(Math.hypot(move.x, move.z) / 0.15)
+        for (let k = 0; k < pieces; k++) {
+          const was = insideLocal(toLocal(placement, at))
+          at = moveWithCollisions(at, { x: move.x / pieces, z: move.z / pieces }, R, world)
+          const local = toLocal(placement, at)
+          expect(blocked(at, R - 1e-6, world)).toBe(false)
+          if (!was && insideLocal(local)) {
+            entered++
+            // Coming in, the centre is in line with the gap and on the door's side.
+            expect(Math.abs(local.x)).toBeLessThanOrEqual(DOOR_WIDTH / 2)
+            expect(local.z).toBeGreaterThan(0)
+          }
         }
       }
     }
@@ -125,5 +131,32 @@ describe("the edge of the ground", () => {
     expect(Math.hypot(at.x, at.z)).toBeCloseTo(50 - R, 9)
     for (let i = 0; i < 100; i++) at = moveWithCollisions(at, { x: 0, z: 300 }, R, edge)
     expect(Math.hypot(at.x, at.z)).toBeLessThanOrEqual(50 - R + 1e-9)
+  })
+})
+
+describe("the lagoon's mouth", () => {
+  const island = { boxes: [], radius: 33, mouth: MOUTH }
+  const inMouth = (p: Vec2) => Math.hypot(p.x, p.z) > MOUTH.radius && Math.PI - Math.abs(Math.atan2(p.x, -p.z)) < MOUTH.halfAngle
+
+  test("walking south from the islet stops at the mouth's edge, in the lagoon", () => {
+    let at: Vec2 = { x: 0, z: 5 }
+    for (let i = 0; i < 400; i++) at = moveWithCollisions(at, { x: 0, z: 0.1 }, R, island)
+    expect(Math.hypot(at.x, at.z)).toBeCloseTo(MOUTH.radius - R, 6)
+  })
+
+  test("from every direction, at random, nobody ends up in the mouth, and the beach either side of it is walkable", () => {
+    const next = random(11)
+    for (let trial = 0; trial < 200; trial++) {
+      let at: Vec2 = { x: (next() - 0.5) * 30, z: (next() - 0.5) * 30 }
+      const heading = next() * Math.PI * 2
+      for (let step = 0; step < 100; step++) {
+        at = moveWithCollisions(at, { x: Math.sin(heading) * 0.3, z: Math.cos(heading) * 0.3 }, R, island)
+        expect([trial, step, inMouth(at)]).toEqual([trial, step, false])
+      }
+    }
+    // Just outside the mouth's edge, on the beach, a body stands where it is.
+    const a = MOUTH.halfAngle + 0.2
+    const beach = { x: Math.sin(Math.PI - a) * 25, z: -Math.cos(Math.PI - a) * 25 }
+    expect(moveWithCollisions(beach, { x: 0, z: 0 }, R, island)).toEqual(beach)
   })
 })

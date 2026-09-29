@@ -34,6 +34,7 @@ import {
 } from "three/webgpu"
 import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
+import { paintIsland } from "./water"
 import { shopLook, type CityKit } from "./kit"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
@@ -47,9 +48,11 @@ import {
   SHOP_WIDTH,
   WALL_HEIGHT,
   deskLocal,
+  islandHeight,
   standLocal,
   toWorld,
   wallsLocal,
+  type Vec2,
 } from "./layout"
 import { detailAt, poseDue, shopInRange } from "./lod"
 import { parseLogo, type Logo } from "./logo"
@@ -63,8 +66,11 @@ const plane = new PlaneGeometry(1, 1)
 /** How far a shop is below the pavement when it has not come up yet. */
 const SUNK = WALL_HEIGHT + 0.8
 
-/** A sphere that holds a whole shop: its half diagonal, the awning and the sign above it. */
-const SHOP_RADIUS = 5.5
+/**
+ * A sphere that holds a whole shop: its half diagonal, the awning and the sign above it, and A2's bay window and
+ * planters in front (the chiringuiti of the island's next stage get their own).
+ */
+export const SHOP_RADIUS = 8
 
 /** The sign over the door, as N3 has its board: 3.5 wide, 0.56 tall, its middle 3.02 up and on the front face. */
 const SIGN_WIDTH = 3.3
@@ -127,6 +133,8 @@ export interface CityView {
   update(town: Town, player: Player, t: number, camera: PerspectiveCamera): void
   /** The user's character. */
   user: Person
+  /** The height of the ground under a point: the island's, or 0 with the placeholders. */
+  groundAt(p: Vec2): number
   /** How many shop groups and people are drawn, for the tests. */
   counts(): { shops: number; people: number }
   /** The person drawn for a session, and the monitor at its desk, for the tests. */
@@ -230,7 +238,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
   // With the file's city the far towers fade into the haze at the foot of its sky dome, which is this colour.
-  scene.fog = kit ? new Fog(0x211f31, 60, 300) : new Fog(0x0b1226, 70, 210)
+  scene.fog = kit?.island ? new Fog(0x3a3560, 70, 330) : kit ? new Fog(0x211f31, 60, 300) : new Fog(0x0b1226, 70, 210)
 
   scene.add(new HemisphereLight(0xb4c6ff, 0x3a2e24, 1.6))
   scene.add(new AmbientLight(0x505878, 0.9))
@@ -244,7 +252,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   if (kit) ground.position.y = -0.05
   scene.add(ground)
   if (kit) {
-    // N3's plaza: the paving with its plots, the pedestal and the kerb, two lamps.
+    // The file's plaza, or the island: its ground, the platform with the pedestal, the pier, the lagoon and the sky.
     scene.add(kit.plaza)
   } else {
     const plaza = new Mesh(new CircleGeometry(PLAZA_RADIUS, 72), new MeshStandardMaterial({ color: 0x2a303a, roughness: 0.8 }))
@@ -274,8 +282,15 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     scene.add(poles)
   }
 
+  // The island's lagoon and dusk sky are painted here, not by the file.
+  const island = kit?.island ? paintIsland(kit.plaza, kind) : undefined
+
   // On N3's pedestal the hologram has no base of its own, and floats where the file's ring anchor says.
   const hologram = createHologram(logo, kind, kit ? { base: false, ringY: kit.ringY } : undefined)
+  // The island's ground has heights (the deck, the lagoon's floor, the beach); the placeholders are flat.
+  const groundAt = kit?.island ? islandHeight : () => 0
+  // On the island the hologram stands on the deck: the file's ring anchor is measured from it.
+  hologram.group.position.y += groundAt({ x: 0, z: 0 })
   scene.add(hologram.group)
 
   const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true }, cast?.get(USER_BODY))
@@ -300,7 +315,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     }
     const wanted = town.deskCount(entity.id)
     if (view.desks !== wanted) buildDesks(view, wanted, kit)
-    view.group.position.set(entity.placement.center.x, -SUNK * (1 - liftEase(entity.lift)), entity.placement.center.z)
+    view.group.position.set(entity.placement.center.x, groundAt(entity.placement.center) - SUNK * (1 - liftEase(entity.lift)), entity.placement.center.z)
     view.group.rotation.y = entity.placement.yaw
     return view
   }
@@ -362,6 +377,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
 
   return {
     scene,
+    groundAt,
     hologram,
     user,
     update(town, player, t, camera) {
@@ -386,10 +402,11 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         disposeScreens(view)
         shops.delete(id)
       }
-      user.group.position.set(player.x, 0, player.z)
+      user.group.position.set(player.x, groundAt(player), player.z)
       user.group.rotation.y = player.heading
       poseWalking(user, player.speed, t)
       hologram.update(t, camera)
+      island?.update(t, camera)
     },
     person(paneId) {
       for (const v of shops.values()) {

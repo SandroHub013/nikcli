@@ -10,13 +10,69 @@
 export const PLAZA_RADIUS = 14
 export const RING_SLOTS = 12
 /**
- * Radius of ring 0, where N3's plaza has its twelve plots; each next ring is `RING_STEP` further, out on the
- * plain beyond the paving.
+ * Radius of ring 0: the island's beach, where the chiringuiti stand with their bars toward the hologram; each next
+ * ring is `RING_STEP` further, on terraces cut into the slope.
  */
-const RING_FIRST = 19
+const RING_FIRST = 28
 const RING_STEP = 12
-/** Ground beyond the last ring the world lets the character reach. */
-export const WORLD_MARGIN = 22
+/** Ground beyond the last ring the world lets the character reach: from the beach to the foot of the slope. */
+export const WORLD_MARGIN = 5
+/** The slots' angles: `SLOT_FIRST` either side of straight ahead, then `SLOT_STEP` apart, so the lagoon's mouth stays free. */
+const SLOT_FIRST = 13
+const SLOT_STEP = 26
+
+/**
+ * The lagoon's mouth: deep water to the south (straight behind the first look), `halfAngle` either side of it and
+ * past `radius`. The character does not walk there.
+ */
+export const MOUTH = { halfAngle: (37 * Math.PI) / 180, radius: 19 }
+
+/** The platform the hologram stands on, at the island's centre: its radius and the height of its deck. */
+export const PLATFORM_RADIUS = 6
+export const PLATFORM_TOP = 0.3
+/** The lagoon's surface: its floor is the ground the character wades on, 18 cm under it. */
+export const WATER_Y = 0.18
+
+/**
+ * The island's ground along a radius, as (radius, height) points joined by straight lines: the deck, a step down to
+ * the islet's sand (dry to r 8.3), the lagoon's floor, the beach rising to where the chiringuiti stand, the foot of the slope. The
+ * generator builds the terrain from the same points.
+ */
+export const ISLAND_PROFILE: ReadonlyArray<readonly [number, number]> = [
+  [0, PLATFORM_TOP],
+  [PLATFORM_RADIUS, PLATFORM_TOP],
+  [PLATFORM_RADIUS + 1e-3, 0.24],
+  [8, 0.22],
+  [9.5, 0],
+  [17.5, 0],
+  [19.5, 0.3],
+  [24.5, 0.45],
+  [31.5, 0.45],
+  [33, 0.8],
+]
+
+/** The pier from the islet to the north beach, straight ahead of the spawn: its half width, where it runs, its deck. */
+export const PIER = { halfWidth: 1.1, fromZ: -19.5, toZ: -7.2, top: PLATFORM_TOP }
+
+/** The height of the island's ground under a point: the profile along the radius, and the pier's deck over it. */
+export function islandHeight(p: Vec2): number {
+  const ground = profileHeight(Math.hypot(p.x, p.z))
+  const onPier = Math.abs(p.x) <= PIER.halfWidth && p.z >= PIER.fromZ && p.z <= PIER.toZ
+  return onPier ? Math.max(ground, PIER.top) : ground
+}
+
+function profileHeight(r: number): number {
+  const last = ISLAND_PROFILE[ISLAND_PROFILE.length - 1]
+  if (r >= last[0]) return last[1]
+  for (let i = 1; i < ISLAND_PROFILE.length; i++) {
+    const [r1, h1] = ISLAND_PROFILE[i]
+    if (r <= r1) {
+      const [r0, h0] = ISLAND_PROFILE[i - 1]
+      return h0 + ((h1 - h0) * (r - r0)) / (r1 - r0)
+    }
+  }
+  return last[1]
+}
 
 /**
  * A shop's outside, and the wall around it: N3's shop, measured off `city.glb` (the tests hold these to the
@@ -43,11 +99,19 @@ export interface Vec2 {
 }
 
 /**
- * Where slot `n` stands. The angle counts clockwise seen from above, from the
- * direction the character first looks at, so slot 0 is straight ahead.
+ * The angle of slot `n`, clockwise seen from above from the direction the character first looks at: the slots go
+ * out from straight ahead in pairs, 13° to the right then 13° to the left, then 26° further each pair, so a handful
+ * of projects stands in front of the spawn and the last pair is at the edges of the lagoon's mouth (±143°).
  */
+export function slotAngle(slot: number): number {
+  const k = slot % RING_SLOTS
+  const sign = k % 2 === 0 ? 1 : -1
+  return (sign * (SLOT_FIRST + SLOT_STEP * Math.floor(k / 2)) * Math.PI) / 180
+}
+
+/** Where slot `n` stands (its angle is `slotAngle`). */
 export function slotCenter(slot: number): Vec2 & { angle: number } {
-  const angle = ((slot % RING_SLOTS) / RING_SLOTS) * Math.PI * 2
+  const angle = slotAngle(slot)
   const radius = ringRadius(ringOf(slot))
   return { x: Math.sin(angle) * radius, z: -Math.cos(angle) * radius, angle }
 }

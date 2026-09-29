@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
+import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, type ShaderMaterial, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
 import { SIGNAL_MAX_SCALE } from "./characters"
 import { spawnPlayer } from "./controller"
-import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, SHOP_DEPTH, WALL_HEIGHT, WALL_THICKNESS, placementOf } from "./layout"
+import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, SHOP_DEPTH, WALL_HEIGHT, WALL_THICKNESS, placementOf } from "./layout"
 import { castOf, kitFor } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
-import { createCityScene } from "./view"
+import { SHOP_RADIUS, createCityScene } from "./view"
 
 const shop = (id: string, slot?: number, name = id): Shop => ({ id, name, slot })
 const agent = (paneId: string, shopId: string, over: Partial<Agent> = {}): Agent => ({
@@ -507,7 +507,7 @@ describe("the city with N3's people", () => {
   })
 })
 
-describe("the city with N3's shop and plaza", () => {
+describe("the island from the file, with its chiringuiti", () => {
   const withKit = async (agents: Agent[], shops = [shop("a", 0)]) => {
     const town = createTown()
     const kit = await kitFor("bassa")
@@ -524,18 +524,31 @@ describe("the city with N3's shop and plaza", () => {
     return found
   }
 
-  test("the plaza is N3's, and the placeholders' square, edge and lamps are not there", async () => {
+  test("the island is the file's, and the placeholders' square, edge and lamps are not there", async () => {
     const { view, kit } = await withKit([])
+    expect(kit.island).toBe(true)
     expect(view.scene.children).toContain(kit.plaza)
     const all = names(view.scene)
-    for (const name of ["plaza_ground", "plaza_kerb", "plaza_base", "plaza_prop"]) expect(all).toContain(name)
+    for (const name of ["island_terrain", "island_deck", "island_pier", "island_water", "island_sky", "plaza_kerb", "plaza_base"]) expect(all).toContain(name)
     expect(view.scene.children.filter((o) => (o as unknown as { isInstancedMesh?: boolean }).isInstancedMesh)).toHaveLength(0)
+  })
+
+  test("the lagoon and the sky are painted for the renderer, one material each, the sky out of the fog", async () => {
+    const { view } = await withKit([])
+    const water = view.scene.getObjectByName("island_water") as Mesh
+    const sky = view.scene.getObjectByName("island_sky") as Mesh
+    expect((water.material as ShaderMaterial).isShaderMaterial).toBe(true)
+    expect((sky.material as ShaderMaterial).isShaderMaterial).toBe(true)
+    expect((water.material as ShaderMaterial).fog).toBe(true)
+    expect((sky.material as ShaderMaterial).fog).toBe(false)
+    // The water knows how deep it is: its vertex colours.
+    expect(water.geometry.hasAttribute("color")).toBe(true)
   })
 
   test("a shop is N3's pieces, not boxes: floor, shell, window, awning, desks, chairs, screens", async () => {
     const { view } = await withKit([agent("p1", "a")])
     const all = names(view.scene.getObjectByName("shop:a")!)
-    for (const name of ["shop_floor", "shop_shell", "shop_glass", "shop_trim", "shop_desk", "shop_chair", "shop_props"]) expect(all).toContain(name)
+    for (const name of ["floor", "shell", "glass", "trim", "desk", "chair", "props"]) expect(all.some((n) => new RegExp(`^shop\\d*_${name}$`).test(n))).toBe(true)
   })
 
   test("the shop's desks are all there, and what is added over them is the glow of the desks in use", async () => {
@@ -565,14 +578,15 @@ describe("the city with N3's shop and plaza", () => {
       })
     expect(discs(view.hologram.group)).toHaveLength(0)
     expect(discs(createCityScene().hologram.group)).toHaveLength(1)
-    expect(view.hologram.group.position.y).toBeCloseTo(kit.ringY - 0.27, 6)
+    // On the island it stands on the deck, and the anchor is measured from there.
+    expect(view.hologram.group.position.y).toBeCloseTo(kit.ringY - 0.27 + PLATFORM_TOP, 6)
     // The placeholders' plaza keeps its projector.
     expect(createCityScene().hologram.group.position.y).toBe(0)
   })
 
   test("people sit on the seats of the shop's own chairs: the layout and the file agree on where they are", async () => {
     const { view } = await withKit([agent("p1", "a"), agent("p2", "a"), agent("p3", "a"), agent("p4", "a")])
-    const chairs = (await kitFor("bassa")).shop().children.find((c) => c.name === "shop_chair") as Mesh
+    const chairs = (await kitFor("bassa")).shop().children.find((c) => /^shop\d*_chair$/.test(c.name)) as Mesh
     expect(chairs).toBeDefined()
     const top = new Box3().setFromObject(chairs)
     for (let i = 1; i <= 4; i++) {
@@ -588,7 +602,7 @@ describe("the city with N3's shop and plaza", () => {
     const box = new Box3().setFromObject(view.scene.getObjectByName("shop:a")!)
     const centre = placementOf(0).center
     const farthest = Math.max(...[box.min.x, box.max.x].flatMap((x) => [box.min.z, box.max.z].map((z) => Math.hypot(x - centre.x, z - centre.z))))
-    expect(farthest).toBeLessThan(5.5 + 0.01)
+    expect(farthest).toBeLessThan(SHOP_RADIUS + 0.01)
   })
 })
 
