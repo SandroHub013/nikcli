@@ -155,6 +155,7 @@ fn asset_mime(path: &str) -> &'static str {
         "ogg" => "audio/ogg",
         "wav" => "audio/wav",
         "woff2" => "font/woff2",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
         "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }

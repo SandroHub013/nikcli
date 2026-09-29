@@ -18,6 +18,7 @@ import {
   type Snapshot,
   type ToWorld,
 } from "./protocol"
+import type { PlayerSpot } from "./player"
 import { diffSnapshots, needsResync } from "./snapshot"
 
 /** The part of a `MessagePort` the link uses. */
@@ -43,6 +44,10 @@ export interface LinkDeps {
   schedule: (run: () => void, ms: number) => () => void
   /** The probe went unanswered and the link closed itself: the document that owned the port is gone. */
   onDead?: () => void
+  /** Where the character stood last, if ADE has it: given to the world when it says `ready`. */
+  player?: () => PlayerSpot | undefined
+  /** The world says where the character is; ADE keeps it. */
+  savePlayer?: (spot: PlayerSpot) => void
 }
 
 export function createLink(deps: LinkDeps) {
@@ -77,8 +82,14 @@ export function createLink(deps: LinkDeps) {
         }
         return
       }
+      if (message.type === "position") {
+        deps.savePlayer?.({ x: message.x, z: message.z, heading: message.heading })
+        return
+      }
       if (message.type === "ready") {
         ready = true
+        const spot = deps.player?.()
+        if (spot) deps.port.postMessage({ type: "player", ...spot })
         return paused ? undefined : sendPicture()
       }
       const parsed = parseCommand(message.command)

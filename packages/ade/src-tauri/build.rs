@@ -9,8 +9,48 @@ use std::{
 const ASSETS_DIR: &str = "nikverse-assets";
 
 fn main() {
+    build_nikverse_world();
     write_nikverse_manifest();
     tauri_build::build()
+}
+
+/// Bundles NikVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-nikverse-world.ts`),
+/// before the folder is listed, so the bundle is hashed into the manifest like every other asset.
+///
+/// Every way ADE is built goes through cargo, so this is the one place that cannot be forgotten
+/// (`tauri dev`, `tauri build`, the test app, `cargo test`). Without `bun` the world keeps working as
+/// its plain list (the page falls back when the module is missing) and the build says so; set
+/// `NIKVERSE_WORLD_REQUIRED=1` to make that an error, as a release build should.
+fn build_nikverse_world() {
+    println!("cargo:rerun-if-changed=../src/nikverse/city");
+    println!("cargo:rerun-if-changed=../scripts/build-nikverse-world.ts");
+    println!("cargo:rerun-if-env-changed=NIKVERSE_WORLD_REQUIRED");
+    println!("cargo:rerun-if-env-changed=NIKVERSE_SKIP_WORLD");
+    if env::var_os("NIKVERSE_SKIP_WORLD").is_some() {
+        return;
+    }
+    let required = env::var_os("NIKVERSE_WORLD_REQUIRED").is_some();
+    let app = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("..");
+    // `bun` is a `.cmd` shim on a Windows machine that installed it with npm.
+    let mut last = String::from("bun non trovato");
+    for program in ["bun", "bun.cmd", "bun.exe"] {
+        match std::process::Command::new(program)
+            .arg("scripts/build-nikverse-world.ts")
+            .current_dir(&app)
+            .output()
+        {
+            Ok(out) if out.status.success() => return,
+            Ok(out) => {
+                last = format!("{program}: {}", String::from_utf8_lossy(&out.stderr).trim());
+                break;
+            }
+            Err(error) => last = format!("{program}: {error}"),
+        }
+    }
+    if required {
+        panic!("NikVerse: il mondo 3D non si e costruito: {last}");
+    }
+    println!("cargo:warning=NikVerse: il mondo 3D non si e costruito ({last}); il pannello mostrera la lista");
 }
 
 /// Lists every file of the assets folder with its SHA-256 and size, and writes the list as Rust

@@ -61,3 +61,6 @@ packages/ade/src-tauri/target/
 # `d1 migrations apply --local`. Machine-local, never committed.
 .wrangler/
 packages/ade/.lavish/
+
+# NikVerse: the 3D city bundle, built by src-tauri/build.rs (scripts/build-nikverse-world.ts)
+packages/ade/src-tauri/nikverse-assets/world/
