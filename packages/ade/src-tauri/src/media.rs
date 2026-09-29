@@ -268,9 +268,13 @@ fn hardened(mut builder: tauri::http::response::Builder) -> tauri::http::respons
  * something holds it. This does, in the same header, so both halves apply. An
  * image may still come from the same scheme, since an agent may put a
  * screenshot beside its sheet.
+ *
+ * `default-src` covers neither where a form is sent nor what a `<base>` makes
+ * relative links mean (review of piece 1, BASSO 1): both are shut apart.
  */
 const DESIGN_SHEET_CSP: &str = "sandbox allow-scripts allow-forms; default-src 'none'; script-src 'unsafe-inline'; \
-style-src 'unsafe-inline'; img-src data: http://ade-media.localhost ade-media://localhost; font-src data:";
+style-src 'unsafe-inline'; img-src data: http://ade-media.localhost ade-media://localhost; font-src data:; \
+form-action 'none'; base-uri 'none'";
 
 /// Whether a path is a design sheet's: inside some `.ade/design/` folder.
 fn is_design_sheet(path: &Path) -> bool {
@@ -581,6 +585,9 @@ mod tests {
         assert!(sheet.starts_with("sandbox allow-scripts allow-forms;"));
         assert!(sheet.contains("default-src 'none'"));
         assert!(sheet.contains("font-src data:"));
+        // A form sent out and a <base> pointing out are shut too: default-src does not reach them.
+        assert!(sheet.contains("form-action 'none'"));
+        assert!(sheet.contains("base-uri 'none'"));
         assert_eq!(csp(&cwd.join("fuori.html")).as_deref(), Some("sandbox allow-scripts allow-forms"));
     }
 
