@@ -332,7 +332,10 @@ fn design_sheet_with(
     let design_dir = Path::new(cwd.trim()).join(".ade").join("design");
     // As text first, in the session's own spelling: nothing is resolved for a path that is plainly elsewhere.
     if !begins_with_root(&comparable(&joined.to_string_lossy()), &comparable(&design_dir.to_string_lossy())) {
-        return Err(format!("{path} non sta in .ade/design/ della tua cartella ({})", design_dir.display()));
+        // Said in the folder's own spelling: a join put `\` after a cwd written with `/`.
+        let folder = cwd.trim().trim_end_matches(['/', '\\']);
+        let sep = if folder.contains('\\') { '\\' } else { '/' };
+        return Err(format!("{path} non sta in .ade/design/ della tua cartella ({folder}{sep}.ade{sep}design)"));
     }
     if !within_with(roots, opened, &joined, &resolve) {
         return Err(format!(
@@ -518,6 +521,10 @@ mod tests {
         assert!(refused(".ade/design/menu.txt").contains("non è una pagina .html"));
         assert!(refused(".ade/design/../../fuori.html").contains("niente `..`"));
         assert!(refused("fuori.html").contains("non sta in .ade/design/"));
+        // The folder is said in the session's own spelling, with no `\` after a `/` (seen live in ADE Test).
+        let slashed = cwd_text.replace('\\', "/");
+        let said = design_sheet(&roots, &[], "fuori.html", &slashed).expect_err("slash");
+        assert!(said.ends_with(&format!("({slashed}/.ade/design)")), "{said}");
         assert!(refused(".ade/design/manca.html").contains("non esiste"));
         // Another project's design folder, even an open one: not this session's.
         let other = tempdir::Dir::new("ade-design-altro");
