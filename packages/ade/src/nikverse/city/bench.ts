@@ -21,6 +21,10 @@ export interface GpuTiming {
    */
   sync: "timestamp" | "queue" | "finish" | "none"
   timestampQuery: boolean
+  /** The share of the level's pixel ratio the view settled at (`resolution.ts`); absent where the level does not move it. */
+  scale?: number
+  /** Each scale tried and its p95, in order. */
+  steps?: Array<{ scale: number; p95: number }>
 }
 
 /** The value at quantile `q` (0..1) of a sorted list, nearest rank. */

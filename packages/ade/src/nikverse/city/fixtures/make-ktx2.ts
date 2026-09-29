@@ -6,6 +6,9 @@
 
 import { VK_FORMAT_BC1_RGB_SRGB_BLOCK, createDefaultContainer, write } from "three/addons/libs/ktx-parse.module.js"
 
+/** VK_FORMAT_BC5_UNORM_BLOCK (the module's types do not list it). */
+const VK_FORMAT_BC5_UNORM_BLOCK = 141
+
 /** `width` and `height` are in texels and must be multiples of 4 (a BC1 block is 4x4 texels in 8 bytes). */
 export function bc1Ktx2(width: number, height: number): Uint8Array {
   const blocks = (width / 4) * (height / 4)
@@ -26,5 +29,34 @@ export function bc1Ktx2(width: number, height: number): Uint8Array {
   dfd.texelBlockDimension = [3, 3, 0, 0]
   dfd.bytesPlane = [8, 0, 0, 0, 0, 0, 0, 0]
   dfd.samples = [{ bitOffset: 0, bitLength: 63, channelType: 0, samplePosition: [0, 0, 0, 0], sampleLower: 0, sampleUpper: 0xffffffff }]
+  return write(container)
+}
+
+/**
+ * A BC5 file (two channels, 16 bytes to a 4x4 block; the format s3tc's sibling rgtc gives a PC's GPU) for the normal maps:
+ * every block is the flat normal, X and Y at the middle of their range.
+ */
+export function bc5Ktx2(width: number, height: number): Uint8Array {
+  const blocks = (width / 4) * (height / 4)
+  const container = createDefaultContainer()
+  container.vkFormat = VK_FORMAT_BC5_UNORM_BLOCK
+  container.typeSize = 1
+  container.pixelWidth = width
+  container.pixelHeight = height
+  container.levelCount = 1
+  // Each channel is a BC4 block: two end points (128, 128) and every texel on the first: 8 bytes, twice.
+  const level = new Uint8Array(blocks * 16)
+  for (let i = 0; i < blocks; i++) level.set([128, 128, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 0, 0], i * 16)
+  container.levels = [{ levelData: level, uncompressedByteLength: level.byteLength }]
+  const dfd = container.dataFormatDescriptor[0]
+  dfd.colorModel = 132 // KHR_DF_MODEL_BC5
+  dfd.colorPrimaries = 1
+  dfd.transferFunction = 1 // linear: a normal map is data
+  dfd.texelBlockDimension = [3, 3, 0, 0]
+  dfd.bytesPlane = [16, 0, 0, 0, 0, 0, 0, 0]
+  dfd.samples = [
+    { bitOffset: 0, bitLength: 63, channelType: 0, samplePosition: [0, 0, 0, 0], sampleLower: 0, sampleUpper: 0xffffffff },
+    { bitOffset: 64, bitLength: 63, channelType: 1, samplePosition: [0, 0, 0, 0], sampleLower: 0, sampleUpper: 0xffffffff },
+  ]
   return write(container)
 }

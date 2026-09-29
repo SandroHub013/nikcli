@@ -211,6 +211,8 @@ export function readOptions(search) {
     check: params.get("check") === "logo",
     classic: params.get("renderer") === "classic",
     quality: params.get("quality") ?? undefined,
+    // `?bench=1` is what ADE asks for in its test build: the gate times the GPU through `window.__nikverseBench`, and nothing else does.
+    bench: params.get("bench") === "1",
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
   }
 }
@@ -260,7 +262,10 @@ export function boot(win, options = {}) {
     .then((started) => {
       city = started
       // The gate and the bench time the GPU through this: the world's own drawing, not a copy of it.
-      win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
+      // Only the bench page and ADE's test build put the timing on the window; a release build has no such door.
+      if (query.bench || query.shot) {
+        win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
+      }
       mark("city", "1")
       if (spot) city.restore(spot)
       if (paused) city.pause()

@@ -7,7 +7,7 @@
 
 import { RenderTarget, type PerspectiveCamera } from "three/webgpu"
 import { spawnPlayer } from "./controller"
-import { benchDraw, measureGpu } from "./gpu-idle"
+import { benchScaled } from "./gpu-idle"
 import { disposeTree, releaseRenderer } from "./release"
 import type { Backend, DrawingSurface } from "./renderers"
 import type { LevelId } from "./quality"
@@ -41,6 +41,8 @@ export interface ShotParts {
   view: CityView
   town: Town
   camera: PerspectiveCamera
+  /** Whether the level moves its resolution with the GPU time: the bench then settles where the governor would. */
+  dynamic: boolean
   /** Whether N3's people and shops loaded, for `info()`. */
   cast: boolean
   kit: boolean
@@ -154,18 +156,18 @@ export async function startShot(parts: ShotParts) {
     }),
     /** The GPU time of this shot's view, drawn back to back: what the bench reports beside the picture. */
     bench: async (frames = 240) => {
-      const target = benchDraw(
-        parts.renderer,
-        parts.backend as Backend,
-        parts.view.scene,
-        parts.camera,
-        () => new RenderTarget(parts.canvas.width, parts.canvas.height, { samples: 4 }),
-      )
-      try {
-        return await measureGpu(parts.renderer, parts.backend as Backend, target.draw, frames)
-      } finally {
-        target.dispose()
-      }
+      // Where the level moves its resolution, at the scale the governor would settle at (`resolution.ts`).
+      return benchScaled({
+        renderer: parts.renderer,
+        backend: parts.backend as Backend,
+        scene: parts.view.scene,
+        camera: parts.camera,
+        makeTarget: (width, height) => new RenderTarget(width, height, { samples: 4 }),
+        width: parts.canvas.width,
+        height: parts.canvas.height,
+        dynamic: parts.dynamic,
+        frames,
+      })
     },
     dispose() {
       parts.view.dispose()

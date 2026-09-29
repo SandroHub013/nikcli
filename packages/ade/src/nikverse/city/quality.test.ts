@@ -33,7 +33,7 @@ describe("the levels", () => {
   })
 
   test("no level turns on what the budget forbids: it is a fact of the type, so a level with a shadow or a bloom would not compile", () => {
-    for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["fps", "id", "label", "pixelRatio", "renderer"])
+    for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["dynamicResolution", "fps", "id", "label", "pixelRatio", "renderer"])
   })
 
   test("the moving mode's interval is the level's frame rate", () => {

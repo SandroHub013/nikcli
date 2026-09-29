@@ -39,7 +39,8 @@ import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./qualit
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
-import { benchDraw, measureGpu } from "./gpu-idle"
+import { benchScaled, hasTimestampQuery, liveGpuTimer } from "./gpu-idle"
+import { createGovernor } from "./resolution"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
 import { startShot } from "./shot-handle"
@@ -174,7 +175,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined)
-    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, cast: cast !== undefined, kit: kit !== undefined })
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -203,10 +204,18 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const raycaster = new Raycaster()
   const pointer = new Vector2()
 
+  // Dynamic resolution: where the level asks for it and the GPU has a clock, the frame's pixels follow its GPU time.
+  const gpuClock = level.dynamicResolution && backend === "webgpu" ? liveGpuTimer(renderer) : undefined
+  const governor = gpuClock ? createGovernor() : undefined
+  let renderScale = 1
+  let sampling = false
+  let framesDrawn = 0
+  doc.documentElement.dataset.renderScale = String(renderScale)
+
   const resize = () => {
     const w = Math.max(1, stage.clientWidth)
     const h = Math.max(1, stage.clientHeight)
-    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, level.pixelRatio))
+    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, level.pixelRatio) * renderScale)
     renderer.setSize(w, h, false)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
@@ -297,7 +306,24 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     const paced = pace(ts, nextDraw, mode === "moving" ? movingInterval : STILL_INTERVAL_MS)
     nextDraw = paced.next
     if (paced.draw) {
+      // One frame in three of the moving mode is timed by the GPU's clock: about twenty a second, no cost for the rest.
+      const timed = governor !== undefined && mode === "moving" && !sampling && ++framesDrawn % 3 === 0
+      if (timed) gpuClock!.begin()
       renderer.render(view.scene, camera)
+      if (timed) {
+        sampling = true
+        void gpuClock!
+          .end()
+          .then((ms) => {
+            const next = governor!.push(ms)
+            if (next === undefined || !running) return
+            renderScale = next
+            doc.documentElement.dataset.renderScale = String(next)
+            resize()
+          })
+          .catch(() => {})
+          .finally(() => (sampling = false))
+      }
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
@@ -437,12 +463,21 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       if (timer !== undefined) clearTimeout(timer)
       handle = undefined
       timer = undefined
-      // Into a target for WebGPU: the canvas would hold each frame for the display (see `benchDraw`).
-      const target = benchDraw(renderer, backend, view.scene, camera, () => new RenderTarget(canvas.width, canvas.height, { samples: 4 }))
+      // Into a target for WebGPU: the canvas would hold each frame for the display (see `benchDraw`). Where the level moves its
+      // resolution, the view is timed at the scales the governor would pick, from the size the canvas has at scale 1.
       try {
-        return await measureGpu(renderer, backend, target.draw, frames)
+        return await benchScaled({
+          renderer,
+          backend,
+          scene: view.scene,
+          camera,
+          makeTarget: (width, height) => new RenderTarget(width, height, { samples: 4 }),
+          width: Math.round(canvas.width / renderScale),
+          height: Math.round(canvas.height / renderScale),
+          dynamic: governor !== undefined,
+          frames,
+        })
       } finally {
-        target.dispose()
         benching = false
         last = 0
         wake()

@@ -23,15 +23,21 @@ export interface Level {
   pixelRatio: number
   /** Frames a second while something moves: never above `MAX_FPS`, whatever the display offers. */
   fps: number
+  /**
+   * Whether the frame's resolution follows the GPU time (`resolution.ts`). The pixel ratio is a ceiling: `min(devicePixelRatio, pixelRatio)`,
+   * so on a 1.25x screen Media draws 1:1 and the four samples are all the smoothing there is: they stay, and it is the pixels
+   * that give way when a close-up costs too much.
+   */
+  dynamicResolution: boolean
 }
 
 /** The most frames a second the city draws at any level: a 144 Hz display does not make it run faster (and burn more). */
 export const MAX_FPS = 60
 
 export const LEVELS: Readonly<Record<LevelId, Level>> = {
-  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30 },
-  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS },
-  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS },
+  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30, dynamicResolution: false },
+  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS, dynamicResolution: true },
+  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS, dynamicResolution: false },
 }
 
 export const isLevelId = (value: unknown): value is LevelId => LEVEL_IDS.includes(value as LevelId)

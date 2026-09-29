@@ -344,6 +344,25 @@ describe("what is drawn depends on where the camera is", () => {
     expect(casters).toEqual([])
   })
 
+  // Every light in the scene is evaluated by every pixel of every material: in the bench a close-up interior spends 3 to 4 ms of
+  // its 11 on the sun alone. The ceiling is the diet's (A1); A2's baked light is meant to take the number down, not up.
+  test("the scene has at most four lights that are worked out at every pixel, with or without N3's kit, and none of them a point or a spot", async () => {
+    const lights = (scene: { traverse(fn: (o: { type: string; isLight?: boolean }) => void): void }) => {
+      const seen: string[] = []
+      scene.traverse((o) => {
+        if (o.isLight) seen.push(o.type)
+      })
+      return seen
+    }
+    const plain = lights(createCityScene().scene)
+    const kit = await kitFor("bassa")
+    const withKit = lights(createCityScene(undefined, "tsl", undefined, kit).scene)
+    for (const seen of [plain, withKit]) {
+      expect(seen.length).toBeLessThanOrEqual(4)
+      expect(seen.filter((t) => t === "PointLight" || t === "SpotLight")).toEqual([])
+    }
+  })
+
   test("the hologram is dressed for the renderer: node materials for WebGPU, shaders for the classic one", () => {
     const kinds = (kind: "tsl" | "shader") => {
       const seen = new Set<string>()

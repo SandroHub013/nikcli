@@ -25,7 +25,7 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { bc1Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
+import { bc1Ktx2, bc5Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
 import { actAsAde, arg, startHarness } from "./nikverse-harness"
 
 const root = join(import.meta.dir, "..")
@@ -46,6 +46,7 @@ const { base, page, browserLine, cpuByProcess, problems, evaluate, open, until, 
   routes(url, policy) {
     // A KTX2 file in the GPU's own format (BC1), made here, for the check of the KTX2 path.
     if (url.pathname === "/fixtures/bc1.ktx2") return new Response(bc1Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
+    if (url.pathname === "/fixtures/bc5.ktx2") return new Response(bc5Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
     if (url.pathname === "/reference.html")
       return new Response(
         '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
@@ -353,32 +354,45 @@ async function levelsCheck() {
  * policy as it is (no `blob:`, no eval): a violation would be a browser error and the check would fail.
  */
 async function ktx2Check() {
-  try {
-    problems.length = 0
-    await open(`/?check=logo&ktx2=1`, { width: 400, height: 300 })
-    await until(`document.documentElement.dataset.ready === "1"`, "the page")
-    const result = await evaluate<{ width: number; height: number; compressed: boolean; srgb: boolean; ms: number }>(`(async () => {
-      const m = await import("/assets/world/city.js")
-      // What the loader asks of a renderer, from a real WebGL context: the compressed formats it offers.
-      const gl = document.createElement("canvas").getContext("webgl2")
-      const renderer = { extensions: { has: (n) => !!gl.getExtension(n), get: (n) => gl.getExtension(n) } }
-      const decoder = m.createPictureDecoder(renderer)
-      const bytes = new Uint8Array(await (await fetch("/fixtures/bc1.ktx2")).arrayBuffer())
-      const t0 = performance.now()
-      const texture = await Promise.race([
-        decoder.decode(bytes, false),
-        new Promise((_, no) => setTimeout(() => no(new Error("no answer from the KTX2 loader in 15 s")), 15000)),
-      ])
-      decoder.dispose()
-      return { width: texture.image.width, height: texture.image.height, compressed: texture.isCompressedTexture === true, srgb: texture.colorSpace === "srgb", ms: Math.round(performance.now() - t0) }
-    })()`)
-    report(
-      "ktx2: a KTX2 file in the GPU's format decodes under the world's policy",
-      result.width === 8 && result.height === 8 && result.compressed && result.srgb && problems.length === 0,
-      `${result.width}x${result.height}, compressed texture, ${result.srgb ? "sRGB from the file" : "colour space WRONG"}, ${result.ms} ms${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
-    )
-  } catch (error) {
-    report("ktx2", false, `${String((error as Error).message ?? error)}${problems.length ? ` (browser errors: ${problems.slice(0, 3).join(" | ")})` : ""}`)
+  for (const [name, extension, colour] of [
+    ["bc1", "WEBGL_compressed_texture_s3tc_srgb", "srgb"],
+    ["bc5", "EXT_texture_compression_rgtc", "linear"],
+  ] as const) {
+    const title = `ktx2 ${name}: a KTX2 file in the GPU's format decodes under the world's policy`
+    try {
+      problems.length = 0
+      await open(`/?check=logo&ktx2=1`, { width: 400, height: 300 })
+      await until(`document.documentElement.dataset.ready === "1"`, "the page")
+      const result = await evaluate<{ width: number; height: number; compressed: boolean; srgb: boolean; ms: number; supported: boolean }>(`(async () => {
+        const m = await import("/assets/world/city.js")
+        // What the loader asks of a renderer, from a real WebGL context: the compressed formats it offers.
+        const gl = document.createElement("canvas").getContext("webgl2")
+        const renderer = { extensions: { has: (n) => !!gl.getExtension(n), get: (n) => gl.getExtension(n) } }
+        if (!gl.getExtension(${JSON.stringify(extension)})) return { supported: false }
+        const decoder = m.createPictureDecoder(renderer)
+        const bytes = new Uint8Array(await (await fetch("/fixtures/${name}.ktx2")).arrayBuffer())
+        const t0 = performance.now()
+        const texture = await Promise.race([
+          decoder.decode(bytes, false),
+          new Promise((_, no) => setTimeout(() => no(new Error("no answer from the KTX2 loader in 15 s")), 15000)),
+        ])
+        decoder.dispose()
+        return { supported: true, width: texture.image.width, height: texture.image.height, compressed: texture.isCompressedTexture === true, srgb: texture.colorSpace === "srgb", ms: Math.round(performance.now() - t0) }
+      })()`)
+      if (!result.supported) {
+        // Not a failure of the world: this browser's GPU does not offer the format (the world then draws plain colours and says so).
+        report(title, true, `skipped: this browser's GPU has no ${extension}`)
+        continue
+      }
+      const colourOk = colour === "srgb" ? result.srgb : !result.srgb
+      report(
+        title,
+        result.width === 8 && result.height === 8 && result.compressed && colourOk && problems.length === 0,
+        `${result.width}x${result.height}, compressed texture, colour space ${colourOk ? colour + " from the file" : "WRONG"}, ${result.ms} ms${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
+      )
+    } catch (error) {
+      report(title, false, `${String((error as Error).message ?? error)}${problems.length ? ` (browser errors: ${problems.slice(0, 3).join(" | ")})` : ""}`)
+    }
   }
 }
 

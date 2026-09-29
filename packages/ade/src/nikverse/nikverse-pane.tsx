@@ -58,7 +58,9 @@ export function NikversePane(props: {
    * world reads it and sends it back, and only that gets the port (`handshake.ts`).
    */
   let nonce = newNonce()
-  const sourceFor = (secret: string) => `${worldUrl()}#n=${secret}`
+  // ADE's test build asks the world for its GPU timing (`?bench=1`), which the gate reads; a release build does not.
+  const benchQuery = () => (document.documentElement.dataset.adeBuild === "test" ? "?bench=1" : "")
+  const sourceFor = (secret: string) => `${worldUrl()}${benchQuery()}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
