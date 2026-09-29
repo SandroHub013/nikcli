@@ -273,10 +273,10 @@ export const it = {
   "agent.noPlanner":
     "Senza un agente (Claude Code o Codex) acceso nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
   "agent.onboarding.title": "Prima di parlarci",
-  "agent.onboarding.subtitle": "Per usare la voce servono tre elementi. Ecco cosa è pronto e cosa manca:",
+  "agent.onboarding.subtitle": "Per usare la voce servono alcuni elementi. Ecco cosa è pronto e cosa manca:",
   "agent.onboarding.key.title": "Chiave OpenRouter",
   "agent.onboarding.key.desc":
-    "Serve per la trascrizione rapida (Whisper / Gemma). Si ottiene gratuitamente o a consumo su openrouter.ai.",
+    "Serve solo per la trascrizione rapida con OpenRouter (Whisper / Gemma); con la trascrizione locale non serve. Si ottiene gratuitamente o a consumo su openrouter.ai.",
   "agent.onboarding.key.action": "Imposta chiave",
   "agent.onboarding.key.done": "Configurata",
   "agent.onboarding.agent.title": "Agente (Claude Code o Codex)",
@@ -1871,6 +1871,8 @@ export const it = {
   "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
     `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+  "bots.serve.toolInPlanner": (tool: string) =>
+    `Un turno senza strumenti ha provato a usare «${tool}»: il turno è stato fermato.`,
   "bots.serve.noFreeModel":
     "Nel catalogo del server di nikcli non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>

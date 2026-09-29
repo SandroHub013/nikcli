@@ -13,6 +13,8 @@ import {
   VOICE_AGENT_FAST,
   VOICE_AGENT_INSTRUCTIONS,
   VOICE_AGENT_TIMEOUT_MS,
+  VOICE_PLAN_FIRST_TOKEN_MS,
+  VOICE_PLAN_IDLE_MS,
   VOICE_PLAN_SESSION_PHRASES,
   VOICE_PLAN_TIMEOUT_MS,
 } from "./agent"
@@ -686,13 +688,89 @@ describe("the planner runs on the agent's own runner", () => {
     expect(planRuns[0].effort).toBeUndefined()
   })
 
-  test("Codex plans with a turn of its own, on its own subscription", async () => {
+  test("Codex does not plan: a cold turn for every sentence costs more than the agent's own, so it goes straight to the agent", async () => {
     const { agent, cold, planRuns } = setup()
-    await agent.plan({ system: "R", user: "U", engine: "codex", speed: "fast" })
+    await expect(agent.plan({ system: "R", user: "U", engine: "codex", speed: "fast" })).rejects.toThrow(
+      /^Non riesco a pianificare: /,
+    )
     expect(planRuns).toHaveLength(0)
-    expect(cold).toHaveLength(1)
-    expect(cold[0]).toMatchObject({ runner: "codex", instructions: "R", message: "U", effort: "low" })
-    expect(cold[0].model).toBeUndefined()
+    expect(cold).toHaveLength(0)
+  })
+
+  test("the warm process of the planner is closed after three idle minutes, not ten", () => {
+    expect(VOICE_PLAN_IDLE_MS).toBe(180_000)
+    expect(VOICE_PLAN_FIRST_TOKEN_MS).toEqual({ warm: 4_000, cold: 8_000 })
+  })
+
+  test("no first word in time: the planner is stopped and gives up, four seconds warm and eight cold", async () => {
+    let stops = 0
+    const silent = (): { result: Promise<TurnResult>; stop: () => void } => {
+      let stop: () => void = () => {}
+      const result = new Promise<TurnResult>((resolve) => {
+        stop = () => {
+          stops++
+          resolve({ status: "stopped", text: "", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult)
+        }
+      })
+      return { result, stop }
+    }
+    let answers = 0
+    const agent = createVoiceAgent({
+      runTurn: () => done("freddo"),
+      warm: { prepare: () => {}, run: () => done("agente"), forget: () => {}, close: () => {} },
+      planWarm: {
+        prepare: () => {},
+        run: () => (answers++ === 0 ? done('{"speech":"ok","steps":[]}') : silent()),
+        forget: () => {},
+        close: () => {},
+      },
+      firstTokenMs: { warm: 30, cold: 200 },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    // The first sentence of a process is cold: it answers, so the next ones are warm.
+    await agent.plan({ system: "R", user: "U", engine: "claude" })
+    const at = Date.now()
+    await expect(agent.plan({ system: "R", user: "U2", engine: "claude" })).rejects.toThrow(
+      /^Non riesco a pianificare: /,
+    )
+    expect(Date.now() - at).toBeLessThan(150)
+    expect(stops).toBe(1)
+  })
+
+  test("a first word that arrives in time keeps the planner going", async () => {
+    const agent = createVoiceAgent({
+      runTurn: () => done("freddo"),
+      warm: { prepare: () => {}, run: () => done("agente"), forget: () => {}, close: () => {} },
+      planWarm: {
+        prepare: () => {},
+        run: (request) => {
+          request.onUpdate?.({ messages: [], streaming: '{"speech":"Ap' } as never)
+          return {
+            result: new Promise<TurnResult>((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    status: "done",
+                    text: '{"speech":"Apro.","steps":[]}',
+                    tokens: 0,
+                    costUsd: 0,
+                    talk: {} as never,
+                  } as TurnResult),
+                80,
+              ),
+            ),
+            stop: () => {},
+          }
+        },
+        forget: () => {},
+        close: () => {},
+      },
+      firstTokenMs: { warm: 30, cold: 30 },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    expect(await agent.plan({ system: "R", user: "U", engine: "claude" })).toBe('{"speech":"Apro.","steps":[]}')
   })
 
   test("Claude's planner has no tools at all, not even ade-msg: the sentence and the pane titles are not to be obeyed", async () => {
@@ -740,7 +818,7 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    await expect(agent.plan({ system: "R", user: "U", engine: "codex" })).rejects.toThrow(
+    await expect(agent.plan({ system: "R", user: "U", engine: "nikcli" })).rejects.toThrow(
       "Non riesco a pianificare: Claude Code non si avvia.",
     )
   })
@@ -757,7 +835,7 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    const pending = agent.plan({ system: "R", user: "U", engine: "codex", signal: controller.signal })
+    const pending = agent.plan({ system: "R", user: "U", engine: "nikcli", signal: controller.signal })
     controller.abort()
     await expect(pending).rejects.toMatchObject({ name: "AbortError" })
   })
@@ -775,22 +853,23 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    await agent.plan({ system: "R", user: "U", engine: "codex", onText: (soFar) => void heard.push(soFar) })
+    await agent.plan({ system: "R", user: "U", engine: "nikcli", onText: (soFar) => void heard.push(soFar) })
     expect(heard).toEqual(['{"speech":"Ap', '{"speech":"Apro."'])
   })
 
-  test(`after ${VOICE_PLAN_SESSION_PHRASES} sentences the conversation starts again, so the cache stays small`, async () => {
-    const { agent, planRuns, forgotten } = setup()
-    for (let i = 0; i < VOICE_PLAN_SESSION_PHRASES; i++)
-      await agent.plan({ system: "R", user: `frase ${i}`, engine: "claude" })
-    expect(forgotten()).toBe(0)
-    await agent.plan({ system: "R", user: "una in più", engine: "claude" })
-    expect(forgotten()).toBe(1)
-    expect(planRuns).toHaveLength(VOICE_PLAN_SESSION_PHRASES + 1)
-    // And the count starts over.
+  test(`right after the ${VOICE_PLAN_SESSION_PHRASES}th sentence the conversation starts again and the new process is made ready, so the next one is not cold`, async () => {
+    const { agent, planRuns, planPrepared, forgotten } = setup()
     for (let i = 0; i < VOICE_PLAN_SESSION_PHRASES - 1; i++)
       await agent.plan({ system: "R", user: `frase ${i}`, engine: "claude" })
+    expect(forgotten()).toBe(0)
+    expect(planPrepared).toHaveLength(0)
+    await agent.plan({ system: "R", user: "la ventesima", engine: "claude" })
     expect(forgotten()).toBe(1)
+    expect(planPrepared).toHaveLength(1)
+    expect(planPrepared[0]).toMatchObject({ runner: "claude", instructions: "R", message: "", noTools: true })
+    await agent.plan({ system: "R", user: "la ventunesima", engine: "claude" })
+    expect(forgotten()).toBe(1)
+    expect(planRuns).toHaveLength(VOICE_PLAN_SESSION_PHRASES + 1)
   })
 
   test("preparing the voice starts the planner's process with the real rules, and forgetting or releasing reach it", () => {
