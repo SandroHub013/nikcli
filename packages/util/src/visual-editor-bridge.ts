@@ -78,6 +78,11 @@ export type BridgeMessage =
       newIndex: number
       outerHTML: string
     }
+  /**
+   * Where the frame's document is, as ADE's frame script read it before the
+   * page ran. Sent by the frame script, not by the bridge (`frame-script.ts`).
+   */
+  | { type: "visual-editor:location"; href: string }
   | { type: "visual-editor:console-log"; log: ConsoleEntry }
   | { type: "visual-editor:dom-changed" }
   /**

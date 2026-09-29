@@ -54,7 +54,7 @@
   const location = win.location || {}, scheme = String(location.protocol);
   if (!(scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"))
     return;
-  const eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), portProto = win.MessagePort.prototype, portPost = uncurry(portProto.postMessage), portStart = uncurry(portProto.start), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift), trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"), isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0, trusted = (event) => {
+  const startHref = String(location.href), eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), portProto = win.MessagePort.prototype, portPost = uncurry(portProto.postMessage), portStart = uncurry(portProto.start), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift), trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"), isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0, trusted = (event) => {
     try {
       return isTrustedOf ? isTrustedOf(event) === !0 : !1;
     } catch {
@@ -84,6 +84,7 @@
     if (data.type !== "ade-browser:hello" || secret !== void 0 || typeof data.secret !== "string")
       return;
     secret = data.secret;
+    send({ type: "visual-editor:location", href: startHref });
     while (queue.length)
       send(shift(queue));
     if (started)

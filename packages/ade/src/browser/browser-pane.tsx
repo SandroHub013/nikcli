@@ -37,7 +37,7 @@ import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFram
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { BROWSE_SANDBOX, DESIGN_SANDBOX } from "./sandbox"
-import { isSheetAddress } from "../design/sheet"
+import { isSheetAddress, watchSheetStay } from "../design/sheet"
 import { elementTarget, noteTargets, noteText, textTarget, type SheetNote } from "../design/notes"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
@@ -242,6 +242,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   /** The notes' send waiting for the user to say which session gets them. */
   const [notesAsking, setNotesAsking] = createSignal(false)
   const [notesNote, setNotesNote] = createSignal<{ ok: boolean; text: string }>()
+  /** What ADE did when the sheet's frame left the sheet, in the footer. */
+  const [sheetNotice, setSheetNotice] = createSignal<string>()
   const [promptText, setPromptText] = createSignal("")
   const [containerBox, setContainerBox] = createSignal({ width: 0, height: 0 })
   const [ownerMenu, setOwnerMenu] = createSignal(false)
@@ -395,8 +397,29 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     }, HANDSHAKE_TIMEOUT_MS)
   }
 
+  /*
+   * A sheet's frame stays on the sheet: a link, a form or a script that takes
+   * it elsewhere brings the sheet back, and the footer says so. Only while the
+   * pane itself is on the sheet, and only where the frame script runs (the
+   * sheet on `http://ade-media.localhost`, as on Windows).
+   */
+  const onSheet = () => props.sheet !== undefined && isSheet(url()) && /^https?:/i.test(url())
+  const sheetStay = watchSheetStay({
+    isSheet,
+    left: (stopped) => {
+      if (stopped) {
+        setSheetNotice(t("sheet.left.stopped"))
+        return
+      }
+      setSheetNotice(t("sheet.left.reloaded"))
+      load(url())
+    },
+  })
+  onCleanup(() => sheetStay.dispose())
+
   /** `initial`: the frame already has `target` as its first `src`; no new token, no new navigation. */
   const load = (target: string, initial = false) => {
+    sheetStay.reset()
     if (refused(target)) {
       setNotice("ade-origin")
       setLoadState("ready")
@@ -484,6 +507,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   )
 
   const onFrameLoad = () => {
+    if (onSheet()) sheetStay.loaded()
     if (srcdoc() !== null) {
       setLoadState("ready")
     }
@@ -544,6 +568,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       if (element && typeof element.selector === "string") {
         setSelection((prev) => (prev.some((item) => item.selector === element.selector) ? prev : [...prev, element]))
       }
+      return
+    }
+
+    if (data.type === "visual-editor:location") {
+      // Said by ADE's frame script, on the secret channel: the page cannot say it.
+      if (onSheet() && typeof data.href === "string") sheetStay.located(data.href)
       return
     }
 
@@ -1521,6 +1551,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         >
           {t("browser.forget")}
         </button>
+        <Show when={sheetNotice()}>
+          <span data-slot="browser-send-note" data-ok="false" role="status">
+            {sheetNotice()}
+          </span>
+        </Show>
         <Show when={forgetNote()}>
           <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
             {forgetNote()?.text}

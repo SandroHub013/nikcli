@@ -871,6 +871,8 @@ export const en: Messages = {
   "sheet.notes.sent": (title) => `Notes sent to “${title}”: they arrive when the turn ends.`,
   "sheet.notes.ask": "The session that wrote the sheet is not running. Which session should get the notes?",
   "sheet.notes.none": "no notes to send",
+  "sheet.left.reloaded": "The sheet opened another address: ADE loaded it again.",
+  "sheet.left.stopped": "The sheet keeps leaving its address: ADE stopped loading it again.",
 
   // Decisions
   "date.today": "today",
