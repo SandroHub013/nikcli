@@ -505,6 +505,8 @@ body[data-theme="glass"] #root,
   /*
    * A separator dot takes the room of the «·» it replaced, not a 12px box:
    * the box is as narrow as the glyph was, and the mask keeps its 12px scale.
+   * The dot's diameter (2 units at that scale) is the box's width: a bigger
+   * circle is cut at the sides, a smaller one never reaches full ink.
    * Drawn as: width: var(--ade-icon-dot-width);
    *   mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
    */
@@ -514,7 +516,7 @@ body[data-theme="glass"] #root,
   --ade-icon-chevron-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5'/%3E%3C/svg%3E");
   --ade-icon-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
   --ade-icon-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2.75v2.75'/%3E%3Ccircle cx='6' cy='7.9' r='0.8' fill='black' stroke='none'/%3E%3C/svg%3E");
-  --ade-icon-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='0.6' fill='black' stroke='none'/%3E%3C/svg%3E");
+  --ade-icon-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='1' fill='black' stroke='none'/%3E%3C/svg%3E");
 
   --ade-weight-normal: 400;
   --ade-weight-medium: 500;
