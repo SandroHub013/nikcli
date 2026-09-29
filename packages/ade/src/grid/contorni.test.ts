@@ -59,12 +59,16 @@ function readToken(name: string): { light: string; dark: string } {
   // read: the glass paints a veil over the desktop, and that is `glassGround`.
   let pair: string | undefined
   let plain: string | undefined
+  let alias: string | undefined
   sheet("index.css").walkDecls(name, (decl) => {
     const value = decl.value.trim()
     const match = /^light-dark\(\s*(#[0-9a-f]{3,8})\s*,\s*(#[0-9a-f]{3,8})\s*\)$/i.exec(value)
     if (match) pair = `${match[1]}|${match[2]}`
     else if (plain === undefined && /^#[0-9a-f]{3,8}$/i.test(value)) plain = value
+    else if (alias === undefined) alias = /^var\((--ade-(?!glass-)[a-z-]+)\)$/.exec(value)?.[1]
   })
+  // An alias (`--ade-on-ink: var(--ade-bg)`) is the token it names; the glass block's own is not one.
+  if (pair === undefined && plain === undefined && alias !== undefined) return readToken(alias)
   const found = pair ?? (plain === undefined ? undefined : `${plain}|${plain}`)
   if (found === undefined) throw new Error(`il token ${name} non ha un valore per tema in index.css`)
   const [light, dark] = found.split("|") as [string, string]
