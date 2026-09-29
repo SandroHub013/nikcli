@@ -516,6 +516,7 @@ import {
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
+  copyToClipboard,
   disposeTerminal,
   getTerminal,
   hasTerminal,
@@ -7323,6 +7324,32 @@ export function Workbench() {
     saveSuspendedMail()
   }
 
+  /*
+   * The sidebar row menu's verbs: the same functions the palette and the pane's
+   * own buttons reach, called from the row the pointer is on.
+   *
+   * Two of them need a step the palette does not. Renaming goes through the
+   * DOM (`requestRename`), so a session with no pane on screen has nothing to
+   * ask — it is opened first and asked again a frame later, when its pane is
+   * there. Closing every session of a project is `closeAll`, which the tray's
+   * "chiudi sessioni" already uses, given the ids of that one project.
+   */
+  const renameSession = async (id: string) => {
+    if (requestRename(id)) return
+    await openSession(id)
+    requestAnimationFrame(() => void requestRename(id))
+  }
+
+  const restartSession = (id: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === id)
+    if (pane) void reopen(pane)
+  }
+
+  const closeProjectSessions = async (workspaceId: string) => {
+    const workspace = workspaces().find((candidate) => candidate.id === workspaceId)
+    await closer.closeAll(workspace?.sessions.map((session) => session.id) ?? [])
+  }
+
   /**
    * The project a pane's process runs in: its own, not whichever is open.
    *
@@ -8620,6 +8647,15 @@ export function Workbench() {
           onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
           onSelectProject={(id) => void switchProject(id)}
           onNewSession={() => setStarting(true)}
+          /* The row menu's verbs: one callback each, into the functions above. */
+          onRenameSession={(id) => void renameSession(id)}
+          onCloseSession={(id) => {
+            close(id)
+          }}
+          onRestartSession={restartSession}
+          onResumeSession={(id) => void resumeSession(id)}
+          onCopySessionId={(id) => void copyToClipboard(id)}
+          onCloseProjectSessions={(id) => void closeProjectSessions(id)}
           project={project()}
           searchFiles={hasHost() ? searchProjectFiles : undefined}
           selectedFilePath={selectedFile()}
