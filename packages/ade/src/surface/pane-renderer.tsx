@@ -133,6 +133,11 @@ export interface PaneRendererDeps {
     request: BrowserRequest,
     capture: { crop: Rect; redact: Rect[]; scale: number },
   ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
+  /** Writes a design sheet's notes beside it and queues their line for its session (piece 2). */
+  sendSheetNotes: (
+    paneId: string,
+    to?: string,
+  ) => Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }>
 }
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
@@ -234,6 +239,12 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         initialUrl={current().browserUrl}
         initialHistory={current().browserHistory}
         sheet={current().designSheet?.file}
+        sheetNotes={current().designSheet?.notes}
+        onSheetNotes={(notes) => {
+          const sheet = current().designSheet
+          if (sheet) setWb((w) => updatePane(w, current().id, { designSheet: { ...sheet, notes } }))
+        }}
+        onSendSheetNotes={(to) => deps.sendSheetNotes(current().id, to)}
         onNavigate={(url, history) =>
           setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
         }

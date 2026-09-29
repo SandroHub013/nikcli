@@ -984,3 +984,113 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── design sheet: the notes ─────────────────────────────────────────────── */
+
+[data-slot="sheet-notes"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  flex: 0 0 auto;
+  max-height: 35%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-raised);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text);
+}
+
+[data-slot="sheet-notes-head"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  min-width: 0;
+}
+
+[data-slot="sheet-notes-count"] {
+  flex: 0 0 auto;
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-slot="sheet-notes-send"] {
+  margin-left: auto;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-active);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-medium);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+  flex: 0 0 auto;
+}
+
+[data-slot="sheet-notes-send"]:hover:not(:disabled) {
+  background: var(--ade-border);
+}
+
+[data-slot="sheet-notes-send"]:not(:disabled):active {
+  transform: var(--ade-press);
+}
+
+[data-slot="sheet-notes-send"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+[data-slot="sheet-notes-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  margin: 0;
+  padding-left: var(--ade-space-6);
+}
+
+[data-slot="sheet-note"] {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: start;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="sheet-note-where"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="sheet-note-text"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="sheet-note-remove"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="sheet-note-remove"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="sheet-note-remove"]:active {
+  transform: var(--ade-press);
+}

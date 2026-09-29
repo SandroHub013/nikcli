@@ -317,6 +317,20 @@ describe("browser panes across a restart", () => {
     expect(roundTrip([browser()]).restored.panes[0].designSheet).toBeUndefined()
   })
 
+  test("the notes not sent yet come back with the sheet", () => {
+    const notes = [
+      {
+        id: "n1",
+        targets: [{ kind: "text" as const, tag: "p", selector: "#intro", text: "Prenota" }],
+        text: "più caldo",
+        at: 7,
+      },
+    ]
+    const sheet = { file: "C:/p/.ade/design/menu.html", from: "p1", notes }
+    const { restored } = roundTrip([session(), browser({ designSheet: sheet })])
+    expect(restored.panes.find((p) => p.id === "b1")?.designSheet?.notes).toEqual(notes)
+  })
+
   test("a damaged sheet is dropped, the pane is kept", () => {
     const saved = parseWorkspace(
       JSON.stringify({

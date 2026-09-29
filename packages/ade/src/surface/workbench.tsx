@@ -480,6 +480,7 @@ import { designPath } from "../design/store"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
 import { createSheetWatch, sheetLabel, sheetPaneFor, sheetTitle, sheetUrl, type PaneSheet } from "../design/sheet"
+import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } from "../design/notes"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -2002,6 +2003,38 @@ export function Workbench() {
     heldLines.push({ paneId: to, text: formatRequestLine(request, details) })
     tellPane(to, t("note.browserRequest", request.paneTitle))
     return { ok: true }
+  }
+
+  /*
+   * A design sheet's notes, to the session that wrote the sheet (piece 2): the
+   * Markdown file beside the sheet, and one line that points at it. Only the
+   * pane's «Invia» button calls this, and the recipient is the session saved
+   * by `ade-msg design` or the one the user picked, never one the page names.
+   */
+  const sendSheetNotes = async (
+    paneId: string,
+    to?: string,
+  ): Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }> => {
+    const sheet = wb().panes.find((pane) => pane.id === paneId)?.designSheet
+    const notes = sheet?.notes ?? []
+    if (!sheet || notes.length === 0) return { ok: false, reason: t("sheet.notes.none") }
+    const target = to ?? sheet.from
+    const session = wb().panes.find((pane) => pane.id === target && !isPanelPane(pane))
+    if (!session || !running.has(target)) return { ok: false, reason: t("browser.send.stopped"), stopped: true }
+    const host = await getHost()
+    if (!host?.writeTextFile) return { ok: false, reason: t("browser.send.noProject") }
+    const at = new Date()
+    const failure = await host.writeTextFile(notesFilePath(sheet.file, at), formatNotesFile(sheet.file, notes, at))
+    if (failure) return { ok: false, reason: failure }
+    heldLines.push({
+      paneId: target,
+      text: formatNotesLine(sheet.file, notes.length, notesFileRelative(sheet.file, at)),
+    })
+    tellPane(target, t("note.sheetNotes", sheetLabel(sheet)))
+    // Sent: the list empties, and a session the user picked is where the next notes go.
+    const { notes: _sent, ...kept } = sheet
+    setWb((w) => updatePane(w, paneId, { designSheet: { ...kept, from: target } }))
+    return { ok: true, title: session.title }
   }
 
   // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
@@ -8327,6 +8360,7 @@ export function Workbench() {
     pluginRuntime,
     browserControllers,
     sendBrowserRequest,
+    sendSheetNotes,
   })
 
   const paletteChord = createMemo(() => {

@@ -54,7 +54,7 @@
   const location = win.location || {}, scheme = String(location.protocol);
   if (!(scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"))
     return;
-  const eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), portProto = win.MessagePort.prototype, portPost = uncurry(portProto.postMessage), portStart = uncurry(portProto.start), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift), trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"), isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0, trusted = (event) => {
+  const startHref = String(location.href), eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), portProto = win.MessagePort.prototype, portPost = uncurry(portProto.postMessage), portStart = uncurry(portProto.start), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift), trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"), isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0, trusted = (event) => {
     try {
       return isTrustedOf ? isTrustedOf(event) === !0 : !1;
     } catch {
@@ -84,6 +84,7 @@
     if (data.type !== "ade-browser:hello" || secret !== void 0 || typeof data.secret !== "string")
       return;
     secret = data.secret;
+    send({ type: "visual-editor:location", href: startHref });
     while (queue.length)
       send(shift(queue));
     if (started)
@@ -451,9 +452,9 @@
     hoverBadge.style.left = Math.max(0, rect.left) + 'px';
   }
 
-  // Mousemove highlight in Edit mode
+  // Mousemove highlight in Edit mode (and note mode, which inspects too)
   listenInput(document, 'mousemove', function(e) {
-    if (currentMode !== 'edit') {
+    if (currentMode !== 'edit' && currentMode !== 'note') {
       hoverOutline.style.display = 'none';
       hoverBadge.style.display = 'none';
       return;
@@ -487,6 +488,28 @@
   // the host page's element after the editor is closed.
   listenInput(document, 'mouseup', function() {
     if (draggedEl && !isDragging) draggedEl.removeAttribute('draggable');
+  }, true);
+
+  // The text selected with the mouse, in note mode: what a note can point at.
+  function selectedText() {
+    var sel = document.getSelection ? document.getSelection() : null;
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+    var text = String(sel.toString() || '').replace(/\s+/g, ' ').trim();
+    if (!text) return null;
+    var node = sel.getRangeAt(0).commonAncestorContainer;
+    var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+    return { text: text.slice(0, 1000), el: el || null };
+  }
+
+  listenInput(document, 'mouseup', function() {
+    if (currentMode !== 'note') return;
+    var picked = selectedText();
+    if (!picked) return;
+    window.parent.postMessage({
+      type: 'visual-editor:text-selected',
+      text: picked.text,
+      element: picked.el ? serializeElement(picked.el) : null
+    }, '*');
   }, true);
 
   listenInput(document, 'dragstart', function(e) {
@@ -580,10 +603,12 @@
 
   // Click handler (Select & Link on click if not dragging)
   listenInput(document, 'click', function(e) {
-    if (currentMode !== 'edit') return;
+    if (currentMode !== 'edit' && currentMode !== 'note') return;
     if (isDragging) return; // ignore click if user just dropped an element
     e.preventDefault();
     e.stopPropagation();
+    // The click that ends a text selection: the text is what was picked, not the element.
+    if (currentMode === 'note' && selectedText()) return;
 
     var target = document.elementFromPoint(e.clientX, e.clientY);
     if (!target || target === hoverOutline || target === hoverBadge || target === dropIndicator) return;
