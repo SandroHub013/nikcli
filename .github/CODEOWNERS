@@ -1,17 +1,32 @@
 # Code Owners for nikcli
+#
+# Only paths listed here require an owner review (enforced by branch protection
+# on live-main). Everything else is freely editable by collaborators with Write.
 
-# Default owners for all files
-* @nikomatt69
-
-# Specific ownership for different areas
+/.github/CODEOWNERS @nikomatt69
 /.github/workflows/ @nikomatt69
-/packages/nikcli/src/cli/ @nikomatt69
-/packages/nikcli/src/server/ @nikomatt69
+
+/packages/auth/ @nikomatt69
+/packages/bench-tui/ @nikomatt69
+/packages/companion/ @nikomatt69
+/packages/console/ @nikomatt69
+/packages/containers/ @nikomatt69
+/packages/enterprise/ @nikomatt69
+/packages/function/ @nikomatt69
+/packages/http-recorder/ @nikomatt69
+/packages/httpapi-codegen/ @nikomatt69
+/packages/identity/ @nikomatt69
+/packages/inference/ @nikomatt69
+/packages/llm/ @nikomatt69
+/packages/nikcli/ @nikomatt69
+/packages/plugin/ @nikomatt69
 /packages/remote/ @nikomatt69
+/packages/script/ @nikomatt69
 /packages/sdk/ @nikomatt69
-packages/tui @nikomatt69
-
-
-packages/app @SandroHub013
-packages/desktop @SandroHub013
-packages/ui @SandroHub013
+/packages/sdk-next/ @nikomatt69
+/packages/simulation/ @nikomatt69
+/packages/slack/ @nikomatt69
+/packages/tui/ @nikomatt69
+/packages/tui-storybook/ @nikomatt69
+/packages/util/ @nikomatt69
+/packages/web/ @nikomatt69
