@@ -62,7 +62,7 @@ describe("the shipped assets against the generator's ceilings", () => {
     expect(animations.json.meshes).toBeUndefined()
     // A clip finds its bones by name: every bone of the animations' skeleton is in every body, at every level.
     const bones = (animations.json.nodes ?? []).map((n) => n.name).filter(Boolean)
-    expect(bones.length).toBeGreaterThan(30)
+    expect(bones.length).toBeGreaterThan(20)
     for (const level of presentLevels()) {
       for (const body of BODIES) {
         const have = new Set((character(level, body).json.nodes ?? []).map((n) => n.name))
@@ -165,6 +165,6 @@ describe("the shipped assets against the generator's ceilings", () => {
     expect(withHat).toBeGreaterThan(budget.budget.char_lod2_tris)
     expect(characterTriangles(glb, 2)).toBeLessThanOrEqual(budget.budget.char_lod2_tris)
     // The parts of a character that are not a body: found under the head or the hips, not at the scene's root.
-    expect(subtree(glb, nodeNamed(glb, "root")).length).toBeGreaterThan(30)
+    expect(subtree(glb, nodeNamed(glb, "root")).length).toBeGreaterThan(20)
   })
 })

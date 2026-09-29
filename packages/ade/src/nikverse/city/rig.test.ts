@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Vector3 } from "three/webgpu"
+import { Quaternion, Vector3 } from "three/webgpu"
 import { castOf, presentLevels } from "./test-cast"
 import { unpack, readGlb } from "./glb"
 import {
@@ -83,6 +83,13 @@ describe("a rigged person", () => {
     rig.root.updateMatrixWorld(true)
     return rig.root.getObjectByName(name)!.getWorldPosition(new Vector3())
   }
+  /** How far a bone has turned from another rig's, in radians: a turn of the body barely moves the head's place. */
+  const turnedBy = (a: ReturnType<typeof createRig>, b: ReturnType<typeof createRig>, name: string) => {
+    a.root.updateMatrixWorld(true)
+    b.root.updateMatrixWorld(true)
+    const q = (rig: ReturnType<typeof createRig>) => rig.root.getObjectByName(name)!.getWorldQuaternion(new Quaternion())
+    return q(a).angleTo(q(b))
+  }
   const run = (rig: ReturnType<typeof createRig>, role: Parameters<typeof play>[1], seconds: number) => {
     play(rig, role)
     advance(rig, 1)
@@ -100,7 +107,7 @@ describe("a rigged person", () => {
     expect(at(b, "footl").toArray()).toEqual(before)
   })
 
-  test("a clip moves the bones: the walk swings the legs, the turn twists the body, the error bows the head", async () => {
+  test("a clip moves the bones: the walk swings the legs, the turn twists the body, the error tilts the head", async () => {
     const seated = await rigOf()
     run(seated, "sit", 0.4)
     const walking = await rigOf()
@@ -108,16 +115,15 @@ describe("a rigged person", () => {
     expect(Math.abs(at(walking, "footl").z - at(seated, "footl").z)).toBeGreaterThan(0.1)
     const turned = await rigOf()
     run(turned, "turn", 0.5)
-    expect(Math.abs(at(turned, "head").x - at(seated, "head").x)).toBeGreaterThan(0.02)
+    expect(turnedBy(turned, seated, "head")).toBeGreaterThan(0.05)
     const bowed = await rigOf()
     run(bowed, "error", 0.5)
-    expect(at(bowed, "head").z).toBeLessThan(at(seated, "head").z - 0.02)
+    // N3 v2 bows by tilting the head (0.14 rad), not by moving it: the turn is 0.78 rad, the bow 0.14, the floor is 0.05.
+    expect(turnedBy(bowed, seated, "head")).toBeGreaterThan(0.05)
   })
 
-  // N3's arm motion for these clips is on IK controls, which three.js does not solve, and the exporter did not
-  // bake it onto the arm bones: a session that needs a permission raises no hand. `failing` turns red when the
-  // export is fixed, and the test is then written as it should be.
-  test.failing("the raised hand of a permission is over the head (N3: the arm clips are not baked from IK)", async () => {
+  // N3 v2 bakes the arm motion onto the arm bones (the IK controls are gone): the hand of a permission is over the head.
+  test("the raised hand of a permission is over the head", async () => {
     const raised = await rigOf()
     run(raised, "raise_hand", 0.5)
     const hand = Math.max(at(raised, "handl").y, at(raised, "handr").y)
