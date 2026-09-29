@@ -10,6 +10,7 @@
 import type { DirEntry } from "../host/shell"
 import type { ReadDir, WatchedRegister } from "../host/register-watch"
 import { mediaUrl } from "../video/video"
+import type { SheetNote } from "./notes"
 
 /** What a web pane showing a sheet remembers, and keeps across a restart. */
 export interface PaneSheet {
@@ -19,6 +20,8 @@ export interface PaneSheet {
   from: string
   /** The pane's title as the session gave it; the file's name without it. */
   title?: string
+  /** The notes the user left and has not sent yet (`design/notes.ts`). */
+  notes?: SheetNote[]
 }
 
 /** The longest title a session may give its sheet. */

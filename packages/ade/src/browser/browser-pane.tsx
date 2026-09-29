@@ -38,6 +38,7 @@ import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./
 import { fitViewport, type DevicePreset } from "./viewport"
 import { BROWSE_SANDBOX, DESIGN_SANDBOX } from "./sandbox"
 import { isSheetAddress } from "../design/sheet"
+import { elementTarget, noteTargets, noteText, textTarget, type SheetNote } from "../design/notes"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
@@ -84,6 +85,20 @@ export interface BrowserPaneProps {
    * the refusal of ADE's origins.
    */
   sheet?: string
+  /**
+   * The notes left on the sheet and not sent yet. They live with the pane, not
+   * in the frame: a reload of the sheet keeps them (design sheet, piece 2).
+   */
+  sheetNotes?: readonly SheetNote[]
+  /** The notes after the user added or removed one. */
+  onSheetNotes?: (notes: SheetNote[]) => void
+  /**
+   * Sends the notes to the session that wrote the sheet, or to `to` when the
+   * user picked one because that session is not running.
+   */
+  onSendSheetNotes?: (
+    to?: string,
+  ) => Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }>
 }
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
@@ -221,6 +236,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [landscape, setLandscape] = createSignal(false)
 
   const [selection, setSelection] = createSignal<InspectedElement[]>([])
+  /** A text selected on a design sheet, which a note can point at. */
+  const [textPick, setTextPick] = createSignal<{ text: string; element: InspectedElement | null }>()
+  const [sendingNotes, setSendingNotes] = createSignal(false)
+  /** The notes' send waiting for the user to say which session gets them. */
+  const [notesAsking, setNotesAsking] = createSignal(false)
+  const [notesNote, setNotesNote] = createSignal<{ ok: boolean; text: string }>()
   const [promptText, setPromptText] = createSignal("")
   const [containerBox, setContainerBox] = createSignal({ width: 0, height: 0 })
   const [ownerMenu, setOwnerMenu] = createSignal(false)
@@ -274,7 +295,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const syncMode = () => {
-    post({ type: "visual-editor:set-mode", mode: mode() })
+    // Inspect on a design sheet is `note`: elements and text are picked, nothing is dragged.
+    post({ type: "visual-editor:set-mode", mode: mode() === "edit" && props.sheet !== undefined ? "note" : mode() })
   }
 
   // Effect runs whenever mode changes, keeping the injected inspector in sync.
@@ -525,6 +547,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       return
     }
 
+    if (data.type === "visual-editor:text-selected") {
+      /*
+       * As a clicked element: only on a design sheet, and only while the user
+       * inspects it. It becomes a pick the user can point a note at, never a
+       * note: a note is written in ADE's own field.
+       */
+      if (mode() !== "edit" || props.sheet === undefined) return
+      const text = typeof data.text === "string" ? data.text.trim() : ""
+      const element = data.element && typeof data.element.selector === "string" ? data.element : null
+      if (text) setTextPick({ text, element })
+      return
+    }
+
     if (data.type === "visual-editor:edit-applied") {
       const edit = data as unknown as Partial<EditRecord>
       if (typeof edit.selector !== "string" || typeof edit.property !== "string") return
@@ -574,8 +609,49 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   const clearSelection = () => {
     setSelection([])
+    setTextPick(undefined)
     post({ type: "visual-editor:clear-selection" })
   }
+
+  /** A note from ADE's field, on what is picked now. Only the user's key gets here. */
+  const addNote = () => {
+    const text = noteText(promptText())
+    if (!text || !props.onSheetNotes) return
+    const pick = textPick()
+    const note: SheetNote = {
+      id: `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      targets: [...selection().map(elementTarget), ...(pick ? [textTarget(pick.text, pick.element)] : [])],
+      text,
+      at: Date.now(),
+    }
+    props.onSheetNotes([...(props.sheetNotes ?? []), note])
+    setPromptText("")
+    clearSelection()
+  }
+
+  const removeNote = (id: string) => props.onSheetNotes?.((props.sheetNotes ?? []).filter((note) => note.id !== id))
+
+  /** The notes, to the sheet's session or to the one the user picked. Only ADE's button gets here. */
+  const sendNotes = async (to?: string) => {
+    if (sendingNotes() || !props.onSendSheetNotes) return
+    setSendingNotes(true)
+    setNotesNote(undefined)
+    const outcome = await props.onSendSheetNotes(to).catch((error: unknown) => ({
+      ok: false as const,
+      reason: error instanceof Error ? error.message : String(error),
+    }))
+    setSendingNotes(false)
+    if (!outcome.ok) {
+      if ("stopped" in outcome && outcome.stopped) setNotesAsking(true)
+      setNotesNote({ ok: false, text: t("browser.send.failed", outcome.reason) })
+      return
+    }
+    setNotesAsking(false)
+    setNotesNote({ ok: true, text: t("sheet.notes.sent", outcome.title) })
+  }
+
+  /** Enter or the button in the prompt: on a sheet it adds a note, elsewhere it sends. */
+  const commitPrompt = () => (props.sheet !== undefined ? addNote() : sendPromptWithContext())
 
   const selectSection = (selector: string) => post({ type: "visual-editor:select-section", selector })
 
@@ -1168,7 +1244,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             )}
           </Show>
 
-          <Show when={!sending() && (mode() === "edit" || selection().length > 0)}>
+          <Show when={!sending() && (mode() === "edit" || selection().length > 0 || textPick() !== undefined)}>
             <div data-slot="browser-prompt-popover">
               <Show when={selection().length > 0}>
                 <div data-slot="browser-selection-list">
@@ -1192,14 +1268,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                                 {t("browser.section.whole", el.section!.name)}
                               </button>
                             </Show>
-                            <button
-                              type="button"
-                              data-slot="browser-context-action"
-                              aria-expanded={editing() === el.selector}
-                              onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
-                            >
-                              {t("browser.edit.toggle")}
-                            </button>
+                            <Show when={props.sheet === undefined}>
+                              <button
+                                type="button"
+                                data-slot="browser-context-action"
+                                aria-expanded={editing() === el.selector}
+                                onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
+                              >
+                                {t("browser.edit.toggle")}
+                              </button>
+                            </Show>
                             <button
                               type="button"
                               data-slot="browser-context-remove"
@@ -1246,6 +1324,36 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                     {t("browser.clearSelection")}
                   </button>
                 </div>
+              </Show>
+
+              <Show when={textPick()}>
+                {(pick) => (
+                  <div data-slot="browser-context-block" data-kind="text">
+                    <div data-slot="browser-context-header">
+                      <span data-slot="browser-context-tag">{t("sheet.text.label")}</span>
+                      <span data-slot="browser-context-name">«{pick().text}»</span>
+                      <button
+                        type="button"
+                        data-slot="browser-context-remove"
+                        onClick={() => setTextPick(undefined)}
+                        aria-label={t("sheet.text.remove")}
+                      >
+                        <svg
+                          viewBox="0 0 16 16"
+                          width="10"
+                          height="10"
+                          aria-hidden="true"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                        >
+                          <path d="M4 4l8 8M12 4l-8 8" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Show>
 
               <Show when={asking()}>
@@ -1295,29 +1403,109 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   onInput={(e) => setPromptText(e.currentTarget.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      sendPromptWithContext()
+                      commitPrompt()
                     } else if (e.key === "Escape") {
                       clearSelection()
                       setPromptText("")
                       setMode("browse")
                     }
                   }}
-                  placeholder={selection().length > 0 ? t("browser.prompt.selected") : t("browser.prompt.empty")}
+                  placeholder={
+                    props.sheet !== undefined
+                      ? t("sheet.note.placeholder")
+                      : selection().length > 0
+                        ? t("browser.prompt.selected")
+                        : t("browser.prompt.empty")
+                  }
                   spellcheck={false}
                 />
                 <button
                   type="button"
                   data-slot="browser-send-btn"
-                  onClick={sendPromptWithContext}
-                  disabled={!promptText().trim() && selection().length === 0}
+                  onClick={commitPrompt}
+                  disabled={
+                    props.sheet !== undefined ? !promptText().trim() : !promptText().trim() && selection().length === 0
+                  }
                 >
-                  {t("agent.send")}
+                  {props.sheet !== undefined ? t("sheet.note.add") : t("agent.send")}
                 </button>
               </div>
             </div>
           </Show>
         </div>
       </div>
+
+      <Show when={props.sheet !== undefined && ((props.sheetNotes?.length ?? 0) > 0 || notesNote())}>
+        <section data-slot="sheet-notes" aria-label={t("sheet.notes.title")}>
+          <div data-slot="sheet-notes-head">
+            <span data-slot="sheet-notes-count">{t("sheet.notes.count", props.sheetNotes?.length ?? 0)}</span>
+            <Show when={notesNote()}>
+              <span data-slot="browser-send-note" data-ok={notesNote()?.ok ? "true" : "false"} role="status">
+                {notesNote()?.text}
+              </span>
+            </Show>
+            <Show when={(props.sheetNotes?.length ?? 0) > 0}>
+              <button
+                type="button"
+                data-slot="sheet-notes-send"
+                disabled={sendingNotes()}
+                onClick={() => void sendNotes()}
+              >
+                {sendingNotes() ? t("browser.send.sending") : t("sheet.notes.send")}
+              </button>
+            </Show>
+          </div>
+          <ol data-slot="sheet-notes-list">
+            <For each={props.sheetNotes ?? []}>
+              {(note, index) => (
+                <li data-slot="sheet-note">
+                  <span data-slot="sheet-note-where">{noteTargets(note) || t("sheet.note.whole")}</span>
+                  <span data-slot="sheet-note-text">{note.text}</span>
+                  <button
+                    type="button"
+                    data-slot="sheet-note-remove"
+                    onClick={() => removeNote(note.id)}
+                    aria-label={t("sheet.note.remove", index() + 1)}
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="10"
+                      height="10"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                    >
+                      <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                  </button>
+                </li>
+              )}
+            </For>
+          </ol>
+          <Show when={notesAsking()}>
+            <div data-slot="browser-send-picker" role="dialog" aria-label={t("sheet.notes.ask")}>
+              <span data-slot="browser-send-question">{t("sheet.notes.ask")}</span>
+              <div data-slot="browser-send-choices">
+                <For
+                  each={props.sessions ?? []}
+                  fallback={<span data-slot="browser-owner-empty">{t("browser.send.none")}</span>}
+                >
+                  {(session) => (
+                    <button type="button" data-slot="browser-send-choice" onClick={() => void sendNotes(session.id)}>
+                      {session.title}
+                    </button>
+                  )}
+                </For>
+                <button type="button" data-slot="browser-clear-selection" onClick={() => setNotesAsking(false)}>
+                  {t("new.cancel")}
+                </button>
+              </div>
+            </div>
+          </Show>
+        </section>
+      </Show>
 
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
