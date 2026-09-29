@@ -18,6 +18,35 @@ EOT-07, EOT-18, EOT-19). Implementation lands in dependency order, one slice at 
 own status. EOT-18 is the exception to the "proposed" framing — its parser premise shipped, and what is left there is
 policy.
 
+## Execution Ledger
+
+Appended 2026-09-29, after a pass over the gates below. Every "landed" line is backed by a named suite run in that
+session; every "open" line is a gate that still needs work, not a claim that a consumer is missing.
+
+**Landed and verified**
+
+- Active sync recovery. `/sync/outbox` paginates on `(seq, aggregate, id)` with a `nextCursor`; the transport keeps
+  per-aggregate cursors that advance only after an event applies; subscription is fenced before the journal is read
+  (`readiness=1`); recovery re-runs on reconnect, on a token-refresh reopen, and on a superseded generation. 86 tests
+  across `test/sync/` and `test/server/httpapi-sync.test.ts`. Generated clients regenerated; `check:routes --strict`
+  clean.
+- Plugin store quota accounting (EOT-14 slice): replacement no longer double-counts, files already on disk are charged,
+  watcher reloads re-check, and concurrent writes to different stores share one reservation instead of racing it.
+- Dialog stack revision guard plus the first real consumer (`component/dialog-profile.tsx`), and the per-key input
+  decision from EOT-07: `ownerOf` now resolves the Ctrl+C/Escape dispute at the one site that arbitrates.
+- Fail-closed baseline validation and terminal provenance in the startup harness (EOT-01 slice). Server-route evidence
+  only.
+
+**Open — and why it is still open**
+
+- EOT-00. Still no real Ghostty leg, and the tmux leg is an emulated environment. No promotion, no ratified budgets.
+- EOT-15 consumer barrier. The sync producer and the fencing contract exist; the TUI still refetches on reconnect
+  instead of resuming per aggregate. `SyncProjection.session` exposes only id/title/lastTouchedAt, so a session
+  watermark barrier is a protocol question, not a wiring one.
+- EOT-16. `locallyWorkspace` still pins a value rather than scoping resources (gap B31).
+- EOT-04 client admission, EOT-06 measured windowing, EOT-18 headless policy on the remaining handlers, EOT-11 adapter
+  convergence. Untouched in this pass.
+
 ## Target Architecture
 
 ```text
@@ -118,14 +147,23 @@ prerequisites. Run memory-heavy verification serially even when implementation w
 
 **Status 2026-09-20: closed for the server-route baseline; the TUI startup half waits on EOT-00.** On
 2026-09-25 EOT-00 ran 603 compiled starts across three of its four terminals with no stall; Ghostty is still owed,
-so the wait stands. The
+so the wait stands. Corrected 2026-09-29: those 603 are compiled starts, and the tmux leg is an emulated
+terminal environment rather than a tmux-driven run — so the evidence is _no observed stall in three process
+contexts_, not a completed real-terminal matrix. `script/tui-startup.ts` now records
+`realTerminalCoverage: observed-process-context | unverified | unavailable` alongside the Ghostty/tmux flags it
+actually observed, so a future artifact cannot read as full matrix coverage. The
 baseline artifact exists at
 `packages/nikcli/specs/perf-baseline.json` and `check:perf-baseline` gates it in
 `script/ci-validate.ts`. It had not been closed because the probe never returned —
 `perf-baseline.ts` finished measuring in under a second and then hung on open handles, so
-no artifact could be produced. The gate enforces the machine-independent half (shape,
+no artifact could be produced. As of 2026-09-29 the validator is fail-closed rather than advisory: it rejects an
+unreadable or non-JSON artifact, an unknown version, zero samples, an unparseable `recordedAt`, absent host
+metadata, an empty route set, duplicate route names, route/sample-count mismatch, non-finite or negative
+timings, a missing required route, malformed or unbalanced lifecycle counters, a nonzero `scope.finalizer-leak`,
+and a run that recorded no scopes. The gate enforces the machine-independent half (shape,
 sample counts, lifecycle-counter balance) and deliberately does not gate wall-clock, for
-the reason this section already states: a noisy baseline is not a pass either. See the P0
+the reason this section already states: a noisy baseline is not a pass either. Server-route evidence only: the
+full TUI budgets remain unratified. See the P0
 Closure section in `effect-tui/01-performance-baseline.md`.
 
 - Record versions, host modes, workload fixtures, raw metrics, queue/resource counters, and a baseline comparison format.

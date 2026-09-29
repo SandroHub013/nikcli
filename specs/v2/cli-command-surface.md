@@ -71,6 +71,7 @@ Source: the `commands` field of the root `Spec.make("nikcli", …)` in `src/cli/
 | `artifact`        | `login`, `logout`, `list [session-id]`                                                             |                                                        |
 | `ads`             | `create`, `list`, `remove [id]`, `toggle [id]`, `enable`, `disable`                                |                                                        |
 | `bot`             | `list`, `add`, `start [name]`, `stop [name]`, `webhook [name]`                                     | Chatbot                                                |
+| `auto-mode`       | `defaults`, `config`, `critique`, `reset`                                                          | Permission auto-mode classifier rules                  |
 | `heap`            | —                                                                                                  |                                                        |
 | `completion`      | —                                                                                                  | yargs-generated shell completion                       |
 

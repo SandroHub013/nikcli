@@ -1,6 +1,6 @@
 import type { TuiMemoryEntry, TuiStoreEntry, TuiStorage } from "@nikcli-ai/plugin/tui"
-import { mkdirSync, readFileSync, watch, type FSWatcher } from "fs"
-import { rename } from "fs/promises"
+import { mkdirSync, readFileSync, renameSync, watch, type FSWatcher } from "fs"
+import { unlink } from "fs/promises"
 import path from "path"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Global } from "@nikcli-ai/util/global"
@@ -30,11 +30,12 @@ const memories = new Map<string, TuiMemoryEntry<object>>()
 type StoredEntry = {
   readonly value: TuiStoreEntry<object>
   readonly reload: () => void
-  /** Size of the last successful write, so the quota can be recomputed. */
+  /** Bytes loaded from disk or committed by the last successful write. */
   bytes: number
 }
 
 const stored = new Map<string, StoredEntry>()
+const reservations = new Map<StoredEntry, Set<{ size: number }>>()
 let watcher: FSWatcher | undefined
 
 /**
@@ -48,9 +49,14 @@ let watcher: FSWatcher | undefined
  */
 const MAX_STORE_BYTES = 32 * 1024 * 1024
 
-function retainedBytes() {
+function retainedBytes(replacement?: StoredEntry, bytes = 0) {
   let total = 0
-  for (const entry of stored.values()) total += entry.bytes
+  const entries = new Set([...stored.values(), ...reservations.keys()])
+  for (const entry of entries) {
+    let size = entry === replacement ? bytes : entry.bytes
+    for (const reserved of reservations.get(entry) ?? []) size = Math.max(size, entry.bytes, reserved.size)
+    total += size
+  }
   return total
 }
 
@@ -77,9 +83,13 @@ function idPrefix(id: string) {
 
 function read(file: string) {
   try {
-    const raw = JSON.parse(readFileSync(file, "utf8")) as unknown
+    const payload = readFileSync(file, "utf8")
+    const raw = JSON.parse(payload) as unknown
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return
-    return raw as Record<string, unknown>
+    return {
+      value: raw as Record<string, unknown>,
+      bytes: Buffer.byteLength(payload),
+    }
   } catch {
     // Missing, half-written, or corrupted: fall back to what we have.
     return
@@ -124,12 +134,20 @@ export function pluginStorage(id: string): TuiStorage {
       mkdirSync(dir, { recursive: true })
       ensureWatcher(dir)
 
+      const loaded = read(file)
+      if (retainedBytes() + (loaded?.bytes ?? 0) > MAX_STORE_BYTES) {
+        throw new Error(
+          `plugin storage quota exhausted: loading ${file} would exceed the ${MAX_STORE_BYTES} byte budget`,
+        )
+      }
       const [store, setStore] = createStore<typeof options.initial>({
         ...options.initial,
-        ...(read(file) as Partial<typeof options.initial> | undefined),
+        ...(loaded?.value as Partial<typeof options.initial> | undefined),
       })
+      let reloadPending = false
 
       const flush = async () => {
+        if (stored.get(file) !== tracked) throw new Error(`plugin storage entry was evicted: ${file}`)
         const payload = JSON.stringify(store, null, 2)
         const size = Buffer.byteLength(payload)
         // Refused, not silently dropped or silently evicted: EOT-14 requires
@@ -137,7 +155,7 @@ export function pluginStorage(id: string): TuiStorage {
         // stopped persisting is a plugin that appears to work and loses data
         // on restart. The in-memory value is already updated by the caller;
         // this is the durable write declining to grow without bound.
-        if (retainedBytes() + size > MAX_STORE_BYTES) {
+        if (retainedBytes(tracked, size) > MAX_STORE_BYTES) {
           log.error("plugin storage quota exhausted; write refused", {
             file,
             bytes: size,
@@ -148,19 +166,47 @@ export function pluginStorage(id: string): TuiStorage {
             `plugin storage quota exhausted: writing ${size} bytes to ${file} would exceed the ${MAX_STORE_BYTES} byte budget`,
           )
         }
+        // Reserve before the first await; other keys cannot spend this growth
+        // while this write waits for its file lock. Shrinks free bytes at commit.
+        const pending = reservations.get(tracked) ?? new Set<{ size: number }>()
+        const reservation = { size }
+        pending.add(reservation)
+        reservations.set(tracked, pending)
         // Locked so two instances writing the same key cannot interleave, and
         // written through a temp file so a reader never sees partial JSON.
-        const lease = await Flock.acquire(`tui-plugin-storage:${file}`).catch(() => undefined)
+        let lease: Flock.Lease | undefined
+        const temp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`
         try {
-          const temp = `${file}.${process.pid}.tmp`
+          lease = await Flock.acquire(`tui-plugin-storage:${file}`, {
+            timeoutMs: 5_000,
+          })
+          if (stored.get(file) !== tracked) throw new Error(`plugin storage entry was evicted: ${file}`)
           await Bun.write(temp, payload)
-          await rename(temp, file)
-          const tracked = stored.get(file)
-          if (tracked) tracked.bytes = size
+          if (stored.get(file) !== tracked) throw new Error(`plugin storage entry was evicted: ${file}`)
+          // Keep the generation check and commit in one turn; eviction cannot
+          // hand this path to a new entry while an asynchronous rename is pending.
+          renameSync(temp, file)
+          tracked.bytes = size
         } catch (error) {
           log.warn("failed to persist plugin storage", { file, error })
+          throw error
         } finally {
-          await lease?.release().catch(() => undefined)
+          try {
+            await unlink(temp).catch((error: NodeJS.ErrnoException) => {
+              if (error.code !== "ENOENT")
+                log.warn("failed to remove plugin storage temporary file", {
+                  file,
+                  error,
+                })
+            })
+            await lease?.release()
+          } finally {
+            pending.delete(reservation)
+            if (!pending.size) {
+              reservations.delete(tracked)
+              if (reloadPending && stored.get(file) === tracked) tracked.reload()
+            }
+          }
         }
       }
 
@@ -172,20 +218,34 @@ export function pluginStorage(id: string): TuiStorage {
         },
       ] as const
 
-      stored.set(file, {
+      const tracked: StoredEntry = {
         value: entry as TuiStoreEntry<object>,
-        bytes: 0,
+        bytes: loaded?.bytes ?? 0,
         reload: () => {
+          if (reservations.has(tracked)) {
+            reloadPending = true
+            return
+          }
+          reloadPending = false
           const next = read(file)
           if (!next) return
+          if (retainedBytes(tracked, next.bytes) > MAX_STORE_BYTES) {
+            log.error("plugin storage quota exhausted; reload refused", {
+              file,
+              bytes: next.bytes,
+            })
+            return
+          }
           setStore(
             reconcile({
               ...options.initial,
-              ...(next as Partial<typeof options.initial>),
+              ...(next.value as Partial<typeof options.initial>),
             }),
           )
+          tracked.bytes = next.bytes
         },
-      })
+      }
+      stored.set(file, tracked)
       return entry
     },
   }
@@ -200,10 +260,10 @@ export function pluginStorage(id: string): TuiStorage {
  * released then.
  */
 export function evictPluginStorage(id: string) {
-  for (const full of [...memories.keys()]) {
+  for (const full of memories.keys()) {
     if (full.startsWith(`${id}.`)) memories.delete(full)
   }
-  for (const file of [...stored.keys()]) {
+  for (const file of stored.keys()) {
     // `stored` is keyed by full path, not by bare file name, so the prefix has
     // to be matched against the name within it.
     if (path.basename(file).startsWith(idPrefix(id))) stored.delete(file)

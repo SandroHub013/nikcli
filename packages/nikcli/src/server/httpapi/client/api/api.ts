@@ -2383,6 +2383,8 @@ type Endpoint25_1Request = Parameters<RawClient["sync"]["outbox"]>[0]
 export type Endpoint25_1Input = {
   readonly projectID: Endpoint25_1Request["query"]["projectID"]
   readonly since?: Endpoint25_1Request["query"]["since"]
+  readonly afterAggregate?: Endpoint25_1Request["query"]["afterAggregate"]
+  readonly afterID?: Endpoint25_1Request["query"]["afterID"]
 }
 export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["sync"]["outbox"]>>
 export type SyncOutboxOperation<E = never> = (input: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
@@ -2398,6 +2400,7 @@ export type SyncSnapshotOperation<E = never> = (input: Endpoint25_2Input) => Eff
 type Endpoint25_3Request = Parameters<RawClient["sync"]["stream"]>[0]
 export type Endpoint25_3Input = {
   readonly projectID: Endpoint25_3Request["query"]["projectID"]
+  readonly readiness?: Endpoint25_3Request["query"]["readiness"]
   readonly token: Endpoint25_3Request["query"]["token"]
 }
 export type Endpoint25_3Output = StreamValue<EffectValue<ReturnType<RawClient["sync"]["stream"]>>>

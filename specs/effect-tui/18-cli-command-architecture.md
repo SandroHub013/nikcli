@@ -177,3 +177,69 @@ consumer, because the REPL they are for does not exist.
 What remains of requirement 12 is therefore the wrapper, not the rule: route `cli/effect/prompt.ts` through
 `isHeadless`, give a prompt with no default a typed failure, and map that failure onto requirement 9's exit codes —
 which are themselves still unimplemented (every failure exits `1`).
+
+## The Remediation Target Was Dead, and the Defect Was One File Over — 2026-09-28
+
+The section above says requirement 12's remaining work is to "route
+`cli/effect/prompt.ts` through `isHeadless`". Two things are wrong with that
+sentence, and both were found by checking the file it names.
+
+**`cli/effect/prompt.ts` has zero importers.** `src/cli/effect/` contains only
+that file, and nothing in `src`, `test`, or `script` imports it by any
+spelling. Its own header already said `Candidate removal: zero imports from
+src/ (plan neon-meadow 2.5)`. Guarding it would have been a guard on dead
+code — the same finding class as the dead `Lifecycle<T>` wrapper this document
+removed two sections ago, and the same reason that removal was right.
+
+**The live surface is 25 handler modules importing `@clack/prompts`
+directly.** One of them was missing the guard, and it is the highest-consequence
+one in the tree:
+
+```ts
+// src/cli/handlers/upgrade.ts, before
+const install = await prompts.select({ message: "Install anyways?", /* … */ initialValue: false })
+if (!install) {
+  prompts.outro("Done")
+  return
+} // never fires on cancel
+```
+
+`@clack/core` answers a cancelled prompt with `Symbol("clack:cancel")` —
+`cancelSymbol = Symbol("clack:cancel")` and `isCancel(x) { return x === cancelSymbol }`
+in `node_modules/@clack/core/dist/index.mjs`. **A symbol is truthy**, so
+`!install` is `false`, the guard is skipped, and the handler falls through to
+`installation.upgrade(...)` — replacing a binary on a package-manager-owned
+path after the user pressed Escape, pressed Ctrl+C, or ran with no TTY at all.
+`initialValue: false` does not help: the default is only used on submit, and a
+cancel submits nothing.
+
+That is the exact inverse of requirement 12. Fixed with the idiom
+`routine/delete.ts` already uses:
+
+```ts
+if (prompts.isCancel(install) || !install) { … }
+```
+
+### Why it survived review, and the rule that follows
+
+**clack cannot be driven without a TTY** — its `createInterface` throws on a
+non-TTY stdin, so the prompt is invisible to `bun test`. A defect that can only
+occur where a human is present, guarding a thing a human is asked about, and
+invisible to the suite, is a defect that review does not find by reading.
+
+Two rules, both already paid for elsewhere in this catalogue:
+
+1. **A cancelled prompt is a value, not an absence.** Any `await` on a clack
+   prompt is `Value | symbol`, and the symbol is truthy. Truthiness is not a
+   cancel check; `isCancel` is. This is `04-event-delivery.md`'s "absence is
+   not typed data" and `public-event-filter.md`'s "withheld means absent, not
+   typed", restated for a prompt.
+2. **Audit the file that is live, not the file the spec names.** The other 24
+   handler modules were already correct, which is what made the plan's
+   remediation look unnecessary rather than misdirected.
+
+`test/cli/prompt-cancel-guards.test.ts` now fails any module under
+`src/cli/handlers/` that calls `select`/`text`/`password`/`confirm`/
+`multiselect` without checking `isCancel`, and asserts the population is at
+least 20 files — so the gate cannot pass by measuring nothing after a refactor
+moves every prompt behind a wrapper.

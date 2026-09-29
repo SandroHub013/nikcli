@@ -4,10 +4,31 @@ Scope: what the specs still owe the code, and the order this repo should pay it 
 Written 2026-09-27, after an audit of `specs/effect-tui/*` and `specs/v2/*` against
 production call paths and existing tests.
 
+**Correction, 2026-09-29.** Tier 1 item 3 is done and the storage-quota reasoning in it
+was partly wrong: `packages/tui/src/plugin/storage.ts` did have a `MAX_STORE_BYTES`
+bound, but it under-counted rather than being absent — a replacement charged the old
+entry and the new bytes together, files already on disk were never charged, and a
+watcher reload re-checked against a total that excluded the file being reloaded. Those
+three are fixed, with a reservation so two concurrent writes to different stores share
+one budget instead of each seeing room the other is about to take. Unload eviction
+remains open and is still EOT-14 work, not this item. Tier 1 item 1 (shutdown budget
+starting after the unbounded awaits) is not addressed by that work and stays open.
+
 The premise of this document: in this catalog the **contracts are landed and gated**,
 and what is missing is the **consumer side** — the migrations the contracts were
 written to govern. A structural gate that greps source cannot tell you the consumer
 exists, which is why the tree reads as unfinished while most of it is finished.
+
+A second correction, in the other direction: `_gap-analysis-2026-09-28.md` credits the
+cursor fix in `src/sync/remote-client.ts` with closing catch-up. `RemoteSyncClient` has
+no production caller — the active path is `src/sync/remote-sync.ts` over
+`createHttpRemoteTransport`, which paginated `/sync/outbox` by a scalar `since`. That
+path now paginates by a composite `(seq, aggregate, id)` keyset with a `nextCursor`,
+subscribes before it reads the journal (`readiness=1`, which turns the greeting into an
+explicit `ready` event and offers only `sync.received` wakeups), keeps a per-aggregate
+cursor that advances only after an event applies, and re-runs recovery on every
+reconnect and on a superseded generation. The client is the contract; the active
+transport is the thing that has to be correct.
 
 ## Tier 1 — real defects, small diffs
 

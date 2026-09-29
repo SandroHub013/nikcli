@@ -11,7 +11,7 @@
  * This module keeps them. It is deliberately readable with
  * `experimental.nativeLlm` **off**, which is the point: `session/llm.ts` already
  * compiles the native request in shadow when the flag is down, so `disabled`
- * answers "how many turns would have gone native, and for which providers"
+ * answers "how many turns had a native mapping, and for which providers"
  * without flipping anything on. The soak the todo asks for is this, not the flag.
  *
  * Discipline, following `effect/lifecycle-counters.ts`:
@@ -20,12 +20,13 @@
  *    reads as "measured, none" when it means "never measured". The six below are
  *    the six branches `session/llm.ts` can take, and adding a seventh means
  *    adding the branch that emits it.
- *  - **Fixed cardinality** (EOT-01 requirement 6). The counter key is
- *    `providerID:outcome` — both bounded. Model ids are *not* keys; they go in a
+ *  - **Bounded cardinality** (EOT-01 requirement 6). Custom provider ids are
+ *    arbitrary: retain at most PROVIDER_CAP, plus a reserved overflow bucket.
+ *    Model ids are *not* keys; they go in a
  *    capped set instead, so "which models" stays answerable without an unbounded
  *    map. Refusal reasons are bounded the same way.
- *  - **No session ids, prompts, tokens or paths.** Provider and model ids are
- *    catalog identifiers, not user data.
+ *  - **No session ids, prompts, tokens or paths are accepted.** Only catalog
+ *    identifiers and refusal reasons are retained; logs use the redacted sink.
  *
  * Nothing here branches production behaviour. Recording is the whole job.
  */
@@ -43,15 +44,15 @@ const log = Log.create({ service: "llm-coverage" })
 export type Outcome =
   /** No `ModelRef` at all: `mapToModelRef` could not map this model. */
   | "unmapped"
-  /** The flag is off, but a `ModelRef` exists — this turn *would* have gone native. */
+  /** Flag off with a `ModelRef`; runtime eligibility has not been tested. */
   | "disabled"
   /** Flag on; the pre-flight `LLMNativeRuntime.status()` refused. A configuration verdict. */
   | "ineligible"
   /** Flag on; `streamRequestOnly` refused once it saw the route. A protocol verdict. */
   | "ineligible-late"
-  /** Flag on; the native runtime streamed the whole turn. */
+  /** Flag on; the native runtime returned a stream (not proof of completion). */
   | "native"
-  /** Flag on; native started, threw mid-stream, and the AI SDK finished the turn. */
+  /** Flag on; native threw and the caller selected the AI SDK fallback. */
   | "fallback"
 
 export const OUTCOMES: readonly Outcome[] = [
@@ -72,6 +73,8 @@ export const OUTCOMES: readonly Outcome[] = [
  * an unbounded one without anybody noticing.
  */
 const REASON_CAP = 32
+const PROVIDER_CAP = 32
+const PROVIDER_OVERFLOW = "other"
 
 /**
  * Distinct `provider/model` pairs kept for the refused set.
@@ -92,13 +95,15 @@ const MODEL_CAP = 64
  */
 const LOG_EVERY = 25
 
-const counts = new Map<string, number>()
+const counts = new Map<string, Map<Outcome, number>>()
+const overflowCounts = new Map<Outcome, number>()
 const reasons = new Map<string, number>()
+let reasonOverflow = 0
 const refusedModels = new Set<string>()
 let refusedOverflow = 0
 let turns = 0
 
-function bump(map: Map<string, number>, key: string) {
+function bump<K extends string>(map: Map<K, number>, key: K) {
   map.set(key, (map.get(key) ?? 0) + 1)
 }
 
@@ -115,13 +120,20 @@ export function record(input: {
   readonly modelID: string
   readonly reason?: string
 }): void {
-  bump(counts, `${input.providerID}:${input.outcome}`)
+  // Reserve `other` before admission; neither literal ids nor later arrivals
+  // may consume another named slot or collide with the overflow counters.
+  let provider = counts.get(input.providerID)
+  if (!provider && input.providerID !== PROVIDER_OVERFLOW && counts.size < PROVIDER_CAP) {
+    provider = new Map<Outcome, number>()
+    counts.set(input.providerID, provider)
+  }
+  bump(provider ?? overflowCounts, input.outcome)
   turns++
 
   if (input.reason && (input.outcome === "ineligible" || input.outcome === "ineligible-late")) {
     // Past the cap a new reason is still counted, just not named. Dropping it
     // entirely would make the totals disagree with the counters.
-    if (reasons.size >= REASON_CAP && !reasons.has(input.reason)) bump(reasons, "other")
+    if (input.reason === "other" || (reasons.size >= REASON_CAP && !reasons.has(input.reason))) reasonOverflow++
     else bump(reasons, input.reason)
   }
 
@@ -136,7 +148,7 @@ export function record(input: {
     }
   }
 
-  if (turns % LOG_EVERY === 0) log.info("native route coverage", summary())
+  if (turns % LOG_EVERY === 0) log.info("native route coverage", report())
 }
 
 export type Snapshot = {
@@ -147,7 +159,7 @@ export type Snapshot = {
   readonly reasons: Readonly<Record<string, number>>
   /** Up to `MODEL_CAP` distinct `provider/model` pairs the native route refused. */
   readonly refusedModels: readonly string[]
-  /** Distinct pairs seen after the cap was reached. */
+  /** Refusal observations not retained after the cap, including repeated pairs. */
   readonly refusedOverflow: number
 }
 
@@ -155,8 +167,14 @@ export type Snapshot = {
 export function snapshot(): Snapshot {
   return {
     turns,
-    counts: Object.fromEntries(counts),
-    reasons: Object.fromEntries(reasons),
+    counts: Object.fromEntries(
+      providerEntries().flatMap(([id, values]) => [...values].map(([outcome, n]) => [`${id}:${outcome}`, n])),
+    ),
+    reasons: Object.fromEntries(
+      [...reasons.entries()]
+        .sort(([a], [b]) => compare(a, b))
+        .concat(reasonOverflow ? [["other", reasonOverflow]] : []),
+    ),
     refusedModels: [...refusedModels].sort(),
     refusedOverflow,
   }
@@ -171,11 +189,64 @@ export function snapshot(): Snapshot {
 export function summary(): Readonly<Record<Outcome | "turns", number>> {
   const out = { turns } as Record<Outcome | "turns", number>
   for (const outcome of OUTCOMES) out[outcome] = 0
-  for (const [key, n] of counts) {
-    const outcome = key.slice(key.indexOf(":") + 1) as Outcome
-    if (outcome in out) out[outcome] += n
-  }
+  for (const [, values] of providerEntries()) for (const [outcome, n] of values) out[outcome] += n
   return out
+}
+
+function compare(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+function providerEntries(): [string, Map<Outcome, number>][] {
+  const entries = [...counts.entries()]
+  if (overflowCounts.size) entries.push([PROVIDER_OVERFLOW, overflowCounts])
+  return entries.sort(([a], [b]) => compare(a, b))
+}
+
+export type ProviderReport = Readonly<Record<Outcome | "turns", number>> & {
+  readonly providerID: string
+  readonly overflow: boolean
+  readonly mapped: number
+  /** Mapped with the flag off; neither preflight nor stream eligibility was measured. */
+  readonly eligibilityUnknown: number
+  readonly eligibilityRefused: number
+  /** Stream selected or native threw; not a count of completed native turns. */
+  readonly nativeAttempts: number
+  /** Fallback / nativeAttempts; null means no observations, not zero failures. */
+  readonly fallbackRate: number | null
+}
+
+/** Cumulative, deterministic decision inputs, without model ids or request data. */
+export function report() {
+  const providers: ProviderReport[] = providerEntries().map(([providerID, values]) => {
+    const outcomes = Object.fromEntries(OUTCOMES.map((outcome) => [outcome, values.get(outcome) ?? 0])) as Record<
+      Outcome,
+      number
+    >
+    const total = OUTCOMES.reduce((sum, outcome) => sum + outcomes[outcome], 0)
+    const nativeAttempts = outcomes.native + outcomes.fallback
+    return {
+      providerID,
+      overflow: providerID === PROVIDER_OVERFLOW,
+      ...outcomes,
+      turns: total,
+      mapped: total - outcomes.unmapped,
+      eligibilityUnknown: outcomes.disabled,
+      eligibilityRefused: outcomes.ineligible + outcomes["ineligible-late"],
+      nativeAttempts,
+      fallbackRate: nativeAttempts ? outcomes.fallback / nativeAttempts : null,
+    }
+  })
+  // Reasons are values in the log payload: the redactor does not sanitize
+  // arbitrary object keys, which could otherwise carry an interpolated secret.
+  return {
+    ...summary(),
+    providers,
+    reasons: Object.entries(snapshot().reasons).map(([reason, count]) => ({
+      reason,
+      count,
+    })),
+  }
 }
 
 /**
@@ -187,7 +258,9 @@ export function summary(): Readonly<Record<Outcome | "turns", number>> {
  */
 export function reset(): void {
   counts.clear()
+  overflowCounts.clear()
   reasons.clear()
+  reasonOverflow = 0
   refusedModels.clear()
   refusedOverflow = 0
   turns = 0

@@ -2620,11 +2620,18 @@ type Endpoint25_1Request = Parameters<RawClient["sync"]["outbox"]>[0]
 type Endpoint25_1Input = {
   readonly projectID: Endpoint25_1Request["query"]["projectID"]
   readonly since?: Endpoint25_1Request["query"]["since"]
+  readonly afterAggregate?: Endpoint25_1Request["query"]["afterAggregate"]
+  readonly afterID?: Endpoint25_1Request["query"]["afterID"]
 }
 const Endpoint25_1 = (raw: RawClient["sync"]) => (input: Endpoint25_1Input) =>
-  raw["outbox"]({ query: { projectID: input["projectID"], since: input["since"] } }).pipe(
-    Effect.mapError(mapClientError),
-  )
+  raw["outbox"]({
+    query: {
+      projectID: input["projectID"],
+      since: input["since"],
+      afterAggregate: input["afterAggregate"],
+      afterID: input["afterID"],
+    },
+  }).pipe(Effect.mapError(mapClientError))
 
 type Endpoint25_2Request = Parameters<RawClient["sync"]["snapshot"]>[0]
 type Endpoint25_2Input = {
@@ -2639,11 +2646,14 @@ const Endpoint25_2 = (raw: RawClient["sync"]) => (input: Endpoint25_2Input) =>
 type Endpoint25_3Request = Parameters<RawClient["sync"]["stream"]>[0]
 type Endpoint25_3Input = {
   readonly projectID: Endpoint25_3Request["query"]["projectID"]
+  readonly readiness?: Endpoint25_3Request["query"]["readiness"]
   readonly token: Endpoint25_3Request["query"]["token"]
 }
 const Endpoint25_3 = (raw: RawClient["sync"]) => (input: Endpoint25_3Input) =>
   Stream.unwrap(
-    raw["stream"]({ query: { projectID: input["projectID"], token: input["token"] } }).pipe(
+    raw["stream"]({
+      query: { projectID: input["projectID"], readiness: input["readiness"], token: input["token"] },
+    }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
     ),

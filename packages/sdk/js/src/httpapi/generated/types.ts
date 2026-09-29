@@ -2083,7 +2083,11 @@ export type SessionMonitorLogOutput2 = {
 
 export type AccountResponse = unknown
 
-export type SyncOutboxResponse = { events: Array<unknown>; hasMore: boolean }
+export type SyncOutboxResponse = {
+  events: Array<unknown>
+  hasMore: boolean
+  nextCursor?: { seq: number; aggregate: string; id: string } | undefined
+}
 
 export type SyncSnapshotResponse = { lastSeq: number; state: unknown }
 
@@ -8813,8 +8817,30 @@ export type SyncEventInput = {
 export type SyncEventOutput = void
 
 export type SyncOutboxInput = {
-  readonly projectID: { readonly projectID: string; readonly since?: number | undefined }["projectID"]
-  readonly since?: { readonly projectID: string; readonly since?: number | undefined }["since"]
+  readonly projectID: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+  }["projectID"]
+  readonly since?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+  }["since"]
+  readonly afterAggregate?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+  }["afterAggregate"]
+  readonly afterID?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+  }["afterID"]
 }
 
 export type SyncOutboxOutput = SyncOutboxResponse
@@ -8827,8 +8853,21 @@ export type SyncSnapshotInput = {
 export type SyncSnapshotOutput = SyncSnapshotResponse
 
 export type SyncStreamInput = {
-  readonly projectID: { readonly projectID: string; readonly token: string }["projectID"]
-  readonly token: { readonly projectID: string; readonly token: string }["token"]
+  readonly projectID: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["projectID"]
+  readonly readiness?: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["readiness"]
+  readonly token: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["token"]
 }
 
 export type SyncStreamOutput = unknown

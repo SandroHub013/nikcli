@@ -24,7 +24,7 @@ import type { JsonValue } from "@/util/json"
 import { Effect } from "effect"
 import { Log } from "@nikcli-ai/util/log"
 import { Database } from "@/database/database"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { syncEvent } from "./sync.sql"
 import { Outbox } from "./outbox"
 import { Sync, type SyncEventRecord } from "./index"
@@ -126,7 +126,10 @@ export namespace RemoteSync {
     const delta = (record.data as { delta?: Record<string, string> } | null)?.delta
     if (!delta) return record
     const hashes = Object.values(delta).filter((value) => value !== "removed")
-    return { ...record, blobs: Effect.runSync(InstructionRepo.getBlobs(hashes)) }
+    return {
+      ...record,
+      blobs: Effect.runSync(InstructionRepo.getBlobs(hashes)),
+    }
   }
 
   async function ingestIncoming(event: SyncEventRecord): Promise<SyncEventRecord> {
@@ -188,9 +191,9 @@ export namespace RemoteSync {
 
   async function doStart(opts: RemoteSyncOptions, key: string): Promise<RemoteSyncHandle> {
     const hubUrl = normalizeUrl(opts.url)
-    const originTag = `remote:${opts.clientId ?? "cli"}`
+    const originTag = `remote:${opts.clientId ?? "cli"}:${hubUrl}`
     const drainInterval = opts.drainIntervalMs ?? 5_000
-    let connected = true
+    let connected = false
     let lastSeq = 0
 
     const transport: RemoteTransport =
@@ -208,49 +211,140 @@ export namespace RemoteSync {
 
     const scheduler: Scheduler = opts.scheduler ?? realScheduler
 
-    // Catch-up: pull everything since 0 (the server already filters by
-    // projectID and the local outbox will dedupe).
-    try {
-      let since = 0
-      for (;;) {
-        const page = await transport.pullBacklog(since)
-        for (const event of page.events) {
-          since = Math.max(since, event.seq)
-          lastSeq = Math.max(lastSeq, event.seq)
-          try {
-            const incoming = await ingestIncoming(event)
-            await Sync.emitRaw(incoming.projectId, incoming.aggregate, incoming.data, {
-              workspaceID: incoming.workspaceId,
-              origin: originTag,
-              originSeq: incoming.seq,
-            })
-          } catch (error) {
-            log.warn("replaying remote event failed", {
-              error,
-              event: event.id,
-            })
-          }
-        }
-        if (!page.hasMore) break
-      }
-      clearHubError(hubUrl)
-    } catch (error) {
-      noteHubError(hubUrl, error)
-      log.warn("initial catch-up failed", { error })
+    let stopped = false
+    let fenced = false
+    let generation = 0
+    let work: Promise<void> = Promise.resolve()
+    let recovery: Promise<void> | undefined
+    let requested = false
+    let scheduled = false
+    const cursors = new Map<string, number>()
+    const applied = Effect.runSync(
+      Database.query("RemoteSync.applied", (db) =>
+        db
+          .select({ aggregate: syncEvent.aggregate, seq: syncEvent.originSeq })
+          .from(syncEvent)
+          .where(and(eq(syncEvent.projectId, opts.projectID), eq(syncEvent.origin, originTag)))
+          .all(),
+      ),
+    )
+    for (const row of applied) {
+      if (row.seq === null) continue
+      cursors.set(row.aggregate, Math.max(cursors.get(row.aggregate) ?? 0, row.seq))
+      lastSeq = Math.max(lastSeq, row.seq)
     }
 
-    transport.subscribe(async (event) => {
-      try {
-        const incoming = await ingestIncoming(event)
-        await Sync.emitRaw(incoming.projectId, incoming.aggregate, incoming.data, {
-          workspaceID: incoming.workspaceId,
-          origin: originTag,
-          originSeq: incoming.seq,
+    async function apply(event: SyncEventRecord) {
+      if (stopped) return
+      if (
+        event.projectId !== opts.projectID ||
+        !event.aggregate ||
+        !event.id ||
+        !Number.isSafeInteger(event.seq) ||
+        event.seq < 1
+      )
+        throw new Error("invalid remote sync event")
+      if (event.seq <= (cursors.get(event.aggregate) ?? 0)) return
+      const incoming = await ingestIncoming(event)
+      if (stopped) return
+      await Sync.emitRaw(incoming.projectId, incoming.aggregate, incoming.data, {
+        workspaceID: incoming.workspaceId,
+        origin: originTag,
+        originSeq: incoming.seq,
+      })
+      if (stopped) return
+      cursors.set(event.aggregate, event.seq)
+      lastSeq = Math.max(lastSeq, event.seq)
+    }
+
+    function recover(): Promise<void> {
+      requested = true
+      if (recovery) return recovery
+      recovery = (async () => {
+        while (requested && !stopped && fenced) {
+          requested = false
+          connected = false
+          const epoch = generation
+          // Always enumerate from zero: a previously unknown aggregate may have
+          // history below every known watermark. The keyset is only a page position.
+          let cursor: import("./transport").BacklogCursor | undefined
+          let pages = 0
+          for (;;) {
+            if (++pages > 10_000) throw new Error("remote recovery page budget exceeded")
+            const page = await transport.pullBacklog(0, cursor)
+            if (stopped || epoch !== generation) return
+            for (const event of page.events) {
+              if (stopped || epoch !== generation) return
+              await apply(event)
+            }
+            if (!page.hasMore) break
+            const next = page.nextCursor
+            if (
+              !next ||
+              (cursor &&
+                (next.seq < cursor.seq ||
+                  (next.seq === cursor.seq &&
+                    (next.aggregate < cursor.aggregate ||
+                      (next.aggregate === cursor.aggregate && next.id <= cursor.id)))))
+            ) {
+              throw new Error("backlog pagination did not advance; composite cursor support required")
+            }
+            cursor = next
+          }
+          if (!stopped && epoch === generation && fenced) {
+            connected = true
+            clearHubError(hubUrl)
+          }
+        }
+      })()
+        .catch((error) => {
+          if (stopped) return
+          connected = false
+          noteHubError(hubUrl, error)
+          log.warn("remote recovery failed", { error })
         })
-      } catch (error) {
-        log.warn("replaying remote event failed", { error, event: event.id })
-      }
-    })
+        .finally(() => {
+          recovery = undefined
+        })
+      return recovery
+    }
+
+    function scheduleRecovery() {
+      if (stopped || !fenced) return
+      requested = true
+      if (scheduled) return
+      scheduled = true
+      work = work
+        .then(() => recover())
+        .finally(() => {
+          scheduled = false
+          if (requested && fenced && !stopped) scheduleRecovery()
+        })
+    }
+
+    const unsubscribe = transport.subscribe(
+      () => {
+        // Notifications are wakeups, not acknowledgements. Read the journal in
+        // aggregate sequence order instead of applying an out-of-order live tail.
+        scheduleRecovery()
+      },
+      {
+        ready() {
+          if (stopped) return
+          fenced = true
+          generation++
+          scheduleRecovery()
+        },
+        stale(error) {
+          if (stopped) return
+          fenced = false
+          generation++
+          connected = false
+          noteHubError(hubUrl, error)
+        },
+        wake: scheduleRecovery,
+      },
+    )
 
     log.info("remote sync started", {
       url: opts.url,
@@ -258,7 +352,10 @@ export namespace RemoteSync {
     })
 
     const drainHandle = scheduler.interval(() => {
+      if (stopped) return
+      if (!connected) scheduleRecovery()
       void Outbox.drain(hubUrl, async (eventId) => {
+        if (stopped) return { ok: false, error: "sync stopped" }
         const event = loadEvent(eventId)
         if (!event) return { ok: false, permanent: true, error: "event not found" }
         const outcome = await transport.push(event)
@@ -282,7 +379,12 @@ export namespace RemoteSync {
 
     const handle: RemoteSyncHandle = {
       stop: async () => {
+        if (stopped) return
+        stopped = true
+        generation++
+        connected = false
         drainHandle.clear()
+        unsubscribe()
         transport.close()
         active.delete(key)
         const urlStillUsed = [...active.values()].some((entry) => entry.url === hubUrl)

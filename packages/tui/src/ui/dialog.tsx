@@ -11,6 +11,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { useTheme } from "@tui/context/theme"
+import { ownerOf } from "@tui/util/input-precedence"
 import { Renderable, RGBA, TextAttributes } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
@@ -46,7 +47,12 @@ export function Dialog(
   onMount(() => {
     timeline.add(
       { opacity: 0 },
-      { opacity: 1, duration: 150, ease: "outQuad", onUpdate: (a) => setOpacity(a.targets[0].opacity) },
+      {
+        opacity: 1,
+        duration: 150,
+        ease: "outQuad",
+        onUpdate: (a) => setOpacity(a.targets[0].opacity),
+      },
     )
     // Opening a dialog is the largest frame the app draws: backdrop, panel and
     // content all change at once. That is the frame Windows consoles truncate,
@@ -124,6 +130,7 @@ export function Dialog(
 }
 
 function init() {
+  let revision = 0
   const [store, setStore] = createStore({
     stack: [] as DialogEntry[],
     size: "medium" as DialogSize,
@@ -142,6 +149,7 @@ function init() {
   function closeTop() {
     const current = store.stack.at(-1)
     if (!current) return
+    revision++
     const next = store.stack.slice(0, -1)
     batch(() => {
       if (next.length === 0) setStore("size", "medium")
@@ -191,9 +199,22 @@ function init() {
         // focus, and `TextareaRenderable` extends it.
         const isInteractive = renderer.currentFocusedEditor !== null
 
-        if (!isInteractive) {
+        // The same two layers, resolved by the key rather than by a flat order:
+        // Escape above the modal, Ctrl+C below it. `specs/effect-tui/07` asks
+        // for that per-key answer, and this is the one site that arbitrates.
+        const owner = ownerOf(
+          {
+            modal: store.stack.length > 0,
+            editable: isInteractive,
+            application: true,
+          },
+          { name: evt.name, ctrl: evt.ctrl },
+        )
+
+        if (owner !== "editable") {
           // Clear entire stack for non-interactive dialogs
           const callbacks = closeCallbacks()
+          revision++
           batch(() => {
             setStore("size", "medium")
             setStore("stack", [])
@@ -229,7 +250,10 @@ function init() {
     reclaimTimer = undefined
   }
 
-  onCleanup(cancelRefocus)
+  onCleanup(() => {
+    revision++
+    cancelRefocus()
+  })
 
   function refocus() {
     cancelRefocus()
@@ -266,6 +290,7 @@ function init() {
     clear() {
       // Collect onClose callbacks BEFORE updating store to avoid recursion
       const callbacks = closeCallbacks()
+      revision++
       batch(() => {
         setStore("size", "medium")
         setStore("stack", [])
@@ -277,6 +302,7 @@ function init() {
     replace(input: DialogElement, onClose?: () => void) {
       // Collect onClose callbacks BEFORE updating store to avoid recursion
       const callbacks = closeCallbacks()
+      revision++
       // A restore queued by the dialog this one replaces must not land later.
       cancelRefocus()
       if (store.stack.length === 0) {
@@ -294,6 +320,10 @@ function init() {
       })
       // Call onClose callbacks AFTER store update to prevent recursive loops
       runCloseCallbacks(callbacks)
+    },
+    /** Capture after opening a child; replacement unmounts the chaining owner. */
+    get revision() {
+      return revision
     },
     get stack() {
       return store.stack

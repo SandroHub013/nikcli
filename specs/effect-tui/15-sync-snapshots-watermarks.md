@@ -151,3 +151,111 @@ load-bearing on the strength of this file.
 Why the property matters beyond ordering: `detectSequenceGap` reads consecutiveness as
 proof that nothing was deleted. Two appends colliding on one `seq` would leave the next
 reader's gap check quietly wrong — no hole to find, and an event gone.
+
+## The One Global Cursor Silently Dropped Every Quiet Aggregate's Events — 2026-09-28
+
+**Correction, 2026-09-30.** The account below preserves the 2026-09-28
+class-level fix attempt, not a completed production recovery guarantee.
+`RemoteSyncClient` has no staged production caller; the active path is
+`RemoteSync` (`src/sync/remote-sync.ts`) over `createHttpRemoteTransport`.
+
+The minimum of **known** aggregate cursors is insufficient: an unknown
+aggregate can have history below that minimum. Likewise, `hasMore && delivered
+
+> 0` is not a sufficient paging bound: delivery need not advance the minimum,
+> and a dedup-only page can stop replay before an unseen tail.
+
+The staged active path subscribes with `readiness=1` before reading the journal
+and starts each recovery enumeration at zero, paging by `(seq, aggregate, id)`
+with the endpoint's `nextCursor`. That tuple is a page position, not an
+authoritative global watermark; per-aggregate cursors advance only after apply.
+
+Recovery rejects missing or non-advancing page cursors, has a 10,000-page
+budget, and uses generation fencing across reconnect/token-refresh reopen and
+cancellation. Stream notifications are journal-read wakeups, not applied events
+or acknowledgements.
+
+The TUI snapshot/watermark barrier remains open, consistent with the staged
+`ROADMAP.md` and `integration-plan.md`; remote journal recovery does not close
+this spec's end-to-end barrier requirements. No new checks were run for this
+correction; the coverage account below is historical evidence only.
+
+Requirement 7 says cursors are per aggregate and that "global cursors are
+**derived** from the per-aggregate cursors; they are not authoritative". The
+producer side already had the property. The one consumer that held a cursor held
+a global one, and the two halves did not compose.
+
+`RemoteSyncClient` (`src/sync/remote-client.ts`) kept a single
+`lastSeq = max(event.seq)` across every aggregate and sent it as `?since=`. Two
+facts make that wrong, and neither is a judgement call:
+
+- **`seq` is per aggregate.** `Sync.reserveSeqAndAppend` reads its counter with
+  `and(eq(projectId), eq(aggregate))`, so each aggregate counts from 1 and two
+  aggregates' `seq` values are not comparable with one another.
+- **`/sync/outbox` has no aggregate predicate.** It filters
+  `projectId = ? AND seq > since`, so one `since` addresses every aggregate at
+  once, ordered by `seq` across aggregates that each numbered themselves
+  independently.
+
+`max(seq)` is therefore a cursor for a stream that does not exist. The concrete
+loss, and it is silent — no error, no gap, no log line:
+
+|                                                  |                                              |
+| ------------------------------------------------ | -------------------------------------------- |
+| `session:busy` writes 60 events                  | `seq` 1..60                                  |
+| `session:quiet` writes 5 events                  | `seq` 1..5                                   |
+| client's global cursor                           | `lastSeq = 60`                               |
+| `session:quiet` writes 3 more while disconnected | `seq` 6, 7, 8                                |
+| reconnect asks `?since=60`                       | returns `seq > 60` for **the whole project** |
+| result                                           | **B's 6, 7, 8 are never delivered. Ever.**   |
+
+The activity imbalance is the trigger: the _less_ active an aggregate is, the
+more certain it is to be skipped, and the quieter it is the longer the window
+in which its events vanish. A project with one busy session and one quiet one
+loses the quiet one's entire tail on every reconnect, forever.
+
+**Fixed** with per-aggregate cursors and a derived `since`. The bound for a
+query that cannot filter by aggregate is the **minimum** cursor, not the
+maximum, and the per-aggregate cursors are what make that query's necessary
+over-return recoverable: the client skips any event at or below its own cursor
+for _that_ aggregate, so the events the project-wide query replays for an
+already-current aggregate are dropped rather than re-applied.
+
+The paging recursion gained a bound while it was in there. `if (body.hasMore)`
+re-issued the same query, and with a `since` that only advances when something
+new is delivered, a server that answered `hasMore` with nothing new would have
+looped forever. It now recurses only when the page actually advanced a cursor.
+
+### What this does and does not establish
+
+**Fixed:** the silent cross-aggregate loss, and the class of it. The client is
+now correct against the endpoint as the endpoint exists today.
+
+**Not fixed, and named here so it is not mistaken for done:** this is the
+_remote hub_ client's cursor. It is not the TUI reconnect path, which has no
+cursor at all and is still a blind refetch — `packages/tui/src/context/sync.tsx`
+says so in its own comment: "Until there is a snapshot/watermark seam to resume
+against, the honest recovery is the one EOT-04 prescribes: refetch". That is
+the consumer barrier this document's "Snapshot Topology" section describes, and
+it is still open.
+
+**Also still open:** `/sync/outbox` answering a project-wide `since` for a
+per-aggregate `seq` is the underlying mismatch, and it costs the client a
+re-fetch of everything above the minimum cursor. Adding an optional
+`aggregate` filter to the endpoint is the producer-side half of requirement 7
+and is additive; it is not done here.
+
+### Coverage
+
+`test/sync/remote-client-cursor.test.ts` drives the real class end to end with
+`fetch` replaced by a replica of the endpoint's exact predicate and
+`EventSource` by a controllable double, so the loss is observed rather than
+asserted from the source. Three cases: the quiet aggregate's events survive a
+reconnect, the `since` sent is the lowest cursor rather than the highest `seq`,
+and the over-return is deduped so no event is applied twice. Reverting the
+cursor to a global maximum fails the first two, which is how the test was
+validated.
+
+This file is the client's first test. `RemoteSyncClient` had no test at all
+before it, which is consistent with EOT-14's audit finding about abstractions
+whose docblocks claim a guarantee nothing checks.

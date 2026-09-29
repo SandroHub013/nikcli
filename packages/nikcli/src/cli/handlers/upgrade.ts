@@ -50,7 +50,12 @@ export default Runtime.handler(Commands.commands["upgrade"], async (input) => {
       ],
       initialValue: false,
     })
-    if (!install) {
+    // `prompts.select` answers a cancelled prompt with `Symbol("clack:cancel")`,
+    // and a symbol is truthy — so the `!install` half of this guard never fires
+    // on Escape, Ctrl+C, or a non-TTY stdin, and the run falls through to
+    // replacing a binary a package manager owns. EOT-18 requirement 12 is
+    // explicit that a headless or cancelled prompt never silently picks "yes".
+    if (prompts.isCancel(install) || !install) {
       prompts.outro("Done")
       return
     }

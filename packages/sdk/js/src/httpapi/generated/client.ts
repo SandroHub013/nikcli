@@ -3962,7 +3962,12 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/sync/outbox`,
-            query: { projectID: input["projectID"], since: input["since"] },
+            query: {
+              projectID: input["projectID"],
+              since: input["since"],
+              afterAggregate: input["afterAggregate"],
+              afterID: input["afterID"],
+            },
             successStatus: 200,
             declaredStatuses: [],
             empty: false,
@@ -3986,7 +3991,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/sync/stream`,
-            query: { projectID: input["projectID"], token: input["token"] },
+            query: { projectID: input["projectID"], readiness: input["readiness"], token: input["token"] },
             successStatus: 200,
             declaredStatuses: [],
             empty: false,

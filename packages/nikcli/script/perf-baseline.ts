@@ -3,39 +3,36 @@
  * `script/perf-baseline.ts` — EOT-01 candidate-budget probe.
  *
  * Boots an isolated nikcli server in-process, fires N requests against the
- * four hot routes (`/global/event`, `/event`, `/health`, `/session/:id/message`
- * when a session can be created), and reports min/median/p95/max in
+ * three declared server routes, and reports min/median/p95/max in
  * milliseconds plus a counter snapshot from `effect/lifecycle-counters.ts`.
  *
  * This is the probe the spec demands: reproducible measurements against the
  * real router, no mocks. Numbers vary by host, so the script is the *harness*,
- * not a single value. The CI gate uses `script/bench-compare.ts` to diff a
+ * not a single value. The gate uses `script/check-perf-baseline.ts` to diff a
  * recorded baseline against a candidate run.
  *
  * Defaults follow EOT-01: 30 samples per route. Override with `--samples`.
  * Routes can be skipped with `--skip <prefix>`.
  */
-import { Effect, Layer } from "effect"
 import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { Config } from "@/config/config"
-import { Server } from "@/server/server"
-import { runtimeFor, runPromise } from "@/effect/runtime"
-import { snapshot, reset } from "@/effect/lifecycle-counters"
+import { REQUIRED_ROUTES } from "./check-perf-baseline"
 
 type Sample = number
 
-function summarize(samples: Sample[]): {
+export function summarize(samples: Sample[]): {
   min: number
   median: number
   p95: number
   max: number
 } {
-  if (samples.length === 0) return { min: 0, median: 0, p95: 0, max: 0 }
+  if (!samples.length || samples.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new Error("samples must contain finite non-negative timings")
+  }
   const sorted = [...samples].sort((a, b) => a - b)
-  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(q * (sorted.length - 1))))]
+  const at = (q: number) => sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)]
   return {
     min: sorted[0],
     median: at(0.5),
@@ -44,7 +41,7 @@ function summarize(samples: Sample[]): {
   }
 }
 
-function parseArgs(argv: string[]) {
+export function parseArgs(argv: string[]) {
   const out = {
     samples: 30,
     skip: new Set<string>(),
@@ -53,14 +50,20 @@ function parseArgs(argv: string[]) {
   }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
-    if (arg === "--samples") out.samples = Math.max(1, Number(argv[++i]))
-    else if (arg === "--skip") out.skip.add(argv[++i])
-    else if (arg === "--route") out.route = argv[++i]
-    else if (arg === "--json") out.json = argv[++i]
-    else if (arg === "--help" || arg === "-h") {
+    if (arg === "--samples") {
+      out.samples = Number(argv[++i])
+      if (!Number.isSafeInteger(out.samples) || out.samples <= 0)
+        throw new Error("--samples must be a positive safe integer")
+    } else if (arg === "--skip" || arg === "--route" || arg === "--json") {
+      const value = argv[++i]
+      if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value`)
+      if (arg === "--skip") out.skip.add(value)
+      else if (arg === "--route") out.route = value
+      else out.json = value
+    } else if (arg === "--help" || arg === "-h") {
       console.log("Usage: perf-baseline.ts [--samples N] [--route /path] [--skip /prefix] [--json out.json]")
       process.exit(0)
-    }
+    } else throw new Error(`unknown argument ${arg}`)
   }
   return out
 }
@@ -72,15 +75,7 @@ type Probe = {
   buildBody?: (i: number) => string
 }
 
-const PROBES: Probe[] = [
-  { name: "global/event-head", method: "GET", path: "/global/event" },
-  { name: "event-head", method: "GET", path: "/event" },
-  // `GET /session`, not `POST /session/list`: the group is declared with
-  // `.prefix("/session")` and the endpoint path is `/`. The wrong spelling
-  // answered 405 and `time()` recorded it, so the baseline carried a real
-  // number for a route that does not exist.
-  { name: "session-list", method: "GET", path: "/session" },
-]
+const PROBES: readonly Probe[] = REQUIRED_ROUTES
 
 /**
  * Thrown when a probe does not describe a real request.
@@ -97,6 +92,7 @@ class ProbeUnreachable extends Error {
 }
 
 async function time(probe: Probe): Promise<Sample> {
+  const { Server } = await import("@/server/server")
   const url = "http://localhost:4096" + probe.path
   const init: RequestInit = { method: probe.method }
   if (probe.buildBody) init.body = probe.buildBody(0)
@@ -111,12 +107,18 @@ async function time(probe: Probe): Promise<Sample> {
   // Cancel before asserting on the status: an SSE body left open keeps the
   // connection — and the process — alive.
   await response.body?.cancel().catch(() => undefined)
-  if (response.status >= 400) throw new ProbeUnreachable(probe, `status ${response.status}`)
+  if (response.status < 200 || response.status >= 400) throw new ProbeUnreachable(probe, `status ${response.status}`)
   return elapsed
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+  const probes = PROBES.filter(
+    (probe) =>
+      ![...args.skip].some((prefix) => probe.path.startsWith(prefix)) &&
+      (!args.route || probe.path.startsWith(args.route)),
+  )
+  if (!probes.length) throw new Error("no routes selected - the probe measured nothing")
   const home = join(tmpdir(), `nikcli-perf-${Date.now()}-${process.pid}`)
   process.env.NIKCLI_TEST_HOME = home
   process.env.NIKCLI_TEST_MODE = "1"
@@ -125,6 +127,11 @@ async function main() {
   process.env.XDG_CACHE_HOME = join(home, "cache")
   process.env.XDG_CONFIG_HOME = join(home, "config")
   process.env.XDG_STATE_HOME = join(home, "state")
+
+  const { Effect, Layer } = await import("effect")
+  const { Config } = await import("@/config/config")
+  const { runtimeFor, runPromise } = await import("@/effect/runtime")
+  const { snapshot, reset } = await import("@/effect/lifecycle-counters")
 
   reset()
   // `Layer.build` produces `Effect<void, never, Scope>`; `runPromise` only
@@ -145,10 +152,7 @@ async function main() {
   reportLines.push(`nikcli perf baseline — samples=${args.samples} home=${home}`)
   reportLines.push("")
 
-  for (const probe of PROBES) {
-    if (args.skip.has(probe.path)) continue
-    if (args.route && !probe.path.startsWith(args.route)) continue
-
+  for (const probe of probes) {
     // Warm up one request (router initializes on first hit).
     await time(probe)
 
@@ -158,7 +162,13 @@ async function main() {
     }
 
     const summary = summarize(samples)
-    routes.push({ name: probe.name, method: probe.method, path: probe.path, n: samples.length, ...summary })
+    routes.push({
+      name: probe.name,
+      method: probe.method,
+      path: probe.path,
+      n: samples.length,
+      ...summary,
+    })
     reportLines.push(
       `${probe.name.padEnd(20)} min=${summary.min.toFixed(2)}ms  median=${summary.median.toFixed(2)}ms  p95=${summary.p95.toFixed(2)}ms  max=${summary.max.toFixed(2)}ms  (n=${samples.length})`,
     )
@@ -173,6 +183,9 @@ async function main() {
   }
 
   console.log(reportLines.join("\n"))
+  console.log(
+    "Server-route characterization only; partial runs cannot pass the baseline gate and TUI budgets remain unratified.",
+  )
 
   if (args.json) {
     /**
@@ -206,16 +219,17 @@ async function main() {
   await runtime.dispose()
 }
 
-main().then(
-  () => {
-    // Explicit, because the in-process server and the instance it booted keep
-    // handles open: falling off the end of `main` left the probe running
-    // forever. That is why no baseline artifact was ever produced — the
-    // measurement finished in under a second and the command never returned.
-    process.exit(0)
-  },
-  (error) => {
-    console.error("perf-baseline failed:", error instanceof Error ? error.message : error)
-    process.exit(1)
-  },
-)
+if (import.meta.main)
+  main().then(
+    () => {
+      // Explicit, because the in-process server and the instance it booted keep
+      // handles open: falling off the end of `main` left the probe running
+      // forever. That is why no baseline artifact was ever produced — the
+      // measurement finished in under a second and the command never returned.
+      process.exit(0)
+    },
+    (error) => {
+      console.error("perf-baseline failed:", error instanceof Error ? error.message : error)
+      process.exit(1)
+    },
+  )

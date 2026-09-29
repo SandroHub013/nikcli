@@ -83,10 +83,45 @@ describe("Sync HttpApi contract (realigned to Hono routes)", () => {
     const directory = await makeProjectDir()
     const response = await request("GET", "/sync/outbox?projectID=proj_1", directory)
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { events: unknown[]; hasMore: boolean }
+    const body = (await response.json()) as {
+      events: unknown[]
+      hasMore: boolean
+    }
     expect(Array.isArray(body.events)).toBe(true)
     expect(body.events.length).toBe(0)
     expect(body.hasMore).toBe(false)
+  })
+
+  it("pages project-wide sequence ties with an additive composite keyset", async () => {
+    const { Sync } = await import("@/sync")
+    const directory = await makeProjectDir()
+    const projectID = `paging_${Date.now()}`
+    for (let n = 0; n < 601; n++) {
+      await Sync.emitRaw(projectID, `tie_${String(n).padStart(4, "0")}`, { n })
+    }
+    const first = await request("GET", `/sync/outbox?projectID=${projectID}`, directory)
+    const page = (await first.json()) as {
+      events: { id: string; seq: number }[]
+      hasMore: boolean
+      nextCursor: { seq: number; aggregate: string; id: string }
+    }
+    expect(page.events).toHaveLength(500)
+    expect(page.events.every((e) => e.seq === 1)).toBe(true)
+    expect(page.hasMore).toBe(true)
+    const cursor = page.nextCursor
+    const second = await request(
+      "GET",
+      `/sync/outbox?projectID=${projectID}&since=${cursor.seq}&afterAggregate=${cursor.aggregate}&afterID=${cursor.id}`,
+      directory,
+    )
+    const tail = (await second.json()) as typeof page
+    expect(tail.events).toHaveLength(101)
+    expect(tail.hasMore).toBe(false)
+    expect(new Set([...page.events, ...tail.events].map((e) => e.id)).size).toBe(601)
+    const legacy = await request("GET", `/sync/outbox?projectID=${projectID}&since=1`, directory)
+    expect(((await legacy.json()) as typeof page).events).toHaveLength(0)
+    const invalid = await request("GET", `/sync/outbox?projectID=${projectID}&afterID=only`, directory)
+    expect(invalid.status).toBe(400)
   })
 
   it("GET /sync/snapshot/:aggregateID preserves the legacy 400 text response", async () => {
@@ -119,7 +154,10 @@ describe("Sync HttpApi contract (realigned to Hono routes)", () => {
   it("rate limits event pushes per token and returns retry-after", async () => {
     const { MobileAuth } = await import("@/mobile/auth")
     const directory = await makeProjectDir()
-    const created = await MobileAuth.create({ name: "test-rate-limit", scope: "cli-sync" })
+    const created = await MobileAuth.create({
+      name: "test-rate-limit",
+      scope: "cli-sync",
+    })
     let limited: Response | undefined
     for (let index = 0; index < 101; index++) {
       const response = await request("POST", `/sync/event?token=${created.token}`, directory, {
@@ -157,7 +195,10 @@ describe("Sync HttpApi contract (realigned to Hono routes)", () => {
   it("raw SSE opens promptly with the legacy headers", async () => {
     const { MobileAuth } = await import("@/mobile/auth")
     const directory = await makeProjectDir()
-    const created = await MobileAuth.create({ name: "test-stream", scope: "cli-sync" })
+    const created = await MobileAuth.create({
+      name: "test-stream",
+      scope: "cli-sync",
+    })
     const controller = new AbortController()
     const url = new URL(`/sync/stream?projectID=proj_1&token=${created.token}`, "http://nikcli.local")
     url.searchParams.set("directory", directory)
@@ -198,7 +239,10 @@ describe("Sync auth_token scope guard", () => {
     })
     const response = await request("GET", `/sync/outbox?token=${created.token}&projectID=proj_1`, directory)
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { events: unknown[]; hasMore: boolean }
+    const body = (await response.json()) as {
+      events: unknown[]
+      hasMore: boolean
+    }
     expect(Array.isArray(body.events)).toBe(true)
   })
 
@@ -211,7 +255,10 @@ describe("Sync auth_token scope guard", () => {
     })
     const response = await request("GET", `/sync/outbox?token=${created.token}&projectID=proj_1`, directory)
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { events: unknown[]; hasMore: boolean }
+    const body = (await response.json()) as {
+      events: unknown[]
+      hasMore: boolean
+    }
     expect(Array.isArray(body.events)).toBe(true)
   })
 

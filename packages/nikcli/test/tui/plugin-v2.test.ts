@@ -1,8 +1,262 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test"
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { Global } from "@nikcli-ai/util/global"
+import { Flock } from "@nikcli-ai/util/flock"
+import { clearPluginStorage, evictPluginStorage, pluginStorage } from "@tui/plugin/storage"
 import { Plugin } from "@nikcli-ai/plugin/v2/tui"
 import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
 import type { TuiDispose, TuiPluginApi, TuiRouteCurrent, TuiRouteDefinition } from "@nikcli-ai/plugin/tui"
 import { readV2TuiPlugin } from "@tui/plugin/v2"
+
+describe("tui plugin storage quota", () => {
+  const budget = 32 * 1024 * 1024
+  let original: string | undefined
+  let dir: string
+  let root: string
+
+  beforeEach(async () => {
+    clearPluginStorage()
+    root = await mkdtemp(path.join(os.tmpdir(), "nikcli-plugin-storage-"))
+    original = process.env.NIKCLI_TEST_HOME
+    process.env.NIKCLI_TEST_HOME = root
+    dir = path.join(Global.Path.state, "tui", "plugin")
+    await mkdir(dir, { recursive: true })
+  })
+
+  afterEach(async () => {
+    clearPluginStorage()
+    if (original === undefined) delete process.env.NIKCLI_TEST_HOME
+    else process.env.NIKCLI_TEST_HOME = original
+    await rm(root, { recursive: true, force: true })
+  })
+
+  function store(id: string) {
+    return pluginStorage(id).store("state", { initial: { text: "" } })
+  }
+
+  function payload(bytes: number) {
+    return JSON.stringify({ text: "x".repeat(bytes - 16) }, null, 2)
+  }
+
+  async function observed(check: () => boolean) {
+    const deadline = Date.now() + 3_000
+    while (!check() && Date.now() < deadline) await Bun.sleep(10)
+    expect(check()).toBe(true)
+  }
+
+  it("replaces near quota without double counting and keeps memoized hot-reload state", async () => {
+    const entry = store("replace")
+    await entry[1]((draft) => {
+      draft.text = "x".repeat(budget - 32)
+    })
+    await entry[1]((draft) => {
+      draft.text = "y".repeat(budget - 32)
+    })
+    expect(store("replace")).toBe(entry)
+    expect((await Bun.file(path.join(dir, "replace.state.json")).json()).text[0]).toBe("y")
+    const memory = pluginStorage("replace").memory("counter", {
+      initial: { count: 0 },
+    })
+    memory[1]((draft) => {
+      draft.count++
+    })
+    expect(pluginStorage("replace").memory("counter", { initial: { count: 0 } })).toBe(memory)
+    evictPluginStorage("replace")
+    await store("other")[1]((draft) => {
+      draft.text = "x".repeat(budget - 32)
+    })
+  })
+
+  it("accounts for loaded file bytes including whitespace and rejects excess loads", async () => {
+    await writeFile(path.join(dir, "loaded.state.json"), payload(budget - 64))
+    const loaded = store("loaded")
+    await expect(
+      store("other")[1]((draft) => {
+        draft.text = "x".repeat(100)
+      }),
+    ).rejects.toThrow("quota exhausted")
+    await writeFile(path.join(dir, "excess.state.json"), payload(128))
+    expect(() => store("excess")).toThrow("quota exhausted")
+    await loaded[1]((draft) => {
+      draft.text = "small"
+    })
+    expect(store("excess")[0].text.length).toBe(112)
+  })
+
+  it("updates watcher accounting on growth and shrink and refuses oversized reloads", async () => {
+    const watched = store("watched")
+    await writeFile(path.join(dir, "watched.state.json"), payload(budget - 64))
+    await observed(() => watched[0].text.length === budget - 80)
+    const other = store("other")
+    await expect(
+      other[1]((draft) => {
+        draft.text = "x".repeat(100)
+      }),
+    ).rejects.toThrow("quota exhausted")
+    await writeFile(path.join(dir, "watched.state.json"), JSON.stringify({ text: "small" }))
+    await observed(() => watched[0].text === "small")
+    await other[1]((draft) => {
+      draft.text = "x".repeat(budget - 64)
+    })
+    await writeFile(path.join(dir, "watched.state.json"), payload(1024))
+    // A second valid file change provides a watcher barrier after the refused reload.
+    const barrier = store("barrier")
+    await writeFile(path.join(dir, "barrier.state.json"), JSON.stringify({ text: "seen" }))
+    await observed(() => barrier[0].text === "seen")
+    expect(watched[0].text).toBe("small")
+  })
+
+  it("reserves the shared budget before concurrent different-store writes await", async () => {
+    const first = store("first")
+    const second = store("second")
+    const results = await Promise.allSettled([
+      first[1]((draft) => {
+        draft.text = "x".repeat(20 * 1024 * 1024)
+      }),
+      second[1]((draft) => {
+        draft.text = "y".repeat(20 * 1024 * 1024)
+      }),
+    ])
+    expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"])
+    expect(await Bun.file(path.join(dir, "second.state.json")).exists()).toBe(false)
+    await first[1]((draft) => {
+      draft.text = "small"
+    })
+    await second[1]((draft) => {
+      draft.text = "y".repeat(20 * 1024 * 1024)
+    })
+  })
+
+  it("propagates failed persistence and releases its reservation and temporary file", async () => {
+    const failed = store("failed")
+    await mkdir(path.join(dir, "failed.state.json"))
+    await expect(
+      failed[1]((draft) => {
+        draft.text = "x".repeat(20 * 1024 * 1024)
+      }),
+    ).rejects.toThrow()
+    expect((await readdir(dir)).filter((file) => file.endsWith(".tmp"))).toEqual([])
+    await store("other")[1]((draft) => {
+      draft.text = "y".repeat(20 * 1024 * 1024)
+    })
+  })
+
+  it("fails closed on flock acquisition failure and releases the reservation", async () => {
+    const failed = store("failed")
+    const acquire = spyOn(Flock, "acquire").mockRejectedValueOnce(new Error("lock unavailable"))
+    try {
+      await expect(
+        failed[1]((draft) => {
+          draft.text = "x".repeat(20 * 1024 * 1024)
+        }),
+      ).rejects.toThrow("lock unavailable")
+    } finally {
+      acquire.mockRestore()
+    }
+    expect(await Bun.file(path.join(dir, "failed.state.json")).exists()).toBe(false)
+    await store("other")[1]((draft) => {
+      draft.text = "y".repeat(20 * 1024 * 1024)
+    })
+  })
+
+  it("propagates temporary-file write failure and releases the reservation", async () => {
+    const failed = store("failed")
+    const write = spyOn(Bun, "write").mockRejectedValueOnce(new Error("write unavailable"))
+    try {
+      await expect(
+        failed[1]((draft) => {
+          draft.text = "x".repeat(20 * 1024 * 1024)
+        }),
+      ).rejects.toThrow("write unavailable")
+    } finally {
+      write.mockRestore()
+    }
+    expect(await Bun.file(path.join(dir, "failed.state.json")).exists()).toBe(false)
+    expect((await readdir(dir)).filter((file) => file.endsWith(".tmp"))).toEqual([])
+    await store("other")[1]((draft) => {
+      draft.text = "y".repeat(20 * 1024 * 1024)
+    })
+  })
+
+  for (const invalidate of ["evict", "clear"] as const) {
+    it(`${invalidate} during a temporary write cannot commit into a replacement generation`, async () => {
+      const old = store("generation")
+      let started!: () => void
+      let resume!: () => void
+      const writing = new Promise<void>((resolve) => (started = resolve))
+      const paused = new Promise<void>((resolve) => (resume = resolve))
+      const originalWrite = Bun.write
+      // Wrap the real `Bun.write` rather than retyping it. `Bun.write` is an
+      // overload set, and `mockImplementationOnce` demands a single signature
+      // assignable to *every* overload — a narrow `(PathLike, …)` is not, so the
+      // delegation has to happen through a wrapper typed as `typeof Bun.write`.
+      const write = spyOn(Bun, "write").mockImplementationOnce(((...args: Parameters<typeof Bun.write>) => {
+        const pending = originalWrite(...args)
+        return (async () => {
+          const bytes = await pending
+          started()
+          await paused
+          return bytes
+        })()
+      }) as typeof Bun.write)
+      const pending = old[1]((draft) => {
+        draft.text = "stale"
+      })
+      // Attach the rejection handler before releasing the blocked write.
+      const rejected = expect(pending).rejects.toThrow("entry was evicted")
+      try {
+        await writing
+        if (invalidate === "evict") evictPluginStorage("generation")
+        else clearPluginStorage()
+        const next = store("generation")
+        expect(next).not.toBe(old)
+        resume()
+        await rejected
+        expect(await Bun.file(path.join(dir, "generation.state.json")).exists()).toBe(false)
+        expect(next[0].text).toBe("")
+        await next[1]((draft) => {
+          draft.text = "current"
+        })
+        expect((await Bun.file(path.join(dir, "generation.state.json")).json()).text).toBe("current")
+        expect((await readdir(dir)).filter((file) => file.endsWith(".tmp"))).toEqual([])
+      } finally {
+        resume()
+        await rejected
+        write.mockRestore()
+      }
+    })
+  }
+
+  it("propagates flock release failure without leaking its reservation", async () => {
+    const failed = store("failed")
+    const lease = await Flock.acquire("plugin-storage-release-test")
+    const acquire = spyOn(Flock, "acquire").mockResolvedValueOnce({
+      ...lease,
+      async release() {
+        await lease.release()
+        throw new Error("release unavailable")
+      },
+    })
+    try {
+      await expect(
+        failed[1]((draft) => {
+          draft.text = "x".repeat(20 * 1024 * 1024)
+        }),
+      ).rejects.toThrow("release unavailable")
+    } finally {
+      acquire.mockRestore()
+    }
+    expect(await Bun.file(path.join(dir, "failed.state.json")).exists()).toBe(true)
+    await failed[1]((draft) => {
+      draft.text = "small"
+    })
+    await store("other")[1]((draft) => {
+      draft.text = "y".repeat(20 * 1024 * 1024)
+    })
+  })
+})
 
 function host() {
   const routes: TuiRouteDefinition[] = []
@@ -115,7 +369,11 @@ describe("v2 tui plugin compatibility", () => {
     expect(runtime.routes).toHaveLength(1)
     expect(runtime.slots).toHaveLength(1)
 
-    context!.ui.router.navigate({ type: "plugin", name: "settings", data: { tab: "general" } })
+    context!.ui.router.navigate({
+      type: "plugin",
+      name: "settings",
+      data: { tab: "general" },
+    })
     expect(runtime.current().name).toBe(runtime.routes[0]!.name)
     expect(context!.ui.router.current()).toEqual({
       type: "plugin",
@@ -144,10 +402,21 @@ describe("v2 tui plugin compatibility", () => {
 })
 
 describe("v2 tui plugin manifest", () => {
-  const manifest = { id: "acme:example", version: "1.2.3", kind: "user", capabilities: ["routes"] }
+  const manifest = {
+    id: "acme:example",
+    version: "1.2.3",
+    kind: "user",
+    capabilities: ["routes"],
+  }
 
   function withManifest(overrides: Record<string, unknown> = {}, setup: Plugin.Definition["setup"] = () => {}) {
-    return { default: { manifest: { ...manifest, ...overrides }, id: "example.plugin", setup } }
+    return {
+      default: {
+        manifest: { ...manifest, ...overrides },
+        id: "example.plugin",
+        setup,
+      },
+    }
   }
 
   it("keeps the plugin's own id", () => {

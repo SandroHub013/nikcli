@@ -19,11 +19,24 @@ import { Global } from "./global"
  * which is why `getSync` exists at all.
  */
 export namespace UserSession {
-  const FILE = path.join(Global.Path.data, "user-session.token")
+  /**
+   * Resolved per call, never captured at module scope.
+   *
+   * `Global.Path.data` is a getter precisely so that a host which sets
+   * `NIKCLI_TEST_HOME` (or `NIKCLI_DATA_DIR`) after this module loads is still
+   * honoured. Binding it once at import time threw that away and made the answer
+   * depend on which file happened to import this one first: in a shared test
+   * process the earliest import fixed the path at the real machine's home, so a
+   * later test asking "is a token sent when the store is empty?" was answered
+   * with the developer's own token.
+   */
+  function file() {
+    return path.join(Global.Path.data, "user-session.token")
+  }
 
   export async function get(): Promise<string | null> {
     try {
-      const token = await Bun.file(FILE).text()
+      const token = await Bun.file(file()).text()
       return token.trim() || null
     } catch {
       return null
@@ -33,7 +46,7 @@ export namespace UserSession {
   /** Readable during render, before any transport exists. */
   export function getSync(): string | null {
     try {
-      const token = readFileSync(FILE, "utf8").trim()
+      const token = readFileSync(file(), "utf8").trim()
       return token || null
     } catch {
       return null
@@ -41,14 +54,15 @@ export namespace UserSession {
   }
 
   export async function save(token: string): Promise<void> {
-    await Bun.write(FILE, token)
+    const target = file()
+    await Bun.write(target, token)
     // chmod is Unix-only, skip on Windows
     if (process.platform !== "win32") {
-      await fs.chmod(FILE, 0o600).catch(() => undefined)
+      await fs.chmod(target, 0o600).catch(() => undefined)
     }
   }
 
   export async function clear(): Promise<void> {
-    await fs.unlink(FILE).catch(() => undefined)
+    await fs.unlink(file()).catch(() => undefined)
   }
 }

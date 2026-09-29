@@ -10,11 +10,31 @@
  * no extra runtime dependencies.
  *
  * Reconnection is handled with exponential backoff (cap 30s). On
- * reconnect, the client asks the server for events with `seq > lastSeq`
+ * reconnect, the client asks the server for events with `seq > since`
  * via the `/sync/outbox?since=…` catch-up endpoint to avoid gaps.
+ *
+ * **Cursors are per aggregate, and the `since` it sends is derived from all of
+ * them.** `specs/effect-tui/15-sync-snapshots-watermarks.md` requirement 7:
+ * "each consumer maintains a per-aggregate cursor `(aggregateID, watermark)`.
+ * Global cursors are **derived** from the per-aggregate cursors; they are not
+ * authoritative." Two facts make that necessary rather than tidy:
+ *
+ *   - `seq` is handed out **per aggregate** — `Sync.reserveSeqAndAppend` reads
+ *     its counter with `and(eq(projectId), eq(aggregate))`, so each aggregate
+ *     counts from 1 and two aggregates' `seq` values are not comparable.
+ *   - `/sync/outbox` filters `projectId = ? AND seq > since` with **no
+ *     aggregate predicate**, so one `since` addresses every aggregate at once.
+ *
+ * A single cursor — the maximum `seq` seen anywhere — is therefore a cursor for
+ * a stream that does not exist. A merely *less active* aggregate has its events
+ * skipped forever: with A at seq 60 and B at seq 5, a reconnect asking
+ * `since=60` never sees B's 6, 7, 8, and the loss is silent. Even the minimum
+ * known cursor skips unknown aggregates. Each replay starts at zero and uses
+ * composite page positions; per-aggregate cursors deduplicate applied events.
  */
 import { Log } from "@nikcli-ai/util/log"
 import type { SyncEventRecord } from "./index"
+import type { BacklogCursor, BacklogResponse } from "./transport"
 
 const log = Log.create({ service: "sync.remote-client" })
 
@@ -28,17 +48,41 @@ export type RemoteSyncClientOptions = {
 
 export class RemoteSyncClient {
   private source: EventSource | undefined
-  private lastSeq = 0
+  /**
+   * Per-aggregate resume positions, keyed by `aggregate`.
+   *
+   * EOT-15 requirement 7. A single shared `lastSeq` silently dropped every
+   * event of any aggregate that was less active than the busiest one, because
+   * `/sync/outbox` has no aggregate predicate to correct it.
+   */
+  private readonly cursors = new Map<string, number>()
   private stopped = false
   private backoffMs = 1000
   private readonly backoffCapMs = 30_000
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  private ingestQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly opts: RemoteSyncClientOptions) {}
 
+  /** The position this client has consumed for one aggregate. */
+  private cursorFor(aggregate: string) {
+    return this.cursors.get(aggregate) ?? 0
+  }
+
+  /** Serialize delivery so failed callbacks cannot be overtaken by later events. */
+  private ingest(event: SyncEventRecord) {
+    const delivery = this.ingestQueue.then(async () => {
+      if (event.seq <= this.cursorFor(event.aggregate)) return
+      await this.opts.onEvent(event)
+      this.cursors.set(event.aggregate, event.seq)
+    })
+    this.ingestQueue = delivery
+    return delivery
+  }
+
   async start(): Promise<void> {
     this.stopped = false
-    // Step 1: catch-up via /sync/outbox?since=0
+    // Step 1: replay and deduplicate per aggregate
     await this.catchUp().catch((error) => {
       log.warn("initial catch-up failed", { error })
     })
@@ -89,28 +133,43 @@ export class RemoteSyncClient {
     }
   }
 
-  private async catchUp(): Promise<void> {
-    const url = new URL(`${this.opts.url.replace(/\/$/, "")}/sync/outbox`)
-    url.searchParams.set("projectID", this.opts.projectID)
-    url.searchParams.set("since", String(this.lastSeq))
-    const res = await fetch(url.toString(), {
-      headers: { authorization: `Bearer ${this.opts.token}` },
-      signal: AbortSignal.timeout(30_000),
-    })
-    if (!res.ok) {
-      throw new Error(`catch-up HTTP ${res.status}`)
-    }
-    const body = (await res.json()) as {
-      events: SyncEventRecord[]
-      hasMore: boolean
-    }
-    for (const event of body.events) {
-      this.lastSeq = Math.max(this.lastSeq, event.seq)
-      await this.opts.onEvent(event)
-    }
-    if (body.hasMore) {
-      // Recurse to drain remaining pages
-      await this.catchUp()
+  /**
+   * Replay from zero so previously unknown aggregates cannot be skipped.
+   *
+   * Public because it is the seam the regression test drives: the reconnect path
+   * also resubscribes, and an `EventSource` cannot be exercised headlessly.
+   */
+  async catchUp(): Promise<void> {
+    await this.ingestQueue.catch(() => {})
+    this.ingestQueue = Promise.resolve()
+    let cursor: BacklogCursor | undefined
+    for (;;) {
+      const url = new URL(`${this.opts.url.replace(/\/$/, "")}/sync/outbox`)
+      url.searchParams.set("projectID", this.opts.projectID)
+      url.searchParams.set("since", String(cursor?.seq ?? 0))
+      if (cursor) {
+        url.searchParams.set("afterAggregate", cursor.aggregate)
+        url.searchParams.set("afterID", cursor.id)
+      }
+      const res = await fetch(url.toString(), {
+        headers: { authorization: `Bearer ${this.opts.token}` },
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!res.ok) throw new Error(`catch-up HTTP ${res.status}`)
+      const body = (await res.json()) as BacklogResponse
+      for (const event of body.events) await this.ingest(event)
+      if (!body.hasMore) return
+      const next = body.nextCursor
+      if (
+        !next ||
+        (cursor &&
+          (next.seq < cursor.seq ||
+            (next.seq === cursor.seq &&
+              (next.aggregate < cursor.aggregate || (next.aggregate === cursor.aggregate && next.id <= cursor.id)))))
+      ) {
+        throw new Error("catch-up cursor did not advance")
+      }
+      cursor = next
     }
   }
 
@@ -131,8 +190,12 @@ export class RemoteSyncClient {
         try {
           const messageEvent = raw as MessageEvent
           const event = JSON.parse(messageEvent.data) as SyncEventRecord
-          this.lastSeq = Math.max(this.lastSeq, event.seq)
-          void this.opts.onEvent(event)
+          void this.ingest(event).catch((error) => {
+            log.warn("sync event callback failed", { error })
+            this.source?.close()
+            this.source = undefined
+            this.scheduleReconnect()
+          })
         } catch (error) {
           log.warn("malformed sync event", { error })
         }
