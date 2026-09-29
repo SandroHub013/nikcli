@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SHOP_DEPTH, SHOP_WIDTH, placementOf, toLocal } from "./layout"
 import { SHOTS, SHOT_COUNT, SHOT_PEOPLE, SHOT_SHOPS, shotOf, shotPicture } from "./shots"
+import { stageShot } from "./shot-handle"
 import { createTown } from "./town"
 
 const insideShop = (slot: number, p: [number, number, number]) => {
@@ -88,5 +89,23 @@ describe("the eight shots", () => {
     expect(Math.hypot(s.look[0] - c.x, s.look[2] - c.z)).toBeLessThan(1.5)
     expect(shotPicture(5).shops.has("shot-shop-5")).toBe(false)
     expect(shotPicture().shops.get("shot-shop-5")?.slot).toBe(10)
+  })
+})
+
+describe("the scene as it is staged for a shot", () => {
+  test("every shop is up and every person seated, twelve seconds in", () => {
+    const town = createTown()
+    stageShot(town, 1)
+    expect(town.shops().map((s) => s.lift)).toEqual([1, 1, 1, 1, 1, 1])
+    expect(town.agents().every((a) => a.presence === 1 && a.blend === 1)).toBe(true)
+    expect(town.animating).toBe(false)
+  })
+
+  test("in the rise shot the sixth shop is half way up and the other five stand", () => {
+    const town = createTown()
+    stageShot(town, 8)
+    const lifts = town.shops().map((s) => Number(s.lift.toFixed(3)))
+    expect(lifts).toEqual([1, 1, 1, 1, 1, 0.5])
+    expect(town.animating).toBe(true)
   })
 })
