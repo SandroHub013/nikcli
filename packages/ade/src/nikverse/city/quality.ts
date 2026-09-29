@@ -21,14 +21,17 @@ export interface Level {
   renderer: "classic" | "webgpu"
   /** The most the pixel ratio may be, whatever the display's. */
   pixelRatio: number
-  /** Frames a second while something moves; 0 is the display's own rate. */
+  /** Frames a second while something moves: never above `MAX_FPS`, whatever the display offers. */
   fps: number
 }
 
+/** The most frames a second the city draws at any level: a 144 Hz display does not make it run faster (and burn more). */
+export const MAX_FPS = 60
+
 export const LEVELS: Readonly<Record<LevelId, Level>> = {
   bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30 },
-  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: 60 },
-  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: 0 },
+  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS },
+  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS },
 }
 
 export const isLevelId = (value: unknown): value is LevelId => LEVEL_IDS.includes(value as LevelId)
@@ -97,5 +100,5 @@ export function resolveLevel(request: string | undefined, gpu: Pick<GpuProbe, "w
   return { level: LEVELS[best], why: `richiesto ${LEVELS[request].label}, ma ${reason}: ${LEVELS[best].label}` }
 }
 
-/** The frame interval of the moving mode at a level, in milliseconds; 0 means every frame the display offers. */
-export const movingIntervalMs = (level: Level): number => (level.fps > 0 ? 1000 / level.fps : 0)
+/** The frame interval of the moving mode at a level, in milliseconds. */
+export const movingIntervalMs = (level: Level): number => 1000 / level.fps

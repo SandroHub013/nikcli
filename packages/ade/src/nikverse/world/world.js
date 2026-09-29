@@ -79,11 +79,6 @@ export function applyEvent(state, event) {
   return state
 }
 
-/** What one Esc does: a captured mouse is released first, and only then is the focus given back to ADE. */
-export function escAction(captured) {
-  return captured ? "release-capture" : "release-focus"
-}
-
 const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta", "AltGraph", "OS"])
 
 /**
@@ -300,11 +295,10 @@ export function boot(win, options = {}) {
   win.addEventListener("message", onPort)
   if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")
 
-  // The focus is the world's once it is clicked; Esc gives it back (a second time if the mouse was captured).
+  // The focus is the world's once it is clicked; Esc gives it back.
   win.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (escAction(city?.captured() ?? false) === "release-capture") city.releaseCapture()
-      else send({ cmd: "release-focus" })
+      send({ cmd: "release-focus" })
       return
     }
     const chord = chordCommand(event)
@@ -313,6 +307,12 @@ export function boot(win, options = {}) {
     send(chord)
   })
   doc.getElementById("world")?.addEventListener("pointerdown", () => doc.getElementById("world")?.focus())
+  // The frame is going (ADE unloads it when the panel is not seen): the GPU's memory goes back now, not when the
+  // process that held the frame is collected, which takes minutes.
+  win.addEventListener("pagehide", () => {
+    city?.dispose()
+    city = undefined
+  })
   return renderer
 }
 

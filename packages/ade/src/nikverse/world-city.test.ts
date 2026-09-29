@@ -45,23 +45,19 @@ function page(search = "") {
   const offer = () => listeners.get("message")?.({ source: parent, data: { type: PORT_OFFER, version: 1 }, ports: [port] })
   const fromAde = (data: unknown) => port.onmessage?.({ data })
   const key = (init: Record<string, unknown>) => listeners.get("keydown")?.({ preventDefault() {}, ...init })
-  return { win, offer, fromAde, key, seen }
+  const hide = () => listeners.get("pagehide")?.({})
+  return { win, offer, fromAde, key, hide, seen }
 }
 
 /** A city that records what the page asks of it. */
 function fakeCity() {
   const calls: string[] = []
   const started: Array<Record<string, unknown>> = []
-  let captured = false
   const handle = {
     sync: () => void calls.push("sync"),
     pause: () => void calls.push("pause"),
     resume: () => void calls.push("resume"),
-    captured: () => captured,
-    releaseCapture: () => {
-      calls.push("release")
-      captured = false
-    },
+    dispose: () => void calls.push("dispose"),
   }
   const module = {
     startCity: (deps: Record<string, unknown>) => {
@@ -69,7 +65,7 @@ function fakeCity() {
       return Promise.resolve(handle)
     },
   }
-  return { module, started, calls, capture: () => (captured = true) }
+  return { module, started, calls }
 }
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -143,8 +139,6 @@ describe("the 3D city the page starts", () => {
         sync() {},
         pause() {},
         resume() {},
-        captured: () => false,
-        releaseCapture() {},
         restore: (spot: unknown) => void restored.push(spot),
       })
     }
@@ -193,18 +187,26 @@ describe("the 3D city the page starts", () => {
     expect(city.calls[0]).toBe("pause")
   })
 
-  test("Esc lets go of a captured mouse first, then gives the focus back to ADE", async () => {
+  test("Esc gives the focus back to ADE: there is no captured mouse to let go of first", async () => {
     const { win, offer, key, seen } = page()
     const city = fakeCity()
     boot(win, { loadCity: async () => city.module })
     await settled()
     offer()
-    city.capture()
-    key({ key: "Escape" })
-    expect(city.calls).toContain("release")
-    expect(seen.filter((m) => (m as { type: string }).type === "command")).toEqual([])
     key({ key: "Escape" })
     expect(seen).toContainEqual({ type: "command", command: { cmd: "release-focus" } })
+    expect(city.calls).not.toContain("release")
+  })
+
+  test("the frame going away disposes the city, once: the GPU's memory goes back now and not when the process is collected", async () => {
+    const { win, offer, hide } = page()
+    const city = fakeCity()
+    boot(win, { loadCity: async () => city.module })
+    await settled()
+    offer()
+    hide()
+    hide()
+    expect(city.calls.filter((call) => call === "dispose")).toHaveLength(1)
   })
 
   test("without the city (not built, or the renderer cannot start) the page works as the list, and says why", async () => {

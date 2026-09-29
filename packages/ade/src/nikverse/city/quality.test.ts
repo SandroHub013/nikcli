@@ -3,7 +3,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { LEVELS_DIR } from "./test-cast"
 import { BODIES, glbUrl } from "./rig"
-import { LEVELS, LEVEL_IDS, isDedicatedGpu, isLevelId, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
+import { LEVELS, LEVEL_IDS, MAX_FPS, isDedicatedGpu, isLevelId, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
 
 describe("the levels", () => {
   test("three, in order of what they ask of the machine, and each has its assets", () => {
@@ -26,17 +26,20 @@ describe("the levels", () => {
     expect(LEVELS.bassa.pixelRatio).toBeLessThan(LEVELS.media.pixelRatio)
     expect(LEVELS.media.pixelRatio).toBeLessThan(LEVELS.alta.pixelRatio)
     expect(LEVELS.bassa.fps).toBeLessThan(LEVELS.media.fps)
-    expect(LEVELS.alta.fps).toBe(0)
+    // Nothing goes over 60, whatever the display offers: Alta is finer (pixels, effects), not faster.
+    for (const level of Object.values(LEVELS)) expect(level.fps).toBeLessThanOrEqual(MAX_FPS)
+    expect(MAX_FPS).toBe(60)
+    expect(LEVELS.alta.fps).toBe(MAX_FPS)
   })
 
   test("no level turns on what the budget forbids: it is a fact of the type, so a level with a shadow or a bloom would not compile", () => {
     for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["fps", "id", "label", "pixelRatio", "renderer"])
   })
 
-  test("the moving mode's interval is the level's frame rate; the display's own when it has none", () => {
+  test("the moving mode's interval is the level's frame rate", () => {
     expect(movingIntervalMs(LEVELS.bassa)).toBeCloseTo(33.33, 1)
     expect(movingIntervalMs(LEVELS.media)).toBeCloseTo(16.67, 1)
-    expect(movingIntervalMs(LEVELS.alta)).toBe(0)
+    expect(movingIntervalMs(LEVELS.alta)).toBeCloseTo(16.67, 1)
   })
 
   test("a level id is one of the three and nothing else", () => {

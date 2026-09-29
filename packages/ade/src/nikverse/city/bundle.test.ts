@@ -29,6 +29,11 @@ describe("the world bundle", () => {
     for (const name of ["startCity", "loadCast", "decodePicture", "resolveLevel"]) expect(exported).toContain(`as ${name}`)
   })
 
+  test("it does not ask for the pointer lock: WebView2 gives a frame none, and the camera turns by dragging", () => {
+    expect(text).not.toContain("requestPointerLock")
+    expect(text).not.toContain("pointerlockchange")
+  })
+
   test("it needs no eval and no Function, which the world's policy does not allow, and loads nothing from the network", () => {
     expect(text).not.toMatch(/\beval\(/)
     expect(text).not.toMatch(/new Function\(/)

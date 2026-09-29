@@ -38,7 +38,8 @@ import { loadLevel } from "./load-level"
 import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
-import { STILL_INTERVAL_MS, drawMode, shouldSavePosition, type DrawMode } from "./schedule"
+import { disposeTree, releaseRenderer } from "./release"
+import { STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
 
@@ -73,9 +74,6 @@ export interface CityHandle {
   resume(): void
   /** Where ADE says the character stood: taken only if the user has not moved yet. */
   restore(spot: Spot): void
-  /** Whether the mouse is captured (Esc lets it go first, and only then gives the focus back to ADE). */
-  captured(): boolean
-  releaseCapture(): void
   info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean; kit: boolean }
   dispose(): void
 }
@@ -165,7 +163,6 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let keys: Input = { ...NO_INPUT }
   let eye: [number, number, number] | undefined
   let look: [number, number, number] = [0, 1.4, 0]
-  let locked = false
   let dragging = false
   let running = true
   let moved = false
@@ -173,7 +170,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let sentAt = 0
   let clock = 0
   let last = 0
-  let lastDraw = 0
+  let nextDraw = 0
   let lastActivity = win.performance.now()
   let mode: DrawMode = "moving"
   let handle: number | undefined
@@ -210,9 +207,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const rayAt = (clientX: number, clientY: number): Ray => {
     const rect = canvas.getBoundingClientRect()
-    // While the mouse is captured the crosshair is the centre of the view.
-    if (locked) pointer.set(0, 0)
-    else pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1))
+    pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1))
     raycaster.setFromCamera(pointer, camera as never)
     const { origin, direction } = raycaster.ray
     return { ox: origin.x, oy: origin.y, oz: origin.z, dx: direction.x, dy: direction.y, dz: direction.z }
@@ -279,11 +274,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     // Immobile: nothing to draw until an event wakes the loop; the last picture stays on the screen.
     if (mode === "immobile") return
-    // Moving draws at the level's frame rate (Bassa 30, Media 60, Alta the display's own); standing, 15.
-    const interval = mode === "moving" ? movingInterval : STILL_INTERVAL_MS
-    if (ts - lastDraw >= interval - 2) {
+    // Moving draws at the level's frame rate (Bassa 30, Media and Alta 60, never more); standing, 15.
+    const paced = pace(ts, nextDraw, mode === "moving" ? movingInterval : STILL_INTERVAL_MS)
+    nextDraw = paced.next
+    if (paced.draw) {
       renderer.render(view.scene, camera)
-      lastDraw = ts
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
@@ -348,25 +343,21 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       wake()
       return
     }
+    // The camera turns by dragging, as in The Sims: WebView2 gives a frame no pointer lock.
     dragging = true
-    // Without the lock (a frame that may not have it) dragging still turns the camera.
-    try {
-      const asked = canvas.requestPointerLock() as unknown as Promise<void> | undefined
-      asked?.catch?.(() => {})
-    } catch {
-      /* dragging is the fallback */
-    }
     wake()
   }
   const onPointerUp = () => {
     dragging = false
   }
+  // On the window, so that a drag goes on when the mouse leaves the canvas; the pointer over the canvas alone is a hover.
   const onPointerMove = (event: PointerEvent) => {
-    if (locked || dragging) {
+    if (dragging) {
       orbit = lookAround(orbit, event.movementX, event.movementY)
       wake()
       return
     }
+    if (event.target !== canvas) return
     canvas.style.cursor = pickAt(event.clientX, event.clientY) ? "pointer" : "default"
     // The mouse over the world is activity: the city does not fall asleep under it.
     lastActivity = win.performance.now()
@@ -377,20 +368,14 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     orbit = zoom(orbit, event.deltaY)
     wake()
   }
-  const onLockChange = () => {
-    locked = doc.pointerLockElement === canvas
-    stage.classList.toggle("locked", locked)
-    if (locked) dragging = false
-  }
 
   win.addEventListener("keydown", onKeyDown)
   win.addEventListener("keyup", onKeyUp)
   win.addEventListener("blur", onBlur)
   canvas.addEventListener("pointerdown", onPointerDown)
   win.addEventListener("pointerup", onPointerUp)
-  canvas.addEventListener("pointermove", onPointerMove)
+  win.addEventListener("pointermove", onPointerMove)
   canvas.addEventListener("wheel", onWheel, { passive: false })
-  doc.addEventListener("pointerlockchange", onLockChange)
 
   town.sync(deps.picture())
   resize()
@@ -425,10 +410,6 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       eye = undefined
       wake()
     },
-    captured: () => locked,
-    releaseCapture() {
-      if (doc.pointerLockElement) doc.exitPointerLock()
-    },
     info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined, kit: kit !== undefined }),
     dispose() {
       running = false
@@ -439,9 +420,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       win.removeEventListener("keyup", onKeyUp)
       win.removeEventListener("blur", onBlur)
       win.removeEventListener("pointerup", onPointerUp)
-      doc.removeEventListener("pointerlockchange", onLockChange)
+      win.removeEventListener("pointermove", onPointerMove)
       view.dispose()
-      renderer.dispose()
+      // Everything the scene holds goes back to the GPU now, not when the frame's process is collected.
+      disposeTree(view.scene)
+      releaseRenderer(renderer)
       canvas.remove()
     },
   }
@@ -463,11 +446,10 @@ function logoCheckHandle(deps: CityDeps, renderer: DrawingSurface, canvas: HTMLC
     pause() {},
     resume() {},
     restore() {},
-    captured: () => false,
-    releaseCapture() {},
     info: () => ({ backend, mode: "logo-check", cast: false, kit: false }),
     dispose() {
-      renderer.dispose()
+      disposeTree(scene)
+      releaseRenderer(renderer)
       canvas.remove()
     },
   }
