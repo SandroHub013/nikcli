@@ -34,7 +34,7 @@ import {
 } from "three/webgpu"
 import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
-import type { CityKit } from "./kit"
+import { shopLook, type CityKit } from "./kit"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
   CHAIR_SEAT_TOP,
@@ -141,8 +141,9 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   const own: Array<{ dispose(): void }> = []
 
   if (kit) {
-    // N3's shop: floor, walls, window, awning, desks, chairs, screens; the sign's text and the monitors' glow are ours.
-    group.add(kit.shop())
+    // The file's shop: one of its variants and colours, by the project's name; the sign's text and the monitors' glow are ours.
+    const look = shopLook(entity.shop.name, kit.variants)
+    group.add(kit.shop(look.variant, look.tint))
   } else {
     const floor = new Mesh(box, FLOOR_MATERIAL)
     floor.scale.set(SHOP_WIDTH, 0.12, SHOP_DEPTH)
@@ -228,7 +229,8 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
 export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast, kit?: CityKit): CityView {
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
-  scene.fog = new Fog(0x0b1226, 70, 210)
+  // With the file's city the far towers fade into the haze at the foot of its sky dome, which is this colour.
+  scene.fog = kit ? new Fog(0x262438, 60, 300) : new Fog(0x0b1226, 70, 210)
 
   scene.add(new HemisphereLight(0xb4c6ff, 0x3a2e24, 1.6))
   scene.add(new AmbientLight(0x505878, 0.9))
@@ -238,6 +240,8 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
 
   const ground = new Mesh(new CircleGeometry(140, 96), new MeshStandardMaterial({ color: 0x171a21, roughness: 0.95 }))
   ground.rotation.x = -Math.PI / 2
+  // The file's paving lies at y = 0 too: at the same height the two fight for the same pixels in patches.
+  if (kit) ground.position.y = -0.05
   scene.add(ground)
   if (kit) {
     // N3's plaza: the paving with its plots, the pedestal and the kerb, two lamps.
