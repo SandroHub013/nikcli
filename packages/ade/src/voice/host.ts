@@ -18,7 +18,7 @@ import {
   type Workbench as WorkbenchState,
 } from "../surface/state"
 import { awaitPaneReply } from "./await-reply"
-import { createVoiceAgent, type VoiceAgent } from "./agent"
+import { createVoiceAgent, VOICE_PLAN_IDLE_MS, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
 import { locale, t } from "../i18n"
 import { dictatedFile, isRecentRoot } from "./paths"
@@ -171,7 +171,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
               // nikcli's turn runs on ADE's server (the planner's, on a free model); the others as `runTurn` runs them.
               runTurn: (request) => runBotTurn(request),
               warm: warmClaude(createWarmClaude()),
-              planWarm: warmClaude(createWarmClaude()),
+              planWarm: warmClaude(createWarmClaude({ idleMs: VOICE_PLAN_IDLE_MS })),
               statuses: () => deps.agentAvailability?.(),
               cwd: () => deps.project()?.root,
               codexFallback: () => deps.codexFallback?.() ?? false,

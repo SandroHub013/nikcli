@@ -465,8 +465,8 @@ describe("il pianificatore dentro il motore", () => {
     await settle()
 
     expect(prompts).toHaveLength(1)
-    expect(prompts[0].user).toContain("1 · Dario · claude-code · al lavoro")
-    expect(prompts[0].user).toContain("2 · Mimo · opencode · in attesa di una risposta dell'utente")
+    expect(prompts[0].user).toContain('1 · "Dario" · claude-code · al lavoro')
+    expect(prompts[0].user).toContain('2 · "Mimo" · opencode · in attesa di una risposta dell\'utente')
     await engine.stop()
   })
 

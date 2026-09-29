@@ -352,6 +352,25 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(fake.calls.created[0]?.permission).toEqual([BOT_SESSION_MARK, ...botPermission("planner" as never)])
   })
 
+  test("a tool call in a turn with no tools ends it at once: a user's «sempre» must not let the planner act", async () => {
+    const events: ChatEvent[] = [
+      busyOf(),
+      { type: "message.updated", properties: { sessionID: SESSION, info: { id: "m1", role: "assistant" } } },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: SESSION,
+          part: { id: "p1", messageID: "m1", type: "tool", tool: "bash", state: { status: "running", input: {} } },
+        },
+      },
+    ]
+    const fake = server({ events, session: SESSION })
+    const result = await runServeTurn(panel({ noTools: true, approvals: false }), fake.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe(t("bots.serve.toolInPlanner", "bash"))
+    expect(fake.calls.aborted).toContain(SESSION)
+  })
+
   test("free models are chosen when the turn runs: the user's own if it is free, else the first the catalog has", async () => {
     const { model: _none, ...noModel } = BOT
     const request = (extra: Partial<TurnRequest> = {}) =>

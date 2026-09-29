@@ -469,6 +469,15 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         showNext()
       }
       const applyPart = (part: ServePart) => {
+        /*
+         * A turn with no tools that reaches for one: a «sempre» the user gave in the project comes after
+         * the profile's rules and wins over them, so the turn is stopped here, as the first call shows.
+         */
+        if (request.noTools && part.type === "tool") {
+          void server.abort(session).catch(() => {})
+          end({ kind: "lost", why: t("bots.serve.toolInPlanner", part.tool ?? "tool") })
+          return
+        }
         const next = partChange(part, now())
         if (next) change(next)
       }

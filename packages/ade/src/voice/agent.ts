@@ -68,6 +68,19 @@ export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; reado
 export const VOICE_PLAN_TIMEOUT_MS = 8_000
 
 /**
+ * How long the planner may go without a first word before it is stopped and the sentence goes to the
+ * agent: its `speech` comes first and streams, so the first word is the sign it is alive. Four seconds
+ * for a process that has already answered (measured 1.2-1.5 s), eight for one starting (3.5-5.4 s).
+ */
+export const VOICE_PLAN_FIRST_TOKEN_MS = { warm: 4_000, cold: 8_000 } as const
+
+/**
+ * How long the planner's process stays after its last sentence. Three minutes, not the agent's ten: it
+ * weighs about 214 MB, and a pause longer than this is not a conversation.
+ */
+export const VOICE_PLAN_IDLE_MS = 3 * 60_000
+
+/**
  * The free models nikcli's planner may use, in order of preference. The turn picks one when it runs, from
  * the server's catalog (`TurnRequest.freeModels`): a list, because a free model leaves the catalog one day.
  * The user's own model comes first when it is free. A paid one is never used.
@@ -190,6 +203,8 @@ export interface VoiceAgentDeps {
    * A second process for the planner, of its own: it holds other instructions than the agent's, and one
    * process serves one configuration, so sharing would replace it at every alternate sentence.
    */
+  /** The first-word limits of the planner (`VOICE_PLAN_FIRST_TOKEN_MS`); tests shorten them. */
+  firstTokenMs?: { readonly warm: number; readonly cold: number }
   planWarm?: {
     prepare: (request: TurnRequest) => void
     run: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
@@ -339,6 +354,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
     ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
   })
   let plannedInSession = 0
+  let lastPlanAt = 0
 
   return {
     prepare({ engine, speed }) {
@@ -357,6 +373,16 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
           : resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
       if ("problem" in resolved) throw new Error(`Non riesco a pianificare: ${resolved.problem}`)
       const runner = resolved.runner
+      /*
+       * Codex has no warm process: every sentence would be a cold turn of its own, which costs more than the
+       * agent's, and it has no way to be given no tools. It is not measured (its account is out of quota
+       * until 2026-10-13; the CLI alone took 8 s to say so): the sentence goes straight to the agent.
+       */
+      if (runner === "codex") {
+        throw new Error(
+          "Non riesco a pianificare: con Codex la frase va direttamente all'agente, il pianificatore sarebbe più lento.",
+        )
+      }
       const base =
         runner === "nikcli"
           ? // Nothing to refuse: nikcli would refuse the turn for want of a way to enforce it.
@@ -367,39 +393,62 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
             }
           : planFor(runner, deps.cwd(), speed, system)
       let last = ""
+      let heard = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let silent = false
       const request: TurnRequest = {
         ...base,
         message: user,
-        ...(onText
-          ? {
-              onUpdate: (talk: Talk) => {
-                const soFar = answerSoFar(talk)
-                if (!soFar || soFar === last) return
-                last = soFar
-                onText(soFar)
-              },
-            }
-          : {}),
+        onUpdate: (talk: Talk) => {
+          const soFar = answerSoFar(talk)
+          if (!soFar) return
+          heard = true
+          clearTimeout(timer)
+          if (!onText || soFar === last) return
+          last = soFar
+          onText(soFar)
+        },
       }
       const warm = runner === "claude" ? deps.planWarm : undefined
-      if (warm && plannedInSession >= VOICE_PLAN_SESSION_PHRASES) {
-        warm.forget()
-        plannedInSession = 0
-      }
+      // A process that has not spoken for as long as it lives is gone: this one starts again.
+      const cold = plannedInSession === 0 || Date.now() - lastPlanAt > VOICE_PLAN_IDLE_MS
       if (warm) plannedInSession++
       const turn = warm ? warm.run(request) : deps.runTurn(request)
+      if (warm) {
+        const limits = deps.firstTokenMs ?? VOICE_PLAN_FIRST_TOKEN_MS
+        timer = setTimeout(
+          () => {
+            if (heard) return
+            silent = true
+            turn.stop()
+          },
+          cold ? limits.cold : limits.warm,
+        )
+      }
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
         const result = await turn.result
+        if (silent && !signal?.aborted) throw new Error("Non riesco a pianificare: nessuna risposta in tempo.")
         if (result.status === "stopped" || signal?.aborted) {
           throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
         }
         if (result.status !== "done") {
           throw new Error(`Non riesco a pianificare: ${result.problem || "l'agente non ha risposto."}`)
         }
+        lastPlanAt = Date.now()
+        /*
+         * The conversation ends here, not at the next sentence: the process that follows is made ready now,
+         * while nobody waits, so the 21st sentence is not the one that pays for it.
+         */
+        if (warm && plannedInSession >= VOICE_PLAN_SESSION_PHRASES) {
+          warm.forget()
+          warm.prepare({ ...base, message: "" })
+          plannedInSession = 0
+        }
         return result.text
       } finally {
+        clearTimeout(timer)
         signal?.removeEventListener("abort", onAbort)
       }
     },
