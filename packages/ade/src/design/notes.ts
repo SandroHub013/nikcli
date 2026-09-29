@@ -107,7 +107,8 @@ export function notesFileRelative(file: string, at: Date): string {
 
 /** Inline code that stays inline code whatever the page put in it. */
 const code = (value: string) => `\`${value.replace(/`/g, "'")}\``
-const quoted = (value: string) => `«${value}»`
+/** The page's text between «»: its own « and » become ", so it cannot close them and write a note. */
+const quoted = (value: string) => `«${value.replace(/[«»]/g, '"')}»`
 
 function targetLines(target: NoteTarget): string[] {
   const where = [target.tag, target.selector ? code(target.selector) : ""].filter(Boolean).join(" ")
