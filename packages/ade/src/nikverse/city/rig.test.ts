@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Quaternion, Vector3 } from "three/webgpu"
 import { castOf, presentLevels } from "./test-cast"
 import { unpack, readGlb } from "./glb"
+import { isKtx2 } from "./ktx2-header"
 import {
   AGENT_BODIES,
   BODIES,
@@ -68,8 +69,8 @@ describe("the cast as it ships", () => {
     const { buffer, pictures } = unpack(glb)
     expect([...pictures.keys()]).toEqual(["knight_texture"])
     expect(Object.keys(pictures.get("knight_texture")!)).toEqual(["map"])
-    const png = pictures.get("knight_texture")!.map!
-    expect([...png.subarray(1, 4)]).toEqual([0x50, 0x4e, 0x47])
+    // A KTX2 file, in the GPU's own format: the world decodes it by its header (`ktx2.ts`).
+    expect(isKtx2(pictures.get("knight_texture")!.map!)).toBe(true)
     const bare = readGlb(new Uint8Array(buffer))
     expect(bare.json.images).toBeUndefined()
     expect(bare.json.textures).toBeUndefined()

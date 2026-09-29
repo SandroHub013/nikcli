@@ -23,11 +23,35 @@ export interface PictureDecoder {
 /** What the loader needs of a renderer: the classic one's extensions, or the WebGPU one's features. */
 export type Ktx2Support = Parameters<KTX2Loader["detectSupport"]>[0]
 
+const DATA_WASM = "data:application/wasm;base64,"
+
+/**
+ * three's zstd decoder (the one inside `KTX2Loader`, for the files that are zstd-supercompressed) loads its WebAssembly with
+ * `fetch("data:application/wasm;base64,...")`, and the world's policy has no `data:` in `connect-src`, on purpose: a `fetch` of
+ * a `data:` address is a way out for anything. So that one address is answered here, from the bytes it carries, without going
+ * near the network; every other `fetch` is the page's own, untouched. The policy stays as it is.
+ */
+export function serveDataWasm(scope: { fetch: typeof fetch } = globalThis): void {
+  const original = scope.fetch
+  if ((original as { servesDataWasm?: boolean }).servesDataWasm) return
+  const wrapped = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof input === "string" && input.startsWith(DATA_WASM)) {
+      const text = atob(input.slice(DATA_WASM.length))
+      const bytes = Uint8Array.from(text, (c) => c.charCodeAt(0))
+      return Promise.resolve(new Response(bytes, { headers: { "content-type": "application/wasm" } }))
+    }
+    return original.call(scope, input, init)
+  }) as typeof fetch & { servesDataWasm?: boolean }
+  wrapped.servesDataWasm = true
+  scope.fetch = wrapped
+}
+
 export function createPictureDecoder(renderer: Ktx2Support, png: PictureDecoder["decode"] = decodePicture): PictureDecoder {
   let loader: KTX2Loader | undefined
   return {
     decode(bytes, srgb) {
       if (!isKtx2(bytes)) return png(bytes, srgb)
+      serveDataWasm()
       loader ??= new KTX2Loader().detectSupport(renderer)
       // A copy: the loader takes the buffer it is given.
       const copy = bytes.slice().buffer
