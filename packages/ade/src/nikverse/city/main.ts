@@ -13,7 +13,7 @@
  * pixels per SVG unit, for the comparison with the SVG.
  */
 
-import { NoToneMapping, PerspectiveCamera, Raycaster, Vector2, WebGPURenderer } from "three/webgpu"
+import { NoToneMapping, PerspectiveCamera, Raycaster, RenderTarget, Vector2, WebGPURenderer } from "three/webgpu"
 import { WebGLRenderer } from "three"
 import {
   NO_INPUT,
@@ -37,8 +37,11 @@ import { loadLevel } from "./load-level"
 import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
+import type { GpuTiming } from "./bench"
+import { benchDraw, measureGpu } from "./gpu-idle"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
+import { startShot } from "./shot-handle"
 import { STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
@@ -61,6 +64,8 @@ export interface CityDeps {
   classic?: boolean
   /** The level asked for (`?quality=`): `auto`, or a level's id. Whatever the machine cannot run is lowered (`quality.ts`). */
   quality?: string
+  /** The bench's shot (`?shot=N`, 1 to 8): the page draws the fixed scene from that camera once, and keeps the picture (`shot-handle.ts`). */
+  shot?: number
   /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
   assets?: string
   /** Tells ADE where the character is, so that a reload of the frame can stand it there again. */
@@ -75,6 +80,8 @@ export interface CityHandle {
   /** Where ADE says the character stood: taken only if the user has not moved yet. */
   restore(spot: Spot): void
   info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean; kit: boolean }
+  /** Draws the current view `frames` times back to back and says how long the GPU took (the gate's and the bench's number). */
+  bench?(frames?: number): Promise<GpuTiming>
   dispose(): void
 }
 
@@ -162,6 +169,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const town = createTown()
   const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
+  // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
+  if (deps.shot !== undefined)
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -169,6 +179,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let look: [number, number, number] = [0, 1.4, 0]
   let dragging = false
   let running = true
+  /** The GPU is being timed: the loop draws nothing until it is done, so that the frames counted are the only ones. */
+  let benching = false
   let moved = false
   let wasMoving = false
   let sentAt = 0
@@ -225,7 +237,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   function frame(ts: number) {
     handle = undefined
-    if (!running) return
+    if (!running || benching) return
     const dt = last === 0 ? 0.016 : Math.min(0.1, (ts - last) / 1000)
     last = ts
     clock += dt
@@ -415,6 +427,24 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       wake()
     },
     info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined, kit: kit !== undefined }),
+    async bench(frames = 240) {
+      if (benching) throw new Error("il banco è già in corso")
+      benching = true
+      if (handle !== undefined) win.cancelAnimationFrame(handle)
+      if (timer !== undefined) clearTimeout(timer)
+      handle = undefined
+      timer = undefined
+      // Into a target for WebGPU: the canvas would hold each frame for the display (see `benchDraw`).
+      const target = benchDraw(renderer, backend, view.scene, camera, () => new RenderTarget(canvas.width, canvas.height, { samples: 4 }))
+      try {
+        return await measureGpu(renderer, backend, target.draw, frames)
+      } finally {
+        target.dispose()
+        benching = false
+        last = 0
+        wake()
+      }
+    },
     dispose() {
       running = false
       if (handle !== undefined) win.cancelAnimationFrame(handle)

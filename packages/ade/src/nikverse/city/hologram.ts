@@ -57,7 +57,6 @@ import {
   select,
   sin,
   smoothstep,
-  time,
   uniform,
   uv,
   vec3,
@@ -117,6 +116,13 @@ export function logoCheck(logo: Logo): { scene: Scene; camera: OrthographicCamer
 
 const CYAN = new Color(0x38d8ff)
 
+/**
+ * The hologram's shaders run on the world's clock, which `update` sets, not on the renderer's own `time`: the same
+ * world time gives the same picture, which is what lets the bench compare two renders, and a paused world stops
+ * everything.
+ */
+const holoTime = uniform(0)
+
 /** The hologram's node material for one colour of the logo (WebGPU). */
 export function hologramMaterial(file: string, brightness: number): MeshBasicNodeMaterial {
   const material = new MeshBasicNodeMaterial({
@@ -134,11 +140,11 @@ export function hologramMaterial(file: string, brightness: number): MeshBasicNod
   const rim = pow(float(1).sub(facing), 2.2)
 
   // A short flicker, once every five seconds: 0.15 s of it.
-  const glitch = select(fract(time.div(5)).lessThan(0.03), float(1), float(0))
+  const glitch = select(fract(holoTime.div(5)).lessThan(0.03), float(1), float(0))
   const shift = glitch.mul(0.9)
   // The typings of `sin` widen a float to a vec4; the value is a float.
   const scan = (offset: Parameters<typeof positionWorld.y.add>[0]) =>
-    sin(positionWorld.y.mul(70).sub(time.mul(4)).add(offset)).mul(0.5).add(0.5) as unknown as ReturnType<typeof float>
+    sin(positionWorld.y.mul(70).sub(holoTime.mul(4)).add(offset)).mul(0.5).add(0.5) as unknown as ReturnType<typeof float>
   const channels = vec3(mix(float(0.55), float(1), scan(shift)), scan(float(0)), mix(float(0.55), float(1), scan(shift.negate())))
 
   // The rim of each voxel's faces glows: `uv` runs 0..1 across a face.
@@ -286,7 +292,7 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl", options: 
   if (kind === "tsl") {
     const node = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide })
     const along = uv().y
-    const sweep = sin(positionWorld.y.mul(9).sub(time.mul(2))).mul(0.5).add(0.5)
+    const sweep = sin(positionWorld.y.mul(9).sub(holoTime.mul(2))).mul(0.5).add(0.5)
     node.colorNode = uniform(CYAN)
     node.opacityNode = float(1).sub(along).mul(0.16).mul(float(0.75).add(sweep.mul(0.25)))
     coneMaterial = node
@@ -365,6 +371,7 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl", options: 
       spun.position.y = HOLOGRAM_HEIGHT + Math.sin(t * 0.8) * 0.07
       glow.quaternion.copy(camera.quaternion)
       for (const shader of shaders) shader.uniforms.uTime.value = t
+      holoTime.value = t
     },
   }
 }

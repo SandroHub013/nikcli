@@ -205,7 +205,14 @@ const loadCityModule = () => import("./assets/world/city.js")
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
   // `?quality=bassa|media|alta` asks for a level (the city lowers what the machine cannot run); without it the level is chosen from the machine.
-  return { check: params.get("check") === "logo", classic: params.get("renderer") === "classic", quality: params.get("quality") ?? undefined }
+  // `?shot=1..8` is the bench: the fixed scene from one camera, drawn once.
+  const shot = Number(params.get("shot"))
+  return {
+    check: params.get("check") === "logo",
+    classic: params.get("renderer") === "classic",
+    quality: params.get("quality") ?? undefined,
+    shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
+  }
 }
 
 /** Starts the page: waits for ADE's port, then lives on it. Only ever once per document. */
@@ -245,12 +252,15 @@ export function boot(win, options = {}) {
         mode: query.check ? "logo-check" : "city",
         classic: query.classic,
         quality: query.quality,
+        shot: query.shot,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
       }),
     )
     .then((started) => {
       city = started
+      // The gate and the bench time the GPU through this: the world's own drawing, not a copy of it.
+      win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
       mark("city", "1")
       if (spot) city.restore(spot)
       if (paused) city.pause()

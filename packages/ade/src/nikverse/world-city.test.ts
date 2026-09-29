@@ -81,13 +81,16 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the query options are ?check=logo and ?renderer=classic, and nothing else: WebGPURenderer's WebGL backend cannot be asked for", () => {
-    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined })
-    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined })
-    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined })
+    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined })
+    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined })
+    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined })
     expect(readOptions("?quality=alta").quality).toBe("alta")
     expect(readOptions("?x=1").quality).toBeUndefined()
+    // ?shot=1..8 is the bench; anything else is no shot.
+    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4 })
+    for (const bad of ["?shot=0", "?shot=9", "?shot=2.5", "?shot=x", "?shot="]) expect(readOptions(bad).shot).toBeUndefined()
     for (const other of ["?check=other&renderer=webgpu", "?renderer=webgl", "?forceWebGL=1"])
-      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined })
+      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined })
     const source = readFileSync(join(import.meta.dir, "world", "world.js"), "utf8")
     expect(source).not.toMatch(/forceWebGL/)
   })
@@ -127,6 +130,34 @@ describe("the 3D city the page starts", () => {
     expect(document.documentElement.dataset.check).toBeUndefined()
     await settled()
     expect(two.started[0]).toMatchObject({ mode: "city", classic: true })
+  })
+
+  test("?shot=N hands the bench's shot to the city, and no shot when the number is not one", async () => {
+    const one = fakeCity()
+    boot(page("?shot=3&quality=media").win, { loadCity: async () => one.module })
+    await settled()
+    expect(one.started[0]).toMatchObject({ mode: "city", shot: 3, quality: "media" })
+    const two = fakeCity()
+    boot(page("?shot=12").win, { loadCity: async () => two.module })
+    await settled()
+    expect((two.started[0] as { shot?: number }).shot).toBeUndefined()
+  })
+
+  test("the GPU timing of the world's own drawing is on the window for the gate: it asks the city, and says so when there is none", async () => {
+    const { win } = page()
+    const timing = { frames: 2, mean: 1, p50: 1, p95: 2, max: 2, sync: "queue", timestampQuery: false }
+    const asked: unknown[] = []
+    const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, bench: async (frames?: number) => (asked.push(frames), timing) }
+    boot(win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    const bench = (win as unknown as { __nikverseBench(frames?: number): Promise<unknown> }).__nikverseBench
+    expect(await bench(120)).toEqual(timing)
+    expect(asked).toEqual([120])
+    // A city without a bench (the logo check's) refuses, it does not answer with nothing.
+    const bare = page()
+    boot(bare.win, { loadCity: async () => ({ startCity: async () => ({ sync() {}, pause() {}, resume() {}, dispose() {} }) }) })
+    await settled()
+    await expect((bare.win as unknown as { __nikverseBench(): Promise<unknown> }).__nikverseBench()).rejects.toThrow("no bench")
   })
 
   test("ADE keeps where the character stands: the world sends its position, and takes it back when it is up again", async () => {

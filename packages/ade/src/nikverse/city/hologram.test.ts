@@ -214,3 +214,14 @@ describe("the hologram on the classic renderer", () => {
     expect(shader).toEqual([...logo.rects].sort(order))
   })
 })
+
+describe("the hologram's clock", () => {
+  // The bench compares two renders of the same world time: nothing may read the renderer's own, moving `time`.
+  test("its shaders run on the world's clock, not on TSL's `time` node", async () => {
+    const source = await Bun.file(new URL("./hologram.ts", import.meta.url)).text()
+    const imported = /import \{[^}]*\} from "three\/tsl"/s.exec(source)?.[0] ?? ""
+    expect(imported).not.toMatch(/\btime\b/)
+    expect(source).not.toMatch(/\btime\.(?:mul|div|add|sub)\(/)
+    expect(source).toContain("holoTime.value = t")
+  })
+})

@@ -15,212 +15,45 @@
  * (`WebGPURenderer` when the browser has a WebGPU adapter, the classic one when it has not).
  * A backend that the headless browser does not have is reported, not failed.
  *
- *   bun scripts/nikverse-render-check.ts [--out DIR] [--browser PATH]
+ *   bun scripts/nikverse-render-check.ts [--out DIR] [--browser PATH] [--json FILE] [--strict-logo]
  *
+ * `--json FILE` writes every check as {name, ok, detail}; `--strict-logo` asks the logo check for 100 % of the pixels
+ * within ΔE 3, as the bench does (an effect must never touch the logo).
  * Exits 1 when a check fails. Time cap: 5 minutes.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { buildWorld } from "../src/nikverse/city/build-world"
 import { bc1Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
+import { actAsAde, arg, startHarness } from "./nikverse-harness"
 
 const root = join(import.meta.dir, "..")
-const world = join(root, "src", "nikverse", "world")
-const arg = (name: string) => {
-  const i = process.argv.indexOf(name)
-  return i >= 0 ? process.argv[i + 1] : undefined
-}
 const out = arg("--out") ?? join(tmpdir(), "nikverse-render-check")
-mkdirSync(out, { recursive: true })
-
-const CANDIDATES = [
-  arg("--browser"),
-  process.env.BROWSER_PATH,
-  "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-  "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-].filter((p): p is string => Boolean(p))
-const browser = CANDIDATES.find((p) => existsSync(p))
-if (!browser) {
-  console.error("no Edge or Chrome found; pass --browser PATH")
-  process.exit(2)
-}
+const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
+const NONCE = "0123456789abcdef".repeat(3)
 
 const deadline = setTimeout(() => {
   console.error("time cap of 5 minutes reached")
   process.exit(1)
 }, 300_000)
 
-const built = await buildWorld()
-if (!built.ok) throw new Error(built.errors.join("\n"))
-
-// The world's own policy, as the `nikverse` scheme sends it, with the host replaced by this server's: a
-// page that works here works there. Without it a `fetch` of a `blob:` address, say, would pass here and fail in ADE.
-const POLICY = readFileSync(join(root, "src-tauri", "src", "nikverse.rs"), "utf8").match(/pub const CSP: &str = "([^"]+)"/)?.[1]
-if (!POLICY) throw new Error("no CSP found in nikverse.rs")
-const CSP = POLICY.replaceAll("http://nikverse.localhost nikverse:", "'self'")
-const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
-
-const NONCE = "0123456789abcdef".repeat(3)
-const LOGO = readFileSync(join(root, "src", "nikverse", "city", "nikcli-logo-dark.svg"), "utf8")
-const text = (path: string) => readFileSync(join(world, path), "utf8")
-
-const server = Bun.serve({
-  port: 0,
-  fetch(request) {
-    const url = new URL(request.url)
-    // The reference page is the harness's own (it compares pictures through `data:` addresses): no policy on it.
-    const policy = url.pathname === "/reference.html" ? {} : { "content-security-policy": CSP }
-    const send = (body: string, type: string) => new Response(body, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
-    // N3's files: `/assets/levels/...` is the levels folder, the way the scheme serves it.
-    const level = /^\/assets\/levels\/((?:bassa|media|alta)\/)?((?:lightmap\/)?[a-z_0-9]+\.(?:glb|png))$/.exec(url.pathname)
-    if (level) {
-      const file = Bun.file(join(LEVELS_DIR, level[1] ?? "", level[2]))
-      const type = level[2].endsWith(".png") ? "image/png" : "model/gltf-binary"
-      return new Response(file, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
-    }
+// The server, the browser and the line to it are `nikverse-harness.ts`'s; this script adds its own two pages.
+const { base, page, browserLine, cpuByProcess, problems, evaluate, open, until, shot, close } = await startHarness({
+  out,
+  // The reference page is the harness's own (it compares pictures through `data:` addresses): no policy on it.
+  noPolicy: ["/reference.html"],
+  routes(url, policy) {
     // A KTX2 file in the GPU's own format (BC1), made here, for the check of the KTX2 path.
     if (url.pathname === "/fixtures/bc1.ktx2") return new Response(bc1Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
-    switch (url.pathname) {
-      case "/":
-      case "/index.html":
-        return send(text("index.html"), "text/html; charset=utf-8")
-      case "/world.js":
-        return send(text("world.js"), "text/javascript; charset=utf-8")
-      case "/world.css":
-        return send(text("world.css"), "text/css; charset=utf-8")
-      case "/assets/world/city.js":
-        return send(built.text, "text/javascript; charset=utf-8")
-      case "/favicon.ico":
-        return new Response(null, { status: 204 })
-      case "/logo.svg":
-        return send(LOGO, "image/svg+xml")
-      case "/reference.html":
-        return send(
-          '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
-          "text/html; charset=utf-8",
-        )
-      default:
-        return new Response("not found", { status: 404 })
-    }
+    if (url.pathname === "/reference.html")
+      return new Response(
+        '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
+        { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...policy } },
+      )
+    return undefined
   },
 })
-const base = `http://127.0.0.1:${server.port}`
-
-// ---- the browser, and a line to it ----
-
-const profile = join(tmpdir(), `nikverse-browser-${process.pid}`)
-mkdirSync(profile, { recursive: true })
-const child = Bun.spawn(
-  [
-    browser,
-    "--headless=new",
-    "--remote-debugging-port=0",
-    `--user-data-dir=${profile}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--use-angle=swiftshader",
-    "--enable-unsafe-swiftshader",
-    "--ignore-gpu-blocklist",
-    "--enable-unsafe-webgpu",
-    "--hide-scrollbars",
-    "--mute-audio",
-    "about:blank",
-  ],
-  { stdout: "ignore", stderr: "ignore" },
-)
-
-async function debuggingPort(): Promise<number> {
-  const file = join(profile, "DevToolsActivePort")
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(file)) {
-      const port = Number(readFileSync(file, "utf8").split("\n")[0])
-      if (port) return port
-    }
-    await Bun.sleep(100)
-  }
-  throw new Error("the browser did not open its debugging port")
-}
-
-class Cdp {
-  private id = 0
-  private pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>()
-  private listeners: Array<(method: string, params: any) => void> = []
-  private constructor(private ws: WebSocket) {
-    ws.onmessage = (event) => {
-      const message = JSON.parse(String(event.data))
-      if (message.id !== undefined) {
-        const wait = this.pending.get(message.id)
-        this.pending.delete(message.id)
-        if (message.error) wait?.reject(new Error(message.error.message))
-        else wait?.resolve(message.result)
-      } else for (const l of this.listeners) l(message.method, message.params)
-    }
-  }
-  static async open(url: string) {
-    const ws = new WebSocket(url)
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve()
-      ws.onerror = () => reject(new Error("no websocket to the page"))
-    })
-    return new Cdp(ws)
-  }
-  send<T = any>(method: string, params: object = {}): Promise<T> {
-    const id = ++this.id
-    this.ws.send(JSON.stringify({ id, method, params }))
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject }))
-  }
-  on(fn: (method: string, params: any) => void) {
-    this.listeners.push(fn)
-  }
-  close() {
-    this.ws.close()
-  }
-}
-
-const port = await debuggingPort()
-const targets: Array<{ type: string; webSocketDebuggerUrl: string }> = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-const page = await Cdp.open(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl)
-const problems: string[] = []
-page.on((method, params) => {
-  if (method === "Runtime.exceptionThrown") problems.push(`exception: ${params.exceptionDetails?.exception?.description ?? params.exceptionDetails?.text}`)
-  if (method === "Runtime.consoleAPICalled" && params.type === "error")
-    problems.push(`console.error: ${params.args?.map((a: any) => a.value ?? a.description).join(" ").slice(0, 300)}`)
-  if (method === "Log.entryAdded" && params.entry.level === "error") problems.push(`log: ${params.entry.text} ${params.entry.url ?? ""}`.slice(0, 300))
-})
-await page.send("Runtime.enable")
-await page.send("Log.enable")
-await page.send("Page.enable")
-
-const evaluate = async <T = any>(expression: string): Promise<T> => {
-  const result = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
-  return result.result.value as T
-}
-
-async function open(path: string, size: { width: number; height: number }) {
-  await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false })
-  await page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } })
-  await page.send("Page.navigate", { url: `${base}${path}` })
-}
-
-async function until(condition: string, what: string, ms = 30_000) {
-  const start = Date.now()
-  while (Date.now() - start < ms) {
-    if (await evaluate<boolean>(condition).catch(() => false)) return
-    await Bun.sleep(150)
-  }
-  const info = await evaluate(`JSON.stringify({city: document.documentElement.dataset.city, error: document.documentElement.dataset.cityError, backend: document.documentElement.dataset.backend})`).catch(() => "?")
-  throw new Error(`timeout waiting for ${what} ${info} ${problems.slice(0, 3).join(" | ")}`)
-}
-
-async function shot(name: string): Promise<string> {
-  const { data } = await page.send("Page.captureScreenshot", { format: "png" })
-  writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"))
-  return data
-}
 
 /** The two pictures compared in the browser: pixels within ΔE 3, and the silhouettes' IoU. */
 const COMPARE = `(async (a, b) => {
@@ -260,8 +93,11 @@ const COMPARE = `(async (a, b) => {
 })`
 
 let failed = 0
+const results: Array<{ name: string; ok: boolean; detail: string }> = []
+const strictLogo = process.argv.includes("--strict-logo")
 const report = (name: string, ok: boolean, detail: string) => {
   if (!ok) failed++
+  results.push({ name, ok, detail })
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}: ${detail}`)
 }
 
@@ -285,7 +121,7 @@ async function logoCheck(renderer: "classic" | "auto") {
     if (result.error) throw new Error(JSON.stringify(result))
     report(
       `logo ${label} [${backend}]`,
-      result.closeShare >= 0.995 && result.iou >= 0.995,
+      (strictLogo ? result.closeShare === 1 : result.closeShare >= 0.995) && result.iou >= 0.995,
       `${(result.closeShare * 100).toFixed(3)} % of pixels within ΔE 3, IoU ${result.iou.toFixed(5)}, worst ΔE ${result.worstDeltaE.toFixed(2)}${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
     )
   } catch (error) {
@@ -312,17 +148,7 @@ const SNAPSHOT = {
   waiting: { decisions: 0 },
 }
 
-/** Acts as ADE: offers the world a port, tells it where the character stood (if it knows) and sends it the snapshot. */
-const asAde = (spot?: { x: number; z: number; heading: number }) => `(async () => {
-  const channel = new MessageChannel()
-  window.__ade = { port: channel.port1, seen: [] }
-  channel.port1.onmessage = (event) => window.__ade.seen.push(event.data)
-  window.postMessage({ type: "nikverse:port", version: 1 }, "*", [channel.port2])
-  for (let i = 0; i < 100 && !window.__ade.seen.some((m) => m.type === "ready"); i++) await new Promise((r) => setTimeout(r, 50))
-  ${spot ? `channel.port1.postMessage({ type: "player", ...${JSON.stringify(spot)} })` : ""}
-  channel.port1.postMessage({ type: "snapshot", snapshot: ${JSON.stringify(SNAPSHOT)} })
-  return window.__ade.seen.some((m) => m.type === "ready")
-})()`
+const asAde = (spot?: { x: number; z: number; heading: number }) => actAsAde(SNAPSHOT, spot)
 
 async function cityCheck(renderer: "classic" | "auto") {
   const label = renderer === "classic" ? "classic WebGL (asked for)" : "auto"
@@ -457,7 +283,12 @@ async function cityCheck(renderer: "classic" | "auto") {
     await Bun.sleep(11_000)
     const immobile = await modeOf()
     const idle1 = await frames()
-    await Bun.sleep(2000)
+    // What runs when nothing is drawn: the CPU time of every process over ten seconds, as a share of one core.
+    const cpuBefore = await cpuByProcess()
+    await Bun.sleep(10_000)
+    const cpuAfter = await cpuByProcess()
+    const share = [...cpuAfter].map(([key, after]) => `${key} ${(((after - (cpuBefore.get(key) ?? after)) / 10) * 100).toFixed(2)}%`)
+    console.log(`  [${renderer}] CPU while immobile, over 10 s: ${share.join(", ")}`)
     const idle2 = await frames()
     await evaluate(`window.__ade.port.postMessage({ type: "snapshot", snapshot: ${JSON.stringify({ ...SNAPSHOT, at: 2, shops: SNAPSHOT.shops.slice(0, 2) })} })`)
     await Bun.sleep(1500)
@@ -559,10 +390,10 @@ try {
   await cityCheck("classic")
   await cityCheck("auto")
   console.log(`pictures in ${out}`)
+  const json = arg("--json")
+  if (json) writeFileSync(json, JSON.stringify(results, null, 2))
 } finally {
   clearTimeout(deadline)
-  page.close()
-  child.kill()
-  server.stop(true)
+  close()
 }
 process.exit(failed ? 1 : 0)

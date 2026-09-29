@@ -1,7 +1,7 @@
 /**
  * The live gate for NikVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
- * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core,
- * 60 fps while walking). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
+ * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core over what
+ * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory +250 MB). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
  *
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
  *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
@@ -12,14 +12,15 @@
  * `nikverse.localhost` renderer's private bytes and working set over N open/close cycles; ADE's own
  * renderer (private, working set, JS heap after a GC) against the world-closed baseline 5 s after the last
  * close and again after `--rest` (the baseline is taken after one warm-up open/close, once ADE has settled); CPU of the frame, the GPU and ADE in the three draw modes (moving, still,
- * immobile) three times each; frames a second; the GPU process' memory. Only ADE Test is driven (it asks for
+ * immobile) three times each, after a baseline of the GPU process with the world closed; frames a second; the GPU time of a
+ * frame (the world's own `window.__nikverseBench`, 240 frames back to back, three times); the GPU process' memory. Only ADE Test is driven (it asks for
  * `data-ade-build="test"` first); the UI it clicks is the Italian one ("Nuovo pannello", "NikVerse").
  */
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { gateChecks, gatePasses, mean, median, GATE_LIMITS } from "../src/nikverse/gate"
+import { gateChecks, gatePasses, immobileCost, mean, median, GATE_LIMITS } from "../src/nikverse/gate"
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -268,6 +269,22 @@ try {
   const m0 = memory(p0.map((p) => p.id))
   const gpuPid = p0.find((p) => p.type === "GPU")!.id
   const base = { adeMb: big(m0[adePid]), adeHeapMb: await heapMb(page), gpuMb: big(m0[gpuPid]) }
+  // What ADE alone costs the GPU process: the world is closed, so none of this CPU is the world's. The gate counts
+  // only what the world adds to it (`immobileCost`); the GPU process is one for the whole window.
+  const cpuOf = async (pid: number, seconds: number) => {
+    const a = await procs()
+    const t0 = performance.now()
+    await sleep(seconds * 1000)
+    const c = await procs()
+    const dt = (performance.now() - t0) / 1000
+    const x = a.find((p) => p.id === pid)
+    const z = c.find((p) => p.id === pid)
+    return x && z ? ((z.cpuTime - x.cpuTime) / dt) * 100 : Number.NaN
+  }
+  const baselineGpuRuns: number[] = []
+  for (let i = 0; i < 3; i++) baselineGpuRuns.push(await cpuOf(gpuPid, 10))
+  const baselineGpuCpu = mean(baselineGpuRuns)
+  log("CPU del processo GPU a mondo chiuso (solo ADE):", baselineGpuRuns.map((v) => v.toFixed(2)).join(", "), "%")
 
   const cycles: Record<string, unknown>[] = []
   let session = ""
@@ -357,6 +374,14 @@ try {
     log(`modi ${rep}`, JSON.stringify({ moving, still, immobile }))
   }
 
+  // ---- the GPU time of a frame: the world draws its own view back to back with no cap, waiting for the GPU each time
+  const timings: { frames: number; p50: number; p95: number; max: number; sync: string; timestampQuery: boolean }[] = []
+  for (let rep = 1; rep <= 3; rep++) {
+    timings.push(await ev(browser, `window.__nikverseBench(240)`, session, true))
+    log(`GPU ${rep}`, JSON.stringify(timings.at(-1)))
+  }
+  const level = await ev(browser, `document.documentElement.dataset.quality`, session)
+
   // ---- close, and what ADE kept
   await closeWorld()
   await sleep(5000)
@@ -380,8 +405,12 @@ try {
     adeGrowthAfter5sMb: after5.adeMb - base.adeMb,
     adeGrowthAtRestMb: rest.adeMb - base.adeMb,
     adeHeapGrowthMb: Math.max(after5.adeHeapMb, rest.adeHeapMb) - base.adeHeapMb,
-    immobileCpuPercent: mean(rows.map((r) => r.immobile.frameCpu + r.immobile.gpuCpu)),
+    immobileFrameCpuPercent: mean(rows.map((r) => r.immobile.frameCpu)),
+    immobileGpuCpuPercent: mean(rows.map((r) => r.immobile.gpuCpu)),
+    baselineGpuCpuPercent: baselineGpuCpu,
     movingFps: mean(rows.map((r) => r.moving.fps)),
+    gpuFrameP95Ms: median(timings.map((t) => t.p95)),
+    gpuMemoryGrowthMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
   }
   const checks = gateChecks(measures)
   const ok = gatePasses(checks)
@@ -397,7 +426,12 @@ try {
       rest,
       stillCpuPercentMedian: median(rows.map((r) => r.still.frameCpu + r.still.gpuCpu)),
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
-      gpuMemoryOpenMinusBaseMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
+      level,
+      gpuTimings: timings,
+      baselineGpuRuns,
+      // The whole use of frame and GPU process, before the baseline is taken off: what the first live run reported as 2.5 to 3.4 %.
+      immobileCpuAbsolutePercent: mean(rows.map((r) => r.immobile.frameCpu + r.immobile.gpuCpu)),
+      immobileCostPercent: mean(rows.map((r) => immobileCost(r.immobile.frameCpu, r.immobile.gpuCpu, baselineGpuCpu))),
       modes,
     },
   })
