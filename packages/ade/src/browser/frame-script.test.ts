@@ -284,7 +284,11 @@ describe("frameGuard: a browser pane's frame", () => {
     const heard: unknown[] = []
     port.onmessage = (event: any) => heard.push(event.data)
     port.postMessage({ type: "ade-browser:hello", secret })
-    expect(heard).toEqual([{ type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:ready" } }])
+    expect(heard).toEqual([
+      // First where the document is, then what the bridge said before the secret came.
+      { type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:location", href: "http://localhost:5173/" } },
+      { type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:ready" } },
+    ])
     shim.parent.postMessage({ type: "visual-editor:dom-changed" })
     expect(heard.at(-1)).toEqual({ type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:dom-changed" } })
     // Nothing of it on the window.
@@ -292,6 +296,18 @@ describe("frameGuard: a browser pane's frame", () => {
     expect(shim.__NIKCLI_INSPECTOR_ACTIVE__).toBe(false)
     // The page's own copy of the bridge stays out.
     expect(frame.win.__NIKCLI_INSPECTOR_ACTIVE__).toBe(true)
+  })
+
+  test("the address it reports is the one the document had before the page ran", () => {
+    const frame = paneFrame("http://ade-media.localhost/C%3A/p/.ade/design/menu.html")
+    // A page script moving its own address with the history API changes nothing.
+    frame.win.location = new URL("http://ade-media.localhost/C%3A/p/.ade/design/altro.html") as any
+    frame.port!.postMessage({ type: "ade-browser:hello", secret })
+    expect(frame.heard[0]).toEqual({
+      type: FRAME_ENVELOPE,
+      secret,
+      message: { type: "visual-editor:location", href: "http://ade-media.localhost/C%3A/p/.ade/design/menu.html" },
+    })
   })
 
   test("the first secret stays", () => {

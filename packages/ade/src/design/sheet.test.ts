@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { DirEntry } from "../host/shell"
 import {
+  SHEET_LEAVE_WINDOW_MS,
   SHEET_RELOAD_DELAY_MS,
   SHEET_TITLE_MAX,
   createSheetWatch,
@@ -14,6 +15,7 @@ import {
   sheetPaneFor,
   sheetTitle,
   sheetUrl,
+  watchSheetStay,
 } from "./sheet"
 
 /*
@@ -183,6 +185,88 @@ describe("the reload", () => {
     const t = setup([{ id: "b1", file: FILE }])
     await t.watch.tick(undefined)
     expect(t.listed).toEqual([])
+  })
+})
+
+describe("the sheet stays on the sheet", () => {
+  const setup = () => {
+    const calls: boolean[] = []
+    const timers: { run: () => void; cancelled: boolean }[] = []
+    let clock = 0
+    const stay = watchSheetStay({
+      isSheet: (href) => isSheetAddress(href, FILE, true),
+      left: (stopped) => calls.push(stopped),
+      later: (run) => {
+        const timer = { run, cancelled: false }
+        timers.push(timer)
+        return timer
+      },
+      cancel: (handle) => {
+        ;(handle as { cancelled: boolean }).cancelled = true
+      },
+      now: () => clock,
+    })
+    const fire = () => timers.splice(0).forEach((timer) => !timer.cancelled && timer.run())
+    const tick = (ms: number) => {
+      clock += ms
+    }
+    return { stay, calls, fire, tick }
+  }
+  const SHEET = `${sheetUrl(FILE, true)}?__ade_reload=2`
+
+  test("the sheet's own documents, in either order with their load, are no leave", () => {
+    const t = setup()
+    t.stay.reset()
+    t.stay.loaded()
+    t.stay.located(SHEET)
+    t.fire()
+    t.stay.located(sheetUrl(FILE, true))
+    t.stay.loaded()
+    t.fire()
+    expect(t.calls).toEqual([])
+  })
+
+  test("another address brings the sheet back at once", () => {
+    const t = setup()
+    t.stay.loaded()
+    t.stay.located("https://example.com/")
+    expect(t.calls).toEqual([false])
+    t.stay.located(sheetUrl("C:/p/.env", true))
+    expect(t.calls).toEqual([false, false])
+  })
+
+  test("a document that never says where it is (a data: page) brings it back after the wait", () => {
+    const t = setup()
+    t.stay.loaded()
+    t.stay.located(SHEET)
+    t.fire()
+    t.stay.loaded()
+    expect(t.calls).toEqual([])
+    t.fire()
+    expect(t.calls).toEqual([false])
+  })
+
+  test("a sheet that leaves at every load is reloaded three times, then left alone", () => {
+    const t = setup()
+    for (let i = 0; i < 5; i++) {
+      t.stay.reset()
+      t.stay.loaded()
+      t.stay.located("https://example.com/")
+      t.tick(1000)
+    }
+    expect(t.calls).toEqual([false, false, false, true, true])
+    t.tick(SHEET_LEAVE_WINDOW_MS)
+    t.stay.loaded()
+    t.stay.located("https://example.com/")
+    expect(t.calls.at(-1)).toBe(false)
+  })
+
+  test("lint: the pane counts every load and every address, and only while it is on the sheet", () => {
+    const pane = readFileSync(join(import.meta.dir, "..", "browser", "browser-pane.tsx"), "utf8")
+    expect(pane).toContain("if (onSheet()) sheetStay.loaded()")
+    expect(pane).toContain('if (onSheet() && typeof data.href === "string") sheetStay.located(data.href)')
+    expect(pane).toContain("sheetStay.reset()")
+    expect(pane).toContain('setSheetNotice(t("sheet.left.reloaded"))')
   })
 })
 

@@ -331,6 +331,8 @@ import {
   formatUnread,
   formatWedged,
   interruptKeys,
+  shellRefusal,
+  typesMailInto,
   WEDGE_MS,
   openDecisions,
   type OpenDecision,
@@ -485,6 +487,7 @@ import { designPath } from "../design/store"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
 import { createSheetWatch, sheetLabel, sheetPaneFor, sheetTitle, sheetUrl, type PaneSheet } from "../design/sheet"
+import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } from "../design/notes"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -2030,6 +2033,38 @@ export function Workbench() {
     return { ok: true }
   }
 
+  /*
+   * A design sheet's notes, to the session that wrote the sheet (piece 2): the
+   * Markdown file beside the sheet, and one line that points at it. Only the
+   * pane's «Invia» button calls this, and the recipient is the session saved
+   * by `ade-msg design` or the one the user picked, never one the page names.
+   */
+  const sendSheetNotes = async (
+    paneId: string,
+    to?: string,
+  ): Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }> => {
+    const sheet = wb().panes.find((pane) => pane.id === paneId)?.designSheet
+    const notes = sheet?.notes ?? []
+    if (!sheet || notes.length === 0) return { ok: false, reason: t("sheet.notes.none") }
+    const target = to ?? sheet.from
+    const session = wb().panes.find((pane) => pane.id === target && !isPanelPane(pane))
+    if (!session || !running.has(target)) return { ok: false, reason: t("browser.send.stopped"), stopped: true }
+    const host = await getHost()
+    if (!host?.writeTextFile) return { ok: false, reason: t("browser.send.noProject") }
+    const at = new Date()
+    const failure = await host.writeTextFile(notesFilePath(sheet.file, at), formatNotesFile(sheet.file, notes, at))
+    if (failure) return { ok: false, reason: failure }
+    heldLines.push({
+      paneId: target,
+      text: formatNotesLine(sheet.file, notes.length, notesFileRelative(sheet.file, at)),
+    })
+    tellPane(target, t("note.sheetNotes", sheetLabel(sheet)))
+    // Sent: the list empties, and a session the user picked is where the next notes go.
+    const { notes: _sent, ...kept } = sheet
+    setWb((w) => updatePane(w, paneId, { designSheet: { ...kept, from: target } }))
+    return { ok: true, title: session.title }
+  }
+
   // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
   const running = new RunningSessions()
   onCleanup(() => running.endAll())
@@ -2064,6 +2099,11 @@ export function Workbench() {
           project: pane.workspaceId,
         })),
     )
+
+  const agentOfPane = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return pane?.agent ?? pane?.model
+  }
 
   /** Long enough for a TUI's paste detection to close before Enter arrives. */
   const SUBMIT_DELAY_MS = 400
@@ -3248,6 +3288,11 @@ export function Workbench() {
           continue
         heldLines.splice(heldLines.indexOf(item), 1)
         if (item.suspended) saveSuspendedMail()
+      } else if (!typesMailInto(agentOfPane(item.paneId))) {
+        // A shell runs what is typed: the line is shown in the pane as a notice and never given to it.
+        heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
+        tellPane(item.paneId, t("note.mailNotTyped", asOneLine(item.text).slice(0, 160)))
       } else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         if (item.suspended) saveSuspendedMail()
@@ -4125,6 +4170,12 @@ export function Workbench() {
     const target = resolveTarget(panes, message.to, message.from)
     if ("error" in target) {
       await answer(`errore: ${target.error}`)
+      return true
+    }
+    // A shell would run the line as a command: refused before anything is typed or booked.
+    const forShell = shellRefusal(message.kind, target.pane)
+    if (forShell) {
+      await answer(forShell)
       return true
     }
     // Nothing wakes a suspended session: a restart is refused, and mail is queued below.
@@ -8422,6 +8473,7 @@ export function Workbench() {
     pluginRuntime,
     browserControllers,
     sendBrowserRequest,
+    sendSheetNotes,
   })
 
   const paletteChord = createMemo(() => {
