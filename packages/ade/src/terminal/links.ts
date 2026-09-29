@@ -249,6 +249,8 @@ export function registerLinks(
   onLink: (request: LinkRequest) => void,
   /** Whether the pointer is on a link now: a Ctrl+click there is ADE's, not the program's. */
   onHover?: (hovered: boolean) => void,
+  /** Whether the program has the clicks now; by default, whenever it asked for the mouse. */
+  programMouse: () => boolean = () => terminal.modes.mouseTrackingMode !== "none",
 ): () => void {
   const setTitle = (title: string | undefined) => {
     onHover?.(title !== undefined)
@@ -260,7 +262,7 @@ export function registerLinks(
     linkClick(event, {
       moved: press.moved(),
       selected: terminal.hasSelection(),
-      programMouse: terminal.modes.mouseTrackingMode !== "none",
+      programMouse: programMouse(),
     })
   const mayOpen = (event: MouseEvent) => click(event).open
   const isExternal = (event: MouseEvent) => {

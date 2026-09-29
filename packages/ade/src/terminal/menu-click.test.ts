@@ -321,8 +321,124 @@ describe("the pane turns menu clicks on for Claude Code only", () => {
     const registry = readFileSync(join(dir, "registry.ts"), "utf8")
     const pane = readFileSync(join(dir, "..", "grid", "pane.tsx"), "utf8")
     expect(registry).toMatch(
-      /registerMenuClicks\(terminal, element, \{ enabled: options\.menuClicks, send: onInput \}\)/,
+      /registerMenuClicks\(terminal, element, \{ enabled: options\.menuClicks, send: onInput, wheelOnly \}\)/,
     )
     expect(pane).toContain('menuClicks: () => props.agent === "claude-code"')
+  })
+})
+
+/*
+ * Claude Code 2.1.284, full screen, as ADE starts it: clicks off, the wheel
+ * kept (CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1, mouse mode 1000). Recorded in a
+ * pty at 120×36, blank rows kept.
+ */
+const blank = (count: number) => Array.from({ length: count }, () => "")
+const banner = [
+  "",
+  " ▐▛███▛█   Claude Code v2.1.284",
+  "▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max",
+  " ▝▝   ▝▝   ~\\Favorites\\ade-team\\prove\\mouse-sessioni\\cwd",
+]
+const EXPORT_FS = [
+  ...banner,
+  ...blank(24),
+  "▔".repeat(120),
+  "   Export conversation",
+  "   Select export method",
+  "",
+  "   ❯ 1. Copy to clipboard  Copy the conversation to your system clipboard",
+  "     2. Save to file       Save the conversation to a file in the current directory",
+  "",
+  "   Esc to cancel",
+]
+const MODEL_FS = [
+  ...banner,
+  ...blank(12),
+  "▔".repeat(120),
+  "   Select model",
+  "   Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names,",
+  "   specify with --model.",
+  "",
+  "     1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks",
+  "   ❯ 2.  Opus 5.5 ✔             For complex work and everyday tasks",
+  "     3.  Fable 5.1              For your toughest challenges",
+  "     4.  Sonnet 5.5             Most efficient for simpler tasks",
+  "     5.  Haiku 4.5              Fastest for quick answers",
+  "     6.  Sonnet 5               Efficient for routine tasks",
+  "     7.  Opus 5                 Best for everyday, complex tasks",
+  "   ↓ 8.  Fable 5                Most capable for your hardest and longest-running tasks",
+  "      … +4 models",
+  "",
+  "   ● High effort ←/→ to adjust",
+  "",
+  "   Use /fast to turn on Fast mode (Opus 5.5).",
+  "",
+  "   Enter to set as default · s to use this session only · Esc to cancel",
+]
+
+describe("Claude Code 2.1.284 full screen, its clicks off (ade/claude-mouse-clic)", () => {
+  test("the recorded screens are 36 rows, and step B reads their menus", () => {
+    expect(EXPORT_FS).toHaveLength(36)
+    expect(MODEL_FS).toHaveLength(36)
+    expect(claudeMenu(EXPORT_FS)!.options.map((option) => [option.number, option.row])).toEqual([
+      [1, 32],
+      [2, 33],
+    ])
+    const model = claudeMenu(MODEL_FS)!
+    expect(model.options.map((option) => option.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(model.current.number).toBe(2)
+  })
+
+  test("with the wheel only (mode 1000), a click on an entry moves and a second confirms", async () => {
+    const screen = { rows: [...EXPORT_FS] }
+    const sent: string[] = []
+    let clock = 0
+    const element = paneElement(screen.rows.length)
+    registerMenuClicks(fakeTerminal(screen, { mode: "vt200" }), element, {
+      enabled: () => true,
+      send: (keys) => sent.push(keys),
+      now: () => clock,
+      wheelOnly: () => true,
+    })
+    click(element, 33)
+    await settle()
+    expect(sent).toEqual(["\x1b[B"])
+    screen.rows = EXPORT_FS.map((row) =>
+      row.startsWith("   ❯ 1.")
+        ? row.replace("❯", " ")
+        : row.startsWith("     2.")
+          ? row.replace("     2.", "   ❯ 2.")
+          : row,
+    )
+    clock = 2_000
+    click(element, 33)
+    await settle()
+    expect(sent).toEqual(["\x1b[B", "\r"])
+  })
+
+  test("a Claude that keeps its clicks (no wheel-only) is left alone, as before", async () => {
+    const sent: string[] = []
+    const element = paneElement(EXPORT_FS.length)
+    registerMenuClicks(fakeTerminal({ rows: [...EXPORT_FS] }, { mode: "vt200" }), element, {
+      enabled: () => true,
+      send: (keys) => sent.push(keys),
+    })
+    click(element, 33)
+    await settle()
+    expect(sent).toEqual([])
+  })
+
+  test("the pane asks for it for Claude Code only", () => {
+    const pane = readFileSync(join(import.meta.dir, "..", "grid", "pane.tsx"), "utf8")
+    expect(pane).toContain('wheelOnly: () => props.agent === "claude-code"')
+    const registry = readFileSync(join(import.meta.dir, "registry.ts"), "utf8")
+    expect(registry).toContain("{ enabled: options.menuClicks, send: onInput, wheelOnly }")
+  })
+
+  test("pty.rs starts claude with its clicks off, and only claude", () => {
+    const pty = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "src", "pty.rs"), "utf8")
+    expect(pty).toMatch(
+      /else if stem\.eq_ignore_ascii_case\("claude"\) \{\s+&\[\("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1"\)\]/,
+    )
   })
 })
