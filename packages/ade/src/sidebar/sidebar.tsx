@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
+import { For, Show, children, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
 import { Badge } from "../ui/layout"
 import "./sidebar.css"
 import { getHost } from "../host/shell"
@@ -613,6 +613,22 @@ export function Sidebar(props: SidebarProps) {
   const [isResizing, setIsResizing] = createSignal(false)
 
   /*
+   * The footer's buttons, built once.
+   *
+   * A JSX prop is a getter: every read builds its elements again. Read once
+   * by `<Show when>` and once for the content, the bell's menu existed twice,
+   * and the copy that was never inserted still bound its «click elsewhere
+   * closes it» to the document. Every press inside the real menu was
+   * elsewhere for that copy, so the menu closed on pointerdown and the click
+   * never reached «Aggiorna», «Controlla aggiornamenti» or the ×: pressed,
+   * and nothing happened (0.9.1, «Aggiorna non risponde»).
+   */
+  const footerActions = children(() => props.footerActions)
+  // The same for the other two: the bot roster in `content` was built four times.
+  const content = children(() => props.content)
+  const sections = children(() => props.sections)
+
+  /*
    * Which sections are open, and nothing about how tall they are.
    *
    * The stored pixel height and its drag handle are gone on purpose: a
@@ -1009,8 +1025,8 @@ export function Sidebar(props: SidebarProps) {
       data-resizing={isResizing() ? "true" : undefined}
       style={{ width: `${width()}px` }}
     >
-      <Show when={props.content}>
-        <div data-slot="sidebar-content">{props.content}</div>
+      <Show when={content()}>
+        <div data-slot="sidebar-content">{content()}</div>
       </Show>
 
       {/*
@@ -1020,7 +1036,7 @@ export function Sidebar(props: SidebarProps) {
         top of a sidebar reads as a search field that will not take text.
         Nothing to say, nothing drawn.
       */}
-      <Show when={project() && !props.content}>
+      <Show when={project() && !content()}>
         <header data-slot="sidebar-header-project">
           <div data-slot="project-name">
             <span data-slot="project-name-text" title={project()!.name}>
@@ -1057,7 +1073,7 @@ export function Sidebar(props: SidebarProps) {
         </header>
       </Show>
 
-      <div data-slot="sidebar-sections" hidden={props.content !== undefined}>
+      <div data-slot="sidebar-sections" hidden={content() !== undefined}>
         {/*
           Sized to its content, never to a stored pixel height and never to
           the leftover space. `data-scrolls` marks the one section allowed to
@@ -1492,8 +1508,8 @@ export function Sidebar(props: SidebarProps) {
           </Show>
         </section>
 
-        <Show when={props.sections}>
-          <div data-slot="sidebar-section-extra">{props.sections}</div>
+        <Show when={sections()}>
+          <div data-slot="sidebar-section-extra">{sections()}</div>
         </Show>
       </div>
 
@@ -1518,7 +1534,7 @@ export function Sidebar(props: SidebarProps) {
          * line it is what it is: the way out of the sidebar and into the
          * application's settings.
          */}
-        <Show when={props.onOpenSettings ?? props.footerActions}>
+        <Show when={props.onOpenSettings ?? footerActions()}>
           <div data-slot="sidebar-settings-strip">
             {/* Gear, theme and bell as one tight group on the left; what the
                 machine is spending fills the rest of the row. */}
@@ -1548,8 +1564,8 @@ export function Sidebar(props: SidebarProps) {
                   <span data-slot="sidebar-settings-label">{t("sidebar.settings")}</span>
                 </button>
               </Show>
-              <Show when={props.footerActions}>
-                <div data-slot="sidebar-footer-actions">{props.footerActions}</div>
+              <Show when={footerActions()}>
+                <div data-slot="sidebar-footer-actions">{footerActions()}</div>
               </Show>
             </div>
             <Show when={stats()}>
