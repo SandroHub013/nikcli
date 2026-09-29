@@ -1279,6 +1279,7 @@ export const en: Messages = {
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
   "note.mailWaiting": (what) => `Mail waiting (the session is typing): ${what}`,
+  "note.mailNotTyped": (what) => `Mail not typed (a shell runs here): ${what}`,
   "pane.mail": (count) => `${count} waiting: ADE holds mail back while the line is half-written`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,
   "note.nudged": (id) => `Reminder sent: request ${id} is waiting for a reply`,
