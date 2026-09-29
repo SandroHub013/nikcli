@@ -125,7 +125,7 @@ export function wallsLocal(): LocalBox[] {
 }
 
 /** Two rows of two: the front row sits in the window, the back row behind it; everyone faces the back wall. */
-const DESK_ROWS = [-0.55, 1.6]
+const DESK_ROWS = [-0.55, 1.08]
 const DESK_COLUMNS = 2
 const DESK_PITCH = 2.15
 
@@ -135,14 +135,14 @@ export function deskLocal(i: number): { desk: Vec2; computer: Vec2; chair: Vec2 
   const row = Math.floor(i / DESK_COLUMNS)
   const x = (col - (DESK_COLUMNS - 1) / 2) * DESK_PITCH
   const z = DESK_ROWS[row]
-  return { desk: { x, z }, computer: { x, z: z + 0.18 }, chair: { x, z: z + 0.95 } }
+  return { desk: { x, z }, computer: { x, z: z - 0.18 }, chair: { x, z: z + 0.48 } }
 }
 
 /** The desk's own size (half extents), for its box and its mesh. */
 export const DESK_HALF = { hx: 0.805, hz: 0.4 }
-export const DESK_HEIGHT = 0.79
+export const DESK_HEIGHT = 0.75
 /** The middle of a monitor's screen, above the floor. */
-export const COMPUTER_HEIGHT = 1.03
+export const COMPUTER_HEIGHT = 0.99
 /** The top of a chair's seat, above the floor: what a rigged person is seated at. */
 export const CHAIR_SEAT_TOP = 0.5
 

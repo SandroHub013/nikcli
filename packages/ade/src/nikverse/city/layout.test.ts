@@ -133,10 +133,11 @@ describe("inside a shop", () => {
         expect(Math.abs(spot.z)).toBeLessThan(interior.z)
       }
       expect(Math.abs(at.desk.x) + DESK_HALF.hx).toBeLessThan(interior.x)
-      // The person sits on the door's side of the desk, facing the back wall; the monitor is between them and the desk's middle.
+      // The person sits on the door's side of the desk, facing the back wall; the monitor stands on the desk's far edge (the keyboard
+      // has the near one), so it is past the desk's middle from the chair.
       expect(at.chair.z).toBeGreaterThan(at.desk.z)
-      expect(at.computer.z).toBeGreaterThan(at.desk.z)
-      expect(at.computer.z).toBeLessThan(at.chair.z)
+      expect(at.computer.z).toBeLessThan(at.desk.z)
+      expect(at.computer.z).toBeGreaterThan(at.desk.z - DESK_HALF.hz)
       // N3's front row sits in the window: a chair past the wall's line is in the gap of the door, not in the wall.
       if (Math.abs(at.chair.z) >= interior.z) expect(Math.abs(at.chair.x) + 0.25).toBeLessThan(DOOR_WIDTH / 2)
       else expect(Math.abs(at.chair.x)).toBeLessThan(interior.x)
