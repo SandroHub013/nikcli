@@ -120,6 +120,8 @@ export async function startHarness(options: HarnessOptions) {
         : { "content-security-policy": CSP }
       const send = (body: string, type: string) =>
         new Response(body, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
+      const own = options.routes?.(url, policy)
+      if (own) return own
       // N3's files: `/assets/levels/...` is the levels folder, the way the scheme serves it.
       const level = /^\/assets\/levels\/((?:bassa|media|alta)\/)?((?:lightmap\/)?[a-z_0-9]+\.(?:glb|png|ktx2))$/.exec(
         url.pathname,
@@ -133,8 +135,6 @@ export async function startHarness(options: HarnessOptions) {
             : "model/gltf-binary"
         return new Response(file, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
       }
-      const own = options.routes?.(url, policy)
-      if (own) return own
       switch (url.pathname) {
         case "/":
         case "/index.html":
