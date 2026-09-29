@@ -342,6 +342,8 @@ import {
 } from "../session/mailbox"
 import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
+import type { Snapshot } from "../nikverse/protocol"
+import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
 import {
   deliveryResult,
   enterAgain,
@@ -1800,6 +1802,27 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "design",
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+    }))
+  }
+
+  /** Opens the NikVerse panel, or focuses the one already open. */
+  const openNikversePane = () => {
+    const existing = wb().panes.find((pane) => pane.mode === "nikverse")
+    if (existing) {
+      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
+      return
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: newPaneId("nv"),
+        title: "NikVerse",
+        status: "working",
+        model: "—",
+        mode: "nikverse",
         ...here(),
         lines: [],
       }),
@@ -6198,6 +6221,8 @@ export function Workbench() {
       openDecisionsPane()
     } else if (id === "design.pane") {
       openDesignPane()
+    } else if (id === "nikverse.pane") {
+      openNikversePane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -8278,6 +8303,41 @@ export function Workbench() {
     }))
   }
 
+  /*
+   * The world's picture of ADE (NikVerse). Built only while a NikVerse panel
+   * exists, and from what the panes' own headers read: the agent's report, a
+   * standing permission prompt, and whether the process is there.
+   */
+  const worldSlots = createSlotBook()
+  const worldPicture = createMemo<Snapshot | undefined>((previous) => {
+    const panes = wb().panes
+    if (!panes.some((pane) => pane.mode === "nikverse")) return undefined
+    const open = project()
+    return worldSnapshot({
+      panes,
+      ...(open ? { open: { name: open.name, root: open.root } } : {}),
+      facts: (pane) => ({
+        activity: records.reports()[pane.id]?.activity,
+        exited: !isRunning(pane.id),
+        hasActions: Boolean(records.permissions()[pane.id]),
+      }),
+      decisions: choicesCounts().waiting,
+      now: Date.now(),
+      ...(previous ? { previous } : {}),
+      slots: worldSlots,
+    })
+  })
+
+  /** A project's folder, from the id the world knows its shop by: the world never sees a path. */
+  const rootOfShop = (id: string): string | undefined => {
+    const known = [
+      project(),
+      ...recents(),
+      ...wb().panes.flatMap((pane) => (pane.projectRoot ? [{ name: pane.workspaceId, root: pane.projectRoot }] : [])),
+    ]
+    return known.find((candidate) => candidate && shopId(candidate) === id)?.root
+  }
+
   const gridPanes = createPaneRenderer({
     wb,
     setWb,
@@ -8307,6 +8367,15 @@ export function Workbench() {
       }),
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
+    world: {
+      picture: worldPicture,
+      openSession: (paneId) => void openSession(paneId),
+      focusProject: (id) => {
+        const root = rootOfShop(id)
+        if (root) void switchProjectTo(root)
+      },
+      ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
+    },
     guessServers,
     confirmOpen,
     decisions: decisionsHub,
@@ -9411,6 +9480,9 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
       <Show when={props.kind === "design"}>
         <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
         <path d="M10 4l2 2" stroke-linecap="round" />
+      </Show>
+      <Show when={props.kind === "nikverse"}>
+        <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
       </Show>
     </svg>
   )

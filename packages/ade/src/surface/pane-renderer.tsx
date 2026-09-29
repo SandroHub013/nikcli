@@ -29,6 +29,8 @@ import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
+import { NikversePane } from "../nikverse/nikverse-pane"
+import type { Snapshot } from "../nikverse/protocol"
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -103,6 +105,13 @@ export interface PaneRendererDeps {
   decisions: DecisionsHub
   /** The project's design proposals register, shared with the bar's badge and window. */
   design: DesignHub
+  /** What the NikVerse panel needs from ADE: the picture of the workbench, and the few things the world may ask for. */
+  world: {
+    picture: () => Snapshot | undefined
+    openSession: (paneId: string) => void
+    focusProject: (shopId: string) => void
+    ignored: (reason: string) => void
+  }
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
@@ -352,6 +361,19 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    const nikversePane = () => (
+      <NikversePane
+        picture={deps.world.picture}
+        focused={isFocused()}
+        onOpenSession={deps.world.openSession}
+        onFocusProject={deps.world.focusProject}
+        onIgnored={deps.world.ignored}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -585,7 +607,14 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                               <Show
                                 when={current().mode === "decisions"}
                                 fallback={
-                                  <Show when={current().mode === "design"} fallback={sessionPane()}>
+                                  <Show
+                                    when={current().mode === "design"}
+                                    fallback={
+                                      <Show when={current().mode === "nikverse"} fallback={sessionPane()}>
+                                        {nikversePane()}
+                                      </Show>
+                                    }
+                                  >
                                     {designPane()}
                                   </Show>
                                 }
