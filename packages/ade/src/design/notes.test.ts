@@ -197,6 +197,7 @@ describe("who can send", () => {
     const body = workbench.slice(start, workbench.indexOf("\n  }\n", start))
     expect(body).toContain("const target = to ?? sheet.from")
     expect(body).toContain("!running.has(target)")
-    expect(body).toContain("heldLines.push({ paneId: target, text: formatNotesLine(")
+    // Whatever the line breaks prettier puts in the object.
+    expect(body).toMatch(/heldLines\.push\(\{\s*paneId: target,\s*text: formatNotesLine\(/)
   })
 })
