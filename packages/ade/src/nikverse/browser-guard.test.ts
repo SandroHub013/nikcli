@@ -24,6 +24,12 @@ import {
 // Each one starts real processes and waits on WMI, which answers in a second or two.
 setDefaultTimeout(60_000)
 
+/**
+ * The tests that start processes (the stand-in, and the real Edge) take about a minute and wait on WMI, which answers late under
+ * load: they are out of `test:unit` and run with `NIKVERSE_GUARD_TESTS=1`, which the gate does (its «browser guard» check).
+ */
+const processes = process.env.NIKVERSE_GUARD_TESTS === "1"
+
 const packageRoot = join(import.meta.dir, "..", "..")
 const scratch = join(profilesDir(packageRoot), "test-guard")
 const owner = join(import.meta.dir, "browser-guard-owner.fixture.ts")
@@ -95,7 +101,7 @@ describe("the profile", () => {
   })
 })
 
-describe("the browser does not survive its script", () => {
+describe.skipIf(!processes)("the browser does not survive its script", () => {
   test("a script that closes its browser leaves none, nor its profile", async () => {
     const { child, profile } = await run("close")
     await child.exited
@@ -143,7 +149,7 @@ describe("the browser does not survive its script", () => {
   })
 })
 
-describe("the sweep at the start of a run", () => {
+describe.skipIf(!processes)("the sweep at the start of a run", () => {
   test("kills a browser whose owner is gone, and leaves one whose owner is alive", async () => {
     // A pid that is certainly gone: a process that ran and ended.
     const gone = Bun.spawn([process.execPath, "-e", "0"])
@@ -174,7 +180,7 @@ describe("the sweep at the start of a run", () => {
 
 const edge = ["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Microsoft/Edge/Application/msedge.exe"].find(existsSync)
 
-describe.skipIf(!edge || process.platform !== "win32")("the real headless Edge of the harness", () => {
+describe.skipIf(!processes || !edge || process.platform !== "win32")("the real headless Edge of the harness", () => {
   test("no msedge of the harness is left after a script that dies with it open, or is killed hard, or closes it", async () => {
     const script = join(scratch, "real-harness.ts")
     mkdirSync(scratch, { recursive: true })
