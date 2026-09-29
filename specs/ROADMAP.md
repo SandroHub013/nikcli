@@ -47,6 +47,31 @@ session; every "open" line is a gate that still needs work, not a claim that a c
 - EOT-04 client admission, EOT-06 measured windowing, EOT-18 headless policy on the remaining handlers, EOT-11 adapter
   convergence. Untouched in this pass.
 
+**Session 2026-09-30 — landed and verified** (each line names the check that was run)
+
+- EOT-18 req. 9 and 12. A cancelled prompt exits `130` quietly; in headless every interactive prompt fails closed with
+  `UI.HeadlessFailure` (exit `66`) instead of waiting on a stdin nobody feeds. `isHeadless` never fired on a real pipe
+  (`isTTY` is `undefined`, not `false`) and now does. `test/cli/` 262 pass; driven on a real PTY and with `< /dev/null`.
+- EOT-04. The client batch cap (`EVENT_BATCH_CAP = 512`) existed untested and the spec called the batch uncapped; now
+  pinned by a 1500-frame burst test that fails without the cap.
+- EOT-02. `InstanceScope.with` interrupted from outside the instance's ALS scope, so a finalizer reading
+  `Instance.directory` threw and the caller waited forever (two `multi-instance-teardown` tests were red, outside CI).
+  Fixed in the bridge; that file 4/4, `test/effect` + `test/workspace` 75/75, 28 consumer suites 0 failures.
+- EOT-16 / B31. Pinned by behaviour, not a comment: two workspaces on one directory share one `InstanceState` entry.
+- EOT-19. Classifying `read`/`write` for `mobile`/`studio` would change no decision today (both hold both); it waits for
+  per-token capabilities.
+
+**Open, and what each is actually waiting for** (measured this session, none is a wiring task)
+
+- EOT-14. All seventeen remaining internal v1 plugins register commands through `keymap`; the v2 `Context` has no
+  command surface, so none can migrate without losing behaviour. Next: design that surface in `packages/plugin`.
+- EOT-15 consumer. `/global/event` is a live fan-out with no sequence number on the envelope, so the TUI has nothing to
+  resume from. Next: decide the protocol (a per-aggregate `seq` on the envelope or `Last-Event-ID` replay), which is a
+  contract change for every client and lands through EOT-10.
+- EOT-11. `CachePolicy.Service`, `Usage.Service` and the tagged `ProviderError` service do not exist; a change to every
+  model call needs characterization tests of current retry/usage behaviour first.
+- EOT-16 / B31. Pinned, not closed: giving each workspace its own scope moves the cache key and the dispose owner.
+
 ## Target Architecture
 
 ```text
