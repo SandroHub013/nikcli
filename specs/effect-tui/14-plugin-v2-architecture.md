@@ -122,3 +122,23 @@ that has not been migrated sees its data, a v2 plugin sees only its scoped store
 3. `packages/nikcli/AGENTS.md` documents the same opt-in. A contract enforced only by a script is one a human reviewer cannot check, and the two drift in opposite directions.
 
 `test/plugin/v2-manifest.test.ts` and `test/plugin/autoload-safety.test.ts` cover the behaviour the gate can only assert structurally.
+
+## What Blocks the Next Migration — 2026-09-30
+
+Inventory of `packages/tui/src/feature-plugins/`, by grep, no code changed. Seven internal plugins are already v2
+`Plugin.define` definitions (`home/tips` and the six `sidebar/*`). The other seventeen — browser, computer, island, brain,
+chatbot, connectors, devtools, herdr, math, observability, discord, session-studio, system (plugins, fusion), btw,
+background, loops, mission — all register their commands through `api.keymap.registerLayer` (a `name`, `slashName`, the
+`namespace`, `run`), and two of them (loops, mission) also register a slot.
+
+The v2 `Context` (`packages/plugin/src/v2/tui/context.ts`) is `options`, `client`, `data`, `storage` and `ui`, where `ui`
+is `router` and `slot` only. **There is no command or slash-command surface.** A v2 `browser` would render nothing and
+lose `/browser`; migrating any of the seventeen today would drop user-visible behaviour, which this spec forbids
+("Migration from v1 to v2 must preserve existing user-visible behavior").
+
+So the order in "Migration and Rollback" (`background` first) is not the next step. The next step is a contract
+decision on the published plugin package: what a v2 command registration looks like (`name`, `title`, `namespace`,
+`slashName`/`slashAliases`, `run`, keybinding), how it is scoped and revoked per generation like `ui.slot`, and how
+`adaptV2TuiPlugin` maps it onto `keymap.registerLayer` so the two paths keep one dispatcher. Once it exists, the
+smallest plugins (`browser`, `computer`, 37 and 55 lines, one command each) are the safe first migrations, with a test
+that the registered command set is identical before and after.
