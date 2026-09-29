@@ -9,19 +9,26 @@
 /** The square's radius: the hologram and the projector stand in it. */
 export const PLAZA_RADIUS = 14
 export const RING_SLOTS = 12
-/** Radius of ring 0; each next one is `RING_STEP` further. */
-const RING_FIRST = 30
-const RING_STEP = 18
+/**
+ * Radius of ring 0, where N3's plaza has its twelve plots; each next ring is `RING_STEP` further, out on the
+ * plain beyond the paving.
+ */
+const RING_FIRST = 19
+const RING_STEP = 12
 /** Ground beyond the last ring the world lets the character reach. */
 export const WORLD_MARGIN = 22
 
-/** A shop's outside, and the wall around it. */
-export const SHOP_WIDTH = 12
-export const SHOP_DEPTH = 9
-export const WALL_THICKNESS = 0.4
-export const WALL_HEIGHT = 3.2
-export const DOOR_WIDTH = 2.6
-export const DESKS_PER_SHOP = 8
+/**
+ * A shop's outside, and the wall around it: N3's shop, measured off `city.glb` (the tests hold these to the
+ * file). The sizes are between the walls' middle lines; the outside is a wall's thickness more.
+ */
+export const SHOP_WIDTH = 6
+export const SHOP_DEPTH = 5
+export const WALL_THICKNESS = 0.18
+export const WALL_HEIGHT = 3.4
+/** The gap in the front wall: it is a shop window and a way in. */
+export const DOOR_WIDTH = 3.8
+export const DESKS_PER_SHOP = 4
 
 export const ringOf = (slot: number) => Math.floor(slot / RING_SLOTS)
 export const ringRadius = (ring: number) => RING_FIRST + RING_STEP * ring
@@ -117,9 +124,10 @@ export function wallsLocal(): LocalBox[] {
   ]
 }
 
-const DESK_ROWS = [-2.9, -0.2]
-const DESK_COLUMNS = 4
-const DESK_PITCH = 2.7
+/** Two rows of two: the front row sits in the window, the back row behind it; everyone faces the back wall. */
+const DESK_ROWS = [-0.55, 1.6]
+const DESK_COLUMNS = 2
+const DESK_PITCH = 2.15
 
 /** Where desk `i` stands in the shop's frame; the person sits behind it, facing the back wall. */
 export function deskLocal(i: number): { desk: Vec2; computer: Vec2; chair: Vec2 } {
@@ -127,19 +135,23 @@ export function deskLocal(i: number): { desk: Vec2; computer: Vec2; chair: Vec2 
   const row = Math.floor(i / DESK_COLUMNS)
   const x = (col - (DESK_COLUMNS - 1) / 2) * DESK_PITCH
   const z = DESK_ROWS[row]
-  return { desk: { x, z }, computer: { x, z: z - 0.25 }, chair: { x, z: z + 0.95 } }
+  return { desk: { x, z }, computer: { x, z: z + 0.18 }, chair: { x, z: z + 0.95 } }
 }
 
 /** The desk's own size (half extents), for its box and its mesh. */
-export const DESK_HALF = { hx: 0.8, hz: 0.4 }
-export const DESK_HEIGHT = 0.75
-export const COMPUTER_HEIGHT = 1.1
+export const DESK_HALF = { hx: 0.805, hz: 0.4 }
+export const DESK_HEIGHT = 0.79
+/** The middle of a monitor's screen, above the floor. */
+export const COMPUTER_HEIGHT = 1.03
+/** The top of a chair's seat, above the floor: what a rigged person is seated at. */
+export const CHAIR_SEAT_TOP = 0.5
 
-/** Where a person stands when the shop has no free desk: along the inside of the front wall. */
+/** Where a person stands when the shop has no free desk: along the inside of the back wall, behind the desks. */
 export function standLocal(i: number): Vec2 {
-  const per = 8
+  const per = 5
   const n = i % per
-  return { x: (n - (per - 1) / 2) * 1.2, z: SHOP_DEPTH / 2 - 1.3 - Math.floor(i / per) * 0.9 }
+  // Two rows behind the desks, along the back wall; past ten they stand in each other's place.
+  return { x: (n - (per - 1) / 2) * 1.1, z: -SHOP_DEPTH / 2 + 0.9 - (Math.floor(i / per) % 2) * 0.5 }
 }
 
 /** The boxes a shop puts on the ground: its walls and its desks. */
@@ -147,7 +159,9 @@ export function shopBoxes(p: Placement, desks: number): Box[] {
   const boxes = wallsLocal().map((b) => worldBox(p, b))
   for (let i = 0; i < Math.min(desks, DESKS_PER_SHOP); i++) {
     const d = deskLocal(i).desk
-    boxes.push(worldBox(p, { x: d.x, z: d.z, hx: DESK_HALF.hx, hz: DESK_HALF.hz, height: DESK_HEIGHT }))
+    // A desk stops the character 10 cm short of its top's edge, which overhangs its legs: without that the strip
+    // between the front row and the front wall (0.41 m) is narrower than a body, and a dead end nobody meant.
+    boxes.push(worldBox(p, { x: d.x, z: d.z, hx: DESK_HALF.hx, hz: DESK_HALF.hz - 0.1, height: DESK_HEIGHT }))
   }
   return boxes
 }

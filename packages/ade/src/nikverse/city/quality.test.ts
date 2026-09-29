@@ -1,0 +1,144 @@
+import { describe, expect, test } from "bun:test"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { LEVELS_DIR } from "./test-cast"
+import { BODIES, glbUrl } from "./rig"
+import { LEVELS, LEVEL_IDS, MAX_FPS, isDedicatedGpu, isLevelId, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
+
+describe("the levels", () => {
+  test("three, in order of what they ask of the machine, and each has its assets", () => {
+    expect(LEVEL_IDS).toEqual(["bassa", "media", "alta"])
+    for (const id of LEVEL_IDS) {
+      expect(LEVELS[id].id).toBe(id)
+      // Bassa and Media ship; Alta's 2K set is a download of its own, and the world falls back to Media without it.
+      if (id !== "alta")
+        for (const file of [...BODIES.map((body) => `character_${body}.glb`), "city.glb"]) expect(existsSync(join(LEVELS_DIR, id, file))).toBe(true)
+      // The address the world asks for is the folder the assets were put in.
+      expect(glbUrl("./assets/", id, "user")).toBe(`./assets/levels/${id}/character_user.glb`)
+    }
+    expect(existsSync(join(LEVELS_DIR, "rig_animations.glb"))).toBe(true)
+  })
+
+  test("Bassa is the classic renderer, Media and Alta are WebGPU, and what they ask for only grows", () => {
+    expect(LEVELS.bassa.renderer).toBe("classic")
+    expect(LEVELS.media.renderer).toBe("webgpu")
+    expect(LEVELS.alta.renderer).toBe("webgpu")
+    expect(LEVELS.bassa.pixelRatio).toBeLessThan(LEVELS.media.pixelRatio)
+    expect(LEVELS.media.pixelRatio).toBeLessThan(LEVELS.alta.pixelRatio)
+    expect(LEVELS.bassa.fps).toBeLessThan(LEVELS.media.fps)
+    // Nothing goes over 60, whatever the display offers: Alta is finer (pixels, effects), not faster.
+    for (const level of Object.values(LEVELS)) expect(level.fps).toBeLessThanOrEqual(MAX_FPS)
+    expect(MAX_FPS).toBe(60)
+    expect(LEVELS.alta.fps).toBe(MAX_FPS)
+  })
+
+  test("no level turns on what the budget forbids: it is a fact of the type, so a level with a shadow or a bloom would not compile", () => {
+    for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["fps", "id", "label", "pixelRatio", "renderer"])
+  })
+
+  test("the moving mode's interval is the level's frame rate", () => {
+    expect(movingIntervalMs(LEVELS.bassa)).toBeCloseTo(33.33, 1)
+    expect(movingIntervalMs(LEVELS.media)).toBeCloseTo(16.67, 1)
+    expect(movingIntervalMs(LEVELS.alta)).toBeCloseTo(16.67, 1)
+  })
+
+  test("a level id is one of the three and nothing else", () => {
+    expect(["bassa", "media", "alta"].every(isLevelId)).toBe(true)
+    for (const not of ["auto", "", "Alta", "ultra", undefined, null, 1]) expect(isLevelId(not)).toBe(false)
+  })
+})
+
+describe("the level the world picks", () => {
+  const strong = { webgpu: true, dedicated: true }
+  const web = { webgpu: true, dedicated: false }
+  const none = { webgpu: false, dedicated: false }
+
+  test("Auto is Media with WebGPU, Alta only with a dedicated GPU, and Bassa without WebGPU", () => {
+    expect(resolveLevel(undefined, web).level.id).toBe("media")
+    expect(resolveLevel("auto", web).level.id).toBe("media")
+    expect(resolveLevel("auto", strong).level.id).toBe("alta")
+    expect(resolveLevel(undefined, none).level.id).toBe("bassa")
+    // A dedicated GPU without WebGPU is not something that exists, but it must not raise the level.
+    expect(resolveLevel(undefined, { webgpu: false, dedicated: true }).level.id).toBe("bassa")
+  })
+
+  test("what is asked for is given when the machine can run it", () => {
+    expect(resolveLevel("bassa", strong).level.id).toBe("bassa")
+    expect(resolveLevel("media", strong).level.id).toBe("media")
+    expect(resolveLevel("alta", strong).level.id).toBe("alta")
+    expect(resolveLevel("media", web).level.id).toBe("media")
+    expect(resolveLevel("bassa", none).level.id).toBe("bassa")
+  })
+
+  test("what the machine cannot run is lowered, and the reason says why", () => {
+    const alta = resolveLevel("alta", web)
+    expect([alta.level.id, alta.why]).toEqual(["media", "richiesto Alta, ma senza GPU dedicata: Media"])
+    const noWebgpu = resolveLevel("alta", none)
+    expect([noWebgpu.level.id, noWebgpu.why]).toEqual(["bassa", "richiesto Alta, ma senza WebGPU: Bassa"])
+    expect(resolveLevel("media", none).level.id).toBe("bassa")
+  })
+
+  test("a request that is not a level is Auto", () => {
+    expect(resolveLevel("ultra", strong).level.id).toBe("alta")
+    expect(resolveLevel("", web).level.id).toBe("media")
+  })
+})
+
+describe("a dedicated GPU", () => {
+  test("NVIDIA cards are, and Tegra is not", () => {
+    expect(isDedicatedGpu({ vendor: "nvidia", architecture: "ada", description: "NVIDIA GeForce RTX 4070" })).toBe(true)
+    expect(isDedicatedGpu({ vendor: "NVIDIA", architecture: "", device: "" })).toBe(true)
+    expect(isDedicatedGpu({ vendor: "nvidia", architecture: "", description: "NVIDIA Tegra X1" })).toBe(false)
+  })
+
+  test("AMD's Radeon RX and Pro are, the Radeon Graphics of an APU is not", () => {
+    expect(isDedicatedGpu({ vendor: "amd", architecture: "rdna-3", description: "AMD Radeon RX 7800 XT" })).toBe(true)
+    expect(isDedicatedGpu({ vendor: "amd", architecture: "", description: "AMD Radeon Pro W7800" })).toBe(true)
+    expect(isDedicatedGpu({ vendor: "amd", architecture: "rdna-2", description: "AMD Radeon(TM) Graphics" })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "amd", architecture: "rdna-3" })).toBe(false)
+  })
+
+  test("Intel's Arc is, its integrated graphics are not", () => {
+    expect(isDedicatedGpu({ vendor: "intel", architecture: "xe-hpg", description: "Intel(R) Arc(TM) A770 Graphics" })).toBe(true)
+    expect(isDedicatedGpu({ vendor: "intel", architecture: "gen-12lp", description: "Intel(R) Iris(R) Xe Graphics" })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "intel", architecture: "gen-11", description: "Intel(R) UHD Graphics 630" })).toBe(false)
+  })
+
+  test("software, fallback and unknown adapters are not, and neither is no answer at all", () => {
+    expect(isDedicatedGpu(undefined)).toBe(false)
+    expect(isDedicatedGpu({})).toBe(false)
+    expect(isDedicatedGpu({ vendor: "nvidia", isFallbackAdapter: true })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "google", architecture: "swiftshader", description: "SwiftShader" })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "microsoft", description: "Microsoft Basic Render Driver" })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "apple", architecture: "metal-3", description: "Apple M2" })).toBe(false)
+    expect(isDedicatedGpu({ vendor: "qualcomm", description: "Adreno" })).toBe(false)
+  })
+})
+
+describe("asking the browser what GPU there is", () => {
+  test("no WebGPU in the frame, no adapter, and an adapter that throws: none can be used, and each says so", async () => {
+    expect(await probeGpu(undefined)).toEqual({ webgpu: false, dedicated: false, why: "WebGPU non disponibile nel frame" })
+    expect(await probeGpu({ requestAdapter: async () => null })).toMatchObject({ webgpu: false, why: "nessun adattatore WebGPU" })
+    const thrown = await probeGpu({
+      requestAdapter: async () => {
+        throw new Error("blocked")
+      },
+    })
+    expect(thrown.webgpu).toBe(false)
+    expect(thrown.why).toContain("blocked")
+  })
+
+  test("it asks for the strong adapter and reads what it says about itself", async () => {
+    let asked: unknown
+    const probe = await probeGpu({
+      requestAdapter: async (options) => {
+        asked = options
+        return { info: { vendor: "nvidia", architecture: "ada", description: "NVIDIA GeForce RTX 4070" } }
+      },
+    })
+    expect(asked).toEqual({ powerPreference: "high-performance" })
+    expect([probe.webgpu, probe.dedicated]).toEqual([true, true])
+    const soft = await probeGpu({ requestAdapter: async () => ({ info: { vendor: "nvidia" }, isFallbackAdapter: true }) })
+    expect([soft.webgpu, soft.dedicated]).toEqual([true, false])
+  })
+})

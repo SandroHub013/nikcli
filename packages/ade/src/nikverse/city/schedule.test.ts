@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, STILL_INTERVAL_MS, drawMode, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -65,5 +65,51 @@ describe("how much of a person is drawn", () => {
     expect(shopInRange(camera, { x: 200, z: 0 }, 9)).toBe(false)
     expect(shopInRange(camera, { x: 148, z: 0 }, 9)).toBe(true)
     expect(shopInRange(camera, { x: 150, z: 0 }, 9)).toBe(false)
+  })
+})
+
+describe("pacing the draws to the level's frame rate", () => {
+  /** The draws in `seconds` of a display at `hz`, with the timestamps a little uneven, as a display's are. */
+  const drawsOn = (hz: number, interval: number, seconds = 10) => {
+    let next = 0
+    let draws = 0
+    const frame = 1000 / hz
+    for (let i = 1; i * frame <= seconds * 1000; i++) {
+      const ts = i * frame + (i % 3) * 0.3 - 0.3
+      const step = pace(ts, next, interval)
+      next = step.next
+      if (step.draw) draws++
+    }
+    return draws / seconds
+  }
+
+  test("never above 60 a second, whatever the display: 60, 75, 120, 144, 165 and 240 Hz", () => {
+    // (60.1 is the first frame of the ten seconds, which draws at once.)
+    for (const hz of [60, 75, 120, 144, 165, 240]) expect([hz, drawsOn(hz, 1000 / 60) <= 60.15]).toEqual([hz, true])
+  })
+
+  test("and as near to 60 as the display allows: not the 48 a plain minimum gap gives on 144 Hz, nor half on 60 Hz", () => {
+    for (const hz of [60, 75, 120, 144, 240]) expect([hz, drawsOn(hz, 1000 / 60) >= 59.5]).toEqual([hz, true])
+  })
+
+  test("Bassa's 30 a second is kept on a 60, 120 or 144 Hz display", () => {
+    for (const hz of [60, 120, 144]) {
+      const rate = drawsOn(hz, 1000 / 30)
+      expect([hz, rate <= 30.15 && rate >= 29.5]).toEqual([hz, true])
+    }
+  })
+
+  test("a frame long after its due time starts the grid again instead of drawing in a burst to catch up", () => {
+    const late = pace(1000, 100, 16.67)
+    expect(late.draw).toBe(true)
+    expect(late.next).toBeCloseTo(1016.67, 2)
+    expect(pace(1001, late.next, 16.67).draw).toBe(false)
+  })
+
+  test("a shorter interval does not wait out the longer one: standing at 66 ms, then walking at 16.7", () => {
+    // Drawn at t = 0 with the still interval: the next is due at 66. The character starts to walk at t = 5.
+    const step = pace(0, 0, 66)
+    expect(step.next).toBeCloseTo(66, 6)
+    expect(pace(17, step.next, 16.67).draw).toBe(true)
   })
 })

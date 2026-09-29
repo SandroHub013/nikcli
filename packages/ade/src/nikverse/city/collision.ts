@@ -59,8 +59,8 @@ const MAX_STEP = 0.15
 
 function settle(p: Vec2, radius: number, world: World): Vec2 {
   let at = p
-  // A few passes: leaving one box can push into the next (a corner).
-  for (let pass = 0; pass < 3; pass++) {
+  // A few passes: leaving one box can push into the next (a corner, or the narrow aisle between two desks).
+  for (let pass = 0; pass < 8; pass++) {
     for (const box of world.boxes) at = pushOut(at, radius, box)
   }
   const d = Math.hypot(at.x, at.z)

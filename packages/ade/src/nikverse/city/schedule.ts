@@ -31,3 +31,20 @@ export function shouldSavePosition(before: { moving: boolean; sentAt: number }, 
   if (before.moving && !now.moving) return true
   return now.moving && now.at - before.sentAt >= POSITION_EVERY_MS
 }
+
+/** A frame that arrives this early (ms) still counts as on time: the display's timestamps jitter. */
+export const DRAW_JITTER_MS = 1
+
+/**
+ * Whether to draw at the display frame `ts`, and when the next draw is due, for a draw every `interval` ms.
+ * The due times stay on a grid of `interval`, so the rate on average is exactly the level's, whatever the
+ * display's (a 144 Hz display draws every second or third frame, a 75 Hz one nearly every frame); a plain
+ * "at least `interval` since the last draw" would settle at 48 fps on 144 Hz and go over 60 with the jitter.
+ * A frame that comes long after its due time starts the grid again; a shorter interval (the character starts
+ * to walk) does not wait out the longer one.
+ */
+export function pace(ts: number, next: number, interval: number): { draw: boolean; next: number } {
+  const due = next > ts + interval ? ts : next
+  if (ts < due - DRAW_JITTER_MS) return { draw: false, next: due }
+  return { draw: true, next: ts - due > interval ? ts + interval : due + interval }
+}

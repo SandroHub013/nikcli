@@ -253,8 +253,8 @@ export function NikversePane(props: {
             src={frameSrc()}
             // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
             // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
-            // `allow-pointer-lock` alone besides the scripts: the third-person camera turns with a captured mouse.
-            sandbox="allow-scripts allow-pointer-lock"
+            // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.
+            sandbox="allow-scripts"
             referrerpolicy="no-referrer"
             // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
             onLoad={() => link?.probe()}

@@ -15,193 +15,45 @@
  * (`WebGPURenderer` when the browser has a WebGPU adapter, the classic one when it has not).
  * A backend that the headless browser does not have is reported, not failed.
  *
- *   bun scripts/nikverse-render-check.ts [--out DIR] [--browser PATH]
+ *   bun scripts/nikverse-render-check.ts [--out DIR] [--browser PATH] [--json FILE] [--strict-logo]
  *
+ * `--json FILE` writes every check as {name, ok, detail}; `--strict-logo` asks the logo check for 100 % of the pixels
+ * within ΔE 3, as the bench does (an effect must never touch the logo).
  * Exits 1 when a check fails. Time cap: 5 minutes.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { buildWorld } from "../src/nikverse/city/build-world"
+import { bc1Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
+import { actAsAde, arg, startHarness } from "./nikverse-harness"
 
 const root = join(import.meta.dir, "..")
-const world = join(root, "src", "nikverse", "world")
-const arg = (name: string) => {
-  const i = process.argv.indexOf(name)
-  return i >= 0 ? process.argv[i + 1] : undefined
-}
 const out = arg("--out") ?? join(tmpdir(), "nikverse-render-check")
-mkdirSync(out, { recursive: true })
-
-const CANDIDATES = [
-  arg("--browser"),
-  process.env.BROWSER_PATH,
-  "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-  "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-].filter((p): p is string => Boolean(p))
-const browser = CANDIDATES.find((p) => existsSync(p))
-if (!browser) {
-  console.error("no Edge or Chrome found; pass --browser PATH")
-  process.exit(2)
-}
+const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
+const NONCE = "0123456789abcdef".repeat(3)
 
 const deadline = setTimeout(() => {
   console.error("time cap of 5 minutes reached")
   process.exit(1)
 }, 300_000)
 
-const built = await buildWorld()
-if (!built.ok) throw new Error(built.errors.join("\n"))
-
-const NONCE = "0123456789abcdef".repeat(3)
-const LOGO = readFileSync(join(root, "src", "nikverse", "city", "nikcli-logo-dark.svg"), "utf8")
-const text = (path: string) => readFileSync(join(world, path), "utf8")
-
-const server = Bun.serve({
-  port: 0,
-  fetch(request) {
-    const url = new URL(request.url)
-    const send = (body: string, type: string) => new Response(body, { headers: { "content-type": type, "cache-control": "no-store" } })
-    switch (url.pathname) {
-      case "/":
-      case "/index.html":
-        return send(text("index.html"), "text/html; charset=utf-8")
-      case "/world.js":
-        return send(text("world.js"), "text/javascript; charset=utf-8")
-      case "/world.css":
-        return send(text("world.css"), "text/css; charset=utf-8")
-      case "/assets/world/city.js":
-        return send(built.text, "text/javascript; charset=utf-8")
-      case "/favicon.ico":
-        return new Response(null, { status: 204 })
-      case "/logo.svg":
-        return send(LOGO, "image/svg+xml")
-      case "/reference.html":
-        return send(
-          '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
-          "text/html; charset=utf-8",
-        )
-      default:
-        return new Response("not found", { status: 404 })
-    }
+// The server, the browser and the line to it are `nikverse-harness.ts`'s; this script adds its own two pages.
+const { base, page, browserLine, cpuByProcess, problems, evaluate, open, until, shot, close } = await startHarness({
+  out,
+  // The reference page is the harness's own (it compares pictures through `data:` addresses): no policy on it.
+  noPolicy: ["/reference.html"],
+  routes(url, policy) {
+    // A KTX2 file in the GPU's own format (BC1), made here, for the check of the KTX2 path.
+    if (url.pathname === "/fixtures/bc1.ktx2") return new Response(bc1Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
+    if (url.pathname === "/reference.html")
+      return new Response(
+        '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
+        { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...policy } },
+      )
+    return undefined
   },
 })
-const base = `http://127.0.0.1:${server.port}`
-
-// ---- the browser, and a line to it ----
-
-const profile = join(tmpdir(), `nikverse-browser-${process.pid}`)
-mkdirSync(profile, { recursive: true })
-const child = Bun.spawn(
-  [
-    browser,
-    "--headless=new",
-    "--remote-debugging-port=0",
-    `--user-data-dir=${profile}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--use-angle=swiftshader",
-    "--enable-unsafe-swiftshader",
-    "--ignore-gpu-blocklist",
-    "--enable-unsafe-webgpu",
-    "--hide-scrollbars",
-    "--mute-audio",
-    "about:blank",
-  ],
-  { stdout: "ignore", stderr: "ignore" },
-)
-
-async function debuggingPort(): Promise<number> {
-  const file = join(profile, "DevToolsActivePort")
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(file)) {
-      const port = Number(readFileSync(file, "utf8").split("\n")[0])
-      if (port) return port
-    }
-    await Bun.sleep(100)
-  }
-  throw new Error("the browser did not open its debugging port")
-}
-
-class Cdp {
-  private id = 0
-  private pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>()
-  private listeners: Array<(method: string, params: any) => void> = []
-  private constructor(private ws: WebSocket) {
-    ws.onmessage = (event) => {
-      const message = JSON.parse(String(event.data))
-      if (message.id !== undefined) {
-        const wait = this.pending.get(message.id)
-        this.pending.delete(message.id)
-        if (message.error) wait?.reject(new Error(message.error.message))
-        else wait?.resolve(message.result)
-      } else for (const l of this.listeners) l(message.method, message.params)
-    }
-  }
-  static async open(url: string) {
-    const ws = new WebSocket(url)
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve()
-      ws.onerror = () => reject(new Error("no websocket to the page"))
-    })
-    return new Cdp(ws)
-  }
-  send<T = any>(method: string, params: object = {}): Promise<T> {
-    const id = ++this.id
-    this.ws.send(JSON.stringify({ id, method, params }))
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject }))
-  }
-  on(fn: (method: string, params: any) => void) {
-    this.listeners.push(fn)
-  }
-  close() {
-    this.ws.close()
-  }
-}
-
-const port = await debuggingPort()
-const targets: Array<{ type: string; webSocketDebuggerUrl: string }> = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-const page = await Cdp.open(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl)
-const problems: string[] = []
-page.on((method, params) => {
-  if (method === "Runtime.exceptionThrown") problems.push(`exception: ${params.exceptionDetails?.exception?.description ?? params.exceptionDetails?.text}`)
-  if (method === "Runtime.consoleAPICalled" && params.type === "error")
-    problems.push(`console.error: ${params.args?.map((a: any) => a.value ?? a.description).join(" ").slice(0, 300)}`)
-  if (method === "Log.entryAdded" && params.entry.level === "error") problems.push(`log: ${params.entry.text} ${params.entry.url ?? ""}`.slice(0, 300))
-})
-await page.send("Runtime.enable")
-await page.send("Log.enable")
-await page.send("Page.enable")
-
-const evaluate = async <T = any>(expression: string): Promise<T> => {
-  const result = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
-  return result.result.value as T
-}
-
-async function open(path: string, size: { width: number; height: number }) {
-  await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false })
-  await page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } })
-  await page.send("Page.navigate", { url: `${base}${path}` })
-}
-
-async function until(condition: string, what: string, ms = 30_000) {
-  const start = Date.now()
-  while (Date.now() - start < ms) {
-    if (await evaluate<boolean>(condition).catch(() => false)) return
-    await Bun.sleep(150)
-  }
-  const info = await evaluate(`JSON.stringify({city: document.documentElement.dataset.city, error: document.documentElement.dataset.cityError, backend: document.documentElement.dataset.backend})`).catch(() => "?")
-  throw new Error(`timeout waiting for ${what} ${info} ${problems.slice(0, 3).join(" | ")}`)
-}
-
-async function shot(name: string): Promise<string> {
-  const { data } = await page.send("Page.captureScreenshot", { format: "png" })
-  writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"))
-  return data
-}
 
 /** The two pictures compared in the browser: pixels within ΔE 3, and the silhouettes' IoU. */
 const COMPARE = `(async (a, b) => {
@@ -241,8 +93,11 @@ const COMPARE = `(async (a, b) => {
 })`
 
 let failed = 0
+const results: Array<{ name: string; ok: boolean; detail: string }> = []
+const strictLogo = process.argv.includes("--strict-logo")
 const report = (name: string, ok: boolean, detail: string) => {
   if (!ok) failed++
+  results.push({ name, ok, detail })
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}: ${detail}`)
 }
 
@@ -266,7 +121,7 @@ async function logoCheck(renderer: "classic" | "auto") {
     if (result.error) throw new Error(JSON.stringify(result))
     report(
       `logo ${label} [${backend}]`,
-      result.closeShare >= 0.995 && result.iou >= 0.995,
+      (strictLogo ? result.closeShare === 1 : result.closeShare >= 0.995) && result.iou >= 0.995,
       `${(result.closeShare * 100).toFixed(3)} % of pixels within ΔE 3, IoU ${result.iou.toFixed(5)}, worst ΔE ${result.worstDeltaE.toFixed(2)}${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
     )
   } catch (error) {
@@ -293,17 +148,7 @@ const SNAPSHOT = {
   waiting: { decisions: 0 },
 }
 
-/** Acts as ADE: offers the world a port, tells it where the character stood (if it knows) and sends it the snapshot. */
-const asAde = (spot?: { x: number; z: number; heading: number }) => `(async () => {
-  const channel = new MessageChannel()
-  window.__ade = { port: channel.port1, seen: [] }
-  channel.port1.onmessage = (event) => window.__ade.seen.push(event.data)
-  window.postMessage({ type: "nikverse:port", version: 1 }, "*", [channel.port2])
-  for (let i = 0; i < 100 && !window.__ade.seen.some((m) => m.type === "ready"); i++) await new Promise((r) => setTimeout(r, 50))
-  ${spot ? `channel.port1.postMessage({ type: "player", ...${JSON.stringify(spot)} })` : ""}
-  channel.port1.postMessage({ type: "snapshot", snapshot: ${JSON.stringify(SNAPSHOT)} })
-  return window.__ade.seen.some((m) => m.type === "ready")
-})()`
+const asAde = (spot?: { x: number; z: number; heading: number }) => actAsAde(SNAPSHOT, spot)
 
 async function cityCheck(renderer: "classic" | "auto") {
   const label = renderer === "classic" ? "classic WebGL (asked for)" : "auto"
@@ -314,6 +159,10 @@ async function cityCheck(renderer: "classic" | "auto") {
     if ((await evaluate<string>(`document.documentElement.dataset.city`)) === "failed")
       throw new Error(`the city did not start: ${await evaluate(`document.documentElement.dataset.cityError`)}`)
     const backend = await evaluate<string>(`document.documentElement.dataset.backend`)
+    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " kit " + document.documentElement.dataset.kit + " " + (document.documentElement.dataset.qualityWhy ?? "")`)
+    const levelState = await evaluate<string>(`document.documentElement.dataset.quality + " (" + document.documentElement.dataset.qualityWhy + ")"`)
+    console.log(`  [${renderer}] cast: ${castState.trim()}; level: ${levelState}`)
+    const castOk = castState.startsWith("ok kit ok")
     const ready = await evaluate<boolean>(asAde())
     // The shops rise in 0.8 s.
     await Bun.sleep(1800)
@@ -352,21 +201,43 @@ async function cityCheck(renderer: "classic" | "auto") {
     console.log(`  [${renderer}] W: ${from} -> ${first}`)
     // Round the projector, and on to the first shop's door, straight ahead of the square.
     const round = await holdUntil("d", (x) => x >= 4)
-    const along = await holdUntil("w", (_x, z) => z <= -22, true)
+    const along = await holdUntil("w", (_x, z) => z <= -10, true)
     await holdUntil("a", (x) => Math.abs(x) <= 0.4)
+    // The first shop stands at (0, -19) with its door, 3.8 wide, in the front wall at z = -16.5.
+    await holdUntil("w", (_x, z) => z <= -14.5)
     const [doorX, doorZ] = (await where()).split(",").map(Number)
     await shot(`city-${renderer}-3-at-the-door`)
-    const inside = await holdUntil("w", (_x, z) => z <= -28)
-    await shot(`city-${renderer}-4-inside`)
-    const [ix, iz] = inside.split(",").map(Number)
-    // At a desk: E next to a computer opens that session, and only there.
+    // E outside, in front of the door, opens nothing: no computer is within reach.
     const far = await evaluate<number>(`window.__ade.seen.filter((m) => m.type === "command").length`)
     await pressKey("e", "KeyE", 69)
     const farCommands = (await evaluate<number>(`window.__ade.seen.filter((m) => m.type === "command").length`)) - far
-    await holdUntil("a", (x) => x <= -1.3)
-    await holdUntil("w", (_x, z) => z <= -32)
+    // In, between the two desks of the window row (the aisle is 0.54 m and the body 0.44), to the chairs of the back row.
+    const inside = await holdUntil("w", (_x, z) => z <= -18.6)
+    await shot(`city-${renderer}-4-inside`)
+    const [ix, iz] = inside.split(",").map(Number)
+    // At a desk: E next to a computer opens that session.
+    await holdUntil("a", (x) => x <= -0.6)
     const hintShown = await evaluate<string>(`document.getElementById("hint").hidden ? "" : document.getElementById("hint").textContent`)
     await shot(`city-${renderer}-5-at-a-desk`)
+    // The people up close, for a look: the camera raised over the wall, behind the character and then in front of it.
+    // Synthetic pointer events with a movement, from a corner where nothing can be picked: CDP's own mouse
+    // events carry no `movementX`, which is what turns the camera.
+    const dragBy = async (dx: number, dy: number) => {
+      await evaluate(`(() => {
+        const canvas = document.querySelector("canvas.city")
+        const at = { clientX: 4, clientY: 4, button: 0, bubbles: true, pointerId: 1 }
+        canvas.dispatchEvent(new PointerEvent("pointerdown", at))
+        canvas.dispatchEvent(new PointerEvent("pointermove", { ...at, movementX: ${dx}, movementY: ${dy} }))
+        window.dispatchEvent(new PointerEvent("pointerup", at))
+      })()`)
+      await Bun.sleep(1500)
+    }
+    await dragBy(0, 260)
+    await shot(`city-${renderer}-6-desks-from-above`)
+    await dragBy(1257, 0)
+    await shot(`city-${renderer}-7-desks-from-the-front`)
+    // Back behind the character, where the next step needs it.
+    await dragBy(-1257, -260)
     await pressKey("e", "KeyE", 69)
     const commands = await evaluate<any[]>(`window.__ade.seen.filter((m) => m.type === "command").map((m) => m.command)`)
     const opened = commands.at(-1)
@@ -412,38 +283,117 @@ async function cityCheck(renderer: "classic" | "auto") {
     await Bun.sleep(11_000)
     const immobile = await modeOf()
     const idle1 = await frames()
-    await Bun.sleep(2000)
+    // What runs when nothing is drawn: the CPU time of every process over ten seconds, as a share of one core.
+    const cpuBefore = await cpuByProcess()
+    await Bun.sleep(10_000)
+    const cpuAfter = await cpuByProcess()
+    const share = [...cpuAfter].map(([key, after]) => `${key} ${(((after - (cpuBefore.get(key) ?? after)) / 10) * 100).toFixed(2)}%`)
+    console.log(`  [${renderer}] CPU while immobile, over 10 s: ${share.join(", ")}`)
     const idle2 = await frames()
     await evaluate(`window.__ade.port.postMessage({ type: "snapshot", snapshot: ${JSON.stringify({ ...SNAPSHOT, at: 2, shops: SNAPSHOT.shops.slice(0, 2) })} })`)
     await Bun.sleep(1500)
     const woken = await frames()
     const modeOk = (still === "still" || still === "moving") && immobile === "immobile" && idle1 === idle2 && woken > idle2
     console.log(`  [${renderer}] draw modes: ${still} -> ${immobile}, frames ${idle1} -> ${idle2} while immobile, ${woken} after an event`)
-    // The first shop stands at (0, -30) with its door toward the square: inside is between its walls.
-    const entered = Math.abs(ix) < 5.5 && iz < -25.6 && iz > -34.4
+    // The first shop stands at (0, -19) with its door toward the square: inside is between its walls (6 wide, 5 deep).
+    const entered = Math.abs(ix) < 2.9 && iz < -17.6 && iz > -21
     console.log(`  [${renderer}] D: ${round}, run W: ${along}, at the door ${doorX},${doorZ}, inside: ${inside}`)
     const status = await evaluate<string>(`document.getElementById("status").textContent`)
     const changed = before !== after
     report(
       `city ${label} [${backend}]`,
-      ready && changed && entered && eOk && pauseOk && positionOk && restoreOk && modeOk && problems.length === 0,
-      `port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
+      ready && castOk && changed && entered && eOk && pauseOk && positionOk && restoreOk && modeOk && problems.length === 0,
+      `cast and city ${castOk ? "loaded" : "NOT loaded"}, port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
     )
   } catch (error) {
     report(`city ${label}`, false, String((error as Error).message ?? error))
   }
 }
 
+/** Every level's four characters loaded the way the world loads them, under the world's policy: the pictures decode at the level's size. */
+async function levelsCheck() {
+  try {
+    problems.length = 0
+    // Alta's 2K set is a developer's local copy: it is checked where it is.
+    const present = ["bassa", "media", "alta"].filter((level) => existsSync(join(LEVELS_DIR, level, "character_user.glb")))
+    await open(`/?check=logo&levels=1`, { width: 400, height: 300 })
+    await until(`document.documentElement.dataset.ready === "1"`, "the page")
+    const result = await evaluate<Record<string, { sizes: number[]; ms: number }>>(`(async () => {
+      const m = await import("/assets/world/city.js")
+      const out = {}
+      for (const level of ${JSON.stringify(present)}) {
+        const t0 = performance.now()
+        const cast = await m.loadCast({ base: location.origin + "/assets/", level, fetchBytes: (u) => fetch(u).then((r) => r.arrayBuffer()), decode: m.decodePicture })
+        const sizes = []
+        for (const template of cast.values()) {
+          let width = 0
+          template.scene.traverse((o) => { if (o.material?.map?.image) width = Math.max(width, o.material.map.image.width) })
+          sizes.push(width)
+        }
+        out[level] = { sizes, ms: Math.round(performance.now() - t0) }
+      }
+      return out
+    })()`)
+    const want: Record<string, number> = { bassa: 512, media: 1024, alta: 2048 }
+    const ok = present.every((level) => result[level].sizes.length === 4 && result[level].sizes.every((w) => w === want[level]))
+    report(
+      "levels: the cast of each loads and its pictures decode",
+      ok && problems.length === 0,
+      Object.entries(result)
+        .map(([level, r]) => `${level} ${r.sizes.join("/")} px in ${r.ms} ms`)
+        .join(", ") + (problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""),
+    )
+  } catch (error) {
+    report("levels", false, String((error as Error).message ?? error))
+  }
+}
+
+/**
+ * A KTX2 file decoded by three's loader under the world's real policy: read on the main thread, with the
+ * policy as it is (no `blob:`, no eval): a violation would be a browser error and the check would fail.
+ */
+async function ktx2Check() {
+  try {
+    problems.length = 0
+    await open(`/?check=logo&ktx2=1`, { width: 400, height: 300 })
+    await until(`document.documentElement.dataset.ready === "1"`, "the page")
+    const result = await evaluate<{ width: number; height: number; compressed: boolean; srgb: boolean; ms: number }>(`(async () => {
+      const m = await import("/assets/world/city.js")
+      // What the loader asks of a renderer, from a real WebGL context: the compressed formats it offers.
+      const gl = document.createElement("canvas").getContext("webgl2")
+      const renderer = { extensions: { has: (n) => !!gl.getExtension(n), get: (n) => gl.getExtension(n) } }
+      const decoder = m.createPictureDecoder(renderer)
+      const bytes = new Uint8Array(await (await fetch("/fixtures/bc1.ktx2")).arrayBuffer())
+      const t0 = performance.now()
+      const texture = await Promise.race([
+        decoder.decode(bytes, false),
+        new Promise((_, no) => setTimeout(() => no(new Error("no answer from the KTX2 loader in 15 s")), 15000)),
+      ])
+      decoder.dispose()
+      return { width: texture.image.width, height: texture.image.height, compressed: texture.isCompressedTexture === true, srgb: texture.colorSpace === "srgb", ms: Math.round(performance.now() - t0) }
+    })()`)
+    report(
+      "ktx2: a KTX2 file in the GPU's format decodes under the world's policy",
+      result.width === 8 && result.height === 8 && result.compressed && result.srgb && problems.length === 0,
+      `${result.width}x${result.height}, compressed texture, ${result.srgb ? "sRGB from the file" : "colour space WRONG"}, ${result.ms} ms${problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""}`,
+    )
+  } catch (error) {
+    report("ktx2", false, `${String((error as Error).message ?? error)}${problems.length ? ` (browser errors: ${problems.slice(0, 3).join(" | ")})` : ""}`)
+  }
+}
+
 try {
+  await levelsCheck()
+  await ktx2Check()
   await logoCheck("classic")
   await logoCheck("auto")
   await cityCheck("classic")
   await cityCheck("auto")
   console.log(`pictures in ${out}`)
+  const json = arg("--json")
+  if (json) writeFileSync(json, JSON.stringify(results, null, 2))
 } finally {
   clearTimeout(deadline)
-  page.close()
-  child.kill()
-  server.stop(true)
+  close()
 }
 process.exit(failed ? 1 : 0)

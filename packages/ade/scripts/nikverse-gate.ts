@@ -1,7 +1,7 @@
 /**
  * The live gate for NikVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
- * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core,
- * 60 fps while walking). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
+ * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core over what
+ * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory +250 MB). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
  *
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
  *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
@@ -12,14 +12,15 @@
  * `nikverse.localhost` renderer's private bytes and working set over N open/close cycles; ADE's own
  * renderer (private, working set, JS heap after a GC) against the world-closed baseline 5 s after the last
  * close and again after `--rest` (the baseline is taken after one warm-up open/close, once ADE has settled); CPU of the frame, the GPU and ADE in the three draw modes (moving, still,
- * immobile) three times each; frames a second; the GPU process' memory. Only ADE Test is driven (it asks for
+ * immobile) three times each, after a baseline of the GPU process with the world closed; frames a second; the GPU time of a
+ * frame (the world's own `window.__nikverseBench`, 240 frames back to back, three times); the GPU process' memory. Only ADE Test is driven (it asks for
  * `data-ade-build="test"` first); the UI it clicks is the Italian one ("Nuovo pannello", "NikVerse").
  */
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { gateChecks, gatePasses, mean, median, GATE_LIMITS } from "../src/nikverse/gate"
+import { gateChecks, gatePasses, immobileCost, mean, median, GATE_LIMITS } from "../src/nikverse/gate"
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -100,18 +101,23 @@ async function pageTarget(port: number) {
   return list.find((t) => t.type === "page" && /^http:\/\/localhost:\d+\//.test(t.url))
 }
 
-type Send = (method: string, params?: object, sessionId?: string) => Promise<any>
+type Send = ((method: string, params?: object, sessionId?: string) => Promise<any>) & {
+  /** Listens for the events of the line (a trace's `Tracing.tracingComplete`). */
+  on(fn: (method: string, params: any) => void): void
+}
 async function connect(url: string): Promise<Send> {
   const ws = new WebSocket(url)
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error("no websocket")))))
   let id = 0
   const pending = new Map<number, (d: any) => void>()
+  const listeners: Array<(method: string, params: any) => void> = []
   ws.onmessage = (m) => {
     const d = JSON.parse(String(m.data))
     if (d.id) pending.get(d.id)?.(d)
+    else if (d.method) for (const l of listeners) l(d.method, d.params)
   }
-  return (method, params = {}, sessionId) =>
-    new Promise((res, rej) => {
+  const send = (method: string, params: object = {}, sessionId?: string) =>
+    new Promise<any>((res, rej) => {
       const i = ++id
       const t = setTimeout(() => rej(new Error("timeout " + method)), 30000)
       pending.set(i, (d) => {
@@ -120,6 +126,7 @@ async function connect(url: string): Promise<Send> {
       })
       ws.send(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) }))
     })
+  return Object.assign(send, { on: (fn: (method: string, params: any) => void) => void listeners.push(fn) })
 }
 const page = await connect((await pageTarget(PORT))!.webSocketDebuggerUrl)
 const browser = await connect(
@@ -268,6 +275,25 @@ try {
   const m0 = memory(p0.map((p) => p.id))
   const gpuPid = p0.find((p) => p.type === "GPU")!.id
   const base = { adeMb: big(m0[adePid]), adeHeapMb: await heapMb(page), gpuMb: big(m0[gpuPid]) }
+  // What ADE alone costs the GPU process: the world is closed, so none of this CPU is the world's. The gate counts
+  // only what the world adds to it (`immobileCost`); the GPU process is one for the whole window.
+  const cpuOf = async (pid: number, seconds: number) => {
+    const a = await procs()
+    const t0 = performance.now()
+    await sleep(seconds * 1000)
+    const c = await procs()
+    const dt = (performance.now() - t0) / 1000
+    const x = a.find((p) => p.id === pid)
+    const z = c.find((p) => p.id === pid)
+    return x && z ? ((z.cpuTime - x.cpuTime) / dt) * 100 : Number.NaN
+  }
+  const baselineGpuRuns: number[] = []
+  for (let i = 0; i < 3; i++) baselineGpuRuns.push(await cpuOf(gpuPid, 10))
+  log(
+    "CPU del processo GPU a mondo chiuso (solo ADE), prima:",
+    baselineGpuRuns.map((v) => v.toFixed(2)).join(", "),
+    "%",
+  )
 
   const cycles: Record<string, unknown>[] = []
   let session = ""
@@ -315,7 +341,22 @@ try {
     page("Input.dispatchKeyEvent", { type, code: KEYS[l][0], key: l, windowsVirtualKeyCode: KEYS[l][1] })
   const frames = () => ev(browser, `window.__nikverseFrames ?? 0`, session)
   const mode = () => ev(browser, `document.documentElement.dataset.drawMode`, session)
+  // What the frame's own main thread did: tasks and script time from the browser's counters, to tell page work from the
+  // browser's (a WebGPU device that is alive costs CPU in the renderer without any script running).
+  await browser("Performance.enable", {}, session)
+  const threadMetrics = async () => {
+    const { metrics } = await browser("Performance.getMetrics", {}, session)
+    const of = (name: string) =>
+      (metrics as { name: string; value: number }[]).find((m) => m.name === name)?.value ?? Number.NaN
+    return {
+      task: of("TaskDuration"),
+      script: of("ScriptDuration"),
+      layout: of("LayoutDuration"),
+      style: of("RecalcStyleDuration"),
+    }
+  }
   async function sample(seconds: number, during?: () => Promise<void>) {
+    const m0 = await threadMetrics()
     const a = await procs()
     const f0 = await frames()
     const t0 = performance.now()
@@ -323,6 +364,7 @@ try {
     else await sleep(seconds * 1000)
     const c = await procs()
     const dt = (performance.now() - t0) / 1000
+    const m1 = await threadMetrics()
     const cpu = (id: number) => {
       const x = a.find((p) => p.id === id)
       const z = c.find((p) => p.id === id)
@@ -333,6 +375,10 @@ try {
       frameCpu: cpu(framePid),
       gpuCpu: cpu(gpuPid),
       adeCpu: cpu(adePid),
+      // Percent of a core spent in the frame's main-thread tasks, and of that in script.
+      threadTaskPercent: ((m1.task - m0.task) / dt) * 100,
+      threadScriptPercent: ((m1.script - m0.script) / dt) * 100,
+      threadLayoutStylePercent: ((m1.layout - m0.layout + (m1.style - m0.style)) / dt) * 100,
       fps: ((await frames()) - f0) / dt,
       mode: await mode(),
     }
@@ -357,6 +403,72 @@ try {
     log(`modi ${rep}`, JSON.stringify({ moving, still, immobile }))
   }
 
+  // ---- what the frame and the GPU process do while nothing is drawn: a trace of the browser for a few seconds in the
+  // "immobile" mode, summed by process, thread and event name. It says whether the CPU of the immobile world is the page's
+  // (script, layout), the compositor's, or the browser's own.
+  async function traceIdle(seconds: number) {
+    while ((await mode()) !== "immobile") await sleep(500)
+    const done = new Promise<string>((resolve) =>
+      browser.on((method, params) => {
+        if (method === "Tracing.tracingComplete") resolve(params.stream)
+      }),
+    )
+    await browser("Tracing.start", {
+      categories: "toplevel,devtools.timeline,disabled-by-default-devtools.timeline,cc,viz,gpu,v8,blink",
+      transferMode: "ReturnAsStream",
+      streamFormat: "json",
+    })
+    await sleep(seconds * 1000)
+    await browser("Tracing.end")
+    const stream = await done
+    let text = ""
+    for (;;) {
+      const chunk = await browser("IO.read", { handle: stream, size: 1 << 20 })
+      text += chunk.data
+      if (chunk.eof) break
+    }
+    await browser("IO.close", { handle: stream })
+    const events = (JSON.parse(text) as { traceEvents: any[] }).traceEvents
+    const threads = new Map<string, string>()
+    for (const e of events)
+      if (e.ph === "M" && e.name === "thread_name") threads.set(`${e.pid}:${e.tid}`, e.args?.name ?? "?")
+    // Animation frames the page asked for: one FireAnimationFrame on the frame's main thread per requestAnimationFrame callback.
+    const animationFrames = events.filter((e) => e.pid === framePid && e.name === "FireAnimationFrame").length
+    const total = new Map<string, { ms: number; count: number }>()
+    for (const e of events) {
+      if (e.ph !== "X" || (e.pid !== framePid && e.pid !== gpuPid) || !(e.dur > 0)) continue
+      const key = `${e.pid === framePid ? "frame" : "gpu"} · ${threads.get(`${e.pid}:${e.tid}`) ?? e.tid} · ${e.name}`
+      const t = total.get(key) ?? { ms: 0, count: 0 }
+      t.ms += e.dur / 1000
+      t.count++
+      total.set(key, t)
+    }
+    return {
+      seconds,
+      animationFrames,
+      animationFramesPerSecond: +(animationFrames / seconds).toFixed(2),
+      top: [...total.entries()]
+        .sort((a, b) => b[1].ms - a[1].ms)
+        .slice(0, 25)
+        .map(([name, t]) => ({
+          name,
+          ms: +t.ms.toFixed(2),
+          count: t.count,
+          percentOfACore: +((t.ms / (seconds * 1000)) * 100).toFixed(3),
+        })),
+    }
+  }
+  const idleTrace = await traceIdle(6).catch((error) => ({ error: String((error as Error).message ?? error) }))
+  log("traccia da immobile", JSON.stringify(idleTrace).slice(0, 1500))
+
+  // ---- the GPU time of a frame: the world draws its own view back to back with no cap, waiting for the GPU each time
+  const timings: { frames: number; p50: number; p95: number; max: number; sync: string; timestampQuery: boolean }[] = []
+  for (let rep = 1; rep <= 3; rep++) {
+    timings.push(await ev(browser, `window.__nikverseBench(240)`, session, true))
+    log(`GPU ${rep}`, JSON.stringify(timings.at(-1)))
+  }
+  const level = await ev(browser, `document.documentElement.dataset.quality`, session)
+
   // ---- close, and what ADE kept
   await closeWorld()
   await sleep(5000)
@@ -374,14 +486,27 @@ try {
     frameProcessGone: !p9.some((p) => p.type === "renderer" && p.id === framePid),
   }
 
+  // The baseline again, world closed once more: closed, open, closed. ADE's own load drifts, and a base taken only before
+  // would blame the world for the drift.
+  const baselineGpuRunsAfter: number[] = []
+  for (let i = 0; i < 3; i++) baselineGpuRunsAfter.push(await cpuOf(gpuPid, 10))
+  log("CPU del processo GPU a mondo chiuso, dopo:", baselineGpuRunsAfter.map((v) => v.toFixed(2)).join(", "), "%")
+  const baselineGpuCpu = mean([...baselineGpuRuns, ...baselineGpuRunsAfter])
+
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {
     frameMb: Math.max(...cycles.map((c) => c.frameMb as number)),
     adeGrowthAfter5sMb: after5.adeMb - base.adeMb,
     adeGrowthAtRestMb: rest.adeMb - base.adeMb,
     adeHeapGrowthMb: Math.max(after5.adeHeapMb, rest.adeHeapMb) - base.adeHeapMb,
-    immobileCpuPercent: mean(rows.map((r) => r.immobile.frameCpu + r.immobile.gpuCpu)),
+    immobileFrameCpuPercent: mean(rows.map((r) => r.immobile.frameCpu)),
+    immobileGpuCpuPercent: mean(rows.map((r) => r.immobile.gpuCpu)),
+    baselineGpuCpuPercent: baselineGpuCpu,
     movingFps: mean(rows.map((r) => r.moving.fps)),
+    idleAnimationFramesPerSecond:
+      "animationFramesPerSecond" in idleTrace ? (idleTrace.animationFramesPerSecond as number) : Number.NaN,
+    gpuFrameP95Ms: median(timings.map((t) => t.p95)),
+    gpuMemoryGrowthMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
   }
   const checks = gateChecks(measures)
   const ok = gatePasses(checks)
@@ -397,7 +522,19 @@ try {
       rest,
       stillCpuPercentMedian: median(rows.map((r) => r.still.frameCpu + r.still.gpuCpu)),
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
-      gpuMemoryOpenMinusBaseMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
+      level,
+      gpuTimings: timings,
+      baselineGpuRuns,
+      baselineGpuRunsAfter,
+      idleTrace,
+      immobileThread: rows.map((r) => ({
+        task: r.immobile.threadTaskPercent,
+        script: r.immobile.threadScriptPercent,
+        layoutStyle: r.immobile.threadLayoutStylePercent,
+      })),
+      // The whole use of frame and GPU process, before the baseline is taken off: what the first live run reported as 2.5 to 3.4 %.
+      immobileCpuAbsolutePercent: mean(rows.map((r) => r.immobile.frameCpu + r.immobile.gpuCpu)),
+      immobileCostPercent: mean(rows.map((r) => immobileCost(r.immobile.frameCpu, r.immobile.gpuCpu, baselineGpuCpu))),
       modes,
     },
   })

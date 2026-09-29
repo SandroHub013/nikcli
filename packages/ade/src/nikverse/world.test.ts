@@ -11,7 +11,6 @@ import {
   chordCommand,
   createRenderer,
   emptyState,
-  escAction,
   readNonce,
   render,
 } from "./world/world.js"
@@ -208,11 +207,6 @@ describe("the world proves it is the world, and takes the port only after that",
 })
 
 describe("the keyboard: focus and shortcuts", () => {
-  test("Esc lets go of a captured mouse first, and only then gives the focus back to ADE", () => {
-    expect(escAction(true)).toBe("release-capture")
-    expect(escAction(false)).toBe("release-focus")
-  })
-
   test("a shortcut with Ctrl, Alt or Meta is forwarded to ADE; a plain key stays in the world", () => {
     const key = (init: Record<string, unknown>) => chordCommand({ key: "k", ...init })
     expect(key({ ctrlKey: true })).toEqual({ cmd: "chord", key: "k", ctrl: true, alt: false, shift: false, meta: false })

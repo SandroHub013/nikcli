@@ -79,11 +79,6 @@ export function applyEvent(state, event) {
   return state
 }
 
-/** What one Esc does: a captured mouse is released first, and only then is the focus given back to ADE. */
-export function escAction(captured) {
-  return captured ? "release-capture" : "release-focus"
-}
-
 const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta", "AltGraph", "OS"])
 
 /**
@@ -203,13 +198,21 @@ export const CITY_MODULE = "./assets/world/city.js"
 const loadCityModule = () => import("./assets/world/city.js")
 
 /**
- * Which of the page's query options are set, for the tests: `?check=logo`, and `?renderer=classic` to draw
+ * Which of the page's query options are set, for the tests: `?check=logo`, `?quality=` and `?renderer=classic` to draw
  * with the classic WebGL renderer where WebGPU exists, to compare the two. There is no way to ask for
  * WebGPURenderer's own WebGL backend: it is never used.
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
-  return { check: params.get("check") === "logo", classic: params.get("renderer") === "classic" }
+  // `?quality=bassa|media|alta` asks for a level (the city lowers what the machine cannot run); without it the level is chosen from the machine.
+  // `?shot=1..8` is the bench: the fixed scene from one camera, drawn once.
+  const shot = Number(params.get("shot"))
+  return {
+    check: params.get("check") === "logo",
+    classic: params.get("renderer") === "classic",
+    quality: params.get("quality") ?? undefined,
+    shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
+  }
 }
 
 /** Starts the page: waits for ADE's port, then lives on it. Only ever once per document. */
@@ -248,12 +251,16 @@ export function boot(win, options = {}) {
         picture: () => state,
         mode: query.check ? "logo-check" : "city",
         classic: query.classic,
+        quality: query.quality,
+        shot: query.shot,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
       }),
     )
     .then((started) => {
       city = started
+      // The gate and the bench time the GPU through this: the world's own drawing, not a copy of it.
+      win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
       mark("city", "1")
       if (spot) city.restore(spot)
       if (paused) city.pause()
@@ -298,11 +305,10 @@ export function boot(win, options = {}) {
   win.addEventListener("message", onPort)
   if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")
 
-  // The focus is the world's once it is clicked; Esc gives it back (a second time if the mouse was captured).
+  // The focus is the world's once it is clicked; Esc gives it back.
   win.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (escAction(city?.captured() ?? false) === "release-capture") city.releaseCapture()
-      else send({ cmd: "release-focus" })
+      send({ cmd: "release-focus" })
       return
     }
     const chord = chordCommand(event)
@@ -311,6 +317,12 @@ export function boot(win, options = {}) {
     send(chord)
   })
   doc.getElementById("world")?.addEventListener("pointerdown", () => doc.getElementById("world")?.focus())
+  // The frame is going (ADE unloads it when the panel is not seen): the GPU's memory goes back now, not when the
+  // process that held the frame is collected, which takes minutes.
+  win.addEventListener("pagehide", () => {
+    city?.dispose()
+    city = undefined
+  })
   return renderer
 }
 

@@ -175,21 +175,6 @@ button:focus-visible {
   outline: none;
 }
 
-/* A dot in the middle while the mouse is captured: the click picks what it is on. */
-#stage.locked::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 0.375rem;
-  height: 0.375rem;
-  margin: -0.1875rem 0 0 -0.1875rem;
-  border-radius: 50%;
-  background: #fff;
-  opacity: 0.85;
-  pointer-events: none;
-}
-
 #hint {
   position: fixed;
   left: 50%;

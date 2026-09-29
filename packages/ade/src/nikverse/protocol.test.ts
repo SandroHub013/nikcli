@@ -150,9 +150,9 @@ describe("where the world lives", () => {
     expect(frame).not.toContain("srcdoc")
     const sandbox = /sandbox="([^"]*)"/.exec(frame)?.[1]?.split(/\s+/) ?? []
     // Every scheme Tauri registers is a local origin for its IPC: the world must not have its own.
-    // The mouse capture is the one thing besides scripts: the third-person camera needs it.
-    expect(sandbox).toEqual(["allow-scripts", "allow-pointer-lock"])
-    for (const never of ["allow-same-origin", "allow-top-navigation", "allow-popups", "allow-forms", "allow-modals"])
+    // Scripts and nothing else: WebView2 gives a frame no pointer lock, and the camera turns by dragging.
+    expect(sandbox).toEqual(["allow-scripts"])
+    for (const never of ["allow-pointer-lock", "allow-same-origin", "allow-top-navigation", "allow-popups", "allow-forms", "allow-modals"])
       expect(sandbox).not.toContain(never)
     // No target origin can name an opaque one: the offer goes to "*", but only to the window of the frame this panel made.
     expect(source).toContain('PROTOCOL_VERSION }, "*", [channel.port2])')

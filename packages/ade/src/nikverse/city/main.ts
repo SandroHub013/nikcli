@@ -13,7 +13,8 @@
  * pixels per SVG unit, for the comparison with the SVG.
  */
 
-import { NoToneMapping, PerspectiveCamera, Raycaster, Vector2, WebGPURenderer } from "three/webgpu"
+import { quietLoop } from "./quiet-loop"
+import { NoToneMapping, PerspectiveCamera, Raycaster, RenderTarget, Vector2, WebGPURenderer } from "three/webgpu"
 import { WebGLRenderer } from "three"
 import {
   NO_INPUT,
@@ -33,8 +34,16 @@ import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } fro
 import type { Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
+import { loadLevel } from "./load-level"
+import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
-import { STILL_INTERVAL_MS, drawMode, shouldSavePosition, type DrawMode } from "./schedule"
+import type { Cast } from "./rig"
+import type { GpuTiming } from "./bench"
+import { benchDraw, measureGpu } from "./gpu-idle"
+import { createPictureDecoder, type Ktx2Support } from "./ktx2"
+import { disposeTree, releaseRenderer } from "./release"
+import { startShot } from "./shot-handle"
+import { STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
 
@@ -54,6 +63,12 @@ export interface CityDeps {
   mode: "city" | "logo-check"
   /** Draw with the classic renderer even where WebGPU exists, to compare the two (`?renderer=classic`). */
   classic?: boolean
+  /** The level asked for (`?quality=`): `auto`, or a level's id. Whatever the machine cannot run is lowered (`quality.ts`). */
+  quality?: string
+  /** The bench's shot (`?shot=N`, 1 to 8): the page draws the fixed scene from that camera once, and keeps the picture (`shot-handle.ts`). */
+  shot?: number
+  /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
+  assets?: string
   /** Tells ADE where the character is, so that a reload of the frame can stand it there again. */
   savePosition?(spot: Spot): void
 }
@@ -65,19 +80,18 @@ export interface CityHandle {
   resume(): void
   /** Where ADE says the character stood: taken only if the user has not moved yet. */
   restore(spot: Spot): void
-  /** Whether the mouse is captured (Esc lets it go first, and only then gives the focus back to ADE). */
-  captured(): boolean
-  releaseCapture(): void
-  info(): { backend: Backend; mode: CityDeps["mode"] }
+  info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean; kit: boolean }
+  /** Draws the current view `frames` times back to back and says how long the GPU took (the gate's and the bench's number). */
+  bench?(frames?: number): Promise<GpuTiming>
   dispose(): void
 }
 
 /** The projector under the hologram: the character walks around it, not through it. */
-const PROJECTOR: Box = { cx: 0, cz: 0, hx: 2.4, hz: 2.4, yaw: 0, height: 0.3 }
+const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
-async function pickRenderer(deps: CityDeps, check: boolean) {
+async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
   const doc = deps.win.document
   return chooseRenderer<HTMLCanvasElement>({
     makeCanvas: () => {
@@ -88,10 +102,12 @@ async function pickRenderer(deps: CityDeps, check: boolean) {
     },
     gpu: (deps.win.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu,
     options: { antialias: !check, alpha: check },
-    classic: deps.classic === true,
+    classic,
     createWebGPU: async (canvas, options) => {
       const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
       await renderer.init()
+      // three's own frame loop would run at every vsync for a city that draws nothing.
+      if (!quietLoop(renderer)) console.warn("[nikverse] il ciclo interno di three non e stato fermato")
       // Never its WebGL backend: that is what the classic renderer is for.
       if (!(renderer as unknown as { backend?: { isWebGPUBackend?: boolean } }).backend?.isWebGPUBackend) {
         renderer.dispose()
@@ -104,6 +120,11 @@ async function pickRenderer(deps: CityDeps, check: boolean) {
   })
 }
 
+export { decodePicture, loadCast } from "./assets"
+export { createPictureDecoder } from "./ktx2"
+export { loadKit } from "./kit"
+export { LEVELS, resolveLevel } from "./quality"
+
 export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const { win } = deps
   const doc = win.document
@@ -111,7 +132,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (!stage) throw new Error("manca #stage nella pagina del mondo")
 
   const check = deps.mode === "logo-check"
-  const chosen = await pickRenderer(deps, check)
+  // The level decides the renderer and the assets: what the machine has, and what was asked for.
+  const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
+  const resolved = resolveLevel(deps.quality, gpu)
+  const level = resolved.level
+  const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
   const { renderer, canvas, backend } = chosen
   stage.append(canvas)
   renderer.toneMapping = NoToneMapping
@@ -120,29 +145,57 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   if (check) return logoCheckHandle(deps, renderer, canvas, backend)
 
+  // N3's people, shop and plaza; what does not load stays a placeholder, and the page says why. The pictures
+  // are KTX2 in the GPU's own format, or PNG.
+  const base = deps.assets ?? new URL("./assets/", win.location.href).href
+  const pictures = createPictureDecoder(renderer as unknown as Ktx2Support)
+  const loaded = await loadLevel(level, {
+    base,
+    fetchBytes: async (url) => {
+      const response = await win.fetch(url)
+      if (!response.ok) throw new Error(`${response.status}`)
+      return response.arrayBuffer()
+    },
+    decode: pictures.decode,
+  })
+  pictures.dispose()
+  const { cast, kit } = loaded
+  const data = doc.documentElement.dataset
+  data.quality = level.id
+  data.assets = loaded.assets.id
+  // Why the level is what it is, and what is plain or missing in it.
+  data.qualityWhy = [resolved.why, ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
+  data.cast = cast ? "ok" : "failed"
+  data.kit = kit ? "ok" : "failed"
+
   const logo = parseLogo()
   const town = createTown()
-  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader")
+  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
+  // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
+  if (deps.shot !== undefined)
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
   let eye: [number, number, number] | undefined
   let look: [number, number, number] = [0, 1.4, 0]
-  let locked = false
   let dragging = false
   let running = true
+  /** The GPU is being timed: the loop draws nothing until it is done, so that the frames counted are the only ones. */
+  let benching = false
   let moved = false
   let wasMoving = false
   let sentAt = 0
   let clock = 0
   let last = 0
-  let lastDraw = 0
+  let nextDraw = 0
   let lastActivity = win.performance.now()
   let mode: DrawMode = "moving"
   let handle: number | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let sized = false
+  const movingInterval = movingIntervalMs(level)
   let boxes: Box[] = [PROJECTOR]
   let boxesStale = true
   let hintPane: string | undefined
@@ -153,7 +206,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const resize = () => {
     const w = Math.max(1, stage.clientWidth)
     const h = Math.max(1, stage.clientHeight)
-    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, 2))
+    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, level.pixelRatio))
     renderer.setSize(w, h, false)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
@@ -173,9 +226,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const rayAt = (clientX: number, clientY: number): Ray => {
     const rect = canvas.getBoundingClientRect()
-    // While the mouse is captured the crosshair is the centre of the view.
-    if (locked) pointer.set(0, 0)
-    else pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1))
+    pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1))
     raycaster.setFromCamera(pointer, camera as never)
     const { origin, direction } = raycaster.ray
     return { ox: origin.x, oy: origin.y, oz: origin.z, dx: direction.x, dy: direction.y, dz: direction.z }
@@ -189,7 +240,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   function frame(ts: number) {
     handle = undefined
-    if (!running) return
+    if (!running || benching) return
     const dt = last === 0 ? 0.016 : Math.min(0.1, (ts - last) / 1000)
     last = ts
     clock += dt
@@ -242,9 +293,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     // Immobile: nothing to draw until an event wakes the loop; the last picture stays on the screen.
     if (mode === "immobile") return
-    if (mode === "moving" || ts - lastDraw >= STILL_INTERVAL_MS - 2) {
+    // Moving draws at the level's frame rate (Bassa 30, Media and Alta 60, never more); standing, 15.
+    const paced = pace(ts, nextDraw, mode === "moving" ? movingInterval : STILL_INTERVAL_MS)
+    nextDraw = paced.next
+    if (paced.draw) {
       renderer.render(view.scene, camera)
-      lastDraw = ts
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
@@ -309,25 +362,21 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       wake()
       return
     }
+    // The camera turns by dragging, as in The Sims: WebView2 gives a frame no pointer lock.
     dragging = true
-    // Without the lock (a frame that may not have it) dragging still turns the camera.
-    try {
-      const asked = canvas.requestPointerLock() as unknown as Promise<void> | undefined
-      asked?.catch?.(() => {})
-    } catch {
-      /* dragging is the fallback */
-    }
     wake()
   }
   const onPointerUp = () => {
     dragging = false
   }
+  // On the window, so that a drag goes on when the mouse leaves the canvas; the pointer over the canvas alone is a hover.
   const onPointerMove = (event: PointerEvent) => {
-    if (locked || dragging) {
+    if (dragging) {
       orbit = lookAround(orbit, event.movementX, event.movementY)
       wake()
       return
     }
+    if (event.target !== canvas) return
     canvas.style.cursor = pickAt(event.clientX, event.clientY) ? "pointer" : "default"
     // The mouse over the world is activity: the city does not fall asleep under it.
     lastActivity = win.performance.now()
@@ -338,20 +387,14 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     orbit = zoom(orbit, event.deltaY)
     wake()
   }
-  const onLockChange = () => {
-    locked = doc.pointerLockElement === canvas
-    stage.classList.toggle("locked", locked)
-    if (locked) dragging = false
-  }
 
   win.addEventListener("keydown", onKeyDown)
   win.addEventListener("keyup", onKeyUp)
   win.addEventListener("blur", onBlur)
   canvas.addEventListener("pointerdown", onPointerDown)
   win.addEventListener("pointerup", onPointerUp)
-  canvas.addEventListener("pointermove", onPointerMove)
+  win.addEventListener("pointermove", onPointerMove)
   canvas.addEventListener("wheel", onWheel, { passive: false })
-  doc.addEventListener("pointerlockchange", onLockChange)
 
   town.sync(deps.picture())
   resize()
@@ -386,11 +429,25 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       eye = undefined
       wake()
     },
-    captured: () => locked,
-    releaseCapture() {
-      if (doc.pointerLockElement) doc.exitPointerLock()
+    info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined, kit: kit !== undefined }),
+    async bench(frames = 240) {
+      if (benching) throw new Error("il banco è già in corso")
+      benching = true
+      if (handle !== undefined) win.cancelAnimationFrame(handle)
+      if (timer !== undefined) clearTimeout(timer)
+      handle = undefined
+      timer = undefined
+      // Into a target for WebGPU: the canvas would hold each frame for the display (see `benchDraw`).
+      const target = benchDraw(renderer, backend, view.scene, camera, () => new RenderTarget(canvas.width, canvas.height, { samples: 4 }))
+      try {
+        return await measureGpu(renderer, backend, target.draw, frames)
+      } finally {
+        target.dispose()
+        benching = false
+        last = 0
+        wake()
+      }
     },
-    info: () => ({ backend, mode: deps.mode }),
     dispose() {
       running = false
       if (handle !== undefined) win.cancelAnimationFrame(handle)
@@ -400,9 +457,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       win.removeEventListener("keyup", onKeyUp)
       win.removeEventListener("blur", onBlur)
       win.removeEventListener("pointerup", onPointerUp)
-      doc.removeEventListener("pointerlockchange", onLockChange)
+      win.removeEventListener("pointermove", onPointerMove)
       view.dispose()
-      renderer.dispose()
+      // Everything the scene holds goes back to the GPU now, not when the frame's process is collected.
+      disposeTree(view.scene)
+      releaseRenderer(renderer)
       canvas.remove()
     },
   }
@@ -424,11 +483,10 @@ function logoCheckHandle(deps: CityDeps, renderer: DrawingSurface, canvas: HTMLC
     pause() {},
     resume() {},
     restore() {},
-    captured: () => false,
-    releaseCapture() {},
-    info: () => ({ backend, mode: "logo-check" }),
+    info: () => ({ backend, mode: "logo-check", cast: false, kit: false }),
     dispose() {
-      renderer.dispose()
+      disposeTree(scene)
+      releaseRenderer(renderer)
       canvas.remove()
     },
   }

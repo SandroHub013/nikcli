@@ -352,6 +352,7 @@ import { createLineQueue } from "../session/line-queue"
 import type { Snapshot } from "../nikverse/protocol"
 import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
 import { forwardedCommand } from "../nikverse/chords"
+import { nikverseOpening } from "../nikverse/open"
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 import {
@@ -1820,11 +1821,16 @@ export function Workbench() {
     }))
   }
 
-  /** Opens the NikVerse panel, or focuses the one already open. */
-  const openNikversePane = () => {
-    const existing = wb().panes.find((pane) => pane.mode === "nikverse")
-    if (existing) {
-      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
+  /**
+   * Opens the NikVerse panel, or takes the user to the one already open: it lives in the project it was opened
+   * in, and focusing a panel of another project showed nothing.
+   */
+  const openNikversePane = async () => {
+    const opening = nikverseOpening(wb().panes, project()?.root, pathEquals)
+    if (opening.kind === "focus") {
+      if (opening.switchTo) await switchProjectTo(opening.switchTo)
+      setStarting(false)
+      setWb((w) => ({ ...w, view: "code", focusedId: opening.id }))
       return
     }
     setWb((w) => ({
@@ -6281,7 +6287,7 @@ export function Workbench() {
     } else if (id === "design.pane") {
       openDesignPane()
     } else if (id === "nikverse.pane") {
-      openNikversePane()
+      void openNikversePane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")

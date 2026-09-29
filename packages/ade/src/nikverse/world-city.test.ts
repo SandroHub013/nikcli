@@ -45,23 +45,19 @@ function page(search = "") {
   const offer = () => listeners.get("message")?.({ source: parent, data: { type: PORT_OFFER, version: 1 }, ports: [port] })
   const fromAde = (data: unknown) => port.onmessage?.({ data })
   const key = (init: Record<string, unknown>) => listeners.get("keydown")?.({ preventDefault() {}, ...init })
-  return { win, offer, fromAde, key, seen }
+  const hide = () => listeners.get("pagehide")?.({})
+  return { win, offer, fromAde, key, hide, seen }
 }
 
 /** A city that records what the page asks of it. */
 function fakeCity() {
   const calls: string[] = []
   const started: Array<Record<string, unknown>> = []
-  let captured = false
   const handle = {
     sync: () => void calls.push("sync"),
     pause: () => void calls.push("pause"),
     resume: () => void calls.push("resume"),
-    captured: () => captured,
-    releaseCapture: () => {
-      calls.push("release")
-      captured = false
-    },
+    dispose: () => void calls.push("dispose"),
   }
   const module = {
     startCity: (deps: Record<string, unknown>) => {
@@ -69,7 +65,7 @@ function fakeCity() {
       return Promise.resolve(handle)
     },
   }
-  return { module, started, calls, capture: () => (captured = true) }
+  return { module, started, calls }
 }
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -85,11 +81,16 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the query options are ?check=logo and ?renderer=classic, and nothing else: WebGPURenderer's WebGL backend cannot be asked for", () => {
-    expect(readOptions("")).toEqual({ check: false, classic: false })
-    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false })
-    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true })
+    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined, shot: undefined })
+    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined })
+    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined })
+    expect(readOptions("?quality=alta").quality).toBe("alta")
+    expect(readOptions("?x=1").quality).toBeUndefined()
+    // ?shot=1..8 is the bench; anything else is no shot.
+    expect(readOptions("?shot=4&quality=media")).toEqual({ check: false, classic: false, quality: "media", shot: 4 })
+    for (const bad of ["?shot=0", "?shot=9", "?shot=2.5", "?shot=x", "?shot="]) expect(readOptions(bad).shot).toBeUndefined()
     for (const other of ["?check=other&renderer=webgpu", "?renderer=webgl", "?forceWebGL=1"])
-      expect(readOptions(other)).toEqual({ check: false, classic: false })
+      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined, shot: undefined })
     const source = readFileSync(join(import.meta.dir, "world", "world.js"), "utf8")
     expect(source).not.toMatch(/forceWebGL/)
   })
@@ -131,6 +132,34 @@ describe("the 3D city the page starts", () => {
     expect(two.started[0]).toMatchObject({ mode: "city", classic: true })
   })
 
+  test("?shot=N hands the bench's shot to the city, and no shot when the number is not one", async () => {
+    const one = fakeCity()
+    boot(page("?shot=3&quality=media").win, { loadCity: async () => one.module })
+    await settled()
+    expect(one.started[0]).toMatchObject({ mode: "city", shot: 3, quality: "media" })
+    const two = fakeCity()
+    boot(page("?shot=12").win, { loadCity: async () => two.module })
+    await settled()
+    expect((two.started[0] as { shot?: number }).shot).toBeUndefined()
+  })
+
+  test("the GPU timing of the world's own drawing is on the window for the gate: it asks the city, and says so when there is none", async () => {
+    const { win } = page()
+    const timing = { frames: 2, mean: 1, p50: 1, p95: 2, max: 2, sync: "queue", timestampQuery: false }
+    const asked: unknown[] = []
+    const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, bench: async (frames?: number) => (asked.push(frames), timing) }
+    boot(win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    const bench = (win as unknown as { __nikverseBench(frames?: number): Promise<unknown> }).__nikverseBench
+    expect(await bench(120)).toEqual(timing)
+    expect(asked).toEqual([120])
+    // A city without a bench (the logo check's) refuses, it does not answer with nothing.
+    const bare = page()
+    boot(bare.win, { loadCity: async () => ({ startCity: async () => ({ sync() {}, pause() {}, resume() {}, dispose() {} }) }) })
+    await settled()
+    await expect((bare.win as unknown as { __nikverseBench(): Promise<unknown> }).__nikverseBench()).rejects.toThrow("no bench")
+  })
+
   test("ADE keeps where the character stands: the world sends its position, and takes it back when it is up again", async () => {
     const { win, offer, fromAde, seen } = page()
     const city = fakeCity()
@@ -141,8 +170,6 @@ describe("the 3D city the page starts", () => {
         sync() {},
         pause() {},
         resume() {},
-        captured: () => false,
-        releaseCapture() {},
         restore: (spot: unknown) => void restored.push(spot),
       })
     }
@@ -191,18 +218,26 @@ describe("the 3D city the page starts", () => {
     expect(city.calls[0]).toBe("pause")
   })
 
-  test("Esc lets go of a captured mouse first, then gives the focus back to ADE", async () => {
+  test("Esc gives the focus back to ADE: there is no captured mouse to let go of first", async () => {
     const { win, offer, key, seen } = page()
     const city = fakeCity()
     boot(win, { loadCity: async () => city.module })
     await settled()
     offer()
-    city.capture()
-    key({ key: "Escape" })
-    expect(city.calls).toContain("release")
-    expect(seen.filter((m) => (m as { type: string }).type === "command")).toEqual([])
     key({ key: "Escape" })
     expect(seen).toContainEqual({ type: "command", command: { cmd: "release-focus" } })
+    expect(city.calls).not.toContain("release")
+  })
+
+  test("the frame going away disposes the city, once: the GPU's memory goes back now and not when the process is collected", async () => {
+    const { win, offer, hide } = page()
+    const city = fakeCity()
+    boot(win, { loadCity: async () => city.module })
+    await settled()
+    offer()
+    hide()
+    hide()
+    expect(city.calls.filter((call) => call === "dispose")).toHaveLength(1)
   })
 
   test("without the city (not built, or the renderer cannot start) the page works as the list, and says why", async () => {

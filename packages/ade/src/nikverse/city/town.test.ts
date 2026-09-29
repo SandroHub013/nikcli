@@ -145,13 +145,13 @@ describe("who sits where", () => {
     expect(desk("p4")).toEqual({ kind: "desk", desk: 1 })
   })
 
-  test("beyond eight desks the rest stand, each in a place of their own", () => {
+  test("beyond the shop's desks the rest stand, each in a place of their own", () => {
     const town = createTown()
     const many = Array.from({ length: 11 }, (_, i) => agent(`p${i}`, "a"))
     town.sync(picture([shop("a", 0)], many))
     const seats = town.agents().map((a) => a.seat)
     expect(seats.filter((s) => s.kind === "desk")).toHaveLength(DESKS_PER_SHOP)
-    expect(seats.filter((s) => s.kind === "stand").map((s) => (s as { index: number }).index)).toEqual([0, 1, 2])
+    expect(seats.filter((s) => s.kind === "stand").map((s) => (s as { index: number }).index)).toEqual(Array.from({ length: 11 - DESKS_PER_SHOP }, (_, i) => i))
   })
 
   test("a shop draws as many desks as it needs, at least two, at most eight", () => {
