@@ -39,6 +39,8 @@ const arg = (name: string) => {
 }
 const flag = (name: string) => process.argv.includes(name)
 const CYCLES = Number(arg("--cycles") ?? 3)
+/** For measuring an option of the renderer: `--tune "samples=1&maxscale=0.9"` reaches the world through the pane and the shot pages (`CityDeps.tune`). */
+const TUNE = arg("--tune")
 const REST_S = Number(arg("--rest") ?? 30)
 const CAP_S = Number(arg("--cap") ?? 600)
 const OUT = arg("--out")
@@ -210,6 +212,7 @@ async function frameSession() {
 }
 async function openWorldOnce() {
   showWindow()
+  await ev(page, `window.__nikverseTune = ${JSON.stringify(TUNE ?? "")}`)
   await ev(page, `document.querySelector('button[aria-label="Nuovo pannello"]')?.click()`)
   await sleep(600)
   await ev(
@@ -526,6 +529,7 @@ try {
         "--no-clip",
         "--label",
         "gate",
+        ...(TUNE ? ["--tune", TUNE] : []),
         "--out",
         join(root, ".ade-test", "gate-bench"),
       ],
@@ -583,6 +587,7 @@ try {
       stillCpuPercentMedian: median(rows.map((r) => r.still.frameCpu + r.still.gpuCpu)),
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
       level,
+      tune: TUNE ?? null,
       gpuTimings: timings,
       // The worst shot the ceiling was held to, and where the bench came from.
       worstShot: { ...worst, level: benchLevel, bench: benchFile },
