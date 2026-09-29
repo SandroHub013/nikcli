@@ -230,7 +230,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
   // With the file's city the far towers fade into the haze at the foot of its sky dome, which is this colour.
-  scene.fog = kit ? new Fog(0x262438, 60, 300) : new Fog(0x0b1226, 70, 210)
+  scene.fog = kit ? new Fog(0x211f31, 60, 300) : new Fog(0x0b1226, 70, 210)
 
   scene.add(new HemisphereLight(0xb4c6ff, 0x3a2e24, 1.6))
   scene.add(new AmbientLight(0x505878, 0.9))

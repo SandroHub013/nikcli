@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync, statSync } from "node:fs"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { LEVELS_DIR, presentLevels } from "./test-cast"
 import { characterTriangles, imageSizes, nodeNamed, readGlb, subtree, trianglesOf, wearsAccessories, type Glb } from "./glb"
 import { ktx2Format, ktx2GpuBytes, ktx2Size } from "./ktx2-header"
 import { CLIP_NAME, BODIES, ROLES } from "./rig"
 import { LEVEL_IDS } from "./quality"
-import { LIGHTMAP_SIZE } from "./kit"
 
 /**
  * The generator's ceilings (`config.json` of N3, copied next to the assets as `budget.json`) against the files
@@ -28,6 +27,7 @@ interface Budget {
     shop_tris: number
     plaza_tris: number
     desk_tris: number
+    surroundings_tris: number
   }
   cast: { user: string; agents: string[] }
 }
@@ -38,7 +38,18 @@ const levelFile = (level: string, name: string) => join(LEVELS_DIR, level, name)
 const glbOf = (path: string): Glb => readGlb(new Uint8Array(readFileSync(path)))
 const character = (level: string, body: string) => glbOf(levelFile(level, `character_${body}.glb`))
 const city = (level: string) => glbOf(levelFile(level, "city.glb"))
-const lightmaps = (level: string) => ["plaza_ground", "shop_floor"].map((name) => levelFile(level, `lightmap/${name}_${LIGHTMAP_SIZE[level]}.ktx2`))
+/** The lightmaps of a level: every file of its folder (the city names them, `kit.test.ts` holds the two to each other). */
+const lightmaps = (level: string) => readdirSync(levelFile(level, "lightmap")).map((name) => levelFile(level, `lightmap/${name}`))
+/** The size of a level's package on disk: characters, city, lightmaps, and the animations shared by all. */
+const packBytes = (level: string) =>
+  BODIES.reduce((sum, body) => sum + statSync(levelFile(level, `character_${body}.glb`)).size, 0) +
+  statSync(levelFile(level, "city.glb")).size +
+  lightmaps(level).reduce((sum, file) => sum + statSync(file).size, 0) +
+  statSync(join(LEVELS_DIR, "rig_animations.glb")).size
+/** The shops a city file has: `shop0_`, `shop1_`... (the prefixes of its nodes). */
+const shopPrefixes = (glb: Glb): string[] => [
+  ...new Set((glb.json.nodes ?? []).flatMap((node) => /^shop\d*_/.exec(node.name ?? "")?.[0] ?? [])),
+]
 
 /** The picture files inside a glb, as bytes: the KTX2 the extension carries. */
 const picturesOf = (glb: Glb): Uint8Array[] =>
@@ -58,7 +69,11 @@ describe("the shipped assets against the generator's ceilings", () => {
     expect(Object.keys(budget.levels).sort()).toEqual([...LEVEL_IDS].sort())
     expect(budget.cast.agents).toHaveLength(3)
     expect(BODIES).toHaveLength(1 + budget.cast.agents.length)
-    for (const level of LEVEL_IDS) expect(LIGHTMAP_SIZE[level]).toBe(budget.levels[level].lightmap)
+  })
+
+  test("Bassa and Media together, as the installer carries them, weigh less than their ceiling", () => {
+    const bytes = packBytes("bassa") + packBytes("media") - statSync(join(LEVELS_DIR, "rig_animations.glb")).size
+    expect(bytes).toBeLessThan(budget.budget.asset_bassa_media_mb * MB)
   })
 
   test("the animations are one file for every body: the clips the world plays, on a skeleton the bodies share", () => {
@@ -83,11 +98,7 @@ describe("the shipped assets against the generator's ceilings", () => {
       const run = skip ? test.skip : test
 
       run("the pack (characters, city, lightmaps, and the animations shared by all) weighs less than the ceiling for a level", () => {
-        const bytes =
-          BODIES.reduce((sum, body) => sum + statSync(levelFile(level, `character_${body}.glb`)).size, 0) +
-          statSync(levelFile(level, "city.glb")).size +
-          lightmaps(level).reduce((sum, file) => sum + statSync(file).size, 0) +
-          statSync(join(LEVELS_DIR, "rig_animations.glb")).size
+        const bytes = packBytes(level)
         // The ceiling is for Bassa and Media together in the installer's words, but each alone is held to it: Alta's is a separate download, with a ceiling of its own.
         expect(bytes).toBeLessThan((level === "alta" ? budget.budget.alta_download_mb : budget.budget.asset_bassa_media_mb) * MB)
       })
@@ -104,12 +115,19 @@ describe("the shipped assets against the generator's ceilings", () => {
         }
       })
 
-      run("the shop, the desks and the plaza are within their ceilings", () => {
+      run("each shop, its desks, the plaza and the surroundings are within their ceilings", () => {
         const glb = city(level)
-        expect(trianglesNamed(glb, "shop_")).toBeLessThanOrEqual(budget.budget.shop_tris)
-        expect(trianglesNamed(glb, "shop_desk") + trianglesNamed(glb, "shop_chair") + trianglesNamed(glb, "shop_props")).toBeLessThanOrEqual(budget.budget.desk_tris)
-        expect(trianglesNamed(glb, "plaza_") + trianglesNamed(glb, "streetlight")).toBeLessThanOrEqual(budget.budget.plaza_tris)
-        expect(trianglesNamed(glb, "shop_")).toBeGreaterThan(100)
+        const shops = shopPrefixes(glb)
+        expect(shops.length).toBeGreaterThan(0)
+        for (const shop of shops) {
+          const tris = trianglesNamed(glb, shop)
+          expect([shop, tris, tris > 100 && tris <= budget.budget.shop_tris]).toEqual([shop, tris, true])
+          // The desk's own pieces (frame, chair base, keyboard) are in the desk's, the chair's and the monitors' meshes.
+          const desks = trianglesNamed(glb, `${shop}desk`) + trianglesNamed(glb, `${shop}chair`) + trianglesNamed(glb, `${shop}props`)
+          expect([shop, desks, desks <= budget.budget.desk_tris]).toEqual([shop, desks, true])
+        }
+        expect(trianglesNamed(glb, "plaza_")).toBeLessThanOrEqual(budget.budget.plaza_tris)
+        expect(trianglesNamed(glb, "env_")).toBeLessThanOrEqual(budget.budget.surroundings_tris)
       })
 
       // The pictures are KTX2 in the GPU's own block format (BC1/BC5), which the GPU holds as they are: what it holds for them

@@ -23,7 +23,7 @@ export interface GltfJson {
   extensionsUsed?: string[]
   extensionsRequired?: string[]
   scenes?: Array<{ nodes?: number[] }>
-  nodes?: Array<{ name?: string; mesh?: number; skin?: number; children?: number[]; translation?: number[] }>
+  nodes?: Array<{ name?: string; mesh?: number; skin?: number; children?: number[]; translation?: number[]; extras?: Record<string, unknown> }>
   meshes?: Array<{ name?: string; primitives: Array<{ indices?: number; attributes: Record<string, number>; material?: number }> }>
   accessors?: Array<{ count: number }>
   buffers?: Array<{ byteLength: number }>
