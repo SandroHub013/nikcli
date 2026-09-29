@@ -200,6 +200,11 @@ describe("the workbench and the pane", () => {
     expect(handler).toContain("host.designSheetPath(message.path, cwd)")
     expect(handler).toContain("sheetPaneFor(wb().panes, file)")
     expect(handler).toContain("!running.has(from.id)")
+    // Born with its sheet: a sheet added after the first render found the pane already refusing its address.
+    expect(handler).toContain("openOwnedBrowser(sheetUrl(file), { id: from.id, title: from.title }, false, sheet)")
+    expect(workbench).toContain("...(sheet ? { designSheet: sheet } : {}),")
+    // Sent again without --title, the sheet keeps the title it was given.
+    expect(handler).toContain("sheetTitle(message.title) ?? shown?.designSheet?.title")
   })
 
   test("lint: the sheets' reload rides the registers' pass", () => {

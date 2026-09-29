@@ -936,10 +936,17 @@ export function Workbench() {
       .panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId)
       .at(-1)
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
-  const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
+  /** `sheet`: a design sheet's pane is born with it, or its first load refuses the `ade-media` address. */
+  const openOwnedBrowser = (
+    url: string,
+    owner: { id: string; title: string },
+    focus: boolean,
+    sheet?: PaneSheet,
+  ): Pane => {
     const pane: Pane = {
       id: newPaneId("b"),
-      title: "Browser",
+      title: sheet ? sheetLabel(sheet) : "Browser",
+      ...(sheet ? { designSheet: sheet } : {}),
       status: "working",
       model: "—",
       mode: "browser",
@@ -4052,17 +4059,17 @@ export function Workbench() {
         await answer(`errore: ${typeof err === "string" ? err : err instanceof Error ? err.message : String(err)}`)
         return true
       }
-      const title = sheetTitle(message.title)
-      const sheet: PaneSheet = { file, from: from.id, ...(title ? { title } : {}) }
       const shown = sheetPaneFor(wb().panes, file)
+      // The same sheet sent again without --title keeps the one it was given.
+      const title = sheetTitle(message.title) ?? shown?.designSheet?.title
+      const sheet: PaneSheet = { file, from: from.id, ...(title ? { title } : {}) }
       if (shown) {
         setWb((w) => updatePane(w, shown.id, { designSheet: sheet, title: sheetLabel(sheet) }))
         browserControllers.get(shown.id)?.reload()
         await answer(`ok: ricaricato il foglio già aperto: ${sheetLabel(sheet)}`)
         return true
       }
-      const pane = openOwnedBrowser(sheetUrl(file), { id: from.id, title: from.title }, false)
-      setWb((w) => updatePane(w, pane.id, { designSheet: sheet, title: sheetLabel(sheet) }))
+      openOwnedBrowser(sheetUrl(file), { id: from.id, title: from.title }, false, sheet)
       await answer(`ok: aperto accanto a te: ${sheetLabel(sheet)}`)
       return true
     }
