@@ -266,7 +266,7 @@ export const en: Messages = {
   "agent.mic.stop": "Turn off microphone",
   "agent.settings": "Settings",
   "agent.noPlanner":
-    "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
+    "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
   "agent.onboarding.title": "Before speaking to nik",
   "agent.onboarding.subtitle":
     "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",
@@ -1817,6 +1817,8 @@ export const en: Messages = {
   "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
   "bots.serve.noModel": (model) =>
     `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
+  "bots.serve.noFreeModel":
+    "None of the free models this turn may use is in the nikcli server's catalog: the turn did not start.",
   "bots.serve.effortNoModel": (effort) =>
     `The effort «${effort}» applies to a chosen model: this bot uses nikcli's default model, and this turn uses the default effort. Choose a model in the bot's settings.`,
   "bots.serve.effortDropped": (effort, model, variants) =>

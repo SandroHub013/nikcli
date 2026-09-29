@@ -105,10 +105,122 @@ async function settle() {
 }
 
 describe("il pianificatore dentro il motore", () => {
-  test("un agente che non può rispondere lascia la frase al pianificatore, e il problema resta scritto", async () => {
+  test("il pianificatore viene prima dell'agente: se il piano basta, l'agente non parte", async () => {
     const { engine, host, transcriber, speaker, prompts } = setup(
       JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
     )
+    let asked = 0
+    ;(host as VoiceHost).askAgent = async () => {
+      asked++
+      return { ok: true, text: "no" }
+    }
+
+    await engine.start()
+    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    await settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(asked).toBe(0)
+    expect(host.started).toHaveLength(1)
+    expect(speaker.lastSpoken).toBe("Ho avviato una sessione Claude Code.")
+    await engine.stop()
+  })
+
+  test("una risposta vuota del pianificatore passa la frase all'agente, che sa fare quello che lui no", async () => {
+    const { engine, host, transcriber, speaker, prompts } = setup('{"speech":"","steps":[]}')
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Ho chiesto a Dario: sta rifacendo i test." }
+    }
+
+    await engine.start()
+    transcriber.emit("chiedi a Dario a che punto è con i test e dimmelo", true)
+    await settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(asked).toEqual(["chiedi a Dario a che punto è con i test e dimmelo"])
+    expect(speaker.lastSpoken).toContain("Dario")
+    await engine.stop()
+  })
+
+  test("«ci penso» con agent:true si sente subito e la frase va comunque all'agente", async () => {
+    const { engine, host, transcriber, speaker } = setup('{"speech":"Ci penso.","steps":[],"agent":true}')
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Il parser è a posto." }
+    }
+
+    await engine.start()
+    transcriber.emit("controlla nel repo se il parser gestisce gli errori", true)
+    await settle()
+
+    expect(asked).toEqual(["controlla nel repo se il parser gestisce gli errori"])
+    expect(speaker.spoken.some((line: string) => line.includes("Ci penso"))).toBe(true)
+    expect(host.started).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("un pianificatore che fallisce (timeout, modello sparito, account limitato) passa la frase all'agente", async () => {
+    const { engine, host, transcriber } = setup(() =>
+      Promise.reject(new Error("Non riesco a pianificare: tempo scaduto.")),
+    )
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Fatto, ho controllato." }
+    }
+
+    await engine.start()
+    transcriber.emit("controlla nel repo se il parser gestisce gli errori", true)
+    await settle()
+
+    expect(asked).toEqual(["controlla nel repo se il parser gestisce gli errori"])
+    expect(
+      engine.history().some((entry) => entry.kind === "error" && entry.text.includes("Non riesco a pianificare")),
+    ).toBe(false)
+    await engine.stop()
+  })
+
+  test("se falliscono il pianificatore e l'agente, l'utente sente il problema del pianificatore", async () => {
+    const { engine, host, transcriber, speaker } = setup(() =>
+      Promise.reject(new Error("Non riesco a pianificare: tempo scaduto.")),
+    )
+    ;(host as VoiceHost).askAgent = async () => ({
+      ok: false,
+      text: "Per rispondere mi serve Claude Code.",
+      ran: false,
+    })
+
+    await engine.start()
+    transcriber.emit("controlla nel repo se il parser gestisce gli errori", true)
+    await settle()
+
+    expect(speaker.lastSpoken).toContain("Non riesco a pianificare")
+    await engine.stop()
+  })
+
+  test("all'agente arriva la frase già detta dal pianificatore: non deve ripeterla", async () => {
+    const { engine, host, transcriber } = setup('{"speech":"Controllo il log git.","steps":[],"agent":true}')
+    const seen: { text: string; alreadySaid?: string }[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      seen.push({ text: request.text, alreadySaid: request.alreadySaid })
+      return { ok: true, text: "Fatto." }
+    }
+
+    await engine.start()
+    transcriber.emit("chi ha scritto l'ultimo commit di questo progetto", true)
+    await settle()
+
+    expect(seen).toEqual([
+      { text: "chi ha scritto l'ultimo commit di questo progetto", alreadySaid: "Controllo il log git." },
+    ])
+    await engine.stop()
+  })
+
+  test("un agente che non può rispondere, dopo un piano vuoto, lascia il problema scritto", async () => {
+    const { engine, host, transcriber, prompts } = setup("[]")
     ;(host as VoiceHost).askAgent = async () => ({
       ok: false,
       text: "Per rispondere mi serve Claude Code o Codex.",
@@ -116,22 +228,18 @@ describe("il pianificatore dentro il motore", () => {
     })
 
     await engine.start()
-    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    transcriber.emit("fai una cosa complicatissima con i pannelli", true)
     await settle()
 
     expect(prompts).toHaveLength(1)
-    expect(host.started).toHaveLength(1)
-    expect(speaker.lastSpoken).toBe("Ho avviato una sessione Claude Code.")
     expect(
       engine.history().some((entry) => entry.kind === "error" && entry.text.includes("mi serve Claude Code")),
     ).toBe(true)
     await engine.stop()
   })
 
-  test("un turno che è partito e poi fallisce non passa la frase al pianificatore: niente sessioni doppie", async () => {
-    const { engine, host, transcriber, prompts } = setup(
-      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
-    )
+  test("un turno dell'agente che è partito e poi fallisce non rifà il piano: niente sessioni doppie", async () => {
+    const { engine, host, transcriber, prompts } = setup("[]")
     ;(host as VoiceHost).askAgent = async () => {
       // The turn opened the session itself, then its CLI timed out.
       host.started.push({ agent: "claude" })
@@ -142,11 +250,51 @@ describe("il pianificatore dentro il motore", () => {
     transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
     await settle()
 
-    expect(prompts).toHaveLength(0)
+    // Il pianificatore ha risposto vuoto una volta, prima dell'agente; dopo non viene richiamato.
+    expect(prompts).toHaveLength(1)
     expect(host.started).toHaveLength(1)
     expect(
       engine.history().some((entry) => entry.kind === "error" && entry.text.includes("non ha risposto in tempo")),
     ).toBe(true)
+    await engine.stop()
+  })
+
+  test("la risposta parlata si sente man mano che arriva, una volta sola, e il piano parte lo stesso", async () => {
+    const host = new PlanningHost()
+    const transcriber = createFakeTranscriber()
+    const speaker = createFakeSpeaker()
+    const answer =
+      '{"speech":"Avvio subito Claude sul parser. Ti dico quando ha finito.","steps":[{"action":"start_session","agent":"claude","task":"il parser","project":"nikcli"}]}'
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker,
+      now: () => 10_000,
+      plan: async ({ onText }: { onText?: (soFar: string) => void }) => {
+        // La risposta arriva a pezzi: la prima frase è finita prima che il JSON lo sia.
+        onText?.('{"speech":"Avvio subito')
+        onText?.('{"speech":"Avvio subito Claude sul parser. Ti dico')
+        onText?.('{"speech":"Avvio subito Claude sul parser. Ti dico quando ha finito.","steps":[')
+        return answer
+      },
+      settings: { activation: "toggle" },
+    } as never)
+
+    await engine.start()
+    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    await settle()
+
+    expect(host.started).toHaveLength(1)
+    // Detto per intero, in pezzi che rimessi insieme sono la frase: né mancano parole né si ripetono.
+    expect(speaker.spoken.join(" ")).toBe("Avvio subito Claude sul parser. Ti dico quando ha finito.")
+    expect(speaker.spoken.length).toBeGreaterThan(1)
+    // Il registro della conversazione ha la frase una volta, intera.
+    const said = engine.history().filter((entry) => entry.kind === "assistant")
+    expect(said.map((entry) => ("text" in entry ? entry.text : ""))).toEqual([
+      "Avvio subito Claude sul parser. Ti dico quando ha finito.",
+    ])
+    // E non viene ridetta con «Ho avviato…» sopra.
+    expect(speaker.spoken.join(" ")).not.toContain("Ho avviato")
     await engine.stop()
   })
 
@@ -270,7 +418,7 @@ describe("il pianificatore dentro il motore", () => {
     await engine.stop()
   })
 
-  test("il modello riceve gli agenti e i progetti veri di questa macchina", async () => {
+  test("il modello riceve gli agenti e i progetti veri di questa macchina, con le regole a parte", async () => {
     const { engine, transcriber, prompts } = setup("[]")
 
     await engine.start()
@@ -278,10 +426,71 @@ describe("il pianificatore dentro il motore", () => {
     await settle()
 
     expect(prompts).toHaveLength(1)
-    expect(prompts[0].system).toContain("claude-code")
-    expect(prompts[0].system).toContain("nikcli")
-    expect(prompts[0].user).toBe("fai una cosa complicatissima con i pannelli")
+    expect(prompts[0].user).toContain("claude-code")
+    expect(prompts[0].user).toContain("nikcli")
+    expect(prompts[0].user.endsWith("Frase dell'utente: fai una cosa complicatissima con i pannelli")).toBe(true)
+    // Le regole non portano niente di questa macchina: uguali a ogni frase.
+    expect(prompts[0].system).not.toContain("claude-code")
 
+    await engine.stop()
+  })
+
+  test("i pannelli aperti arrivano al modello con titolo, agente e stato: «manda a Mimo» si risolve", async () => {
+    const { engine, host, transcriber, prompts } = setup("[]")
+    host.panes.push(
+      {
+        id: "a",
+        title: "Dario",
+        status: "working",
+        index: 1,
+        hasLiveProcess: true,
+        isBrowser: false,
+        isFile: false,
+        agent: "claude-code",
+      },
+      {
+        id: "b",
+        title: "Mimo",
+        status: "waiting",
+        index: 2,
+        hasLiveProcess: true,
+        isBrowser: false,
+        isFile: false,
+        agent: "opencode",
+      },
+    )
+
+    await engine.start()
+    transcriber.emit("manda a Mimo di rifare tutti i test dall'inizio", true)
+    await settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0].user).toContain("1 · Dario · claude-code · al lavoro")
+    expect(prompts[0].user).toContain("2 · Mimo · opencode · in attesa di una risposta dell'utente")
+    await engine.stop()
+  })
+
+  test("«manda a Mimo: fai i test» con il numero del pannello giusto invia il messaggio a Mimo, dopo il sì", async () => {
+    const { engine, host, transcriber } = setup(
+      JSON.stringify({
+        speech: "Scrivo a Mimo.",
+        steps: [{ action: "send_prompt", paneIndex: 2, text: "fai i test" }],
+      }),
+    )
+    host.panes.push(
+      { id: "a", title: "Dario", status: "working", index: 1, hasLiveProcess: true, isBrowser: false, isFile: false },
+      { id: "b", title: "Mimo", status: "idle", index: 2, hasLiveProcess: true, isBrowser: false, isFile: false },
+    )
+
+    await engine.start()
+    transcriber.emit("manda a Mimo di fare i test", true)
+    await settle()
+    // Un messaggio a un agente aspetta un sì: è l'unico tasto che nessuno vede prima che parta.
+    expect(host.sent).toEqual([])
+    transcriber.emit("sì", true)
+    await settle()
+
+    expect(host.sent).toEqual([{ paneId: "b", text: "fai i test" }])
     await engine.stop()
   })
 

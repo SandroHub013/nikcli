@@ -66,7 +66,7 @@ const BLOCKED = [
   "diskpart",
 ]
 const EVERYDAY = ["git status", "ls -la", "bun test", "npm run build"]
-const PROFILES: BotProfile[] = ["ask", "ask-outside", "no-shell", "read-only", "remote-ask", "remote-none"]
+const PROFILES: BotProfile[] = ["ask", "ask-outside", "no-shell", "read-only", "remote-ask", "remote-none", "planner"]
 
 describe("B8d: the rules of a bot's session", () => {
   test("the block list is denied where the shell asks, whatever the bot's file grants", () => {
@@ -101,6 +101,7 @@ describe("B8d: the rules of a bot's session", () => {
       "read-only": ["deny", "deny", "deny"],
       "remote-ask": ["ask", "deny", "deny"],
       "remote-none": ["ask", "deny", "deny"],
+      planner: ["deny", "deny", "deny"],
     }
     for (const profile of PROFILES) {
       const got = ["external_directory", "computer", "browser_control"].map((tool) =>
@@ -158,7 +159,7 @@ describe("B8d: the rules of a bot's session", () => {
       for (const path of CONFIG)
         expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, "deny"])
       // The rest of the project is as the profile had it: open, or closed to a routine.
-      const open = profile === "read-only" ? "deny" : "allow"
+      const open = profile === "read-only" || profile === "planner" ? "deny" : "allow"
       for (const path of PROJECT)
         expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, open])
     }
@@ -288,5 +289,18 @@ describe("the block list is the same in nikcli", () => {
   test("every sample is blocked by ADE too, for the same rule", () => {
     for (const [rule, command] of SAMPLES)
       expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
+  })
+})
+
+describe("the planner's profile: a session with no tool at all", () => {
+  test("a turn with no tools gets it, before any other profile", () => {
+    expect(profileFor({ shell: true, noTools: true })).toBe("planner")
+    expect(profileFor({ shell: false, noTools: true, approvals: true })).toBe("planner")
+  })
+
+  test("every tool is denied: edit, write, patch, webfetch, read, a shell, a search", () => {
+    const rules = botPermission("planner" as BotProfile)
+    for (const tool of ["edit", "write", "patch", "webfetch", "websearch", "read", "grep", "glob", "bash", "task"])
+      expect([tool, decide(tool, "src/a.ts", HOSTILE, rules)]).toEqual([tool, "deny"])
   })
 })

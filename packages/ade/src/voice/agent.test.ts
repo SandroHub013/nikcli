@@ -10,9 +10,14 @@ import {
   createVoiceAgent,
   resolveVoiceAgentRunner,
   VOICE_AGENT_DISABLED_TOOLS,
+  VOICE_AGENT_FAST,
   VOICE_AGENT_INSTRUCTIONS,
   VOICE_AGENT_TIMEOUT_MS,
+  VOICE_PLAN_SESSION_PHRASES,
+  VOICE_PLAN_TIMEOUT_MS,
 } from "./agent"
+import { PLANNER_SYSTEM } from "@nikcli-ai/voice/core"
+import { isFreeModel } from "../bots/runners"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
   ({ agent: { id, label: id, command: id }, availability }) as AgentStatus
@@ -104,13 +109,14 @@ describe("voice/agent", () => {
     expect(requests[2]!.sessionId).toBe("new")
   })
 
-  test("the fast setting asks Claude Code for Sonnet 5 with little effort, and cli leaves the CLI alone", async () => {
+  test("the fast setting asks Claude Code for Sonnet 5.5 with little effort, and cli leaves the CLI alone", async () => {
     const runner = fakeRunner([{ text: "a" }, { text: "b" }, { text: "c" }])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
     await agent.ask({ text: "ciao", engine: "claude", speed: "fast" })
     await agent.ask({ text: "ciao", engine: "codex", speed: "fast" })
     await agent.ask({ text: "ciao", engine: "claude", speed: "cli" })
-    expect(runner.requests[0]).toMatchObject({ model: "claude-sonnet-5", effort: "low" })
+    expect(runner.requests[0]).toMatchObject({ model: "claude-sonnet-5-5", effort: "low" })
+    expect(VOICE_AGENT_FAST.claude).toEqual({ model: "claude-sonnet-5-5", effort: "low" })
     expect(runner.requests[1]!.model).toBeUndefined()
     expect(runner.requests[1]!.effort).toBe("low")
     expect(runner.requests[2]!.model).toBeUndefined()
@@ -500,7 +506,7 @@ describe("the warm process", () => {
     agent.prepare({ engine: "auto", speed: "fast" })
     agent.prepare({ engine: "codex", speed: "fast" })
     expect(prepared).toHaveLength(1)
-    expect(prepared[0]).toMatchObject({ runner: "claude", cwd: "C:/p", model: "claude-sonnet-5", partial: true })
+    expect(prepared[0]).toMatchObject({ runner: "claude", cwd: "C:/p", model: "claude-sonnet-5-5", partial: true })
 
     expect((await agent.ask({ text: "uno", engine: "claude", speed: "fast" })).text).toBe("caldo")
     expect((await agent.ask({ text: "due", engine: "claude", speed: "fast" })).text).toBe("caldo")
@@ -614,5 +620,194 @@ describe("the warm process", () => {
     })
     expect(warmCmd.flags).toEqual(["account-plan"])
     expect(warmCmd.secrets).toBeUndefined()
+  })
+})
+
+describe("the planner runs on the agent's own runner", () => {
+  const done = (text: string, extra: Partial<TurnResult> = {}) => ({
+    result: Promise.resolve({ status: "done", text, tokens: 0, costUsd: 0, talk: {} as never, ...extra } as TurnResult),
+    stop: () => {},
+  })
+
+  function setup(engineStatuses?: AgentStatus[]) {
+    const cold: TurnRequest[] = []
+    const planRuns: TurnRequest[] = []
+    const planPrepared: TurnRequest[] = []
+    const agentRuns: TurnRequest[] = []
+    let planForgotten = 0
+    let planClosed = 0
+    const agent = createVoiceAgent({
+      runTurn: (request) => (cold.push(request), done("freddo")),
+      warm: {
+        prepare: () => {},
+        run: (request) => (agentRuns.push(request), done("agente")),
+        forget: () => {},
+        close: () => {},
+      },
+      planWarm: {
+        prepare: (request) => void planPrepared.push(request),
+        run: (request) => (planRuns.push(request), done('{"speech":"ok","steps":[]}')),
+        forget: () => void planForgotten++,
+        close: () => void planClosed++,
+      },
+      statuses: () => engineStatuses,
+      cwd: () => "C:/p",
+    })
+    return { agent, cold, planRuns, planPrepared, agentRuns, forgotten: () => planForgotten, closed: () => planClosed }
+  }
+
+  test("Claude plans in a process of its own, not the agent's: Sonnet 5.5 low, the rules as instructions, the rest as the message", async () => {
+    const { agent, planRuns, agentRuns, cold } = setup()
+    const text = await agent.plan({ system: "REGOLE", user: "DATI e frase", engine: "claude", speed: "fast" })
+    expect(text).toBe('{"speech":"ok","steps":[]}')
+    expect(planRuns).toHaveLength(1)
+    expect(planRuns[0]).toMatchObject({
+      runner: "claude",
+      instructions: "REGOLE",
+      message: "DATI e frase",
+      model: "claude-sonnet-5-5",
+      effort: "low",
+      cwd: "C:/p",
+      partial: true,
+      lean: true,
+      timeoutMs: VOICE_PLAN_TIMEOUT_MS,
+    })
+    // Nothing of the agent's: no identity on ade-msg, so nothing to list, send or close.
+    expect(planRuns[0].mailbox).toBeUndefined()
+    expect(planRuns[0].disabledTools).toBe(VOICE_AGENT_DISABLED_TOOLS)
+    expect(agentRuns).toHaveLength(0)
+    expect(cold).toHaveLength(0)
+  })
+
+  test("cli speed leaves the model to the CLI", async () => {
+    const { agent, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "claude", speed: "cli" })
+    expect(planRuns[0].model).toBeUndefined()
+    expect(planRuns[0].effort).toBeUndefined()
+  })
+
+  test("Codex plans with a turn of its own, on its own subscription", async () => {
+    const { agent, cold, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "codex", speed: "fast" })
+    expect(planRuns).toHaveLength(0)
+    expect(cold).toHaveLength(1)
+    expect(cold[0]).toMatchObject({ runner: "codex", instructions: "R", message: "U", effort: "low" })
+    expect(cold[0].model).toBeUndefined()
+  })
+
+  test("Claude's planner has no tools at all, not even ade-msg: the sentence and the pane titles are not to be obeyed", async () => {
+    const { agent, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "claude", speed: "fast" })
+    expect(planRuns[0].noTools).toBe(true)
+    expect(planRuns[0].mailbox).toBeUndefined()
+  })
+
+  test("nikcli's planner has no tools either, and no model of its own choosing: the turn picks a free one at run time", async () => {
+    const { agent, cold } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "nikcli", speed: "fast" })
+    expect(cold[0].noTools).toBe(true)
+    expect(cold[0].model).toBeUndefined()
+    expect(cold[0].freeModels?.length).toBeGreaterThan(0)
+    for (const model of cold[0].freeModels ?? []) expect(isFreeModel(model)).toBe(true)
+  })
+
+  test("the planner gives up after eight seconds: the coldest answer measured was five", async () => {
+    const { agent, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "claude" })
+    expect(planRuns[0].timeoutMs).toBe(8_000)
+  })
+
+  test("the sentence already said is told to the agent, which is not to say it again", async () => {
+    const { agent, agentRuns } = setup()
+    await agent.ask({ text: "chi ha scritto l'ultimo commit?", engine: "claude", alreadySaid: "Controllo il log git." })
+    expect(agentRuns[0].message).toContain("chi ha scritto l'ultimo commit?")
+    expect(agentRuns[0].message).toContain("Controllo il log git.")
+    expect(agentRuns[0].message).toMatch(/già sentito/i)
+    await agent.ask({ text: "un'altra frase", engine: "claude" })
+    expect(agentRuns[1].message).toBe("un'altra frase")
+  })
+
+  test("with no CLI installed it says so, in the words the agent would use", async () => {
+    const { agent } = setup(["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")))
+    await expect(agent.plan({ system: "R", user: "U", engine: "auto" })).rejects.toThrow(
+      /Non riesco a pianificare: .*Claude Code/,
+    )
+  })
+
+  test("a turn that failed rejects with what the CLI said", async () => {
+    const agent = createVoiceAgent({
+      runTurn: () => done("", { status: "error", problem: "Claude Code non si avvia." }),
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    await expect(agent.plan({ system: "R", user: "U", engine: "codex" })).rejects.toThrow(
+      "Non riesco a pianificare: Claude Code non si avvia.",
+    )
+  })
+
+  test("stopped by the signal it rejects as an abort, which is not a failure to report", async () => {
+    const controller = new AbortController()
+    const agent = createVoiceAgent({
+      runTurn: () => ({
+        result: new Promise<TurnResult>((resolve) =>
+          controller.signal.addEventListener("abort", () => resolve({ status: "stopped", text: "" } as TurnResult)),
+        ),
+        stop: () => {},
+      }),
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    const pending = agent.plan({ system: "R", user: "U", engine: "codex", signal: controller.signal })
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+  })
+
+  test("the answer is handed on as it grows, once for each change", async () => {
+    const heard: string[] = []
+    const agent = createVoiceAgent({
+      runTurn: (request) => {
+        const streaming = (text: string) => ({ messages: [], streaming: text }) as never
+        request.onUpdate?.(streaming('{"speech":"Ap'))
+        request.onUpdate?.(streaming('{"speech":"Ap'))
+        request.onUpdate?.(streaming('{"speech":"Apro."'))
+        return done('{"speech":"Apro.","steps":[]}')
+      },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    await agent.plan({ system: "R", user: "U", engine: "codex", onText: (soFar) => void heard.push(soFar) })
+    expect(heard).toEqual(['{"speech":"Ap', '{"speech":"Apro."'])
+  })
+
+  test(`after ${VOICE_PLAN_SESSION_PHRASES} sentences the conversation starts again, so the cache stays small`, async () => {
+    const { agent, planRuns, forgotten } = setup()
+    for (let i = 0; i < VOICE_PLAN_SESSION_PHRASES; i++)
+      await agent.plan({ system: "R", user: `frase ${i}`, engine: "claude" })
+    expect(forgotten()).toBe(0)
+    await agent.plan({ system: "R", user: "una in più", engine: "claude" })
+    expect(forgotten()).toBe(1)
+    expect(planRuns).toHaveLength(VOICE_PLAN_SESSION_PHRASES + 1)
+    // And the count starts over.
+    for (let i = 0; i < VOICE_PLAN_SESSION_PHRASES - 1; i++)
+      await agent.plan({ system: "R", user: `frase ${i}`, engine: "claude" })
+    expect(forgotten()).toBe(1)
+  })
+
+  test("preparing the voice starts the planner's process with the real rules, and forgetting or releasing reach it", () => {
+    const { agent, planPrepared, forgotten, closed } = setup()
+    agent.prepare({ engine: "claude", speed: "fast" })
+    expect(planPrepared).toHaveLength(1)
+    expect(planPrepared[0]).toMatchObject({
+      runner: "claude",
+      instructions: PLANNER_SYSTEM,
+      message: "",
+      model: "claude-sonnet-5-5",
+      partial: true,
+    })
+    // The same configuration as the sentence's own request: the process waiting is the one that answers.
+    agent.forget()
+    expect(forgotten()).toBe(1)
+    agent.release()
+    expect(closed()).toBe(1)
   })
 })

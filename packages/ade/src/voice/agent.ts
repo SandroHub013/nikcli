@@ -22,6 +22,7 @@ import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { locale as currentAppLocale, t } from "../i18n"
+import { PLANNER_SYSTEM } from "@nikcli-ai/voice/core"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
 
@@ -55,10 +56,37 @@ export const VOICE_AGENT_TIMEOUT_MS = 150_000
  * soon, and the CLI's default model thinks longer than that.
  */
 export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; readonly effort?: string }> = {
-  claude: { model: "claude-sonnet-5", effort: "low" },
+  claude: { model: "claude-sonnet-5-5", effort: "low" },
   codex: { effort: "low" },
   nikcli: {},
 }
+
+/**
+ * How long the planner may take: it writes one short JSON, so a turn that has not answered in this
+ * long is stuck, and the sentence goes on to the agent.
+ */
+export const VOICE_PLAN_TIMEOUT_MS = 8_000
+
+/**
+ * The free models nikcli's planner may use, in order of preference. The turn picks one when it runs, from
+ * the server's catalog (`TurnRequest.freeModels`): a list, because a free model leaves the catalog one day.
+ * The user's own model comes first when it is free. A paid one is never used.
+ */
+export const VOICE_PLAN_NIKCLI_FREE_MODELS: readonly string[] = [
+  "openrouter/google/gemma-4-31b-it:free",
+  "openrouter/google/gemma-4-26b-a4b-it:free",
+  "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+  "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+]
+
+/**
+ * How many sentences a planner process answers before it starts a new conversation. The conversation
+ * stays in the process, so each sentence carries the ones before it: measured at about 150 tokens more
+ * of cache read per sentence, so 20 sentences cost 3k tokens on every next one. A fresh one starts warm
+ * again at the next sentence, and every sentence brings its own context (panes, projects), so nothing
+ * is lost by forgetting.
+ */
+export const VOICE_PLAN_SESSION_PHRASES = 20
 
 /** What a voice turn may not do: edit, write, run a command other than `ade-msg`, or touch the web. */
 export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash", "webfetch", "websearch"]
@@ -158,6 +186,16 @@ export interface VoiceAgentDeps {
     forget: () => void
     close: () => void
   }
+  /**
+   * A second process for the planner, of its own: it holds other instructions than the agent's, and one
+   * process serves one configuration, so sharing would replace it at every alternate sentence.
+   */
+  planWarm?: {
+    prepare: (request: TurnRequest) => void
+    run: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
+    forget: () => void
+    close: () => void
+  }
   statuses: () => readonly AgentStatus[] | undefined
   cwd: () => string | undefined
   locale?: () => "it" | "en"
@@ -172,10 +210,25 @@ export interface VoiceAgent {
     /** `fast` uses `VOICE_AGENT_FAST`; absent or `cli` leaves the CLI's own model. */
     speed?: "fast" | "cli"
     codexFallback?: boolean
+    /** What the user has already heard for this sentence (the planner's «ci penso»): the agent is not to say it again. */
+    alreadySaid?: string
     signal?: AbortSignal
     /** The answer so far, each time it grows, so it can be read before it is finished. */
     onText?: (soFar: string) => void
   }): Promise<{ ok: boolean; text: string; ran: boolean }>
+  /**
+   * One completion for the planner, from the same runner and subscription as `ask`: the rules in
+   * `system`, everything that changes in `user`. Rejects with a sentence for the user (starting
+   * «Non riesco a pianificare») when it could not, and with an `AbortError` when `signal` stopped it.
+   */
+  plan(request: {
+    system: string
+    user: string
+    engine: VoiceAgentEngine
+    speed?: "fast" | "cli"
+    signal?: AbortSignal
+    onText?: (soFar: string) => void
+  }): Promise<string>
   /** Starts the next sentence in a new conversation. */
   forget(): void
   /** Gets the agent ready for a sentence that may come soon. */
@@ -266,15 +319,95 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
     }
   }
 
+  /* The planner's request but for the sentence: what a process waiting for one is started with. */
+  const planFor = (
+    runner: RunnerId,
+    cwd: string | undefined,
+    speed: "fast" | "cli" | undefined,
+    system: string,
+  ): Omit<TurnRequest, "message"> => ({
+    runner,
+    instructions: system,
+    ...(cwd ? { cwd } : {}),
+    disabledTools: VOICE_AGENT_DISABLED_TOOLS,
+    // No mailbox and no tool, `ade-msg` included: the planner is given everything it needs and touches
+    // nothing, and its input holds text others can write (pane titles).
+    lean: true,
+    noTools: true,
+    timeoutMs: VOICE_PLAN_TIMEOUT_MS,
+    partial: runner === "claude",
+    ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
+  })
+  let plannedInSession = 0
+
   return {
     prepare({ engine, speed }) {
       if (!deps.warm) return
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
       if ("problem" in resolved || resolved.runner !== "claude") return
       deps.warm.prepare({ ...turnFor("claude", deps.cwd(), speed), message: "" })
+      // The planner's process too: the first sentence is answered by one already waiting for it.
+      deps.planWarm?.prepare({ ...planFor("claude", deps.cwd(), speed, PLANNER_SYSTEM), message: "" })
     },
 
-    async ask({ text, engine, speed, codexFallback, signal, onText }) {
+    async plan({ system, user, engine, speed, signal, onText }) {
+      const resolved =
+        engine === "nikcli"
+          ? { runner: "nikcli" as RunnerId }
+          : resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
+      if ("problem" in resolved) throw new Error(`Non riesco a pianificare: ${resolved.problem}`)
+      const runner = resolved.runner
+      const base =
+        runner === "nikcli"
+          ? // Nothing to refuse: nikcli would refuse the turn for want of a way to enforce it.
+            {
+              ...planFor(runner, deps.cwd(), speed, system),
+              disabledTools: [],
+              freeModels: VOICE_PLAN_NIKCLI_FREE_MODELS,
+            }
+          : planFor(runner, deps.cwd(), speed, system)
+      let last = ""
+      const request: TurnRequest = {
+        ...base,
+        message: user,
+        ...(onText
+          ? {
+              onUpdate: (talk: Talk) => {
+                const soFar = answerSoFar(talk)
+                if (!soFar || soFar === last) return
+                last = soFar
+                onText(soFar)
+              },
+            }
+          : {}),
+      }
+      const warm = runner === "claude" ? deps.planWarm : undefined
+      if (warm && plannedInSession >= VOICE_PLAN_SESSION_PHRASES) {
+        warm.forget()
+        plannedInSession = 0
+      }
+      if (warm) plannedInSession++
+      const turn = warm ? warm.run(request) : deps.runTurn(request)
+      const onAbort = () => turn.stop()
+      signal?.addEventListener("abort", onAbort, { once: true })
+      try {
+        const result = await turn.result
+        if (result.status === "stopped" || signal?.aborted) {
+          throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
+        }
+        if (result.status !== "done") {
+          throw new Error(`Non riesco a pianificare: ${result.problem || "l'agente non ha risposto."}`)
+        }
+        return result.text
+      } finally {
+        signal?.removeEventListener("abort", onAbort)
+      }
+    },
+
+    async ask({ text: asked, engine, speed, codexFallback, alreadySaid, signal, onText }) {
+      const text = alreadySaid
+        ? `${asked}\n\n(L'utente ha già sentito «${alreadySaid}»: non annunciare cosa stai per fare, vai al risultato.)`
+        : asked
       const loc = currentLocale()
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), loc)
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
@@ -375,10 +508,13 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       latest++
       conversation = undefined
       deps.warm?.forget()
+      deps.planWarm?.forget()
+      plannedInSession = 0
     },
 
     release() {
       deps.warm?.close()
+      deps.planWarm?.close()
     },
   }
 }

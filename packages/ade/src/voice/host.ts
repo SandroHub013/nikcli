@@ -165,19 +165,26 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   const voiceAgent = () =>
     (agent ??= deps.voiceAgentFactory
       ? deps.voiceAgentFactory()
-      : Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
-          createVoiceAgent({
-            runTurn,
-            warm: warmClaude(createWarmClaude()),
-            statuses: () => deps.agentAvailability?.(),
-            cwd: () => deps.project()?.root,
-            codexFallback: () => deps.codexFallback?.() ?? false,
-          }),
+      : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
+          ([{ runBotTurn }, { createWarmClaude }]) =>
+            createVoiceAgent({
+              // nikcli's turn runs on ADE's server (the planner's, on a free model); the others as `runTurn` runs them.
+              runTurn: (request) => runBotTurn(request),
+              warm: warmClaude(createWarmClaude()),
+              planWarm: warmClaude(createWarmClaude()),
+              statuses: () => deps.agentAvailability?.(),
+              cwd: () => deps.project()?.root,
+              codexFallback: () => deps.codexFallback?.() ?? false,
+            }),
         ))
 
   return {
     async askAgent(request) {
       return (await voiceAgent()).ask(request)
+    },
+
+    async plan(request) {
+      return (await voiceAgent()).plan(request)
     },
 
     prepareAgent(request) {
@@ -229,6 +236,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         hasLiveProcess: deps.isRunning(pane.id),
         isBrowser: Boolean(pane.browserUrl),
         isFile: Boolean(pane.filePath),
+        ...(pane.agent ? { agent: pane.agent } : {}),
       }))
     },
 

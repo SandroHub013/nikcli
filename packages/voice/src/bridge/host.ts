@@ -55,6 +55,8 @@ export interface PaneSummary {
   isBrowser: boolean
   /** Whether this pane is an editor view for a project file. */
   isFile: boolean
+  /** The agent running in it (`claude-code`, `codex`…), when it is a session. */
+  agent?: string
 }
 
 /**
@@ -159,6 +161,24 @@ export interface VoiceHost {
   }>
 
   /**
+   * Plans a sentence the grammar could not match: one completion from the same runner and subscription
+   * that answers `askAgent`, never a service billed per call.
+   *
+   * `system` is the same for every sentence and `user` is what changes, so a host can keep a process
+   * running that holds the first and is sent the second. `onText` gets the raw answer as it is written.
+   * Optional: a host without it has no planner, and unmatched sentences go to the agent only.
+   */
+  plan?(request: {
+    system: string
+    user: string
+    /* `VoiceSettings.agentEngine` without "off": the planner follows the agent's runner. */
+    engine: "auto" | "claude" | "codex" | "nikcli"
+    speed?: "fast" | "cli"
+    signal?: AbortSignal
+    onText?: (soFar: string) => void
+  }): Promise<string>
+
+  /**
    * Hand a sentence the grammar could not match to a coding agent, and get
    * back what to say.
    *
@@ -172,6 +192,8 @@ export interface VoiceHost {
    */
   askAgent?(request: {
     text: string
+    /** What the user has already heard for this sentence: the agent is not to say it again. */
+    alreadySaid?: string
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
     /* `VoiceSettings.agentSpeed`; absent is the CLI's own settings. */
