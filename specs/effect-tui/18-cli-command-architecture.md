@@ -274,4 +274,6 @@ Measured, not read: `nikcli connectors add < /dev/null` did not exit in 120 s. T
 
 After: `connectors add < /dev/null` exits `66` in ~1 s with `Cannot ask "Location" in headless mode…`; on a PTY, Ctrl+C
 still exits `130`. `bun test test/cli/` (262), `bun run typecheck`, prettier, oxlint and `check:routes --strict` pass.
-Not covered: the two `src/session` importers and `cli/headless.ts`'s own `select` keep importing clack directly.
+`src/session/{auth,uninstall}.ts` use the wrapper too (`uninstall < /dev/null` without `--force` now refuses instead of
+waiting on the confirmation). Not covered: `cli/headless.ts`'s own `select` (already behind `isHeadless`) and the
+output-only import in `handlers/plugin.ts`; neither can wait on input.
