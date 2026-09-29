@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createComponent } from "solid-js"
-import { SDKProvider } from "@tui/context/sdk"
+import { SDKProvider, useSDK } from "@tui/context/sdk"
 import {
   createReconnectGate,
   reconnectDelay,
@@ -149,6 +149,83 @@ describe("SDKProvider event stream", () => {
       // Delays are at least 125, 250, 500 ms: at most three subscribes fit.
       expect(subscribes).toBeGreaterThanOrEqual(1)
       expect(subscribes).toBeLessThanOrEqual(3)
+    } finally {
+      renderer.destroy()
+    }
+  })
+})
+
+describe("SDKProvider event batch", () => {
+  it("flushes a burst in bounded batches and delivers every envelope", async () => {
+    // The client batch used to grow without a bound for as long as a burst
+    // lasted. EVENT_BATCH_CAP (512) flushes it early — and must do so without
+    // discarding anything, because this queue carries permission prompts and
+    // terminal session outcomes.
+    const total = 1500
+    const encoder = new TextEncoder()
+    const fetch = (async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      if (!url.includes("/global/event")) return new Response("{}", { headers: { "content-type": "application/json" } })
+      let sent = false
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            // One chunk holding the whole burst, then stay open like a live stream.
+            if (sent) return new Promise(() => {})
+            sent = true
+            const frames = Array.from(
+              { length: total },
+              (_, index) =>
+                `data: ${JSON.stringify({
+                  directory: "/burst",
+                  payload: { type: "burst.test", properties: { index } },
+                })}\n\n`,
+            ).join("")
+            controller.enqueue(encoder.encode(frames))
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    }) as typeof globalThis.fetch
+
+    // Handlers of one flush run synchronously; a microtask boundary separates flushes.
+    const sizes: number[] = []
+    const seen = new Set<number>()
+    let open = false
+    const Probe = () => {
+      const sdk = useSDK()
+      sdk.onEnvelope((envelope) => {
+        const payload = envelope.payload as { type: string; properties?: { index?: number } }
+        if (payload.type !== "burst.test") return
+        if (!open) {
+          open = true
+          sizes.push(0)
+          queueMicrotask(() => (open = false))
+        }
+        sizes[sizes.length - 1]++
+        seen.add(payload.properties?.index ?? -1)
+      })
+      return null
+    }
+
+    const { renderer } = await testRender(() =>
+      createComponent(SDKProvider, {
+        url: "http://nikcli.test",
+        fetch,
+        get children() {
+          return createComponent(Probe, {})
+        },
+      }),
+    )
+    try {
+      const deadline = Date.now() + 5_000
+      while (seen.size < total && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(seen.size).toBe(total)
+      expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(total)
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(512)
+      // The cap is what split the burst: a single window would be one batch of ~1500.
+      expect(sizes.length).toBeGreaterThanOrEqual(3)
     } finally {
       renderer.destroy()
     }
