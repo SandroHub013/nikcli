@@ -102,7 +102,7 @@ describe("the icons fit the text they sit in (polish B5b)", () => {
     return { top: Math.min(...ys), bottom: Math.max(...ys), height: Math.max(...ys) - Math.min(...ys) }
   }
 
-  test("a separator dot takes the room of the «·»: a 2px box, the mask at its 12px scale, about 1px of ink", () => {
+  test("a separator dot takes the room of the «·»: a 2px box, the mask at its 12px scale, a dot as wide as the box", () => {
     expect(index).toMatch(/--ade-icon-dot-width:\s*2px;/)
     const dots = pseudoRules().filter((rule) => /mask:\s*var\(--ade-icon-dot\)/.test(rule.body))
     expect(dots.map((rule) => rule.file).sort()).toEqual(["dev.css", "grid/pane.css"])
@@ -110,7 +110,9 @@ describe("the icons fit the text they sit in (polish B5b)", () => {
       expect(rule.body).toMatch(/width:\s*var\(--ade-icon-dot-width\)/)
       expect(rule.body).toMatch(/mask:\s*var\(--ade-icon-dot\) center \/ var\(--ade-icon-size\) no-repeat/)
     }
-    expect(ink("dot").height).toBeLessThanOrEqual(1.4)
+    // Solid ink like the «·»: the circle is the box's width, not cut by it and not thinner than it (r 0.6 was 1.2px, a third paler).
+    expect(ink("dot").height).toBeGreaterThanOrEqual(2)
+    expect(ink("dot").height).toBeLessThanOrEqual(2)
   })
 
   test("the quota's «!» is as tall as the digits beside it, not taller", () => {
