@@ -85,11 +85,13 @@ describe("the 3D city the page starts", () => {
   })
 
   test("the query options are ?check=logo and ?renderer=classic, and nothing else: WebGPURenderer's WebGL backend cannot be asked for", () => {
-    expect(readOptions("")).toEqual({ check: false, classic: false })
-    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false })
-    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true })
+    expect(readOptions("")).toEqual({ check: false, classic: false, quality: undefined })
+    expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined })
+    expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined })
+    expect(readOptions("?quality=alta").quality).toBe("alta")
+    expect(readOptions("?x=1").quality).toBeUndefined()
     for (const other of ["?check=other&renderer=webgpu", "?renderer=webgl", "?forceWebGL=1"])
-      expect(readOptions(other)).toEqual({ check: false, classic: false })
+      expect(readOptions(other)).toEqual({ check: false, classic: false, quality: undefined })
     const source = readFileSync(join(import.meta.dir, "world", "world.js"), "utf8")
     expect(source).not.toMatch(/forceWebGL/)
   })

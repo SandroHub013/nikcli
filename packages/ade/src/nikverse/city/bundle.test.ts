@@ -15,8 +15,18 @@ describe("the world bundle", () => {
     expect(text).toMatch(/export\s*\{[^}]*\bas startCity\b/)
   })
 
-  test("it fits the budget: 600 kB gzip of code, with three.js and the renderer in it", () => {
+  test("it fits the budget: 600 kB gzip of code, with three.js, the renderer and the loaders in it", () => {
     expect(gzipSync(text).length).toBeLessThan(600 * 1024)
+  })
+
+  test("it is minified: 2.5 MB unminified, about 1.4 MB as built (what stays is three.js' shader text, which no minifier touches)", () => {
+    expect(text.length).toBeLessThan(1700 * 1024)
+    expect(text).not.toContain("sourceMappingURL")
+  })
+
+  test("it exports what the render check and the world call: the city, the loader of the cast and the level choice", () => {
+    const exported = /export\s*\{([^}]*)\}/.exec(text)?.[1] ?? ""
+    for (const name of ["startCity", "loadCast", "decodePicture", "resolveLevel"]) expect(exported).toContain(`as ${name}`)
   })
 
   test("it needs no eval and no Function, which the world's policy does not allow, and loads nothing from the network", () => {

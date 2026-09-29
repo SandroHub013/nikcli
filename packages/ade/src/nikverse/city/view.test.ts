@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
 import { spawnPlayer } from "./controller"
-import { COMPUTER_HEIGHT, WALL_HEIGHT, placementOf } from "./layout"
+import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, WALL_HEIGHT, placementOf } from "./layout"
+import { castOf } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
 import { createCityScene } from "./view"
@@ -316,6 +317,134 @@ describe("what is drawn depends on where the camera is", () => {
     }
     expect(kinds("tsl")).toEqual(["node"])
     expect(kinds("shader")).toEqual(["shader"])
+  })
+})
+
+describe("the city with N3's people", () => {
+  const camAt = (out: number, height = 4) => {
+    const p = placementOf(0)
+    const c = new PerspectiveCamera(58, 1.6, 0.1, 400)
+    c.position.set(p.center.x + Math.sin(p.yaw) * out, height, p.center.z + Math.cos(p.yaw) * out)
+    c.lookAt(p.center.x, 1, p.center.z)
+    c.updateProjectionMatrix()
+    c.updateMatrixWorld(true)
+    return c
+  }
+  const rigged = async (agents: Agent[]) => {
+    const town = createTown()
+    const view = createCityScene(undefined, "shader", await castOf("bassa"))
+    town.sync(picture([shop("a", 0)], agents))
+    for (let t = 0; t < 3; t += 0.05) town.tick(0.05)
+    return { town, view }
+  }
+  const roleOf = (view: ReturnType<typeof createCityScene>, id: string) => view.person(id)!.rig!.role
+
+  test("a session is one of three bodies by its look, the user is the mage, and all of them are rigged", async () => {
+    const { town, view } = await rigged([
+      agent("p1", "a", { look: { body: 0, palette: 0 } }),
+      agent("p2", "a", { look: { body: 1, palette: 0 } }),
+      agent("p3", "a", { look: { body: 2, palette: 0 } }),
+    ])
+    view.update(town, spawnPlayer(), 1, camAt(6))
+    const names = (id: string) => {
+      const found: string[] = []
+      view.person(id)!.rig!.root.traverse((o) => {
+        if (/_lod0$/.test(o.name)) found.push(o.name)
+      })
+      return found
+    }
+    expect([names("p1"), names("p2"), names("p3")]).toEqual([["agent_knight_lod0"], ["agent_rogue_lod0"], ["agent_barbarian_lod0"]])
+    const user: string[] = []
+    view.user.rig!.root.traverse((o) => {
+      if (/_lod0$/.test(o.name)) user.push(o.name)
+    })
+    expect(user).toEqual(["user_lod0"])
+  })
+
+  test("the state picks the clip: typing, the raised hand, sitting, and nothing for who is away", async () => {
+    const { town, view } = await rigged([agent("p1", "a"), agent("p2", "a", { state: "perm" }), agent("p3", "a", { state: "idle" }), agent("p4", "a", { state: "err" })])
+    view.update(town, spawnPlayer(), 1, camAt(6))
+    expect([roleOf(view, "p1"), roleOf(view, "p2"), roleOf(view, "p3"), roleOf(view, "p4")]).toEqual(["type", "raise_hand", "sit", "error"])
+    town.sync(picture([shop("a", 0)], [agent("p1", "a", { state: "off" }), agent("p2", "a", { state: "ask" })]))
+    for (let t = 0; t < 2; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 2, camAt(6))
+    expect(roleOf(view, "p2")).toBe("turn")
+    expect(view.person("p1")!.group.visible).toBe(false)
+  })
+
+  test("a seated person is raised until the pelvis is on the seat; somebody with no desk stands and is not lowered", async () => {
+    const crowd = Array.from({ length: DESKS_PER_SHOP + 1 }, (_, i) => agent(`p${i}`, "a"))
+    const { town, view } = await rigged(crowd)
+    view.update(town, spawnPlayer(), 1, camAt(6))
+    const seated = view.person("p0")!
+    expect(seated.body.position.y).toBeCloseTo(CHAIR_SEAT_TOP - seated.rig!.seatY, 6)
+    const standing = view.person(`p${DESKS_PER_SHOP}`)!
+    expect(standing.body.position.y).toBe(0)
+    expect(standing.rig!.role).toBe("idle")
+  })
+
+  test("the seat a person is raised to is the top of the chair drawn at the desk", async () => {
+    const { town, view } = await rigged([agent("p0", "a")])
+    view.update(town, spawnPlayer(), 1, camAt(6))
+    view.scene.updateMatrixWorld(true)
+    const chair = view.scene
+      .getObjectByName("shop:a")!
+      .children.flatMap((c) => c.children)
+      .find((o) => (o as Mesh).isMesh && Math.abs(o.scale.y - 0.06) < 1e-6 && Math.abs(o.scale.x - 0.5) < 1e-6) as Mesh
+    // 0.51 m is the chair as N2 drew it (a 6 cm seat with its middle at 0.48); the number is in the test so that moving one moves both on purpose.
+    expect(chair.position.y + chair.scale.y / 2).toBeCloseTo(0.51, 6)
+    expect(CHAIR_SEAT_TOP).toBeCloseTo(0.51, 6)
+  })
+
+  test("near the whole body and its hat, farther a lighter one, the farthest without the hat, and past 30 metres the box", async () => {
+    const { town, view } = await rigged([agent("p1", "a", { look: { body: 2, palette: 0 } })])
+    const shown = () => {
+      const person = view.person("p1")!
+      return [person.body.visible, ...person.rig!.lods.map((m) => m.visible), person.rig!.accessories.some((a) => a.visible)]
+    }
+    view.update(town, spawnPlayer(), 1, camAt(3))
+    expect(shown()).toEqual([true, true, false, false, true])
+    view.update(town, spawnPlayer(), 2, camAt(12))
+    expect(shown()).toEqual([true, false, true, false, true])
+    view.update(town, spawnPlayer(), 3, camAt(22))
+    expect(shown()).toEqual([true, false, false, true, false])
+    view.update(town, spawnPlayer(), 4, camAt(60))
+    expect(view.person("p1")!.body.visible).toBe(false)
+    expect(view.person("p1")!.impostor.visible).toBe(true)
+  })
+
+  test("the far ones' clips are stepped ten times a second, the near ones' every frame, and an impostor's never", async () => {
+    const { town, view } = await rigged([agent("p1", "a")])
+    const clock = () => view.person("p1")!.rig!.at
+    const near = camAt(4)
+    view.update(town, spawnPlayer(), 10, near)
+    view.update(town, spawnPlayer(), 10.02, near)
+    expect(clock()).toBe(10.02)
+    const middle = camAt(20)
+    view.update(town, spawnPlayer(), 20, middle)
+    view.update(town, spawnPlayer(), 20.04, middle)
+    expect(clock()).toBe(20)
+    view.update(town, spawnPlayer(), 20.11, middle)
+    expect(clock()).toBe(20.11)
+    view.update(town, spawnPlayer(), 40, camAt(60))
+    expect(clock()).toBe(20.11)
+  })
+
+  test("the user stands, walks and runs by the pace, and the clip is played at the pace of the ground covered", async () => {
+    const { town, view } = await rigged([])
+    const camera = camAt(6)
+    view.update(town, { ...spawnPlayer(), speed: 0 }, 1, camera)
+    expect(view.user.rig!.role).toBe("idle")
+    view.update(town, { ...spawnPlayer(), speed: 3.2 }, 1.1, camera)
+    expect(view.user.rig!.role).toBe("walk")
+    expect(view.user.rig!.actions.get("walk")!.getEffectiveTimeScale()).toBeGreaterThan(1)
+    view.update(town, { ...spawnPlayer(), speed: 6.4 }, 1.2, camera)
+    expect(view.user.rig!.role).toBe("run")
+  })
+
+  test("without the cast the city is the placeholders, and nothing about them changed", () => {
+    const view = createCityScene()
+    expect(view.user.rig).toBeUndefined()
   })
 })
 

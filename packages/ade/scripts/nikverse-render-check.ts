@@ -55,6 +55,13 @@ const deadline = setTimeout(() => {
 const built = await buildWorld()
 if (!built.ok) throw new Error(built.errors.join("\n"))
 
+// The world's own policy, as the `nikverse` scheme sends it, with the host replaced by this server's: a
+// page that works here works there. Without it a `fetch` of a `blob:` address, say, would pass here and fail in ADE.
+const POLICY = readFileSync(join(root, "src-tauri", "src", "nikverse.rs"), "utf8").match(/pub const CSP: &str = "([^"]+)"/)?.[1]
+if (!POLICY) throw new Error("no CSP found in nikverse.rs")
+const CSP = POLICY.replaceAll("http://nikverse.localhost nikverse:", "'self'")
+const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
+
 const NONCE = "0123456789abcdef".repeat(3)
 const LOGO = readFileSync(join(root, "src", "nikverse", "city", "nikcli-logo-dark.svg"), "utf8")
 const text = (path: string) => readFileSync(join(world, path), "utf8")
@@ -63,7 +70,16 @@ const server = Bun.serve({
   port: 0,
   fetch(request) {
     const url = new URL(request.url)
-    const send = (body: string, type: string) => new Response(body, { headers: { "content-type": type, "cache-control": "no-store" } })
+    // The reference page is the harness's own (it compares pictures through `data:` addresses): no policy on it.
+    const policy = url.pathname === "/reference.html" ? {} : { "content-security-policy": CSP }
+    const send = (body: string, type: string) => new Response(body, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
+    // N3's files: `/assets/levels/...` is the levels folder, the way the scheme serves it.
+    const level = /^\/assets\/levels\/((?:bassa|media|alta)\/)?((?:lightmap\/)?[a-z_0-9]+\.(?:glb|png))$/.exec(url.pathname)
+    if (level) {
+      const file = Bun.file(join(LEVELS_DIR, level[1] ?? "", level[2]))
+      const type = level[2].endsWith(".png") ? "image/png" : "model/gltf-binary"
+      return new Response(file, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
+    }
     switch (url.pathname) {
       case "/":
       case "/index.html":
@@ -314,6 +330,10 @@ async function cityCheck(renderer: "classic" | "auto") {
     if ((await evaluate<string>(`document.documentElement.dataset.city`)) === "failed")
       throw new Error(`the city did not start: ${await evaluate(`document.documentElement.dataset.cityError`)}`)
     const backend = await evaluate<string>(`document.documentElement.dataset.backend`)
+    const castState = await evaluate<string>(`document.documentElement.dataset.cast + " " + (document.documentElement.dataset.castWhy ?? "")`)
+    const levelState = await evaluate<string>(`document.documentElement.dataset.quality + " (" + document.documentElement.dataset.qualityWhy + ")"`)
+    console.log(`  [${renderer}] cast: ${castState.trim()}; level: ${levelState}`)
+    const castOk = castState.startsWith("ok")
     const ready = await evaluate<boolean>(asAde())
     // The shops rise in 0.8 s.
     await Bun.sleep(1800)
@@ -367,6 +387,25 @@ async function cityCheck(renderer: "classic" | "auto") {
     await holdUntil("w", (_x, z) => z <= -32)
     const hintShown = await evaluate<string>(`document.getElementById("hint").hidden ? "" : document.getElementById("hint").textContent`)
     await shot(`city-${renderer}-5-at-a-desk`)
+    // The people up close, for a look: the camera raised over the wall, behind the character and then in front of it.
+    // Synthetic pointer events with a movement, from a corner where nothing can be picked: CDP's own mouse
+    // events carry no `movementX`, which is what turns the camera.
+    const dragBy = async (dx: number, dy: number) => {
+      await evaluate(`(() => {
+        const canvas = document.querySelector("canvas.city")
+        const at = { clientX: 4, clientY: 4, button: 0, bubbles: true, pointerId: 1 }
+        canvas.dispatchEvent(new PointerEvent("pointerdown", at))
+        canvas.dispatchEvent(new PointerEvent("pointermove", { ...at, movementX: ${dx}, movementY: ${dy} }))
+        window.dispatchEvent(new PointerEvent("pointerup", at))
+      })()`)
+      await Bun.sleep(1500)
+    }
+    await dragBy(0, 260)
+    await shot(`city-${renderer}-6-desks-from-above`)
+    await dragBy(1257, 0)
+    await shot(`city-${renderer}-7-desks-from-the-front`)
+    // Back behind the character, where the next step needs it.
+    await dragBy(-1257, -260)
     await pressKey("e", "KeyE", 69)
     const commands = await evaluate<any[]>(`window.__ade.seen.filter((m) => m.type === "command").map((m) => m.command)`)
     const opened = commands.at(-1)
@@ -426,15 +465,54 @@ async function cityCheck(renderer: "classic" | "auto") {
     const changed = before !== after
     report(
       `city ${label} [${backend}]`,
-      ready && changed && entered && eOk && pauseOk && positionOk && restoreOk && modeOk && problems.length === 0,
-      `port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
+      ready && castOk && changed && entered && eOk && pauseOk && positionOk && restoreOk && modeOk && problems.length === 0,
+      `cast ${castOk ? "loaded" : "NOT loaded"}, port ${ready ? "handed" : "NOT handed"}, status "${status}", picture ${changed ? "changed" : "did NOT change"} after W, walked ${entered ? "into" : "NOT into"} the first shop through its door, E ${eOk ? "opens the right session" : "WRONG"}, pause ${pauseOk ? "stops the frames" : "did NOT stop them"}, position ${positionOk ? "reaches ADE" : "did NOT reach ADE"} and ${restoreOk ? "comes back" : "did NOT come back"}, draw modes ${modeOk ? "as planned" : "WRONG"}${problems.length ? `, ${problems.length} browser errors: ${problems.slice(0, 2).join(" | ")}` : ""}`,
     )
   } catch (error) {
     report(`city ${label}`, false, String((error as Error).message ?? error))
   }
 }
 
+/** Every level's four characters loaded the way the world loads them, under the world's policy: the pictures decode at the level's size. */
+async function levelsCheck() {
+  try {
+    problems.length = 0
+    // Alta's 2K set is a developer's local copy: it is checked where it is.
+    const present = ["bassa", "media", "alta"].filter((level) => existsSync(join(LEVELS_DIR, level, "character_user.glb")))
+    await open(`/?check=logo&levels=1`, { width: 400, height: 300 })
+    await until(`document.documentElement.dataset.ready === "1"`, "the page")
+    const result = await evaluate<Record<string, { sizes: number[]; ms: number }>>(`(async () => {
+      const m = await import("/assets/world/city.js")
+      const out = {}
+      for (const level of ${JSON.stringify(present)}) {
+        const t0 = performance.now()
+        const cast = await m.loadCast({ base: location.origin + "/assets/", level, fetchBytes: (u) => fetch(u).then((r) => r.arrayBuffer()), decode: m.decodePicture })
+        const sizes = []
+        for (const template of cast.values()) {
+          let width = 0
+          template.scene.traverse((o) => { if (o.material?.map?.image) width = Math.max(width, o.material.map.image.width) })
+          sizes.push(width)
+        }
+        out[level] = { sizes, ms: Math.round(performance.now() - t0) }
+      }
+      return out
+    })()`)
+    const want: Record<string, number> = { bassa: 512, media: 1024, alta: 2048 }
+    const ok = present.every((level) => result[level].sizes.length === 4 && result[level].sizes.every((w) => w === want[level]))
+    report(
+      "levels: the cast of each loads and its pictures decode",
+      ok && problems.length === 0,
+      Object.entries(result)
+        .map(([level, r]) => `${level} ${r.sizes.join("/")} px in ${r.ms} ms`)
+        .join(", ") + (problems.length ? `, ${problems.length} browser errors: ${problems[0]}` : ""),
+    )
+  } catch (error) {
+    report("levels", false, String((error as Error).message ?? error))
+  }
+}
+
 try {
+  await levelsCheck()
   await logoCheck("classic")
   await logoCheck("auto")
   await cityCheck("classic")

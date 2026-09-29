@@ -134,6 +134,8 @@ export function deskLocal(i: number): { desk: Vec2; computer: Vec2; chair: Vec2 
 export const DESK_HALF = { hx: 0.8, hz: 0.4 }
 export const DESK_HEIGHT = 0.75
 export const COMPUTER_HEIGHT = 1.1
+/** The top of a chair's seat, above the floor: what a rigged person is seated at. */
+export const CHAIR_SEAT_TOP = 0.51
 
 /** Where a person stands when the shop has no free desk: along the inside of the front wall. */
 export function standLocal(i: number): Vec2 {

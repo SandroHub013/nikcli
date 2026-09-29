@@ -20,8 +20,10 @@ import {
   MeshBasicMaterial,
 } from "three/webgpu"
 import { jointsFor, mixJoints, walkSwing, type Joints } from "./pose"
+import { advance, createRig, lodAt, paceOf, play, roleAtSpeed, ROLE_OF_POSE, showLod, type Rig, type Template } from "./rig"
 import type { StateLook } from "./states"
 import { hairColor, personColor } from "./states"
+import { CHAIR_SEAT_TOP } from "./layout"
 
 const box = new BoxGeometry(1, 1, 1)
 const sphere = new SphereGeometry(0.5, 20, 14)
@@ -66,17 +68,21 @@ export interface Person {
   impostor: Mesh
   /** The pose was last worked out at this time (seconds), for the far people that update ten times a second. */
   posedAt: number
+  /** N3's rigged character, when there is one: the joints above are then unused and the clips do the posing. */
+  rig?: Rig
 }
 
 const blobGeometry = new CircleGeometry(0.5, 20)
 const blobMaterial = new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false })
 
 /** Draws the figure or its impostor: near, the figure with its shadow; far, the one box. */
-export function showDetail(person: Person, detail: "full" | "slow" | "impostor"): void {
+export function showDetail(person: Person, detail: "full" | "slow" | "impostor", distance = 0): void {
   const far = detail === "impostor"
   person.body.visible = !far
   person.signal.visible = person.signal.visible && !far
   person.impostor.visible = far
+  // A rigged person also draws the LOD their distance asks for.
+  if (person.rig && !far) showLod(person.rig, lodAt(distance) ?? 2)
 }
 
 export interface PersonStyle {
@@ -87,12 +93,8 @@ export interface PersonStyle {
   user?: boolean
 }
 
-export function createPerson(style: PersonStyle): Person {
-  const skin = style.skin ?? 0xe0b48c
-  const group = new Group()
-  const body = new Group()
-  group.add(body)
-
+/** The placeholder's joints: a figure of boxes, standing with its feet at y = 0. */
+function boxFigure(body: Group, style: PersonStyle, skin: number) {
   const hips = 0.82
   const legs = (x: number) => {
     const leg = new Group()
@@ -137,6 +139,26 @@ export function createPerson(style: PersonStyle): Person {
   nose.position.set(0, 0.1, 0.16)
   head.add(skull, hair, nose)
   torso.add(head)
+  return { torso, head, armL, armR, legL, legR }
+}
+
+/** A person: N3's rigged character when a template is given, the placeholder of boxes otherwise. */
+export function createPerson(style: PersonStyle, template?: Template): Person {
+  const skin = style.skin ?? 0xe0b48c
+  const group = new Group()
+  const body = new Group()
+  group.add(body)
+
+  let rig: Rig | undefined
+  let joints: ReturnType<typeof boxFigure>
+  if (template) {
+    rig = createRig(template)
+    body.add(rig.root)
+    // The joints belong to the placeholder; the rig has its own, so these stand in and are never drawn.
+    joints = { torso: new Group(), head: new Group(), armL: new Group(), armR: new Group(), legL: new Group(), legR: new Group() }
+    showLod(rig, 0)
+  } else joints = boxFigure(body, style, skin)
+  const { torso, head, armL, armR, legL, legR } = joints
 
   if (style.user) {
     // A ring at the feet, so the user can tell their own character at a glance.
@@ -166,7 +188,7 @@ export function createPerson(style: PersonStyle): Person {
   impostor.visible = false
   group.add(impostor)
 
-  return { group, body, torso, head, armL, armR, legL, legR, signal, attention, question, blob, impostor, posedAt: -1 }
+  return { group, body, torso, head, armL, armR, legL, legR, signal, attention, question, blob, impostor, posedAt: -1, rig }
 }
 
 /** The person's look from ADE's `look` (stable for a title), and whether it is the user. */
@@ -177,6 +199,11 @@ export const styleOf = (look: { body: number; palette: number }): PersonStyle =>
 
 /** Sits the person on a chair: lowered, legs forward. */
 export function sit(person: Person, seated: boolean): void {
+  if (person.rig) {
+    // The clip seats the pelvis `seatY` above the root: raise the root until that is the chair's seat.
+    person.body.position.y = seated ? CHAIR_SEAT_TOP - person.rig.seatY : 0
+    return
+  }
   person.body.position.y = seated ? -0.32 : 0
   person.legL.rotation.x = seated ? -Math.PI / 2 : 0
   person.legR.rotation.x = seated ? -Math.PI / 2 : 0
@@ -191,8 +218,12 @@ function applyJoints(p: Person, j: Joints): void {
 }
 
 /** Poses a seated person for `look`, blended from the look before. `t` is the world clock in seconds. */
-export function poseSeated(p: Person, look: StateLook, previous: StateLook, blend: number, t: number): void {
-  applyJoints(p, mixJoints(jointsFor(previous.pose, t), jointsFor(look.pose, t), blend))
+export function poseSeated(p: Person, look: StateLook, previous: StateLook, blend: number, t: number, seated = true): void {
+  if (p.rig) {
+    // Somebody standing (no desk for them) stands; the state's clip is a seated one.
+    play(p.rig, seated ? ROLE_OF_POSE[look.pose] : "idle")
+    advance(p.rig, t)
+  } else applyJoints(p, mixJoints(jointsFor(previous.pose, t), jointsFor(look.pose, t), blend))
   p.signal.visible = look.signal !== "none"
   p.attention.visible = look.signal === "attention"
   p.question.visible = look.signal === "question"
@@ -203,6 +234,12 @@ export function poseSeated(p: Person, look: StateLook, previous: StateLook, blen
 
 /** The user walking: legs and arms swing with the speed. */
 export function poseWalking(p: Person, speed: number, t: number): void {
+  if (p.rig) {
+    const role = roleAtSpeed(speed)
+    play(p.rig, role, paceOf(role, speed))
+    advance(p.rig, t)
+    return
+  }
   const swing = walkSwing(speed, t)
   p.legL.rotation.x = swing.leg
   p.legR.rotation.x = -swing.leg

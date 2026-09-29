@@ -64,3 +64,5 @@ packages/ade/.lavish/
 
 # NikVerse: the 3D city bundle, built by src-tauri/build.rs (scripts/build-nikverse-world.ts)
 packages/ade/src-tauri/nikverse-assets/world/
+# Alta's 2K set is not in the installer (downloaded on its own); a developer copies it with `sync-nikverse-assets --alta`.
+packages/ade/src-tauri/nikverse-assets/levels/alta/

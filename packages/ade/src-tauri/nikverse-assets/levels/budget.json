@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "levels": {
+    "bassa": {
+      "label": "Bassa",
+      "texture": 512,
+      "lightmap": 512,
+      "bake_samples": 16,
+      "lods": [
+        0,
+        1,
+        2
+      ],
+      "bake": true
+    },
+    "media": {
+      "label": "Media",
+      "texture": 1024,
+      "lightmap": 1024,
+      "bake_samples": 32,
+      "lods": [
+        0,
+        1,
+        2
+      ],
+      "bake": true
+    },
+    "alta": {
+      "label": "Alta",
+      "texture": 2048,
+      "lightmap": 2048,
+      "bake_samples": 64,
+      "lods": [
+        0,
+        1,
+        2
+      ],
+      "bake": true
+    }
+  },
+  "budget": {
+    "asset_bassa_media_mb": 12,
+    "char_lod0_tris": 15000,
+    "char_lod1_tris": 5000,
+    "char_lod2_tris": 1500,
+    "shop_tris": 12000,
+    "plaza_tris": 20000,
+    "desk_tris": 2500
+  },
+  "cast": {
+    "user": "Mage",
+    "agents": [
+      "Knight",
+      "Rogue",
+      "Barbarian"
+    ]
+  }
+}

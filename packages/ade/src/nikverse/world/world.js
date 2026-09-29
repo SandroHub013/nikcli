@@ -203,13 +203,14 @@ export const CITY_MODULE = "./assets/world/city.js"
 const loadCityModule = () => import("./assets/world/city.js")
 
 /**
- * Which of the page's query options are set, for the tests: `?check=logo`, and `?renderer=classic` to draw
+ * Which of the page's query options are set, for the tests: `?check=logo`, `?quality=` and `?renderer=classic` to draw
  * with the classic WebGL renderer where WebGPU exists, to compare the two. There is no way to ask for
  * WebGPURenderer's own WebGL backend: it is never used.
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
-  return { check: params.get("check") === "logo", classic: params.get("renderer") === "classic" }
+  // `?quality=bassa|media|alta` asks for a level (the city lowers what the machine cannot run); without it the level is chosen from the machine.
+  return { check: params.get("check") === "logo", classic: params.get("renderer") === "classic", quality: params.get("quality") ?? undefined }
 }
 
 /** Starts the page: waits for ADE's port, then lives on it. Only ever once per document. */
@@ -248,6 +249,7 @@ export function boot(win, options = {}) {
         picture: () => state,
         mode: query.check ? "logo-check" : "city",
         classic: query.classic,
+        quality: query.quality,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
       }),

@@ -33,7 +33,11 @@ import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } fro
 import type { Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
+import { decodePicture } from "./assets"
+import { loadLevel } from "./load-level"
+import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
+import type { Cast } from "./rig"
 import { STILL_INTERVAL_MS, drawMode, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
@@ -54,6 +58,10 @@ export interface CityDeps {
   mode: "city" | "logo-check"
   /** Draw with the classic renderer even where WebGPU exists, to compare the two (`?renderer=classic`). */
   classic?: boolean
+  /** The level asked for (`?quality=`): `auto`, or a level's id. Whatever the machine cannot run is lowered (`quality.ts`). */
+  quality?: string
+  /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
+  assets?: string
   /** Tells ADE where the character is, so that a reload of the frame can stand it there again. */
   savePosition?(spot: Spot): void
 }
@@ -68,7 +76,7 @@ export interface CityHandle {
   /** Whether the mouse is captured (Esc lets it go first, and only then gives the focus back to ADE). */
   captured(): boolean
   releaseCapture(): void
-  info(): { backend: Backend; mode: CityDeps["mode"] }
+  info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean }
   dispose(): void
 }
 
@@ -77,7 +85,7 @@ const PROJECTOR: Box = { cx: 0, cz: 0, hx: 2.4, hz: 2.4, yaw: 0, height: 0.3 }
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
-async function pickRenderer(deps: CityDeps, check: boolean) {
+async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
   const doc = deps.win.document
   return chooseRenderer<HTMLCanvasElement>({
     makeCanvas: () => {
@@ -88,7 +96,7 @@ async function pickRenderer(deps: CityDeps, check: boolean) {
     },
     gpu: (deps.win.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu,
     options: { antialias: !check, alpha: check },
-    classic: deps.classic === true,
+    classic,
     createWebGPU: async (canvas, options) => {
       const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
       await renderer.init()
@@ -104,6 +112,9 @@ async function pickRenderer(deps: CityDeps, check: boolean) {
   })
 }
 
+export { decodePicture, loadCast } from "./assets"
+export { LEVELS, resolveLevel } from "./quality"
+
 export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const { win } = deps
   const doc = win.document
@@ -111,7 +122,11 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (!stage) throw new Error("manca #stage nella pagina del mondo")
 
   const check = deps.mode === "logo-check"
-  const chosen = await pickRenderer(deps, check)
+  // The level decides the renderer and the assets: what the machine has, and what was asked for.
+  const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
+  const resolved = resolveLevel(deps.quality, gpu)
+  let level = resolved.level
+  const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
   const { renderer, canvas, backend } = chosen
   stage.append(canvas)
   renderer.toneMapping = NoToneMapping
@@ -119,10 +134,29 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (chosen.why) doc.documentElement.dataset.backendWhy = chosen.why
 
   if (check) return logoCheckHandle(deps, renderer, canvas, backend)
+  doc.documentElement.dataset.qualityWhy = resolved.why
+
+  // N3's people; if they do not load they stay boxes, and the page says why.
+  const base = deps.assets ?? new URL("./assets/", win.location.href).href
+  const loaded = await loadLevel(level, {
+    base,
+    fetchBytes: async (url) => {
+      const response = await win.fetch(url)
+      if (!response.ok) throw new Error(`${response.status}`)
+      return response.arrayBuffer()
+    },
+    decode: decodePicture,
+  })
+  const { cast } = loaded
+  level = loaded.level
+  const data = doc.documentElement.dataset
+  data.quality = level.id
+  data.cast = cast ? "ok" : "failed"
+  if (loaded.notes.length) data.castWhy = loaded.notes.join(" | ").slice(0, 400)
 
   const logo = parseLogo()
   const town = createTown()
-  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader")
+  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast)
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
@@ -143,6 +177,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let handle: number | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let sized = false
+  const movingInterval = movingIntervalMs(level)
   let boxes: Box[] = [PROJECTOR]
   let boxesStale = true
   let hintPane: string | undefined
@@ -153,7 +188,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const resize = () => {
     const w = Math.max(1, stage.clientWidth)
     const h = Math.max(1, stage.clientHeight)
-    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, 2))
+    renderer.setPixelRatio(Math.min(win.devicePixelRatio || 1, level.pixelRatio))
     renderer.setSize(w, h, false)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
@@ -242,7 +277,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     // Immobile: nothing to draw until an event wakes the loop; the last picture stays on the screen.
     if (mode === "immobile") return
-    if (mode === "moving" || ts - lastDraw >= STILL_INTERVAL_MS - 2) {
+    // Moving draws at the level's frame rate (Bassa 30, Media 60, Alta the display's own); standing, 15.
+    const interval = mode === "moving" ? movingInterval : STILL_INTERVAL_MS
+    if (ts - lastDraw >= interval - 2) {
       renderer.render(view.scene, camera)
       lastDraw = ts
       // A count of the frames drawn, for the render check: pausing must stop it.
@@ -390,7 +427,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     releaseCapture() {
       if (doc.pointerLockElement) doc.exitPointerLock()
     },
-    info: () => ({ backend, mode: deps.mode }),
+    info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined }),
     dispose() {
       running = false
       if (handle !== undefined) win.cancelAnimationFrame(handle)
@@ -426,7 +463,7 @@ function logoCheckHandle(deps: CityDeps, renderer: DrawingSurface, canvas: HTMLC
     restore() {},
     captured: () => false,
     releaseCapture() {},
-    info: () => ({ backend, mode: "logo-check" }),
+    info: () => ({ backend, mode: "logo-check", cast: false }),
     dispose() {
       renderer.dispose()
       canvas.remove()

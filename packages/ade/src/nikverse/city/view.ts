@@ -34,7 +34,9 @@ import {
 } from "three/webgpu"
 import { createPerson, paint, poseSeated, poseWalking, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
+import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
+  CHAIR_SEAT_TOP,
   COMPUTER_HEIGHT,
   DESK_HALF,
   DESK_HEIGHT,
@@ -191,7 +193,7 @@ function buildDesks(view: ShopView, count: number): void {
     legs.position.set(at.desk.x, DESK_HEIGHT / 2, at.desk.z)
     const chair = new Mesh(box, CHAIR_MATERIAL)
     chair.scale.set(0.5, 0.06, 0.5)
-    chair.position.set(at.chair.x, 0.48, at.chair.z)
+    chair.position.set(at.chair.x, CHAIR_SEAT_TOP - 0.03, at.chair.z)
     const back = new Mesh(box, CHAIR_MATERIAL)
     back.scale.set(0.5, 0.55, 0.06)
     back.position.set(at.chair.x, 0.78, at.chair.z + 0.25)
@@ -207,7 +209,7 @@ function buildDesks(view: ShopView, count: number): void {
   view.desks = count
 }
 
-export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl"): CityView {
+export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast): CityView {
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
   scene.fog = new Fog(0x0b1226, 70, 210)
@@ -250,7 +252,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   const hologram = createHologram(logo, kind)
   scene.add(hologram.group)
 
-  const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true })
+  const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true }, cast?.get(USER_BODY))
   scene.add(user.group)
 
   const shops = new Map<string, ShopView>()
@@ -297,7 +299,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   function place(view: ShopView, shop: ShopEntity, a: AgentEntity, t: number, camera: PerspectiveCamera, seen: boolean): void {
     let person = view.people.get(a.paneId)
     if (!person) {
-      person = createPerson(styleOf(a.agent.look))
+      person = createPerson(styleOf(a.agent.look), cast?.get(bodyOfLook(a.agent.look)))
       view.people.set(a.paneId, person)
       view.people3.add(person.group)
     }
@@ -309,11 +311,12 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     sit(person, desk)
     // How far they are decides how much of them is drawn and how often their pose is worked out.
     const world = toWorld(shop.placement, at)
-    const detail = detailAt(Math.hypot(camera.position.x - world.x, camera.position.z - world.z))
-    showDetail(person, detail)
+    const distance = Math.hypot(camera.position.x - world.x, camera.position.z - world.z)
+    const detail = detailAt(distance)
+    showDetail(person, detail, distance)
     if (seen && poseDue(detail, t, person.posedAt)) {
-      poseSeated(person, a.look, a.previous, a.blend, t)
-      showDetail(person, detail)
+      poseSeated(person, a.look, a.previous, a.blend, t, desk)
+      showDetail(person, detail, distance)
       person.posedAt = t
     }
     // Someone who is away leaves an empty chair; the rest scale in and out.
