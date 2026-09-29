@@ -65,14 +65,19 @@ export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; reado
  * How long the planner may take: it writes one short JSON, so a turn that has not answered in this
  * long is stuck, and the sentence goes on to the agent.
  */
-export const VOICE_PLAN_TIMEOUT_MS = 30_000
+export const VOICE_PLAN_TIMEOUT_MS = 8_000
 
 /**
- * The model nikcli plans with: free, always. nikcli cannot be told to keep its tools for one turn, so
- * what keeps a planner from doing anything is the rules, and what keeps it from costing anything is
- * this id: a model the user picked for the agent is not used, whatever it costs.
+ * The free models nikcli's planner may use, in order of preference. The turn picks one when it runs, from
+ * the server's catalog (`TurnRequest.freeModels`): a list, because a free model leaves the catalog one day.
+ * The user's own model comes first when it is free. A paid one is never used.
  */
-export const VOICE_PLAN_NIKCLI_MODEL = "openrouter/google/gemma-4-31b-it:free"
+export const VOICE_PLAN_NIKCLI_FREE_MODELS: readonly string[] = [
+  "openrouter/google/gemma-4-31b-it:free",
+  "openrouter/google/gemma-4-26b-a4b-it:free",
+  "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+  "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+]
 
 /**
  * How many sentences a planner process answers before it starts a new conversation. The conversation
@@ -205,6 +210,8 @@ export interface VoiceAgent {
     /** `fast` uses `VOICE_AGENT_FAST`; absent or `cli` leaves the CLI's own model. */
     speed?: "fast" | "cli"
     codexFallback?: boolean
+    /** What the user has already heard for this sentence (the planner's «ci penso»): the agent is not to say it again. */
+    alreadySaid?: string
     signal?: AbortSignal
     /** The answer so far, each time it grows, so it can be read before it is finished. */
     onText?: (soFar: string) => void
@@ -323,8 +330,10 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
     instructions: system,
     ...(cwd ? { cwd } : {}),
     disabledTools: VOICE_AGENT_DISABLED_TOOLS,
-    // No mailbox: the planner is given everything it needs and touches nothing.
+    // No mailbox and no tool, `ade-msg` included: the planner is given everything it needs and touches
+    // nothing, and its input holds text others can write (pane titles).
     lean: true,
+    noTools: true,
     timeoutMs: VOICE_PLAN_TIMEOUT_MS,
     partial: runner === "claude",
     ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
@@ -351,7 +360,11 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       const base =
         runner === "nikcli"
           ? // Nothing to refuse: nikcli would refuse the turn for want of a way to enforce it.
-            { ...planFor(runner, deps.cwd(), speed, system), disabledTools: [], model: VOICE_PLAN_NIKCLI_MODEL }
+            {
+              ...planFor(runner, deps.cwd(), speed, system),
+              disabledTools: [],
+              freeModels: VOICE_PLAN_NIKCLI_FREE_MODELS,
+            }
           : planFor(runner, deps.cwd(), speed, system)
       let last = ""
       const request: TurnRequest = {
@@ -391,7 +404,10 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       }
     },
 
-    async ask({ text, engine, speed, codexFallback, signal, onText }) {
+    async ask({ text: asked, engine, speed, codexFallback, alreadySaid, signal, onText }) {
+      const text = alreadySaid
+        ? `${asked}\n\n(L'utente ha già sentito «${alreadySaid}»: non annunciare cosa stai per fare, vai al risultato.)`
+        : asked
       const loc = currentLocale()
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), loc)
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }

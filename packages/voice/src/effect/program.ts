@@ -788,6 +788,10 @@ export function makeVoiceProgram(
     /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
     let agentAbort: AbortController | null = null
     let plannerAbort: AbortController | null = null
+    /** The planner's speech for the sentence it handed over: the agent is told the user heard it. */
+    let handedOff: string | undefined
+    /** Why the planner could not plan this sentence: said only if the agent cannot take it either. */
+    let plannerFailed: string | undefined
 
     /* A free sentence heard while thinking, and whether the user asked for it to go out. */
     let held: string | null = null
@@ -840,6 +844,8 @@ export function makeVoiceProgram(
         const abort = new AbortController()
         agentAbort = abort
         plannerAbort = abort
+        handedOff = undefined
+        plannerFailed = undefined
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -936,13 +942,19 @@ export function makeVoiceProgram(
           // What the provider said, for whoever has to work out why the same
           // sentence keeps being refused. The user is told the Italian one.
           if (planned.detail) options.onProviderError?.(planned.detail)
-          yield* say(planned.failure)
-          return true
+          /*
+           * The planner is the fast path, not the only one: a timeout, a model gone from the catalog or a
+           * limited account must not leave the agent, which may be working, without the sentence. The
+           * user hears the planner's problem only if the agent cannot take it either.
+           */
+          plannerFailed = planned.failure
+          return false
         }
 
         if (planned.handoff) {
           // «Ci penso»: said as it came, or now; the agent that follows does the work.
           if (!streamed && whole && !quiet()) yield* say(whole)
+          handedOff = whole || undefined
           if (agentAbort === abort) agentAbort = null
           if (plannerAbort === abort) plannerAbort = null
           if (currentState.status === "executing") {
@@ -1108,6 +1120,7 @@ export function makeVoiceProgram(
             interrupted.addEventListener("abort", () => abort.abort(), { once: true })
             return askAgent.call(host, {
               text: utterance,
+              ...(handedOff ? { alreadySaid: handedOff } : {}),
               engine,
               speed: settings.agentSpeed,
               signal: abort.signal,
@@ -1434,6 +1447,14 @@ export function makeVoiceProgram(
             if (handled !== "stopped") yield* afterTurn()
             return
           }
+        }
+
+        // The planner failed and nobody else could take the sentence: the user is told why.
+        if (plannerFailed && parsed.outcome === "unknown" && openToModels) {
+          const failure = plannerFailed
+          plannerFailed = undefined
+          yield* say(failure)
+          return
         }
 
         // 4. Unknown outcome: do NOT speak offline fallback suggestions.

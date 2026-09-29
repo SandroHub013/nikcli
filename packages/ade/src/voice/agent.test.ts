@@ -13,7 +13,6 @@ import {
   VOICE_AGENT_FAST,
   VOICE_AGENT_INSTRUCTIONS,
   VOICE_AGENT_TIMEOUT_MS,
-  VOICE_PLAN_NIKCLI_MODEL,
   VOICE_PLAN_SESSION_PHRASES,
   VOICE_PLAN_TIMEOUT_MS,
 } from "./agent"
@@ -696,14 +695,36 @@ describe("the planner runs on the agent's own runner", () => {
     expect(cold[0].model).toBeUndefined()
   })
 
-  test("nikcli plans with a free model, no tools to refuse, and never the agent's own model", async () => {
-    const { agent, cold, planRuns } = setup()
+  test("Claude's planner has no tools at all, not even ade-msg: the sentence and the pane titles are not to be obeyed", async () => {
+    const { agent, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "claude", speed: "fast" })
+    expect(planRuns[0].noTools).toBe(true)
+    expect(planRuns[0].mailbox).toBeUndefined()
+  })
+
+  test("nikcli's planner has no tools either, and no model of its own choosing: the turn picks a free one at run time", async () => {
+    const { agent, cold } = setup()
     await agent.plan({ system: "R", user: "U", engine: "nikcli", speed: "fast" })
-    expect(planRuns).toHaveLength(0)
-    expect(cold).toHaveLength(1)
-    expect(cold[0]).toMatchObject({ runner: "nikcli", instructions: "R", message: "U", model: VOICE_PLAN_NIKCLI_MODEL })
-    expect(cold[0].disabledTools).toEqual([])
-    expect(isFreeModel(cold[0].model)).toBe(true)
+    expect(cold[0].noTools).toBe(true)
+    expect(cold[0].model).toBeUndefined()
+    expect(cold[0].freeModels?.length).toBeGreaterThan(0)
+    for (const model of cold[0].freeModels ?? []) expect(isFreeModel(model)).toBe(true)
+  })
+
+  test("the planner gives up after eight seconds: the coldest answer measured was five", async () => {
+    const { agent, planRuns } = setup()
+    await agent.plan({ system: "R", user: "U", engine: "claude" })
+    expect(planRuns[0].timeoutMs).toBe(8_000)
+  })
+
+  test("the sentence already said is told to the agent, which is not to say it again", async () => {
+    const { agent, agentRuns } = setup()
+    await agent.ask({ text: "chi ha scritto l'ultimo commit?", engine: "claude", alreadySaid: "Controllo il log git." })
+    expect(agentRuns[0].message).toContain("chi ha scritto l'ultimo commit?")
+    expect(agentRuns[0].message).toContain("Controllo il log git.")
+    expect(agentRuns[0].message).toMatch(/già sentito/i)
+    await agent.ask({ text: "un'altra frase", engine: "claude" })
+    expect(agentRuns[1].message).toBe("un'altra frase")
   })
 
   test("with no CLI installed it says so, in the words the agent would use", async () => {

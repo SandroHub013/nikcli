@@ -162,6 +162,63 @@ describe("il pianificatore dentro il motore", () => {
     await engine.stop()
   })
 
+  test("un pianificatore che fallisce (timeout, modello sparito, account limitato) passa la frase all'agente", async () => {
+    const { engine, host, transcriber } = setup(() =>
+      Promise.reject(new Error("Non riesco a pianificare: tempo scaduto.")),
+    )
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Fatto, ho controllato." }
+    }
+
+    await engine.start()
+    transcriber.emit("controlla nel repo se il parser gestisce gli errori", true)
+    await settle()
+
+    expect(asked).toEqual(["controlla nel repo se il parser gestisce gli errori"])
+    expect(
+      engine.history().some((entry) => entry.kind === "error" && entry.text.includes("Non riesco a pianificare")),
+    ).toBe(false)
+    await engine.stop()
+  })
+
+  test("se falliscono il pianificatore e l'agente, l'utente sente il problema del pianificatore", async () => {
+    const { engine, host, transcriber, speaker } = setup(() =>
+      Promise.reject(new Error("Non riesco a pianificare: tempo scaduto.")),
+    )
+    ;(host as VoiceHost).askAgent = async () => ({
+      ok: false,
+      text: "Per rispondere mi serve Claude Code.",
+      ran: false,
+    })
+
+    await engine.start()
+    transcriber.emit("controlla nel repo se il parser gestisce gli errori", true)
+    await settle()
+
+    expect(speaker.lastSpoken).toContain("Non riesco a pianificare")
+    await engine.stop()
+  })
+
+  test("all'agente arriva la frase già detta dal pianificatore: non deve ripeterla", async () => {
+    const { engine, host, transcriber } = setup('{"speech":"Controllo il log git.","steps":[],"agent":true}')
+    const seen: { text: string; alreadySaid?: string }[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      seen.push({ text: request.text, alreadySaid: request.alreadySaid })
+      return { ok: true, text: "Fatto." }
+    }
+
+    await engine.start()
+    transcriber.emit("chi ha scritto l'ultimo commit di questo progetto", true)
+    await settle()
+
+    expect(seen).toEqual([
+      { text: "chi ha scritto l'ultimo commit di questo progetto", alreadySaid: "Controllo il log git." },
+    ])
+    await engine.stop()
+  })
+
   test("un agente che non può rispondere, dopo un piano vuoto, lascia il problema scritto", async () => {
     const { engine, host, transcriber, prompts } = setup("[]")
     ;(host as VoiceHost).askAgent = async () => ({

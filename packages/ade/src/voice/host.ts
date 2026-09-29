@@ -165,15 +165,17 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   const voiceAgent = () =>
     (agent ??= deps.voiceAgentFactory
       ? deps.voiceAgentFactory()
-      : Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
-          createVoiceAgent({
-            runTurn,
-            warm: warmClaude(createWarmClaude()),
-            planWarm: warmClaude(createWarmClaude()),
-            statuses: () => deps.agentAvailability?.(),
-            cwd: () => deps.project()?.root,
-            codexFallback: () => deps.codexFallback?.() ?? false,
-          }),
+      : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
+          ([{ runBotTurn }, { createWarmClaude }]) =>
+            createVoiceAgent({
+              // nikcli's turn runs on ADE's server (the planner's, on a free model); the others as `runTurn` runs them.
+              runTurn: (request) => runBotTurn(request),
+              warm: warmClaude(createWarmClaude()),
+              planWarm: warmClaude(createWarmClaude()),
+              statuses: () => deps.agentAvailability?.(),
+              cwd: () => deps.project()?.root,
+              codexFallback: () => deps.codexFallback?.() ?? false,
+            }),
         ))
 
   return {

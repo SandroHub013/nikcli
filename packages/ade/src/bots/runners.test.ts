@@ -785,3 +785,26 @@ describe("a turn nobody watches (B11, a routine)", () => {
     expect(turnCommand(runnerById("claude"), { bot: own, message: "x" }).args).not.toContain("--max-budget-usd")
   })
 })
+
+describe("a turn with no tools at all (the voice's planner)", () => {
+  const planner: AgentFile = {
+    ...bot,
+    scope: "global",
+    disabledTools: ["edit", "write", "bash", "webfetch", "websearch"],
+  }
+
+  test('Claude Code gets `--tools ""`: nothing to run, nothing to ask, and not even ade-msg', () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: planner, message: "x", lean: true, noTools: true })
+    const at = args.indexOf("--tools")
+    expect(at).toBeGreaterThan(-1)
+    expect(args[at + 1]).toBe("")
+    expect(args.join(" ")).not.toContain("ade-msg")
+    expect(args).not.toContain("--allowedTools")
+  })
+
+  test("without it, a lean turn without a shell keeps its ade-msg: the agent's own kind of turn is unchanged", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: planner, message: "x", lean: true })
+    expect(args).not.toContain("--tools")
+    expect(args[args.indexOf("--allowedTools") + 1]).toContain("Bash(ade-msg *)")
+  })
+})

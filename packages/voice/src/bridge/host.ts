@@ -192,6 +192,8 @@ export interface VoiceHost {
    */
   askAgent?(request: {
     text: string
+    /** What the user has already heard for this sentence: the agent is not to say it again. */
+    alreadySaid?: string
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
     /* `VoiceSettings.agentSpeed`; absent is the CLI's own settings. */

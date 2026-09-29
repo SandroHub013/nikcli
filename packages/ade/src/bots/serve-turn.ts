@@ -42,7 +42,7 @@ import { projectFs } from "./store"
 import { localTrustStore } from "./trust"
 import { agentDirs, type AgentFile } from "./nikcli"
 import { joinPath } from "../host/path"
-import { finalText, spendKind } from "./runners"
+import { finalText, isFreeModel, spendKind } from "./runners"
 import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
 import {
   appendMessage,
@@ -370,8 +370,24 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
        * refused here, before any session: nikcli would end the turn without
        * a word. A catalog that cannot be read lets the server decide.
        */
-      const model = modelRef(bot.model)
+      let model = modelRef(bot.model)
       const catalog = await server.catalog()
+      /*
+       * A turn that may only use a free model (the voice's planner) picks one now, from the catalog as it is:
+       * a model fixed in the code leaves the catalog one day. The user's own model when it is free, else the
+       * first of the list the catalog has; none, and no turn.
+       */
+      if (request.freeModels && !model && !agentModel) {
+        const free = request.freeModels.map(modelRef).filter((ref) => ref !== undefined)
+        const pick = (from: Awaited<ReturnType<typeof server.catalog>>) => {
+          const own = parseModelRef(from.configModel)
+          const candidates = [...(own && isFreeModel(serializeModelRef(own)) ? [own] : []), ...free]
+          return candidates.find((candidate) => catalogHasModel(from.providerList, candidate) === true)
+        }
+        const chosen = pick(catalog) ?? pick(await server.catalog(true))
+        if (!chosen) return finish("error", t("bots.serve.noFreeModel"))
+        model = chosen
+      }
       const wanted = model ?? agentModel ?? parseModelRef(catalog.configModel)
       // The catalog may be one read a little earlier: read now before refusing.
       if (wanted && catalogHasModel(catalog.providerList, wanted) === false) {
@@ -390,6 +406,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         ...(request.remote ? { remote: { commands: request.remote.commands } } : {}),
         ...(request.unattended ? { unattended: true } : {}),
         ...(request.approvals ? { approvals: true } : {}),
+        ...(request.noTools ? { noTools: true } : {}),
         shell: !bot.disabledTools.includes("bash"),
       })
       const found = request.sessionId ? await orEnd(server.session(request.sessionId)) : { value: undefined }
