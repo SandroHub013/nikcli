@@ -128,6 +128,8 @@
    * The linear line is a fallback: an engine without `pow()` gets a
    * reasonable ground rather than no declaration at all.
    */
+  --ade-glass-ground: #131111;
+  --ade-on-ink: var(--ade-glass-ground);
   --ade-glass-veil: rgba(19, 17, 17, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
   --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
   --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
@@ -315,6 +317,13 @@ body[data-theme="glass"] #root,
   --ade-text: light-dark(#1a1817, #ecebeb);
   --ade-text-soft: light-dark(#5f5a57, #a9a4a4);
   --ade-text-weak: light-dark(#716c69, #938e8e);
+  /*
+   * The words on a solid `--ade-text` fill (the chosen value, the primary
+   * action). It is the page ground, except in glass where the ground is
+   * transparent and text in it paints nothing: there it is the dark the glass
+   * reads on (`--ade-glass-ground`).
+   */
+  --ade-on-ink: var(--ade-bg);
 
   /* ── accent ─────────────────────────────────────────────────────────────── */
   /*
@@ -764,7 +773,7 @@ body,
   font-weight: var(--ade-weight-semibold);
   /* The zone's own neutral, inverted so the word reads over the wash: the
      accent pill was the one green left in a grey zone (contorni-terzo, 3). */
-  color: var(--ade-bg);
+  color: var(--ade-on-ink);
   background: var(--ade-text);
   transition: background var(--ade-dur-fast) var(--ade-ease);
 }

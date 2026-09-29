@@ -667,7 +667,7 @@
   border-radius: var(--ade-radius-lg);
   /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
   background: var(--ade-text);
-  color: var(--ade-surface);
+  color: var(--ade-on-ink);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
@@ -1296,7 +1296,7 @@
   padding: 1px var(--ade-space-3);
   border-radius: var(--ade-radius-full);
   background: var(--ade-accent);
-  color: var(--ade-surface);
+  color: var(--ade-accent-fg);
   font-size: var(--ade-font-xs);
   white-space: nowrap;
 }

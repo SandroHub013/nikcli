@@ -663,7 +663,7 @@
 [data-slot="variant-choose"][data-on="true"] {
   background: var(--ade-text);
   border-color: var(--ade-text);
-  color: var(--ade-surface);
+  color: var(--ade-on-ink);
 }
 
 [data-slot="variant-choose"]:disabled {
