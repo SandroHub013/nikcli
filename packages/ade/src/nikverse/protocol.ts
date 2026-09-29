@@ -16,6 +16,7 @@
  */
 
 import type { PaneState } from "../grid/pane-state"
+import { readSpot, type PlayerSpot } from "./player"
 
 export const PROTOCOL_VERSION = 1
 
@@ -64,11 +65,18 @@ export type ToWorld =
   | { type: "event"; event: WorldEvent }
   | { type: "pause" }
   | { type: "resume" }
+  /** Where the character stood last, given back when the world says `ready` (ADE keeps it, not the frame). */
+  | ({ type: "player" } & PlayerSpot)
   /** Asked at every load of the frame: only the document that owns the port can answer. */
   | { type: "ping"; id: number }
 
 /** world → ADE. */
-export type FromWorld = { type: "ready" } | { type: "pong"; id: number } | { type: "command"; command: unknown }
+export type FromWorld =
+  | { type: "ready" }
+  | { type: "pong"; id: number }
+  | { type: "command"; command: unknown }
+  /** Where the character is: sent when it stops and now and then while it walks, for ADE to keep. */
+  | ({ type: "position" } & PlayerSpot)
 
 export type Command =
   | { cmd: "open-session"; paneId: string }
@@ -169,6 +177,10 @@ export function readFromWorld(data: unknown): FromWorld | undefined {
   if (body.type === "ready") return { type: "ready" }
   if (body.type === "pong") return typeof body.id === "number" ? { type: "pong", id: body.id } : undefined
   if (body.type === "command") return { type: "command", command: body.command }
+  if (body.type === "position") {
+    const spot = readSpot(data)
+    return spot ? { type: "position", ...spot } : undefined
+  }
   return undefined
 }
 

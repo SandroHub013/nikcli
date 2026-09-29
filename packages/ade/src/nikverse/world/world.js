@@ -193,18 +193,75 @@ export function render(doc, state, send) {
   )
 }
 
+/**
+ * Where the 3D city lives: the bundle `bun build` makes of `city/main.ts`, served by the scheme from
+ * the assets folder (against its hash). Loaded by address, not bundled in here, so this file stays
+ * the small protocol client the tests read and a bundle that is missing costs the page its 3D only.
+ */
+export const CITY_MODULE = "./assets/world/city.js"
+
+const loadCityModule = () => import("./assets/world/city.js")
+
+/**
+ * Which of the page's query options are set, for the tests: `?check=logo`, and `?renderer=classic` to draw
+ * with the classic WebGL renderer where WebGPU exists, to compare the two. There is no way to ask for
+ * WebGPURenderer's own WebGL backend: it is never used.
+ */
+export function readOptions(search) {
+  const params = new URLSearchParams(String(search))
+  return { check: params.get("check") === "logo", classic: params.get("renderer") === "classic" }
+}
+
 /** Starts the page: waits for ADE's port, then lives on it. Only ever once per document. */
-export function boot(win) {
+export function boot(win, options = {}) {
   const doc = win.document
+  const loadCity = options.loadCity ?? loadCityModule
+  const query = readOptions(win.location?.search ?? "")
   let state = emptyState()
   let port
+  let city
+  let paused = false
+  /** Where ADE says the character stood, if it said so before the city was up. */
+  let spot
   const send = (command) => port?.postMessage({ type: "command", command })
+  const mark = (name, value) => {
+    const data = doc.documentElement?.dataset
+    if (data) data[name] = value
+  }
   const renderer = createRenderer({
     raf: (fn) => win.requestAnimationFrame(fn),
     caf: (handle) => win.cancelAnimationFrame(handle),
     draw: () => render(doc, state, send),
   })
   renderer.invalidate()
+  // The check page shows the logo and nothing else, from the first paint.
+  if (query.check) mark("check", "1")
+
+  // The city starts by itself and the list above stays as it is: if the module is missing, or the
+  // renderer cannot start, the page keeps working as the list.
+  Promise.resolve()
+    .then(loadCity)
+    .then((module) =>
+      module.startCity({
+        win,
+        send,
+        picture: () => state,
+        mode: query.check ? "logo-check" : "city",
+        classic: query.classic,
+        // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
+        savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
+      }),
+    )
+    .then((started) => {
+      city = started
+      mark("city", "1")
+      if (spot) city.restore(spot)
+      if (paused) city.pause()
+    })
+    .catch((error) => {
+      mark("city", "failed")
+      mark("cityError", String(error?.message ?? error).slice(0, 200))
+    })
 
   // Without the nonce this is not the world ADE made, and it says nothing: no port will come.
   const nonce = readNonce(win.location?.hash ?? "")
@@ -217,10 +274,23 @@ export function boot(win) {
       if (!data || typeof data !== "object") return
       // Whether this document is still the one at the other end: only it can answer.
       if (data.type === "ping") return port.postMessage({ type: "pong", id: data.id })
+      if (data.type === "player") {
+        spot = { x: data.x, z: data.z, heading: data.heading }
+        city?.restore(spot)
+        return
+      }
       if (data.type === "snapshot") state = applySnapshot(state, data.snapshot)
       else if (data.type === "event") state = applyEvent(state, data.event)
-      else if (data.type === "pause") return renderer.pause()
-      else if (data.type === "resume") renderer.resume()
+      else if (data.type === "pause") {
+        paused = true
+        city?.pause()
+        return renderer.pause()
+      } else if (data.type === "resume") {
+        paused = false
+        city?.resume()
+        renderer.resume()
+      }
+      city?.sync()
       renderer.invalidate()
     }
     port.postMessage({ type: "ready" })
@@ -229,10 +299,9 @@ export function boot(win) {
   if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")
 
   // The focus is the world's once it is clicked; Esc gives it back (a second time if the mouse was captured).
-  let captured = false
   win.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (escAction(captured) === "release-capture") captured = false
+      if (escAction(city?.captured() ?? false) === "release-capture") city.releaseCapture()
       else send({ cmd: "release-focus" })
       return
     }

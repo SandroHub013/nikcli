@@ -29,6 +29,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# build.rs hashes NikVerse's assets into the manifest the scheme checks them against;
+# the same `sha2` the app itself depends on.
+sha2 = "0.10"
 
 [features]
 # Tauri turns the web inspector on by itself in a debug build, so naming the

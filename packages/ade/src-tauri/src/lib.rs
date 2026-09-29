@@ -2221,7 +2221,9 @@ pub fn run() {
          * NikVerse's world: the package's own files, in an origin of its own.
          * Nothing on disk is reachable through it (`nikverse.rs`).
          */
-        .register_uri_scheme_protocol(nikverse::SCHEME, |_ctx, request| nikverse::respond(&request))
+        .register_uri_scheme_protocol(nikverse::SCHEME, |ctx, request| {
+            nikverse::respond(&request, nikverse::source(ctx.app_handle()))
+        })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
             // is not listening yet shows its own error page and stays on it.

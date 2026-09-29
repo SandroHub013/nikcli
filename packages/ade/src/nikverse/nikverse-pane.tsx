@@ -2,6 +2,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createLifecycle } from "./lifecycle"
 import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
+import { createPlayerStore, type SpotStorage } from "./player"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
 import "./nikverse.css"
@@ -20,6 +21,21 @@ import { t } from "../i18n"
  * A `.tsx`, so its wiring is not reachable from `bun test`; what it decides is
  * in `protocol.ts`, `link.ts`, `snapshot.ts` and `lifecycle.ts`, which are.
  */
+/** ADE's own storage, when there is one to use (it may be missing or throw). */
+function spotStorage(): SpotStorage | undefined {
+  try {
+    return typeof localStorage === "undefined" ? undefined : localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Where the character stood, kept outside the component: «Apri sessione» unmounts the pane and the way
+ * back mounts a new one, which must find the character where it was even when storage is not there.
+ */
+const places = createPlayerStore(spotStorage())
+
 export function NikversePane(props: {
   /** The picture of ADE now; undefined while there is nothing to show. */
   picture: () => Snapshot | undefined
@@ -79,6 +95,9 @@ export function NikversePane(props: {
       onDead: () => {
         if (link === current) link = undefined
       },
+      // Where the character stood is ADE's to keep: the frame is unloaded when it is not seen.
+      player: places.load,
+      savePlayer: places.save,
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
@@ -234,7 +253,8 @@ export function NikversePane(props: {
             src={frameSrc()}
             // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
             // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
-            sandbox="allow-scripts"
+            // `allow-pointer-lock` alone besides the scripts: the third-person camera turns with a captured mouse.
+            sandbox="allow-scripts allow-pointer-lock"
             referrerpolicy="no-referrer"
             // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
             onLoad={() => link?.probe()}
