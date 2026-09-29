@@ -274,3 +274,35 @@ describe("the pane knows when the pointer is on a link", () => {
     expect(hovers).toEqual([true, false, false])
   })
 })
+
+describe("a link under Claude Code on the wheel only", () => {
+  test("registerLinks asks the pane whether the program has the clicks, and a plain click opens", () => {
+    const opened: LinkRequest[] = []
+    let provider: { provideLinks: (row: number, callback: (links?: any[]) => void) => void } | undefined
+    const terminal = {
+      buffer: { active: fakeBuffer([{ text: "see https://example.com" }]) },
+      modes: { mouseTrackingMode: "vt200" },
+      hasSelection: () => false,
+      registerLinkProvider: (given: typeof provider) => {
+        provider = given
+        return { dispose: () => {} }
+      },
+    }
+    const element = document.createElement("div")
+    let programClicks = false
+    registerLinks(
+      terminal as any,
+      element,
+      (request) => opened.push(request),
+      undefined,
+      () => programClicks,
+    )
+    let links: any[] = []
+    provider!.provideLinks(1, (found) => (links = found ?? []))
+    links[0].activate({} as MouseEvent, links[0].text)
+    expect(opened).toHaveLength(1)
+    programClicks = true
+    links[0].activate({} as MouseEvent, links[0].text)
+    expect(opened).toHaveLength(1)
+  })
+})
