@@ -61,3 +61,23 @@ packages/ade/src-tauri/target/
 # `d1 migrations apply --local`. Machine-local, never committed.
 .wrangler/
 packages/ade/.lavish/
+
+# Caches, logs and test output
+.ruff_cache/
+__pycache__/
+*.pyc
+*.log
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Signing material — never commit
+*.pem
+*.p12
+*.mobileprovision
+
+# Claude Code local state (team-wide, not just .git/info/exclude)
+.claude/RESUME.md
+.claude/worktrees/
+.claude/settings.local.json
