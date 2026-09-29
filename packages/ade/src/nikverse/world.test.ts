@@ -2,13 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+  HELLO,
+  PORT_OFFER,
   STATE_LABELS,
   applyEvent,
   applySnapshot,
+  boot,
   chordCommand,
   createRenderer,
   emptyState,
   escAction,
+  readNonce,
   render,
 } from "./world/world.js"
 
@@ -116,6 +120,90 @@ describe("the page", () => {
     expect(doc.getElementById("empty")?.hidden).toBe(true)
     render(doc, applySnapshot(emptyState(), { at: 1, shops: [], agents: [], waiting: { decisions: 0 } }), () => {})
     expect(doc.getElementById("empty")?.hidden).toBe(false)
+  })
+})
+
+describe("the world proves it is the world, and takes the port only after that", () => {
+  const NONCE = "0123456789abcdef".repeat(3)
+
+  /** A window with just enough of one for `boot`, and the parent it will talk to. */
+  function fakeWorld(hash: string) {
+    document.body.innerHTML =
+      '<main id="world"></main><span id="status"></span><p id="empty" hidden></p><section id="shops"></section>'
+    const listeners = new Map<string, (event: unknown) => void>()
+    const toParent: unknown[][] = []
+    const parent = { postMessage: (...args: unknown[]) => void toParent.push(args) }
+    const win = {
+      document,
+      parent,
+      location: { hash },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      addEventListener: (type: string, fn: (event: unknown) => void) => void listeners.set(type, fn),
+      removeEventListener: (type: string) => void listeners.delete(type),
+    }
+    const port = () => {
+      const seen: unknown[] = []
+      return { seen, postMessage: (message: unknown) => void seen.push(message), onmessage: undefined as unknown }
+    }
+    const offer = (source: unknown, ports: unknown[], type = PORT_OFFER) =>
+      listeners.get("message")?.({ source, data: { type, version: 1 }, ports })
+    return { win, parent, toParent, listeners, port, offer }
+  }
+
+  test("the nonce is read from the address fragment, and only a long hex one is a nonce", () => {
+    expect(readNonce(`#n=${NONCE}`)).toBe(NONCE)
+    expect(readNonce(`n=${NONCE}`)).toBe(NONCE)
+    expect(readNonce(`#x=1&n=${NONCE}`)).toBe(NONCE)
+    for (const hash of ["", "#", "#n=", "#n=abc", `#n=${NONCE}zz`, `#m=${NONCE}`, `#n=${NONCE.toUpperCase()}`, "#n=%3Cscript%3E"])
+      expect([hash, readNonce(hash)]).toEqual([hash, undefined])
+  })
+
+  test("it says hello to its parent with the nonce, once, as soon as it starts", () => {
+    const { win, toParent } = fakeWorld(`#n=${NONCE}`)
+    boot(win)
+    expect(toParent).toEqual([[{ type: HELLO, nonce: NONCE }, "*"]])
+  })
+
+  test("without a nonce in its address it says nothing, and no port offered to it is taken", () => {
+    const { win, parent, toParent, port, offer } = fakeWorld("")
+    boot(win)
+    expect(toParent).toEqual([])
+    const p = port()
+    offer(parent, [p])
+    expect(p.onmessage).toBeUndefined()
+    expect(p.seen).toEqual([])
+  })
+
+  test("the port is taken from its parent only, once, and answered with `ready`", () => {
+    const { win, parent, port, offer } = fakeWorld(`#n=${NONCE}`)
+    boot(win)
+    const stranger = port()
+    offer({ name: "another window" }, [stranger])
+    expect(stranger.seen).toEqual([])
+    const wrongType = port()
+    offer(parent, [wrongType], "nikverse:other")
+    expect(wrongType.seen).toEqual([])
+    offer(parent, [])
+    const taken = port()
+    offer(parent, [taken])
+    expect(taken.seen).toEqual([{ type: "ready" }])
+    const second = port()
+    offer(parent, [second])
+    expect(second.seen).toEqual([])
+    expect(second.onmessage).toBeUndefined()
+  })
+
+  test("it answers a ping with the same number, paused or not: that is how ADE knows its document is still there", () => {
+    const { win, parent, port, offer } = fakeWorld(`#n=${NONCE}`)
+    boot(win)
+    const taken = port()
+    offer(parent, [taken])
+    const receive = taken.onmessage as (event: { data: unknown }) => void
+    receive({ data: { type: "ping", id: 41 } })
+    receive({ data: { type: "pause" } })
+    receive({ data: { type: "ping", id: 42 } })
+    expect(taken.seen).toEqual([{ type: "ready" }, { type: "pong", id: 41 }, { type: "pong", id: 42 }])
   })
 })
 
@@ -228,8 +316,10 @@ describe("what the world's page is allowed to be", () => {
 
   test("lint: it takes the port only from its parent, only once, and speaks nowhere else on `window`", () => {
     expect(script).toContain("message.source !== win.parent")
-    expect(script).toContain("if (port ||")
-    expect(script).not.toMatch(/postMessage\([^)]*,\s*["']\*["']/)
-    expect(script).not.toMatch(/win(dow)?\.parent\.postMessage|top\.postMessage/)
+    expect(script).toContain("if (!nonce || port ||")
+    // The one thing it says on `window` is the hello, to its own parent, and only with a nonce.
+    expect(script.match(/postMessage\([^)]*"\*"\)/g)).toEqual(['postMessage({ type: HELLO, nonce }, "*")'])
+    expect(script).toContain('if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")')
+    expect(script).not.toMatch(/top\.postMessage|opener\.postMessage|frames\[/)
   })
 })

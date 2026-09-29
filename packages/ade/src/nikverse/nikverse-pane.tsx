@@ -1,5 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createLifecycle } from "./lifecycle"
+import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
@@ -36,6 +37,14 @@ export function NikversePane(props: {
   let root: HTMLElement | undefined
   let frame: HTMLIFrameElement | undefined
   let link: ReturnType<typeof createLink> | undefined
+  /*
+   * A fresh nonce for each load of the frame, in its address fragment: the
+   * world reads it and sends it back, and only that gets the port (`handshake.ts`).
+   */
+  let nonce = newNonce()
+  const sourceFor = (secret: string) => `${worldUrl()}#n=${secret}`
+  const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
+  const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
   const [asking, setAsking] = createSignal<{ command: Command; approve: () => void }>()
 
@@ -53,9 +62,8 @@ export function NikversePane(props: {
     }
   }
 
-  const connect = () => {
-    const target = frame?.contentWindow
-    if (!target) return
+  /** The world proved it is the world: a new port for its window, in place of any older one. */
+  const connect = (target: Window) => {
     link?.close()
     const channel = new MessageChannel()
     const current = createLink({
@@ -64,12 +72,30 @@ export function NikversePane(props: {
       run,
       ask: (command, approve) => setAsking({ command, approve }),
       ignored: (reason) => props.onIgnored?.(reason),
+      schedule: (fn, ms) => {
+        const timer = setTimeout(fn, ms)
+        return () => clearTimeout(timer)
+      },
+      onDead: () => {
+        if (link === current) link = undefined
+      },
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
-    // "*" because the frame's origin is opaque and no target origin can name it; the offer goes only to the
-    // window of the frame this panel made, once per load, and the world takes it only from its parent.
+    // "*" because the frame's origin is opaque and no target origin can name it. What decides who gets the
+    // port is the nonce the world just sent back from this frame's window (`handshake.hello`), not the address.
     target.postMessage({ type: PORT_OFFER, version: PROTOCOL_VERSION }, "*", [channel.port2])
+  }
+
+  /** The world's `hello`, from the frame with the nonce: only that is answered with the port. */
+  const onHello = (event: MessageEvent) => {
+    const verdict = handshake.hello(event)
+    if (!verdict.ok) {
+      // Another window's message is none of this panel's business; a frame that fails the check is worth a line.
+      if (verdict.fromFrame) props.onIgnored?.(verdict.reason)
+      return
+    }
+    connect(event.source as Window)
   }
 
   const lifecycle = createLifecycle({
@@ -81,7 +107,12 @@ export function NikversePane(props: {
       setAsking(undefined)
       setLoaded(false)
     },
-    load: () => setLoaded(true),
+    load: () => {
+      // A new frame, a new secret: nothing said to the old one can be replayed to it.
+      nonce = newNonce()
+      setFrameSrc(sourceFor(nonce))
+      setLoaded(true)
+    },
     schedule: (fn, ms) => {
       const timer = setTimeout(fn, ms)
       return () => clearTimeout(timer)
@@ -107,6 +138,7 @@ export function NikversePane(props: {
           })
     if (root) observer?.observe(root)
     document.addEventListener("visibilitychange", apply)
+    window.addEventListener("message", onHello)
     // A click in the frame moves the window's focus into it, which the panel above cannot hear.
     const onBlur = () => {
       if (document.activeElement === frame) props.onFocus?.()
@@ -115,6 +147,7 @@ export function NikversePane(props: {
     onCleanup(() => {
       observer?.disconnect()
       document.removeEventListener("visibilitychange", apply)
+      window.removeEventListener("message", onHello)
       window.removeEventListener("blur", onBlur)
     })
   })
@@ -198,12 +231,13 @@ export function NikversePane(props: {
             data-slot="nikverse-frame"
             title={t("newPane.nikverse")}
             name="ade-nikverse"
-            src={worldUrl()}
+            src={frameSrc()}
             // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
             // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
             sandbox="allow-scripts"
             referrerpolicy="no-referrer"
-            onLoad={connect}
+            // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
+            onLoad={() => link?.probe()}
           />
         </Show>
       </div>

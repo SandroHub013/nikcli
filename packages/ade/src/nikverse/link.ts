@@ -26,6 +26,9 @@ export interface LinkPort {
   close(): void
 }
 
+/** How long the document behind the port has to answer a probe before the port is closed. */
+export const PROBE_MS = 1500
+
 export interface LinkDeps {
   port: LinkPort
   /** The picture of ADE now. */
@@ -36,6 +39,10 @@ export interface LinkDeps {
   ask: (command: Command, approve: () => void) => void
   /** A message the world sent that was ignored, and why. */
   ignored: (reason: string) => void
+  /** Runs `run` after `ms`; the returned function cancels it. */
+  schedule: (run: () => void, ms: number) => () => void
+  /** The probe went unanswered and the link closed itself: the document that owned the port is gone. */
+  onDead?: () => void
 }
 
 export function createLink(deps: LinkDeps) {
@@ -45,6 +52,9 @@ export function createLink(deps: LinkDeps) {
   let ready = false
   let paused = false
   let closed = false
+  let probes = 0
+  /** The probe still waiting for its answer, and the clock that will close the link if none comes. */
+  let asked: { id: number; cancel: () => void } | undefined
 
   const sendPicture = () => {
     const picture = deps.picture()
@@ -59,6 +69,14 @@ export function createLink(deps: LinkDeps) {
       if (closed) return
       const message = readFromWorld(data)
       if (!message) return deps.ignored("messaggio non riconosciuto")
+      if (message.type === "pong") {
+        // Only the answer to the probe that is waiting counts: an old or invented id is nothing.
+        if (asked?.id === message.id) {
+          asked.cancel()
+          asked = undefined
+        }
+        return
+      }
       if (message.type === "ready") {
         ready = true
         return paused ? undefined : sendPicture()
@@ -82,6 +100,26 @@ export function createLink(deps: LinkDeps) {
       for (const event of events) deps.port.postMessage({ type: "event", event })
     },
 
+    /**
+     * Asks the document at the other end of the port whether it is still there.
+     * A frame that navigated somewhere else took its document, and the port
+     * with it, so nothing answers and the link closes; the world that reloaded
+     * or came back is met again by its own `hello`, and gets a new port.
+     */
+    probe() {
+      if (closed) return
+      asked?.cancel()
+      const id = ++probes
+      deps.port.postMessage({ type: "ping", id })
+      const cancel = deps.schedule(() => {
+        if (asked?.id !== id) return
+        asked = undefined
+        this.close()
+        deps.onDead?.()
+      }, PROBE_MS)
+      asked = { id, cancel }
+    },
+
     pause() {
       if (closed || paused) return
       paused = true
@@ -98,6 +136,8 @@ export function createLink(deps: LinkDeps) {
 
     close() {
       closed = true
+      asked?.cancel()
+      asked = undefined
       shown = undefined
       deps.port.close()
     },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createLink } from "./link"
+import { PROBE_MS, createLink } from "./link"
 import { ALLOWLIST, type Command, type Snapshot, type ToWorld } from "./protocol"
 
 const agent = (paneId: string, state: Snapshot["agents"][number]["state"] = "work", title = paneId) => ({
@@ -27,7 +27,11 @@ function rig(initial: Snapshot | null = picture()) {
   const ignored: string[] = []
   let now: Snapshot | undefined = initial ?? undefined
   let closed = false
+  let dead = 0
   const approvals: (() => void)[] = []
+  const timers = new Map<number, { at: number; run: () => void }>()
+  let clock = 0
+  let nextTimer = 0
   const link = createLink({
     port: { postMessage: (message) => void sent.push(message), close: () => void (closed = true) },
     picture: () => now,
@@ -37,8 +41,25 @@ function rig(initial: Snapshot | null = picture()) {
       approvals.push(approve)
     },
     ignored: (reason) => void ignored.push(reason),
+    schedule: (run, ms) => {
+      const id = nextTimer++
+      timers.set(id, { at: clock + ms, run })
+      return () => void timers.delete(id)
+    },
+    onDead: () => void dead++,
   })
   return {
+    advance: (ms: number) => {
+      clock += ms
+      for (const [id, timer] of [...timers]) {
+        if (timer.at <= clock) {
+          timers.delete(id)
+          timer.run()
+        }
+      }
+    },
+    dead: () => dead,
+    timers: () => timers.size,
     link,
     sent,
     ran,
@@ -212,5 +233,75 @@ describe("a command from the world", () => {
     } finally {
       table["open-session"]!.confirm = original
     }
+  })
+})
+
+describe("a navigation of the frame closes the port: the probe", () => {
+  const pings = (sent: ToWorld[]) => sent.filter((message) => message.type === "ping") as { type: "ping"; id: number }[]
+
+  test("a document that is still there answers, and the link stays", () => {
+    const { link, sent, advance, dead, closed, timers } = rig()
+    link.receive({ type: "ready" })
+    link.probe()
+    const [ping] = pings(sent)
+    expect(ping).toBeDefined()
+    link.receive({ type: "pong", id: ping!.id })
+    expect(timers()).toBe(0)
+    advance(PROBE_MS * 3)
+    expect([dead(), closed()]).toEqual([0, false])
+    link.pause()
+    expect(sent.at(-1)).toEqual({ type: "pause" })
+  })
+
+  test("a frame that went somewhere else answers nothing: the port is closed after the wait", () => {
+    const { link, sent, advance, dead, closed, ran } = rig()
+    link.receive({ type: "ready" })
+    link.probe()
+    advance(PROBE_MS - 1)
+    expect([dead(), closed()]).toEqual([0, false])
+    advance(1)
+    expect([dead(), closed()]).toEqual([1, true])
+    // Nothing more is heard from it, or sent to it.
+    const before = sent.length
+    link.receive({ type: "command", command: { cmd: "release-focus" } })
+    link.push()
+    link.pause()
+    expect(ran).toEqual([])
+    expect(sent).toHaveLength(before)
+  })
+
+  test("an answer to an older or an invented probe does not save the link", () => {
+    const { link, sent, advance, closed } = rig()
+    link.receive({ type: "ready" })
+    link.probe()
+    const first = pings(sent)[0]!.id
+    link.probe()
+    const second = pings(sent)[1]!.id
+    expect(second).not.toBe(first)
+    link.receive({ type: "pong", id: first })
+    link.receive({ type: "pong", id: 999 })
+    advance(PROBE_MS)
+    expect(closed()).toBe(true)
+  })
+
+  test("the answer to the probe that is waiting is enough, even after an older one was superseded", () => {
+    const { link, sent, advance, closed } = rig()
+    link.receive({ type: "ready" })
+    link.probe()
+    link.probe()
+    link.receive({ type: "pong", id: pings(sent)[1]!.id })
+    advance(PROBE_MS * 2)
+    expect(closed()).toBe(false)
+  })
+
+  test("a link that is already closed is not probed, and closing on purpose leaves no clock", () => {
+    const { link, sent, timers } = rig()
+    link.receive({ type: "ready" })
+    link.probe()
+    expect(timers()).toBe(1)
+    link.close()
+    expect(timers()).toBe(0)
+    link.probe()
+    expect(pings(sent)).toHaveLength(1)
   })
 })

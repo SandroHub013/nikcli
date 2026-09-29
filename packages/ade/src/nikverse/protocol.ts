@@ -64,9 +64,11 @@ export type ToWorld =
   | { type: "event"; event: WorldEvent }
   | { type: "pause" }
   | { type: "resume" }
+  /** Asked at every load of the frame: only the document that owns the port can answer. */
+  | { type: "ping"; id: number }
 
 /** world → ADE. */
-export type FromWorld = { type: "ready" } | { type: "command"; command: unknown }
+export type FromWorld = { type: "ready" } | { type: "pong"; id: number } | { type: "command"; command: unknown }
 
 export type Command =
   | { cmd: "open-session"; paneId: string }
@@ -163,8 +165,9 @@ export function decide(command: Command): "run" | "confirm" {
 /** A whole message from the world, read defensively: anything that is not one of its two shapes is nothing. */
 export function readFromWorld(data: unknown): FromWorld | undefined {
   if (!data || typeof data !== "object") return undefined
-  const body = data as { type?: unknown; command?: unknown }
+  const body = data as { type?: unknown; command?: unknown; id?: unknown }
   if (body.type === "ready") return { type: "ready" }
+  if (body.type === "pong") return typeof body.id === "number" ? { type: "pong", id: body.id } : undefined
   if (body.type === "command") return { type: "command", command: body.command }
   return undefined
 }

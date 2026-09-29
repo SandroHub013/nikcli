@@ -2,8 +2,9 @@
  * NikVerse's world, the placeholder of the first piece (N1).
  *
  * It runs in a frame of its own, from the `nikverse` scheme: it is not ADE's
- * origin and it has no line to ADE except one MessageChannel port, which ADE
- * hands over once after the document has loaded. Everything it knows arrives
+ * origin and it has no line to ADE except one MessageChannel port. ADE hands
+ * it over once, and only after the world has sent back, in a `hello`, the nonce
+ * ADE put in its address: a page that is not the world has not got it. Everything it knows arrives
  * on that port (a snapshot, then events), and everything it asks for leaves on
  * it as a command that ADE checks against an allowlist.
  *
@@ -15,6 +16,15 @@
 
 /** ADE hands the port over in a message with this type, and nothing else on `window` is believed. */
 export const PORT_OFFER = "nikverse:port"
+
+/** The world says this to its parent, with the nonce ADE put in its address: the proof it is the world. */
+export const HELLO = "nikverse:hello"
+
+/** The nonce in the address fragment (`#n=…`), or nothing. */
+export function readNonce(hash) {
+  const value = new URLSearchParams(String(hash).replace(/^#/, "")).get("n")
+  return value && /^[0-9a-f]{32,}$/.test(value) ? value : undefined
+}
 
 export const STATE_LABELS = {
   work: "al lavoro",
@@ -196,13 +206,17 @@ export function boot(win) {
   })
   renderer.invalidate()
 
+  // Without the nonce this is not the world ADE made, and it says nothing: no port will come.
+  const nonce = readNonce(win.location?.hash ?? "")
   const onPort = (message) => {
-    if (port || message.source !== win.parent) return
+    if (!nonce || port || message.source !== win.parent) return
     if (message.data?.type !== PORT_OFFER || message.ports.length !== 1) return
     port = message.ports[0]
     win.removeEventListener("message", onPort)
     port.onmessage = ({ data }) => {
       if (!data || typeof data !== "object") return
+      // Whether this document is still the one at the other end: only it can answer.
+      if (data.type === "ping") return port.postMessage({ type: "pong", id: data.id })
       if (data.type === "snapshot") state = applySnapshot(state, data.snapshot)
       else if (data.type === "event") state = applyEvent(state, data.event)
       else if (data.type === "pause") return renderer.pause()
@@ -212,6 +226,7 @@ export function boot(win) {
     port.postMessage({ type: "ready" })
   }
   win.addEventListener("message", onPort)
+  if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")
 
   // The focus is the world's once it is clicked; Esc gives it back (a second time if the mouse was captured).
   let captured = false

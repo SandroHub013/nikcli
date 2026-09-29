@@ -146,15 +146,32 @@ describe("where the world lives", () => {
   test("lint: the frame's origin is opaque, so Tauri's IPC refuses it, and it has no way to navigate ADE", () => {
     const source = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
     const frame = source.slice(source.indexOf("<iframe"), source.indexOf("/>", source.indexOf("<iframe")))
-    expect(frame).toContain("src={worldUrl()}")
+    expect(frame).toContain("src={frameSrc()}")
     expect(frame).not.toContain("srcdoc")
     const sandbox = /sandbox="([^"]*)"/.exec(frame)?.[1]?.split(/\s+/) ?? []
     // Every scheme Tauri registers is a local origin for its IPC: the world must not have its own.
     expect(sandbox).toEqual(["allow-scripts"])
     expect(sandbox).not.toContain("allow-same-origin")
     // No target origin can name an opaque one: the offer goes to "*", but only to the window of the frame this panel made.
-    expect(source).toContain('const target = frame?.contentWindow')
     expect(source).toContain('PROTOCOL_VERSION }, "*", [channel.port2])')
     expect(source.match(/postMessage\(/g)).toHaveLength(1)
+    // The port goes only to the window that just proved it knows the nonce, from this frame.
+    const answered = source.slice(source.indexOf("const onHello"), source.indexOf("const lifecycle"))
+    expect(answered).toContain("handshake.hello(event)")
+    expect(answered.indexOf("if (!verdict.ok)")).toBeLessThan(answered.indexOf("connect(event.source as Window)"))
+    expect(source.match(/connect\(/g)).toHaveLength(2)
+    // The secret is in the address' fragment, fresh for each load of the frame.
+    expect(source).toContain("`${worldUrl()}#n=${secret}`")
+    expect(source).toContain("src={frameSrc()}")
+    expect(source).toContain("nonce = newNonce()")
+    // Every load of the frame asks the link whether its document is still there.
+    expect(source).toContain("onLoad={() => link?.probe()}")
   })
+
+  test("a pong is read, with its number, and nothing else passes for one", () => {
+    expect(readFromWorld({ type: "pong", id: 3 })).toEqual({ type: "pong", id: 3 })
+    for (const data of [{ type: "pong" }, { type: "pong", id: "3" }, { type: "pong", id: null }])
+      expect([data, readFromWorld(data)]).toEqual([data, undefined])
+  })
+
 })
