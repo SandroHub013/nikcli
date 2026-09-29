@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { GATE_LIMITS, gateChecks, gatePasses, immobileCost, mean, type GateMeasures } from "./gate"
+import {
+  GATE_LIMITS,
+  gateChecks,
+  gatePasses,
+  immobileCost,
+  mean,
+  worstShot,
+  type BenchRow,
+  type GateMeasures,
+} from "./gate"
 
 const good: GateMeasures = {
   frameMb: 96,
@@ -34,7 +43,9 @@ describe("the NikVerse gate", () => {
     expect(red({ movingFps: 90 })).toEqual(["fps while moving"])
     expect(red({ idleAnimationFramesPerSecond: 60 })).toEqual(["animation frames a second while immobile"])
     expect(red({ baselineGpuCpuPercent: 5.5 })).toEqual(["GPU baseline with the world closed (valid up to 5), %"])
-    expect(red({ gpuFrameP95Ms: GATE_LIMITS.gpuFrameP95Ms + 0.5 })).toEqual(["GPU frame time p95, ms"])
+    expect(red({ gpuFrameP95Ms: GATE_LIMITS.gpuFrameP95Ms + 0.5 })).toEqual([
+      "GPU frame time p95, worst of the 8 shots, ms",
+    ])
     expect(red({ gpuMemoryGrowthMb: GATE_LIMITS.gpuMemoryGrowthMb + 1 })).toEqual(["GPU memory growth, MB"])
   })
 
@@ -48,7 +59,7 @@ describe("the NikVerse gate", () => {
   test("a measurement that could not be taken is red, not a pass", () => {
     expect(gatePasses(gateChecks({ ...good, frameMb: Number.NaN }))).toBe(false)
     expect(gatePasses(gateChecks({ ...good, immobileFrameCpuPercent: mean([]) }))).toBe(false)
-    expect(red({ gpuFrameP95Ms: Number.NaN })).toEqual(["GPU frame time p95, ms"])
+    expect(red({ gpuFrameP95Ms: Number.NaN })).toEqual(["GPU frame time p95, worst of the 8 shots, ms"])
     expect(red({ idleAnimationFramesPerSecond: Number.NaN })).toEqual(["animation frames a second while immobile"])
     expect(red({ gpuMemoryGrowthMb: Number.NaN })).toEqual(["GPU memory growth, MB"])
     // Without a baseline the GPU's share cannot be told from ADE's: not a pass either.
@@ -92,5 +103,40 @@ describe("what the world costs when it draws nothing", () => {
 
   test("no baseline is NaN, and NaN is never under a line", () => {
     expect(Number.isNaN(immobileCost(0.1, 1, Number.NaN))).toBe(true)
+  })
+})
+
+describe("the worst of the eight shots", () => {
+  const row = (n: number, p95: number | undefined, scale?: number): BenchRow => ({
+    level: "media",
+    n,
+    name: `shot${n}`,
+    gpu: p95 === undefined ? undefined : { p95, scale },
+  })
+  const eight = (p95s: number[], scales: number[] = []) => p95s.map((p, i) => row(i + 1, p, scales[i]))
+
+  test("it is the largest p95, with the shot it belongs to and the scale that shot settled at", () => {
+    const worst = worstShot(eight([4, 5, 6, 13.4, 5, 8, 9, 3], [1, 1, 1, 0.9, 1, 1, 1, 1]), "media")
+    expect([worst.p95, worst.n, worst.name, worst.scale, worst.shots]).toEqual([13.4, 4, "shot4", 0.9, 8])
+  })
+
+  test("the view a player starts in (3 ms) does not decide: the desk does", () => {
+    // The gate used to read `__nikverseBench` on the default view and passed on 3 ms while a shot took 16.
+    const worst = worstShot(eight([3, 3, 3, 16.4, 3, 3, 3, 3]), "media")
+    expect(worst.p95).toBe(16.4)
+    expect(red({ gpuFrameP95Ms: worst.p95 })).toEqual(["GPU frame time p95, worst of the 8 shots, ms"])
+  })
+
+  test("a bench with fewer than eight shots, or a shot with no time, is not a pass", () => {
+    expect(worstShot(eight([3, 3, 3]), "media").p95).toBeNaN()
+    expect(worstShot([...eight([3, 3, 3, 3, 3, 3, 3]), row(8, undefined)], "media").p95).toBeNaN()
+    expect(worstShot(eight([3, 3, 3, 3, 3, 3, 3, Number.NaN]), "media").p95).toBeNaN()
+    expect(worstShot([], "media").p95).toBeNaN()
+    expect(red({ gpuFrameP95Ms: worstShot([], "media").p95 })).toEqual(["GPU frame time p95, worst of the 8 shots, ms"])
+  })
+
+  test("only the rows of the level asked for count", () => {
+    const rows = [...eight([3, 3, 3, 3, 3, 3, 3, 3]), { level: "bassa", n: 1, gpu: { p95: 40 } }]
+    expect(worstShot(rows, "media").p95).toBe(3)
   })
 })

@@ -33,6 +33,7 @@ import {
 } from "three/webgpu"
 import { cityUrl, loadCityFile, type CastDeps } from "./assets"
 import type { Loaded } from "./rig"
+import { releaseAfterUpload } from "./upload-release"
 
 export interface ShopTint {
   /** The plaster of the walls, `0xRRGGBB` in sRGB. */
@@ -236,7 +237,8 @@ async function lightmap(deps: KitDeps, name: string): Promise<Texture | undefine
   try {
     const texture = await deps.decode(new Uint8Array(bytes), true)
     texture.colorSpace = SRGBColorSpace
-    return texture
+    // Once the GPU has it, the CPU's copy goes (`upload-release.ts`).
+    return releaseAfterUpload(texture)
   } catch (error) {
     // The city is drawn without this baked light instead of not being drawn at all.
     deps.warn?.(`${url}: lightmap non decodificata (${String((error as Error)?.message ?? error).slice(0, 120)})`)
