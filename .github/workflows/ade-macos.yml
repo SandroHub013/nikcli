@@ -29,6 +29,10 @@ jobs:
   build:
     if: github.repository == 'SandroHub013/nikcli'
     runs-on: macos-14
+    env:
+      # build.rs fails the build if NikVerse's 3D city cannot be bundled, instead of
+      # shipping the plain list in silence (`nikverse/release-env.test.ts`).
+      NIKVERSE_WORLD_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v7
 

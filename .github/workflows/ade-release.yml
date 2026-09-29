@@ -144,6 +144,10 @@ jobs:
     # gone, and a release on red tests is worse than none.
     needs: [draft, checks]
     env:
+      # build.rs bundles NikVerse's 3D city with bun; without this a build that
+      # cannot do it warns and ships the plain list, in silence. A release must
+      # fail instead (`nikverse/release-env.test.ts` holds this line).
+      NIKVERSE_WORLD_REQUIRED: "1"
       # Authenticode signing through SignPath Foundation starts the day its API
       # token is added as a secret; until then the Windows setup ships
       # unsigned, as before. See packages/ade/CODE_SIGNING.md.

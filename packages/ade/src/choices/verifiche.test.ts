@@ -297,4 +297,6 @@ test("lint: no test imports design-preview.tsx before compileSolidJsx() can run"
   }
   walk(src)
   expect(wrong).toEqual([])
-})
+  // It reads every test file under src: on a loaded machine the first read of each waits for the antivirus, and the
+  // default 5 s went by in the full suite (13/13 alone). The ceiling is explicit.
+}, 30_000)

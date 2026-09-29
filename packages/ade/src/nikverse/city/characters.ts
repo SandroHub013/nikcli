@@ -79,7 +79,7 @@ const blobMaterial = new MeshBasicMaterial({ color: 0x000000, transparent: true,
 export function showDetail(person: Person, detail: "full" | "slow" | "impostor", distance = 0): void {
   const far = detail === "impostor"
   person.body.visible = !far
-  person.signal.visible = person.signal.visible && !far
+  // The mark over the head is not part of the figure: it stays at any distance (`setSignal`).
   person.impostor.visible = far
   // A rigged person also draws the LOD their distance asks for.
   if (person.rig && !far) showLod(person.rig, lodAt(distance) ?? 2)
@@ -224,11 +224,26 @@ export function poseSeated(p: Person, look: StateLook, previous: StateLook, blen
     play(p.rig, seated ? ROLE_OF_POSE[look.pose] : "idle")
     advance(p.rig, t)
   } else applyJoints(p, mixJoints(jointsFor(previous.pose, t), jointsFor(look.pose, t), blend))
+  setSignal(p, look, t)
+}
+
+/** The mark grows with distance up to this many times its size, so that it is still a few pixels at the edge of the range. */
+export const SIGNAL_MAX_SCALE = 5
+/** From this far away the mark starts to grow (metres): up to it, the figure and the mark are as they are. */
+export const SIGNAL_GROWS_FROM = 25
+
+/**
+ * The mark over the head, when the session needs the user. It is worked out for everyone in view, at any distance,
+ * because it is the one thing about a far session that the user has to see: the figure may be a box, the mark is
+ * not. It turns and bobs, so it reads from across the square, and it grows with the distance to stay readable.
+ */
+export function setSignal(p: Person, look: StateLook, t: number, distance = 0): void {
   p.signal.visible = look.signal !== "none"
   p.attention.visible = look.signal === "attention"
   p.question.visible = look.signal === "question"
-  // The mark turns and bobs, so a session that needs the user reads from across the square.
-  p.signal.position.y = 1.95 + Math.sin(t * 3) * 0.05
+  const grow = Math.min(SIGNAL_MAX_SCALE, Math.max(1, distance / SIGNAL_GROWS_FROM))
+  p.signal.scale.setScalar(grow)
+  p.signal.position.y = 1.95 + 0.25 * (grow - 1) + Math.sin(t * 3) * 0.05
   p.signal.rotation.y = t * 2
 }
 

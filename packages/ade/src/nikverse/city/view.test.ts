@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
+import { SIGNAL_MAX_SCALE } from "./characters"
 import { spawnPlayer } from "./controller"
 import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, WALL_HEIGHT, placementOf } from "./layout"
 import { castOf } from "./test-cast"
@@ -238,14 +239,53 @@ describe("what is drawn depends on where the camera is", () => {
     return { town, view }
   }
 
-  test("near, the whole figure with its mark; past 30 metres one box, and no mark", () => {
+  test("near, the whole figure with its mark; past 30 metres one box, and the mark still there", () => {
     const { town, view } = one()
     view.update(town, spawnPlayer(), 1, camAt(0, 12))
     expect([view.person("p1")!.body.visible, view.person("p1")!.impostor.visible]).toEqual([true, false])
     expect(view.person("p2")!.signal.visible).toBe(true)
     view.update(town, spawnPlayer(), 2, camAt(0, 60))
     expect([view.person("p1")!.body.visible, view.person("p1")!.impostor.visible]).toEqual([false, true])
+    expect(view.person("p2")!.signal.visible).toBe(true)
+    expect(view.person("p2")!.attention.visible).toBe(true)
+    // And the session that does not need the user has none, near or far.
+    expect(view.person("p1")!.signal.visible).toBe(false)
+  })
+
+  test("a session that starts to need the user while it is far shows the mark, without its figure being posed; it goes when the need does", () => {
+    const { town, view } = one()
+    const far = camAt(0, 80)
+    view.update(town, spawnPlayer(), 1, far)
+    expect(view.person("p1")!.signal.visible).toBe(false)
+    town.sync(picture([shop("a", 0)], [agent("p1", "a", { state: "ask" }), agent("p2", "a", { state: "work" })]))
+    for (let t = 0; t < 2; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 2, far)
+    expect([view.person("p1")!.signal.visible, view.person("p1")!.question.visible, view.person("p1")!.attention.visible]).toEqual([true, true, false])
     expect(view.person("p2")!.signal.visible).toBe(false)
+    // An impostor is never posed: the mark is the only thing that changed.
+    expect(view.person("p1")!.posedAt).toBe(-1)
+    // Back near, it is the same mark; and once the session is answered it goes, near or far.
+    view.update(town, spawnPlayer(), 3, camAt(0, 8))
+    expect(view.person("p1")!.signal.visible).toBe(true)
+    town.sync(picture([shop("a", 0)], [agent("p1", "a"), agent("p2", "a")]))
+    for (let t = 0; t < 2; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 4, far)
+    expect(view.person("p1")!.signal.visible).toBe(false)
+  })
+
+  test("the mark grows with the distance, from 25 metres, up to five times, and stays above the head", () => {
+    const { town, view } = one()
+    const scaleAt = (out: number) => {
+      view.update(town, spawnPlayer(), 1, camAt(0, out))
+      return view.person("p2")!.signal.scale.x
+    }
+    // The distance is the camera's to the person, who sits a couple of metres inside the shop.
+    expect(scaleAt(8)).toBe(1)
+    expect(scaleAt(20)).toBe(1)
+    expect(scaleAt(60)).toBeGreaterThan(2)
+    expect(scaleAt(60)).toBeLessThan(3)
+    expect(scaleAt(130)).toBe(SIGNAL_MAX_SCALE)
+    expect(view.person("p2")!.signal.position.y).toBeGreaterThan(1.95 + 0.25 * (SIGNAL_MAX_SCALE - 1) - 0.06)
   })
 
   test("past 15 metres the pose is worked out ten times a second, near it every frame, and an impostor's never", () => {

@@ -32,7 +32,7 @@ import {
   Vector3,
   type PerspectiveCamera,
 } from "three/webgpu"
-import { createPerson, paint, poseSeated, poseWalking, showDetail, sit, styleOf, type Person } from "./characters"
+import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
@@ -319,6 +319,8 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       showDetail(person, detail, distance)
       person.posedAt = t
     }
+    // The mark is not the figure's: it is worked out for whoever is in view, box or not.
+    if (seen) setSignal(person, a.look, t, distance)
     // Someone who is away leaves an empty chair; the rest scale in and out.
     const present = a.look.present ? a.presence : 0
     person.group.visible = present > 0.01
