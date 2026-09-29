@@ -12,7 +12,7 @@ export const GATE_LIMITS = {
   stillCpuPercent: 1,
   /** Frames a second while the character walks; a display faster than this must not make the city run faster. */
   movingFps: 60,
-  /** The GPU time of a frame at its 95th percentile, in ms, with no cap and no display in the way (`src/nikverse/city/bench.ts`). */
+  /** The GPU time of a frame at its 95th percentile, in ms, of the WORST of the eight shots, with no cap and no display in the way (`src/nikverse/city/bench.ts`). */
   gpuFrameP95Ms: 15,
   /** The GPU process with the world closed may not use more than this: above it ADE was busy and the measure is not valid. */
   baselineMaxPercent: 5,
@@ -39,7 +39,7 @@ export interface GateMeasures {
   baselineGpuCpuPercent: number
   /** Mean frames a second while walking. */
   movingFps: number
-  /** The GPU time of a frame at the 95th percentile, from the world's own bench. */
+  /** The GPU time of a frame at the 95th percentile of the worst of the eight shots (`worstShot`): not the view a player starts in. */
   gpuFrameP95Ms: number
   /** Animation frames a second the page requested in the "immobile" mode (counted in a browser trace). */
   idleAnimationFramesPerSecond: number
@@ -91,7 +91,7 @@ export function gateChecks(measures: GateMeasures, limits = GATE_LIMITS): GateCh
       limits.idleAnimationFramesPerSecond,
     ),
     under("fps while moving", measures.movingFps, limits.movingFps + 1),
-    under("GPU frame time p95, ms", measures.gpuFrameP95Ms, limits.gpuFrameP95Ms),
+    under("GPU frame time p95, worst of the 8 shots, ms", measures.gpuFrameP95Ms, limits.gpuFrameP95Ms),
     under("GPU memory growth, MB", measures.gpuMemoryGrowthMb, limits.gpuMemoryGrowthMb),
   ]
 }
@@ -104,3 +104,41 @@ export const median = (values: readonly number[]) => {
 }
 export const mean = (values: readonly number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : Number.NaN
+
+/** What `nikverse-shots.ts` writes for each shot, as far as the gate reads it. */
+export interface BenchRow {
+  level: string
+  n: number
+  name?: string
+  gpu?: { p95: number; scale?: number; sync?: string }
+}
+
+export interface WorstShot {
+  /** The p95 of the worst shot, in ms; NaN when the bench is not the whole one. */
+  p95: number
+  n: number
+  name?: string
+  /** The resolution scale that shot settled at (1 where the level does not move it). */
+  scale: number
+  shots: number
+}
+
+/**
+ * The worst of the eight shots of a level, from the bench's rows. A bench with fewer than eight shots measured, or a shot without
+ * a time, is NaN: a gate must not go green on the shots that could be taken.
+ */
+export function worstShot(rows: readonly BenchRow[], level: string, expected = 8): WorstShot {
+  const mine = rows.filter((r) => r.level === level)
+  const times = mine.map((r) => r.gpu?.p95 ?? Number.NaN)
+  const complete = mine.length === expected && times.every(Number.isFinite)
+  let worst = mine[0]
+  for (const r of mine)
+    if ((r.gpu?.p95 ?? Number.NEGATIVE_INFINITY) > (worst?.gpu?.p95 ?? Number.NEGATIVE_INFINITY)) worst = r
+  return {
+    p95: complete ? Math.max(...times) : Number.NaN,
+    n: worst?.n ?? 0,
+    name: worst?.name,
+    scale: worst?.gpu?.scale ?? 1,
+    shots: mine.length,
+  }
+}

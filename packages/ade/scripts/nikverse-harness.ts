@@ -1,14 +1,15 @@
 /**
  * What the scripts that run NikVerse's world in a real browser share: the world's page and its 3D bundle (built in
  * memory) served on a local port the way the `nikverse` scheme serves them, with the same policy; a headless Edge
- * or Chrome of its own (a temporary profile, killed at the end: never ADE); and a line to it over CDP.
+ * or Chrome of its own (a profile under `.ade-test/browsers`, its whole tree killed at the end, on any error, on a signal and
+ * when the script dies: `src/nikverse/browser-guard.ts`; never ADE); and a line to it over CDP.
  * `nikverse-render-check.ts` and `nikverse-shots.ts` are built on it.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { buildWorld } from "../src/nikverse/city/build-world"
+import { guardBrowser, newProfile, profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
 
 const root = join(import.meta.dir, "..")
 const world = join(root, "src", "nikverse", "world")
@@ -80,6 +81,8 @@ export interface HarnessOptions {
   gpu?: "software" | "real"
   /** Extra flags for the browser. */
   flags?: string[]
+  /** The longest the browser may live, ms. Default 45 minutes. */
+  maxMs?: number
 }
 
 export async function startHarness(options: HarnessOptions) {
@@ -96,6 +99,8 @@ export async function startHarness(options: HarnessOptions) {
     process.exit(2)
   }
   mkdirSync(options.out, { recursive: true })
+  // The browsers of earlier runs that died without closing theirs (a timeout, a closed terminal) go first; the old ones lived in %TEMP%.
+  sweepOrphans([profilesDir(root)])
 
   const built = await buildWorld()
   if (!built.ok) throw new Error(built.errors.join("\n"))
@@ -120,6 +125,8 @@ export async function startHarness(options: HarnessOptions) {
         : { "content-security-policy": CSP }
       const send = (body: string, type: string) =>
         new Response(body, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
+      const own = options.routes?.(url, policy)
+      if (own) return own
       // N3's files: `/assets/levels/...` is the levels folder, the way the scheme serves it.
       const level = /^\/assets\/levels\/((?:bassa|media|alta)\/)?((?:lightmap\/)?[a-z_0-9]+\.(?:glb|png|ktx2))$/.exec(
         url.pathname,
@@ -133,8 +140,6 @@ export async function startHarness(options: HarnessOptions) {
             : "model/gltf-binary"
         return new Response(file, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
       }
-      const own = options.routes?.(url, policy)
-      if (own) return own
       switch (url.pathname) {
         case "/":
         case "/index.html":
@@ -156,9 +161,9 @@ export async function startHarness(options: HarnessOptions) {
   })
   const base = `http://127.0.0.1:${server.port}`
 
-  const profile = join(tmpdir(), `nikverse-browser-${process.pid}`)
-  mkdirSync(profile, { recursive: true })
-  const child = Bun.spawn(
+  const profile = newProfile(profilesDir(root))
+  // The process this starts is a launcher that may hand over to the real browser and exit at once: the guard follows the profile, not this pid.
+  Bun.spawn(
     [
       browser,
       "--headless=new",
@@ -181,6 +186,8 @@ export async function startHarness(options: HarnessOptions) {
     ],
     { stdout: "ignore", stderr: "ignore" },
   )
+  // From here the browser cannot outlive this process: not on an error below, not on a signal, not on a hard kill.
+  const guard = guardBrowser({ profile, maxMs: options.maxMs })
 
   async function debuggingPort(): Promise<number> {
     const file = join(profile, "DevToolsActivePort")
@@ -198,103 +205,106 @@ export async function startHarness(options: HarnessOptions) {
     throw new Error("the browser did not open its debugging port")
   }
 
-  const stop = () => {
-    // The whole tree: the crash handler and the utility processes of the browser outlive a plain kill of the main one.
-    if (process.platform === "win32")
-      Bun.spawnSync(["taskkill", "/PID", String(child.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" })
-    else child.kill()
-  }
-  let port: number
-  try {
-    port = await debuggingPort()
-  } catch (error) {
-    stop()
+  let closed = false
+  const shutDown = (pages: Cdp[]) => {
+    if (closed) return
+    closed = true
+    for (const line of pages) {
+      try {
+        line.close()
+      } catch {
+        // The line was never opened, or is already shut.
+      }
+    }
+    guard.stop()
     server.stop(true)
+  }
+  const lines: Cdp[] = []
+  try {
+    return await launch()
+  } catch (error) {
+    shutDown(lines)
     throw error
   }
-  const targets: Array<{ type: string; webSocketDebuggerUrl: string }> = await (
-    await fetch(`http://127.0.0.1:${port}/json/list`)
-  ).json()
-  const page = await Cdp.open(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl)
-  // The browser's own line, for what the pages cannot say: the CPU time of each of its processes.
-  const version: { webSocketDebuggerUrl: string } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()
-  const browserLine = await Cdp.open(version.webSocketDebuggerUrl)
-  /** CPU seconds so far, by process type (the page's renderer, the GPU process, the browser). */
-  const cpuByProcess = async () => {
-    const { processInfo } = await browserLine.send<{
-      processInfo: Array<{ type: string; id: number; cpuTime: number }>
-    }>("SystemInfo.getProcessInfo")
-    return new Map(processInfo.map((p) => [`${p.type}:${p.id}`, p.cpuTime]))
-  }
-  const problems: string[] = []
-  page.on((method, params) => {
-    if (method === "Runtime.exceptionThrown")
-      problems.push(`exception: ${params.exceptionDetails?.exception?.description ?? params.exceptionDetails?.text}`)
-    if (method === "Runtime.consoleAPICalled" && params.type === "error")
-      problems.push(
-        `console.error: ${params.args
-          ?.map((a: any) => a.value ?? a.description)
-          .join(" ")
-          .slice(0, 300)}`,
-      )
-    if (method === "Log.entryAdded" && params.entry.level === "error")
-      problems.push(`log: ${params.entry.text} ${params.entry.url ?? ""}`.slice(0, 300))
-  })
-  await page.send("Runtime.enable")
-  await page.send("Log.enable")
-  await page.send("Page.enable")
 
-  const evaluate = async <T = any>(expression: string): Promise<T> => {
-    const result = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })
-    if (result.exceptionDetails)
-      throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
-    return result.result.value as T
-  }
-
-  async function open(path: string, size: { width: number; height: number }) {
-    await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false })
-    await page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } })
-    await page.send("Page.navigate", { url: `${base}${path}` })
-  }
-
-  async function until(condition: string, what: string, ms = 30_000) {
-    const start = Date.now()
-    while (Date.now() - start < ms) {
-      if (await evaluate<boolean>(condition).catch(() => false)) return
-      await Bun.sleep(150)
+  async function launch() {
+    const port = await debuggingPort()
+    const targets: Array<{ type: string; webSocketDebuggerUrl: string }> = await (
+      await fetch(`http://127.0.0.1:${port}/json/list`)
+    ).json()
+    const page = await Cdp.open(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl)
+    lines.push(page)
+    // The browser's own line, for what the pages cannot say: the CPU time of each of its processes.
+    const version: { webSocketDebuggerUrl: string } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()
+    const browserLine = await Cdp.open(version.webSocketDebuggerUrl)
+    lines.push(browserLine)
+    /** CPU seconds so far, by process type (the page's renderer, the GPU process, the browser). */
+    const cpuByProcess = async () => {
+      const { processInfo } = await browserLine.send<{
+        processInfo: Array<{ type: string; id: number; cpuTime: number }>
+      }>("SystemInfo.getProcessInfo")
+      return new Map(processInfo.map((p) => [`${p.type}:${p.id}`, p.cpuTime]))
     }
-    const info = await evaluate(
-      `JSON.stringify({city: document.documentElement.dataset.city, error: document.documentElement.dataset.cityError, backend: document.documentElement.dataset.backend})`,
-    ).catch(() => "?")
-    throw new Error(`timeout waiting for ${what} ${info} ${problems.slice(0, 3).join(" | ")}`)
-  }
+    const problems: string[] = []
+    page.on((method, params) => {
+      if (method === "Runtime.exceptionThrown")
+        problems.push(`exception: ${params.exceptionDetails?.exception?.description ?? params.exceptionDetails?.text}`)
+      if (method === "Runtime.consoleAPICalled" && params.type === "error")
+        problems.push(
+          `console.error: ${params.args
+            ?.map((a: any) => a.value ?? a.description)
+            .join(" ")
+            .slice(0, 300)}`,
+        )
+      if (method === "Log.entryAdded" && params.entry.level === "error")
+        problems.push(`log: ${params.entry.text} ${params.entry.url ?? ""}`.slice(0, 300))
+    })
+    await page.send("Runtime.enable")
+    await page.send("Log.enable")
+    await page.send("Page.enable")
 
-  async function shot(name: string): Promise<string> {
-    const { data } = await page.send("Page.captureScreenshot", { format: "png" })
-    writeFileSync(join(options.out, `${name}.png`), Buffer.from(data, "base64"))
-    return data
-  }
+    const evaluate = async <T = any>(expression: string): Promise<T> => {
+      const result = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })
+      if (result.exceptionDetails)
+        throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
+      return result.result.value as T
+    }
 
-  return {
-    base,
-    page,
-    browserLine,
-    cpuByProcess,
-    problems,
-    evaluate,
-    open,
-    until,
-    shot,
-    close() {
-      page.close()
-      browserLine.close()
-      stop()
-      server.stop(true)
-      try {
-        rmSync(profile, { recursive: true, force: true })
-      } catch {
-        // A file still held by a process that is going away: the temp folder is cleaned by the system.
+    async function open(path: string, size: { width: number; height: number }) {
+      await page.send("Emulation.setDeviceMetricsOverride", { ...size, deviceScaleFactor: 1, mobile: false })
+      await page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } })
+      await page.send("Page.navigate", { url: `${base}${path}` })
+    }
+
+    async function until(condition: string, what: string, ms = 30_000) {
+      const start = Date.now()
+      while (Date.now() - start < ms) {
+        if (await evaluate<boolean>(condition).catch(() => false)) return
+        await Bun.sleep(150)
       }
-    },
+      const info = await evaluate(
+        `JSON.stringify({city: document.documentElement.dataset.city, error: document.documentElement.dataset.cityError, backend: document.documentElement.dataset.backend})`,
+      ).catch(() => "?")
+      throw new Error(`timeout waiting for ${what} ${info} ${problems.slice(0, 3).join(" | ")}`)
+    }
+
+    async function shot(name: string): Promise<string> {
+      const { data } = await page.send("Page.captureScreenshot", { format: "png" })
+      writeFileSync(join(options.out, `${name}.png`), Buffer.from(data, "base64"))
+      return data
+    }
+
+    return {
+      base,
+      page,
+      browserLine,
+      cpuByProcess,
+      problems,
+      evaluate,
+      open,
+      until,
+      shot,
+      close: () => shutDown(lines),
+    }
   }
 }

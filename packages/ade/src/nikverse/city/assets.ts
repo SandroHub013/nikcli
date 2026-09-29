@@ -14,6 +14,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js"
 import { NoColorSpace, SRGBColorSpace, Texture, type Material, type Mesh, type MeshStandardMaterial } from "three/webgpu"
 import { readGlb, unpack, type Slot } from "./glb"
+import { releaseAfterUpload } from "./upload-release"
 import { BODIES, animationsUrl, glbUrl, templateOf, type Body, type Cast, type Loaded, type Template } from "./rig"
 
 export interface AssetDeps {
@@ -82,6 +83,8 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
           failed.add(String(error?.message ?? error).slice(0, 120))
         })
         if (!texture) return
+        // Once the GPU has it, the CPU's copy goes (`upload-release.ts`).
+        releaseAfterUpload(texture)
         if (slot === "map") material.map = texture
         else if (slot === "normalMap") material.normalMap = texture
         else {

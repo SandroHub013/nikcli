@@ -6,21 +6,32 @@
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
  *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
  *   bun scripts/nikverse-gate.ts --start      start it first (voice off) and stop it after
- *   options: --cycles N (3) --rest S (30, wait for "at rest") --cap S (300, the whole run) --out FILE
+ *   options: --cycles N (3) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
+ *            --bench FILE  the bench.json of a `nikverse-shots.ts` run to read the GPU time from, instead of running one
  *
  * What it measures, with the window visible and on a project (the real iGPU, so not headless): the
  * `nikverse.localhost` renderer's private bytes and working set over N open/close cycles; ADE's own
  * renderer (private, working set, JS heap after a GC) against the world-closed baseline 5 s after the last
  * close and again after `--rest` (the baseline is taken after one warm-up open/close, once ADE has settled); CPU of the frame, the GPU and ADE in the three draw modes (moving, still,
  * immobile) three times each, after a baseline of the GPU process with the world closed; frames a second; the GPU time of a
- * frame (the world's own `window.__nikverseBench`, 240 frames back to back, three times); the GPU process' memory. Only ADE Test is driven (it asks for
+ * frame: the p95 of the WORST of the eight shots of the level, read from the bench (`nikverse-shots.ts`, run here on the real GPU unless `--bench` gives one), with the scale it settled at; the view a player starts in (the world's own `window.__nikverseBench` in ADE Test, three times) is kept in the JSON as information only; the GPU process' memory. Only ADE Test is driven (it asks for
  * `data-ade-build="test"` first); the UI it clicks is the Italian one ("Nuovo pannello", "NikVerse").
  */
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { gateChecks, gatePasses, immobileCost, mean, median, GATE_LIMITS } from "../src/nikverse/gate"
+import { profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
+import {
+  gateChecks,
+  gatePasses,
+  immobileCost,
+  mean,
+  median,
+  worstShot,
+  GATE_LIMITS,
+  type BenchRow,
+} from "../src/nikverse/gate"
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -29,7 +40,7 @@ const arg = (name: string) => {
 const flag = (name: string) => process.argv.includes(name)
 const CYCLES = Number(arg("--cycles") ?? 3)
 const REST_S = Number(arg("--rest") ?? 30)
-const CAP_S = Number(arg("--cap") ?? 300)
+const CAP_S = Number(arg("--cap") ?? 600)
 const OUT = arg("--out")
 
 const adeDir = join(import.meta.dir, "..")
@@ -493,6 +504,42 @@ try {
   log("CPU del processo GPU a mondo chiuso, dopo:", baselineGpuRunsAfter.map((v) => v.toFixed(2)).join(", "), "%")
   const baselineGpuCpu = mean([...baselineGpuRuns, ...baselineGpuRunsAfter])
 
+  // The GPU time the ceiling is held to: the worst of the eight shots of the level the world ran at, not the view a player starts in (a
+  // close-up interior took 16 ms while that view took 3). The shots run in a headless browser on the same GPU, with ADE's world shut.
+  const benchLevel = String(level ?? "media")
+  let benchFile = arg("--bench")
+  if (!benchFile) {
+    benchFile = join(root, ".ade-test", "gate-bench", "bench.json")
+    log(`le 8 inquadrature a ${benchLevel} (banco su Edge headless, GPU vera)`)
+    spawnSync(
+      "bun",
+      [
+        "scripts/nikverse-shots.ts",
+        "--levels",
+        benchLevel,
+        "--no-clip",
+        "--label",
+        "gate",
+        "--out",
+        join(root, ".ade-test", "gate-bench"),
+      ],
+      {
+        cwd: adeDir,
+        stdio: "ignore",
+        timeout: 480_000,
+      },
+    )
+    // A timeout kills the script and nothing of its own runs: the browser it left is taken here, not at somebody's next run.
+    sweepOrphans([profilesDir(adeDir)])
+  }
+  const benchRows: BenchRow[] = existsSync(benchFile)
+    ? (JSON.parse(readFileSync(benchFile, "utf8")) as { rows: BenchRow[] }).rows
+    : []
+  const worst = worstShot(benchRows, benchLevel)
+  log(
+    `peggiore delle 8 a ${benchLevel}: p95 ${worst.p95.toFixed(2)} ms nell'inquadratura ${worst.n} ${worst.name ?? ""}, scala ${worst.scale}`,
+  )
+
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {
     frameMb: Math.max(...cycles.map((c) => c.frameMb as number)),
@@ -505,7 +552,7 @@ try {
     movingFps: mean(rows.map((r) => r.moving.fps)),
     idleAnimationFramesPerSecond:
       "animationFramesPerSecond" in idleTrace ? (idleTrace.animationFramesPerSecond as number) : Number.NaN,
-    gpuFrameP95Ms: median(timings.map((t) => t.p95)),
+    gpuFrameP95Ms: worst.p95,
     gpuMemoryGrowthMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
   }
   const checks = gateChecks(measures)
@@ -524,6 +571,10 @@ try {
       movingCpuPercentMedian: median(rows.map((r) => r.moving.frameCpu + r.moving.gpuCpu)),
       level,
       gpuTimings: timings,
+      // The worst shot the ceiling was held to, and where the bench came from.
+      worstShot: { ...worst, level: benchLevel, bench: benchFile },
+      // The default view's p95 (ADE Test, `__nikverseBench`): information, not what the ceiling reads.
+      defaultViewP95Ms: median(timings.map((t) => t.p95)),
       // The scale the level's resolution settled at for the default view (1 where the level does not move it).
       gpuScale: median(timings.map((t) => (t as { scale?: number }).scale ?? 1)),
       baselineGpuRuns,
