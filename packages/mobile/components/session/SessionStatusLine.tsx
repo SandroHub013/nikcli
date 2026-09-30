@@ -43,19 +43,18 @@ export function SessionStatusLine({ label, working, runningCount, onOpenActivity
   return (
     <View
       style={{
-        alignSelf: "stretch",
-        minHeight: 44,
+        alignSelf: "flex-start",
+        height: 28,
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
-        marginBottom: 6,
-        borderRadius: 16,
+        gap: 6,
+        marginBottom: 4,
+        borderRadius: 999,
         borderCurve: "continuous",
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: isDark ? hexToRgba(palette.ink, 0.1) : hexToRgba(palette.border, 0.72),
         backgroundColor: isDark ? hexToRgba(palette.ink, 0.04) : hexToRgba(palette.ink, 0.03),
-        paddingHorizontal: 14,
-        paddingVertical: 8,
+        paddingHorizontal: 10,
       }}
     >
       <Animated.View
@@ -63,16 +62,16 @@ export function SessionStatusLine({ label, working, runningCount, onOpenActivity
           transform: [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }],
         }}
       >
-        <Sparkles size={16} color={palette.warn} strokeWidth={2.2} />
+        <Sparkles size={13} color={palette.warn} strokeWidth={2.2} />
       </Animated.View>
       {working ? (
-        <Text style={{ flexShrink: 1, color: palette.warn, ...typeStyle(15, { weight: "500" }) }} numberOfLines={1}>
+        <Text style={{ flexShrink: 1, color: palette.warn, ...typeStyle(13, { weight: "500" }) }} numberOfLines={1}>
           {label ?? "Working"}…
         </Text>
       ) : null}
       {runningCount > 0 ? (
         <>
-          {working ? <Text style={{ color: palette.muted, ...typeStyle(15) }}>·</Text> : null}
+          {working ? <Text style={{ color: palette.muted, ...typeStyle(13) }}>·</Text> : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${countLabel}. Opens background activity.`}
@@ -80,14 +79,14 @@ export function SessionStatusLine({ label, working, runningCount, onOpenActivity
               void triggerHaptic("selection")
               onOpenActivity()
             }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             style={({ pressed }) => ({
-              minHeight: 44,
               justifyContent: "center",
               opacity: pressed ? 0.6 : 1,
               transform: [{ scale: pressed ? 0.97 : 1 }],
             })}
           >
-            <Text style={{ color: palette.accentLight, ...typeStyle(15, { weight: "500" }) }}>{countLabel}</Text>
+            <Text style={{ color: palette.accentLight, ...typeStyle(13, { weight: "500" }) }}>{countLabel}</Text>
           </Pressable>
         </>
       ) : null}

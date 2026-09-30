@@ -3,6 +3,9 @@ import { ActivityIndicator, Animated, Pressable, ScrollView, Text, View } from "
 import {
   Braces,
   Copy,
+  GitPullRequest,
+  GitCompare,
+  Trash2,
   FileText,
   ListChecks,
   MonitorPlay,
@@ -37,6 +40,15 @@ type Props = {
   onOpenActivity?(): void
   /** Background runs in this session, shown on the activity row. */
   activityCount?: number
+  /** Git actions: shown only for sessions that run in a worktree. */
+  onPublish?(): void
+  publishLabel?: string
+  publishDisabled?: boolean
+  onReview?(): void
+  onCleanup?(): void
+  cleanupLabel?: string
+  cleanupDisabled?: boolean
+  cleaning?: boolean
 }
 
 type RowProps = {
@@ -168,6 +180,14 @@ export function SessionActionsSheet({
   onInspect,
   onOpenActivity,
   activityCount = 0,
+  onPublish,
+  publishLabel = "Publish pull request",
+  publishDisabled = false,
+  onReview,
+  onCleanup,
+  cleanupLabel = "Clean up worktree",
+  cleanupDisabled = false,
+  cleaning = false,
 }: Props) {
   const { palette, isDark } = useAppTheme()
 
@@ -249,6 +269,43 @@ export function SessionActionsSheet({
             onPress={onTeleport}
             tone="accent"
           />
+        ) : null}
+
+        {onPublish || onReview || onCleanup ? (
+          <>
+            <SectionDivider />
+            <SectionLabel label="Git" />
+            {onReview ? (
+              <SheetRow
+                Icon={GitCompare}
+                label="Review changes"
+                description="Stage, commit, push, pull, and diff"
+                onPress={onReview}
+                tone="accent"
+              />
+            ) : null}
+            {onPublish ? (
+              <SheetRow
+                Icon={GitPullRequest}
+                label={publishLabel}
+                description="Commit and open or update the pull request"
+                onPress={onPublish}
+                disabled={publishDisabled}
+                tone="success"
+              />
+            ) : null}
+            {onCleanup ? (
+              <SheetRow
+                Icon={Trash2}
+                label={cleaning ? "Cleaning up…" : cleanupLabel}
+                description="Remove this session's worktree"
+                onPress={onCleanup}
+                disabled={cleanupDisabled}
+                loading={cleaning}
+                tone="neutral"
+              />
+            ) : null}
+          </>
         ) : null}
 
         <SectionDivider />
