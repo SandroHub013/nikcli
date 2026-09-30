@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SkinnedMesh, Texture } from "three/webgpu"
+import { BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshStandardMaterial, SkinnedMesh, Texture } from "three/webgpu"
 import { disposeTree, releaseRenderer } from "./release"
 import type { DrawingSurface } from "./renderers"
 
@@ -59,6 +59,18 @@ describe("giving the scene back", () => {
     disposeTree(root)
     expect(skeletons).toBe(1)
   })
+})
+
+test("an instanced mesh gives its instances' buffers back, hidden or not", () => {
+  const root = new Group()
+  const plants = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), 4)
+  const far = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), 4)
+  far.visible = false
+  root.add(plants, far)
+  let disposed = 0
+  for (const m of [plants, far]) m.addEventListener("dispose", () => disposed++)
+  disposeTree(root)
+  expect(disposed).toBe(2)
 })
 
 describe("giving the renderer back", () => {

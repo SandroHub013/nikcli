@@ -107,7 +107,8 @@ export function createTown() {
       const at = toWorld(s.placement, deskLocal(a.seat.desk).chair)
       return { at, yaw: s.placement.yaw + Math.PI, onDesk: true }
     }
-    return { at: toWorld(s.placement, standLocal(a.seat.index)), yaw: s.placement.yaw + Math.PI, onDesk: false }
+    // Behind the counter, facing the hologram.
+    return { at: toWorld(s.placement, standLocal(a.seat.index)), yaw: s.placement.yaw, onDesk: false }
   }
 
   return {

@@ -32,45 +32,66 @@ import {
   Vector3,
   type PerspectiveCamera,
 } from "three/webgpu"
-import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
+import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, warmRig, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
-import type { CityKit } from "./kit"
+import { paintIsland } from "./water"
+import { plantWind } from "./wind"
+import { heightFog } from "./fog"
+import { plantDetail, shopLook, type CityKit } from "./kit"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
   CHAIR_SEAT_TOP,
   COMPUTER_HEIGHT,
+  COUNTER,
   DESK_HALF,
   DESK_HEIGHT,
-  DOOR_WIDTH,
+  EAVE_HEIGHT,
   PLAZA_RADIUS,
+  ROOF_TOP,
   SHOP_DEPTH,
   SHOP_WIDTH,
-  WALL_HEIGHT,
   deskLocal,
+  islandHeight,
   standLocal,
   toWorld,
   wallsLocal,
+  type Vec2,
 } from "./layout"
 import { detailAt, poseDue, shopInRange } from "./lod"
 import { parseLogo, type Logo } from "./logo"
 import type { Player } from "./controller"
 import { GLOW_COLOR, lookOf } from "./states"
+import { createRiseFx, type RiseFx } from "./rise"
 import { liftEase, type AgentEntity, type ShopEntity, type Town } from "./town"
 
 const box = new BoxGeometry(1, 1, 1)
 const plane = new PlaneGeometry(1, 1)
 
-/** How far a shop is below the pavement when it has not come up yet. */
-const SUNK = WALL_HEIGHT + 0.8
+/** How far a chiringuito is under the sand when it has not come up yet: all of it, roof and all. */
+const SUNK = ROOF_TOP + 0.3
 
-/** A sphere that holds a whole shop: its half diagonal, the awning and the sign above it. */
-const SHOP_RADIUS = 5.5
+/**
+ * A sphere that holds a whole chiringuito, its middle `SHOP_MIDDLE` over the ground: the roof's corners, the loungers
+ * and umbrellas in front, the torches, and the shadow and lamp light it lays on the sand around it.
+ */
+export const SHOP_RADIUS = 8.3
+export const SHOP_MIDDLE = 1.5
 
-/** The sign over the door, as N3 has its board: 3.5 wide, 0.56 tall, its middle 3.02 up and on the front face. */
-const SIGN_WIDTH = 3.3
-const SIGN_HEIGHT = 0.5
-const SIGN_Y = 3.02
-const SIGN_Z = SHOP_DEPTH / 2 + 0.16
+/**
+ * Where the name goes when the file does not say (the placeholders): a board over the counter, under the eave. The
+ * file's signs carry an anchor (`*_signtext`) with the board's middle, its turn and its size.
+ */
+const SIGN_WIDTH = 2.4
+const SIGN_HEIGHT = 0.42
+const SIGN_Y = EAVE_HEIGHT - 0.35
+const SIGN_Z = 0.9
+/** A laptop's screen, as the glow over it is drawn: the lid leans back 12 degrees, its top away from who sits. */
+const SCREEN = { width: 0.3, height: 0.19, tilt: (-12 * Math.PI) / 180 }
+/**
+ * Beyond this distance (metres) the laptops' glow is not drawn: a screen is three pixels there, and the state is the
+ * mark's over the person. It spares a draw call a desk in the views of the whole island.
+ */
+export const SCREEN_FAR = 45
 
 /** A name, drawn as a texture for the sign. Text only: the name is never parsed as anything. */
 function signTexture(name: string): CanvasTexture | undefined {
@@ -82,7 +103,8 @@ function signTexture(name: string): CanvasTexture | undefined {
   if (!ctx) return undefined
   ctx.fillStyle = "#0f141c"
   ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = "#38d8ff"
+  // A frame of chalk: cyan is the hologram's alone.
+  ctx.strokeStyle = "#e8dcc4"
   ctx.lineWidth = 8
   ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20)
   ctx.fillStyle = "#f1ecec"
@@ -100,6 +122,63 @@ function signTexture(name: string): CanvasTexture | undefined {
   return texture
 }
 
+/** What a laptop shows: code on a dark ground while the session works, the logo as a screensaver while it is free. */
+type ScreenPicture = "code" | "logo"
+
+const screenPictures = new Map<ScreenPicture, CanvasTexture | undefined>()
+
+/**
+ * The two pictures every screen shares, drawn once. The state's colour tints them (`GLOW_COLOR`): white code for a
+ * session at work, amber for one that waits for a permission, and so on; the ground stays dark whatever the tint.
+ */
+function screenPicture(kind: ScreenPicture, logo: Logo): CanvasTexture | undefined {
+  if (screenPictures.has(kind)) return screenPictures.get(kind)
+  let texture: CanvasTexture | undefined
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas")
+    canvas.width = 256
+    canvas.height = 160
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      ctx.fillStyle = "#0d1016"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      if (kind === "code") {
+        // An editor: a title bar, then lines of code with their indents, in a few quiet syntax colours.
+        ctx.fillStyle = "#1c212b"
+        ctx.fillRect(0, 0, canvas.width, 14)
+        const hues = ["#d6d9df", "#e3b56d", "#8db7e6", "#98cf96", "#cf8f8f", "#b9a2e0"]
+        let seed = 7
+        const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+        let indent = 0
+        for (let y = 22; y < canvas.height - 6; y += 10) {
+          indent = Math.max(0, Math.min(4, indent + (next() < 0.3 ? 1 : next() < 0.3 ? -1 : 0)))
+          let x = 10 + indent * 12
+          const words = 1 + Math.floor(next() * 4)
+          for (let w = 0; w < words && x < canvas.width - 20; w++) {
+            const width = 10 + Math.floor(next() * 38)
+            ctx.fillStyle = hues[Math.floor(next() * hues.length)]
+            ctx.fillRect(x, y, Math.min(width, canvas.width - 10 - x), 5)
+            x += width + 6
+          }
+        }
+      } else {
+        // The logo in the middle, small, as the brand draws it.
+        const scale = (canvas.height * 0.55) / logo.height
+        const left = (canvas.width - logo.width * scale) / 2
+        const top = (canvas.height - logo.height * scale) / 2
+        for (const r of logo.rects) {
+          ctx.fillStyle = r.color
+          ctx.fillRect(left + r.x * scale, top + r.y * scale, r.w * scale, r.h * scale)
+        }
+      }
+      texture = new CanvasTexture(canvas)
+      texture.colorSpace = SRGBColorSpace
+    }
+  }
+  screenPictures.set(kind, texture)
+  return texture
+}
+
 interface ShopView {
   group: Group
   /** The parts that need their own disposal. */
@@ -112,6 +191,8 @@ interface ShopView {
   screens: Map<string, Mesh>
   people: Map<string, Person>
   people3: Group
+  /** The sand it throws while it comes up or goes down. */
+  rise: RiseFx
 }
 
 const WALL_MATERIAL = new MeshStandardMaterial({ color: 0x8a7560, roughness: 0.85 })
@@ -127,6 +208,8 @@ export interface CityView {
   update(town: Town, player: Player, t: number, camera: PerspectiveCamera): void
   /** The user's character. */
   user: Person
+  /** The height of the ground under a point: the island's, or 0 with the placeholders. */
+  groundAt(p: Vec2): number
   /** How many shop groups and people are drawn, for the tests. */
   counts(): { shops: number; people: number }
   /** The person drawn for a session, and the monitor at its desk, for the tests. */
@@ -141,8 +224,9 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   const own: Array<{ dispose(): void }> = []
 
   if (kit) {
-    // N3's shop: floor, walls, window, awning, desks, chairs, screens; the sign's text and the monitors' glow are ours.
-    group.add(kit.shop())
+    // The file's shop: one of its variants and colours, by the project's name; the sign's text and the monitors' glow are ours.
+    const look = shopLook(entity.shop.name, kit.variants)
+    group.add(kit.drawnShop(look.variant, look.tint))
   } else {
     const floor = new Mesh(box, FLOOR_MATERIAL)
     floor.scale.set(SHOP_WIDTH, 0.12, SHOP_DEPTH)
@@ -154,11 +238,14 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
       wall.position.set(w.x, w.height / 2, w.z)
       group.add(wall)
     }
-
-    // A lit strip over the door.
+    // The roof, and a lit strip along the counter's front.
+    const roof = new Mesh(box, WALL_MATERIAL)
+    roof.scale.set(SHOP_WIDTH + 0.6, 0.2, SHOP_DEPTH - 1.2)
+    roof.position.set(0, EAVE_HEIGHT + 0.1, -0.8)
+    group.add(roof)
     const strip = new Mesh(box, paint(0x38d8ff, { emissive: true }))
-    strip.scale.set(DOOR_WIDTH, 0.08, 0.1)
-    strip.position.set(0, WALL_HEIGHT - 0.1, SHOP_DEPTH / 2)
+    strip.scale.set(COUNTER.hx * 2, 0.05, 0.05)
+    strip.position.set(0, COUNTER.height - 0.05, COUNTER.z + COUNTER.hz + 0.03)
     group.add(strip)
   }
 
@@ -169,16 +256,29 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   own.push(signMaterial)
   if (texture) own.push(texture)
   const sign = new Mesh(plane, signMaterial)
-  sign.scale.set(SIGN_WIDTH, SIGN_HEIGHT, 1)
-  sign.position.set(0, SIGN_Y, SIGN_Z)
+  const anchor = kit?.signOf(shopLook(entity.shop.name, kit.variants).variant)
+  if (anchor) {
+    sign.scale.set(anchor.width, anchor.height, 1)
+    sign.position.set(anchor.x, anchor.y, anchor.z)
+    sign.rotation.y = anchor.yaw
+  } else {
+    sign.scale.set(SIGN_WIDTH, SIGN_HEIGHT, 1)
+    sign.position.set(0, SIGN_Y, SIGN_Z)
+  }
   group.add(sign)
 
   const deskGroup = new Group()
   group.add(deskGroup)
   const people3 = new Group()
+  // The bench's split counts what hangs from here as the people (`drawn.ts`).
+  people3.name = "people"
   group.add(people3)
 
-  return { group, own, name: entity.shop.name, desks: 0, deskGroup, monitors: [], screens: new Map(), people: new Map(), people3 }
+  const rise = createRiseFx()
+  group.add(rise.group)
+  own.push(rise)
+
+  return { group, own, name: entity.shop.name, desks: 0, deskGroup, monitors: [], screens: new Map(), people: new Map(), people3, rise }
 }
 
 /** The monitors own their material (its colour is the session's state), so it goes with them. */
@@ -198,10 +298,11 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
   for (let i = 0; i < count; i++) {
     const at = deskLocal(i)
     const screen = new Mesh(plane, new MeshBasicMaterial({ color: GLOW_COLOR.off }))
-    screen.scale.set(0.56, 0.32, 1)
-    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.035)
+    screen.scale.set(SCREEN.width, SCREEN.height, 1)
+    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.02)
     view.monitors.push(screen)
     if (kit) {
+      screen.rotation.x = SCREEN.tilt
       view.deskGroup.add(screen)
       continue
     }
@@ -218,7 +319,7 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
     back.scale.set(0.5, 0.5, 0.06)
     back.position.set(at.chair.x, CHAIR_SEAT_TOP + 0.25, at.chair.z + 0.25)
     const body = new Mesh(box, MONITOR_BODY)
-    body.scale.set(0.62, 0.38, 0.05)
+    body.scale.set(SCREEN.width + 0.03, SCREEN.height + 0.03, 0.02)
     body.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z)
     view.deskGroup.add(desk, legs, chair, back, body, screen)
   }
@@ -228,7 +329,8 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
 export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast, kit?: CityKit): CityView {
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
-  scene.fog = new Fog(0x0b1226, 70, 210)
+  // With the file's city the far towers fade into the haze at the foot of its sky dome, which is this colour.
+  scene.fog = kit?.island ? new Fog(0x3a3560, 70, 330) : kit ? new Fog(0x211f31, 60, 300) : new Fog(0x0b1226, 70, 210)
 
   scene.add(new HemisphereLight(0xb4c6ff, 0x3a2e24, 1.6))
   scene.add(new AmbientLight(0x505878, 0.9))
@@ -238,9 +340,11 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
 
   const ground = new Mesh(new CircleGeometry(140, 96), new MeshStandardMaterial({ color: 0x171a21, roughness: 0.95 }))
   ground.rotation.x = -Math.PI / 2
+  // The file's paving lies at y = 0 too: at the same height the two fight for the same pixels in patches.
+  if (kit) ground.position.y = -0.05
   scene.add(ground)
   if (kit) {
-    // N3's plaza: the paving with its plots, the pedestal and the kerb, two lamps.
+    // The file's plaza, or the island: its ground, the platform with the pedestal, the pier, the lagoon and the sky.
     scene.add(kit.plaza)
   } else {
     const plaza = new Mesh(new CircleGeometry(PLAZA_RADIUS, 72), new MeshStandardMaterial({ color: 0x2a303a, roughness: 0.8 }))
@@ -270,8 +374,18 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     scene.add(poles)
   }
 
+  // The island's lagoon and dusk sky are painted here, not by the file.
+  const island = kit?.island ? paintIsland(kit.plaza, kind) : undefined
+  // The plants sway, and on WebGPU a height fog lies at the foot of the slopes.
+  const wind = kit?.island ? plantWind(kit.plaza, kind) : undefined
+  if (kit?.island && kind === "tsl" && scene.fog instanceof Fog) heightFog(scene, scene.fog)
+
   // On N3's pedestal the hologram has no base of its own, and floats where the file's ring anchor says.
   const hologram = createHologram(logo, kind, kit ? { base: false, ringY: kit.ringY } : undefined)
+  // The island's ground has heights (the deck, the lagoon's floor, the beach); the placeholders are flat.
+  const groundAt = kit?.island ? islandHeight : () => 0
+  // On the island the hologram stands on the deck: the file's ring anchor is measured from it.
+  hologram.group.position.y += groundAt({ x: 0, z: 0 })
   scene.add(hologram.group)
 
   const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true }, cast?.get(USER_BODY))
@@ -296,7 +410,11 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     }
     const wanted = town.deskCount(entity.id)
     if (view.desks !== wanted) buildDesks(view, wanted, kit)
-    view.group.position.set(entity.placement.center.x, -SUNK * (1 - liftEase(entity.lift)), entity.placement.center.z)
+    const sunk = SUNK * (1 - liftEase(entity.lift))
+    view.group.position.set(entity.placement.center.x, groundAt(entity.placement.center) - sunk, entity.placement.center.z)
+    // The sand it throws is at the ground, however deep the chiringuito still is.
+    view.rise.group.position.y = sunk
+    view.rise.update(entity.lift)
     view.group.rotation.y = entity.placement.yaw
     return view
   }
@@ -329,12 +447,15 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     const desk = seat.kind === "desk"
     const at = seat.kind === "desk" ? deskLocal(seat.desk).chair : standLocal(seat.index)
     person.group.position.set(at.x, 0, at.z)
-    person.group.rotation.y = Math.PI
+    // Seated, facing the counter or the table; standing behind the counter, facing the hologram.
+    person.group.rotation.y = desk ? Math.PI : 0
     sit(person, desk)
     // How far they are decides how much of them is drawn and how often their pose is worked out.
     const world = toWorld(shop.placement, at)
     const distance = Math.hypot(camera.position.x - world.x, camera.position.z - world.z)
     const detail = detailAt(distance)
+    // The pictures of the LODs they show or are about to: decoded before they are needed, and only then.
+    if (person.rig) warmRig(person.rig, distance)
     showDetail(person, detail, distance)
     if (seen && poseDue(detail, t, person.posedAt)) {
       poseSeated(person, a.look, a.previous, a.blend, t, desk)
@@ -342,7 +463,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       person.posedAt = t
     }
     // The mark is not the figure's: it is worked out for whoever is in view, box or not.
-    if (seen) setSignal(person, a.look, t, distance)
+    if (seen) setSignal(person, a.look, t, distance, camera.fov)
     // Someone who is away leaves an empty chair; the rest scale in and out.
     const present = a.look.present ? a.presence : 0
     person.group.visible = present > 0.01
@@ -350,7 +471,13 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     if (desk) {
       const monitor = seat.kind === "desk" ? view.monitors[seat.desk] : undefined
       if (monitor) {
-        (monitor.material as MeshBasicMaterial).color.setHex(GLOW_COLOR[a.look.glow])
+        const material = monitor.material as MeshBasicMaterial
+        material.color.setHex(GLOW_COLOR[a.look.glow])
+        const map = screenPicture(a.look.glow === "dim" ? "logo" : "code", logo) ?? null
+        if (material.map !== map) {
+          material.map = map
+          material.needsUpdate = true
+        }
         view.screens.set(a.paneId, monitor)
       }
     }
@@ -358,6 +485,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
 
   return {
     scene,
+    groundAt,
     hologram,
     user,
     update(town, player, t, camera) {
@@ -369,10 +497,14 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       for (const entity of town.shops()) {
         seen.add(entity.id)
         const view = reconcileShop(entity, town)
-        sphere.set(new Vector3(entity.placement.center.x, 1.5, entity.placement.center.z), SHOP_RADIUS)
+        sphere.set(new Vector3(entity.placement.center.x, groundAt(entity.placement.center) + SHOP_MIDDLE, entity.placement.center.z), SHOP_RADIUS)
         const inView =
           shopInRange({ x: camera.position.x, z: camera.position.z }, entity.placement.center, SHOP_RADIUS) && frustum.intersectsSphere(sphere)
         view.group.visible = inView
+        if (kit) {
+          const far = Math.hypot(camera.position.x - entity.placement.center.x, camera.position.z - entity.placement.center.z)
+          view.deskGroup.visible = far <= SCREEN_FAR
+        }
         reconcilePeople(view, entity, town, t, camera, inView)
       }
       for (const [id, view] of shops) {
@@ -382,10 +514,20 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         disposeScreens(view)
         shops.delete(id)
       }
-      user.group.position.set(player.x, 0, player.z)
+      user.group.position.set(player.x, groundAt(player), player.z)
+      // The camera follows the user from a few metres: their near LOD.
+      if (user.rig) warmRig(user.rig, 0)
       user.group.rotation.y = player.heading
       poseWalking(user, player.speed, t)
       hologram.update(t, camera)
+      if (island) {
+        // The water reflects the lamps of the chiringuiti that are up, as much as they are.
+        island.shops(town.shops().map((e) => ({ x: e.placement.center.x, z: e.placement.center.z, up: liftEase(e.lift) })))
+        island.update(t, camera)
+        // The near plants with their own pieces only where they are near: from afar, the far ones' (a quarter).
+        if (kit) plantDetail(kit.plaza, camera.position, camera.fov)
+        wind?.update(t)
+      }
     },
     person(paneId) {
       for (const v of shops.values()) {

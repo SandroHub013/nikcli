@@ -35,13 +35,16 @@ export function lookOf(state: string): StateLook {
   return Object.hasOwn(STATE_LOOK, state) ? STATE_LOOK[state as PaneState] : STATE_LOOK.idle
 }
 
-/** Monitor colours, sRGB hex. */
+/**
+ * Monitor colours, sRGB hex: the tint over the screen's picture. A session at work is neutral (cyan is the
+ * hologram's); the ones that want something are their colour; a free one shows the logo, a little dimmed.
+ */
 export const GLOW_COLOR: Readonly<Record<StateLook["glow"], number>> = {
-  cool: 0x5fd4ff,
+  cool: 0xeef0f4,
   amber: 0xffb640,
   blue: 0x6f8cff,
   red: 0xff4a4a,
-  dim: 0x3a4658,
+  dim: 0x9aa0aa,
   off: 0x050608,
 }
 

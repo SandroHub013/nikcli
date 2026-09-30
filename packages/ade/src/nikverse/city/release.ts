@@ -8,7 +8,7 @@
  * given up with `forceContextLoss`).
  */
 
-import type { BufferGeometry, Material, Object3D, SkinnedMesh, Texture } from "three/webgpu"
+import type { BufferGeometry, InstancedMesh, Material, Object3D, SkinnedMesh, Texture } from "three/webgpu"
 import type { DrawingSurface } from "./renderers"
 
 export interface Released {
@@ -38,6 +38,8 @@ export function disposeTree(root: Object3D): Released {
       for (const texture of texturesOf(material)) textures.add(texture)
     }
     mesh.skeleton?.dispose()
+    // An instanced mesh's matrices and colours are buffers of their own, which only its `dispose` gives back.
+    if ((node as InstancedMesh).isInstancedMesh) (node as InstancedMesh).dispose()
   })
   for (const texture of textures) {
     // A decoded picture is an `ImageBitmap`, which holds its pixels until it is closed.

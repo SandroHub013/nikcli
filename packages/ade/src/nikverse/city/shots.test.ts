@@ -75,9 +75,9 @@ describe("the eight shots", () => {
     }
   })
 
-  test("the permission shot looks into shop 3, at the desk of the one who asks, from across the square", () => {
+  test("the permission shot looks into shop 3, at the desk of the one who asks, from across the lagoon", () => {
     const s = shotOf(5)!
-    expect(insideShop(6, s.look)).toBe(true)
+    expect(insideShop(3, s.look)).toBe(true)
     const [ex, , ez] = s.eye
     expect(Math.hypot(ex - s.look[0], ez - s.look[2])).toBeGreaterThan(25)
   })
@@ -85,10 +85,10 @@ describe("the eight shots", () => {
   test("the rise shot is of the sixth shop, and it is the shop that the picture leaves out at first", () => {
     const s = shotOf(8)!
     expect(s.rising).toBe(true)
-    const c = placementOf(10).center
+    const c = placementOf(5).center
     expect(Math.hypot(s.look[0] - c.x, s.look[2] - c.z)).toBeLessThan(1.5)
     expect(shotPicture(5).shops.has("shot-shop-5")).toBe(false)
-    expect(shotPicture().shops.get("shot-shop-5")?.slot).toBe(10)
+    expect(shotPicture().shops.get("shot-shop-5")?.slot).toBe(5)
   })
 })
 

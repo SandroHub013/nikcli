@@ -8,7 +8,9 @@
  */
 
 import {
+  BackSide,
   BoxGeometry,
+  CapsuleGeometry,
   CircleGeometry,
   Color,
   Group,
@@ -18,9 +20,13 @@ import {
   SphereGeometry,
   TorusGeometry,
   MeshBasicMaterial,
+  type Material,
 } from "three/webgpu"
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js"
 import { jointsFor, mixJoints, walkSwing, type Joints } from "./pose"
-import { advance, createRig, lodAt, paceOf, play, roleAtSpeed, ROLE_OF_POSE, showLod, type Rig, type Template } from "./rig"
+import { advance, createRig, LOD_UP_TO, lodAt, paceOf, play, roleAtSpeed, ROLE_OF_POSE, showLod, type Rig, type Template } from "./rig"
+import { warmPictures } from "./assets"
+import { wearsAccessories } from "./glb"
 import type { StateLook } from "./states"
 import { hairColor, personColor } from "./states"
 import { CHAIR_SEAT_TOP } from "./layout"
@@ -29,6 +35,8 @@ const box = new BoxGeometry(1, 1, 1)
 const sphere = new SphereGeometry(0.5, 20, 14)
 
 const materials = new Map<string, MeshStandardMaterial | MeshBasicMaterial>()
+/** How tall a seated far figure is, of a standing one's height. */
+const IMPOSTOR_SEATED = 0.74
 
 /** One shared material per colour: many people, few materials. */
 export function paint(hex: number, options: { emissive?: boolean; rough?: number } = {}) {
@@ -64,8 +72,8 @@ export interface Person {
   question: Mesh
   /** A soft dark disc on the floor: the only shadow there is (no dynamic shadows). */
   blob: Mesh
-  /** The whole figure as one box, drawn instead of the figure when it is far. */
-  impostor: Mesh
+  /** The whole figure as a capsule and a head, drawn instead of the figure when it is far. */
+  impostor: Group
   /** The pose was last worked out at this time (seconds), for the far people that update ten times a second. */
   posedAt: number
   /** N3's rigged character, when there is one: the joints above are then unused and the clips do the posing. */
@@ -73,6 +81,36 @@ export interface Person {
 }
 
 const blobGeometry = new CircleGeometry(0.5, 20)
+/**
+ * The far figure: a capsule for the body and a ball for the head, as tall as a person (1.75 m), one mesh of the
+ * shirt's colour. From 30 m the head reads by its shape; a colour of its own would be a second draw call a person.
+ */
+const impostorShape = (() => {
+  const body = new CapsuleGeometry(0.24, 0.92, 3, 10).translate(0, 0.7, 0)
+  const head = new SphereGeometry(0.19, 10, 8).translate(0, 1.56, 0)
+  return mergeGeometries([body, head])!
+})()
+const markAttention = new OctahedronGeometry(0.16)
+const markQuestion = new TorusGeometry(0.13, 0.045, 8, 20)
+
+/**
+ * The mark's own material: drawn over everything (a roof, a post, the fog), after the scene, because it is the one
+ * thing about a far session the user has to see. Its outline is the same shape a quarter larger, dark, behind it.
+ */
+function markMaterial(hex: number, outline = false): MeshBasicMaterial {
+  return new MeshBasicMaterial({ color: new Color(hex), depthTest: false, depthWrite: false, fog: false, side: outline ? BackSide : undefined })
+}
+const MARK_ORDER = 1000
+
+function mark(geometry: OctahedronGeometry | TorusGeometry, hex: number): Mesh {
+  const mesh = new Mesh(geometry, markMaterial(hex))
+  mesh.renderOrder = MARK_ORDER + 1
+  const outline = new Mesh(geometry, markMaterial(0x14100c, true))
+  outline.scale.setScalar(1.3)
+  outline.renderOrder = MARK_ORDER
+  mesh.add(outline)
+  return mesh
+}
 const blobMaterial = new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false })
 
 /** Draws the figure or its impostor: near, the figure with its shadow; far, the one box. */
@@ -81,8 +119,27 @@ export function showDetail(person: Person, detail: "full" | "slow" | "impostor",
   person.body.visible = !far
   // The mark over the head is not part of the figure: it stays at any distance (`setSignal`).
   person.impostor.visible = far
+  // The soft shadow on the floor goes with the figure: from 30 m it is a few pixels, and a draw call a person.
+  person.blob.visible = !far
   // A rigged person also draws the LOD their distance asks for.
   if (person.rig && !far) showLod(person.rig, lodAt(distance) ?? 2)
+}
+
+/** A LOD's pictures are decoded when the person is within this many times its band of distance: ready before it is shown. */
+export const WARM_AHEAD = 1.5
+
+/**
+ * Asks for the pictures of the LODs a person at `distance` shows or is about to show (`assets.warmPictures`): LOD k is
+ * shown from `LOD_UP_TO[k - 1]` to `LOD_UP_TO[k]`, and warmed from that band's near end over `WARM_AHEAD` to its far end
+ * times it. The hat and the cape go with LOD 0 and 1. A body no one wears is never warmed.
+ */
+export function warmRig(rig: Rig, distance: number, warm: (material: Material) => unknown = warmPictures): void {
+  for (const k of [0, 1, 2] as const) {
+    const near = k === 0 ? 0 : LOD_UP_TO[k - 1] / WARM_AHEAD
+    if (distance < near || distance > LOD_UP_TO[k] * WARM_AHEAD) continue
+    for (const m of [rig.lods[k].material].flat()) warm(m)
+    if (wearsAccessories(k)) for (const piece of rig.accessories) for (const m of [(piece as Mesh).material].flat()) warm(m)
+  }
 }
 
 export interface PersonStyle {
@@ -169,9 +226,9 @@ export function createPerson(style: PersonStyle, template?: Template): Person {
   }
 
   const signal = new Group()
-  signal.position.set(0, 1.95, 0)
-  const attention = new Mesh(new OctahedronGeometry(0.16), paint(0xffb640, { emissive: true }))
-  const question = new Mesh(new TorusGeometry(0.13, 0.045, 8, 20), paint(0x6f8cff, { emissive: true }))
+  signal.position.set(0, SIGNAL_Y, 0)
+  const attention = mark(markAttention, 0xffb640)
+  const question = mark(markQuestion, 0x6f8cff)
   signal.add(attention, question)
   signal.visible = false
   group.add(signal)
@@ -182,9 +239,9 @@ export function createPerson(style: PersonStyle, template?: Template): Person {
   blob.position.y = 0.03
   group.add(blob)
 
-  // Far away a person is a coloured box of their height: the shirt's colour, and nothing that moves.
-  const impostor = part(box, paint(style.shirt), 0.5, 1.7, 0.3)
-  impostor.position.y = 0.85
+  // Far away a person is a capsule of their height with a head, in the shirt's colour, and nothing that moves.
+  const impostor = new Group()
+  impostor.add(new Mesh(impostorShape, paint(style.shirt)))
   impostor.visible = false
   group.add(impostor)
 
@@ -199,6 +256,9 @@ export const styleOf = (look: { body: number; palette: number }): PersonStyle =>
 
 /** Sits the person on a chair: lowered, legs forward. */
 export function sit(person: Person, seated: boolean): void {
+  // The far figure sits too: shorter, its seat on the chair's.
+  person.impostor.scale.y = seated ? IMPOSTOR_SEATED : 1
+  person.impostor.position.y = seated ? CHAIR_SEAT_TOP - 0.7 * IMPOSTOR_SEATED + 0.24 : 0
   if (person.rig) {
     // The clip seats the pelvis `seatY` above the root: raise the root until that is the chair's seat.
     person.body.position.y = seated ? CHAIR_SEAT_TOP - person.rig.seatY : 0
@@ -227,23 +287,36 @@ export function poseSeated(p: Person, look: StateLook, previous: StateLook, blen
   setSignal(p, look, t)
 }
 
-/** The mark grows with distance up to this many times its size, so that it is still a few pixels at the edge of the range. */
-export const SIGNAL_MAX_SCALE = 5
-/** From this far away the mark starts to grow (metres): up to it, the figure and the mark are as they are. */
-export const SIGNAL_GROWS_FROM = 25
+/** How tall the mark is at its own size (metres): the octahedron's height. */
+export const SIGNAL_SIZE = 0.32
+/** Where the mark's middle is over a person's feet, at its own size. */
+export const SIGNAL_Y = 1.95
+/**
+ * The least the mark is on the screen, as a share of the view's height: 18 pixels of 900. Nearer than where that
+ * is its own size it keeps its own size; farther, it grows so that it never gets smaller than this.
+ */
+export const SIGNAL_MIN_SCREEN = 0.02
+
+/** How many times its own size the mark is drawn at `distance` from a camera of vertical field `fov` (degrees). */
+export function signalScale(distance: number, fov: number): number {
+  const viewHeight = 2 * Math.tan((fov * Math.PI) / 360) * distance
+  return Math.max(1, (SIGNAL_MIN_SCREEN * viewHeight) / SIGNAL_SIZE)
+}
 
 /**
  * The mark over the head, when the session needs the user. It is worked out for everyone in view, at any distance,
- * because it is the one thing about a far session that the user has to see: the figure may be a box, the mark is
- * not. It turns and bobs, so it reads from across the square, and it grows with the distance to stay readable.
+ * because it is the one thing about a far session that the user has to see: the figure may be a capsule, the mark is
+ * not. It turns and bobs, it is drawn over whatever is in front of it with a dark outline, and it grows with the
+ * distance so that it is never less than `SIGNAL_MIN_SCREEN` of the view.
  */
-export function setSignal(p: Person, look: StateLook, t: number, distance = 0): void {
+export function setSignal(p: Person, look: StateLook, t: number, distance = 0, fov = 58): void {
   p.signal.visible = look.signal !== "none"
   p.attention.visible = look.signal === "attention"
   p.question.visible = look.signal === "question"
-  const grow = Math.min(SIGNAL_MAX_SCALE, Math.max(1, distance / SIGNAL_GROWS_FROM))
+  const grow = signalScale(distance, fov)
   p.signal.scale.setScalar(grow)
-  p.signal.position.y = 1.95 + 0.25 * (grow - 1) + Math.sin(t * 3) * 0.05
+  // Grown, its lower tip stays where it was: over the head, not in it.
+  p.signal.position.y = SIGNAL_Y + (SIGNAL_SIZE / 2) * (grow - 1) + Math.sin(t * 3) * 0.05
   p.signal.rotation.y = t * 2
 }
 

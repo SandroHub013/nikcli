@@ -31,7 +31,7 @@ import {
   type Player,
 } from "./controller"
 import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } from "./interaction"
-import type { Box } from "./layout"
+import { MOUTH, type Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
@@ -164,7 +164,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     },
     decode: pictures.decode,
   })
-  pictures.dispose()
+  // Not closed yet: the people's pictures are decoded as they come near (`assets.warmPictures`); it goes with the city.
   const { cast, kit } = loaded
   const data = doc.documentElement.dataset
   data.quality = level.id
@@ -237,7 +237,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       boxes = [PROJECTOR, ...town.boxes()]
       boxesStale = false
     }
-    return { boxes, radius: town.radius() }
+    return { boxes, radius: town.radius(), mouth: MOUTH }
   }
 
   const rayAt = (clientX: number, clientY: number): Ray => {
@@ -266,7 +266,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     if (wasAnimating || town.animating) boxesStale = true
     player = stepPlayer(player, keys, orbit.yaw, dt, world())
 
-    const goal = cameraGoal(player, orbit)
+    // The camera looks at the shoulders wherever the ground is: on the deck, in the lagoon, up the beach.
+    const goal = cameraGoal(player, orbit, 1.4 + view.groundAt(player))
     if (!eye) {
       eye = goal.eye
       look = goal.look
@@ -505,6 +506,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       // Everything the scene holds goes back to the GPU now, not when the frame's process is collected.
       disposeTree(view.scene)
       releaseRenderer(renderer)
+      pictures.dispose()
       canvas.remove()
     },
   }

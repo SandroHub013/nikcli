@@ -27,17 +27,18 @@ export interface LevelAssets {
 const message = (error: unknown) => String((error as Error)?.message ?? error).slice(0, 200)
 
 async function loadAt(level: Level, deps: Omit<CastDeps, "level">) {
-  const warnings: string[] = []
-  const at = { ...deps, level: level.id, warn: (text: string) => void warnings.push(text) }
+  // One list, kept: the people's pictures are decoded as they come near, and what fails then is added to it.
+  const notes: string[] = []
+  const at = { ...deps, level: level.id, warn: (text: string) => void notes.push(text) }
   const [cast, kit] = await Promise.allSettled([loadCast(at), loadKit(at)])
+  notes.unshift(
+    ...(cast.status === "rejected" ? [`personaggi: ${message(cast.reason)}`] : []),
+    ...(kit.status === "rejected" ? [`negozio e piazza: ${message(kit.reason)}`] : []),
+  )
   return {
     cast: cast.status === "fulfilled" ? cast.value : undefined,
     kit: kit.status === "fulfilled" ? kit.value : undefined,
-    notes: [
-      ...(cast.status === "rejected" ? [`personaggi: ${message(cast.reason)}`] : []),
-      ...(kit.status === "rejected" ? [`negozio e piazza: ${message(kit.reason)}`] : []),
-      ...warnings,
-    ],
+    notes,
   }
 }
 
@@ -50,7 +51,8 @@ export async function loadLevel(asked: Level, deps: Omit<CastDeps, "level">): Pr
       assets: LEVELS.media,
       cast: second.cast,
       kit: second.kit,
-      notes: [`i file di Alta non ci sono (${first.notes.join("; ")}): texture di Media`, ...second.notes],
+      // The same list as Media's: what its people's pictures say later still lands in it.
+      notes: (second.notes.unshift(`i file di Alta non ci sono (${first.notes.join("; ")}): texture di Media`), second.notes),
     }
   }
   return { level: asked, assets: asked, ...first }

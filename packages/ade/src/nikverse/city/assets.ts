@@ -58,8 +58,37 @@ const newLoader = () => {
   return loader
 }
 
-/** Fetches, unpacks and parses one file, and puts its pictures on its materials. */
-export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string): Promise<Loaded> {
+/**
+ * The pictures of a material that are still compressed, and how to decode them: the people's (`loadCast`) wait for
+ * the world to ask (`warmPictures`), so that the LODs and the bodies no one sees never hold their decoded mipmaps in
+ * the frame's memory (the Architect's decision of 2026-09-30, about 14 MB at Media). zstd stays.
+ */
+const waiting = new WeakMap<Material, () => Promise<void>>()
+const warming = new WeakMap<Material, Promise<void>>()
+/** One picture decoded at a time: a person coming near costs a frame a picture, not a frame all of them. */
+let queue: Promise<unknown> = Promise.resolve()
+
+/** Whether a material still has pictures to decode. */
+export const picturesPending = (material: Material): boolean => waiting.has(material)
+
+/** Decodes a material's waiting pictures and puts them on it; once, however many ask. Nothing to do: resolves at once. */
+export function warmPictures(material: Material): Promise<void> {
+  const running = warming.get(material)
+  if (running) return running
+  const job = waiting.get(material)
+  if (!job) return Promise.resolve()
+  waiting.delete(material)
+  const done = queue.then(job, job)
+  queue = done.catch(() => {})
+  warming.set(material, done)
+  return done
+}
+
+/**
+ * Fetches, unpacks and parses one file, and puts its pictures on its materials. With `lazy` they are not decoded
+ * here: each material keeps its compressed bytes and decodes them when `warmPictures` asks.
+ */
+export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string, lazy = false): Promise<Loaded> {
   const bytes = await deps.fetchBytes(url).catch((error) => {
     throw new Error(`${url}: ${String(error?.message ?? error)}`)
   })
@@ -74,10 +103,12 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
       const material = (o as Mesh).material as MeshStandardMaterial | undefined
       if (!material || seen.has(material)) return
       seen.add(material)
-      const own = pictures.get(material.name)
-      if (!own) return
+      const found = pictures.get(material.name)
+      if (!found) return
+      // Waiting, a picture keeps a copy of its bytes: the file's buffer can go.
+      const own = lazy ? Object.fromEntries(Object.entries(found).map(([slot, bytes]) => [slot, bytes?.slice()])) : found
       const put = async (slot: Slot) => {
-        const png = own[slot]
+        const png = own[slot as keyof typeof own]
         if (!png) return
         const texture = await decode(png, slot === "map").catch((error) => {
           failed.add(String(error?.message ?? error).slice(0, 120))
@@ -95,7 +126,12 @@ export async function loadFile(loader: GLTFLoader, deps: AssetDeps, url: string)
         }
         material.needsUpdate = true
       }
-      for (const slot of ["map", "normalMap", "ormMap"] as const) jobs.push(put(slot))
+      const all = () => Promise.all((["map", "normalMap", "ormMap"] as const).map(put)).then(() => {
+        if (failed.size) deps.warn?.(`${url}: texture non decodificate (${[...failed].join("; ")}): tinte unite`)
+        failed.clear()
+      })
+      if (lazy) waiting.set(material, all)
+      else jobs.push(put("map"), put("normalMap"), put("ormMap"))
     })
     await Promise.all(jobs)
     if (failed.size) deps.warn?.(`${url}: texture non decodificate (${[...failed].join("; ")}): tinte unite`)
@@ -108,7 +144,8 @@ export async function loadCast(deps: CastDeps): Promise<Cast> {
   // The clips come once, from their own file; the bodies bring only mesh, skeleton and anchors.
   const [{ animations }, ...bodies] = await Promise.all([
     loadFile(loader, deps, animationsUrl(deps.base)),
-    ...BODIES.map(async (body: Body) => [body, await loadFile(loader, deps, glbUrl(deps.base, deps.level, body))] as const),
+    // The bodies' pictures wait until someone of that body comes near (`warmPictures`).
+    ...BODIES.map(async (body: Body) => [body, await loadFile(loader, deps, glbUrl(deps.base, deps.level, body), true)] as const),
   ] as const)
   const templates = (bodies as unknown as Array<readonly [Body, Loaded]>).map(([body, loaded]): Template => templateOf(body, loaded, animations))
   return new Map(templates.map((t) => [t.body, t]))

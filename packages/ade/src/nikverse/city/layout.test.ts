@@ -1,14 +1,26 @@
 import { describe, expect, test } from "bun:test"
+import { blocked } from "./collision"
 import {
+  BACK_BAR,
+  COUNTER,
   DESKS_PER_SHOP,
   DESK_HALF,
-  DOOR_WIDTH,
+  EAVE_HEIGHT,
+  LOUNGERS,
+  LOUNGER_HALF,
+  MOUTH,
+  PLATFORM_TOP,
   PLAZA_RADIUS,
   RING_SLOTS,
   SHOP_DEPTH,
+  POSTS,
+  POTS,
+  POST_HALF,
+  ROOF_TOP,
   SHOP_WIDTH,
-  WALL_THICKNESS,
+  WATER_Y,
   deskLocal,
+  islandHeight,
   placeShops,
   placementOf,
   ringRadius,
@@ -52,17 +64,70 @@ function overlap(a: Box, b: Box): boolean {
 }
 
 describe("the ring of shops", () => {
-  test("slot 0 is straight ahead of the square, and slots go clockwise from above, twelve to a ring", () => {
-    expect(slotCenter(0).x).toBeCloseTo(0, 9)
-    expect(slotCenter(0).z).toBeCloseTo(-ringRadius(0), 9)
-    // A quarter of the way round is to the right.
-    expect(slotCenter(3).x).toBeCloseTo(ringRadius(0), 9)
-    expect(slotCenter(3).z).toBeCloseTo(0, 9)
-    expect(slotCenter(6).z).toBeCloseTo(ringRadius(0), 9)
+  test("slot 0 is 13° to the right of straight ahead and slot 1 13° to the left, then 26° further each pair, twelve to a ring", () => {
+    const deg = (slot: number) => (slotCenter(slot).angle * 180) / Math.PI
+    expect(deg(0)).toBeCloseTo(13, 9)
+    expect(deg(1)).toBeCloseTo(-13, 9)
+    expect(deg(2)).toBeCloseTo(39, 9)
+    expect(deg(3)).toBeCloseTo(-39, 9)
+    expect(deg(10)).toBeCloseTo(143, 9)
+    expect(deg(11)).toBeCloseTo(-143, 9)
+    // Clockwise from above, from the first look (-z): a positive angle is to the right.
+    expect(slotCenter(0).x).toBeGreaterThan(0)
+    expect(slotCenter(0).z).toBeLessThan(0)
+    expect(Math.hypot(slotCenter(0).x, slotCenter(0).z)).toBeCloseTo(ringRadius(0), 9)
     // The next ring starts again at the front, further out.
     expect(Math.hypot(slotCenter(12).x, slotCenter(12).z)).toBeCloseTo(ringRadius(1), 9)
-    expect(slotCenter(12).z).toBeLessThan(slotCenter(0).z)
+    expect(slotCenter(12).angle).toBeCloseTo(slotCenter(0).angle, 9)
     expect(ringRadius(1)).toBeGreaterThan(ringRadius(0))
+  })
+
+  test("no slot's centre is in the lagoon's mouth, and neighbours are the same distance apart", () => {
+    for (let slot = 0; slot < 24; slot++) {
+      const fromSouth = Math.PI - Math.abs(slotCenter(slot).angle)
+      expect([slot, fromSouth >= MOUTH.halfAngle - 1e-9]).toEqual([slot, true])
+    }
+    const gap = (a: number, b: number) => Math.hypot(slotCenter(a).x - slotCenter(b).x, slotCenter(a).z - slotCenter(b).z)
+    expect(gap(0, 1)).toBeCloseTo(gap(0, 2), 9)
+    expect(gap(0, 1)).toBeGreaterThan(SHOP_WIDTH + 6)
+  })
+
+  test("the island's ground: the deck under the hologram, the lagoon's floor under the water, the beach above it", () => {
+    expect(islandHeight({ x: 0, z: 0 })).toBe(PLATFORM_TOP)
+    expect(islandHeight({ x: 0, z: 13 })).toBe(0)
+    expect(islandHeight({ x: 0, z: 13 })).toBeLessThan(WATER_Y)
+    const beach = placementOf(0).center
+    expect(islandHeight(beach)).toBeGreaterThan(WATER_Y)
+    // A chiringuito stands on flat sand, from its back wall to its bar.
+    for (const z of [-SHOP_DEPTH / 2, 0, SHOP_DEPTH / 2]) expect(islandHeight(toWorld(placementOf(0), { x: 0, z }))).toBeCloseTo(islandHeight(beach), 9)
+    // The ground never jumps more than the deck's step.
+    for (let r = 0; r < 40; r += 0.05) {
+      const step = Math.abs(islandHeight({ x: 0, z: r + 0.05 }) - islandHeight({ x: 0, z: r }))
+      expect(step).toBeLessThanOrEqual(PLATFORM_TOP - 0.1)
+    }
+  })
+
+  test("the beach's shore is not a circle: it comes and goes a metre or two, and never reaches the chiringuiti", () => {
+    const waterline = (a: number) => {
+      for (let r = 12; r < 30; r += 0.02) if (islandHeight({ x: Math.sin(a) * r, z: -Math.cos(a) * r }) > WATER_Y) return r
+      return Infinity
+    }
+    // Round the circle, but off the pier (straight ahead), whose deck stands over the water.
+    const radii = Array.from({ length: 72 }, (_, k) => (k / 72) * Math.PI * 2)
+      .filter((a) => Math.cos(a) < 0.99)
+      .map(waterline)
+    expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(2)
+    for (const r of radii) {
+      expect(r).toBeGreaterThan(15.5)
+      expect(r).toBeLessThan(21.5)
+    }
+    // Every slot of the first ring stands on flat sand, corner to corner.
+    for (let slot = 0; slot < 12; slot++) {
+      const p = placementOf(slot)
+      const level = islandHeight(p.center)
+      for (const x of [-SHOP_WIDTH / 2, SHOP_WIDTH / 2])
+        for (const z of [-SHOP_DEPTH / 2, SHOP_DEPTH / 2]) expect([slot, islandHeight(toWorld(p, { x, z })) - level]).toEqual([slot, 0])
+    }
   })
 
   test("every shop's door faces the square: the door is nearer to the centre than the back wall", () => {
@@ -109,54 +174,56 @@ describe("the ring of shops", () => {
   })
 })
 
-describe("inside a shop", () => {
-  const interior = { x: SHOP_WIDTH / 2 - WALL_THICKNESS, z: SHOP_DEPTH / 2 - WALL_THICKNESS }
+describe("inside a chiringuito", () => {
+  const roof = { x: SHOP_WIDTH / 2, z: SHOP_DEPTH / 2 }
+  const fixed = wallsLocal().length
 
-  test("the walls are the back, both sides and the front with a gap exactly as wide as the door", () => {
+  test("what stops the character is the back bar, the counter, the four posts and the three loungers; the front is open", () => {
     const walls = wallsLocal()
-    expect(walls).toHaveLength(5)
-    const front = walls.filter((w) => w.z === SHOP_DEPTH / 2)
-    expect(front).toHaveLength(2)
-    const [left, right] = front.sort((a, b) => a.x - b.x)
-    const gap = right.x - right.hx - (left.x + left.hx)
-    expect(gap).toBeCloseTo(DOOR_WIDTH, 9)
-    expect(left.x + right.x).toBeCloseTo(0, 9)
+    expect(walls[0]).toEqual(BACK_BAR)
+    expect(walls[1]).toEqual(COUNTER)
+    expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length + POTS.length)
+    // The counter faces the hologram: it is in front of the back bar, with room behind it for whoever stands there.
+    expect(COUNTER.z - COUNTER.hz - (BACK_BAR.z + BACK_BAR.hz)).toBeGreaterThan(1.5)
+    // Round each end of the counter a body gets behind it, between the counter and the front posts.
+    const frontPost = POSTS.find((p) => p.z > 0 && p.x > 0)!
+    expect(frontPost.x - POST_HALF - (COUNTER.x + COUNTER.hx)).toBeGreaterThan(0.6)
+    // The loungers are in front, toward the water, and nothing of the chiringuito is past them.
+    for (const l of LOUNGERS) expect(l.z - LOUNGER_HALF.hz).toBeGreaterThan(roof.z)
+    expect(EAVE_HEIGHT).toBeLessThan(ROOF_TOP)
   })
 
-  test("every desk, chair and monitor stands inside the walls, and no two desks touch", () => {
-    const desks = shopBoxes(placementOf(0), DESKS_PER_SHOP).slice(5)
-    expect(desks).toHaveLength(DESKS_PER_SHOP)
+  test("the four seats: two stools at the counter and two small tables in front, with the laptop on each and nothing in the way", () => {
+    const boxes = shopBoxes(placementOf(0), DESKS_PER_SHOP)
+    const tables = boxes.slice(fixed)
+    // The counter's seats are the counter; the tables are boxes of their own.
+    expect(tables).toHaveLength(2)
     for (let i = 0; i < DESKS_PER_SHOP; i++) {
       const at = deskLocal(i)
-      for (const spot of [at.desk, at.computer]) {
-        expect(Math.abs(spot.x)).toBeLessThan(interior.x)
-        expect(Math.abs(spot.z)).toBeLessThan(interior.z)
-      }
-      expect(Math.abs(at.desk.x) + DESK_HALF.hx).toBeLessThan(interior.x)
-      // The person sits on the door's side of the desk, facing the back wall; the monitor stands on the desk's far edge (the keyboard
-      // has the near one), so it is past the desk's middle from the chair.
+      if (i < 2) {
+        expect(at.desk.z).toBe(COUNTER.z)
+        expect(Math.abs(at.desk.x) + DESK_HALF.hx).toBeLessThanOrEqual(COUNTER.hx)
+      } else expect(at.desk.z - DESK_HALF.hz).toBeGreaterThan(COUNTER.z + COUNTER.hz + 0.5)
+      // Each sits on the hologram's side of their table, facing the back bar; the laptop is past the table's middle.
       expect(at.chair.z).toBeGreaterThan(at.desk.z)
       expect(at.computer.z).toBeLessThan(at.desk.z)
       expect(at.computer.z).toBeGreaterThan(at.desk.z - DESK_HALF.hz)
-      // N3's front row sits in the window: a chair past the wall's line is in the gap of the door, not in the wall.
-      if (Math.abs(at.chair.z) >= interior.z) expect(Math.abs(at.chair.x) + 0.25).toBeLessThan(DOOR_WIDTH / 2)
-      else expect(Math.abs(at.chair.x)).toBeLessThan(interior.x)
-      for (let j = i + 1; j < DESKS_PER_SHOP; j++) expect([i, j, overlap(desks[i], desks[j])]).toEqual([i, j, false])
+      // A chair is clear of everything that stops the character, by a seated body.
+      const chair = toWorld(placementOf(0), at.chair)
+      const world = { boxes: boxes.filter((_, k) => k !== fixed + i - 2 || i < 2), radius: 200 }
+      expect([i, blocked(chair, 0.15, world)]).toEqual([i, false])
+      expect(Math.abs(at.chair.x)).toBeLessThan(roof.x)
     }
+    for (let i = 0; i < tables.length; i++) for (let j = i + 1; j < tables.length; j++) expect(overlap(tables[i], tables[j])).toBe(false)
   })
 
-  test("people standing (no desk left) stand inside, behind the desks, in ten places of their own", () => {
-    const desks = shopBoxes(placementOf(0), DESKS_PER_SHOP).slice(5)
-    const local = Array.from({ length: DESKS_PER_SHOP }, (_, i) => deskLocal(i).desk)
+  test("people standing (no seat left) stand behind the counter, in front of the back bar, in ten places of their own", () => {
     for (let i = 0; i < 12; i++) {
       const at = standLocal(i)
-      expect(Math.abs(at.x)).toBeLessThan(interior.x)
-      expect(at.z).toBeLessThan(interior.z)
-      expect(at.z).toBeGreaterThan(-interior.z)
-      // Behind every desk, along the back wall, clear of them by more than a body.
-      for (const d of local) expect(at.z).toBeLessThan(d.z - DESK_HALF.hz - 0.25)
+      expect(Math.abs(at.x)).toBeLessThan(COUNTER.hx)
+      expect(at.z).toBeLessThan(COUNTER.z - COUNTER.hz - 0.2)
+      expect(at.z).toBeGreaterThan(BACK_BAR.z + BACK_BAR.hz + 0.2)
     }
-    expect(desks).toHaveLength(DESKS_PER_SHOP)
     // Two rows of five; past ten they share a place, which is a crowd and not a place.
     expect(new Set(Array.from({ length: 10 }, (_, i) => `${standLocal(i).x}:${standLocal(i).z}`)).size).toBe(10)
     expect(standLocal(10)).toEqual(standLocal(0))

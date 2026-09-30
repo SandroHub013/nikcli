@@ -130,10 +130,10 @@ describe("lint: what the budget forbids", () => {
     }
   })
 
-  test("node materials (TSL) are used by the hologram and by nothing else", () => {
+  test("node materials (TSL) are used by the hologram, the island's water and sky, the plants' wind and the height fog, and by nothing else", () => {
     const users = sources()
       .filter(([, text]) => /three\/tsl|NodeMaterial/.test(text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")))
       .map(([file]) => file)
-    expect(users.sort()).toEqual(["hologram.ts"])
+    expect(users.sort()).toEqual(["fog.ts", "hologram.ts", "water.ts", "wind.ts"])
   })
 })

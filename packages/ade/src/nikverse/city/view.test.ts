@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Vector3 } from "three/webgpu"
+import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, type ShaderMaterial, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
-import { SIGNAL_MAX_SCALE } from "./characters"
+import { SIGNAL_SIZE, SIGNAL_Y } from "./characters"
 import { spawnPlayer } from "./controller"
-import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, SHOP_DEPTH, WALL_HEIGHT, WALL_THICKNESS, placementOf } from "./layout"
+import { shopLook } from "./kit"
+import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, ROOF_TOP, placementOf } from "./layout"
 import { castOf, kitFor } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
-import { createCityScene } from "./view"
+import { SCREEN_FAR, SHOP_MIDDLE, SHOP_RADIUS, createCityScene } from "./view"
 
 const shop = (id: string, slot?: number, name = id): Shop => ({ id, name, slot })
 const agent = (paneId: string, shopId: string, over: Partial<Agent> = {}): Agent => ({
@@ -80,6 +81,35 @@ describe("the city drawn from the town", () => {
     }
   })
 
+  test("a shop coming up throws a ring of sand and puffs of it, at the ground, strongest half way and gone when it is up", () => {
+    const town = createTown()
+    const view = createCityScene()
+    town.sync(picture([shop("a", 2)]))
+    const rise = () => view.scene.getObjectByName("shop:a")!.getObjectByName("rise")!
+    const opacity = () => ((rise().children[0] as Mesh).material as MeshBasicMaterial).opacity
+    town.tick(RISE_SECONDS * 0.5)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(rise().visible).toBe(true)
+    const half = opacity()
+    expect(half).toBeGreaterThan(0.3)
+    // The puffs are dust, soft at the edge: their vertices' alpha is most at the middle and nothing at the rim.
+    const puffs = rise().children[1] as Mesh
+    const alpha = puffs.geometry.getAttribute("color")
+    expect(alpha.itemSize).toBe(4)
+    expect((puffs.material as MeshBasicMaterial).vertexColors).toBe(true)
+    const alphas = Array.from({ length: alpha.count }, (_, i) => alpha.getW(i))
+    expect([Math.min(...alphas), Math.max(...alphas) > 0.5]).toEqual([0, true])
+    // At the ground, not with the chiringuito under it.
+    const group = view.scene.getObjectByName("shop:a")!
+    expect(group.position.y + rise().position.y).toBeCloseTo(view.groundAt(placementOf(2).center), 6)
+    town.tick(RISE_SECONDS * 0.4)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(opacity()).toBeLessThan(half)
+    town.tick(RISE_SECONDS)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(rise().visible).toBe(false)
+  })
+
   test("a shop stands on the ground when it is up, and is under it while it comes up or goes down", () => {
     const town = createTown()
     const view = createCityScene()
@@ -87,7 +117,7 @@ describe("the city drawn from the town", () => {
     view.update(town, spawnPlayer(), 0, camera)
     const group = view.scene.getObjectByName("shop:a") as Group
     const sunk = group.position.y
-    expect(sunk).toBeLessThan(-WALL_HEIGHT)
+    expect(sunk).toBeLessThan(-ROOF_TOP)
     town.tick(RISE_SECONDS * 0.5)
     view.update(town, spawnPlayer(), 0, camera)
     expect(group.position.y).toBeGreaterThan(sunk)
@@ -107,6 +137,25 @@ describe("the city drawn from the town", () => {
     expect((view.monitor("p2")!.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.off)
     expect((view.monitor("p1")!.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.cool)
     expect(town.agents()).toHaveLength(2)
+  })
+
+  test("a screen shows code while its session works and the logo while it is free, never the hologram's cyan", () => {
+    const { view } = build(picture([shop("a", 0)], [agent("p1", "a"), agent("p2", "a", { state: "idle" }), agent("p3", "a", { state: "perm" })]))
+    const material = (id: string) => view.monitor(id)!.material as MeshBasicMaterial
+    const pixel = (id: string, x: number, y: number) => {
+      const canvas = material(id).map!.image as HTMLCanvasElement
+      return [...canvas.getContext("2d")!.getImageData(x, y, 1, 1).data.slice(0, 3)]
+    }
+    // Code and a wait for permission share the editor; the free one has the screensaver.
+    expect(material("p1").map).toBeDefined()
+    expect(material("p1").map).toBe(material("p3").map)
+    expect(material("p2").map).not.toBe(material("p1").map)
+    // Both on a dark ground, and the ground stays dark whatever the tint.
+    for (const id of ["p1", "p2"]) expect(Math.max(...pixel(id, 2, 150))).toBeLessThan(30)
+    // The tint of a session at work is neutral: no channel far from the others.
+    const cool = GLOW_COLOR.cool
+    const [r, g, b] = [(cool >> 16) & 255, (cool >> 8) & 255, cool & 255]
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(16)
   })
 
   test("the state shows on the screen and over the head: a permission is amber with a mark, an error red without", () => {
@@ -273,19 +322,55 @@ describe("what is drawn depends on where the camera is", () => {
     expect(view.person("p1")!.signal.visible).toBe(false)
   })
 
-  test("the mark grows with the distance, from 25 metres, up to five times, and stays above the head", () => {
+  test("the mark is never less than 18 pixels of 900 on the screen, keeps its own size near, and stays above the head", () => {
     const { town, view } = one()
-    const scaleAt = (out: number) => {
-      view.update(town, spawnPlayer(), 1, camAt(0, out))
-      return view.person("p2")!.signal.scale.x
+    const person = () => view.person("p2")!
+    /** The mark's height on a 900-pixel-tall screen, from a camera `out` metres in front of the shop. */
+    const pixelsAt = (out: number, fov = 58) => {
+      const camera = camAt(0, out)
+      camera.fov = fov
+      camera.updateProjectionMatrix()
+      view.update(town, spawnPlayer(), 1, camera)
+      const at = person().signal.getWorldPosition(new Vector3())
+      const distance = Math.hypot(camera.position.x - at.x, camera.position.z - at.z)
+      return (SIGNAL_SIZE * person().signal.scale.x * 900) / (2 * Math.tan((fov * Math.PI) / 360) * distance)
     }
-    // The distance is the camera's to the person, who sits a couple of metres inside the shop.
-    expect(scaleAt(8)).toBe(1)
-    expect(scaleAt(20)).toBe(1)
-    expect(scaleAt(60)).toBeGreaterThan(2)
-    expect(scaleAt(60)).toBeLessThan(3)
-    expect(scaleAt(130)).toBe(SIGNAL_MAX_SCALE)
-    expect(view.person("p2")!.signal.position.y).toBeGreaterThan(1.95 + 0.25 * (SIGNAL_MAX_SCALE - 1) - 0.06)
+    for (const out of [20, 38, 60, 130]) for (const fov of [22, 58, 62]) expect([out, fov, pixelsAt(out, fov) >= 18 * 0.97]).toEqual([out, fov, true])
+    // Near, it is its own size, larger than the least.
+    pixelsAt(8)
+    expect(person().signal.scale.x).toBe(1)
+    // Grown, its lower tip is where it was: over the head.
+    pixelsAt(130)
+    const grow = person().signal.scale.x
+    expect(grow).toBeGreaterThan(5)
+    expect(person().signal.position.y - (SIGNAL_SIZE / 2) * grow).toBeGreaterThan(SIGNAL_Y - SIGNAL_SIZE / 2 - 0.06)
+  })
+
+  test("the mark is drawn over whatever stands in front of it, with a dark outline, out of the fog", () => {
+    const { town, view } = one()
+    view.update(town, spawnPlayer(), 1, camAt(0, 60))
+    for (const mark of [view.person("p2")!.attention, view.person("p2")!.question]) {
+      const material = mark.material as MeshBasicMaterial
+      expect([material.depthTest, material.fog]).toEqual([false, false])
+      const outline = mark.children[0] as Mesh
+      expect((outline.material as MeshBasicMaterial).depthTest).toBe(false)
+      expect(outline.renderOrder).toBeLessThan(mark.renderOrder)
+      expect(outline.scale.x).toBeGreaterThan(1)
+    }
+  })
+
+  test("far away a person is one mesh, a capsule with a head, without the floor's shadow, and shorter when seated", () => {
+    const { town, view } = one()
+    view.update(town, spawnPlayer(), 1, camAt(0, 60))
+    const impostor = view.person("p1")!.impostor
+    expect(impostor.visible).toBe(true)
+    expect(impostor.children).toHaveLength(1)
+    expect(view.person("p1")!.blob.visible).toBe(false)
+    view.update(town, spawnPlayer(), 2, camAt(0, 8))
+    expect(view.person("p1")!.blob.visible).toBe(true)
+    view.update(town, spawnPlayer(), 3, camAt(0, 60))
+    const height = new Box3().setFromObject(impostor)
+    expect(height.max.y - height.min.y).toBeLessThan(1.6)
   })
 
   test("past 15 metres the pose is worked out ten times a second, near it every frame, and an impostor's never", () => {
@@ -507,7 +592,7 @@ describe("the city with N3's people", () => {
   })
 })
 
-describe("the city with N3's shop and plaza", () => {
+describe("the island from the file, with its chiringuiti", () => {
   const withKit = async (agents: Agent[], shops = [shop("a", 0)]) => {
     const town = createTown()
     const kit = await kitFor("bassa")
@@ -524,18 +609,48 @@ describe("the city with N3's shop and plaza", () => {
     return found
   }
 
-  test("the plaza is N3's, and the placeholders' square, edge and lamps are not there", async () => {
+  test("the island is the file's, and the placeholders' square, edge and lamps are not there", async () => {
     const { view, kit } = await withKit([])
+    expect(kit.island).toBe(true)
     expect(view.scene.children).toContain(kit.plaza)
     const all = names(view.scene)
-    for (const name of ["plaza_ground", "plaza_kerb", "plaza_base", "plaza_prop"]) expect(all).toContain(name)
+    for (const name of ["island_terrain", "island_deck", "island_pier", "island_water", "island_sky", "plaza_kerb", "plaza_base"]) expect(all).toContain(name)
     expect(view.scene.children.filter((o) => (o as unknown as { isInstancedMesh?: boolean }).isInstancedMesh)).toHaveLength(0)
   })
 
-  test("a shop is N3's pieces, not boxes: floor, shell, window, awning, desks, chairs, screens", async () => {
-    const { view } = await withKit([agent("p1", "a")])
-    const all = names(view.scene.getObjectByName("shop:a")!)
-    for (const name of ["shop_floor", "shop_shell", "shop_glass", "shop_trim", "shop_desk", "shop_chair", "shop_props"]) expect(all).toContain(name)
+  test("the lagoon and the sky are painted for the renderer, one material each, the sky out of the fog", async () => {
+    const { view } = await withKit([])
+    const water = view.scene.getObjectByName("island_water") as Mesh
+    const sky = view.scene.getObjectByName("island_sky") as Mesh
+    expect((water.material as ShaderMaterial).isShaderMaterial).toBe(true)
+    expect((sky.material as ShaderMaterial).isShaderMaterial).toBe(true)
+    expect((water.material as ShaderMaterial).fog).toBe(true)
+    expect((sky.material as ShaderMaterial).fog).toBe(false)
+    // The water knows how deep it is: its vertex colours.
+    expect(water.geometry.hasAttribute("color")).toBe(true)
+  })
+
+  test("the water reflects the lamps of the chiringuiti that are up, where they stand, and no others", async () => {
+    const { view, town } = await withKit([], [shop("a", 0), shop("b", 3)])
+    const water = view.scene.getObjectByName("island_water") as Mesh
+    const lamps = (water.material as ShaderMaterial).uniforms.uShops.value as Array<{ x: number; y: number; z: number }>
+    const up = lamps.filter((l) => l.z > 0.99)
+    expect(up).toHaveLength(2)
+    for (const e of town.shops()) expect(up.some((l) => Math.hypot(l.x - e.placement.center.x, l.y - e.placement.center.z) < 1e-6)).toBe(true)
+    expect(lamps.filter((l) => l.z === 0)).toHaveLength(lamps.length - 2)
+  })
+
+  test("a shop is a chiringuito from the file's parts, merged by material: every part is drawn, in a handful of meshes", async () => {
+    const { view, kit } = await withKit([agent("p1", "a")])
+    const group = view.scene.getObjectByName("shop:a")!.children[0]
+    const drawn = group.children.flatMap((c) => c.name.split("+"))
+    const look = shopLook("a", kit.variants)
+    const parts = kit.shop(look.variant, look.tint).children.map((c) => c.name)
+    expect(drawn.sort()).toEqual(parts.sort())
+    for (const name of [/^chir_base_fixtures$/, /^chir_base_accent$/, /^chir_roof\d+_roof$/, /^chir_roof\d+_shade$/, /^chir_roof\d+_pool$/, /^chir_bar\d+_counter$/, /^chir_sign\d+_board$/])
+      expect([String(name), drawn.some((n) => name.test(n))]).toEqual([String(name), true])
+    // The palette's pieces are one mesh, the accents another, the lamps another; the shadow and the pool their own.
+    expect(group.children.length).toBeLessThanOrEqual(6)
   })
 
   test("the shop's desks are all there, and what is added over them is the glow of the desks in use", async () => {
@@ -548,11 +663,60 @@ describe("the city with N3's shop and plaza", () => {
     expect((monitor.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.amber)
   })
 
-  test("the sign's text is on the awning's board, at N3's height", async () => {
-    const { view } = await withKit([])
-    const sign = view.scene.getObjectByName("shop:a")!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
-    expect(sign.position.y).toBeCloseTo(3.02, 2)
-    expect(sign.position.z).toBeGreaterThan(SHOP_DEPTH / 2 + WALL_THICKNESS / 2)
+  test("the pictures of a body no one wears are never decoded; the user's and a seated agent's are, as they come near", async () => {
+    const { loadCast, picturesPending } = await import("./assets")
+    const { join } = await import("node:path")
+    const { LEVELS_DIR } = await import("./test-cast")
+    const { Texture } = await import("three/webgpu")
+    // A cast of its own, with pictures to decode: the shared one has none.
+    const cast = await loadCast({
+      base: "file:///assets/",
+      level: "bassa",
+      fetchBytes: async (url) => (await Bun.file(join(LEVELS_DIR, url.replace("file:///assets/levels/", ""))).arrayBuffer()) as ArrayBuffer,
+      decode: async () => new Texture({ width: 4, height: 4 } as never),
+    })
+    const material = (body: string) => (cast.get(body as never)!.scene.getObjectByProperty("isSkinnedMesh", true) as Mesh).material as never
+    const bodies = [...cast.keys()]
+    expect(bodies.every((b) => picturesPending(material(b)))).toBe(true)
+    const town = createTown()
+    const view = createCityScene(undefined, "shader", cast, await kitFor("bassa"))
+    town.sync(picture([shop("a", 0)], [agent("p1", "a")]))
+    for (let t = 0; t < 3; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 1, camera)
+    // The decoding is queued: let it run.
+    await new Promise((r) => setTimeout(r, 50))
+    const warm = bodies.filter((b) => !picturesPending(material(b)))
+    // The user's body, and the seated agent's (a few metres from the camera); the others wait.
+    expect(warm.length).toBeGreaterThanOrEqual(1)
+    expect(warm.length).toBeLessThan(bodies.length)
+    expect(warm).toContain("user")
+  })
+
+  test("the laptops' glow is not drawn beyond SCREEN_FAR, and is again coming back", async () => {
+    const { town, view } = await withKit([agent("p1", "a")])
+    const shown = () => view.monitor("p1")!.parent!.visible
+    expect(shown()).toBe(true)
+    const p = placementOf(0)
+    const away = new Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw))
+    const far = new PerspectiveCamera(58, 1.6, 0.1, 400)
+    far.position.set(p.center.x, 20, p.center.z).addScaledVector(away, SCREEN_FAR + 10)
+    far.lookAt(p.center.x, 1, p.center.z)
+    far.updateMatrixWorld(true)
+    view.update(town, spawnPlayer(), 1, far)
+    expect(view.scene.getObjectByName("shop:a")!.visible).toBe(true)
+    expect(shown()).toBe(false)
+    view.update(town, spawnPlayer(), 1, camera)
+    expect(shown()).toBe(true)
+  })
+
+  test("the sign's text is where the file's sign says, as wide and tall, turned as it is", async () => {
+    for (const name of ["a", "docs", "nikcli", "voice"]) {
+      const { view, kit } = await withKit([], [shop(name, 0)])
+      const sign = view.scene.getObjectByName(`shop:${name}`)!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
+      const anchor = kit.signOf(shopLook(name, kit.variants).variant)!
+      expect([name, sign.position.x, sign.position.y, sign.position.z]).toEqual([name, anchor.x, anchor.y, anchor.z])
+      expect([name, sign.scale.x, sign.scale.y, sign.rotation.y]).toEqual([name, anchor.width, anchor.height, anchor.yaw])
+    }
   })
 
   test("the hologram has no projector of its own and floats where the file's anchor says", async () => {
@@ -565,14 +729,15 @@ describe("the city with N3's shop and plaza", () => {
       })
     expect(discs(view.hologram.group)).toHaveLength(0)
     expect(discs(createCityScene().hologram.group)).toHaveLength(1)
-    expect(view.hologram.group.position.y).toBeCloseTo(kit.ringY - 0.27, 6)
+    // On the island it stands on the deck, and the anchor is measured from there.
+    expect(view.hologram.group.position.y).toBeCloseTo(kit.ringY - 0.27 + PLATFORM_TOP, 6)
     // The placeholders' plaza keeps its projector.
     expect(createCityScene().hologram.group.position.y).toBe(0)
   })
 
   test("people sit on the seats of the shop's own chairs: the layout and the file agree on where they are", async () => {
     const { view } = await withKit([agent("p1", "a"), agent("p2", "a"), agent("p3", "a"), agent("p4", "a")])
-    const chairs = (await kitFor("bassa")).shop().children.find((c) => c.name === "shop_chair") as Mesh
+    const chairs = (await kitFor("bassa")).shop().children.find((c) => /^chir_base_fixtures$/.test(c.name)) as Mesh
     expect(chairs).toBeDefined()
     const top = new Box3().setFromObject(chairs)
     for (let i = 1; i <= 4; i++) {
@@ -583,12 +748,50 @@ describe("the city with N3's shop and plaza", () => {
     }
   })
 
-  test("the shop is drawn within its sphere for the culling: the sign and awning are inside it", async () => {
-    const { view } = await withKit([])
-    const box = new Box3().setFromObject(view.scene.getObjectByName("shop:a")!)
-    const centre = placementOf(0).center
-    const farthest = Math.max(...[box.min.x, box.max.x].flatMap((x) => [box.min.z, box.max.z].map((z) => Math.hypot(x - centre.x, z - centre.z))))
-    expect(farthest).toBeLessThan(5.5 + 0.01)
+  test("the plants sway in materials of their own, and on WebGPU a height fog lies over the scene", async () => {
+    const kit = await kitFor("bassa")
+    for (const kind of ["shader", "tsl"] as const) {
+      const view = createCityScene(undefined, kind, await castOf("bassa"), kit)
+      const plants: Mesh[] = []
+      view.scene.traverse((o) => {
+        if ((o as Mesh).isMesh && o.name.startsWith("veg_")) plants.push(o as Mesh)
+      })
+      expect(plants.length).toBeGreaterThan(0)
+      const rocks = view.scene.getObjectByName("island_rocks") as Mesh
+      for (const plant of plants) {
+        expect([plant.name, plant.userData.nkv_wind]).toEqual([plant.name, kind])
+        // Not the rocks' material: they do not sway.
+        expect(plant.material).not.toBe(rocks.material)
+        if (kind === "tsl") expect([plant.name, (plant.material as { positionNode?: unknown }).positionNode != null]).toEqual([plant.name, true])
+        else expect([plant.name, typeof (plant.material as MeshBasicMaterial).onBeforeCompile]).toEqual([plant.name, "function"])
+      }
+      const fogNode = (view.scene as unknown as { fogNode?: unknown }).fogNode
+      expect([kind, fogNode != null]).toEqual([kind, kind === "tsl"])
+    }
+  })
+
+  test("every chiringuito is drawn within its sphere for the culling: roof, sign, loungers and what it lays on the sand", async () => {
+    const kit = await kitFor("bassa")
+    const names = Array.from({ length: 40 }, (_, i) => `project-${i}`)
+    const { view } = await withKit([], names.map((name, i) => shop(name, i)))
+    const seen = new Set<number>()
+    const point = new Vector3()
+    for (const [i, name] of names.entries()) {
+      seen.add(shopLook(name, kit.variants).variant)
+      const group = view.scene.getObjectByName(`shop:${name}`)!
+      const centre = placementOf(i).center
+      const middle = new Vector3(centre.x, view.groundAt(centre) + SHOP_MIDDLE, centre.z)
+      let farthest = 0
+      group.traverse((o) => {
+        const mesh = o as Mesh
+        if (!mesh.isMesh) return
+        const pos = mesh.geometry.attributes.position
+        for (let k = 0; k < pos.count; k++) farthest = Math.max(farthest, point.fromBufferAttribute(pos, k).applyMatrix4(mesh.matrixWorld).distanceTo(middle))
+      })
+      expect([name, farthest < SHOP_RADIUS]).toEqual([name, true])
+    }
+    // Forty projects are most of the file's variants: the sphere is measured on them, not on one.
+    expect(seen.size).toBeGreaterThan(kit.variants / 2)
   })
 })
 
