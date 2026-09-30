@@ -205,7 +205,8 @@ setInterval(() => {}, 1000)
     // A script that closes its browser.
     const closing = await start("close")
     await closing.exited
-    expect(ours(closing.pid)).toEqual([])
+    // Edge's helpers (its GPU process) take a moment to go after the browser: waited for, as in the two cases below, and never left.
+    expect(await waitFor(() => ours(closing.pid).length === 0, 10_000)).toBe(true)
     // A script that exits without closing: the exit hook takes the whole browser.
     const first = await start("exit")
     await first.exited

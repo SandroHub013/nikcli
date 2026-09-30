@@ -33,8 +33,9 @@ const { page, browserLine, open, until, close } = await startHarness({
 })
 
 interface Snapshot {
-  snapshot: { meta: { node_fields: string[]; node_types: [string[]] } }
+  snapshot: { meta: { node_fields: string[]; node_types: [string[]]; edge_fields: string[]; edge_types: [string[]] } }
   nodes: number[]
+  edges: number[]
   strings: string[]
 }
 
@@ -84,6 +85,70 @@ function groupsOf(snap: Snapshot): { groups: Group[]; total: number } {
   return { groups: [...map.values()].sort((a, b) => b.bytes - a.bytes), total }
 }
 
+/**
+ * The biggest single array buffers and who holds them: each `JSArrayBufferData` node walked up through the first retainer that is a real
+ * reference (a property, an element, an internal slot, a context slot), a few steps, as `Holder.edge <- Holder.edge`.
+ */
+function bigBuffers(snap: Snapshot, count = 12): { biggest: Array<{ mb: number; chain: string }>; groups: Array<{ mb: number; buffers: number; holder: string }> } {
+  const meta = snap.snapshot.meta
+  const fields = meta.node_fields
+  const stride = fields.length
+  const iType = fields.indexOf("type")
+  const iName = fields.indexOf("name")
+  const iSize = fields.indexOf("self_size")
+  const iEdges = fields.indexOf("edge_count")
+  const types = meta.node_types[0]
+  const eFields = meta.edge_fields
+  const eStride = eFields.length
+  const eType = eFields.indexOf("type")
+  const eName = eFields.indexOf("name_or_index")
+  const eTo = eFields.indexOf("to_node")
+  const eTypes = meta.edge_types[0]
+  const total = snap.nodes.length / stride
+  const retainer = new Int32Array(total).fill(-1)
+  const retainerEdge = new Array<string>(total).fill("")
+  let edge = 0
+  for (let n = 0; n < total; n++) {
+    const edgeCount = snap.nodes[n * stride + iEdges]
+    for (let e = 0; e < edgeCount; e++, edge++) {
+      const kind = eTypes[snap.edges[edge * eStride + eType]]
+      if (kind === "weak" || kind === "shortcut") continue
+      const to = snap.edges[edge * eStride + eTo] / stride
+      if (retainer[to] !== -1 || to === n) continue
+      retainer[to] = n
+      const raw = snap.edges[edge * eStride + eName]
+      retainerEdge[to] = kind === "element" || kind === "hidden" ? `[${raw}]` : (snap.strings[raw] ?? "")
+    }
+  }
+  const nameOf = (n: number) => `${types[snap.nodes[n * stride + iType]]}:${(snap.strings[snap.nodes[n * stride + iName]] ?? "").slice(0, 40)}`
+  const buffers: number[] = []
+  for (let n = 0; n < total; n++)
+    if (snap.strings[snap.nodes[n * stride + iName]] === "system / JSArrayBufferData") buffers.push(n)
+  buffers.sort((a, b) => snap.nodes[b * stride + iSize] - snap.nodes[a * stride + iSize])
+  const chainOf = (n: number, withEdges: boolean) => {
+    const steps: string[] = []
+    for (let at = n, depth = 0; at !== -1 && depth < 6; at = retainer[at], depth++)
+      steps.push(`${nameOf(at)}${withEdges && retainerEdge[at] ? "." + retainerEdge[at] : ""}`)
+    return steps
+  }
+  // The same buffers summed by what holds them (the chain without the node the buffer itself is, and without element indexes).
+  const sums = new Map<string, { bytes: number; buffers: number }>()
+  for (const n of buffers) {
+    const key = chainOf(n, false).slice(2, 5).join(" <- ")
+    const g = sums.get(key) ?? { bytes: 0, buffers: 0 }
+    g.bytes += snap.nodes[n * stride + iSize]
+    g.buffers++
+    sums.set(key, g)
+  }
+  return {
+    biggest: buffers.slice(0, count).map((n) => ({ mb: +(snap.nodes[n * stride + iSize] / 1048576).toFixed(2), chain: chainOf(n, true).join(" <- ") })),
+    groups: [...sums.entries()]
+      .sort((a, b) => b[1].bytes - a[1].bytes)
+      .slice(0, 12)
+      .map(([holder, g]) => ({ mb: +(g.bytes / 1048576).toFixed(2), buffers: g.buffers, holder })),
+  }
+}
+
 function memoryOf(ids: number[]): Record<number, number> {
   const raw = ps(
     `Get-Process -Id ${ids.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id) $($_.PrivateMemorySize64) $($_.WorkingSet64)" }`,
@@ -117,6 +182,10 @@ const report = {
   frameMb: +frameMb.toFixed(1),
   snapshotMb: mb(total),
   outsideSnapshotMb: +(frameMb - total / 1048576).toFixed(1),
+  ...(() => {
+    const b = bigBuffers(snap)
+    return { bufferGroups: b.groups, biggestBuffers: b.biggest }
+  })(),
   top: groups.slice(0, TOP).map((g) => ({ group: g.key, mb: mb(g.bytes), objects: g.count })),
 }
 writeFileSync(join(out, `heap-groups-${LEVEL}${refusing ? "-refused" : ""}.json`), JSON.stringify(report, null, 2))
