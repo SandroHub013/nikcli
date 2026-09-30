@@ -3,6 +3,10 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.419.0 (September 2026)
+
+- No notable changes
+
 ## v1.418.0 (September 2026)
 
 ## Desktop

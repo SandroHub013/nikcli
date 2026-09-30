@@ -13,44 +13,41 @@
  * command knows to fall back to a dialog instead of toggling a panel nobody
  * can see.
  */
-import { Plugin } from "@nikcli-ai/plugin/v2/tui";
-import { SimulatorSidebar } from "@tui/component/simulator-sidebar";
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { SimulatorSidebar } from "@tui/component/simulator-sidebar"
+import { createSignal, onCleanup, onMount, Show } from "solid-js"
 
 export default Plugin.define({
   id: "internal:simulator",
   setup(ctx) {
-    const [enabled, setEnabled] = createSignal(false);
-    let mounted = 0;
+    const [enabled, setEnabled] = createSignal(false)
+    let mounted = 0
 
     function Slot() {
-      onMount(() => mounted++);
-      onCleanup(() => mounted--);
+      onMount(() => mounted++)
+      onCleanup(() => mounted--)
       return (
         <Show when={enabled()}>
           <SimulatorSidebar onClose={() => setEnabled(false)} />
         </Show>
-      );
+      )
     }
 
-    ctx.ui.slot("sidebar.content", () => <Slot />);
+    ctx.ui.slot("sidebar.content", () => <Slot />)
     ctx.ui.command({
       name: "simulator.toggle",
       title: "Native simulator",
       namespace: "Tool",
-      description:
-        "Show an installed iOS simulator or Android emulator in the sidebar",
+      description: "Show an installed iOS simulator or Android emulator in the sidebar",
       slash: { name: "simulator" },
       run() {
-        if (!enabled()) setEnabled(true);
+        if (!enabled()) setEnabled(true)
         // Mounted > 0 means the sidebar slot is live, so the panel is already
         // on screen. Otherwise the sidebar is hidden or off this route, and
         // the same component goes in a dialog rather than nowhere.
-        if (mounted > 0) return;
-        ctx.ui.dialog.replace(() => (
-          <SimulatorSidebar onClose={() => ctx.ui.dialog.clear()} />
-        ));
+        if (mounted > 0) return
+        ctx.ui.dialog.replace(() => <SimulatorSidebar onClose={() => ctx.ui.dialog.clear()} />)
       },
-    });
+    })
   },
-});
+})

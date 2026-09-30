@@ -3,20 +3,20 @@
 Native desktop admin dashboard and developer platform for **nikcli**. It runs on your machine, talks to your
 real local nikcli service and your real repository, and never shows placeholder data.
 
-| Area          | What it does                                                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Overview      | Service health and latency, host CPU/memory, nikcli process totals, doctor checks, lifetime usage, recent runs                                   |
-| Processes     | Every nikcli process and what it spawned (MCP, LSP, shells): CPU, resident/virtual memory, I/O, uptime, terminate/kill                           |
-| Tests         | Every test file of every workspace package; runs real `bun test`, streams output, per-test results from bun's junit report, slowest tests       |
-| Benchmarks    | Stored benchmark runs with run-vs-run comparison, the recorded perf baseline, live route probes against a real in-process server                 |
-| Playground    | **Model bench** (same prompt across models, N runs: median/p95, tokens/s, cost), **endpoint load test** (p50–p99, req/s), **script lab** (Bun)   |
-| Telemetry     | Live spans (`telemetry.record`) and bus events over SSE: operations table, trace waterfall, event feed                                           |
-| Manage        | Sessions (rename/fork/stop/delete), providers and API keys, MCP servers, agents/skills/commands, effective config (secrets masked)               |
-| API console   | Authenticated requests to the nikcli HttpApi with history                                                                                        |
-| Activity      | Tokens, cost, tools, models, projects, recent sessions from nikcli analytics                                                                     |
-| System        | MCP/LSP status, repository checks (typecheck, route coverage, …), on-disk storage, live logs                                                     |
-| Settings      | Account sign-in (device-code flow), theme (every theme of the shared UI, live preview), repository, assistant behaviour                          |
-| **Assistant** | A chat panel (⌘J) driven by a real nikcli agent. It is given the live state of the app as context and operates DevHub through typed actions.    |
+| Area          | What it does                                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview      | Service health and latency, host CPU/memory, nikcli process totals, doctor checks, lifetime usage, recent runs                                 |
+| Processes     | Every nikcli process and what it spawned (MCP, LSP, shells): CPU, resident/virtual memory, I/O, uptime, terminate/kill                         |
+| Tests         | Every test file of every workspace package; runs real `bun test`, streams output, per-test results from bun's junit report, slowest tests      |
+| Benchmarks    | Stored benchmark runs with run-vs-run comparison, the recorded perf baseline, live route probes against a real in-process server               |
+| Playground    | **Model bench** (same prompt across models, N runs: median/p95, tokens/s, cost), **endpoint load test** (p50–p99, req/s), **script lab** (Bun) |
+| Telemetry     | Live spans (`telemetry.record`) and bus events over SSE: operations table, trace waterfall, event feed                                         |
+| Manage        | Sessions (rename/fork/stop/delete), providers and API keys, MCP servers, agents/skills/commands, effective config (secrets masked)             |
+| API console   | Authenticated requests to the nikcli HttpApi with history                                                                                      |
+| Activity      | Tokens, cost, tools, models, projects, recent sessions from nikcli analytics                                                                   |
+| System        | MCP/LSP status, repository checks (typecheck, route coverage, …), on-disk storage, live logs                                                   |
+| Settings      | Account sign-in (device-code flow), theme (every theme of the shared UI, live preview), repository, assistant behaviour                        |
+| **Assistant** | A chat panel (⌘J) driven by a real nikcli agent. It is given the live state of the app as context and operates DevHub through typed actions.   |
 
 ## Run
 
