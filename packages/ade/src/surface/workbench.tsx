@@ -261,7 +261,7 @@ import {
 } from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
-import { importPluginModule } from "../plugin/loader"
+import { FILE_PLUGINS_DISABLED, importPluginModule } from "../plugin/loader"
 import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
@@ -5348,6 +5348,13 @@ export function Workbench() {
     load: importPluginModule,
     internal: ({ status, registry }) => [createManagerPlugin(status, registry)],
     async trust(root, plugins) {
+      /*
+       * Consent is a question about code that is about to run. The loader
+       * refuses every file plugin first, so the dialog would be asking the
+       * user to authorize nothing: `hasConsent` and the question below come
+       * back the day the loader does (brief: bloccare il caricatore).
+       */
+      if (FILE_PLUGINS_DISABLED) return true
       let stored: string | null = null
       try {
         stored = localStorage.getItem(CONSENT_KEY)
