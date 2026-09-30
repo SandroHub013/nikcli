@@ -39,9 +39,18 @@ const deadline = setTimeout(() => {
   process.exit(1)
 }, 600_000)
 
+// For comparing a variant of the city's file before it goes into the package: `--city FILE` is served in place of every
+// level's `city.glb` (the lightmaps and the people stay the package's).
+const cityOverride = arg("--city")
 const { page, problems, evaluate, open, until, close } = await startHarness({
   out,
   gpu: arg("--gpu") === "software" ? "software" : "real",
+  routes: cityOverride
+    ? (url, policy) =>
+        /^\/assets\/levels\/(bassa|media|alta)\/city\.glb$/.test(url.pathname)
+          ? new Response(Bun.file(cityOverride), { headers: { "content-type": "model/gltf-binary", "cache-control": "no-store", ...policy } })
+          : undefined
+    : undefined,
 })
 
 /** The scene as ADE would send it: for the walking clip. */
