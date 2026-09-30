@@ -587,7 +587,7 @@ try {
 
   // The frame is judged on its private memory; the working set (which counts shared pages) goes in the report only.
   const framePriv = framePrivate(cycles.map((c) => c.framePrivMb as number))
-  log(`frame privata: picco ${framePriv.peakMb.toFixed(1)} MB (limite ${GATE_LIMITS.frameMb}), crescita cicli 3-5 ${framePriv.growthAfterWarmupMb.toFixed(1)} MB; working set (informazione): ${Math.max(...cycles.map((c) => c.frameWsMb as number)).toFixed(1)} MB`)
+  log(`frame privata: picco ${framePriv.peakMb.toFixed(1)} MB (limite ${GATE_LIMITS.frameMb}), crescita sul ciclo 3 ${framePriv.growthAfterWarmupMb.toFixed(1)} MB; working set (informazione): ${Math.max(...cycles.map((c) => c.frameWsMb as number)).toFixed(1)} MB`)
 
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {

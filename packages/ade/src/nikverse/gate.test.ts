@@ -40,7 +40,7 @@ describe("the NikVerse gate", () => {
 
   test("each ceiling turns the gate red on its own, by name", () => {
     expect(red({ frameMb: GATE_LIMITS.frameMb + 1 })).toEqual(["frame MB"])
-    expect(red({ frameGrowthAfterWarmupMb: GATE_LIMITS.frameGrowthAfterWarmupMb + 0.5 })).toEqual(["frame growth from cycle 3 to 5, MB"])
+    expect(red({ frameGrowthAfterWarmupMb: GATE_LIMITS.frameGrowthAfterWarmupMb + 0.5 })).toEqual(["frame growth over cycle 3, MB"])
     expect(red({ adeGrowthAfter5sMb: 5.2 })).toEqual(["ADE growth after 5 s, MB"])
     expect(red({ adeGrowthAtRestMb: 5.2 })).toEqual(["ADE growth at rest, MB"])
     expect(red({ adeHeapGrowthMb: 6 })).toEqual(["ADE heap growth, MB"])
@@ -190,16 +190,22 @@ describe("the frame's private memory the gate reads", () => {
     expect(red({ frameMb: framePrivate([...priv, 118]).peakMb })).toEqual(["frame MB"])
   })
 
-  test("the growth is the fifth cycle over the third: warming up is not a leak, a rise is", () => {
-    expect(framePrivate(priv).growthAfterWarmupMb).toBe(1)
+  test("the growth is the highest cycle from the third on over the third: warming up is not a leak, a rise is, even one that falls back", () => {
+    expect(framePrivate(priv).growthAfterWarmupMb).toBe(2)
     expect(framePrivate([80, 95, 96, 96, 96]).growthAfterWarmupMb).toBe(0)
-    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94, 97, 99]).growthAfterWarmupMb })).toEqual(["frame growth from cycle 3 to 5, MB"])
+    // A peak at the fourth cycle that the fifth has given back still counts; and with more than five cycles every one from the third does.
+    expect(framePrivate([90, 92, 94, 99, 95]).growthAfterWarmupMb).toBe(5)
+    // Master's example: 106 at the fourth cycle over the third's 102 is 4 MB, red, though the fifth (103) is only 1 over.
+    expect(framePrivate([100, 101, 102, 106, 103]).growthAfterWarmupMb).toBe(4)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([100, 101, 102, 106, 103]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
+    expect(framePrivate([90, 92, 94, 95, 96, 96, 101]).growthAfterWarmupMb).toBe(7)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94, 97, 99]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
   })
 
   test("fewer than five cycles, or a cycle without a number, give no growth (red) rather than a pass", () => {
     expect(Number.isNaN(framePrivate([90, 92, 94]).growthAfterWarmupMb)).toBe(true)
     expect(framePrivate([90, 92, 94]).peakMb).toBe(94)
-    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94]).growthAfterWarmupMb })).toEqual(["frame growth from cycle 3 to 5, MB"])
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
     expect(Number.isNaN(framePrivate([90, Number.NaN, 94, 95, 96]).peakMb)).toBe(true)
     expect(Number.isNaN(framePrivate([]).peakMb)).toBe(true)
   })
