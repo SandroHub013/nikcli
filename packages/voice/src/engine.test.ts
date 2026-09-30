@@ -1655,6 +1655,7 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1701,6 +1702,7 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1801,6 +1803,7 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
+      creditLeft: async () => undefined,
       listenRequestsPerHour: 3,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
@@ -1846,6 +1849,7 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         usage = options?.openRouterOptions?.onUsage
@@ -1911,6 +1915,7 @@ describe("always-on listening", () => {
       settings,
       haltStore,
       listenRequestsPerHour: 1,
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -1931,6 +1936,7 @@ describe("always-on listening", () => {
       now: () => Date.now(),
       settings,
       haltStore,
+      creditLeft: async () => undefined,
     })
     expect(next.listenHalted()).toBe(true)
     expect(next.listenWarning()).toContain("smesso di ascoltare")
@@ -1969,6 +1975,7 @@ describe("always-on listening", () => {
       },
       haltStore,
       listenRequestsPerHour: 1,
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -2004,6 +2011,7 @@ describe("always-on listening", () => {
       },
       haltStore,
       listenRequestsPerHour: 1,
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -2124,6 +2132,7 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -2864,6 +2873,7 @@ describe("interrupted while it talks", () => {
       speaker,
       now: () => 10_000,
       settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -2941,6 +2951,7 @@ describe("a television talking on does not keep the window open", () => {
       speaker: createFakeSpeaker(),
       now: () => clock,
       settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
