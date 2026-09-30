@@ -51,7 +51,10 @@ describe("llm-event-adapter", () => {
   })
 
   it("synthesizes start-step from request-start", () => {
-    const events = mapLLMEvent(adapterState(), { type: "request-start", id: "r1" } as LLMEvent)
+    const events = mapLLMEvent(adapterState(), {
+      type: "request-start",
+      id: "r1",
+    } as LLMEvent)
     expect(events.map((e) => e.type)).toEqual(["start", "start-step"])
   })
 
@@ -59,7 +62,10 @@ describe("llm-event-adapter", () => {
     const s = adapterState()
     mapLLMEvent(s, { type: "text-delta", text: "hi" } as LLMEvent)
     mapLLMEvent(s, { type: "reasoning-delta", text: "think" } as LLMEvent)
-    const events = mapLLMEvent(s, { type: "request-finish", reason: "stop" } as LLMEvent)
+    const events = mapLLMEvent(s, {
+      type: "request-finish",
+      reason: "stop",
+    } as LLMEvent)
     expect(events.map((e) => e.type)).toEqual(["reasoning-end", "text-end", "finish-step", "finish"])
   })
 
@@ -219,6 +225,52 @@ describe("llm-event-adapter", () => {
     expect(SessionRetry.retryable(classified)).toBeUndefined()
   })
 
+  it.each([
+    { status: 401, retryable: false, expected: undefined },
+    { status: 400, retryable: false, expected: undefined },
+    { status: 429, retryable: true, expected: "request failed" },
+    { status: 503, retryable: false, expected: "request failed" },
+  ])("matches SDK retry classification for native HTTP $status", ({ status, retryable, expected }) => {
+    const native = providerErrorToAPICallError({
+      type: "provider-error",
+      message: "request failed",
+      retryable,
+      providerMetadata: { provider: { statusCode: String(status) } },
+    } as Extract<LLMEvent, { type: "provider-error" }>)
+    const sdk = new APICallError({
+      message: "request failed",
+      url: "https://provider.example/inference",
+      requestBodyValues: undefined,
+      statusCode: status,
+      isRetryable: retryable,
+    })
+
+    expect(native.statusCode).toBe(status)
+    for (const error of [native, sdk]) {
+      const classified = MessageV2.fromError(error, {
+        providerID: "test-provider",
+      })
+      expect(SessionRetry.retryable(classified)).toBe(expected)
+    }
+  })
+
+  it("currently drops native Retry-After metadata at the API error boundary", () => {
+    const error = providerErrorToAPICallError({
+      type: "provider-error",
+      message: "rate limited",
+      retryable: true,
+      providerMetadata: {
+        provider: { statusCode: 429, responseHeaders: { "retry-after": "7" } },
+      },
+    } as Extract<LLMEvent, { type: "provider-error" }>)
+    const classified = MessageV2.fromError(error, {
+      providerID: "test-provider",
+    })
+
+    expect(classified).toMatchObject({ name: "APIError", data: { statusCode: 429 } })
+    expect((classified.data as { responseHeaders?: unknown }).responseHeaders).toBeUndefined()
+  })
+
   it("maps tool-input-delta with delta field", () => {
     const s = adapterState()
     const events = mapLLMEvent(s, {
@@ -291,6 +343,116 @@ describe("suppressEmptyTextResult", () => {
 })
 
 describe("native turn equivalence", () => {
+  it("bills each step once and does not bill request totals again", () => {
+    const state = adapterState()
+    const steps = [
+      ...mapLLMEvent(state, { type: "request-start" } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "step-finish",
+        index: 0,
+        reason: "tool-calls",
+        usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      } as LLMEvent),
+      ...mapLLMEvent(state, { type: "step-start", index: 1 } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "step-finish",
+        index: 1,
+        reason: "stop",
+        usage: { inputTokens: 20, outputTokens: 3, totalTokens: 23 },
+      } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "request-finish",
+        reason: "stop",
+        usage: { inputTokens: 30, outputTokens: 5, totalTokens: 35 },
+      } as LLMEvent),
+    ].filter((event) => event.type === "finish-step")
+
+    expect(steps.map((event) => event.usage)).toEqual([
+      { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      { inputTokens: 20, outputTokens: 3, totalTokens: 23 },
+    ])
+  })
+
+  it("preserves normalized cache writes alongside provider metadata", () => {
+    const events = mapLLMEvent(adapterState(), {
+      type: "request-finish",
+      reason: "stop",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 5,
+        reasoningTokens: 2,
+        totalTokens: 105,
+        cacheReadInputTokens: 30,
+        cacheWriteInputTokens: 20,
+      },
+      providerMetadata: { anthropic: { cacheCreationInputTokens: 99 } },
+    } as LLMEvent)
+    const step = events.find((event) => event.type === "finish-step")
+
+    expect(step?.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 5,
+      reasoningTokens: 2,
+      totalTokens: 105,
+      cachedInputTokens: 30,
+    })
+    expect(step?.providerMetadata).toEqual({
+      anthropic: { cacheCreationInputTokens: 99 },
+      nikcli: { cacheWriteInputTokens: 20 },
+    })
+  })
+
+  it("currently leaves missing finish usage undefined rather than reporting a gap", () => {
+    const events = mapLLMEvent(adapterState(), {
+      type: "request-finish",
+      reason: "stop",
+    } as LLMEvent)
+    const step = events.find((event) => event.type === "finish-step")
+
+    expect(step).toBeDefined()
+    expect(step?.usage).toBeUndefined()
+  })
+
+  it("propagates a mid-stream provider failure without synthesizing finish events", async () => {
+    async function* source(): AsyncGenerator<LLMEvent> {
+      yield { type: "request-start" } as LLMEvent
+      yield { type: "text-delta", id: "t1", text: "partial" } as LLMEvent
+      yield {
+        type: "provider-error",
+        message: "overloaded",
+        retryable: true,
+      } as LLMEvent
+    }
+    const events: string[] = []
+    const consume = async () => {
+      for await (const event of toProcessorStream(source())) events.push(event.type)
+    }
+
+    await expect(consume()).rejects.toThrow(APICallError)
+    expect(events).toEqual(["start", "start-step", "text-start", "text-delta"])
+  })
+
+  it("releases the source iterator when its consumer stops early", async () => {
+    let released = false
+    let advanced = false
+    async function* source(): AsyncGenerator<LLMEvent> {
+      try {
+        yield { type: "text-delta", id: "t1", text: "first" } as LLMEvent
+        advanced = true
+        yield { type: "text-delta", id: "t1", text: "late" } as LLMEvent
+      } finally {
+        released = true
+      }
+    }
+
+    for await (const event of toProcessorStream(source())) {
+      expect(event.type).toBe("text-start")
+      break
+    }
+    expect(released).toBe(true)
+    expect(advanced).toBe(false)
+  })
+
   /**
    * One complete turn through the native path, pinned as a sequence.
    *
@@ -311,7 +473,11 @@ describe("native turn equivalence", () => {
     const emitted = [
       ...mapLLMEvent(state, { type: "request-start" } as LLMEvent),
       ...mapLLMEvent(state, { type: "text-start", id: "t1" } as LLMEvent),
-      ...mapLLMEvent(state, { type: "text-delta", id: "t1", text: "look" } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "text-delta",
+        id: "t1",
+        text: "look",
+      } as LLMEvent),
       ...mapLLMEvent(state, { type: "text-end", id: "t1" } as LLMEvent),
       ...mapLLMEvent(state, {
         type: "tool-call",
@@ -325,7 +491,10 @@ describe("native turn equivalence", () => {
         name: "read",
         result: { type: "json", value: { contents: "ok" } },
       } as LLMEvent),
-      ...mapLLMEvent(state, { type: "request-finish", reason: "stop" } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "request-finish",
+        reason: "stop",
+      } as LLMEvent),
     ].map((event) => event.type)
 
     expect(emitted).toEqual([
@@ -365,8 +534,15 @@ describe("native turn equivalence", () => {
     const state = adapterState()
     const emitted = [
       ...mapLLMEvent(state, { type: "request-start" } as LLMEvent),
-      ...mapLLMEvent(state, { type: "text-delta", id: "t1", text: "partial" } as LLMEvent),
-      ...mapLLMEvent(state, { type: "request-finish", reason: "stop" } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "text-delta",
+        id: "t1",
+        text: "partial",
+      } as LLMEvent),
+      ...mapLLMEvent(state, {
+        type: "request-finish",
+        reason: "stop",
+      } as LLMEvent),
     ].map((event) => event.type)
 
     expect(emitted.indexOf("text-end")).toBeGreaterThan(-1)

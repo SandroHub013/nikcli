@@ -69,8 +69,30 @@ session; every "open" line is a gate that still needs work, not a claim that a c
   resume from. Next: decide the protocol (a per-aggregate `seq` on the envelope or `Last-Event-ID` replay), which is a
   contract change for every client and lands through EOT-10.
 - EOT-11. `CachePolicy.Service`, `Usage.Service` and the tagged `ProviderError` service do not exist; a change to every
-  model call needs characterization tests of current retry/usage behaviour first.
+  model call now has test-only characterization of current retry/usage behaviour, not an implementation or promotion.
+  Existing cache, usage and error helpers are not those services; full adapter convergence remains future work.
 - EOT-16 / B31. Pinned, not closed: giving each workspace its own scope moves the cache key and the dispose owner.
+
+---
+
+### Review the evidence
+
+EOT-11 tests pin partial text/reasoning published to Bus then removed on legacy processor retry: a requirement 6 gap,
+not compliance. Missing usage fields default to zero, but Anthropic/Bedrock recompute a zero total while OpenAI/Google
+leave an absent total undefined.
+
+Native finish usage stays undefined when absent, and the adapter drops `Retry-After` metadata at the API error boundary.
+See [EOT-11](effect-tui/11-provider-inference-streaming.md) for the inspected tests and remaining gaps.
+
+User-supplied verified result from `packages/nikcli`: **120 pass, 0 fail, exit 0** across
+`test/session/{session,llm-event-adapter,retry,retry-precise}.test.ts`; not a new run here.
+Processor tests were inspected without a confirmed run count.
+
+Next: a narrow partial-output retry/fallback guard across processor and native paths with matching tests, then
+missing-usage and header handling. EOT-11 stays proposed at Tier 1/P2 with unchanged dependencies; EOT-00's real
+Ghostty/tmux matrix remains open, so this evidence does not permit promotion.
+
+---
 
 ## Target Architecture
 
@@ -256,7 +278,8 @@ to P0. Leave any unpassed spec proposed/in-progress rather than claiming the arc
 7. EOT-03: carry abort plus generation checks through one complete dialog request/resource/close flow.
 8. EOT-04: classify event types and test overload before introducing admission caps; retain server encode-once behavior.
 9. EOT-09: extend monitor or one background job family with capacity/queue/terminal-state guards.
-10. EOT-11: unify the AI SDK → LLMEvent adapter on one provider and one session path; verify byte-identical output.
+10. EOT-11: use the test-only characterization to guard partial-output retry/fallback across processor and native paths
+    with matching tests; follow with missing-usage and header handling before full adapter convergence.
 11. EOT-14: migrate one internal plugin (`background`) to v2; verify hot reload with late disposer and incompatible manifest.
 12. EOT-15: land the snapshot barrier on `session` first, then extend to `project` and `workspace`.
 13. EOT-16: tighten workspace scope semantics on one operation; verify concurrent isolation.

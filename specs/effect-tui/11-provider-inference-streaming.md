@@ -173,3 +173,37 @@ one module that was about to repeat it.
 
 **What this is not.** It is not the adapter convergence. The AI SDK path and the native path are
 still two pipelines, and this spec's release gate still asks for one.
+
+---
+
+## Review the evidence
+
+2026-09-30: test-only characterization, not production implementation or promotion. Status remains proposed,
+Tier 1/P2 and dependencies unchanged; EOT-00's real Ghostty/tmux matrix remains open.
+
+- `packages/nikcli/test/session/processor-retry.test.ts` pins transient recovery, exhaustion, non-retryable failures
+  and backoff cancellation; cancellation leaves terminal persistence to the caller.
+- The same processor tests pin partial text/reasoning published to Bus, then removed before retry output appears.
+  Removal does not undo publication: this is a requirement 6 gap, not compliance.
+- `packages/nikcli/test/session/session.test.ts` pins cache normalization, metadata precedence and pricing.
+  Missing usage fields default to zero, but Anthropic/Bedrock recompute zero totals while OpenAI/Google leave absent totals undefined.
+- `packages/nikcli/test/session/llm-event-adapter.test.ts` pins step billing without double-counting request totals,
+  cache-write metadata, failure propagation without finish events and early iterator release.
+- Those adapter tests also pin absent native finish usage as undefined, without a gap signal, and dropped
+  `Retry-After` metadata at the API error boundary; neither satisfies the missing-usage or header requirements.
+- `packages/nikcli/test/session/retry.test.ts` and `packages/nikcli/test/session/retry-precise.test.ts` pin classification,
+  backoff, header delays and abort cleanup, not a partial-output safety guard.
+
+User-supplied verified result from `packages/nikcli`: **120 pass, 0 fail, exit 0** across
+`test/session/{session,llm-event-adapter,retry,retry-precise}.test.ts`; not a new run here.
+Processor tests were inspected without a confirmed run count.
+
+---
+
+## Guard partial output
+
+Next, add a narrow partial-output retry/fallback guard across the processor and native paths with matching tests.
+Then address missing-usage signals and header handling; full adapter convergence remains future work.
+
+`CachePolicy.Service`, `Usage.Service` and the tagged `ProviderError` service remain absent.
+Existing cache, usage and error helper modules are not these services, and passing characterization tests do not close this spec.

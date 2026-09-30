@@ -694,20 +694,18 @@ export namespace SessionProcessor {
               if (needsCompaction) break
             }
           } catch (e: any) {
-            const error = MessageV2.fromError(e, {
+            let error = MessageV2.fromError(e, {
               providerID: input.model.providerID,
             })
-            if (input.abort.aborted || isAbortError(e)) {
-              input.assistantMessage.error = error
-              break
+            const interrupted = input.abort.aborted || isAbortError(e)
+            if (!interrupted) {
+              log.error("process", {
+                error: e,
+                stack: JSON.stringify(e.stack),
+              })
             }
-
-            log.error("process", {
-              error: e,
-              stack: JSON.stringify(e.stack),
-            })
             // Context overflow is handled through retryable provider error classification below.
-            const retry = SessionRetry.retryable(error)
+            const retry = interrupted ? undefined : SessionRetry.retryable(error)
             if (retry !== undefined) {
               const nextAttempt = attempt + 1
               if (nextAttempt <= SessionRetry.RETRY_MAX_ATTEMPTS) {
@@ -729,17 +727,12 @@ export namespace SessionProcessor {
                 try {
                   await SessionRetry.sleep(delay, input.abort)
                   input.abort.throwIfAborted()
+                  continue
                 } catch (sleepError) {
-                  input.assistantMessage.error = MessageV2.fromError(sleepError, {
+                  error = MessageV2.fromError(sleepError, {
                     providerID: input.model.providerID,
                   })
-                  Bus.publish(Session.Event.Error, {
-                    sessionID: input.assistantMessage.sessionID,
-                    error: input.assistantMessage.error,
-                  })
-                  break
                 }
-                continue
               }
             }
             input.assistantMessage.error = error
