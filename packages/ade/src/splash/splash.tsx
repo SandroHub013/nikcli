@@ -4,6 +4,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import type * as THREE from "three"
 import { t } from "../i18n"
 import "./splash.css"
+import { SPLASH_SCENE_DELAY_MS } from "./timing"
 
 export interface SplashProps {
   /** Hidden when this goes false. The fade is handled here. */
@@ -92,10 +93,15 @@ function SplashView(props: { visible: boolean; onDismiss?: () => void }) {
       return
     }
 
-    void startScene(container, asciiLayer).then((stop) => {
-      if (disposed) stop?.()
-      else teardown = stop
-    })
+    // Not at once: a boot that is over within the delay never loads three.js nor takes a GPU context for a screen that is already going.
+    const starting = setTimeout(() => {
+      if (disposed) return
+      void startScene(container, asciiLayer).then((stop) => {
+        if (disposed) stop?.()
+        else teardown = stop
+      })
+    }, SPLASH_SCENE_DELAY_MS)
+    onCleanup(() => clearTimeout(starting))
   })
 
   return (
