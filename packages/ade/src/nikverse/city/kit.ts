@@ -1,12 +1,18 @@
 /**
- * The city's pieces from `city.glb`: the plaza with everything around it, and the shops.
+ * The city's pieces from `city.glb`: the plaza (or the island) with everything around it, and the shops.
  *
  * The file has the pieces as meshes, each in its own frame: the plaza and its surroundings in the world's (the
- * square at the origin), and a shop in its own (floor at y = 0, the door on +z, the desks facing -z). A shop is
- * the meshes named `shop<variant>_*` (`shop_*` is variant 0): the file has a few, and each project gets one of
- * them by the hash of its name, with the colours of its walls and awning. What changes from one shop to the next
- * beyond that (the sign's text, the monitors' colour) is added over them by `view.ts`; the pieces are shared,
- * geometry and material.
+ * square at the origin), and a shop in its own (ground at y = 0, the front on +z, the seats facing -z).
+ *
+ * On the island a shop is a chiringuito put together from parts: `chir_base_*` (the posts, the back bar, the
+ * seats, the loungers, what every one has), one roof `chir_roof<k>_*`, one counter `chir_bar<k>_*` and one sign
+ * `chir_sign<k>_*`. Every combination is a variant, and each project gets one by the hash of its name, with an
+ * accent colour (the awning's stripes, the cushions). A sign carries an empty `chir_sign<k>_signtext`: where the
+ * project's name is drawn, facing its +z, as wide and tall as its scale. An older file has whole shops instead,
+ * `shop<variant>_*` (`shop_*` is variant 0).
+ *
+ * What changes from one shop to the next beyond that (the sign's text, the screens' colour) is added over them by
+ * `view.ts`; the pieces are shared, geometry and material.
  *
  * The light is baked (A2): the file says how each mesh is drawn in its `extras`, which the loader puts in
  * `userData`. `nkv_shade` is `lit` (its colour times its lightmap, on the second set of UVs, named by `nkv_lm`),
@@ -38,8 +44,18 @@ import { releaseAfterUpload } from "./upload-release"
 export interface ShopTint {
   /** The plaster of the walls, `0xRRGGBB` in sRGB. */
   wall: number
-  /** The awning's colour. */
+  /** The awning's colour: on a chiringuito, the accent (the stripes, the cushions). */
   awning: number
+}
+
+/** Where a sign's text goes, in the shop's frame: its middle, its turn about y, its size. */
+export interface SignAnchor {
+  x: number
+  y: number
+  z: number
+  yaw: number
+  width: number
+  height: number
 }
 
 export interface CityKit {
@@ -58,6 +74,8 @@ export interface CityKit {
   lit: boolean
   /** Whether the file is the island (its ground has heights: `islandHeight`), not a flat city. */
   island: boolean
+  /** Where variant `variant`'s sign wants the project's name, if the file says. */
+  signOf(variant: number): SignAnchor | undefined
 }
 
 /** How strongly the baked light is added to what the scene lights, on N3's older files. */
@@ -99,6 +117,8 @@ export function shopLook(name: string, variants: number): { variant: number; tin
 const named = (o: Object3D, prefix: string) => o.name.startsWith(prefix)
 
 const SHOP_NAME = /^shop(\d*)_/
+/** A chiringuito's part: `chir_base_*`, or a roof, a counter or a sign of some kind. */
+const PART_NAME = /^chir_(base|roof|bar|sign)(\d*)_/
 
 /** The lightmaps of a file, by the name its meshes give (`nkv_lm`). */
 export type Lightmaps = Map<string, Texture>
@@ -145,6 +165,11 @@ function drawnWith(mesh: Mesh, maps: Lightmaps, cache: Map<string, Material>): M
   } else if (shade === "emit" || shade === "add" || shade === "mul") {
     const glow = source.emissive && source.emissive.getHex() !== 0 ? source.emissive : source.color
     if (!source.map) material.color.copy(glow)
+    // A decal baked in its vertices (a chiringuito's shadow and lamp pool on the sand) is its vertex colours.
+    if (shade !== "emit" && mesh.geometry.hasAttribute("color")) {
+      material.vertexColors = true
+      material.color.setRGB(1, 1, 1)
+    }
     if (shade !== "emit") {
       material.transparent = true
       material.depthWrite = false
@@ -160,6 +185,9 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
   const plaza = new Group()
   plaza.name = "plaza"
   const variants = new Map<number, Mesh[]>()
+  /** A chiringuito's parts by kind (`base`, `roof`, `bar`, `sign`) and number. */
+  const parts = new Map<string, Map<number, Mesh[]>>()
+  const signs = new Map<number, SignAnchor>()
   const cache = new Map<string, Material>()
   let ringY = 0
   for (const child of loaded.scene.children) {
@@ -167,22 +195,60 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
       ringY = Math.max(ringY, child.position.y)
       continue
     }
+    const part = PART_NAME.exec(child.name)
+    if (part && part[1] === "sign" && child.name.endsWith("_signtext")) {
+      signs.set(Number(part[2] || 0), {
+        x: child.position.x,
+        y: child.position.y,
+        z: child.position.z,
+        yaw: child.rotation.y,
+        width: child.scale.x,
+        height: child.scale.y,
+      })
+      continue
+    }
     if (!(child as Mesh).isMesh) continue
     const mesh = (child as Mesh).clone()
     const material = drawnWith(mesh, maps, cache)
     if (material) mesh.material = material
     const shop = SHOP_NAME.exec(child.name)
-    if (shop) {
+    if (part) {
+      const byNumber = parts.get(part[1]) ?? new Map<number, Mesh[]>()
+      parts.set(part[1], byNumber)
+      const n = Number(part[2] || 0)
+      byNumber.set(n, [...(byNumber.get(n) ?? []), mesh])
+    } else if (shop) {
       const variant = shop[1] ? Number(shop[1]) : 0
       if (!variants.has(variant)) variants.set(variant, [])
       variants.get(variant)!.push(mesh)
     } else plaza.add(mesh)
   }
+  // The chiringuiti: one variant for every roof, counter and sign together.
+  const kindsOf = (kind: string) => [...(parts.get(kind)?.keys() ?? [])].sort((a, b) => a - b)
+  const [roofs, bars, signKinds] = [kindsOf("roof"), kindsOf("bar"), kindsOf("sign")]
+  const combine = (v: number) => {
+    const r = roofs.length ? v % roofs.length : 0
+    const b = bars.length ? Math.floor(v / Math.max(1, roofs.length)) % bars.length : 0
+    const s = signKinds.length ? Math.floor(v / Math.max(1, roofs.length * bars.length)) % signKinds.length : 0
+    return { roof: roofs[r], bar: bars[b], sign: signKinds[s] }
+  }
+  if (parts.has("base")) {
+    const count = Math.max(1, roofs.length) * Math.max(1, bars.length) * Math.max(1, signKinds.length)
+    for (let v = 0; v < count; v++) {
+      const c = combine(v)
+      variants.set(v, [
+        ...(parts.get("base")?.get(0) ?? []),
+        ...(parts.get("roof")?.get(c.roof) ?? []),
+        ...(parts.get("bar")?.get(c.bar) ?? []),
+        ...(parts.get("sign")?.get(c.sign) ?? []),
+      ])
+    }
+  }
   const kinds = [...variants.keys()].sort((a, b) => a - b)
   if (!plaza.children.length || !kinds.length) throw new Error("city.glb senza la piazza o senza il negozio")
   const tinted = new Map<string, Material>()
   const tintOf = (material: Material, tint: ShopTint | undefined, role: unknown): Material => {
-    if (!tint || (role !== "wall" && role !== "awning")) return material
+    if (!tint || (role !== "wall" && role !== "awning" && role !== "accent")) return material
     const hex = role === "wall" ? tint.wall : tint.awning
     const key = `${material.uuid}|${hex}`
     let copy = tinted.get(key)
@@ -199,6 +265,10 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
     variants: kinds.length,
     lit: wanted.every((name) => maps.has(name)),
     island: plaza.children.some((o) => named(o, "island_")),
+    signOf(variant) {
+      if (!signs.size) return undefined
+      return signs.get(combine(((variant % kinds.length) + kinds.length) % kinds.length).sign)
+    },
     shop(variant = 0, tint) {
       const pieces = variants.get(kinds[((variant % kinds.length) + kinds.length) % kinds.length])!
       const group = new Group()

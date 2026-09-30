@@ -40,13 +40,14 @@ import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
   CHAIR_SEAT_TOP,
   COMPUTER_HEIGHT,
+  COUNTER,
   DESK_HALF,
   DESK_HEIGHT,
-  DOOR_WIDTH,
+  EAVE_HEIGHT,
   PLAZA_RADIUS,
+  ROOF_TOP,
   SHOP_DEPTH,
   SHOP_WIDTH,
-  WALL_HEIGHT,
   deskLocal,
   islandHeight,
   standLocal,
@@ -63,20 +64,26 @@ import { liftEase, type AgentEntity, type ShopEntity, type Town } from "./town"
 const box = new BoxGeometry(1, 1, 1)
 const plane = new PlaneGeometry(1, 1)
 
-/** How far a shop is below the pavement when it has not come up yet. */
-const SUNK = WALL_HEIGHT + 0.8
+/** How far a chiringuito is under the sand when it has not come up yet: all of it, roof and all. */
+const SUNK = ROOF_TOP + 0.3
 
 /**
- * A sphere that holds a whole shop: its half diagonal, the awning and the sign above it, and A2's bay window and
- * planters in front (the chiringuiti of the island's next stage get their own).
+ * A sphere that holds a whole chiringuito, its middle `SHOP_MIDDLE` over the ground: the roof's corners, the loungers
+ * and umbrellas in front, the torches, and the shadow and lamp light it lays on the sand around it.
  */
-export const SHOP_RADIUS = 8
+export const SHOP_RADIUS = 8.3
+export const SHOP_MIDDLE = 1.5
 
-/** The sign over the door, as N3 has its board: 3.5 wide, 0.56 tall, its middle 3.02 up and on the front face. */
-const SIGN_WIDTH = 3.3
-const SIGN_HEIGHT = 0.5
-const SIGN_Y = 3.02
-const SIGN_Z = SHOP_DEPTH / 2 + 0.16
+/**
+ * Where the name goes when the file does not say (the placeholders): a board over the counter, under the eave. The
+ * file's signs carry an anchor (`*_signtext`) with the board's middle, its turn and its size.
+ */
+const SIGN_WIDTH = 2.4
+const SIGN_HEIGHT = 0.42
+const SIGN_Y = EAVE_HEIGHT - 0.35
+const SIGN_Z = 0.9
+/** A laptop's screen, as the glow over it is drawn: the lid leans back 12 degrees, its top away from who sits. */
+const SCREEN = { width: 0.3, height: 0.19, tilt: (-12 * Math.PI) / 180 }
 
 /** A name, drawn as a texture for the sign. Text only: the name is never parsed as anything. */
 function signTexture(name: string): CanvasTexture | undefined {
@@ -163,11 +170,14 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
       wall.position.set(w.x, w.height / 2, w.z)
       group.add(wall)
     }
-
-    // A lit strip over the door.
+    // The roof, and a lit strip along the counter's front.
+    const roof = new Mesh(box, WALL_MATERIAL)
+    roof.scale.set(SHOP_WIDTH + 0.6, 0.2, SHOP_DEPTH - 1.2)
+    roof.position.set(0, EAVE_HEIGHT + 0.1, -0.8)
+    group.add(roof)
     const strip = new Mesh(box, paint(0x38d8ff, { emissive: true }))
-    strip.scale.set(DOOR_WIDTH, 0.08, 0.1)
-    strip.position.set(0, WALL_HEIGHT - 0.1, SHOP_DEPTH / 2)
+    strip.scale.set(COUNTER.hx * 2, 0.05, 0.05)
+    strip.position.set(0, COUNTER.height - 0.05, COUNTER.z + COUNTER.hz + 0.03)
     group.add(strip)
   }
 
@@ -178,8 +188,15 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   own.push(signMaterial)
   if (texture) own.push(texture)
   const sign = new Mesh(plane, signMaterial)
-  sign.scale.set(SIGN_WIDTH, SIGN_HEIGHT, 1)
-  sign.position.set(0, SIGN_Y, SIGN_Z)
+  const anchor = kit?.signOf(shopLook(entity.shop.name, kit.variants).variant)
+  if (anchor) {
+    sign.scale.set(anchor.width, anchor.height, 1)
+    sign.position.set(anchor.x, anchor.y, anchor.z)
+    sign.rotation.y = anchor.yaw
+  } else {
+    sign.scale.set(SIGN_WIDTH, SIGN_HEIGHT, 1)
+    sign.position.set(0, SIGN_Y, SIGN_Z)
+  }
   group.add(sign)
 
   const deskGroup = new Group()
@@ -207,10 +224,11 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
   for (let i = 0; i < count; i++) {
     const at = deskLocal(i)
     const screen = new Mesh(plane, new MeshBasicMaterial({ color: GLOW_COLOR.off }))
-    screen.scale.set(0.56, 0.32, 1)
-    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.035)
+    screen.scale.set(SCREEN.width, SCREEN.height, 1)
+    screen.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z + 0.02)
     view.monitors.push(screen)
     if (kit) {
+      screen.rotation.x = SCREEN.tilt
       view.deskGroup.add(screen)
       continue
     }
@@ -227,7 +245,7 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
     back.scale.set(0.5, 0.5, 0.06)
     back.position.set(at.chair.x, CHAIR_SEAT_TOP + 0.25, at.chair.z + 0.25)
     const body = new Mesh(box, MONITOR_BODY)
-    body.scale.set(0.62, 0.38, 0.05)
+    body.scale.set(SCREEN.width + 0.03, SCREEN.height + 0.03, 0.02)
     body.position.set(at.computer.x, COMPUTER_HEIGHT, at.computer.z)
     view.deskGroup.add(desk, legs, chair, back, body, screen)
   }
@@ -348,7 +366,8 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     const desk = seat.kind === "desk"
     const at = seat.kind === "desk" ? deskLocal(seat.desk).chair : standLocal(seat.index)
     person.group.position.set(at.x, 0, at.z)
-    person.group.rotation.y = Math.PI
+    // Seated, facing the counter or the table; standing behind the counter, facing the hologram.
+    person.group.rotation.y = desk ? Math.PI : 0
     sit(person, desk)
     // How far they are decides how much of them is drawn and how often their pose is worked out.
     const world = toWorld(shop.placement, at)
@@ -389,7 +408,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       for (const entity of town.shops()) {
         seen.add(entity.id)
         const view = reconcileShop(entity, town)
-        sphere.set(new Vector3(entity.placement.center.x, 1.5, entity.placement.center.z), SHOP_RADIUS)
+        sphere.set(new Vector3(entity.placement.center.x, groundAt(entity.placement.center) + SHOP_MIDDLE, entity.placement.center.z), SHOP_RADIUS)
         const inView =
           shopInRange({ x: camera.position.x, z: camera.position.z }, entity.placement.center, SHOP_RADIUS) && frustum.intersectsSphere(sphere)
         view.group.visible = inView

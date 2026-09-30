@@ -3,11 +3,12 @@ import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, ty
 import type { Agent, Shop } from "../protocol"
 import { SIGNAL_MAX_SCALE } from "./characters"
 import { spawnPlayer } from "./controller"
-import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, SHOP_DEPTH, WALL_HEIGHT, WALL_THICKNESS, placementOf } from "./layout"
+import { shopLook } from "./kit"
+import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, ROOF_TOP, placementOf } from "./layout"
 import { castOf, kitFor } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
-import { SHOP_RADIUS, createCityScene } from "./view"
+import { SHOP_MIDDLE, SHOP_RADIUS, createCityScene } from "./view"
 
 const shop = (id: string, slot?: number, name = id): Shop => ({ id, name, slot })
 const agent = (paneId: string, shopId: string, over: Partial<Agent> = {}): Agent => ({
@@ -87,7 +88,7 @@ describe("the city drawn from the town", () => {
     view.update(town, spawnPlayer(), 0, camera)
     const group = view.scene.getObjectByName("shop:a") as Group
     const sunk = group.position.y
-    expect(sunk).toBeLessThan(-WALL_HEIGHT)
+    expect(sunk).toBeLessThan(-ROOF_TOP)
     town.tick(RISE_SECONDS * 0.5)
     view.update(town, spawnPlayer(), 0, camera)
     expect(group.position.y).toBeGreaterThan(sunk)
@@ -555,10 +556,11 @@ describe("the island from the file, with its chiringuiti", () => {
     expect(lamps.filter((l) => l.z === 0)).toHaveLength(lamps.length - 2)
   })
 
-  test("a shop is N3's pieces, not boxes: floor, shell, window, awning, desks, chairs, screens", async () => {
+  test("a shop is a chiringuito from the file's parts, not boxes: what every one has, a roof with its shadow, a counter, a sign", async () => {
     const { view } = await withKit([agent("p1", "a")])
     const all = names(view.scene.getObjectByName("shop:a")!)
-    for (const name of ["floor", "shell", "glass", "trim", "desk", "chair", "props"]) expect(all.some((n) => new RegExp(`^shop\\d*_${name}$`).test(n))).toBe(true)
+    for (const name of [/^chir_base_fixtures$/, /^chir_base_accent$/, /^chir_roof\d+_roof$/, /^chir_roof\d+_shade$/, /^chir_roof\d+_pool$/, /^chir_bar\d+_counter$/, /^chir_sign\d+_board$/])
+      expect([String(name), all.some((n) => name.test(n))]).toEqual([String(name), true])
   })
 
   test("the shop's desks are all there, and what is added over them is the glow of the desks in use", async () => {
@@ -571,11 +573,14 @@ describe("the island from the file, with its chiringuiti", () => {
     expect((monitor.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.amber)
   })
 
-  test("the sign's text is on the awning's board, at N3's height", async () => {
-    const { view } = await withKit([])
-    const sign = view.scene.getObjectByName("shop:a")!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
-    expect(sign.position.y).toBeCloseTo(3.02, 2)
-    expect(sign.position.z).toBeGreaterThan(SHOP_DEPTH / 2 + WALL_THICKNESS / 2)
+  test("the sign's text is where the file's sign says, as wide and tall, turned as it is", async () => {
+    for (const name of ["a", "docs", "nikcli", "voice"]) {
+      const { view, kit } = await withKit([], [shop(name, 0)])
+      const sign = view.scene.getObjectByName(`shop:${name}`)!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
+      const anchor = kit.signOf(shopLook(name, kit.variants).variant)!
+      expect([name, sign.position.x, sign.position.y, sign.position.z]).toEqual([name, anchor.x, anchor.y, anchor.z])
+      expect([name, sign.scale.x, sign.scale.y, sign.rotation.y]).toEqual([name, anchor.width, anchor.height, anchor.yaw])
+    }
   })
 
   test("the hologram has no projector of its own and floats where the file's anchor says", async () => {
@@ -596,7 +601,7 @@ describe("the island from the file, with its chiringuiti", () => {
 
   test("people sit on the seats of the shop's own chairs: the layout and the file agree on where they are", async () => {
     const { view } = await withKit([agent("p1", "a"), agent("p2", "a"), agent("p3", "a"), agent("p4", "a")])
-    const chairs = (await kitFor("bassa")).shop().children.find((c) => /^shop\d*_chair$/.test(c.name)) as Mesh
+    const chairs = (await kitFor("bassa")).shop().children.find((c) => /^chir_base_fixtures$/.test(c.name)) as Mesh
     expect(chairs).toBeDefined()
     const top = new Box3().setFromObject(chairs)
     for (let i = 1; i <= 4; i++) {
@@ -607,12 +612,28 @@ describe("the island from the file, with its chiringuiti", () => {
     }
   })
 
-  test("the shop is drawn within its sphere for the culling: the sign and awning are inside it", async () => {
-    const { view } = await withKit([])
-    const box = new Box3().setFromObject(view.scene.getObjectByName("shop:a")!)
-    const centre = placementOf(0).center
-    const farthest = Math.max(...[box.min.x, box.max.x].flatMap((x) => [box.min.z, box.max.z].map((z) => Math.hypot(x - centre.x, z - centre.z))))
-    expect(farthest).toBeLessThan(SHOP_RADIUS + 0.01)
+  test("every chiringuito is drawn within its sphere for the culling: roof, sign, loungers and what it lays on the sand", async () => {
+    const kit = await kitFor("bassa")
+    const names = Array.from({ length: 40 }, (_, i) => `project-${i}`)
+    const { view } = await withKit([], names.map((name, i) => shop(name, i)))
+    const seen = new Set<number>()
+    const point = new Vector3()
+    for (const [i, name] of names.entries()) {
+      seen.add(shopLook(name, kit.variants).variant)
+      const group = view.scene.getObjectByName(`shop:${name}`)!
+      const centre = placementOf(i).center
+      const middle = new Vector3(centre.x, view.groundAt(centre) + SHOP_MIDDLE, centre.z)
+      let farthest = 0
+      group.traverse((o) => {
+        const mesh = o as Mesh
+        if (!mesh.isMesh) return
+        const pos = mesh.geometry.attributes.position
+        for (let k = 0; k < pos.count; k++) farthest = Math.max(farthest, point.fromBufferAttribute(pos, k).applyMatrix4(mesh.matrixWorld).distanceTo(middle))
+      })
+      expect([name, farthest < SHOP_RADIUS]).toEqual([name, true])
+    }
+    // Forty projects are most of the file's variants: the sphere is measured on them, not on one.
+    expect(seen.size).toBeGreaterThan(kit.variants / 2)
   })
 })
 

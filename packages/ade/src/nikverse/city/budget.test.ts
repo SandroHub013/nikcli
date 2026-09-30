@@ -28,6 +28,7 @@ interface Budget {
     plaza_tris: number
     desk_tris: number
     surroundings_tris: number
+    island_tris: number
   }
   cast: { user: string; agents: string[] }
 }
@@ -46,9 +47,9 @@ const packBytes = (level: string) =>
   statSync(levelFile(level, "city.glb")).size +
   lightmaps(level).reduce((sum, file) => sum + statSync(file).size, 0) +
   statSync(join(LEVELS_DIR, "rig_animations.glb")).size
-/** The shops a city file has: `shop0_`, `shop1_`... (the prefixes of its nodes). */
-const shopPrefixes = (glb: Glb): string[] => [
-  ...new Set((glb.json.nodes ?? []).flatMap((node) => /^shop\d*_/.exec(node.name ?? "")?.[0] ?? [])),
+/** The parts of a kind a city file has for its chiringuiti: `chir_roof0_`, `chir_roof1_`... (the prefixes of its nodes). */
+const partPrefixes = (glb: Glb, kind: string): string[] => [
+  ...new Set((glb.json.nodes ?? []).flatMap((node) => new RegExp(`^chir_${kind}\\d*_`).exec(node.name ?? "")?.[0] ?? [])),
 ]
 
 /** The picture files inside a glb, as bytes: the KTX2 the extension carries. */
@@ -115,18 +116,18 @@ describe("the shipped assets against the generator's ceilings", () => {
         }
       })
 
-      run("each shop, its desks, the plaza and the surroundings are within their ceilings", () => {
+      run("each chiringuito, whatever roof, counter and sign it got, and the island are within their ceilings", () => {
         const glb = city(level)
-        const shops = shopPrefixes(glb)
-        expect(shops.length).toBeGreaterThan(0)
-        for (const shop of shops) {
-          const tris = trianglesNamed(glb, shop)
-          expect([shop, tris, tris > 100 && tris <= budget.budget.shop_tris]).toEqual([shop, tris, true])
-          // The desk's own pieces (frame, chair base, keyboard) are in the desk's, the chair's and the monitors' meshes.
-          const desks = trianglesNamed(glb, `${shop}desk`) + trianglesNamed(glb, `${shop}chair`) + trianglesNamed(glb, `${shop}props`)
-          expect([shop, desks, desks <= budget.budget.desk_tris]).toEqual([shop, desks, true])
-        }
-        expect(trianglesNamed(glb, "plaza_")).toBeLessThanOrEqual(budget.budget.plaza_tris)
+        const base = trianglesNamed(glb, "chir_base_")
+        const [roofs, bars, signs] = ["roof", "bar", "sign"].map((kind) => partPrefixes(glb, kind))
+        expect(Math.min(roofs.length, bars.length, signs.length)).toBeGreaterThan(0)
+        // A chiringuito is the base and one of each: the heaviest of each together is the heaviest chiringuito.
+        const heaviest = (prefixes: string[]) => Math.max(...prefixes.map((prefix) => trianglesNamed(glb, prefix)))
+        const tris = base + heaviest(roofs) + heaviest(bars) + heaviest(signs)
+        expect([tris, tris > 1000 && tris <= budget.budget.shop_tris]).toEqual([tris, true])
+        // The seats, the tables and the laptops are in the base with the rest of the fixtures: the base holds the desks' ceiling and the rest.
+        const island = trianglesNamed(glb, "island_") + trianglesNamed(glb, "plaza_")
+        expect([island, island <= budget.budget.island_tris]).toEqual([island, true])
         expect(trianglesNamed(glb, "env_")).toBeLessThanOrEqual(budget.budget.surroundings_tris)
       })
 

@@ -5,20 +5,22 @@ import type { BufferGeometry, Mesh, MeshBasicMaterial, Object3D } from "three/we
 import { readGlb } from "./glb"
 import { SHOP_TINTS, shopLook } from "./kit"
 import {
+  BACK_BAR,
   CHAIR_SEAT_TOP,
   COMPUTER_HEIGHT,
+  COUNTER,
   DESKS_PER_SHOP,
   DESK_HALF,
   DESK_HEIGHT,
-  DOOR_WIDTH,
+  EAVE_HEIGHT,
+  LOUNGERS,
+  LOUNGER_HALF,
   MOUTH,
   PIER,
   PLATFORM_RADIUS,
   PLATFORM_TOP,
-  SHOP_DEPTH,
-  SHOP_WIDTH,
-  WALL_HEIGHT,
-  WALL_THICKNESS,
+  POSTS,
+  POST_HALF,
   WATER_Y,
   deskLocal,
   islandHeight,
@@ -91,9 +93,6 @@ const meshNamed = (root: Object3D, name: string | RegExp): Mesh => {
   return found
 }
 
-/** A shop's piece by what it is: `shop2_desk` is the desk of the third shop. */
-const piece = (shop: Object3D, what: string) => meshNamed(shop, new RegExp(`^shop\\d*_${what}$`))
-
 const near = (a: number, b: number, tolerance = 0.03) => Math.abs(a - b) <= tolerance
 
 const cityGlb = (level: string) => readGlb(new Uint8Array(readFileSync(join(LEVELS_DIR, level, "city.glb"))))
@@ -106,82 +105,62 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
   }
   const plaza = async () => (await kitFor(level)).plaza
 
-  /** The x of every vertex of the shell on the front wall (its z between the inner face and the pier's front) below the door's top. */
-  const frontEdges = (mesh: Mesh) => {
-    const pos = mesh.geometry.attributes.position
-    const xs = new Set<string>()
-    for (let i = 0; i < pos.count; i++) if (pos.getZ(i) > 2.3 && pos.getZ(i) < 2.7 && pos.getY(i) < 1.7) xs.add(pos.getX(i).toFixed(2))
-    return [...xs].map(Number).sort((a, b) => a - b)
-  }
+  /** A chiringuito's mesh by what it is: `fixtures` is `chir_base_fixtures`, `counter` the counter it got. */
+  const piece = (shop: Object3D, what: string) => meshNamed(shop, new RegExp(`^chir_[a-z]+\\d*_${what}$`))
+  /** Whether a piece's footprint is the box's, within a few centimetres. */
+  const covers = (p: Part, box: { x: number; z: number; hx: number; hz: number }, tolerance = 0.03) =>
+    near(p.min[0], box.x - box.hx, tolerance) && near(p.max[0], box.x + box.hx, tolerance) && near(p.min[2], box.z - box.hz, tolerance) && near(p.max[2], box.z + box.hz, tolerance)
 
-  test("the file has a few shops to choose from", async () => {
-    expect((await kitFor(level)).variants).toBeGreaterThanOrEqual(3)
+  test("the file has a chiringuito's parts, and every roof, counter and sign together is a shop", async () => {
+    const glb = cityGlb(level)
+    const kinds = (what: string) => new Set((glb.json.nodes ?? []).flatMap((n) => new RegExp(`^chir_${what}(\\d+)_`).exec(n.name ?? "")?.[1] ?? []))
+    const [roofs, bars, signs] = [kinds("roof").size, kinds("bar").size, kinds("sign").size]
+    expect(Math.min(roofs, bars, signs)).toBeGreaterThanOrEqual(3)
+    expect((await kitFor(level)).variants).toBe(roofs * bars * signs)
   })
 
-  test("the walls of the layout are the pieces of every shell, in the same places", async () => {
+  test("what stops the character is what the file draws: the counter, the back bar, the posts and the loungers", async () => {
     for (const { v, shop } of await shops()) {
-      const mesh = piece(shop, "shell")
-      const shell = parts(mesh.geometry).filter((p) => p.max[1] > 3.3 && p.max[1] - p.min[1] > 3)
       const walls = wallsLocal()
-      expect(walls).toHaveLength(5)
-      const isFront = (wall: (typeof walls)[number]) => wall.z > 0
-      // The back and the two sides are pieces of their own.
-      for (const wall of walls.filter((w) => !isFront(w))) {
-        const match = shell.find(
-          (p) => near(p.min[0], wall.x - wall.hx) && near(p.max[0], wall.x + wall.hx) && near(p.min[2], wall.z - wall.hz) && near(p.max[2], wall.z + wall.hz),
-        )
-        expect([v, wall, match !== undefined]).toEqual([v, wall, true])
-        expect(near(match!.max[1], wall.height)).toBe(true)
+      const fixtures = parts(piece(shop, "fixtures").geometry)
+      // The counter is its own mesh, and what sticks out of its box (the rail, the logs) is less than a body's radius: nobody walks into it.
+      const counter = piece(shop, "counter")
+      counter.geometry.computeBoundingBox()
+      const bounds = counter.geometry.boundingBox!
+      expect([v, parts(counter.geometry).some((p) => covers(p, COUNTER))]).toEqual([v, true])
+      expect([v, near(bounds.max.y, COUNTER.height)]).toEqual([v, true])
+      expect([v, bounds.min.x >= COUNTER.x - COUNTER.hx - 0.15, bounds.max.x <= COUNTER.x + COUNTER.hx + 0.15]).toEqual([v, true, true])
+      expect([v, bounds.min.z >= COUNTER.z - COUNTER.hz - 0.15, bounds.max.z <= COUNTER.z + COUNTER.hz + 0.15]).toEqual([v, true, true])
+      // The back bar's cabinet, the posts as tall as the eaves, the loungers' frames.
+      expect([v, fixtures.some((p) => covers(p, BACK_BAR))]).toEqual([v, true])
+      for (const post of POSTS) {
+        const found = fixtures.find((p) => covers(p, { ...post, hx: POST_HALF, hz: POST_HALF }, 0.02))
+        expect([v, post, found !== undefined]).toEqual([v, post, true])
+        expect(near(found!.max[1], EAVE_HEIGHT)).toBe(true)
       }
-      // The front is one piece with the door cut out of it: its two piers have their edges where the layout's two front walls have theirs.
-      const edges = frontEdges(mesh)
-      for (const wall of walls.filter(isFront)) {
-        expect([v, wall.x - wall.hx, edges.some((x) => near(x, wall.x - wall.hx, 0.01))]).toEqual([v, wall.x - wall.hx, true])
-        expect([v, wall.x + wall.hx, edges.some((x) => near(x, wall.x + wall.hx, 0.01))]).toEqual([v, wall.x + wall.hx, true])
-      }
-      // Outside, the shell is the walls' middle lines and half a wall more.
-      expect(near(Math.max(...shell.map((p) => p.max[0])) - Math.min(...shell.map((p) => p.min[0])), SHOP_WIDTH + WALL_THICKNESS)).toBe(true)
-      expect(near(Math.max(...shell.map((p) => p.max[2])) - Math.min(...shell.map((p) => p.min[2])), SHOP_DEPTH + WALL_THICKNESS)).toBe(true)
-      expect(near(Math.max(...shell.map((p) => p.max[1])), WALL_HEIGHT)).toBe(true)
+      for (const lounger of LOUNGERS) expect([v, lounger, fixtures.some((p) => covers(p, { ...lounger, ...LOUNGER_HALF }))]).toEqual([v, lounger, true])
+      expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length)
     }
   })
 
-  test("the gap in the front wall is the door of the layout, and the window's front pane closes it", async () => {
+  test("the seats are the layout's: two at the counter, two small tables of its size and height, in its places", async () => {
     for (const { v, shop } of await shops()) {
-      // Below the door's top the only vertices on the front are the piers': the gap is between the innermost two.
-      const edges = frontEdges(piece(shop, "shell"))
-      const inner = edges.filter((x) => x < 0).at(-1)!
-      const other = edges.find((x) => x > 0)!
-      expect([v, near(other - inner, DOOR_WIDTH, 0.01)]).toEqual([v, true])
-      // The window is a bay: a front pane and two sides, all as tall as the door (the pool of light it throws is flat).
-      const panes = parts(piece(shop, "glass").geometry).filter((p) => p.max[1] - p.min[1] > 2)
-      const front = panes.reduce((a, b) => (b.max[0] - b.min[0] > a.max[0] - a.min[0] ? b : a))
-      // The glass fills the gap, within a few centimetres of frame each side, in front of the door.
-      expect(front.max[0] - front.min[0]).toBeLessThanOrEqual(DOOR_WIDTH)
-      expect(front.max[0] - front.min[0]).toBeGreaterThan(DOOR_WIDTH - 0.3)
-      expect(front.min[2]).toBeGreaterThan(SHOP_DEPTH / 2)
-    }
-  })
-
-  test("the desks are the layout's desks: four, of the layout's size and height, in its places", async () => {
-    for (const { v, shop } of await shops()) {
-      const tops = parts(piece(shop, "desk").geometry).filter((p) => p.max[1] > DESK_HEIGHT - 0.05 && p.max[1] - p.min[1] < 0.2)
-      expect([v, tops.length]).toEqual([v, DESKS_PER_SHOP])
+      const fixtures = parts(piece(shop, "fixtures").geometry)
+      expect(COUNTER.height).toBe(DESK_HEIGHT)
       for (let i = 0; i < DESKS_PER_SHOP; i++) {
         const at = deskLocal(i).desk
-        const top = tops.find((p) => near(p.center[0], at.x) && near(p.center[2], at.z))
+        // At the counter the counter is the table; in front the table is a top of its own.
+        if (at.z === COUNTER.z) continue
+        const top = fixtures.find((p) => covers(p, { ...at, ...DESK_HALF }) && p.max[1] - p.min[1] < 0.1)
         expect([v, i, top !== undefined]).toEqual([v, i, true])
-        expect(near(top!.max[0] - top!.min[0], DESK_HALF.hx * 2)).toBe(true)
-        expect(near(top!.max[2] - top!.min[2], DESK_HALF.hz * 2)).toBe(true)
         expect(near(top!.max[1], DESK_HEIGHT)).toBe(true)
       }
     }
   })
 
-  test("the chairs are where the people sit, with the seat at the height the pelvis is seated at", async () => {
+  test("the stools and chairs are where the people sit, with the seat at the height the pelvis is seated at", async () => {
     for (const { v, shop } of await shops()) {
-      const seats = parts(piece(shop, "chair").geometry).filter((p) => near(p.max[1], CHAIR_SEAT_TOP, 0.02) && p.max[1] - p.min[1] < 0.15)
-      expect([v, seats.length]).toEqual([v, DESKS_PER_SHOP])
+      const seats = parts(piece(shop, "fixtures").geometry).filter((p) => near(p.max[1], CHAIR_SEAT_TOP, 0.02) && p.max[1] - p.min[1] < 0.1)
       for (let i = 0; i < DESKS_PER_SHOP; i++) {
         const at = deskLocal(i).chair
         expect([v, i, seats.some((p) => near(p.center[0], at.x) && near(p.center[2], at.z))]).toEqual([v, i, true])
@@ -189,18 +168,35 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     }
   })
 
-  test("the monitors are the layout's computers: their middle at its height, their face where the glow is drawn", async () => {
+  test("the laptops are the layout's computers: the lid's middle at its height, just behind where the glow is drawn", async () => {
     for (const { v, shop } of await shops()) {
-      const screens = parts(piece(shop, "props").geometry).filter((p) => p.max[0] - p.min[0] > 0.5 && p.max[1] - p.min[1] > 0.3)
-      expect([v, screens.length]).toEqual([v, DESKS_PER_SHOP])
+      const lids = parts(piece(shop, "fixtures").geometry).filter((p) => near(p.max[0] - p.min[0], 0.3, 0.025) && p.max[1] - p.min[1] > 0.15)
       for (let i = 0; i < DESKS_PER_SHOP; i++) {
         const at = deskLocal(i).computer
-        const screen = screens.find((p) => near(p.center[0], at.x) && near(p.center[2], at.z))
-        expect([v, i, screen !== undefined]).toEqual([v, i, true])
-        expect(near(screen!.center[1], COMPUTER_HEIGHT)).toBe(true)
-        // The glow plane stands 3.5 cm in front of the middle, on the side the person sits: past the panel's front face.
-        expect(screen!.max[2]).toBeLessThan(at.z + 0.035)
+        const here = lids.filter((p) => near(p.center[0], at.x) && near(p.center[2], at.z))
+        expect([v, i, here.length > 0]).toEqual([v, i, true])
+        for (const lid of here) {
+          expect(near(lid.center[1], COMPUTER_HEIGHT)).toBe(true)
+          // The glow stands 2 cm in front of the middle, on the side the person sits: past the lid's front face.
+          expect(lid.center[2]).toBeLessThan(at.z + 0.02)
+        }
       }
+    }
+  })
+
+  test("every sign says where the project's name goes, on its board, facing out", async () => {
+    const kit = await kitFor(level)
+    for (let v = 0; v < kit.variants; v++) {
+      const anchor = kit.signOf(v)
+      expect([v, anchor !== undefined]).toEqual([v, true])
+      const board = piece(kit.shop(v), "board")
+      board.geometry.computeBoundingBox()
+      const b = board.geometry.boundingBox!
+      expect([v, anchor!.width > 0.3, anchor!.height > 0.15]).toEqual([v, true, true])
+      const inside = (value: number, lo: number, hi: number) => value >= lo - 0.05 && value <= hi + 0.05
+      expect([v, inside(anchor!.x, b.min.x, b.max.x), inside(anchor!.y, b.min.y, b.max.y), inside(anchor!.z, b.min.z, b.max.z)]).toEqual([v, true, true, true])
+      // It faces the hologram, more or less: the text is read from the plaza, not from behind the bar.
+      expect(Math.abs(anchor!.yaw)).toBeLessThan(Math.PI / 3)
     }
   })
 
@@ -272,18 +268,22 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     }
   })
 
-  test("a project's tint changes its walls and awning and nothing else, and shops of the same tint share the tinted material", async () => {
+  test("a project's tint changes its accents and nothing else, and shops of the same tint share the tinted material", async () => {
     const kit = await kitFor(level)
-    const plain = kit.shop(0)
-    const a = kit.shop(0, SHOP_TINTS[1])
-    const b = kit.shop(0, SHOP_TINTS[1])
-    for (let i = 0; i < plain.children.length; i++) {
-      const mesh = plain.children[i] as Mesh
-      const tinted = mesh.userData.nkv_tint === "wall" || mesh.userData.nkv_tint === "awning"
-      expect([mesh.name, (a.children[i] as Mesh).material !== mesh.material]).toEqual([mesh.name, tinted])
-      expect((a.children[i] as Mesh).material).toBe((b.children[i] as Mesh).material)
+    for (let v = 0; v < kit.variants; v++) {
+      const plain = kit.shop(v)
+      const a = kit.shop(v, SHOP_TINTS[1])
+      const b = kit.shop(v, SHOP_TINTS[1])
+      for (let i = 0; i < plain.children.length; i++) {
+        const mesh = plain.children[i] as Mesh
+        const tinted = ["wall", "awning", "accent"].includes(mesh.userData.nkv_tint)
+        // What the file calls an accent (the cushions, the umbrellas, the awning's stripes) takes the tint.
+        if (/_(accent|stripes)$/.test(mesh.name)) expect([mesh.name, tinted]).toEqual([mesh.name, true])
+        expect([mesh.name, (a.children[i] as Mesh).material !== mesh.material]).toEqual([mesh.name, tinted])
+        expect((a.children[i] as Mesh).material).toBe((b.children[i] as Mesh).material)
+      }
+      expect(plain.children.some((c) => c.userData.nkv_tint === "accent")).toBe(true)
     }
-    expect(plain.children.some((c) => c.userData.nkv_tint === "wall")).toBe(true)
   })
 
   test("every mesh of the file is drawn: none is a group the kit would skip, and each says how it is drawn", async () => {
@@ -292,9 +292,10 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     // One primitive a mesh: a mesh of several becomes a group of meshes in the loader, and the kit takes meshes.
     for (const node of nodes) expect([node.name, glb.json.meshes![node.mesh!].primitives.length]).toEqual([node.name, 1])
     const kit = await kitFor(level)
-    let drawn = kit.plaza.children.length
-    for (let v = 0; v < kit.variants; v++) drawn += kit.shop(v).children.length
-    expect(drawn).toBe(nodes.length)
+    // A chiringuito's parts are in many shops; what counts is that each is in at least one.
+    const drawn = new Set(kit.plaza.children.map((c) => c.name))
+    for (let v = 0; v < kit.variants; v++) for (const c of kit.shop(v).children) drawn.add(c.name)
+    expect([...drawn].sort()).toEqual(nodes.map((n) => n.name!).sort())
     const shades = ["lit", "vcol", "emit", "add", "mul", "water", "sky"]
     for (const node of nodes) {
       const shade = (node.extras as { nkv_shade?: string } | undefined)?.nkv_shade

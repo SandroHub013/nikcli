@@ -48,6 +48,8 @@
     "plaza_tris": 20000,
     "desk_tris": 2500,
     "surroundings_tris": 30000,
+    "island_tris": 100000,
+    "_island_tris": "I6: l'isola intera (terreno, spiaggia, laguna, rocce, pedana, molo, intarsio), i nodi island_ e plaza_ di city.glb; i chiringuiti stanno in shop_tris, una combinazione di pezzi alla volta.",
     "_surroundings_tris": "A2: tutto quello che sta fuori dalla piazza (giardino, strada, lampioni, case, skyline, cielo), i nodi env_ di city.glb.",
     "draw_call_max": 120,
     "tris_in_view_max": 250000,

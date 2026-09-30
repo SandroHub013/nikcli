@@ -93,16 +93,36 @@ function profileHeight(r: number): number {
 }
 
 /**
- * A shop's outside, and the wall around it: N3's shop, measured off `city.glb` (the tests hold these to the
- * file). The sizes are between the walls' middle lines; the outside is a wall's thickness more.
+ * A project's chiringuito, in its own frame (+z toward the hologram): a thatched roof on four posts over a
+ * counter, with the back bar and its bottles behind, loungers and umbrellas in front toward the water. The front
+ * is open. `SHOP_WIDTH` by `SHOP_DEPTH` is the roof's footprint; the tests hold these numbers to `city.glb`.
  */
 export const SHOP_WIDTH = 6
 export const SHOP_DEPTH = 5
-export const WALL_THICKNESS = 0.18
-export const WALL_HEIGHT = 3.4
-/** The gap in the front wall: it is a shop window and a way in. */
-export const DOOR_WIDTH = 3.8
+/** Where the roof starts, over the posts, and its top: what a chiringuito must sink by to be under the sand. */
+export const EAVE_HEIGHT = 2.55
+export const ROOF_TOP = 4
 export const DESKS_PER_SHOP = 4
+
+/** The counter: the bar the first two seats work at, its front toward the hologram. */
+export const COUNTER = { x: 0, z: 0.3, hx: 1.8, hz: 0.28, height: 0.75 }
+/** The back bar with its shelves of bottles, along the back of the roof. */
+export const BACK_BAR = { x: 0, z: -2.3, hx: 2.6, hz: 0.2, height: 2 }
+/** The four posts under the roof's corners. */
+export const POSTS: ReadonlyArray<Vec2> = [
+  { x: -2.8, z: -2.3 },
+  { x: 2.8, z: -2.3 },
+  { x: -2.8, z: 0.75 },
+  { x: 2.8, z: 0.75 },
+]
+export const POST_HALF = 0.09
+/** Three loungers on the sand in front, toward the water, their heads toward the chiringuito. */
+export const LOUNGERS: ReadonlyArray<Vec2> = [
+  { x: -2.3, z: 3.9 },
+  { x: 0, z: 3.9 },
+  { x: 2.3, z: 3.9 },
+]
+export const LOUNGER_HALF = { hx: 0.33, hz: 0.95, height: 0.45 }
 
 export const ringOf = (slot: number) => Math.floor(slot / RING_SLOTS)
 export const ringRadius = (ring: number) => RING_FIRST + RING_STEP * ring
@@ -190,60 +210,60 @@ export interface LocalBox {
   height: number
 }
 
-/** The walls of a shop, in its own frame: back, both sides, and the front with a gap for the door. */
+/**
+ * What stops the character in a chiringuito, in its own frame: the back bar, the counter, the posts and the
+ * loungers. The front is open: behind the counter is reached round its ends.
+ */
 export function wallsLocal(): LocalBox[] {
-  const w = SHOP_WIDTH / 2
-  const d = SHOP_DEPTH / 2
-  const t = WALL_THICKNESS / 2
-  const side = (SHOP_WIDTH - DOOR_WIDTH) / 4
-  const doorEdge = DOOR_WIDTH / 2
   return [
-    { x: 0, z: -d, hx: w, hz: t, height: WALL_HEIGHT },
-    { x: -w, z: 0, hx: t, hz: d, height: WALL_HEIGHT },
-    { x: w, z: 0, hx: t, hz: d, height: WALL_HEIGHT },
-    { x: -(doorEdge + side), z: d, hx: side, hz: t, height: WALL_HEIGHT },
-    { x: doorEdge + side, z: d, hx: side, hz: t, height: WALL_HEIGHT },
+    BACK_BAR,
+    COUNTER,
+    ...POSTS.map((p) => ({ x: p.x, z: p.z, hx: POST_HALF, hz: POST_HALF, height: EAVE_HEIGHT })),
+    ...LOUNGERS.map((l) => ({ x: l.x, z: l.z, ...LOUNGER_HALF })),
   ]
 }
 
-/** Two rows of two: the front row sits in the window, the back row behind it; everyone faces the back wall. */
-const DESK_ROWS = [-0.55, 1.08]
-const DESK_COLUMNS = 2
-const DESK_PITCH = 2.15
+/**
+ * The four seats: 0 and 1 are stools at the counter, with the laptop on it; 2 and 3 are small tables on the sand in
+ * front, either side. Everyone sits on the hologram's side of their table, facing the back bar.
+ */
+const SEATS: ReadonlyArray<Vec2> = [
+  { x: -0.85, z: COUNTER.z },
+  { x: 0.85, z: COUNTER.z },
+  { x: -2.05, z: 1.75 },
+  { x: 2.05, z: 1.75 },
+]
 
-/** Where desk `i` stands in the shop's frame; the person sits behind it, facing the back wall. */
+/** Where seat `i` is in the shop's frame: its table (or its stretch of counter), the laptop on it, the chair. */
 export function deskLocal(i: number): { desk: Vec2; computer: Vec2; chair: Vec2 } {
-  const col = i % DESK_COLUMNS
-  const row = Math.floor(i / DESK_COLUMNS)
-  const x = (col - (DESK_COLUMNS - 1) / 2) * DESK_PITCH
-  const z = DESK_ROWS[row]
+  const { x, z } = SEATS[i % SEATS.length]
   return { desk: { x, z }, computer: { x, z: z - 0.18 }, chair: { x, z: z + 0.48 } }
 }
 
-/** The desk's own size (half extents), for its box and its mesh. */
-export const DESK_HALF = { hx: 0.805, hz: 0.4 }
+/** A small table's own size (half extents), for its box and its mesh; a seat at the counter has as much of it. */
+export const DESK_HALF = { hx: 0.45, hz: 0.3 }
 export const DESK_HEIGHT = 0.75
-/** The middle of a monitor's screen, above the floor. */
-export const COMPUTER_HEIGHT = 0.99
+/** The middle of a laptop's screen, above the ground. */
+export const COMPUTER_HEIGHT = 0.86
 /** The top of a chair's seat, above the floor: what a rigged person is seated at. */
 export const CHAIR_SEAT_TOP = 0.5
 
-/** Where a person stands when the shop has no free desk: along the inside of the back wall, behind the desks. */
+/** Where a person stands when the chiringuito has no free seat: behind the counter, facing the hologram. */
 export function standLocal(i: number): Vec2 {
   const per = 5
   const n = i % per
-  // Two rows behind the desks, along the back wall; past ten they stand in each other's place.
-  return { x: (n - (per - 1) / 2) * 1.1, z: -SHOP_DEPTH / 2 + 0.9 - (Math.floor(i / per) % 2) * 0.5 }
+  // Two rows between the counter and the back bar; past ten they stand in each other's place.
+  return { x: (n - (per - 1) / 2) * 0.85, z: -0.55 - (Math.floor(i / per) % 2) * 0.6 }
 }
 
-/** The boxes a shop puts on the ground: its walls and its desks. */
+/** The boxes a chiringuito puts on the ground: its fixed pieces, and the small tables in use. */
 export function shopBoxes(p: Placement, desks: number): Box[] {
   const boxes = wallsLocal().map((b) => worldBox(p, b))
   for (let i = 0; i < Math.min(desks, DESKS_PER_SHOP); i++) {
+    // The counter's seats are in the counter's box already.
+    if (SEATS[i].z === COUNTER.z) continue
     const d = deskLocal(i).desk
-    // A desk stops the character 10 cm short of its top's edge, which overhangs its legs: without that the strip
-    // between the front row and the front wall (0.41 m) is narrower than a body, and a dead end nobody meant.
-    boxes.push(worldBox(p, { x: d.x, z: d.z, hx: DESK_HALF.hx, hz: DESK_HALF.hz - 0.1, height: DESK_HEIGHT }))
+    boxes.push(worldBox(p, { x: d.x, z: d.z, hx: DESK_HALF.hx, hz: DESK_HALF.hz, height: DESK_HEIGHT }))
   }
   return boxes
 }

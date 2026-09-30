@@ -73,7 +73,7 @@ export const REFLECTED_SHOPS = 12
 
 /** The columns of light the water reflects: where they stand, how wide they are, between which heights they shine. */
 const HOLOGRAM_COLUMN = { x: 0, z: 0, width: 1.1, from: 1.8, to: 6.8, strength: 0.55 }
-const SHOP_COLUMN = { width: 2.4, from: 0.5, to: 3.2, strength: 0.35 }
+const SHOP_COLUMN = { width: 2.4, from: 0.5, to: 3.2, strength: 0.8 }
 
 /** The shore band's foam, off on the lowest level. */
 export interface WaterOptions {
@@ -145,8 +145,10 @@ function waterNodeMaterial(foamOn: boolean): MeshBasicNodeMaterial {
   const shore = light.y
   const p = positionWorld as unknown as Vec3Node
   const t = waterTime
-  // The ripples calm down with the distance: at the horizon they would only be a grid of aliasing.
-  const calm = float(1).sub(smoothstep(15, 60, length(cameraPosition.sub(p))))
+  // The ripples calm down with the distance (at the horizon they would only be a grid of aliasing) and when the
+  // water is seen grazing (there they turn into dark round puddles): the fresnel rules there.
+  const toEye = normalize(cameraPosition.sub(p))
+  const calm = float(1).sub(smoothstep(15, 60, length(cameraPosition.sub(p)))).mul(smoothstep(0.03, 0.35, toEye.y))
   const nx = sin(p.x.mul(1.7).add(p.z.mul(0.6)).add(t.mul(1.1))).mul(0.035).add(sin(p.z.mul(3.1).sub(t.mul(1.7))).mul(0.02)).mul(calm)
   const nz = sin(p.z.mul(1.3).sub(p.x.mul(0.8)).add(t.mul(0.9))).mul(0.035).add(sin(p.x.mul(2.7).add(t.mul(1.4))).mul(0.02)).mul(calm)
   const n = normalize(vec3(nx, 1, nz))
@@ -289,7 +291,7 @@ void main() {
   float shore = vLight.y;
   vec3 p = vWorld;
   float t = uTime;
-  float calm = 1.0 - smoothstep(15.0, 60.0, length(cameraPosition - p));
+  float calm = (1.0 - smoothstep(15.0, 60.0, length(cameraPosition - p))) * smoothstep(0.03, 0.35, normalize(cameraPosition - p).y);
   float nx = (sin(p.x * 1.7 + p.z * 0.6 + t * 1.1) * 0.035 + sin(p.z * 3.1 - t * 1.7) * 0.02) * calm;
   float nz = (sin(p.z * 1.3 - p.x * 0.8 + t * 0.9) * 0.035 + sin(p.x * 2.7 + t * 1.4) * 0.02) * calm;
   vec3 n = normalize(vec3(nx, 1.0, nz));

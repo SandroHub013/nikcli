@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { Agent, Shop } from "../protocol"
 import { nearestPickable, pickWithRay } from "./interaction"
-import { COMPUTER_HEIGHT, DESKS_PER_SHOP, deskLocal, placementOf, ringRadius, toWorld } from "./layout"
+import { COMPUTER_HEIGHT, COUNTER, DESKS_PER_SHOP, deskLocal, placementOf, ringRadius, toWorld, wallsLocal } from "./layout"
 import { STATE_LOOK } from "./states"
 import { POSE_BLEND_SECONDS, PRESENCE_SECONDS, RISE_SECONDS, createTown, liftEase, type Picture } from "./town"
 
@@ -257,18 +257,23 @@ describe("what can be clicked and what is in the way", () => {
     expect(nearestPickable({ x: 0, z: 0 }, town.pickables())).toBeUndefined()
   })
 
-  test("the walls block the click on a computer from outside, and the ground boxes hold the shops' walls and desks", () => {
+  test("the back bar blocks the click on a computer from behind, the front is open, and the ground boxes hold the chiringuiti's pieces and tables", () => {
     const town = built()
     const target = town.pickables().find((p) => p.paneId === "p1")!
     const p = placementOf(0)
-    const behind = toWorld(p, { x: 0, z: -12 })
-    const dir = { x: target.x - behind.x, y: 0, z: target.z - behind.z }
-    const len = Math.hypot(dir.x, dir.z)
-    const ray = { ox: behind.x, oy: COMPUTER_HEIGHT, oz: behind.z, dx: dir.x / len, dy: 0, dz: dir.z / len }
-    expect(pickWithRay(ray, town.pickables(), town.walls())).toBeUndefined()
-    // 2 shops x 5 walls, plus the desks each draws (2 and 2 in a; 2 in b).
-    expect(town.walls()).toHaveLength(10)
-    expect(town.boxes().length).toBe(10 + town.deskCount("a") + town.deskCount("b"))
+    const rayFrom = (from: { x: number; z: number }) => {
+      const at = toWorld(p, from)
+      const dir = { x: target.x - at.x, z: target.z - at.z }
+      const len = Math.hypot(dir.x, dir.z)
+      return { ox: at.x, oy: COMPUTER_HEIGHT, oz: at.z, dx: dir.x / len, dy: 0, dz: dir.z / len }
+    }
+    expect(pickWithRay(rayFrom({ x: 0, z: -12 }), town.pickables(), town.walls())).toBeUndefined()
+    // From the sand in front the laptop on the counter is in sight: the loungers and the counter are lower than it.
+    expect(pickWithRay(rayFrom({ x: -1.15, z: 7 }), town.pickables(), town.walls())?.paneId).toBe("p1")
+    // 2 shops x their fixed pieces, plus the tables in front for the seats in use that are not at the counter.
+    const tables = (n: number) => Array.from({ length: n }, (_, i) => deskLocal(i).desk).filter((d) => d.z !== COUNTER.z).length
+    expect(town.walls()).toHaveLength(2 * wallsLocal().length)
+    expect(town.boxes().length).toBe(2 * wallsLocal().length + tables(town.deskCount("a")) + tables(town.deskCount("b")))
   })
 
   test("a shop that is not up yet has no walls to bump into", () => {
