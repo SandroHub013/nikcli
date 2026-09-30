@@ -1,5 +1,6 @@
 import { onMount, onCleanup, createSignal, type JSX } from "solid-js"
 import { t } from "../i18n"
+import { SHEEN_MS, loopWanted } from "./nik-chrome-logo-motion"
 
 export interface NikChromeLogoProps {
   /** Logo size in pixels (both width and height square bounding box). Defaults to 30. */
@@ -28,8 +29,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
   const N_PATH =
     "M 11 34 C 10 24, 11 13, 12 8 C 13 4, 16.5 4, 18.5 8.5 L 26.5 27 C 28.5 31, 31.5 31, 32.5 27 C 33.5 21, 34 13.5, 34.5 8"
 
-  // Whether the loop is running. It drives the sheen sweep too, so the CSS
-  // animation and the rAF loop start and stop together.
+  // Whether the physics loop is running (`data-live`). The sheen is not tied to it: it is one pass on an event.
   const [live, setLive] = createSignal(false)
 
   onMount(() => {
@@ -89,6 +89,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     const INTRO_MS = 2000
     const introUntil = performance.now() + INTRO_MS
     let pointerInside = false
+    let lastPointerAt = performance.now()
 
     const settled = () =>
       Math.abs(velX) < 0.01 &&
@@ -96,6 +97,24 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       Math.abs(tiltX - targetTiltX) < 0.05 &&
       Math.abs(tiltY - targetTiltY) < 0.05 &&
       wobbleAmp < 0.01
+
+    // The sheen is one pass, not a loop: on the intro, on entering the mark and on a click. Restarting a CSS animation is taking
+    // the attribute off, letting the style be read, and putting it back; the pass ends by taking it off again.
+    // A pass whose end never comes (the window hidden, the element out of the tree) is ended by a timer, so the next one can start.
+    let sheenPass = false
+    let sheenTimer: ReturnType<typeof setTimeout> | undefined
+    const sheen = () => {
+      if (reducedMotion || !containerRef || sheenPass) return
+      sheenPass = true
+      containerRef.setAttribute("data-sheen", "")
+      sheenTimer = setTimeout(onSheenEnd, SHEEN_MS + 300)
+    }
+    function onSheenEnd() {
+      sheenPass = false
+      if (sheenTimer !== undefined) clearTimeout(sheenTimer)
+      sheenTimer = undefined
+      containerRef?.removeAttribute("data-sheen")
+    }
 
     const start = () => {
       if (reducedMotion || !isMounted || animId !== 0) return
@@ -185,7 +204,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
 
       placeDroplets()
 
-      if (pointerInside || performance.now() < introUntil || !settled()) {
+      if (loopWanted({ now: performance.now(), introUntil, pointerInside, lastPointerAt, settled: settled() })) {
         animId = requestAnimationFrame(updatePhysics)
       } else {
         setLive(false)
@@ -193,10 +212,14 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     }
 
     start()
+    sheen()
 
     // ── Mouse & Interaction Handlers ─────────────────────────────────────
     const onMouseMove = (e: MouseEvent) => {
       if (!containerRef) return
+      lastPointerAt = performance.now()
+      // A pointer that moves again on a mark that had gone still wakes the loop.
+      start()
       const rect = containerRef.getBoundingClientRect()
       const cx = rect.left + rect.width / 2
       const cy = rect.top + rect.height / 2
@@ -210,8 +233,10 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
 
     const onMouseEnter = () => {
       pointerInside = true
+      lastPointerAt = performance.now()
       setHovered(true)
       start()
+      sheen()
       // Fluid impulse on hover
       velY += (Math.random() > 0.5 ? 1 : -1) * 6
       velX += 5
@@ -228,6 +253,8 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     }
 
     const onClick = () => {
+      lastPointerAt = performance.now()
+      sheen()
       // Liquid splash recoil impulse
       wobbleAmp = 22
       velX += (Math.random() - 0.5) * 26
@@ -243,10 +270,12 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       el.addEventListener("mouseenter", onMouseEnter)
       el.addEventListener("mouseleave", onMouseLeave)
       el.addEventListener("click", onClick)
+      el.addEventListener("animationend", onSheenEnd)
     }
 
     onCleanup(() => {
       isMounted = false
+      if (sheenTimer !== undefined) clearTimeout(sheenTimer)
       if (animId !== 0) cancelAnimationFrame(animId)
       animId = 0
       if (el) {
@@ -254,6 +283,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
         el.removeEventListener("mouseenter", onMouseEnter)
         el.removeEventListener("mouseleave", onMouseLeave)
         el.removeEventListener("click", onClick)
+        el.removeEventListener("animationend", onSheenEnd)
       }
     })
   })
@@ -278,10 +308,11 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       aria-label={t("logo.aria")}
     >
       <style>{`
-        @keyframes chromeSheenFlow {
+        /* One pass: the sweep comes in from the start of the stroke and ends on the resting frame (offset 0, near full
+           opacity), so the end of the pass does not jump. */
+        @keyframes chromeSheenPass {
           0% { stroke-dashoffset: 160; opacity: 0.25; }
-          50% { opacity: 0.95; }
-          100% { stroke-dashoffset: -160; opacity: 0.25; }
+          100% { stroke-dashoffset: 0; opacity: 0.95; }
         }
 
         .nik-physics-turntable {
@@ -293,24 +324,22 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
           will-change: transform;
         }
 
-        /* Paused unless the physics loop is running. The negative delay
-           starts it at its midpoint (offset 0, near full opacity), so the
-           mark at rest shows the sheen across the ribbon rather than the
-           dim start of a sweep; pausing and resuming keep the frame they
-           reached, so neither end of a hover jumps. A paused animation
-           asks for no frames. */
+        /* The mark at rest shows the sheen across the ribbon (offset 0, near full opacity). It moves for one pass, when the
+           container has data-sheen (the intro, entering the mark, a click), and never in a loop: a stroke that redraws inside a
+           3D context every frame cost about 28 % of a core in the title bar. */
         .nik-sheen-sweep {
           stroke-dasharray: 45 110;
-          animation: chromeSheenFlow 2.8s linear -1.4s infinite;
-          animation-play-state: paused;
+          stroke-dashoffset: 0;
+          opacity: 0.95;
         }
 
-        [data-component="nik-chrome-logo"][data-live] .nik-sheen-sweep {
-          animation-play-state: running;
+        [data-component="nik-chrome-logo"][data-sheen] .nik-sheen-sweep {
+          animation: chromeSheenPass ${SHEEN_MS}ms ease-out 1;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .nik-sheen-sweep {
+          .nik-sheen-sweep,
+          [data-component="nik-chrome-logo"][data-sheen] .nik-sheen-sweep {
             animation: none;
             stroke-dashoffset: 0;
             opacity: 0.95;
