@@ -13,6 +13,7 @@ dependencies = [
  "image",
  "junction",
  "keyring",
+ "minisign-verify",
  "portable-pty",
  "reqwest",
  "rustls",
