@@ -508,9 +508,7 @@ export function WorkspaceTreeRow(props: {
       />
     )
   }
-  return (
-    <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} onMenu={props.onMenu} />
-  )
+  return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} onMenu={props.onMenu} />
 }
 
 type FlatFileNodeWithRanges = FlatFileNode & { ranges?: [number, number][] }
@@ -910,7 +908,15 @@ export function Sidebar(props: SidebarProps) {
       if (props.onRenameSession) {
         items.push({ kind: "item", label: t("sidebar.menu.rename"), run: () => props.onRenameSession?.(id) })
       }
-      if (props.onRestartSession) {
+      // "Riavvia" restarts a session whose process is gone. On one still at
+      // work `reopen` returns at once, so the verb would sit there and do
+      // nothing: it is offered on the sessions the pane's own button takes
+      // (review sidebar-clic, MEDIO 3). An unknown session keeps it — there
+      // is nothing here to say it cannot be restarted.
+      const session = sessionById(id)
+      const restartable =
+        session === undefined || (!session.suspended && (session.status === "done" || session.status === "error"))
+      if (props.onRestartSession && restartable) {
         items.push({ kind: "item", label: t("sidebar.menu.restart"), run: () => props.onRestartSession?.(id) })
       }
       // "Riprendi" means a suspended session: on any other it would do nothing.
@@ -939,8 +945,23 @@ export function Sidebar(props: SidebarProps) {
     let y: number
     if (event.type === "contextmenu") {
       event.preventDefault()
-      x = (event as MouseEvent).clientX
-      y = (event as MouseEvent).clientY
+      const mouse = event as MouseEvent
+      if (mouse.clientX === 0 && mouse.clientY === 0) {
+        // The keyboard's own context menu: Shift+F10 and the Menu key open it
+        // from a keydown and the browser follows with a `contextmenu` that has
+        // no pointer behind it (detail 0, coordinates 0,0). Rebuilding the menu
+        // here would drop it at the column's top-left corner, and the keydown
+        // a moment before already opened it on this row (review sidebar-clic,
+        // MEDIO 5).
+        const open = rowMenu()
+        if (open && open.kind === kind && open.id === id) return
+        const rect = anchor.getBoundingClientRect()
+        x = rect.left + 24
+        y = rect.bottom
+      } else {
+        x = mouse.clientX
+        y = mouse.clientY
+      }
     } else {
       // The keyboard's way in: the Menu key, and Shift+F10 where there is none.
       const key = event as KeyboardEvent
@@ -1845,7 +1866,27 @@ export function Sidebar(props: SidebarProps) {
               role="menu"
               aria-label={menu.kind === "workspace" ? t("sidebar.menu.workspace") : t("sidebar.menu.session")}
               ref={(element) => {
-                onCleanup(bindMenu(element, { close: () => setRowMenu(null), anchor: menu.anchor }))
+                const close = () => setRowMenu(null)
+                /*
+                 * The two ways out `bindMenu` does not take, each handled here
+                 * because the bar's menus share it (review sidebar-clic, MEDIO 4):
+                 * it lets a press on the anchor pass, so a left button on the row
+                 * that opened the menu left the menu over the session it had just
+                 * opened; and it has no word for the focus, so Tab out of the menu
+                 * left it on screen with nothing under it.
+                 */
+                const onFocusOut = (event: FocusEvent) => {
+                  const next = event.relatedTarget as Node | null
+                  if (!next || !element.contains(next)) close()
+                }
+                const onAnchorClick = () => close()
+                element.addEventListener("focusout", onFocusOut)
+                menu.anchor.addEventListener("click", onAnchorClick)
+                onCleanup(() => {
+                  element.removeEventListener("focusout", onFocusOut)
+                  menu.anchor.removeEventListener("click", onAnchorClick)
+                })
+                onCleanup(bindMenu(element, { close, anchor: menu.anchor }))
                 queueMicrotask(() => placeRowMenu(element, menu))
               }}
             >

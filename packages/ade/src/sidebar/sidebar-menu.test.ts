@@ -38,11 +38,11 @@ const WORKSPACES: Workspace[] = [
   { id: "ws-desktop", name: "packages/desktop", sessions: [] },
 ]
 
-function mount(props: Omit<SidebarProps, "workspaces">) {
+function mount(props: Omit<SidebarProps, "workspaces">, workspaces: Workspace[] = WORKSPACES) {
   const host = document.createElement("div")
   document.body.append(host)
   const dispose = createRoot((dispose) => {
-    render(() => createComponent(Sidebar, { workspaces: WORKSPACES, ...props }), host)
+    render(() => createComponent(Sidebar, { workspaces, ...props }), host)
     return dispose
   })
   const menu = () => host.querySelector('[data-slot="ade-row-menu"]')
@@ -67,7 +67,9 @@ const rightClick = (element: Element, x = 40, y = 120) => {
 
 const menuKey = (key: string, init: KeyboardEventInit = {}) => {
   const menu = document.querySelector('[data-slot="ade-row-menu"]')
-  ;(menu ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }))
+  ;(menu ?? document.body).dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }),
+  )
 }
 
 afterEach(() => {
@@ -94,10 +96,10 @@ describe("the session row's menu", () => {
     expect(view.menu()).not.toBeNull()
     expect(view.menu()!.getAttribute("role")).toBe("menu")
     expect(view.menu()!.getAttribute("aria-label")).toBe(t("sidebar.menu.session"))
-    // No "Riprendi": this session is not suspended.
+    // No "Riprendi": this session is not suspended. No "Riavvia" either: it is
+    // at work, and restarting it would do nothing (review sidebar-clic, MEDIO 3).
     expect(view.labels()).toEqual([
       t("sidebar.menu.rename"),
-      t("sidebar.menu.restart"),
       t("sidebar.menu.close"),
       t("sidebar.menu.copyId"),
       t("sidebar.menu.openSession"),
@@ -178,6 +180,90 @@ describe("the session row's menu", () => {
 
     rightClick(view.host.querySelector('[data-slot="session-row"]')!)
     expect(view.menu()).toBeNull()
+
+    view.cleanup()
+  }, 5000)
+
+  /*
+   * «Riavvia» was offered on every session, while `reopen` returns at once on
+   * one whose process is alive: the verb was there and did nothing (review
+   * sidebar-clic, MEDIO 3). It is offered where the pane's own button is.
+   */
+  test("«Riavvia» is offered only on a session that can be restarted", () => {
+    const view = mount({ onRestartSession: () => {}, onCloseSession: () => {} }, [
+      {
+        id: "ws",
+        name: "ws",
+        sessions: [
+          { id: "s-run", title: "al lavoro", status: "working" },
+          { id: "s-done", title: "finita", status: "done" },
+          { id: "s-failed", title: "fallita", status: "error" },
+          { id: "s-susp", title: "sospesa", status: "done", suspended: true },
+        ],
+      },
+    ])
+
+    const rows = view.host.querySelectorAll('[data-slot="session-row"]')
+    const offersRestart = (index: number) => {
+      rightClick(rows[index]!)
+      return view.labels().includes(t("sidebar.menu.restart"))
+    }
+
+    expect(offersRestart(0)).toBe(false)
+    expect(offersRestart(1)).toBe(true)
+    expect(offersRestart(2)).toBe(true)
+    expect(offersRestart(3)).toBe(false)
+
+    view.cleanup()
+  }, 5000)
+
+  test("leaving the menu with the keyboard closes it", () => {
+    const view = mount({ onCloseSession: () => {} })
+
+    rightClick(view.host.querySelector('[data-slot="session-row"]')!)
+    expect(view.menu()).not.toBeNull()
+
+    const outside = document.createElement("button")
+    document.body.append(outside)
+    const focusout = new FocusEvent("focusout", { bubbles: true, cancelable: true })
+    Object.defineProperty(focusout, "relatedTarget", { value: outside })
+    view.menu()!.dispatchEvent(focusout)
+
+    expect(view.menu() === null).toBe(true)
+
+    view.cleanup()
+  }, 5000)
+
+  test("the left button on the row that opened the menu closes it, and still opens the session", () => {
+    const selected: string[] = []
+    const view = mount({ onSelectSession: (id) => selected.push(id), onCloseSession: () => {} })
+
+    const row = view.host.querySelector('[data-slot="session-row"]') as HTMLElement
+    rightClick(row)
+    expect(view.menu()).not.toBeNull()
+
+    row.click()
+
+    expect(view.menu() === null).toBe(true)
+    expect(selected).toEqual(["s1"])
+
+    view.cleanup()
+  }, 5000)
+
+  test("the keyboard's own context menu does not open the menu a second time", () => {
+    const view = mount({ onCloseSession: () => {} })
+
+    const row = view.host.querySelector('[data-slot="session-row"]') as HTMLElement
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }))
+    const first = view.menu()
+    expect(first).not.toBeNull()
+
+    // What the browser follows with: no pointer behind it, so no coordinates.
+    row.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 0, clientY: 0, detail: 0 }),
+    )
+
+    expect(view.menu() === first).toBe(true)
 
     view.cleanup()
   }, 5000)

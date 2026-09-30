@@ -7347,7 +7347,10 @@ export function Workbench() {
 
   const closeProjectSessions = async (workspaceId: string) => {
     const workspace = workspaces().find((candidate) => candidate.id === workspaceId)
-    await closer.closeAll(workspace?.sessions.map((session) => session.id) ?? [])
+    // An agent of the project may be at work: the tray's own "close sessions"
+    // goes through closeAll bare too, but this one comes from a menu the user
+    // reached without seeing the panes (review sidebar-clic, ALTO 1).
+    await closer.closeAll(workspace?.sessions.map((session) => session.id) ?? [], { confirmRunning: true })
   }
 
   /**
@@ -8650,7 +8653,10 @@ export function Workbench() {
           /* The row menu's verbs: one callback each, into the functions above. */
           onRenameSession={(id) => void renameSession(id)}
           onCloseSession={(id) => {
-            close(id)
+            // The sidebar's ✕ is a click, not a shortcut held down: an agent
+            // at work is stopped only after it is said out loud, the way the
+            // pane's own ✕ does (review sidebar-clic, MEDIO 2).
+            closer.close(id, { confirmRunning: true })
           }}
           onRestartSession={restartSession}
           onResumeSession={(id) => void resumeSession(id)}
