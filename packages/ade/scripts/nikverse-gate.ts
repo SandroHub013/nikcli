@@ -22,6 +22,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
 import { profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
+import { ensureWorld } from "../src/nikverse/city/build-world"
 import {
   gateChecks,
   framePrivate,
@@ -83,6 +84,22 @@ function finish(code: number, extra: Record<string, unknown> = {}): never {
   stopApp()
   process.exit(code)
 }
+// ---- the world -----------------------------------------------------------------------------------
+
+// The bundle of the world is ignored by git, and an ADE Test that was already up (or one started by `test:app`) serves the last one anybody
+// built: a branch with a new city was measured, and shown, as the old one. So it is rebuilt from the sources as they are, always (a quarter
+// of a second), and the JSON says which bundle this run measured: the hash of the file, its size and whether this run had to write it.
+{
+  const world = await ensureWorld()
+  if (!world.ok) finish(2, { ok: false, error: `the world does not build: ${world.errors.join(" ")}` })
+  Object.assign(result, {
+    world: { sha256: world.sha256, bytes: world.bytes, modified: world.modified, rebuilt: world.written },
+  })
+  log(
+    `mondo: ${world.sha256.slice(0, 12)}, ${Math.round(world.bytes / 1024)} kB${world.written ? " (ricostruito ora)" : ""}`,
+  )
+}
+
 // ---- the app -------------------------------------------------------------------------------------
 
 const cdpPortOf = () => {
@@ -102,7 +119,6 @@ async function answers(port: number) {
 }
 if (flag("--start") && !((cdpPortOf() ?? 0) > 0 && (await answers(cdpPortOf()!)))) {
   log("avvio ADE Test (voce spenta): la prima volta compila il Rust")
-  spawnSync("bun", ["scripts/build-nikverse-world.ts"], { cwd: adeDir, stdio: "ignore" })
   spawn("bun", ["scripts/test-app.ts", "--cdp"], {
     cwd: adeDir,
     env: { ...process.env, NIKCLI_SERVICE: "0" },
@@ -546,7 +562,9 @@ try {
     cycles.map((c) => c.gpuMb as number),
     gpuBaseSamples,
   )
-  log(`memoria GPU: picco ${gpuMem.peakMb} MB (limite ${GATE_LIMITS.gpuPeakMb}), base mediana ${gpuMem.baseMb} MB su ${gpuBaseSamples.join("/")}, crescita ${gpuMem.growthMb} MB (solo informazione)`)
+  log(
+    `memoria GPU: picco ${gpuMem.peakMb} MB (limite ${GATE_LIMITS.gpuPeakMb}), base mediana ${gpuMem.baseMb} MB su ${gpuBaseSamples.join("/")}, crescita ${gpuMem.growthMb} MB (solo informazione)`,
+  )
 
   // The GPU time the ceiling is held to: the worst of the eight shots of the level the world ran at, not the view a player starts in (a
   // close-up interior took 16 ms while that view took 3). The shots run in a headless browser on the same GPU, with ADE's world shut.
@@ -587,7 +605,9 @@ try {
 
   // The frame is judged on its private memory; the working set (which counts shared pages) goes in the report only.
   const framePriv = framePrivate(cycles.map((c) => c.framePrivMb as number))
-  log(`frame privata: picco ${framePriv.peakMb.toFixed(1)} MB (limite ${GATE_LIMITS.frameMb}), crescita sul ciclo 3 ${framePriv.growthAfterWarmupMb.toFixed(1)} MB; working set (informazione): ${Math.max(...cycles.map((c) => c.frameWsMb as number)).toFixed(1)} MB`)
+  log(
+    `frame privata: picco ${framePriv.peakMb.toFixed(1)} MB (limite ${GATE_LIMITS.frameMb}), crescita sul ciclo 3 ${framePriv.growthAfterWarmupMb.toFixed(1)} MB; working set (informazione): ${Math.max(...cycles.map((c) => c.frameWsMb as number)).toFixed(1)} MB`,
+  )
 
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {
@@ -612,7 +632,12 @@ try {
     ["test", "--conditions=browser", "--preload", "./happydom.ts", "./src/nikverse/browser-guard.test.ts"],
     { cwd: adeDir, stdio: "ignore", timeout: 300_000, env: { ...process.env, NIKVERSE_GUARD_TESTS: "1" } },
   )
-  checks.push({ name: "browser guard tests (0 = green)", value: guardRun.status ?? 1, limit: 0, ok: guardRun.status === 0 })
+  checks.push({
+    name: "browser guard tests (0 = green)",
+    value: guardRun.status ?? 1,
+    limit: 0,
+    ok: guardRun.status === 0,
+  })
   const ok = gatePasses(checks)
   finish(ok ? 0 : 1, {
     ok,

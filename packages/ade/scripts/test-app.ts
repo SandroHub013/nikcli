@@ -32,6 +32,7 @@ import {
   type TestAppPlan,
   type TestAppRecord,
 } from "../src/host/test-app"
+import { ensureWorld } from "../src/nikverse/city/build-world"
 
 const adeDir = join(import.meta.dir, "..")
 const isWindows = process.platform === "win32"
@@ -178,6 +179,14 @@ async function start(): Promise<void> {
 
   // Before cargo writes a binary: see scripts/medium-target.ts.
   spawnSync(process.execPath, [join(adeDir, "scripts", "medium-target.ts")], { stdio: "inherit" })
+
+  // The world's bundle is not in git: rebuilt from the sources as they are, or ADE Test shows the city of whoever built it last.
+  const world = await ensureWorld()
+  console.log(
+    world.ok
+      ? `Mondo di NikVerse: ${world.sha256.slice(0, 12)}${world.written ? " (ricostruito)" : " (già aggiornato)"}`
+      : `ATTENZIONE: il mondo di NikVerse non si costruisce, ADE Test mostrerebbe quello vecchio:\n${world.errors.join("\n")}`,
+  )
 
   for (const dir of [plan.stateDir, plan.profileDir, plan.tmpDir]) mkdirSync(dir, { recursive: true })
 

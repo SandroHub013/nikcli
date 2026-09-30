@@ -4,7 +4,9 @@
  * nothing else. `scripts/build-nikverse-world.ts` writes it; the tests build it in memory.
  */
 
-import { join } from "node:path"
+import { createHash } from "node:crypto"
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 
 const root = join(import.meta.dir, "..", "..", "..")
 /** Where the bundle is written: the assets folder the `nikverse` scheme serves, under `world/`. */
@@ -25,4 +27,42 @@ export async function buildWorld(): Promise<{ ok: true; text: string } | { ok: f
   })
   if (!result.success) return { ok: false, errors: result.logs.map((log) => String(log)) }
   return { ok: true, text: await result.outputs[0].text() }
+}
+
+/** Which bundle: what a run says it measured or served, so a number is never read against the wrong city. */
+export interface WorldBundle {
+  sha256: string
+  bytes: number
+  /** The file's modification time, ISO. */
+  modified: string
+  /** Whether this call wrote the file (it was missing or different); false when it was already the bundle of the sources. */
+  written: boolean
+}
+
+/**
+ * Makes `city.js` the bundle of the sources as they are now, and says which bundle that is.
+ *
+ * The file is ignored by git and only a release build or a script rebuilt it, so an ADE Test started by `test:app` (or a gate that found
+ * one running) served the city of the last time somebody built it: a branch with the island showed the old city. The bundle costs a
+ * quarter of a second, so it is built every time, and written only when the bytes differ (a write that changes nothing would make
+ * cargo rebuild for it, see `scripts/build-nikverse-world.ts`). `check` builds and writes nothing.
+ */
+export async function ensureWorld(
+  options: { file?: string; check?: boolean } = {},
+): Promise<({ ok: true } & WorldBundle) | { ok: false; errors: string[] }> {
+  const file = options.file ?? OUT_FILE
+  const built = await buildWorld()
+  if (!built.ok) return built
+  const same = existsSync(file) && readFileSync(file, "utf8") === built.text
+  if (!same && !options.check) {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, built.text)
+  }
+  return {
+    ok: true,
+    sha256: createHash("sha256").update(built.text).digest("hex"),
+    bytes: Buffer.byteLength(built.text),
+    modified: existsSync(file) ? statSync(file).mtime.toISOString() : "",
+    written: !same && !options.check,
+  }
 }
