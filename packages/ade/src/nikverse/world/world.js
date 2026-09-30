@@ -254,7 +254,9 @@ export function boot(win, options = {}) {
   if (query.check) mark("check", "1")
 
   // The city starts by itself and the list above stays as it is: if the module is missing, or the
-  // renderer cannot start, the page keeps working as the list.
+  // renderer cannot start, the page keeps working as the list. Until the city's own phases (`city/load-log.ts`),
+  // the opening is loading the city's module.
+  if (!query.check) mark("load", "module")
   Promise.resolve()
     .then(loadCity)
     .then((module) =>
