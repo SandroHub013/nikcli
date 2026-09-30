@@ -39,8 +39,7 @@ import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./qualit
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
-import { benchScaled, gpuIdleOf, hasTimestampQuery, liveGpuTimer } from "./gpu-idle"
-import { createLoadLog, shortUrl } from "./load-log"
+import { benchScaled, hasTimestampQuery, liveGpuTimer } from "./gpu-idle"
 import { createGovernor } from "./resolution"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
@@ -139,14 +138,10 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   if (!stage) throw new Error("manca #stage nella pagina del mondo")
 
   const check = deps.mode === "logo-check"
-  // Where the opening is, phase by phase, for an opening that never reaches `ready` (`load-log.ts`).
-  const log = createLoadLog(win)
-  log.phase("gpu")
   // The level decides the renderer and the assets: what the machine has, and what was asked for.
   const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
   const resolved = resolveLevel(deps.quality, gpu)
   const level = resolved.level
-  log.phase("renderer")
   const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
   const { renderer, canvas, backend } = chosen
   stage.append(canvas)
@@ -154,45 +149,21 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   doc.documentElement.dataset.backend = backend
   if (chosen.why) doc.documentElement.dataset.backendWhy = chosen.why
 
-  if (check) {
-    log.done()
-    return logoCheckHandle(deps, renderer, canvas, backend)
-  }
+  if (check) return logoCheckHandle(deps, renderer, canvas, backend)
 
   // N3's people, shop and plaza; what does not load stays a placeholder, and the page says why. The pictures
   // are KTX2 in the GPU's own format, or PNG.
   const base = deps.assets ?? new URL("./assets/", win.location.href).href
   const pictures = createPictureDecoder(renderer as unknown as Ktx2Support)
-  log.phase("assets")
-  let decoded = 0
   const loaded = await loadLevel(level, {
     base,
     fetchBytes: async (url) => {
-      const close = log.piece(`fetch ${shortUrl(url)}`)
-      try {
-        const response = await win.fetch(url)
-        if (!response.ok) throw new Error(`${response.status}`)
-        const bytes = await response.arrayBuffer()
-        close()
-        return bytes
-      } catch (error) {
-        close(true)
-        throw error
-      }
+      const response = await win.fetch(url)
+      if (!response.ok) throw new Error(`${response.status}`)
+      return response.arrayBuffer()
     },
-    decode: async (bytes, srgb) => {
-      const close = log.piece(`decode ${++decoded} (${Math.round(bytes.byteLength / 1024)} kB)`)
-      try {
-        const texture = await pictures.decode(bytes, srgb)
-        close()
-        return texture
-      } catch (error) {
-        close(true)
-        throw error
-      }
-    },
+    decode: pictures.decode,
   })
-  log.phase("scene")
   // Not closed yet: the people's pictures are decoded as they come near (`assets.warmPictures`); it goes with the city.
   const { cast, kit } = loaded
   const data = doc.documentElement.dataset
@@ -208,10 +179,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
-  if (deps.shot !== undefined) {
-    log.done()
+  if (deps.shot !== undefined)
     return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), tune: { ...deps.tune, maxScale: deps.tune?.maxScale ?? level.maxScale }, cast: cast !== undefined, kit: kit !== undefined })
-  }
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -345,9 +314,6 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     const paced = pace(ts, nextDraw, mode === "moving" ? movingInterval : STILL_INTERVAL_MS)
     nextDraw = paced.next
     if (paced.draw) {
-      // The first draw builds every material's shader (TSL to WGSL, in JS); the GPU then compiles them and draws.
-      const first = doc.documentElement.dataset.ready !== "1"
-      if (first) log.phase("first-draw")
       // One frame in three of the moving mode is timed by the GPU's clock: about twenty a second, no cost for the rest.
       const timed = governor !== undefined && mode === "moving" && !sampling && ++framesDrawn % 3 === 0
       if (timed) gpuClock!.begin()
@@ -369,14 +335,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
-      if (first) {
-        doc.documentElement.dataset.ready = "1"
-        log.phase("first-draw-gpu")
-        const gpuIdle = gpuIdleOf(renderer, backend)
-        // WebGL compiled its shaders inside the draw; only WebGPU's queue says when the GPU is done without stalling.
-        if (gpuIdle.sync === "queue") void Promise.resolve(gpuIdle.idle()).then(log.done, log.done)
-        else log.done()
-      }
+      if (doc.documentElement.dataset.ready !== "1") doc.documentElement.dataset.ready = "1"
     }
     schedule(mode === "moving")
   }
@@ -472,8 +431,6 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   canvas.addEventListener("wheel", onWheel, { passive: false })
 
   town.sync(deps.picture())
-  // Until the loop draws: an opening stopped here is waiting for its first frame (a paused pane, a hidden frame).
-  log.phase("first-frame")
   resize()
 
   return {

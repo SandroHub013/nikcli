@@ -285,12 +285,4 @@ describe("the 3D city the page starts", () => {
     await settled()
     expect(document.documentElement.dataset.city).toBe("failed")
   })
-
-  test("until the city's own phases, the opening says it is loading the city's module", async () => {
-    const { win } = page()
-    document.documentElement.removeAttribute("data-load")
-    boot(win, { loadCity: () => new Promise(() => {}) })
-    await settled()
-    expect(document.documentElement.dataset.load).toBe("module")
-  })
 })
