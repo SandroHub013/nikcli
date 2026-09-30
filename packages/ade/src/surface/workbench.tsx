@@ -227,7 +227,12 @@ import {
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
-import { clearNaturalVoiceFailure, naturalVoiceFailureFor, type NaturalVoiceFailure } from "../agent/onboarding"
+import {
+  clearNaturalVoiceFailure,
+  naturalVoiceFailureFor,
+  transcriptionReady,
+  type NaturalVoiceFailure,
+} from "../agent/onboarding"
 import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
@@ -8780,8 +8785,8 @@ export function Workbench() {
               running={voiceEngine.isRunning()}
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
-              canPlan={Boolean(voiceSettings().openRouterApiKey)}
-              hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
+              canPlan={hasVoiceAgent() && voiceSettings().agentEngine !== "off"}
+              hasKey={transcriptionReady(voiceSettings())}
               hasAgent={hasVoiceAgent()}
               hasVoice={voiceInstalled() && !voiceError()}
               isVoiceDownloading={voiceDownloading()}

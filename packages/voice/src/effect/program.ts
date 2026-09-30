@@ -788,6 +788,10 @@ export function makeVoiceProgram(
     /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
     let agentAbort: AbortController | null = null
     let plannerAbort: AbortController | null = null
+    /** The planner's speech for the sentence it handed over: the agent is told the user heard it. */
+    let handedOff: string | undefined
+    /** Why the planner could not plan this sentence: said only if the agent cannot take it either. */
+    let plannerFailed: string | undefined
 
     /* A free sentence heard while thinking, and whether the user asked for it to go out. */
     let held: string | null = null
@@ -840,6 +844,8 @@ export function makeVoiceProgram(
         const abort = new AbortController()
         agentAbort = abort
         plannerAbort = abort
+        handedOff = undefined
+        plannerFailed = undefined
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -863,16 +869,55 @@ export function makeVoiceProgram(
           agents: host.listAgents?.() ?? [],
           projects: host.listProjects?.() ?? [],
           paneCount: panes.length,
+          panes: panes.map((pane) => ({
+            index: pane.index,
+            title: pane.title,
+            status: pane.status,
+            ...(pane.agent ? { agent: pane.agent } : {}),
+          })),
           commands: PLANNABLE_COMMANDS,
           recentHistory,
           focusedPaneTitle: focusedPane?.title,
           activeProjectName: host.describeState?.().activeProject,
         }
 
+        /*
+         * `speech` comes first in the answer, and is read as it is written: each finished sentence goes to
+         * the voice at once, so the wait is the time to the first words and not to the whole plan.
+         */
+        const hushedAtStart = hushed
+        const quiet = () => abort.signal.aborted || hushed !== hushedAtStart
+        const append = speaker.append
+        let saidUpTo = 0
+        let saidText = ""
+        const onSpeech = append
+          ? (text: string) => {
+              if (quiet()) return
+              const end = saidUpTo === 0 ? firstPieceUpTo(text) : finishedUpTo(text)
+              if (end <= saidUpTo) return
+              const piece = text.slice(saidUpTo, end).trim()
+              saidUpTo = end
+              if (!piece) return
+              saidText = text.slice(0, end).trim()
+              options.onSpeaking?.(saidText)
+              Effect.runFork(
+                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err))))),
+              )
+            }
+          : undefined
+
         const planned = yield* Effect.promise((interrupted) => {
           interrupted.addEventListener("abort", () => abort.abort(), { once: true })
-          return planUtterance(utterance, context, complete, { signal: abort.signal })
+          return planUtterance(utterance, context, complete, {
+            signal: abort.signal,
+            ...(onSpeech ? { onSpeech } : {}),
+          })
         })
+        /* What is left of the speech after what was already said; all of it when the two disagree. */
+        const whole = squash(planned.speech ?? "")
+        const said = squash(saidText)
+        const streamed = saidText !== ""
+        const rest = !streamed ? whole : whole.startsWith(said) ? whole.slice(said.length).trim() : whole
         // Stopped while the model thought: whoever stopped it speaks next.
         if (abort.signal.aborted) return "stopped"
 
@@ -897,8 +942,26 @@ export function makeVoiceProgram(
           // What the provider said, for whoever has to work out why the same
           // sentence keeps being refused. The user is told the Italian one.
           if (planned.detail) options.onProviderError?.(planned.detail)
-          yield* say(planned.failure)
-          return true
+          /*
+           * The planner is the fast path, not the only one: a timeout, a model gone from the catalog or a
+           * limited account must not leave the agent, which may be working, without the sentence. The
+           * user hears the planner's problem only if the agent cannot take it either.
+           */
+          plannerFailed = planned.failure
+          return false
+        }
+
+        if (planned.handoff) {
+          // «Ci penso»: said as it came, or now; the agent that follows does the work.
+          if (!streamed && whole && !quiet()) yield* say(whole)
+          handedOff = whole || undefined
+          if (agentAbort === abort) agentAbort = null
+          if (plannerAbort === abort) plannerAbort = null
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
+          return false
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
@@ -932,7 +995,7 @@ export function makeVoiceProgram(
             type: "plan_ready",
             steps: planned.steps,
             refusals: planned.refusals,
-            ...(planned.speech ? { speech: planned.speech } : {}),
+            ...(rest ? { speech: rest } : {}),
           })
           return true
         }
@@ -947,6 +1010,17 @@ export function makeVoiceProgram(
           options.onStateChange?.(currentState)
         }
 
+        if (streamed && append) {
+          // The speech was said as it came: only what was left of it, and what went wrong.
+          const problems = [...planned.refusals, ...execution.failures]
+          const note = problems.length > 0 ? `Nota: ${problems.join(" ")}` : ""
+          const tail = [rest, note].filter(Boolean).join(" ")
+          options.onSpoken?.(`${whole}${note ? ` ${note}` : ""}`)
+          if (tail && !quiet()) {
+            yield* append(tail).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+          }
+          return true
+        }
         yield* sayPlanResult(planned, execution, context.agents)
         return true
       })
@@ -1046,6 +1120,7 @@ export function makeVoiceProgram(
             interrupted.addEventListener("abort", () => abort.abort(), { once: true })
             return askAgent.call(host, {
               text: utterance,
+              ...(handedOff ? { alreadySaid: handedOff } : {}),
               engine,
               speed: settings.agentSpeed,
               signal: abort.signal,
@@ -1352,6 +1427,20 @@ export function makeVoiceProgram(
 
         if (!thinking) clearHeld()
 
+        /*
+         * The planner first: a sentence that is one operation on ADE (open a pane, send to a session,
+         * start some sessions) or a question about what is open is answered in the time it takes to write
+         * a line of JSON, and costs a fraction of a turn. What it cannot do it hands back empty, and the
+         * agent, which can ask a session and wait for it, takes the sentence.
+         */
+        if (parsed.outcome === "unknown" && openToModels && (options.plan || options.resolvePlan)) {
+          const handled = yield* runPlan(trimmed)
+          if (handled) {
+            if (handled !== "stopped") yield* afterTurn()
+            return
+          }
+        }
+
         if (parsed.outcome === "unknown" && openToModels) {
           const handled = yield* runAgent(trimmed)
           if (handled) {
@@ -1360,12 +1449,12 @@ export function makeVoiceProgram(
           }
         }
 
-        if (parsed.outcome === "unknown" && openToModels && (options.plan || options.resolvePlan)) {
-          const handled = yield* runPlan(trimmed)
-          if (handled) {
-            if (handled !== "stopped") yield* afterTurn()
-            return
-          }
+        // The planner failed and nobody else could take the sentence: the user is told why.
+        if (plannerFailed && parsed.outcome === "unknown" && openToModels) {
+          const failure = plannerFailed
+          plannerFailed = undefined
+          yield* say(failure)
+          return
         }
 
         // 4. Unknown outcome: do NOT speak offline fallback suggestions.

@@ -346,6 +346,89 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(byConfig.calls.created).toEqual([])
   })
 
+  test("a turn with no tools runs in the planner's session, whatever the bot's file says", async () => {
+    const fake = server({ events: FIRST, session: FIRST_SESSION })
+    await runServeTurn(panel({ noTools: true, approvals: false }), fake.deps).result
+    expect(fake.calls.created[0]?.permission).toEqual([BOT_SESSION_MARK, ...botPermission("planner" as never)])
+  })
+
+  test("a tool call in a turn with no tools ends it at once: a user's «sempre» must not let the planner act", async () => {
+    const events: ChatEvent[] = [
+      busyOf(),
+      { type: "message.updated", properties: { sessionID: SESSION, info: { id: "m1", role: "assistant" } } },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: SESSION,
+          part: { id: "p1", messageID: "m1", type: "tool", tool: "bash", state: { status: "running", input: {} } },
+        },
+      },
+    ]
+    const fake = server({ events, session: SESSION })
+    const result = await runServeTurn(panel({ noTools: true, approvals: false }), fake.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe(t("bots.serve.toolInPlanner", "bash"))
+    expect(fake.calls.aborted).toContain(SESSION)
+  })
+
+  test("free models are chosen when the turn runs: the user's own if it is free, else the first the catalog has", async () => {
+    const { model: _none, ...noModel } = BOT
+    const request = (extra: Partial<TurnRequest> = {}) =>
+      panel({
+        bot: { ...noModel, identifier: "" },
+        noTools: true,
+        approvals: false,
+        freeModels: ["openrouter/a/gone:free", "openrouter/b/second:free", "openrouter/c/third:free"],
+        ...extra,
+      })
+
+    const second = server({
+      events: FIRST,
+      session: FIRST_SESSION,
+      catalog: { providerList: catalogOf("openrouter/b/second:free", "openrouter/c/third:free") },
+    })
+    await runServeTurn(request(), second.deps).result
+    expect(second.calls.prompts[0]?.model).toEqual({ providerID: "openrouter", modelID: "b/second:free" })
+
+    const own = server({
+      events: FIRST,
+      session: FIRST_SESSION,
+      catalog: {
+        providerList: catalogOf("openrouter/b/second:free", "openrouter/mine/own:free"),
+        configModel: "openrouter/mine/own:free",
+      },
+    })
+    await runServeTurn(request(), own.deps).result
+    expect(own.calls.prompts[0]?.model).toEqual({ providerID: "openrouter", modelID: "mine/own:free" })
+
+    // A paid model of the user's is never the planner's.
+    const paid = server({
+      events: FIRST,
+      session: FIRST_SESSION,
+      catalog: { providerList: catalogOf("openrouter/b/second:free", "openai/gpt-x"), configModel: "openai/gpt-x" },
+    })
+    await runServeTurn(request(), paid.deps).result
+    expect(paid.calls.prompts[0]?.model).toEqual({ providerID: "openrouter", modelID: "b/second:free" })
+  })
+
+  test("none of them in the catalog: the turn is refused before any session, and says so", async () => {
+    const { model: _none, ...noModel } = BOT
+    const fake = server({ catalog: { providerList: catalogOf("openai/gpt-x") } })
+    const result = await runServeTurn(
+      panel({
+        bot: { ...noModel, identifier: "" },
+        noTools: true,
+        approvals: false,
+        freeModels: ["openrouter/a/gone:free"],
+      }),
+      fake.deps,
+    ).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe(t("bots.serve.noFreeModel"))
+    expect(fake.calls.created).toEqual([])
+    expect(fake.calls.prompts).toEqual([])
+  })
+
   test("a catalog that cannot be read, or a turn with no model named anywhere, goes: the server decides", async () => {
     const unknown = server({ events: FIRST, session: FIRST_SESSION, catalog: {} })
     expect((await runServeTurn(panel(), unknown.deps).result).status).toBe("done")

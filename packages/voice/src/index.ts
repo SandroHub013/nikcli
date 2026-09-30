@@ -140,10 +140,11 @@ export { announceExecution, executePlan, type PlanExecution } from "./plan/execu
 
 export {
   buildPlannerPrompt,
-  createOpenRouterCompletion,
   extractJson,
   planUtterance,
-  PLANNER_MODEL,
+  PLANNER_SYSTEM,
+  plannerContext,
+  speechSoFar,
   type Completion,
   type PlannerResult,
 } from "./plan/planner"

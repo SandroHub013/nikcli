@@ -259,12 +259,12 @@ export const en: Messages = {
   "agent.mic.stop": "Turn off microphone",
   "agent.settings": "Settings",
   "agent.noPlanner":
-    "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
+    "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
   "agent.onboarding.title": "Before speaking to nik",
-  "agent.onboarding.subtitle":
-    "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",
+  "agent.onboarding.subtitle": "A few things are needed to use voice. Here is what is ready and what is missing:",
   "agent.onboarding.key.title": "OpenRouter API Key",
-  "agent.onboarding.key.desc": "Required for fast speech transcription (Whisper / Gemma). Obtainable at openrouter.ai.",
+  "agent.onboarding.key.desc":
+    "Needed only for fast transcription through OpenRouter (Whisper / Gemma); local transcription does not need it. Obtainable at openrouter.ai.",
   "agent.onboarding.key.action": "Set API key",
   "agent.onboarding.key.done": "Configured",
   "agent.onboarding.agent.title": "Agent (Claude Code or Codex)",
@@ -1789,6 +1789,9 @@ export const en: Messages = {
   "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
   "bots.serve.noModel": (model) =>
     `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
+  "bots.serve.toolInPlanner": (tool) => `A turn with no tools tried to use «${tool}»: the turn was stopped.`,
+  "bots.serve.noFreeModel":
+    "None of the free models this turn may use is in the nikcli server's catalog: the turn did not start.",
   "bots.serve.effortNoModel": (effort) =>
     `The effort «${effort}» applies to a chosen model: this bot uses nikcli's default model, and this turn uses the default effort. Choose a model in the bot's settings.`,
   "bots.serve.effortDropped": (effort, model, variants) =>
