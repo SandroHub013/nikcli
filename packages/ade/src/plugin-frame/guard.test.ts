@@ -108,6 +108,9 @@ describe("a layout restored with a plugin that is not installed shows the placeh
       accepted: () => [],
       accept: () => calls.push("accept"),
       rejected: { add: () => calls.push("reject") },
+      unconfirmed: () => (calls.push("unconfirmed"), undefined),
+      watch: () => void calls.push("watch"),
+      unwatch: () => void calls.push("unwatch"),
       schedule: () => (calls.push("schedule"), () => {}),
       phase: () => {},
     })
