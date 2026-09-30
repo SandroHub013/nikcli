@@ -995,6 +995,37 @@ pub(crate) trait Fetcher {
         report: &mut dyn FnMut(u64),
         stop: &dyn Fn() -> Option<String>,
     ) -> Result<u64, String>;
+
+    /// `fetch`, for a file whose size is known beforehand: a body larger than `limit` is refused, not written.
+    ///
+    /// The default ignores the limit (a fetcher that cannot tell has nothing to enforce; the caller checks the size it got all the same).
+    fn fetch_within(
+        &self,
+        url: &str,
+        part: &Path,
+        limit: Option<u64>,
+        report: &mut dyn FnMut(u64),
+        stop: &dyn Fn() -> Option<String>,
+    ) -> Result<u64, String> {
+        let _ = limit;
+        self.fetch(url, part, report, stop)
+    }
+}
+
+/// What curl is told about where it may go and how much it may take, besides the transfer itself.
+///
+/// An `https` address is followed only over `https`, redirects included: a release asset comes through a redirect to a CDN, and a redirect
+/// that downgrades to plain http is a way for anyone on the line to put bytes in the file. (An `http` address is a loopback server in a
+/// test, and there is nothing to restrict.) `limit` is the size the file is known to have: curl refuses a larger body before writing it.
+pub(crate) fn curl_guard(url: &str, limit: Option<u64>) -> Vec<String> {
+    let mut args = Vec::new();
+    if url.starts_with("https://") {
+        args.extend(["--proto", "=https", "--proto-redir", "=https"].map(String::from));
+    }
+    if let Some(limit) = limit {
+        args.extend(["--max-filesize".to_string(), limit.to_string()]);
+    }
+    args
 }
 
 /// The digest of a file on disk.
@@ -1013,8 +1044,20 @@ impl Fetcher for Curl {
         report: &mut dyn FnMut(u64),
         stop: &dyn Fn() -> Option<String>,
     ) -> Result<u64, String> {
+        self.fetch_within(url, part, None, report, stop)
+    }
+
+    fn fetch_within(
+        &self,
+        url: &str,
+        part: &Path,
+        limit: Option<u64>,
+        report: &mut dyn FnMut(u64),
+        stop: &dyn Fn() -> Option<String>,
+    ) -> Result<u64, String> {
         let mut command = std::process::Command::new(curl_program());
         command
+            .args(curl_guard(url, limit))
             .args([
                 "-fsSL".as_ref(),
                 "--retry".as_ref(),

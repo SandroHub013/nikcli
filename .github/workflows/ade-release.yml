@@ -290,6 +290,18 @@ jobs:
           TOTAL="$(find "$DIR" -type f -not -path '*/.*' | wc -l | tr -d '[:space:]')"
           echo "NikVerse assets: $TOTAL files, $UPLOADED uploaded"
           if [ "$TOTAL" = "0" ]; then echo "no NikVerse assets to upload"; exit 1; fi
+          # Not what the uploads said: what the release holds now. Every hash the manifest carries must be an asset of ade-updater,
+          # because a list naming one that is not there is a world that cannot be fetched, and the release must not go out with it.
+          LIVE="$(names)"
+          ABSENT=0
+          while IFS= read -r FILE; do
+            HASH="$(digest "$FILE")"
+            if ! printf '%s\n' "$LIVE" | grep -qx "nikverse-$HASH"; then
+              echo "not on ade-updater: nikverse-$HASH ($FILE)"
+              ABSENT=$((ABSENT + 1))
+            fi
+          done < <(find "$DIR" -type f -not -path '*/.*' | sort)
+          if [ "$ABSENT" != "0" ]; then echo "$ABSENT NikVerse assets are not on ade-updater"; exit 1; fi
 
       # The setup goes to SignPath, comes back with an Authenticode signature,
       # and replaces the unsigned one. Its updater signature was computed over

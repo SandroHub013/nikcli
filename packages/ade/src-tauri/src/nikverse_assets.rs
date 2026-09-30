@@ -171,9 +171,11 @@ fn fetch_all(
         }
         let part = staging(&dest);
         let _ = std::fs::remove_file(&part);
-        let written = fetcher.fetch(
+        // The list says how much the file weighs: a body larger than that is refused before it is written.
+        let written = fetcher.fetch_within(
             &url(entry),
             &part,
+            Some(entry.size),
             &mut |so_far| assets.update(|progress| progress.bytes_done = before + so_far.min(entry.size)),
             stop,
         );
@@ -294,10 +296,24 @@ mod tests {
     struct Table {
         bodies: Vec<(String, Vec<u8>)>,
         asked: RefCell<Vec<String>>,
+        /// The size limit each request came with.
+        limits: RefCell<Vec<Option<u64>>>,
         /// Reports this many bytes short: the connection dropped.
         cut: Option<usize>,
     }
     impl Fetcher for Table {
+        fn fetch_within(
+            &self,
+            url: &str,
+            part: &Path,
+            limit: Option<u64>,
+            report: &mut dyn FnMut(u64),
+            stop: &dyn Fn() -> Option<String>,
+        ) -> Result<u64, String> {
+            self.limits.borrow_mut().push(limit);
+            self.fetch(url, part, report, stop)
+        }
+
         fn fetch(
             &self,
             url: &str,
@@ -321,12 +337,45 @@ mod tests {
         Table {
             bodies: manifest.iter().zip(bodies).map(|(entry, body)| (url_of(entry), body.to_vec())).collect(),
             asked: RefCell::new(Vec::new()),
+            limits: RefCell::new(Vec::new()),
             cut: None,
         }
     }
 
     fn never() -> Option<String> {
         None
+    }
+
+    #[test]
+    fn every_file_is_asked_for_with_the_size_the_list_gives_as_its_limit() {
+        let root = Scratch::new();
+        let manifest = [entry("a.txt", b"alpha"), entry("sub/b.txt", b"bravo!")];
+        let fetcher = table(&manifest, &[b"alpha", b"bravo!"]);
+        install_into(&root.0, &manifest, &url_of, &fetcher, &Assets::default(), &never).unwrap();
+        assert_eq!(*fetcher.limits.borrow(), vec![Some(5), Some(6)]);
+    }
+
+    #[test]
+    fn curl_is_kept_on_https_and_told_the_limit() {
+        use crate::tts::curl_guard;
+        let https = curl_guard(&url_of(&entry("a.txt", b"alpha")), Some(5));
+        assert_eq!(https, ["--proto", "=https", "--proto-redir", "=https", "--max-filesize", "5"]);
+        // A loopback server in a test speaks http: nothing to restrict there, and the limit still holds.
+        assert_eq!(curl_guard("http://127.0.0.1:9/x", Some(5)), ["--max-filesize", "5"]);
+        assert!(curl_guard("https://example.org/x", None).iter().all(|a| a != "--max-filesize"));
+    }
+
+    #[test]
+    fn a_body_larger_than_the_list_says_is_refused_and_leaves_nothing() {
+        let root = Scratch::new();
+        // The list says five bytes; the server has eleven.
+        let manifest = [entry("levels/a.glb", b"alpha")];
+        let (port, server) = serve(vec![(format!("/nikverse-{}", manifest[0].sha256), b"model bytes".to_vec())], 1);
+        let url = |entry: &ManifestEntry| format!("http://127.0.0.1:{port}/nikverse-{}", entry.sha256);
+        let error = install_into(&root.0, &manifest, &url, &Curl, &Assets::default(), &never).unwrap_err();
+        server.join().unwrap();
+        assert!(!error.is_empty());
+        assert!(!root.0.join("levels/a.glb").exists() && !root.0.join("levels/a.glb.part").exists());
     }
 
     #[test]
@@ -497,20 +546,12 @@ mod tests {
                 match table.iter().find(|(p, _)| *p == path) {
                     Some((_, body)) => {
                         let _ = stream.write_all(
-                            format!("HTTP/1.1 200 OK
-Content-Length: {}
-Connection: close
-
-", body.len()).as_bytes(),
+                            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes(),
                         );
                         let _ = stream.write_all(body);
                     }
                     None => {
-                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found
-Content-Length: 0
-Connection: close
-
-");
+                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                     }
                 }
             }

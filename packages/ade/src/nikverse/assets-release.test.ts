@@ -41,6 +41,33 @@ describe("NikVerse's assets on the release", () => {
     expect(upload).toContain("gh release upload ade-updater")
   })
 
+  test("the app fetches from the very release its updater reads: the address is the updater's endpoint, its file name swapped for the asset's", () => {
+    const conf = JSON.parse(readFileSync(join(root, "packages", "ade", "src-tauri", "tauri.conf.json"), "utf8"))
+    const endpoints: string[] = conf.plugins.updater.endpoints
+    expect(endpoints.length).toBe(1)
+    const endpoint = endpoints[0]
+    expect(endpoint.endsWith("/latest.json")).toBe(true)
+    const base = /pub const BASE_URL: &str = "([^"]+)"/.exec(rust)?.[1]
+    expect(base).toBe(`${endpoint.slice(0, -"latest.json".length)}nikverse-`)
+  })
+
+  test("after the uploads the release is asked what it holds, and every hash of the manifest must be there or the job fails", () => {
+    const upload = step(job("build"), "NikVerse assets")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n")
+    const uploads = upload.indexOf("gh release upload ade-updater")
+    const check = upload.indexOf('LIVE="$(names)"')
+    expect(uploads).toBeGreaterThan(-1)
+    expect(check).toBeGreaterThan(uploads)
+    const after = upload.slice(check)
+    // The same files the manifest lists, each by the name the app asks for.
+    expect(after).toContain(`find "$DIR" -type f -not -path '*/.*'`)
+    expect(after).toMatch(/grep -qx "nikverse-\$HASH"/)
+    expect(after).toMatch(/not on ade-updater[^\n]*\n[^\n]*ABSENT/)
+    expect(after).toMatch(/if \[ "\$ABSENT" != "0" \]; then[^\n]*exit 1; fi/)
+  })
+
   test("they are uploaded by the build, before the release is made public, and a failed upload fails the job", () => {
     const build = job("build")
     const upload = step(build, "NikVerse assets")
