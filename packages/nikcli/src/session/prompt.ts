@@ -1151,7 +1151,7 @@ export namespace SessionPrompt {
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-      const tools = await resolveTools({
+      const { tools, deferred } = await resolveTools({
         agent,
         session,
         model,
@@ -1246,6 +1246,7 @@ export namespace SessionPrompt {
             : []),
         ],
         tools,
+        deferred,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
@@ -2081,7 +2082,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       message: { id: Identifier.ascending("message") } as MessageV2.Assistant,
       partFromToolCall: () => undefined,
     }
-    const resolved = await resolveTools({
+    const { tools: resolved, deferred } = await resolveTools({
       agent,
       session,
       model,
@@ -2117,6 +2118,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       abort: input.abort,
       retries: 2,
       tools,
+      // Same offer as the session's own requests, so this one reads the same
+      // cached prefix.
+      deferred,
       messages: [
         ...rendered.skillMessages.map((content) => ({ role: "user" as const, content })),
         ...MessageV2.toModelMessages(sessionMessages, model, { wrap }),

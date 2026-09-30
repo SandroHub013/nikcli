@@ -7,6 +7,9 @@ import { Provider } from "@/provider/provider"
 import { Config } from "@/config/config"
 import { MCP } from "@/mcp"
 import { ToolRegistry } from "@/tool/registry"
+import { withDeferredIndex } from "@/tool/search_tools"
+import { PermissionNext } from "@/permission/next"
+import { Flag } from "@nikcli-ai/util/flag"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Token } from "@nikcli-ai/util/token"
@@ -25,6 +28,8 @@ export namespace SessionContext {
     detail: z.string().optional(),
     tokens: z.number(),
     enabled: z.boolean(),
+    /** A tool that is off only until the session needs it: `search_tools` or a direct call loads it. */
+    deferred: z.boolean().optional(),
     togglable: z.boolean(),
     toggleKind: z.enum(["mcp", "skill", "instruction", "tool"]).optional(),
     toggleKey: z.string().optional(),
@@ -116,14 +121,16 @@ export namespace SessionContext {
   async function lastTokens(sessionID: string) {
     let last: MessageV2.Assistant | undefined
     let lastModel: { providerID: string; modelID: string } | undefined
+    let lastAgent: string | undefined
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "assistant") {
         const info = item.info as MessageV2.Assistant
         if (info.tokens.output > 0) last = info
       }
       if (item.info.role === "user" && item.info.model) lastModel = item.info.model
+      if (item.info.role === "user" && item.info.agent) lastAgent = item.info.agent
     }
-    return { last, lastModel }
+    return { last, lastModel, lastAgent }
   }
 
   export async function breakdown(sessionID: string): Promise<Breakdown> {
@@ -139,7 +146,7 @@ export namespace SessionContext {
       }),
     )
 
-    const { last, lastModel } = await lastTokens(sessionID)
+    const { last, lastModel, lastAgent } = await lastTokens(sessionID)
 
     const modelRef = last
       ? { providerID: last.providerID, modelID: last.modelID }
@@ -351,22 +358,47 @@ export namespace SessionContext {
       })
     }
 
-    // 6. Built-in tools — one togglable source per tool (schema + description),
-    //    reflecting session.disabledTools.
+    // 6. Built-in tools — one togglable source per tool (schema + description).
+    //    `enabled` is whether the next request carries the tool, decided the
+    //    way `resolveTools` decides it for the agent the session last ran.
     const disabledTools = session.disabledTools ?? {}
     if (model) {
+      const agent = await runAgent(
+        ctx,
+        Effect.gen(function* () {
+          const service = yield* Agent.Service
+          const named = lastAgent ? yield* service.get(lastAgent) : undefined
+          return named ?? (yield* service.get(yield* service.defaultAgent()))
+        }),
+      ).catch(() => undefined)
+      const merged = PermissionNext.merge(agent?.permission ?? [], session.permission ?? [])
+      const ruleset = Flag.autoApprove() ? PermissionNext.autoApprove(merged) : merged
+      const eager = config.tool?.eager ?? []
       const tools = await runRegistry(
         ctx,
         Effect.gen(function* () {
           const registry = yield* ToolRegistry.Service
-          return yield* registry.tools({ providerID: model.providerID, modelID: model.id })
+          return yield* registry.tools({ providerID: model.providerID, modelID: model.id }, agent)
         }),
       ).catch(() => [] as ToolRegistry.Resolved[])
-      for (const tool of tools) {
+      const exposed = tools.map((tool) => ({
+        tool,
+        exposure: ToolRegistry.exposure(tool.id, { disabledTools, ruleset, eager }),
+      }))
+      const deferredIndex = exposed
+        .filter((entry) => entry.exposure === "deferred")
+        .map((entry) => ({ id: entry.tool.id, description: entry.tool.description }))
+      for (const { tool, exposure } of exposed) {
+        // A tool the agent's permissions deny outright is never sent and the
+        // toggle cannot bring it back, so it is not a source of this session's
+        // context. One the user switched off stays listed to switch back on.
+        if (exposure === "hidden" && disabledTools[tool.id] !== true) continue
         let schema: unknown = {}
         try {
           schema = z.toJSONSchema(tool.parameters)
         } catch {}
+        const description =
+          tool.id === "search_tools" ? withDeferredIndex(tool.description, deferredIndex) : tool.description
         const firstLine = (tool.description ?? "").split("\n")[0]?.trim()
         sources.push({
           id: "tool:" + tool.id,
@@ -375,8 +407,9 @@ export namespace SessionContext {
           // `detail` is `optionalKey` on the route: a present `undefined`
           // fails the response encode instead of omitting the field.
           ...(firstLine ? { detail: firstLine.slice(0, 80) } : undefined),
-          tokens: toolTokens(tool.description, schema),
-          enabled: ToolRegistry.enabled(tool.id, disabledTools),
+          tokens: toolTokens(description, schema),
+          enabled: exposure === "active",
+          ...(exposure === "deferred" ? { deferred: true } : undefined),
           togglable: true,
           toggleKind: "tool",
           toggleKey: tool.id,

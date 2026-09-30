@@ -186,6 +186,7 @@ export namespace SessionHttpApi {
     detail: Schema.optionalKey(Schema.String),
     tokens: Schema.Number,
     enabled: Schema.Boolean,
+    deferred: Schema.optionalKey(Schema.Boolean),
     togglable: Schema.Boolean,
     toggleKind: Schema.optionalKey(Schema.Literals(["mcp", "skill", "instruction", "tool"])),
     toggleKey: Schema.optionalKey(Schema.String),
@@ -1136,9 +1137,9 @@ export namespace SessionHttpApi {
           const session = yield* Session.Service
           yield* session.update(params.sessionID, (draft) => {
             const map = { ...draft.disabledTools }
-            // `false`, not a deleted key: an opt-in tool (`ToolRegistry.OPT_IN`)
-            // reads an absent entry as "never asked for" and stays off, so
-            // enabling has to be recorded.
+            // `false`, not a deleted key: a deferred tool reads an absent entry
+            // as "not loaded yet" (`ToolRegistry.exposure`), so enabling has to
+            // be recorded.
             map[key] = !enabled
             draft.disabledTools = map
           })

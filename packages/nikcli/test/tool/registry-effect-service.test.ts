@@ -129,20 +129,69 @@ describe("ToolRegistry.Service", () => {
     expect(ids.length).toBeGreaterThan(1)
   })
 
-  it("keeps opt-in tools out of a session that never asked for them", () => {
-    // `opentui` stays registered — that is what lets `/usage` list it — but it
-    // only reaches the model once the toggle has written an explicit `false`.
-    // An absent entry is "never asked for", not "enabled".
-    expect(ToolRegistry.OPT_IN.has("opentui")).toBe(true)
-    expect(ToolRegistry.enabled("opentui", undefined)).toBe(false)
-    expect(ToolRegistry.enabled("opentui", {})).toBe(false)
-    expect(ToolRegistry.enabled("opentui", { opentui: true })).toBe(false)
-    expect(ToolRegistry.enabled("opentui", { opentui: false })).toBe(true)
+  it("defers every tool outside the core set until the session loads it", () => {
+    // An absent entry is "not loaded yet", an explicit `false` is loaded, and
+    // `true` is the user switching the tool off.
+    expect(ToolRegistry.exposure("opentui", { ruleset: [] })).toBe("deferred")
+    expect(ToolRegistry.exposure("webfetch", { disabledTools: {}, ruleset: [] })).toBe("deferred")
+    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: false }, ruleset: [] })).toBe("active")
+    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: true }, ruleset: [] })).toBe("hidden")
+    // Plugin and custom tools are not in the core set either.
+    expect(ToolRegistry.exposure("live_scores", { ruleset: [] })).toBe("deferred")
 
-    // Every other tool keeps the plain meaning: on unless disabled.
-    expect(ToolRegistry.enabled("bash", undefined)).toBe(true)
-    expect(ToolRegistry.enabled("bash", { bash: false })).toBe(true)
-    expect(ToolRegistry.enabled("bash", { bash: true })).toBe(false)
+    // Core tools keep the plain meaning: on unless switched off.
+    expect(ToolRegistry.exposure("bash", { ruleset: [] })).toBe("active")
+    expect(ToolRegistry.exposure("bash", { disabledTools: { bash: false }, ruleset: [] })).toBe("active")
+    expect(ToolRegistry.exposure("bash", { disabledTools: { bash: true }, ruleset: [] })).toBe("hidden")
+  })
+
+  it("loads configured tools from the first request", () => {
+    expect(ToolRegistry.exposure("webfetch", { ruleset: [], eager: ["webfetch"] })).toBe("active")
+    expect(ToolRegistry.exposure("live_scores", { ruleset: [], eager: ["live_*"] })).toBe("active")
+    expect(ToolRegistry.exposure("webfetch", { ruleset: [], eager: ["*"] })).toBe("active")
+    // Configuring a tool as eager does not override the user switching it off.
+    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: true }, ruleset: [], eager: ["*"] })).toBe(
+      "hidden",
+    )
+  })
+
+  it("defers nothing for an agent with a curated toolset", () => {
+    // `scout`-style: everything not named is denied, so what is left is the
+    // agent's working set.
+    const curated = [
+      { permission: "*", pattern: "*", action: "allow" as const },
+      { permission: "*", pattern: "*", action: "deny" as const },
+      { permission: "webfetch", pattern: "*", action: "allow" as const },
+    ]
+    expect(ToolRegistry.curated(curated)).toBe(true)
+    expect(ToolRegistry.exposure("webfetch", { ruleset: curated })).toBe("active")
+    expect(ToolRegistry.exposure("generate_image", { ruleset: curated })).toBe("hidden")
+
+    // An open agent that denies a few tools is not curated.
+    const open = [
+      { permission: "*", pattern: "*", action: "allow" as const },
+      { permission: "plan_exit", pattern: "*", action: "deny" as const },
+    ]
+    expect(ToolRegistry.curated(open)).toBe(false)
+    expect(ToolRegistry.exposure("webfetch", { ruleset: open })).toBe("deferred")
+  })
+
+  it("names only tools the registry can actually register in the core set", async () => {
+    // A typo here would silently defer a core tool.
+    const directory = await makeProjectDir()
+    const ids = await Effect.runPromise(
+      InstanceScope.with(
+        { directory },
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          return yield* registry.ids()
+        }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
+      ),
+    )
+    // `question` depends on the client and `batch` on config; both are
+    // registered conditionally.
+    const registrable = new Set([...ids, "question", "batch"])
+    expect([...ToolRegistry.CORE].filter((id) => !registrable.has(id))).toEqual([])
   })
 
   it("orders ids by code unit rather than host locale", () => {

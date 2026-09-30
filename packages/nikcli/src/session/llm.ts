@@ -123,6 +123,11 @@ export namespace LLM {
     messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
+    /**
+     * Entries of `tools` the model can call but is not sent the schema of:
+     * deferred tools a session has not loaded yet (`SessionTools.resolveTools`).
+     */
+    deferred?: ReadonlySet<string>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
   }
@@ -614,7 +619,10 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions,
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
+      // Offered to the model. Everything in `tools` stays callable: `invalid`
+      // is where a repaired call lands, and a deferred tool called by name runs
+      // and is loaded for the next step.
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop" && !input.deferred?.has(x)),
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
@@ -851,9 +859,9 @@ export namespace LLM {
   /**
    * Convert an AI SDK Tool map into @nikcli-ai/llm ToolDefinition[].
    */
-  function toLLMToolDefinitions(tools: Record<string, Tool>): ToolDefinition[] {
+  function toLLMToolDefinitions(tools: Record<string, Tool>, deferred?: ReadonlySet<string>): ToolDefinition[] {
     return Object.entries(tools)
-      .filter(([, t]) => !!t.description)
+      .filter(([name, t]) => !!t.description && !deferred?.has(name))
       .map(([name, t]) => ({
         name,
         description: t.description ?? "",
@@ -898,7 +906,7 @@ export namespace LLM {
     const httpOptions = headers && Object.keys(headers).length > 0 ? new HttpOptions({ headers }) : undefined
 
     // Tool definitions
-    const tools = toLLMToolDefinitions(input.tools)
+    const tools = toLLMToolDefinitions(input.tools, input.deferred)
 
     return new LLMRequestClass({
       model: modelRef,

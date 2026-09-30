@@ -1788,8 +1788,9 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       /**
        * Custom tool-file load policy for `{tool,tools}/*.{js,ts}` under
-       * config directories. Distinct from deprecated `tools` (enable/disable
-       * registered tool ids). See `ToolRegistry` + `NIKCLI_ALLOW_PLUGIN_AUTOLOAD`.
+       * config directories, and which registered tools the model gets up
+       * front. Distinct from deprecated `tools` (enable/disable registered
+       * tool ids). See `ToolRegistry` + `NIKCLI_ALLOW_PLUGIN_AUTOLOAD`.
        */
       tool: z
         .object({
@@ -1805,9 +1806,15 @@ export namespace Config {
             .describe(
               "Map of basename/absolute path → sha256 hex. When set, mismatch rejects the file and skips registration.",
             ),
+          eager: z
+            .array(z.string())
+            .optional()
+            .describe(
+              'Tool ids (wildcards allowed) whose schema is sent from the first request, on top of the core tools. Every other built-in and plugin tool is deferred: listed by search_tools and loaded when the model needs it. ["*"] turns deferral off.',
+            ),
         })
         .optional()
-        .describe("Filesystem tool autoload allowlist and integrity pins"),
+        .describe("Custom tool autoload allowlist and integrity pins, and the tools loaded up front"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),

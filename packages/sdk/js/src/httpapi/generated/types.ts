@@ -1971,6 +1971,7 @@ export type SessionContextSource = {
   detail?: string
   tokens: number
   enabled: boolean
+  deferred?: boolean
   togglable: boolean
   toggleKind?: "mcp" | "skill" | "instruction" | "tool"
   toggleKey?: string
@@ -3941,7 +3942,13 @@ export type Config = {
   permission_mode?: PermissionModeConfig | undefined
   auto_mode?: AutoModeConfig | undefined
   tools?: { [x: string]: boolean } | undefined
-  tool?: { allow?: Array<string> | undefined; pin?: { [x: string]: string } | undefined } | undefined
+  tool?:
+    | {
+        allow?: Array<string> | undefined
+        pin?: { [x: string]: string } | undefined
+        eager?: Array<string> | undefined
+      }
+    | undefined
   enterprise?: { url?: string | undefined } | undefined
   compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
   experimental?:
@@ -4190,7 +4197,13 @@ export type MobileConfigInfo = {
   permission_mode?: PermissionModeConfig1 | undefined
   auto_mode?: AutoModeConfig1 | undefined
   tools?: { [x: string]: boolean } | undefined
-  tool?: { allow?: Array<string> | undefined; pin?: { [x: string]: string } | undefined } | undefined
+  tool?:
+    | {
+        allow?: Array<string> | undefined
+        pin?: { [x: string]: string } | undefined
+        eager?: Array<string> | undefined
+      }
+    | undefined
   enterprise?: { url?: string | undefined } | undefined
   compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
   experimental?:
@@ -6912,6 +6925,7 @@ export type ConfigUpdateInput = {
       | {
           readonly allow?: ReadonlyArray<string> | undefined
           readonly pin?: { readonly [x: string]: string } | undefined
+          readonly eager?: ReadonlyArray<string> | undefined
         }
       | undefined
     readonly enterprise?: { readonly url?: string | undefined } | undefined
