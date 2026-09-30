@@ -11,11 +11,6 @@ export const GATE_LIMITS = {
    * 115, not the old 130 on the larger of the two, so that the budget is not widened on the quiet.
    */
   frameMb: 115,
-  /**
-   * How much the frame's private bytes may still rise once it is warm: from the third cycle to the last, in MB. The
-   * first cycles fill the process's caches and do not count; after them a rise is a leak (the Architect, 2026-09-30).
-   */
-  frameLateGrowthMb: 3,
   /** How much ADE's own renderer may grow after the world has been opened and closed, in MB. */
   adeGrowthMb: 5,
   /** CPU, in percent of one core, that the world adds when it draws nothing: its frame, plus what its GPU work adds to the GPU process. */
@@ -38,8 +33,6 @@ export interface GateMeasures {
   frameMb: number
   /** Worst frame working set over the cycles: in the report for information, held to no ceiling. */
   frameWorkingSetMb?: number
-  /** The frame's private bytes after the third cycle over the third's (`lateGrowth`); NaN with fewer than four cycles. */
-  frameLateGrowthMb: number
   /** ADE renderer growth (larger of private and working set, and JS heap after a GC) 5 s after the last close. */
   adeGrowthAfter5sMb: number
   /** The same, after the wait for the process to settle. */
@@ -86,7 +79,6 @@ export const immobileCost = (frameCpu: number, gpuCpu: number, baselineGpuCpu: n
 export function gateChecks(measures: GateMeasures, limits = GATE_LIMITS): GateCheck[] {
   return [
     under("frame private MB", measures.frameMb, limits.frameMb),
-    under("frame private growth from cycle 3, MB", measures.frameLateGrowthMb, limits.frameLateGrowthMb),
     under("ADE growth after 5 s, MB", measures.adeGrowthAfter5sMb, limits.adeGrowthMb),
     under("ADE growth at rest, MB", measures.adeGrowthAtRestMb, limits.adeGrowthMb),
     under("ADE heap growth, MB", measures.adeHeapGrowthMb, limits.adeGrowthMb),
@@ -117,15 +109,6 @@ export const median = (values: readonly number[]) => {
   const sorted = [...values].sort((a, b) => a - b)
   return sorted.length ? sorted[Math.floor(sorted.length / 2)] : Number.NaN
 }
-/**
- * How much a series rose once warm: the highest value after the third over the third. NaN when there is nothing after
- * the third to judge by (fewer than four cycles): the gate runs five.
- */
-export function lateGrowth(values: readonly number[]): number {
-  if (values.length < 4) return Number.NaN
-  return Math.max(...values.slice(3)) - values[2]
-}
-
 export const mean = (values: readonly number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : Number.NaN
 

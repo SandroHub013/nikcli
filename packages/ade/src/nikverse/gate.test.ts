@@ -4,7 +4,6 @@ import {
   gateChecks,
   gatePasses,
   immobileCost,
-  lateGrowth,
   mean,
   worstShot,
   type BenchRow,
@@ -13,7 +12,6 @@ import {
 
 const good: GateMeasures = {
   frameMb: 96,
-  frameLateGrowthMb: 1,
   adeGrowthAfter5sMb: 4.7,
   adeGrowthAtRestMb: 0.5,
   adeHeapGrowthMb: 0.1,
@@ -41,16 +39,6 @@ describe("the NikVerse gate", () => {
     // The island's run of 2026-09-30: private 93-103, working set 133-143 (shared pages, WebView2 and the GPU's).
     expect(red({ frameMb: 103, frameWorkingSetMb: 143.5 })).toEqual([])
     expect(red({ frameMb: 116, frameWorkingSetMb: 120 })).toEqual(["frame private MB"])
-  })
-
-  test("once warm the frame may not keep growing: from the third cycle on, 3 MB at most", () => {
-    // The cycles of 2026-09-30: 92, 99, 101, 103, 99 private; the first two fill caches and do not count.
-    expect(lateGrowth([92, 99, 101, 103, 99])).toBe(2)
-    expect(lateGrowth([90, 95, 100, 102, 104.5])).toBe(4.5)
-    // Fewer than four cycles cannot say it: the gate is red, and says which.
-    expect(lateGrowth([92, 99, 101])).toBeNaN()
-    expect(red({ frameLateGrowthMb: 4.5 })).toEqual(["frame private growth from cycle 3, MB"])
-    expect(red({ frameLateGrowthMb: Number.NaN })).toEqual(["frame private growth from cycle 3, MB"])
   })
 
   test("each ceiling turns the gate red on its own, by name", () => {

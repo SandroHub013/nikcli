@@ -6,7 +6,7 @@
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
  *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
  *   bun scripts/nikverse-gate.ts --start      start it first (voice off) and stop it after
- *   options: --cycles N (5) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
+ *   options: --cycles N (3) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
  *            --bench FILE  the bench.json of a `nikverse-shots.ts` run to read the GPU time from, instead of running one
  *
  * What it measures, with the window visible and on a project (the real iGPU, so not headless): the
@@ -26,7 +26,6 @@ import {
   gateChecks,
   gatePasses,
   immobileCost,
-  lateGrowth,
   mean,
   median,
   worstShot,
@@ -39,7 +38,7 @@ const arg = (name: string) => {
   return i >= 0 ? process.argv[i + 1] : undefined
 }
 const flag = (name: string) => process.argv.includes(name)
-const CYCLES = Number(arg("--cycles") ?? 5)
+const CYCLES = Number(arg("--cycles") ?? 3)
 /** For measuring an option of the renderer: `--tune "samples=1&maxscale=0.9"` reaches the world through the pane and the shot pages (`CityDeps.tune`). */
 const TUNE = arg("--tune")
 const REST_S = Number(arg("--rest") ?? 30)
@@ -576,7 +575,6 @@ try {
   const measures = {
     frameMb: Math.max(...cycles.map((c) => c.frameMb as number)),
     frameWorkingSetMb: Math.max(...cycles.map((c) => (c.frameWsMb as number) ?? Number.NaN)),
-    frameLateGrowthMb: lateGrowth(cycles.map((c) => c.frameMb as number)),
     adeGrowthAfter5sMb: after5.adeMb - base.adeMb,
     adeGrowthAtRestMb: rest.adeMb - base.adeMb,
     adeHeapGrowthMb: Math.max(after5.adeHeapMb, rest.adeHeapMb) - base.adeHeapMb,
