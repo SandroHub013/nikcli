@@ -1,12 +1,12 @@
 /**
  * The live gate for NikVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
- * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core over what
- * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory +250 MB). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
+ * fails above the ceilings in `src/nikverse/gate.ts` (frame private 115 MB, ADE +5 MB, nothing drawn 1 % of a core over what
+ * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory peak 460 MB at Media). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
  *
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
  *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
  *   bun scripts/nikverse-gate.ts --start      start it first (voice off) and stop it after
- *   options: --cycles N (3) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
+ *   options: --cycles N (5) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
  *            --bench FILE  the bench.json of a `nikverse-shots.ts` run to read the GPU time from, instead of running one
  *
  * What it measures, with the window visible and on a project (the real iGPU, so not headless): the
@@ -24,7 +24,9 @@ import { basename, join } from "node:path"
 import { profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
 import {
   gateChecks,
+  framePrivate,
   gatePasses,
+  gpuMemory,
   immobileCost,
   mean,
   median,
@@ -38,7 +40,7 @@ const arg = (name: string) => {
   return i >= 0 ? process.argv[i + 1] : undefined
 }
 const flag = (name: string) => process.argv.includes(name)
-const CYCLES = Number(arg("--cycles") ?? 3)
+const CYCLES = Number(arg("--cycles") ?? 5)
 /** For measuring an option of the renderer: `--tune "samples=1&maxscale=0.9"` reaches the world through the pane and the shot pages (`CityDeps.tune`). */
 const TUNE = arg("--tune")
 const REST_S = Number(arg("--rest") ?? 30)
@@ -533,6 +535,19 @@ try {
   log("CPU del processo GPU a mondo chiuso, dopo:", baselineGpuRunsAfter.map((v) => v.toFixed(2)).join(", "), "%")
   const baselineGpuCpu = mean([...baselineGpuRuns, ...baselineGpuRunsAfter])
 
+  // The GPU process's memory with the world closed, sampled four times (before, right after the cycles, and twice more here): the base of the
+  // growth, which is information. The verdict is the absolute peak of the cycles (`gpuMemory`): ADE's own GPU base varied 168-260 MB between runs.
+  const gpuBaseSamples: number[] = [base.gpuMb, rest.gpuMb]
+  for (let i = 0; i < 2; i++) {
+    await sleep(3000)
+    gpuBaseSamples.push(big(memory([gpuPid])[gpuPid]))
+  }
+  const gpuMem = gpuMemory(
+    cycles.map((c) => c.gpuMb as number),
+    gpuBaseSamples,
+  )
+  log(`memoria GPU: picco ${gpuMem.peakMb} MB (limite ${GATE_LIMITS.gpuPeakMb}), base mediana ${gpuMem.baseMb} MB su ${gpuBaseSamples.join("/")}, crescita ${gpuMem.growthMb} MB (solo informazione)`)
+
   // The GPU time the ceiling is held to: the worst of the eight shots of the level the world ran at, not the view a player starts in (a
   // close-up interior took 16 ms while that view took 3). The shots run in a headless browser on the same GPU, with ADE's world shut.
   const benchLevel = String(level ?? "media")
@@ -570,9 +585,14 @@ try {
     `peggiore delle 8 a ${benchLevel}: p95 ${worst.p95.toFixed(2)} ms nell'inquadratura ${worst.n} ${worst.name ?? ""}, scala ${worst.scale}`,
   )
 
+  // The frame is judged on its private memory; the working set (which counts shared pages) goes in the report only.
+  const framePriv = framePrivate(cycles.map((c) => c.framePrivMb as number))
+  log(`frame privata: picco ${framePriv.peakMb.toFixed(1)} MB (limite ${GATE_LIMITS.frameMb}), crescita cicli 3-5 ${framePriv.growthAfterWarmupMb.toFixed(1)} MB; working set (informazione): ${Math.max(...cycles.map((c) => c.frameWsMb as number)).toFixed(1)} MB`)
+
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {
-    frameMb: Math.max(...cycles.map((c) => c.frameMb as number)),
+    frameMb: framePriv.peakMb,
+    frameGrowthAfterWarmupMb: framePriv.growthAfterWarmupMb,
     adeGrowthAfter5sMb: after5.adeMb - base.adeMb,
     adeGrowthAtRestMb: rest.adeMb - base.adeMb,
     adeHeapGrowthMb: Math.max(after5.adeHeapMb, rest.adeHeapMb) - base.adeHeapMb,
@@ -583,7 +603,7 @@ try {
     idleAnimationFramesPerSecond:
       "animationFramesPerSecond" in idleTrace ? (idleTrace.animationFramesPerSecond as number) : Number.NaN,
     gpuFrameP95Ms: worst.p95,
-    gpuMemoryGrowthMb: Math.max(...cycles.map((c) => c.gpuMb as number)) - base.gpuMb,
+    gpuPeakMb: gpuMem.peakMb,
   }
   const checks = gateChecks(measures)
   // No browser of the harness survives its script: the tests that start the stand-in and the real Edge, kept out of test:unit.
@@ -601,6 +621,8 @@ try {
     measures,
     info: {
       base,
+      gpuMemory: { ...gpuMem, baseSamples: gpuBaseSamples },
+      frameWorkingSetMaxMb: Math.max(...cycles.map((c) => c.frameWsMb as number)),
       cycles,
       after5,
       rest,
