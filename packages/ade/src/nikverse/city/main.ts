@@ -180,7 +180,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined)
-    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), tune: deps.tune, cast: cast !== undefined, kit: kit !== undefined })
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), tune: { ...deps.tune, maxScale: deps.tune?.maxScale ?? level.maxScale }, cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -211,7 +211,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   // Dynamic resolution: where the level asks for it and the GPU has a clock, the frame's pixels follow its GPU time.
   const gpuClock = level.dynamicResolution && backend === "webgpu" ? liveGpuTimer(renderer) : undefined
-  const maxScale = deps.tune?.maxScale ?? 1
+  const maxScale = deps.tune?.maxScale ?? level.maxScale
   const samples = deps.tune?.samples ?? 4
   const governor = gpuClock ? createGovernor(maxScale, undefined, maxScale) : undefined
   let renderScale = maxScale

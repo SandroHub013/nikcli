@@ -3,6 +3,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { LEVELS_DIR } from "./test-cast"
 import { BODIES, glbUrl } from "./rig"
+import { SCALE_MAX, SCALE_MIN } from "./resolution"
 import { LEVELS, LEVEL_IDS, MAX_FPS, isDedicatedGpu, isLevelId, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
 
 describe("the levels", () => {
@@ -32,8 +33,16 @@ describe("the levels", () => {
     expect(LEVELS.alta.fps).toBe(MAX_FPS)
   })
 
+  test("Media's resolution scale stops at 0.9 (MSAA 4x stays); the levels that do not move it draw at 1", () => {
+    expect(LEVELS.media.maxScale).toBe(0.9)
+    expect(LEVELS.media.maxScale).toBeGreaterThanOrEqual(SCALE_MIN)
+    expect(LEVELS.bassa.maxScale).toBe(1)
+    expect(LEVELS.alta.maxScale).toBe(1)
+    for (const level of Object.values(LEVELS)) expect(level.maxScale).toBeLessThanOrEqual(SCALE_MAX)
+  })
+
   test("no level turns on what the budget forbids: it is a fact of the type, so a level with a shadow or a bloom would not compile", () => {
-    for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["dynamicResolution", "fps", "id", "label", "pixelRatio", "renderer"])
+    for (const level of Object.values(LEVELS)) expect(Object.keys(level).sort()).toEqual(["dynamicResolution", "fps", "id", "label", "maxScale", "pixelRatio", "renderer"])
   })
 
   test("the moving mode's interval is the level's frame rate", () => {

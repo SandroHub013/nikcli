@@ -29,15 +29,20 @@ export interface Level {
    * that give way when a close-up costs too much.
    */
   dynamicResolution: boolean
+  /**
+   * The most the frame's resolution scale may be (`resolution.ts` starts there and never goes above it). Media stops at 0.9: with the four
+   * samples on, the last tenth of the pixels costs ~30 MB of GPU memory and the worst view its p95, and the edges stay smooth.
+   */
+  maxScale: number
 }
 
 /** The most frames a second the city draws at any level: a 144 Hz display does not make it run faster (and burn more). */
 export const MAX_FPS = 60
 
 export const LEVELS: Readonly<Record<LevelId, Level>> = {
-  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30, dynamicResolution: false },
-  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS, dynamicResolution: true },
-  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS, dynamicResolution: false },
+  bassa: { id: "bassa", label: "Bassa", renderer: "classic", pixelRatio: 1, fps: 30, dynamicResolution: false, maxScale: 1 },
+  media: { id: "media", label: "Media", renderer: "webgpu", pixelRatio: 1.5, fps: MAX_FPS, dynamicResolution: true, maxScale: 0.9 },
+  alta: { id: "alta", label: "Alta", renderer: "webgpu", pixelRatio: 2, fps: MAX_FPS, dynamicResolution: false, maxScale: 1 },
 }
 
 export const isLevelId = (value: unknown): value is LevelId => LEVEL_IDS.includes(value as LevelId)
