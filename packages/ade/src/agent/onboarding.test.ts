@@ -123,13 +123,13 @@ describe("voice onboarding prerequisites", () => {
   })
 })
 
-describe("the OpenRouter key is a prerequisite only for the transcription that uses it", () => {
+describe("the OpenRouter key is a prerequisite of the transcription", () => {
   afterEach(() => {
     setLocalePreference("it")
   })
 
-  test("local transcription needs no key; the OpenRouter one does", () => {
-    expect(transcriptionReady({ backend: "parakeet" })).toBe(true)
+  test("the transcription needs the key, whatever backend an old profile names", () => {
+    expect(transcriptionReady({ backend: "parakeet" })).toBe(false)
     expect(transcriptionReady({ backend: "openrouter" })).toBe(false)
     expect(transcriptionReady({ backend: "openrouter", openRouterApiKey: "  " })).toBe(false)
     expect(transcriptionReady({ backend: "openrouter", openRouterApiKey: "sk-x" })).toBe(true)

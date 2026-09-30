@@ -22,8 +22,6 @@ export interface OrbRimInput {
   running: boolean
   /** The engine's last failure, if it has one that has not been superseded. */
   errorKind?: VoiceErrorKind
-  /** Whether the local model is still being fetched and nothing can be heard. */
-  preparing: boolean
 }
 
 /**
@@ -35,15 +33,10 @@ export interface OrbRimInput {
  * contradicting itself. Of the failures, a microphone that has not been
  * granted is called out separately because it is the only one the user fixes
  * from a browser prompt rather than from settings.
- *
- * The warm-up gets no ring at all. It is neither listening nor broken, and
- * inventing a fourth colour for "wait" would spend the vocabulary on the one
- * state the pill is already spelling out in words and a percentage.
  */
 export function orbRim(input: OrbRimInput): OrbRim | undefined {
   if (input.errorKind === "mic-auth") return "mic-auth"
   if (input.errorKind === "failed") return "failed"
-  if (input.preparing) return undefined
   return input.running ? "listening" : undefined
 }
 
@@ -147,32 +140,6 @@ export function agentHudState(input: HudInput): HudState {
         return { tone: "done", label: t("vui.hud.answer"), line: answer, quoted: false }
       }
       return { tone: "listening", label: t("vui.hud.hearing"), line: t("vui.hud.goAhead"), quoted: false }
-  }
-}
-
-export interface HudPreparation {
-  /** How far the download has got, when the server sent a total to divide by. */
-  percent?: number
-}
-
-/**
- * What the widget says before either engine is able to hear anything.
- *
- * The local model is fetched on first use, and that is hundreds of megabytes:
- * long enough that a widget which only appears once the microphone is live
- * leaves the user talking into a window that shows nothing at all. Reporting
- * the wait — with its percentage when there is one — is the difference between
- * "still coming" and "broken", and those are the two readings of an empty
- * screen.
- */
-export function preparingHudState(progress: HudPreparation): HudState {
-  const known = typeof progress.percent === "number" && Number.isFinite(progress.percent)
-  const percent = known ? Math.max(0, Math.min(100, Math.round(progress.percent!))) : undefined
-  return {
-    tone: "working",
-    label: t("vui.hud.preparing"),
-    line: percent === undefined ? t("vui.hud.model") : t("vui.hud.modelPercent", percent),
-    quoted: false,
   }
 }
 

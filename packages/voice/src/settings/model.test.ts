@@ -30,7 +30,6 @@ describe("settings/model - normalizeSettings", () => {
       expect(res.agentChord).toBe("mod+shift+k")
       expect(res.transcriptionChord).toBe("mod+shift+j")
       expect(res.backend).toBe("openrouter")
-      expect(res.parakeetBackend).toBe("auto")
 
       expect(res.corrections.length).toBeGreaterThan(0)
       // Allows destructuring { settings, corrections }
@@ -45,7 +44,6 @@ describe("settings/model - normalizeSettings", () => {
       activation: "always-on",
       transcriptionSend: "later",
       backend: "quantum-asr",
-      parakeetBackend: "cuda",
       language: "",
       wakeWord: "   ",
       agentChord: "ctrl+shift", // Missing principal key!
@@ -58,7 +56,6 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.activation).toBe("wake-word")
     expect(res.transcriptionSend).toBe("manual")
     expect(res.backend).toBe("openrouter")
-    expect(res.parakeetBackend).toBe("auto")
     expect(res.language).toBe("it")
     expect(res.wakeWord).toBe("nik")
     expect(res.agentChord).toBe("mod+shift+k")
@@ -95,12 +92,43 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.language).toBe("en")
     // The phrase is fixed: a stored one is replaced.
     expect(res.wakeWord).toBe("nik")
-    // A stored choice survives migration; only a missing or invalid one falls
-    // back to the default, which is now the cloud engine.
-    expect(res.backend).toBe("parakeet")
-    expect(res.parakeetBackend).toBe("webgpu")
+    // The local engine is gone: a profile that chose it moves to the cloud one, silently (not a correction),
+    // and its acceleration preference is dropped with it.
+    expect(res.backend).toBe("openrouter")
+    expect("parakeetBackend" in res).toBe(false)
     // Moving to a newer version is not reported as a repair.
     expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(false)
+  })
+
+  test("a profile of the current version that names the removed local engine moves to the cloud one, and is told once", () => {
+    const res = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, backend: "parakeet", parakeetBackend: "wasm" } as never)
+    expect(res.backend).toBe("openrouter")
+    // Not a repair: the strip of corrections stays empty; the move has its own marker.
+    expect(res.corrections).toEqual([])
+    expect(res.migrations).toEqual(["parakeet-removed"])
+    expect("parakeetBackend" in res).toBe(false)
+  })
+
+  test("a profile on the removed local engine that listened on its own does not listen on its own in the cloud", () => {
+    // It heard every phrase in the room for free; on the paid transcription it would send every one of them
+    // (a key is there) before the user has read a word.
+    const res = normalizeSettings({
+      ...DEFAULT_VOICE_SETTINGS,
+      backend: "parakeet",
+      alwaysListen: true,
+      activation: "wake-word",
+      openRouterApiKey: "sk-or-x",
+    } as never)
+    expect(res.backend).toBe("openrouter")
+    expect(res.alwaysListen).toBe(false)
+    expect(res.settings.alwaysListen).toBe(false)
+    expect(res.migrations).toEqual(["parakeet-removed", "parakeet-listening-off"])
+  })
+
+  test("listening on its own is left alone for whoever was already on the cloud engine", () => {
+    const res = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, backend: "openrouter", alwaysListen: true } as never)
+    expect(res.alwaysListen).toBe(true)
+    expect(res.migrations).toEqual([])
   })
 
   test("a profile written before the name was asked for is moved to it, once and only from toggle", () => {
@@ -143,7 +171,6 @@ describe("settings/model - normalizeSettings", () => {
       backend: "openrouter",
       agentChord: DEFAULT_VOICE_SETTINGS.agentChord,
       transcriptionChord: DEFAULT_VOICE_SETTINGS.transcriptionChord,
-      parakeetBackend: DEFAULT_VOICE_SETTINGS.parakeetBackend,
     }
     const after = normalizeSettings(saved)
     expect(after.alwaysListen).toBe(false)
@@ -213,7 +240,6 @@ describe("settings/model - normalizeSettings", () => {
       transcriptionChord: "ctrl+shift+t",
       backend: "openrouter" as const,
       openRouterApiKey: "sk-or-test-key",
-      parakeetBackend: "wasm" as const,
     }
 
     const res = normalizeSettings(valid)
