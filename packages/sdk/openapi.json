@@ -21569,6 +21569,36 @@
             "required": false
           },
           {
+            "name": "afterAggregate",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "afterID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
             "name": "directory",
             "in": "query",
             "required": false,
@@ -21697,6 +21727,21 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "readiness",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           },
           {
             "name": "token",
@@ -61134,6 +61179,29 @@
           },
           "hasMore": {
             "type": "boolean"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "aggregate": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["seq", "aggregate", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["events", "hasMore"],

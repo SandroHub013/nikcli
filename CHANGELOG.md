@@ -3,6 +3,36 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.414.0 (September 2026)
+
+## Core
+
+- Strip the trailing space Prettier still flags in lifecycle-counters test (@nikomatt69)
+- Remove trailing whitespace in lifecycle-counters test file (@nikomatt69)
+- Authenticate the changelog release lookup; treat Windows EPERM as lock contention (@nikomatt69)
+- V2 plugin command surface; migrate internal:browser to v2 (EOT-14) (@nikomatt69)
+- Interrupt an instance scope from inside its ALS context; pin B31 by behaviour (@nikomatt69)
+- Pin the client event batch cap and correct EOT-04's stale 'uncapped' note (@nikomatt69)
+- Pin the exit-code seam, not just the lookup (@nikomatt69)
+- Unblock plugin storage eviction regression test (@nikomatt69)
+- Enhance performance baseline validation and reporting (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(perf): enhance performance baseline validation and reporting
+  - test(tui): unblock plugin storage eviction regression test
+  - test(cli): pin the exit-code seam, not just the lookup
+  - docs(specs): record headless prompt fix in EOT-18 and the read/write finding in EOT-19
+  - test(tui): pin the client event batch cap and correct EOT-04's stale 'uncapped' note
+  - fix(effect): interrupt an instance scope from inside its ALS context; pin B31 by behaviour
+  - docs(specs): EOT-14 is blocked on a v2 command surface, not on plugin order
+  - docs(specs): ledger for 2026-09-30 — what landed and what each open item is waiting for
+  - feat(tui): v2 plugin command surface; migrate internal:browser to v2 (EOT-14)
+  - fix(ci): authenticate the changelog release lookup; treat Windows EPERM as lock contention
+  - fix(test): remove trailing whitespace in lifecycle-counters test file
+  - fix(ci): strip the trailing space Prettier still flags in lifecycle-counters test
+
 ## v1.406.0 (September 2026)
 
 ## Core
