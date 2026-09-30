@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import {
   GATE_LIMITS,
+  GPU_BASE_MIN_SAMPLES,
   gateChecks,
   gatePasses,
+  framePrivate,
+  gpuMemory,
   immobileCost,
   mean,
   worstShot,
@@ -12,6 +15,7 @@ import {
 
 const good: GateMeasures = {
   frameMb: 96,
+  frameGrowthAfterWarmupMb: 1,
   adeGrowthAfter5sMb: 4.7,
   adeGrowthAtRestMb: 0.5,
   adeHeapGrowthMb: 0.1,
@@ -21,7 +25,7 @@ const good: GateMeasures = {
   movingFps: 60,
   idleAnimationFramesPerSecond: 0,
   gpuFrameP95Ms: 9,
-  gpuMemoryGrowthMb: 160,
+  gpuPeakMb: 430,
 }
 
 const red = (change: Partial<GateMeasures>) =>
@@ -36,6 +40,7 @@ describe("the NikVerse gate", () => {
 
   test("each ceiling turns the gate red on its own, by name", () => {
     expect(red({ frameMb: GATE_LIMITS.frameMb + 1 })).toEqual(["frame MB"])
+    expect(red({ frameGrowthAfterWarmupMb: GATE_LIMITS.frameGrowthAfterWarmupMb + 0.5 })).toEqual(["frame growth from cycle 3 to 5, MB"])
     expect(red({ adeGrowthAfter5sMb: 5.2 })).toEqual(["ADE growth after 5 s, MB"])
     expect(red({ adeGrowthAtRestMb: 5.2 })).toEqual(["ADE growth at rest, MB"])
     expect(red({ adeHeapGrowthMb: 6 })).toEqual(["ADE heap growth, MB"])
@@ -46,13 +51,16 @@ describe("the NikVerse gate", () => {
     expect(red({ gpuFrameP95Ms: GATE_LIMITS.gpuFrameP95Ms + 0.5 })).toEqual([
       "GPU frame time p95, worst of the 8 shots, ms",
     ])
-    expect(red({ gpuMemoryGrowthMb: GATE_LIMITS.gpuMemoryGrowthMb + 1 })).toEqual(["GPU memory growth, MB"])
+    expect(red({ gpuPeakMb: GATE_LIMITS.gpuPeakMb + 1 })).toEqual(["GPU memory peak, MB"])
   })
 
-  test("the ceilings themselves are the plan's: GPU memory 250 MB, a frame in 15 ms at the 95th percentile", () => {
-    expect(GATE_LIMITS.gpuMemoryGrowthMb).toBe(250)
+  test("the ceilings themselves are the plan's: GPU memory peak 460 MB at Media, a frame in 15 ms at the 95th percentile", () => {
+    expect(GATE_LIMITS.gpuPeakMb).toBe(460)
     expect(GATE_LIMITS.gpuFrameP95Ms).toBe(15)
-    expect(red({ gpuMemoryGrowthMb: 250 })).toEqual([])
+    expect(GATE_LIMITS.frameMb).toBe(115)
+    expect(GATE_LIMITS.frameGrowthAfterWarmupMb).toBe(3)
+    expect(red({ frameMb: 115, frameGrowthAfterWarmupMb: 3 })).toEqual([])
+    expect(red({ gpuPeakMb: 460 })).toEqual([])
     expect(red({ gpuFrameP95Ms: 15 })).toEqual([])
   })
 
@@ -61,7 +69,7 @@ describe("the NikVerse gate", () => {
     expect(gatePasses(gateChecks({ ...good, immobileFrameCpuPercent: mean([]) }))).toBe(false)
     expect(red({ gpuFrameP95Ms: Number.NaN })).toEqual(["GPU frame time p95, worst of the 8 shots, ms"])
     expect(red({ idleAnimationFramesPerSecond: Number.NaN })).toEqual(["animation frames a second while immobile"])
-    expect(red({ gpuMemoryGrowthMb: Number.NaN })).toEqual(["GPU memory growth, MB"])
+    expect(red({ gpuPeakMb: Number.NaN })).toEqual(["GPU memory peak, MB"])
     // Without a baseline the GPU's share cannot be told from ADE's: not a pass either.
     expect(red({ baselineGpuCpuPercent: Number.NaN }).sort()).toEqual([
       "GPU baseline with the world closed (valid up to 5), %",
@@ -138,5 +146,61 @@ describe("the worst of the eight shots", () => {
   test("only the rows of the level asked for count", () => {
     const rows = [...eight([3, 3, 3, 3, 3, 3, 3, 3]), { level: "bassa", n: 1, gpu: { p95: 40 } }]
     expect(worstShot(rows, "media").p95).toBe(3)
+  })
+})
+
+describe("the GPU memory the gate reads", () => {
+  // The five cycles measured at Media with the scale ceiling at 0.9 (gpu-opzioni, c) and the three bases that run took.
+  const cycles = [438, 423, 424, 448, 428]
+
+  test("the verdict is the highest of the cycles, whatever the base was", () => {
+    expect(gpuMemory(cycles, [168, 233, 260]).peakMb).toBe(448)
+    expect(gpuMemory(cycles, [400, 401, 402]).peakMb).toBe(448)
+    expect(red({ gpuPeakMb: gpuMemory(cycles, [168]).peakMb })).toEqual([])
+    expect(red({ gpuPeakMb: gpuMemory([...cycles, 481], []).peakMb })).toEqual(["GPU memory peak, MB"])
+  })
+
+  test("the growth is information only, over the median of at least three bases", () => {
+    const m = gpuMemory(cycles, [168, 233, 260])
+    expect(m.baseMb).toBe(233)
+    expect(m.growthMb).toBe(448 - 233)
+    expect(GPU_BASE_MIN_SAMPLES).toBe(3)
+    // One outlier does not move the base the way a single sample would.
+    expect(gpuMemory(cycles, [200, 205, 500]).baseMb).toBe(205)
+  })
+
+  test("fewer than three bases give no growth (NaN), and the peak still stands; a NaN cycle is no peak", () => {
+    const two = gpuMemory(cycles, [168, 233])
+    expect(Number.isNaN(two.baseMb)).toBe(true)
+    expect(Number.isNaN(two.growthMb)).toBe(true)
+    expect(two.peakMb).toBe(448)
+    expect(Number.isNaN(gpuMemory([], [1, 2, 3]).peakMb)).toBe(true)
+    expect(Number.isNaN(gpuMemory([430, Number.NaN], [1, 2, 3]).peakMb)).toBe(true)
+    expect(gpuMemory(cycles, [168, Number.NaN, 233, 260]).baseMb).toBe(233)
+  })
+})
+
+describe("the frame's private memory the gate reads", () => {
+  // Private memory of the frame by cycle in Dario's tappa 4 (93-103 MB); the working set of the same runs was 141-143.5.
+  const priv = [93, 98, 101, 103, 102]
+
+  test("the verdict is the highest private memory of the cycles", () => {
+    expect(framePrivate(priv).peakMb).toBe(103)
+    expect(red({ frameMb: framePrivate(priv).peakMb })).toEqual([])
+    expect(red({ frameMb: framePrivate([...priv, 118]).peakMb })).toEqual(["frame MB"])
+  })
+
+  test("the growth is the fifth cycle over the third: warming up is not a leak, a rise is", () => {
+    expect(framePrivate(priv).growthAfterWarmupMb).toBe(1)
+    expect(framePrivate([80, 95, 96, 96, 96]).growthAfterWarmupMb).toBe(0)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94, 97, 99]).growthAfterWarmupMb })).toEqual(["frame growth from cycle 3 to 5, MB"])
+  })
+
+  test("fewer than five cycles, or a cycle without a number, give no growth (red) rather than a pass", () => {
+    expect(Number.isNaN(framePrivate([90, 92, 94]).growthAfterWarmupMb)).toBe(true)
+    expect(framePrivate([90, 92, 94]).peakMb).toBe(94)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94]).growthAfterWarmupMb })).toEqual(["frame growth from cycle 3 to 5, MB"])
+    expect(Number.isNaN(framePrivate([90, Number.NaN, 94, 95, 96]).peakMb)).toBe(true)
+    expect(Number.isNaN(framePrivate([]).peakMb)).toBe(true)
   })
 })
