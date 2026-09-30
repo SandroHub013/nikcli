@@ -21,7 +21,7 @@
       flex-direction: column;
       width: 100%;
       height: 100%;
-      border-radius: var(--radius-lg);
+      border-radius: 22px;
       background: var(--surface-raised-stronger-non-alpha);
       box-shadow:
         0 15px 45px 0 rgba(19, 16, 16, 0.35),
@@ -39,7 +39,7 @@
         justify-content: space-between;
         gap: 12px;
         padding: 10px 8px 10px 16px;
-        border-bottom: 1px solid var(--border-weaker-base);
+        border-bottom: var(--hairline, 1px) solid var(--border-weaker-base);
         flex-shrink: 0;
 
         [data-slot="artifact-preview-heading"] {

@@ -175,10 +175,10 @@
 }
 
 [data-component="dialog"][data-transition] [data-slot="dialog-content"] {
-  animation: contentHide 100ms ease-in forwards;
+  animation: contentHide 120ms var(--ease-out-strong) forwards;
 
   &[data-expanded] {
-    animation: contentShow 150ms ease-out;
+    animation: contentShow 200ms var(--ease-out-strong);
   }
 }
 

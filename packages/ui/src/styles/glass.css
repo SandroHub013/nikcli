@@ -1,0 +1,509 @@
+/*
+ * Liquid Glass material (iOS 27 language), shared by app + desktop.
+ *
+ * Layers, back to front: blurred backdrop -> tinted fill -> specular sheen ->
+ * rim light (inset) -> soft contact shadow. Refraction (SVG displacement) is
+ * deliberately NOT used on panels: it is expensive and Chromium-only for
+ * backdrop use, so glass here is reserved for small/floating surfaces.
+ *
+ * Every rule degrades to the previous opaque surface when transparency is
+ * reduced or backdrop-filter is unavailable.
+ */
+
+:root {
+  /* Motion — strong ease-out for entrances, iOS drawer curve for movement */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-press: 160ms;
+  --duration-popover: 180ms;
+  --duration-modal: 240ms;
+
+  /* Squircle-ish radii (CSS has no continuous corners; run slightly larger) */
+  --glass-radius-sm: 10px;
+  --glass-radius-md: 14px;
+  --glass-radius-lg: 18px;
+  --glass-radius-xl: 26px;
+
+  /* Hairlines: a true half-pixel on retina, 1px elsewhere */
+  --hairline: 1px;
+
+  --glass-blur: 28px;
+  --glass-saturate: 180%;
+
+  /*
+   * The fill follows the active theme: it is the theme's own raised surface, thinned out.
+   * That keeps glass cohesive in all 199 themes instead of a fixed white/grey sheet.
+   */
+  --glass-fill: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 56%, transparent);
+  --glass-fill-strong: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 76%, transparent);
+  --glass-fill-tint: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 34%, transparent);
+  --glass-fill-dark: light-dark(rgb(28 28 30 / 0.74), rgb(58 58 62 / 0.7));
+
+  /* Layered light: soft sheen + a hot spot that tracks the pointer (see glass-pointer.ts) */
+  --gx: 18%;
+  --gy: 0%;
+  --glass-sheen:
+    radial-gradient(
+      120% 90% at var(--gx) var(--gy),
+      light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.13)) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      155deg,
+      light-dark(rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.07)) 0%,
+      transparent 40%,
+      transparent 72%,
+      light-dark(rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.03)) 100%
+    );
+
+  /*
+   * Bevel: a bright top-left edge, a dim bottom-right edge and a hairline outline, like the
+   * rim of a lens catching light from above.
+   */
+  --glass-rim:
+    inset 0 var(--hairline) 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.2)),
+    inset var(--hairline) 0 0 light-dark(rgb(255 255 255 / 0.45), rgb(255 255 255 / 0.08)),
+    inset 0 calc(var(--hairline) * -1) 0 light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.35)),
+    inset 0 0 0 var(--hairline) light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.1)),
+    inset 0 6px 14px -8px light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.09));
+  --glass-shadow:
+    0 22px 52px -14px light-dark(rgb(0 0 0 / 0.24), rgb(0 0 0 / 0.62)),
+    0 6px 16px -4px light-dark(rgb(0 0 0 / 0.09), rgb(0 0 0 / 0.32)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.3));
+  --glass-shadow-sm:
+    0 10px 28px -8px light-dark(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.52)),
+    0 2px 6px -1px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.26)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.22));
+  --glass-scrim: light-dark(rgb(20 20 24 / 0.22), rgb(0 0 0 / 0.42));
+}
+
+@media (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
+/* Material applied to floating surfaces. Opaque fallback first. */
+[data-glass],
+[data-component="dialog"] [data-slot="dialog-content"],
+[data-component="popover-content"],
+[data-component="dropdown-menu-content"],
+[data-component="dropdown-menu-sub-content"],
+[data-component="context-menu-content"],
+[data-component="select-content"],
+[data-component="hover-card-content"],
+[data-component="toast"] {
+  background-clip: padding-box;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  @media all {
+    [data-glass],
+    [data-component="dialog"] [data-slot="dialog-content"],
+    [data-component="popover-content"],
+    [data-component="dropdown-menu-content"],
+    [data-component="dropdown-menu-sub-content"],
+    [data-component="context-menu-content"],
+    [data-component="select-content"],
+    [data-component="hover-card-content"],
+    [data-slot="message-nav-tooltip-content"],
+    [data-slot="image-preview-content"],
+    [data-slot="artifact-preview-content"],
+    [data-slot="line-comment-popover"],
+    [data-component="toast"],
+    [data-component="tooltip"] {
+      border-color: transparent;
+      background-color: var(--glass-fill);
+      background-image: var(--glass-sheen);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.04);
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.04);
+      box-shadow: var(--glass-rim), var(--glass-shadow-sm);
+    }
+
+    [data-component="dialog"] [data-slot="dialog-content"],
+    [data-component="popover-content"],
+    [data-component="dropdown-menu-content"],
+    [data-component="dropdown-menu-sub-content"],
+    [data-component="context-menu-content"],
+    [data-component="select-content"],
+    [data-component="hover-card-content"],
+    [data-slot="image-preview-content"],
+    [data-slot="artifact-preview-content"],
+    [data-slot="line-comment-popover"],
+    [data-glass="strong"] {
+      background-color: var(--glass-fill-strong);
+      box-shadow: var(--glass-rim), var(--glass-shadow);
+    }
+
+    /* Toast + tooltip keep inverted (dark) text contract, so their glass is dark */
+    [data-component="tooltip"],
+    [data-component="toast"] {
+      background-color: var(--glass-fill-dark);
+      background-image: var(--glass-sheen);
+    }
+
+    [data-component="dialog-overlay"] {
+      background-color: var(--glass-scrim);
+      -webkit-backdrop-filter: blur(10px) saturate(130%);
+      backdrop-filter: blur(10px) saturate(130%);
+    }
+
+    /* Arrows would expose a flat opaque tip against the translucent body */
+    [data-slot="popover-arrow"],
+    [data-slot="dropdown-menu-arrow"] {
+      display: none;
+    }
+  }
+}
+
+/* Radii */
+[data-component="popover-content"],
+[data-component="dropdown-menu-content"],
+[data-component="dropdown-menu-sub-content"],
+[data-component="context-menu-content"],
+[data-component="select-content"],
+[data-component="hover-card-content"] {
+  border-radius: var(--glass-radius-md);
+}
+
+[data-component="dialog"] [data-slot="dialog-content"] {
+  border-radius: var(--glass-radius-xl);
+}
+
+[data-component="toast"] {
+  border-radius: var(--glass-radius-lg);
+}
+
+[data-component="tooltip"] {
+  border-radius: var(--glass-radius-sm);
+}
+
+/* Menu items: inset rounded highlight like iOS menus */
+[data-component="dropdown-menu-content"] [data-slot^="dropdown-menu-"][data-highlighted],
+[data-component="context-menu-content"] [data-highlighted],
+[data-component="select-content"] [data-highlighted] {
+  border-radius: calc(var(--glass-radius-md) - 4px);
+}
+
+/* Entrances: origin-aware, never from scale(0), ease-out, under 250ms */
+[data-component="popover-content"][data-expanded],
+[data-component="dropdown-menu-content"][data-expanded],
+[data-component="dropdown-menu-sub-content"][data-expanded],
+[data-component="select-content"][data-expanded] {
+  animation-duration: var(--duration-popover);
+  animation-timing-function: var(--ease-out-strong);
+}
+
+[data-component="popover-content"][data-closed],
+[data-component="dropdown-menu-content"][data-closed],
+[data-component="dropdown-menu-sub-content"][data-closed],
+[data-component="select-content"][data-closed] {
+  animation-duration: 110ms;
+  animation-timing-function: var(--ease-out-strong);
+}
+
+[data-component="dialog"][data-transition] [data-slot="dialog-content"] {
+  animation-timing-function: var(--ease-out-strong);
+
+  &[data-expanded] {
+    animation-duration: var(--duration-modal);
+    animation-name: glass-modal-in;
+  }
+}
+
+@keyframes glass-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Materialize: blur and scale arrive together so the surface reads as a material, not a fade */
+@keyframes glass-materialize {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+    backdrop-filter: blur(0) saturate(100%);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+}
+
+@keyframes glass-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="popover-content"][data-expanded],
+  [data-component="dropdown-menu-content"][data-expanded],
+  [data-component="dropdown-menu-sub-content"][data-expanded],
+  [data-component="select-content"][data-expanded] {
+    animation-name: glass-materialize;
+  }
+}
+
+/* Dialog titles: size-specific tracking (tighter as type grows) */
+[data-component="dialog"] [data-slot="dialog-title"] {
+  letter-spacing: -0.011em;
+}
+
+[data-component="artifact-card"]:active {
+  scale: 0.99;
+}
+
+/* Press feedback on every pressable (Emil: scale 0.97, 100-160ms) */
+[data-component="button"],
+[data-component="icon-button"] {
+  transition:
+    scale var(--duration-press) var(--ease-out-strong),
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+
+  &:active:not(:disabled) {
+    scale: 0.97;
+    transition-duration: 90ms;
+  }
+}
+
+[data-component="button"] {
+  border-radius: var(--glass-radius-sm);
+}
+
+[data-component="button"][data-size="large"] {
+  border-radius: var(--glass-radius-md);
+}
+
+[data-component="icon-button"] {
+  border-radius: var(--glass-radius-sm);
+}
+
+/* Secondary buttons become soft glass chips */
+@supports (backdrop-filter: blur(1px)) {
+  @media all {
+    [data-component="button"][data-variant="secondary"] {
+      background-color: var(--glass-fill-tint);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      backdrop-filter: blur(12px) saturate(160%);
+      box-shadow: var(--glass-rim);
+
+      &:hover:not(:disabled) {
+        background-color: var(--glass-fill);
+      }
+      &:focus-visible:not(:active) {
+        box-shadow:
+          var(--glass-rim),
+          0 0 0 2px var(--border-selected);
+      }
+    }
+  }
+}
+
+/* Inputs: soft field, focus ring instead of heavy select shadow */
+[data-component="input"] [data-slot="input-wrapper"] {
+  border-radius: var(--glass-radius-md);
+  transition:
+    box-shadow 160ms var(--ease-out-strong),
+    border-color 160ms var(--ease-out-strong);
+}
+
+/* Floating prompt dock + any composer surface. Element-qualified so it beats
+   utility classes (bg-*, shadow-*, rounded-*) already on the form. */
+form[data-glass] {
+  border-radius: var(--glass-radius-xl);
+  border: 0;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  @media all {
+    form[data-glass] {
+      background-color: var(--glass-fill-strong);
+      background-image: var(--glass-sheen);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.04);
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.04);
+      /* Tighter reach than --glass-shadow so it never crosses a neighbouring panel edge */
+      box-shadow:
+        var(--glass-rim),
+        0 12px 26px -10px light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.55)),
+        0 3px 8px -3px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.3));
+      transition: box-shadow 200ms var(--ease-out-strong);
+    }
+
+    form[data-glass]:focus-within {
+      box-shadow:
+        var(--glass-rim),
+        0 12px 26px -10px light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.55)),
+        0 0 0 2px color-mix(in srgb, var(--border-selected, var(--border-focus)) 32%, transparent);
+    }
+  }
+}
+
+/* Reduced motion: keep fades, drop movement/scale */
+@media (prefers-reduced-motion: reduce) {
+  [data-component="button"]:active,
+  [data-component="icon-button"]:active {
+    scale: 1;
+  }
+
+  [data-component="dialog"][data-transition] [data-slot="dialog-content"][data-expanded],
+  [data-component="popover-content"][data-expanded],
+  [data-component="dropdown-menu-content"][data-expanded],
+  [data-component="dropdown-menu-sub-content"][data-expanded],
+  [data-component="select-content"][data-expanded],
+  [data-component="toast"][data-opened] {
+    animation-name: glass-fade;
+    animation-duration: 120ms;
+  }
+
+  [data-component="popover-content"][data-closed],
+  [data-component="dropdown-menu-content"][data-closed],
+  [data-component="dropdown-menu-sub-content"][data-closed],
+  [data-component="select-content"][data-closed] {
+    animation-name: glass-fade;
+    animation-direction: reverse;
+  }
+}
+
+/* Higher contrast: near-solid surface with a defined edge */
+@media (prefers-contrast: more) {
+  [data-glass],
+  form[data-glass],
+  [data-component="dialog"] [data-slot="dialog-content"],
+  [data-component="popover-content"],
+  [data-component="dropdown-menu-content"],
+  [data-component="dropdown-menu-sub-content"],
+  [data-component="context-menu-content"],
+  [data-component="select-content"],
+  [data-component="hover-card-content"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    background-color: var(--surface-raised-stronger-non-alpha);
+    border: 1px solid var(--border-strong-base, var(--border-base));
+  }
+}
+
+/* Windows high-contrast etc.: drop material entirely */
+@media (forced-colors: active) {
+  [data-glass],
+  [data-component="dialog"] [data-slot="dialog-content"],
+  [data-component="popover-content"],
+  [data-component="dropdown-menu-content"],
+  [data-component="select-content"],
+  [data-component="toast"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    border: 1px solid CanvasText;
+  }
+}
+
+/*
+ * Lens edge: a gradient hairline that is bright where light enters (top-left), dim through
+ * the middle and catches again bottom-right. Drawn as a masked ::before so it works with
+ * any radius and any theme. Dialog-like surfaces get `position: relative` to host it.
+ */
+[data-component="dialog"] [data-slot="dialog-content"],
+[data-slot="image-preview-content"],
+[data-slot="artifact-preview-content"] {
+  position: relative;
+}
+
+@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+  @media all {
+    [data-glass]::before,
+    [data-component="dialog"] [data-slot="dialog-content"]::before,
+    [data-component="popover-content"]::before,
+    [data-component="dropdown-menu-content"]::before,
+    [data-component="dropdown-menu-sub-content"]::before,
+    [data-component="context-menu-content"]::before,
+    [data-component="select-content"]::before,
+    [data-component="hover-card-content"]::before,
+    [data-slot="image-preview-content"]::before,
+    [data-slot="artifact-preview-content"]::before,
+    [data-slot="line-comment-popover"]::before,
+    [data-component="toast"]::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      padding: var(--hairline, 1px);
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(
+        140deg,
+        light-dark(rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.34)) 0%,
+        light-dark(rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04)) 34%,
+        transparent 62%,
+        light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.16)) 100%
+      );
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask:
+        linear-gradient(#000 0 0) content-box exclude,
+        linear-gradient(#000 0 0);
+    }
+  }
+}
+
+/*
+ * Reduced transparency: frosted becomes solid. Kept as an opt-out (not an opt-in) because
+ * WebKit ignores unknown media features, which would leave glass off for everyone.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [data-glass],
+  form[data-glass],
+  [data-component="dialog"] [data-slot="dialog-content"],
+  [data-component="popover-content"],
+  [data-component="dropdown-menu-content"],
+  [data-component="dropdown-menu-sub-content"],
+  [data-component="context-menu-content"],
+  [data-component="select-content"],
+  [data-component="hover-card-content"],
+  [data-slot="image-preview-content"],
+  [data-slot="artifact-preview-content"],
+  [data-slot="line-comment-popover"],
+  [data-component="toast"],
+  [data-component="tooltip"],
+  [data-component="button"][data-variant="secondary"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    background-color: var(--surface-raised-stronger-non-alpha);
+  }
+
+  [data-component="toast"],
+  [data-component="tooltip"] {
+    background-color: var(--surface-float-base);
+  }
+
+  [data-glass]::before,
+  [data-component="dialog"] [data-slot="dialog-content"]::before,
+  [data-component="popover-content"]::before,
+  [data-component="dropdown-menu-content"]::before,
+  [data-component="select-content"]::before,
+  [data-component="toast"]::before {
+    display: none;
+  }
+
+  [data-component="dialog-overlay"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

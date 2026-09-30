@@ -7,9 +7,9 @@
     position: absolute;
     background: var(--border-weak-base);
     transition:
-      background 0.15s ease-in-out,
-      width 0.15s ease-in-out,
-      height 0.15s ease-in-out;
+      background 160ms var(--ease-out-strong),
+      width 160ms var(--ease-out-strong),
+      height 160ms var(--ease-out-strong);
   }
 
   &:hover::after,
