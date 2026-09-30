@@ -44,14 +44,11 @@
   hello.ask = ask
 
   hello.runAll = function () {
-    var first = hello.pushes.filter(function (m) { return m.type === "sessions.snapshot" })[0]
-    var paneId = first && first.snapshot.sessions[0] ? first.snapshot.sessions[0].paneId : "inventata"
     var chord = { key: "p", ctrl: true, alt: false, shift: true, meta: false }
     var steps = [
       ["sessions.snapshot"],
       ["projects"],
       ["decisions.count"],
-      ["pane.focus", { paneId: paneId }],
       ["pane.focus", { paneId: "inventata" }],
       ["command.run", { chord: chord }],
       ["command.run", { chord: { key: "w", ctrl: true, alt: false, shift: false, meta: false } }],
@@ -68,6 +65,13 @@
         })
       })
     }, Promise.resolve())
+  }
+
+  /** Asks ADE to focus the first session it was shown. ADE then puts that session in front, so the plugin's own pane leaves the view: no reply is waited for. */
+  hello.focusFirst = function () {
+    var first = hello.pushes.filter(function (m) { return m.type === "sessions.snapshot" })[0]
+    var paneId = first && first.snapshot.sessions[0] ? first.snapshot.sessions[0].paneId : "inventata"
+    hello.port.postMessage({ v: 1, id: next++, type: "pane.focus", paneId: paneId })
   }
 
   hello.navigate = function (url) {
