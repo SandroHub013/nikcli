@@ -107,6 +107,9 @@ import {
   HOOK_TARGETS,
   HOOK_TIMEOUT,
   hookTarget,
+  reportsTurns,
+  takesActivityExtension,
+  reportFamily,
   readHookStatus,
   refreshHookScript,
   type HookHost,
@@ -286,7 +289,7 @@ import {
   timeNoteFor,
   lineIsTaken,
   formatUpdate,
-  parseActivity,
+  activityOrFormer,
   keptActivity,
   parseOpenRequests,
   shouldRering,
@@ -2180,8 +2183,7 @@ export function Workbench() {
       while (true) {
         await new Promise((resolve) => setTimeout(resolve, 500))
         if (running.get(paneId) !== session || questionOpen(paneId)) return
-        const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+        const activity = await paneActivity(host, paneId, await host.readAgentActivity(nonce))
         const check = submitCheck({ typedAt, activity, now: Date.now(), deadline })
         if (check === "confirmed") {
           activityOf.set(paneId, activity!)
@@ -2437,11 +2439,10 @@ export function Workbench() {
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
-      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
       activity = keptActivity(
         activity,
         afterInterrupt(
-          parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+          await paneActivity(host, paneId, await readsOf(host, host.readAgentActivity).read(nonce)),
           interruptSettled.get(paneId),
         ),
       )
@@ -2740,6 +2741,27 @@ export function Workbench() {
 
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
+  /*
+   * The nonce of a pane's previous spawn, while this one's file is silent: a
+   * Prime worker that outlived ADE still writes under it (`activityOrFormer`).
+   */
+  const formerNonces = new Map<string, string>()
+  /** A pane's activity from this spawn's file, or from the previous spawn's while this one is silent. */
+  const paneActivity = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    paneId: string,
+    text: string | null,
+  ): Promise<Activity | undefined> => {
+    const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+    const former = formerNonces.get(paneId)
+    // This spawn speaks: the old file has nothing more to say.
+    if (text !== null) formerNonces.delete(paneId)
+    const formerText =
+      text === null && former && resumeId && host.readAgentActivity
+        ? await readsOf(host, host.readAgentActivity).read(former)
+        : null
+    return activityOrFormer(text, formerText, resumeId)
+  }
   const activityOf = new Map<string, Activity>()
   /**
    * When ADE last saw a question in each pane open or close by itself, without
@@ -2752,7 +2774,7 @@ export function Workbench() {
   const interruptSettled = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
+    return paneNonces.has(paneId) && reportsTurns(pane?.agent ?? pane?.model ?? "")
   }
 
   /*
@@ -2962,7 +2984,7 @@ export function Workbench() {
     const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
     for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = afterInterrupt(parseActivity(texts[index] ?? null, pane?.resumeId), interruptSettled.get(paneId))
+      const read = afterInterrupt(await paneActivity(host, paneId, texts[index] ?? null), interruptSettled.get(paneId))
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
@@ -6378,7 +6400,8 @@ export function Workbench() {
    * nobody sends mail to.
    */
   const noticeWorkFromOutput = (pane: Pane) => {
-    if ((pane.agent ?? pane.model) === "terminal" || hooked(pane.id)) return
+    // A hooked pane whose hook has said nothing yet is guessed like any other.
+    if ((pane.agent ?? pane.model) === "terminal" || (hooked(pane.id) && activityOf.has(pane.id))) return
     const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
     if (!outputSaysWorking(run)) {
       if (run) outputRuns.set(pane.id, run)
@@ -6553,6 +6576,7 @@ export function Workbench() {
     usageOf.delete(id)
     paneTokens.delete(id)
     paneNonces.delete(id)
+    formerNonces.delete(id)
     activityOf.delete(id)
     questionSeenAt.delete(id)
     workingSince.delete(id)
@@ -7169,6 +7193,7 @@ export function Workbench() {
     resumeId?: string
     otherDir?: string
     linkNonce?: string
+    agent?: string
   }) => {
     const nonce = pane.linkNonce
     if (!nonce) return undefined
@@ -7176,7 +7201,7 @@ export function Workbench() {
     const text = (await host?.readAgentLink?.(nonce).catch(() => null)) ?? null
     if (text === null) return undefined
     await host?.clearAgentLink?.(nonce).catch(() => {})
-    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
+    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId, reportFamily(pane.agent ?? ""))
     if (id) {
       const report = parseReport(text)
       const elsewhere = report && pane.cwd ? followedFolder(report, pane.cwd, pane) : undefined
@@ -7511,11 +7536,17 @@ export function Workbench() {
      * Only when the user has installed the hook — see the settings panel.
      * Without it the variables are not set, and nothing changes.
      */
-    const linked = hookStates()[agentId]?.installed ?? false
+    // Prime and pi need nothing installed: their reporter comes with the spawn (`takesActivityExtension`).
+    const linked = (hookStates()[agentId]?.installed ?? false) || takesActivityExtension(agentId)
     const nonce = linked ? newNonce() : undefined
     // Kept per pane so turn activity can be read for as long as this spawn lives.
     if (nonce) paneNonces.set(paneId, nonce)
     else paneNonces.delete(paneId)
+    // The previous spawn's, saved with the pane: its worker may still be the one writing (MEDIO 1).
+    const formerNonce = wb().panes.find((pane) => pane.id === paneId)?.linkNonce
+    if (nonce && formerNonce && formerNonce !== nonce && takesActivityExtension(agentId)) {
+      formerNonces.set(paneId, formerNonce)
+    } else formerNonces.delete(paneId)
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
     let spawned: SpawnedSession | undefined
@@ -7712,9 +7743,11 @@ export function Workbench() {
        */
       if (nonce) {
         // And after it: a `/resume` or `/clear` inside the CLI moves the pane too.
+        const family = reportFamily(agentId)
         void followReports({
           pane: paneId,
           nonce,
+          ...(family ? { family } : {}),
           read: (n) => host.readAgentLink?.(n) ?? Promise.resolve(null),
           clear: async (n) => {
             await host.clearAgentLink?.(n)

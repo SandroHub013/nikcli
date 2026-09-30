@@ -144,6 +144,45 @@ export function hookTarget(agentId: string): HookTarget | undefined {
   return HOOK_TARGETS.find((target) => target.id === agentId)
 }
 
+/*
+ * Prime Agent and pi: an extension ADE passes with `-e`, not a hook.
+ *
+ * Both load extensions that hear the agent's own `agent_start` and `agent_end`,
+ * and Prime hands the flag and the pane's environment to the daemon worker where
+ * its agent runs. So ADE ships one file (`src-tauri/plugins/ade-activity.js`),
+ * writes it into its own application data and adds it to the command line of the
+ * spawns it starts: nothing in the user's configuration, nothing to install, and
+ * a Prime or pi started outside ADE never sees it. Rust keeps the same list
+ * (`ACTIVITY_EXTENSION_AGENTS` in `agent_link.rs`); a test holds them together.
+ */
+export const ACTIVITY_EXTENSION_AGENTS: readonly string[] = ["prime", "pi"]
+
+/** The file's name in ADE's application data. */
+export const ACTIVITY_EXTENSION_NAME = "ade-activity.js"
+
+/** The extension's text, relative to this module, for the tests. Rust compiles in the same file. */
+export const ACTIVITY_EXTENSION_SOURCE = "../../src-tauri/plugins/ade-activity.js"
+
+/** Whether ADE starts this agent with its turn reporter. */
+export function takesActivityExtension(agentId: string): boolean {
+  return ACTIVITY_EXTENSION_AGENTS.includes(agentId)
+}
+
+/**
+ * The `agent` a pane's own CLI writes in its reports: the hook's, or `pi` for
+ * the extension (Prime is a fork of pi). A report of another family, with this
+ * spawn's nonce, comes from a CLI the session started, which inherited the
+ * pane's environment (review of activity-prime-pi, MEDIO 2).
+ */
+export function reportFamily(agentId: string): string | undefined {
+  return takesActivityExtension(agentId) ? "pi" : hookTarget(agentId)?.agent
+}
+
+/** Whether a spawn of this agent with a nonce reports its turns: a hook with activity events, or the extension. */
+export function reportsTurns(agentId: string): boolean {
+  return Boolean(hookTarget(agentId)?.activityEvents?.length) || takesActivityExtension(agentId)
+}
+
 /** How the config file invokes the script. */
 export function hookCommand(scriptPath: string): string {
   return `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`
