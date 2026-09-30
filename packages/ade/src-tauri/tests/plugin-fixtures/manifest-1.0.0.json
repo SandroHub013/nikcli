@@ -1,0 +1,20 @@
+{
+  "id": "nikverse",
+  "version": "1.0.0",
+  "permissions": [
+    "theme",
+    "snapshot"
+  ],
+  "files": [
+    {
+      "path": "app.js",
+      "sha256": "e5b844ccb91706997ba5ac7c11475a404979a49a07aac9e473666a9e1e8504fc",
+      "size": 33
+    },
+    {
+      "path": "index.html",
+      "sha256": "4bd4943e1f40df9fb50891ebf36d17bf4da6514e38f525022be21bb8193c0c64",
+      "size": 142
+    }
+  ]
+}

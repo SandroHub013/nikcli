@@ -1,0 +1,11 @@
+{
+  "issued_at": 3000,
+  "plugins": {
+    "nikverse": {
+      "version": "1.2.0",
+      "api": 1,
+      "min_ade": "99.0.0",
+      "manifest": "3d2df15b8cb32c576b5fb5c786e90e7cf1c0dc0f545ffc6c43d85f27c15a487f"
+    }
+  }
+}

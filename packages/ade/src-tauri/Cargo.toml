@@ -60,6 +60,8 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-single-instance = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
+# The signature of the plugins' index (src/plugin_install.rs): the same minisign the updater checks its update with, already in the lock.
+minisign-verify = "0.2.5"
 serde = { version = "1", features = ["derive"] }
 # `time` and `select!` for the updater's stall watchdog and the gateways'
 # reading loops, `sync` for their stop signal; the runtime is Tauri's.

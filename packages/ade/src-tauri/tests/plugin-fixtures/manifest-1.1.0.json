@@ -1,0 +1,26 @@
+{
+  "id": "nikverse",
+  "version": "1.1.0",
+  "permissions": [
+    "theme",
+    "snapshot",
+    "chords"
+  ],
+  "files": [
+    {
+      "path": "app.js",
+      "sha256": "5a56c27d988070f6805df3d3f16eb307d506bf70e47b2a7b3ebfd38b21fe6e4e",
+      "size": 33
+    },
+    {
+      "path": "assets/extra.css",
+      "sha256": "b4d5deb2f19a59cc8683e443244245fad7c2e9a22e20b02dc2068698c69a9528",
+      "size": 19
+    },
+    {
+      "path": "index.html",
+      "sha256": "2ef86b475075f6c5d8abb99357ee5936b401ad6a65592b651a989cfb415f2bea",
+      "size": 189
+    }
+  ]
+}
