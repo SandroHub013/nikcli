@@ -21,23 +21,23 @@ export function InstallConfirm(props: {
   const known = () => knownPermissions(props.permissions)
   const unknown = () => unknownPermissions(props.permissions)
   return (
-    <div data-slot="plugin-confirm" role="alertdialog" aria-label={t("plugin.confirm.title", props.name, props.version)}>
-      <p data-slot="plugin-confirm-title">{t("plugin.confirm.title", props.name, props.version)}</p>
-      <p data-slot="plugin-confirm-size">{t("plugin.confirm.size", formatSize(props.sizeBytes))}</p>
-      <Show when={known().length > 0} fallback={<p data-slot="plugin-confirm-none">{t("plugin.confirm.none")}</p>}>
+    <div data-slot="frame-plugin-confirm" role="alertdialog" aria-label={t("plugin.confirm.title", props.name, props.version)}>
+      <p data-slot="frame-plugin-confirm-title">{t("plugin.confirm.title", props.name, props.version)}</p>
+      <p data-slot="frame-plugin-confirm-size">{t("plugin.confirm.size", formatSize(props.sizeBytes))}</p>
+      <Show when={known().length > 0} fallback={<p data-slot="frame-plugin-confirm-none">{t("plugin.confirm.none")}</p>}>
         <p>{t("plugin.confirm.asks")}</p>
-        <ul data-slot="plugin-confirm-permissions">
+        <ul data-slot="frame-plugin-confirm-permissions">
           <For each={known()}>{(permission) => <li>{permissionText(permission)}</li>}</For>
         </ul>
       </Show>
       <Show when={unknown().length > 0}>
-        <p data-slot="plugin-confirm-unknown">{t("plugin.confirm.unknown", unknown().join(", "))}</p>
+        <p data-slot="frame-plugin-confirm-unknown">{t("plugin.confirm.unknown", unknown().join(", "))}</p>
       </Show>
-      <div data-slot="plugin-confirm-actions">
-        <button type="button" data-slot="plugin-confirm-install" onClick={props.onConfirm}>
+      <div data-slot="frame-plugin-confirm-actions">
+        <button type="button" data-slot="settings-choice" data-frame-plugin="confirm-install" data-active="true" onClick={props.onConfirm}>
           {t("plugin.confirm.install")}
         </button>
-        <button type="button" data-slot="plugin-confirm-cancel" onClick={props.onCancel}>
+        <button type="button" data-slot="settings-choice" data-frame-plugin="confirm-cancel" onClick={props.onCancel}>
           {t("plugin.confirm.cancel")}
         </button>
       </div>

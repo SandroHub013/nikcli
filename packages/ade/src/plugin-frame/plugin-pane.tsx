@@ -13,6 +13,8 @@ import { createLifecycle } from "./lifecycle"
 import { createLink } from "./link"
 import { pluginFrameUrl } from "./frame-url"
 import { permissionText } from "./words"
+// The buttons here look like the settings' own (`settings-choice`), which the pane may need before the settings were ever opened.
+import "../settings/sections.css"
 import "./plugin-frame.css"
 
 /**
@@ -285,7 +287,7 @@ export function PluginFramePane(props: {
         </span>
         <h2 data-slot="pane-title">{props.title}</h2>
         <Show when={dev() && running()}>
-          <span data-slot="plugin-dev-badge">{t("plugin.dev")}</span>
+          <span data-slot="frame-plugin-dev-badge">{t("plugin.dev")}</span>
         </Show>
         <div data-slot="pane-actions">
           <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
@@ -301,11 +303,11 @@ export function PluginFramePane(props: {
         </div>
       </header>
 
-      <div data-slot="plugin-body">
+      <div data-slot="frame-plugin-body">
         <Show when={phase().kind === "absent"}>
-          <div data-slot="plugin-placeholder" role="status">
+          <div data-slot="frame-plugin-placeholder" role="status">
             <p>{t("plugin.absent", props.title)}</p>
-            <button type="button" data-slot="plugin-install" onClick={() => props.onInstall(props.pluginId)}>
+            <button type="button" data-slot="settings-choice" data-frame-plugin="install" data-active="true" onClick={() => props.onInstall(props.pluginId)}>
               {t("plugin.install")}
             </button>
           </div>
@@ -313,9 +315,9 @@ export function PluginFramePane(props: {
 
         <Show when={phase().kind === "failed" ? (phase() as Extract<Phase, { kind: "failed" }>) : undefined}>
           {(failed) => (
-            <div data-slot="plugin-failed" role="alert">
+            <div data-slot="frame-plugin-failed" role="alert">
               <p>{t("plugin.failed", props.title, failed().reason)}</p>
-              <button type="button" data-slot="plugin-uninstall" disabled={busy()} onClick={() => void uninstall()}>
+              <button type="button" data-slot="settings-choice" data-frame-plugin="uninstall" disabled={busy()} onClick={() => void uninstall()}>
                 {t("plugin.uninstall")}
               </button>
             </div>
@@ -324,15 +326,15 @@ export function PluginFramePane(props: {
 
         <Show when={asking() && phase().kind === "consent" ? (phase() as Extract<Phase, { kind: "consent" }>) : undefined}>
           {(consent) => (
-            <div data-slot="plugin-consent" role="alertdialog" aria-label={t("plugin.consent.title", props.title, consent().version)}>
-              <p data-slot="plugin-consent-title">{t("plugin.consent.title", props.title, consent().version)}</p>
+            <div data-slot="frame-plugin-consent" role="alertdialog" aria-label={t("plugin.consent.title", props.title, consent().version)}>
+              <p data-slot="frame-plugin-consent-title">{t("plugin.consent.title", props.title, consent().version)}</p>
               <ul>
                 <For each={consent().added}>{(permission) => <li>{permissionText(permission)}</li>}</For>
               </ul>
-              <div data-slot="plugin-consent-actions">
+              <div data-slot="frame-plugin-consent-actions">
                 <button
                   type="button"
-                  data-slot="plugin-consent-allow"
+                  data-slot="settings-choice" data-frame-plugin="consent-allow" data-active="true"
                   onClick={() => {
                     setAsking(false)
                     void activation.answer(true)
@@ -342,7 +344,7 @@ export function PluginFramePane(props: {
                 </button>
                 <button
                   type="button"
-                  data-slot="plugin-consent-keep"
+                  data-slot="settings-choice" data-frame-plugin="consent-keep"
                   onClick={() => {
                     setAsking(false)
                     void activation.answer(false)
@@ -356,10 +358,10 @@ export function PluginFramePane(props: {
         </Show>
 
         <Show when={running()}>
-          <Show when={loaded()} fallback={<p data-slot="plugin-unloaded">{t("plugin.unloaded")}</p>}>
+          <Show when={loaded()} fallback={<p data-slot="frame-plugin-unloaded">{t("plugin.unloaded")}</p>}>
             <iframe
               ref={frame}
-              data-slot="plugin-frame"
+              data-slot="frame-plugin-frame"
               title={props.title}
               name={`ade-plugin-${props.pluginId}`}
               src={frameSrc()}

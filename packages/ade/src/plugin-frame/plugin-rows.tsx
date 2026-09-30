@@ -124,35 +124,35 @@ export function FramePluginRows(props: {
 
   return (
     <Show when={rows().installed.length + rows().offered.length > 0}>
-    <div data-slot="plugin-rows" data-count={installed().length}>
-      <h4 data-slot="plugin-rows-heading">{t("plugin.rows.heading")}</h4>
+    <div data-slot="frame-plugin-rows" data-count={installed().length}>
+      <h4 data-slot="frame-plugin-rows-heading">{t("plugin.rows.heading")}</h4>
 
       <For each={rows().installed}>
         {(plugin) => (
-          <div data-slot="plugin-row" data-plugin={plugin.id} data-dev={plugin.dev ? "true" : undefined}>
-            <span data-slot="plugin-row-name">
+          <div data-slot="frame-plugin-row" data-plugin={plugin.id} data-dev={plugin.dev ? "true" : undefined}>
+            <span data-slot="frame-plugin-row-name">
               {nameOf(plugin.id)}
               <Show when={plugin.pending}>
                 <span
-                  data-slot="plugin-row-update"
+                  data-slot="frame-plugin-row-update"
                   role="img"
                   title={t("plugin.rows.update", plugin.pending ?? "")}
                   aria-label={t("plugin.rows.update", plugin.pending ?? "")}
                 />
               </Show>
             </span>
-            <span data-slot="plugin-row-meta">
+            <span data-slot="frame-plugin-row-meta">
               {plugin.current ?? plugin.pending} · {formatSize(plugin.bytes)}
               <Show when={plugin.dev}> · {t("plugin.dev")}</Show>
             </span>
-            <span data-slot="plugin-row-actions">
-              <button type="button" data-slot="plugin-row-open" disabled={busy() === plugin.id} onClick={() => props.onOpen(plugin.id)}>
+            <span data-slot="frame-plugin-row-actions">
+              <button type="button" data-slot="settings-choice" data-frame-plugin="row-open" disabled={busy() === plugin.id} onClick={() => props.onOpen(plugin.id)}>
                 {t("plugin.open")}
               </button>
               <Show when={!plugin.dev}>
                 <button
                   type="button"
-                  data-slot="plugin-row-uninstall"
+                  data-slot="settings-choice" data-frame-plugin="row-uninstall"
                   disabled={busy() === plugin.id}
                   onClick={() => setConfirming({ id: plugin.id, what: { kind: "uninstall", plugin } })}
                 >
@@ -162,7 +162,7 @@ export function FramePluginRows(props: {
               <Show when={plugin.dev && isTestBuild()}>
                 <button
                   type="button"
-                  data-slot="plugin-row-preview-confirm"
+                  data-slot="settings-choice" data-frame-plugin="row-preview-confirm"
                   onClick={() => setConfirming({ id: plugin.id, what: { kind: "preview", plugin } })}
                 >
                   {t("plugin.confirm.preview")}
@@ -170,21 +170,21 @@ export function FramePluginRows(props: {
               </Show>
             </span>
             <Show when={failure()?.id === plugin.id}>
-              <span data-slot="plugin-row-meta" role="alert">
+              <span data-slot="frame-plugin-row-meta" role="alert">
                 {t("plugin.rows.failed", failure()!.reason)}
               </span>
             </Show>
             <Show when={confirmation(plugin.id)}>
               {(what) => (
-                <div data-slot="plugin-row-confirm">
+                <div data-slot="frame-plugin-row-confirm">
                   <Show when={what().kind === "uninstall"}>
-                    <div data-slot="plugin-confirm" role="alertdialog">
-                      <p data-slot="plugin-confirm-title">{t("plugin.uninstall.ask", nameOf(plugin.id), formatSize(plugin.bytes))}</p>
-                      <div data-slot="plugin-confirm-actions">
-                        <button type="button" data-slot="plugin-uninstall-yes" onClick={() => void uninstall(plugin)}>
+                    <div data-slot="frame-plugin-confirm" role="alertdialog">
+                      <p data-slot="frame-plugin-confirm-title">{t("plugin.uninstall.ask", nameOf(plugin.id), formatSize(plugin.bytes))}</p>
+                      <div data-slot="frame-plugin-confirm-actions">
+                        <button type="button" data-slot="settings-choice" data-frame-plugin="uninstall-yes" data-active="true" onClick={() => void uninstall(plugin)}>
                           {t("plugin.uninstall")}
                         </button>
-                        <button type="button" data-slot="plugin-uninstall-cancel" onClick={() => setConfirming(undefined)}>
+                        <button type="button" data-slot="settings-choice" data-frame-plugin="uninstall-cancel" onClick={() => setConfirming(undefined)}>
                           {t("plugin.uninstall.cancel")}
                         </button>
                       </div>
@@ -209,22 +209,22 @@ export function FramePluginRows(props: {
 
       <For each={rows().offered}>
         {(entry) => (
-          <div data-slot="plugin-row" data-plugin={entry.id} data-offered="true">
-            <span data-slot="plugin-row-name">{entry.name}</span>
-            <span data-slot="plugin-row-actions">
-              <button type="button" data-slot="plugin-row-install" disabled={busy() === entry.id} onClick={() => void ask(entry)}>
+          <div data-slot="frame-plugin-row" data-plugin={entry.id} data-offered="true">
+            <span data-slot="frame-plugin-row-name">{entry.name}</span>
+            <span data-slot="frame-plugin-row-actions">
+              <button type="button" data-slot="settings-choice" data-frame-plugin="row-install" data-active="true" disabled={busy() === entry.id} onClick={() => void ask(entry)}>
                 {busy() === entry.id ? t("plugin.installing") : t("plugin.install")}
                 <Show when={progress()?.id === entry.id}> {progress()!.percent}%</Show>
               </button>
             </span>
             <Show when={failure()?.id === entry.id}>
-              <span data-slot="plugin-row-meta" role="alert">
+              <span data-slot="frame-plugin-row-meta" role="alert">
                 {t("plugin.rows.failed", failure()!.reason)}
               </span>
             </Show>
             <Show when={confirmation(entry.id)}>
               {(what) => (
-                <div data-slot="plugin-row-confirm">
+                <div data-slot="frame-plugin-row-confirm">
                   <Show when={what().kind === "install" ? (what() as Extract<Confirming, { kind: "install" }>) : undefined}>
                     {(installing) => (
                       <InstallConfirm
