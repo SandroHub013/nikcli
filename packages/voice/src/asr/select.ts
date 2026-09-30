@@ -1,11 +1,12 @@
 /**
  * Transcriber backend selection and readiness diagnostics.
  *
- * Two engines, both of which work inside an embedded webview:
- * - "parakeet": Local neural model (NVIDIA Parakeet TDT 0.6B v3) via WebGPU/WASM
+ * One engine, which works inside an embedded webview:
  * - "openrouter": Cloud ASR via OpenRouter (microsoft/mai-transcribe-2)
  *
- * There was a third, the browser's own Web Speech API, and it is gone. Inside
+ * There were two more, and both are gone. A local neural model (NVIDIA Parakeet TDT 0.6B v3, on
+ * WebGPU/WASM) took the renderer past four gigabytes and stopped it answering, and it carried a 24 MB
+ * WebAssembly runtime into every installer. And the browser's own Web Speech API: Inside
  * Tauri's WebView2 the constructor exists and the service behind it does not:
  * every `start()` was answered by an immediate `end` with no audio event, no
  * result and no error, so the app reported "listening" to a user talking to
@@ -16,13 +17,6 @@
  */
 
 import type { Transcriber } from "./transcriber"
-import {
-  createParakeetTranscriber,
-  describeParakeetReadiness,
-  isWasmAvailable,
-  isWebGpuAvailable,
-  type ParakeetTranscriberOptions,
-} from "./parakeet-local"
 import { createOpenRouterTranscriber, type OpenRouterTranscriberOptions } from "./openrouter"
 import { t } from "@nikcli-ai/ade/i18n"
 
@@ -30,7 +24,7 @@ import { t } from "@nikcli-ai/ade/i18n"
 // Backend Identifier & Status Types
 // ---------------------------------------------------------------------------
 
-export type TranscriberBackend = "parakeet" | "openrouter"
+export type TranscriberBackend = "openrouter"
 
 export interface BackendStatus {
   /** Whether the backend can be activated and used right now. */
@@ -40,15 +34,12 @@ export interface BackendStatus {
 }
 
 export interface BackendDescriptions {
-  parakeet: BackendStatus
   openrouter: BackendStatus
 }
 
 export interface SelectTranscriberOptions {
   /** OpenRouter API key. */
   apiKey?: string
-  /** Whether the Parakeet model weights have already been cached/downloaded locally. */
-  isModelDownloaded?: boolean
   /**
    * `VoiceSettings.language`, applied to whichever backend is chosen.
    *
@@ -58,8 +49,6 @@ export interface SelectTranscriberOptions {
    * has a reason to differ.
    */
   language?: string
-  /** Options passed when constructing the Parakeet transcriber. */
-  parakeetOptions?: ParakeetTranscriberOptions
   /** Options passed when constructing the OpenRouter transcriber. */
   openRouterOptions?: Partial<OpenRouterTranscriberOptions>
 }
@@ -70,18 +59,13 @@ export interface SelectTranscriberOptions {
 
 /**
  * Diagnostics utility returning usability state and user-facing Italian reasons
- * for all three transcription backends.
+ * for the transcription backends.
  *
  * Guarantees: Never throws.
  */
 export function describeBackends(options: SelectTranscriberOptions = {}): BackendDescriptions {
   try {
-    // 1. Parakeet Local
-    const parakeetStatus: BackendStatus = describeParakeetReadiness({
-      isModelDownloaded: options.isModelDownloaded,
-    })
-
-    // 2. OpenRouter Cloud
+    // OpenRouter Cloud
     const candidateKey = options.apiKey ?? options.openRouterOptions?.apiKey
     const hasValidKey = Boolean(candidateKey && candidateKey.trim().length > 0)
     const openrouterStatus: BackendStatus = hasValidKey
@@ -92,15 +76,10 @@ export function describeBackends(options: SelectTranscriberOptions = {}): Backen
         }
 
     return {
-      parakeet: parakeetStatus,
       openrouter: openrouterStatus,
     }
   } catch {
     return {
-      parakeet: {
-        usable: false,
-        reason: t("vui.asr.parakeetCheck"),
-      },
       openrouter: {
         usable: false,
         reason: t("vui.asr.keyCheck"),
@@ -118,12 +97,6 @@ export function describeBackends(options: SelectTranscriberOptions = {}): Backen
  */
 export function createTranscriberFor(backend: TranscriberBackend, options: SelectTranscriberOptions = {}): Transcriber {
   switch (backend) {
-    case "parakeet":
-      return createParakeetTranscriber({
-        language: options.language,
-        ...options.parakeetOptions,
-      })
-
     case "openrouter": {
       const apiKey = options.apiKey ?? options.openRouterOptions?.apiKey ?? ""
       return createOpenRouterTranscriber({

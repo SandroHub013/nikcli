@@ -157,6 +157,10 @@ export const it = {
   "newPane.nikverse": "NikVerse",
   "newPane.nikverse.hint": "la città delle tue sessioni, in tempo reale",
   "nikverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
+  "nikverse.assets.fetching": (megabytes: number) => `Scarico il mondo di NikVerse (${megabytes} MB), solo la prima volta…`,
+  "nikverse.assets.failed": (reason: string) =>
+    `Non sono riuscita a scaricare il mondo di NikVerse: ${reason} Per ora vedi i segnaposto.`,
+  "nikverse.assets.retry": "Riprova",
   "nikverse.ask": (what: string) => `NikVerse chiede di: ${what}`,
   "nikverse.allow": "Consenti",
   "nikverse.deny": "Nega",
@@ -1379,6 +1383,10 @@ export const it = {
     `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "voice.listeningOff": (shortcut: string, always: string) =>
     `Da questa versione ADE non ascolta più da sola: il microfono si apre con la scorciatoia ${shortcut} o con il tasto in alto, e il nome funziona lì dentro. Ascoltare sempre costa, perché ogni voce in stanza viene mandata al servizio che trascrive: se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
+  "voice.parakeetRemoved":
+    "La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, con la tua chiave.",
+  "voice.parakeetRemovedListeningOff": (always: string) =>
+    `La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, e l'ascolto continuo è spento, perché ogni voce in stanza sarebbe stata mandata al servizio a pagamento. Se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
   "voice.alert.permission": (pane: string, what: string) =>
     `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,

@@ -38,7 +38,6 @@ import {
   latestExchange,
   HUD_WAVE,
   orbRim,
-  preparingHudState,
   waveBarHeight,
   type HudState,
 } from "./voice-hud-state"
@@ -99,9 +98,6 @@ export function VoiceHud(props: VoiceHudProps) {
   const parse = () => props.engine.lastParseResult()
   const error = () => props.engine.lastError()
 
-  /** Set while the local model is still being fetched, and nothing can be heard yet. */
-  const preparing = createMemo(() => props.engine.parakeetProgress())
-
   /*
    * The orb's collar: green while it hears you, red when it is broken, amber
    * when the microphone has not been granted. The rule is in `orbRim`, where
@@ -113,7 +109,6 @@ export function VoiceHud(props: VoiceHudProps) {
     orbRim({
       running: running(),
       errorKind: props.engine.lastErrorKind(),
-      preparing: preparing() !== undefined,
     }),
   )
 
@@ -135,12 +130,12 @@ export function VoiceHud(props: VoiceHudProps) {
    */
   const engineFailure = createMemo(() => {
     const message = props.engine.lastError()
-    if (!message || running() || preparing()) return undefined
+    if (!message || running()) return undefined
     return message === dismissedError() ? undefined : message
   })
   const installFailure = createMemo(() => {
     const message = props.naturalVoiceError
-    if (!message || running() || preparing() || message === dismissedError()) return undefined
+    if (!message || running() || message === dismissedError()) return undefined
     return message
   })
   const failure = createMemo(() => installFailure() ?? engineFailure())
@@ -178,13 +173,10 @@ export function VoiceHud(props: VoiceHudProps) {
     props.open !== undefined
       ? props.open
       : (running() && (mode() === "transcription" || agentNeedsPill())) ||
-        preparing() !== undefined ||
         failure() !== undefined,
   )
 
   const state = createMemo<HudState>(() => {
-    const warmup = preparing()
-    if (warmup) return preparingHudState({ percent: warmup.percent })
     return agentHudState({
       status: status(),
       partial: partial(),
@@ -378,7 +370,7 @@ export function VoiceHud(props: VoiceHudProps) {
             <section
               data-slot="hud-pill"
               data-kind="transcription"
-              data-tone={preparing() ? "working" : partial().length > 0 ? "listening" : "armed"}
+              data-tone={partial().length > 0 ? "listening" : "armed"}
               role="status"
               aria-live="polite"
               aria-label={t("vui.hud.transcription.label")}
@@ -401,10 +393,10 @@ export function VoiceHud(props: VoiceHudProps) {
               view — what was said thirty seconds ago is already in the pane.
             */}
               <span data-slot="hud-said" data-empty={dictated().length === 0 ? "true" : undefined}>
-                {preparing() ? state().line : dictated().length > 0 ? dictated() : t("vui.hud.listeningNow")}
+                {dictated().length > 0 ? dictated() : t("vui.hud.listeningNow")}
               </span>
 
-              <Show when={props.target && !preparing()}>
+              <Show when={props.target}>
                 <button
                   type="button"
                   data-slot="hud-target"

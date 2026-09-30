@@ -409,6 +409,7 @@ import { createInFlight } from "../session/in-flight"
 import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
+import { splashRemainingMs } from "../splash/timing"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
 import { acceptsRequests, panelsHelp } from "../panels/protocol"
 import { alternateRows, createScreenRequests } from "../panels/screen-requests"
@@ -511,6 +512,7 @@ import {
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
+  dropLegacyParakeet,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -620,15 +622,6 @@ const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
  * separately by `transcript-budget`.
  */
 const MAX_PANE_LINES = 200
-
-/**
- * The shortest time the startup screen stays up.
- *
- * A warm start finishes in under a tenth of a second, and a screen that
- * appears and vanishes in that time reads as a glitch. Long enough to be
- * looked at, short enough not to be waited for.
- */
-const SPLASH_FLOOR_MS = 7000
 
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
@@ -4931,25 +4924,35 @@ export function Workbench() {
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
   const listeningOff = initialVoice.migrations.includes("listening-off")
+  // The local engine is gone and the profile is on the cloud one now; told once (the profile is written back), with
+  // what was turned off under it when it listened on its own.
+  const localEngineRemoved = initialVoice.migrations.includes("parakeet-removed")
+  const cloudListeningOff = initialVoice.migrations.includes("parakeet-listening-off")
+  const localEngineNotice = cloudListeningOff
+    ? t("voice.parakeetRemovedListeningOff", t("vui.listen.always"))
+    : localEngineRemoved
+      ? t("voice.parakeetRemoved")
+      : undefined
   const movedToName = initialVoice.migrations.some(
     (m) => m === "name-only" || m === "wake-word" || m === "always-listen",
   )
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    listeningOff
-      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
-      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-        : movedToShortcut
-          ? t("voice.shortcutOnly", agentShortcut)
-          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-            ? t(
-                "voice.alwaysListening",
-                initialVoice.settings.wakeWord,
-                t("vui.listen.manual"),
-                t("vui.activation.toggle"),
-              )
-            : undefined,
+    localEngineNotice ??
+      (listeningOff
+        ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+        : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+          ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+          : movedToShortcut
+            ? t("voice.shortcutOnly", agentShortcut)
+            : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+              ? t(
+                  "voice.alwaysListening",
+                  initialVoice.settings.wakeWord,
+                  t("vui.listen.manual"),
+                  t("vui.activation.toggle"),
+                )
+              : undefined),
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -4961,6 +4964,8 @@ export function Workbench() {
        * nobody reads.
        */
       listeningOff ? t("voice.listeningOff", agentShortcut, t("vui.listen.always")) : undefined,
+      // Also in the strip: listening turned off under the user, and the service the voice now goes to, are theirs to know.
+      localEngineNotice,
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
         ? initialVoice.corrections.filter((c) => !c.includes("assenti")).join(" ")
         : rawSavedVoice !== null && initialVoice.corrections.length > 0
@@ -5407,7 +5412,7 @@ export function Workbench() {
     s.alwaysListen &&
     s.activation === "wake-word" &&
     s.mode === "agent" &&
-    (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
+    Boolean(s.openRouterApiKey)
   const listenForName = () => {
     // Not the user's hand: a stop for spending is not lifted by a launch.
     if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
@@ -5819,7 +5824,7 @@ export function Workbench() {
      * A floor, not a delay: when the start really does take two seconds the
      * splash goes the moment it is over.
      */
-    const remaining = SPLASH_FLOOR_MS - (Date.now() - startedAt)
+    const remaining = splashRemainingMs(startedAt, Date.now())
     if (remaining > 0 && booting() !== undefined) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, remaining)
@@ -5830,6 +5835,8 @@ export function Workbench() {
       })
     }
     setBooting(undefined)
+    // The local speech model that was removed left its download in the webview's storage: dropped once, after the screen is up.
+    void dropLegacyParakeet()
   })
 
   const autosave = createAutosave({
@@ -5858,7 +5865,7 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
-        if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+        if (!voiceSettings().openRouterApiKey) {
           if (wb().view !== "agent") {
             setWb((w) => ({ ...w, view: "agent" }))
             return
@@ -6362,7 +6369,7 @@ export function Workbench() {
         )
       }
     } else if (id === "voice.toggle") {
-      if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+      if (!voiceSettings().openRouterApiKey) {
         if (wb().view !== "agent") {
           setWb((w) => ({ ...w, view: "agent" }))
           return
@@ -8500,6 +8507,7 @@ export function Workbench() {
         else console.warn("[nikverse] scorciatoia non inoltrata: non è di navigazione")
       },
       ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
+      assets: () => getHost(),
     },
     guessServers,
     confirmOpen,

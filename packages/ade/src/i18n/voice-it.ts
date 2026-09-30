@@ -56,9 +56,6 @@ export const voiceIt = {
   "vui.hud.understood": "capito",
   "vui.hud.answer": "risposta",
   "vui.hud.goAhead": "parla pure",
-  "vui.hud.preparing": "preparo",
-  "vui.hud.model": "modello vocale…",
-  "vui.hud.modelPercent": (percent: number) => `modello vocale · ${percent}%`,
   "vui.hud.failed": "non parte",
   "vui.hud.failed.label": "Controllo vocale non avviato",
   "vui.hud.voiceFailed": "voce naturale non disponibile",
@@ -124,8 +121,6 @@ export const voiceIt = {
   "vui.codexFallback.off.desc": "Riferisce il limite senza passare a Codex (predefinito)",
   "vui.engine.note":
     "L'agente usa il tuo account della CLI, per uso personale: ADE non legge le tue credenziali, tiene pochi turni insieme e non riprova quando raggiungi il limite. Non modifica file e non esegue comandi nel progetto: il lavoro lo affida alle sessioni. Per un uso intensivo accedi alla CLI con una chiave API.",
-  "vui.download.starting": "Avvio download modello Parakeet (~640 MB)...",
-  "vui.download.failed": "Errore durante il download del modello Parakeet",
   "vui.trial.noEngine": "Impossibile avviare il motore vocale: comando non inviato.",
   "vui.shortcut.conflicting": "Scorciatoia in conflitto.",
   "vui.shortcut.shadowed": (message: string) =>
@@ -276,44 +271,13 @@ export const voiceIt = {
   "vui.device.mic": (position: number) => `Microfono ${position}`,
   "vui.device.output": (position: number) => `Uscita audio ${position}`,
   "vui.device.missing": "Dispositivo non collegato",
-  "vui.model.title": "Modello locale",
-  "vui.model.none": "Niente in cache: il modello quantizzato (~640 MB) non è presente in locale.",
-  "vui.model.local": "modello locale",
-  "vui.model.found": (mb: string, format: string) =>
-    `Rilevato sul tuo computer: ${mb} MB (${format}). Resta salvato in locale sul tuo disco.`,
-  "vui.model.path": (path: string) => `Percorso: ${path}`,
-  "vui.model.cached": (files: number, mb: string) =>
-    `${files} file, ${mb} MB. Resta installato tra un avvio e l'altro; ADE chiede al browser di non cancellarlo.`,
-  "vui.model.partial": (files: number, mb: string) =>
-    `${files} file, ${mb} MB — scaricamento incompleto. Resta installato tra un avvio e l'altro; ADE chiede al browser di non cancellarlo.`,
-  "vui.model.download": "Scarica modello Parakeet (~640 MB)",
-  "vui.model.download.hint": "Pronto all'uso appena finisce il download",
-  "vui.model.downloading": "Download in corso...",
-  "vui.model.downloaded": "✓ Modello scaricato con successo! Parakeet è ora attivo e pronto all'uso.",
-  "vui.model.deleting": "Eliminazione…",
-  "vui.model.delete": "Elimina il modello scaricato",
-  "vui.model.delete.hint":
-    "Da usare se la trascrizione locale non parte: rimuove i file e li riscarica al prossimo avvio.",
   "vui.backend.title": "Motore di riconoscimento",
   "vui.backend.desc": "I tre motori ASR supportati con stato di idoneità diagnostica",
-  "vui.backend.parakeet": "Parakeet locale",
-  "vui.backend.parakeet.desc": "Riconoscimento neurale NVIDIA Parakeet TDT 0.6B sul tuo computer",
-  "vui.backend.downloading": (percent: number) => `Download in corso (${percent}%)`,
   "vui.backend.readyLocal": "Pronto (in locale)",
   "vui.backend.ready": "Pronto",
   "vui.backend.available": "Disponibile (~640 MB)",
   "vui.backend.unsupported": "Non supportato",
   "vui.backend.needsKey": "Serve la chiave",
-  "vui.backend.parakeet.note":
-    "Modello neurale quantizzato (~640 MB, INT8). Trascrizione vocale neurale sul tuo computer, privata e senza inviare audio a server esterni.",
-  "vui.backend.accel": "Accelerazione hardware",
-  "vui.backend.accel.auto": "Sceglie WebGPU se disponibile, altrimenti WASM",
-  "vui.backend.accel.gpu": "Inferenza sulla GPU",
-  "vui.backend.accel.noGpu": "WebGPU non è disponibile in questo browser",
-  "vui.backend.accel.cpu": "Inferenza sulla CPU",
-  "vui.backend.accel.noWasm": "WebAssembly non è disponibile in questo ambiente",
-  "vui.backend.weights": (message: string) => `Scaricamento pesi modello (${message})`,
-  "vui.backend.weights.default": "download in corso",
   "vui.backend.openrouter.desc": "Trascrizione cloud ad alta accuratezza (microsoft/mai-transcribe-2)",
   "vui.key.title": "Chiave API OpenRouter",
   "vui.key.saved": (masked: string) => `Chiave salvata: ${masked}`,
@@ -346,9 +310,7 @@ export const voiceIt = {
   "vui.footer.keys": "Frecce per scegliere · Invio per confermare · Esc per chiudere",
   "vui.footer.done": "Fatto",
   "vui.asr.noRuntime": "Né WebGPU né WebAssembly sono supportati in questo browser o ambiente.",
-  "vui.asr.notDownloaded": "Il modello neurale Parakeet non è ancora stato scaricato in locale.",
   "vui.asr.noKey": "Chiave API OpenRouter mancante.",
-  "vui.asr.parakeetCheck": "Errore durante la verifica del supporto Parakeet.",
   "vui.asr.keyCheck": "Errore durante la verifica della chiave OpenRouter.",
 
   // Voice wake word hint
@@ -388,8 +350,6 @@ export const voiceIt = {
   "vui.fix.transcriptionChord": (value: string, problem: string, fallback: string) =>
     `Scorciatoia modalità trascrizione non utilizzabile ('${value}'). ${problem} Ripristinata '${fallback}'.`,
   "vui.fix.backend": (value: string, fallback: string) => `Backend '${value}' non valido: ripristinato '${fallback}'.`,
-  "vui.fix.parakeetBackend": (value: string, fallback: string) =>
-    `Backend Parakeet '${value}' non riconosciuto: ripristinato '${fallback}'.`,
   "vui.fix.wordsDropped": (dropped: string) => `Parole personalizzate non testuali ignorate: ${dropped}.`,
   "vui.fix.wordsInvalid": "Elenco di parole personalizzate non valido: svuotato.",
   "vui.fix.speakReplies": "Lettura delle risposte non valida: ripristinata attiva.",

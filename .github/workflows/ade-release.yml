@@ -130,6 +130,21 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
             --title "$NAME ${TAG#ade-v}" --notes-file notes.md --verify-tag
 
+      # The release that holds the updater's manifest also holds NikVerse's assets (one per file, named `nikverse-<sha256>`), which the builds
+      # below put there before this release is public. It is created here, once, and not by the builds that run side by side and would race.
+      - name: The updater release
+        if: ${{ !inputs.attach_only }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NAME="$(jq -r .name packages/ade/brand.json)"
+          if ! gh release view ade-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create ade-updater --repo "$GITHUB_REPOSITORY" --target feat/ade --prerelease --latest=false \
+              --title "$NAME updater" --notes "Manifest read by installed copies of $NAME to update themselves. Not a release: see the ade-v* releases."
+          fi
+
   checks:
     needs: draft
     uses: ./.github/workflows/ade-checks.yml
@@ -240,6 +255,53 @@ jobs:
           fi
           CONFIG_JSON="{\"version\":\"$VERSION\",\"build\":{\"beforeBuildCommand\":\"\"},\"bundle\":{\"createUpdaterArtifacts\":$UPDATER,\"macOS\":{\"signingIdentity\":\"-\"}}}"
           bun x tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$CONFIG_JSON"
+
+      # NikVerse's assets are not in the installer: the app fetches them the first time the world opens, by the hash its own list carries
+      # (`src-tauri/src/nikverse_assets.rs`), from this release. The list was compiled from the folder as it is now, so every file of the
+      # folder is put there, named by content and never overwritten: the same file in two versions is one asset, and an older app finds
+      # the ones its list names. This runs before `publish` makes the release public, and a file that cannot be put there fails the build:
+      # a release whose world cannot be fetched is worse than no release.
+      - name: NikVerse assets
+        if: ${{ !inputs.attach_only }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DIR=packages/ade/src-tauri/nikverse-assets
+          STAGE="$(mktemp -d)"
+          digest() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+          names() { gh release view ade-updater --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'; }
+          HAVE="$(names)"
+          UPLOADED=0
+          # The same files the manifest lists: everything that is not hidden (build.rs skips a name that starts with a dot, folders too).
+          while IFS= read -r FILE; do
+            HASH="$(digest "$FILE")"
+            ASSET="nikverse-$HASH"
+            if printf '%s\n' "$HAVE" | grep -qx "$ASSET"; then continue; fi
+            cp "$FILE" "$STAGE/$ASSET"
+            # No --clobber: an asset is never replaced. Two builds may put the same file at once; then one of the uploads
+            # fails and the asset is there all the same, which is what is checked.
+            if ! gh release upload ade-updater "$STAGE/$ASSET" --repo "$GITHUB_REPOSITORY"; then
+              names | grep -qx "$ASSET" || { echo "could not upload $ASSET ($FILE)"; exit 1; }
+            fi
+            UPLOADED=$((UPLOADED + 1))
+          done < <(find "$DIR" -type f -not -path '*/.*' | sort)
+          TOTAL="$(find "$DIR" -type f -not -path '*/.*' | wc -l | tr -d '[:space:]')"
+          echo "NikVerse assets: $TOTAL files, $UPLOADED uploaded"
+          if [ "$TOTAL" = "0" ]; then echo "no NikVerse assets to upload"; exit 1; fi
+          # Not what the uploads said: what the release holds now. Every hash the manifest carries must be an asset of ade-updater,
+          # because a list naming one that is not there is a world that cannot be fetched, and the release must not go out with it.
+          LIVE="$(names)"
+          ABSENT=0
+          while IFS= read -r FILE; do
+            HASH="$(digest "$FILE")"
+            if ! printf '%s\n' "$LIVE" | grep -qx "nikverse-$HASH"; then
+              echo "not on ade-updater: nikverse-$HASH ($FILE)"
+              ABSENT=$((ABSENT + 1))
+            fi
+          done < <(find "$DIR" -type f -not -path '*/.*' | sort)
+          if [ "$ABSENT" != "0" ]; then echo "$ABSENT NikVerse assets are not on ade-updater"; exit 1; fi
 
       # The setup goes to SignPath, comes back with an Authenticode signature,
       # and replaces the unsigned one. Its updater signature was computed over

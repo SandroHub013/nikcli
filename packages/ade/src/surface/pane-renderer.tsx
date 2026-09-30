@@ -30,6 +30,7 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import { NikversePane } from "../nikverse/nikverse-pane"
+import type { AssetsHost } from "../nikverse/assets"
 import type { Snapshot } from "../nikverse/protocol"
 import type { ForwardedChord } from "../nikverse/chords"
 import type { DesignHub } from "../design/hub"
@@ -113,6 +114,8 @@ export interface PaneRendererDeps {
     focusProject: (shopId: string) => void
     chord: (chord: ForwardedChord) => void
     ignored: (reason: string) => void
+    /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
+    assets: () => Promise<AssetsHost | undefined>
   }
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
@@ -382,6 +385,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onFocusProject={deps.world.focusProject}
         onChord={deps.world.chord}
         onIgnored={deps.world.ignored}
+        assets={deps.world.assets}
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}

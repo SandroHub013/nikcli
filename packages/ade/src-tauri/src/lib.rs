@@ -21,6 +21,7 @@ mod frontend;
 mod gateway;
 mod media;
 mod nikverse;
+mod nikverse_assets;
 mod project_bytes;
 mod pty;
 mod record;
@@ -2177,6 +2178,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
+        .manage(nikverse_assets::Assets::default())
         .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
@@ -2283,6 +2285,8 @@ pub fn run() {
             tts::tts_local_delete,
             tts::tts_install_status,
             tts::tts_install_cancel,
+            nikverse_assets::nikverse_assets_status,
+            nikverse_assets::nikverse_assets_install,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,

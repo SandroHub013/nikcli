@@ -5,7 +5,7 @@ use std::{
 };
 
 /// The folder of NikVerse's assets, next to this file. `src/nikverse.rs` names the same folder (`ASSETS_DIR`)
-/// and `tauri.conf.json` ships it in `bundle.resources`; a test holds the three together.
+/// and the installer does not ship it: `src/nikverse_assets.rs` fetches the files the manifest below names.
 const ASSETS_DIR: &str = "nikverse-assets";
 
 fn main() {

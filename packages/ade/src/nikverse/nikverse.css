@@ -6,6 +6,7 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 
 [data-slot="nikverse-frame"] {
@@ -21,6 +22,48 @@
   max-width: 32ch;
   text-align: center;
   color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="nikverse-assets"] {
+  margin: auto;
+  padding: 16px;
+  max-width: 40ch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--ade-text-dim, currentColor);
+}
+
+/* The frame is in place under a failure line: the line sits over it instead of pushing it. */
+[data-slot="nikverse-assets"][data-failed="true"] {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  margin: 0;
+  max-width: none;
+  flex-direction: row;
+  justify-content: space-between;
+  text-align: left;
+  background: var(--ade-sunken, canvas);
+  border: 1px solid var(--ade-line, currentColor);
+  border-radius: var(--ade-radius-md);
+}
+
+[data-slot="nikverse-assets-track"] {
+  width: 100%;
+  height: 4px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-line, currentColor);
+  overflow: hidden;
+}
+
+[data-slot="nikverse-assets-fill"] {
+  height: 100%;
+  background: var(--ade-accent, currentColor);
+  transition: width 200ms linear;
 }
 
 [data-slot="nikverse-ask"] {

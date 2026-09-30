@@ -4,7 +4,7 @@
  * Acquires getUserMedia({ audio: true }) exactly ONCE and routes the hardware stream
  * into three synchronized outputs:
  * 1. Real-time audio RMS level for visual activity rings (reusing audio/level.ts).
- * 2. Continuous 16 kHz mono Float32Array PCM chunks for local Parakeet TDT streaming.
+ * 2. Continuous 16 kHz mono Float32Array PCM chunks for a local streaming engine.
  * 3. Speech-bounded compressed audio Blobs via MediaRecorder for cloud OpenRouter transcription.
  */
 
@@ -141,7 +141,7 @@ export function chooseSupportedAudioMimeType(isTypeSupported?: (mime: string) =>
  *
  * AudioContext was requested with sampleRate: 16000. If the underlying hardware
  * or browser does not honor this and uses a different rate (e.g. 44100 or 48000 Hz),
- * we explicitly resample the PCM samples to 16000 Hz mono. Parakeet TDT strictly
+ * we explicitly resample the PCM samples to 16000 Hz mono. Local speech models strictly
  * requires 16 kHz; wrong sample rates do not crash, but result in garbage transcription.
  */
 export function resamplePcm(input: Float32Array, fromSampleRate: number, toSampleRate: number = 16000): Float32Array {
@@ -198,7 +198,7 @@ export interface MicCaptureOptions {
   now?: () => number
   /** Real-time RMS audio level stream [0.0 - 1.0]. */
   onLevel?: MicLevelCallback
-  /** 16 kHz mono Float32Array PCM sample chunks for Parakeet. */
+  /** 16 kHz mono Float32Array PCM sample chunks for a local streaming engine. */
   onPcmChunk?: PcmChunkCallback
   /** Closed compressed speech segments for OpenRouter. */
   onSegment?: SegmentCallback
@@ -693,7 +693,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000, at?: number): void {
     if (!running) return
 
-    // Resample to 16 kHz mono Float32Array for Parakeet
+    // Resample to 16 kHz mono Float32Array for a local streaming engine
     const pcm16k = inputSampleRate !== 16000 ? resamplePcm(samples, inputSampleRate, 16000) : samples
 
     onPcmChunkCb(pcm16k)

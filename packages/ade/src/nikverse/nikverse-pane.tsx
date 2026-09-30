@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { createAssetsFlow, type AssetsFlow, type AssetsHost, type AssetsView } from "./assets"
 import { createLifecycle } from "./lifecycle"
 import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
@@ -42,6 +43,8 @@ export function NikversePane(props: {
   focused: boolean
   onOpenSession: (paneId: string) => void
   onFocusProject: (shopId: string) => void
+  /** The host's commands for the world's assets, which are fetched the first time the panel opens. Absent: the world starts as it is. */
+  assets?: () => Promise<AssetsHost | undefined>
   /** A shortcut the world forwarded: ADE reads it as its own binding and runs it only if it is navigation. */
   onChord: (chord: ForwardedChord) => void
   /** A message the world sent that ADE ignored, and why. */
@@ -68,6 +71,37 @@ export function NikversePane(props: {
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
+  /*
+   * The frame is held back while the world's files are looked at and fetched: started at once it would load with placeholders and again with the
+   * files. Without a host to ask there is nothing to wait for. Once the files are in it starts; if they could not be fetched it starts anyway
+   * (placeholders and a line saying why), and «Riprova» reloads it when they arrive.
+   */
+  const [waiting, setWaiting] = createSignal(props.assets !== undefined)
+  const [assetsView, setAssetsView] = createSignal<AssetsView>({ kind: "ready" })
+  let assetsFlow: AssetsFlow | undefined
+  const reloadFrame = () => {
+    nonce = newNonce()
+    setFrameSrc(sourceFor(nonce))
+  }
+  const startAssets = async () => {
+    if (!assetsFlow) {
+      const host = await props.assets?.()
+      assetsFlow = createAssetsFlow({
+        host,
+        view: setAssetsView,
+        ready: (complete) => {
+          if (waiting()) setWaiting(false)
+          // The frame was already up with placeholders and the files have come since: it starts again with them.
+          else if (complete) reloadFrame()
+        },
+        schedule: (fn, ms) => {
+          const timer = setTimeout(fn, ms)
+          return () => clearTimeout(timer)
+        },
+      })
+    }
+    await assetsFlow.start()
+  }
   const [asking, setAsking] = createSignal<{ command: Command; approve: () => void }>()
 
   const run = (command: Command) => {
@@ -151,6 +185,10 @@ export function NikversePane(props: {
   })
 
   onMount(() => {
+    if (props.assets) void startAssets()
+  })
+
+  onMount(() => {
     // Visible means the window is shown and the panel is on screen (not behind another section, nor scrolled away).
     let onScreen = true
     const apply = () => lifecycle.setVisible(onScreen && document.visibilityState !== "hidden")
@@ -178,6 +216,7 @@ export function NikversePane(props: {
   })
 
   onCleanup(() => {
+    assetsFlow?.dispose()
     lifecycle.dispose()
     link?.close()
     link = undefined
@@ -250,7 +289,36 @@ export function NikversePane(props: {
       </Show>
 
       <div data-slot="nikverse-body">
-        <Show when={loaded()} fallback={<p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
+        <Show when={assetsView().kind === "fetching" ? (assetsView() as Extract<AssetsView, { kind: "fetching" }>) : undefined}>
+          {(fetching) => (
+            <div data-slot="nikverse-assets" role="status" aria-live="polite">
+              <p>{t("nikverse.assets.fetching", fetching().megabytes)}</p>
+              <div
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={fetching().percent}
+                data-slot="nikverse-assets-track"
+              >
+                <div data-slot="nikverse-assets-fill" style={{ width: `${fetching().percent ?? 0}%` }} />
+              </div>
+              <Show when={fetching().percent !== undefined}>
+                <span data-slot="nikverse-assets-percent">{`${fetching().percent ?? 0}%`}</span>
+              </Show>
+            </div>
+          )}
+        </Show>
+        <Show when={assetsView().kind === "failed" ? (assetsView() as Extract<AssetsView, { kind: "failed" }>) : undefined}>
+          {(failed) => (
+            <div data-slot="nikverse-assets" data-failed="true" role="alert">
+              <p>{t("nikverse.assets.failed", failed().reason)}</p>
+              <button type="button" data-slot="nikverse-assets-retry" onClick={() => void startAssets()}>
+                {t("nikverse.assets.retry")}
+              </button>
+            </div>
+          )}
+        </Show>
+        <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
           <iframe
             ref={frame}
             data-slot="nikverse-frame"

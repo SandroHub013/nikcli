@@ -152,6 +152,9 @@ export const en: Messages = {
   "newPane.nikverse": "NikVerse",
   "newPane.nikverse.hint": "the city of your sessions, live",
   "nikverse.unloaded": "World unloaded to save memory: come back to this panel to reopen it.",
+  "nikverse.assets.fetching": (megabytes: number) => `Downloading NikVerse's world (${megabytes} MB), the first time only…`,
+  "nikverse.assets.failed": (reason: string) => `Could not download NikVerse's world: ${reason} For now you see placeholders.`,
+  "nikverse.assets.retry": "Try again",
   "nikverse.ask": (what) => `NikVerse asks to: ${what}`,
   "nikverse.allow": "Allow",
   "nikverse.deny": "Deny",
@@ -1343,6 +1346,10 @@ export const en: Messages = {
     `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "voice.listeningOff": (shortcut, always) =>
     `Starting with this version ADE no longer listens by itself: the microphone opens with ${shortcut} or the button at the top, and the name works inside it. Listening all the time costs money, because every voice in the room is sent to the transcription service: to have it back, turn on “${always}” in the voice settings.`,
+  "voice.parakeetRemoved":
+    "Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, with your key.",
+  "voice.parakeetRemovedListeningOff": (always) =>
+    `Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, and listening all the time is off, because every voice in the room would have been sent to the paid service. To have it back, turn on “${always}” in the voice settings.`,
   "voice.alert.permission": (pane, what) => `${pane} is requesting permission for: ${what}. Do you want to allow it?`,
   "voice.alert.completed": (pane, details) => `${pane} has finished: ${details}.`,
   "voice.alert.completedSimple": (pane) => `${pane} has finished the work.`,

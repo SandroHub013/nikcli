@@ -267,6 +267,33 @@ describe("the migration to the wake word happens once", () => {
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("nik")
     expect(loadVoiceSettings(store).migrations).toEqual([])
   })
+
+  test("the move off the removed local engine is written back at the current version, so it is told once and listening stays off", () => {
+    const store = new MemoryStorage()
+    store.setItem(
+      VOICE_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        ...DEFAULT_VOICE_SETTINGS,
+        backend: "parakeet",
+        alwaysListen: true,
+        activation: "wake-word",
+      }),
+    )
+    store.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-x")
+
+    const first = loadVoiceSettings(store)
+    expect(first.settings.backend).toBe("openrouter")
+    expect(first.settings.alwaysListen).toBe(false)
+    expect(first.migrations).toEqual(["parakeet-removed", "parakeet-listening-off"])
+
+    const stored = JSON.parse(store.getItem(VOICE_SETTINGS_STORAGE_KEY) ?? "{}")
+    expect(stored.backend).toBe("openrouter")
+    expect(stored.alwaysListen).toBe(false)
+
+    const second = loadVoiceSettings(store)
+    expect(second.migrations).toEqual([])
+    expect(second.settings.alwaysListen).toBe(false)
+  })
 })
 
 describe("0.7.0: a profile saved on the wake word", () => {

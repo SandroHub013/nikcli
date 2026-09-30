@@ -251,6 +251,10 @@ export interface Host {
   ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
   /** K3: stops the install under way for a provider; whether there was one. */
   ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
+  /** NikVerse's assets: whether the world's folder is complete, and how a fetch under way is going. */
+  nikverseAssetsStatus?: () => Promise<AssetsStatus>
+  /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
+  nikverseAssetsInstall?: () => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -397,6 +401,7 @@ import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
+import type { AssetsStatus } from "../nikverse/assets"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -762,6 +767,16 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsInstallCancel(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<{ cancelled: boolean }>("tts_install_cancel", { provider })
+    },
+
+    async nikverseAssetsStatus() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<AssetsStatus>("nikverse_assets_status")
+    },
+
+    async nikverseAssetsInstall() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("nikverse_assets_install")
     },
 
     /*

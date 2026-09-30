@@ -47,11 +47,11 @@ export interface VoicePrerequisiteItem {
 }
 
 /**
- * Whether transcription is ready as far as the key goes: only the OpenRouter backend needs one, the local
- * one (Parakeet) does not.
+ * Whether transcription is ready as far as the key goes: the one engine, OpenRouter, needs one. (There was a local
+ * engine that did not; it is gone.)
  */
 export function transcriptionReady(settings: { backend?: string; openRouterApiKey?: string }): boolean {
-  return settings.backend === "parakeet" || Boolean(settings.openRouterApiKey?.trim())
+  return Boolean(settings.openRouterApiKey?.trim())
 }
 
 /** Returns true when all voice prerequisites are met. */
