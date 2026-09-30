@@ -9,7 +9,7 @@
  * test going red. The fourth is the consent dialog in the workbench, which
  * would otherwise still open for code that never runs.
  */
-import { describe, expect, test, mock } from "bun:test"
+import { afterAll, describe, expect, test, mock } from "bun:test"
 import { readFileSync } from "node:fs"
 import type { DiscoveryIO } from "./discovery"
 import { FILE_PLUGIN_DISABLED_REASON, importPluginModule } from "./loader"
@@ -18,13 +18,25 @@ import { createAdePluginRuntime, type RuntimeHost } from "./runtime"
 /** Every path `convertFileSrc` was asked for: none may be there. */
 const converted: string[] = []
 
+/*
+ * The mock carries the real module's other exports, and is taken back when
+ * this file is done: `@tauri-apps/api/event` imports from `core`, so a
+ * partial replacement breaks modules these tests never touch, and a test's
+ * mock is not the application's business.
+ */
+const realCore = await import("@tauri-apps/api/core")
+
 mock.module("@tauri-apps/api/core", () => ({
+  ...realCore,
   convertFileSrc: (path: string) => {
     converted.push(path)
     return `asset://localhost/${encodeURIComponent(path)}`
   },
-  invoke: async () => undefined,
 }))
+
+afterAll(() => {
+  mock.module("@tauri-apps/api/core", () => realCore)
+})
 
 const host: RuntimeHost = {
   data: {
