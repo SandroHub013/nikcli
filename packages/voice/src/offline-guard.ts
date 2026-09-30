@@ -1,4 +1,4 @@
-﻿import { afterAll } from "bun:test"
+import { afterAll } from "bun:test"
 
 /**
  * The suite never goes to the network: preloaded by `bunfig.toml` before every

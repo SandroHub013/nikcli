@@ -1,2 +1,2 @@
-﻿[test]
+[test]
 preload = ["./src/offline-guard.ts"]
