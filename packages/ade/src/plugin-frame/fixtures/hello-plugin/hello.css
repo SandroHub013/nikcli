@@ -1,0 +1,6 @@
+body { font-family: system-ui, sans-serif; font-size: 0.85rem; margin: 0.75rem; color: #222; background: #f6f6f6; }
+h1 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+table { border-collapse: collapse; width: 100%; }
+td { border-top: 1px solid #ccc; padding: 0.15rem 0.4rem; vertical-align: top; font-family: ui-monospace, monospace; font-size: 0.75rem; }
+td.ok { color: #0a6; }
+td.no { color: #c30; }

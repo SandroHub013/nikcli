@@ -584,26 +584,60 @@ pub struct Listed {
     pub pending: Option<String>,
     pub previous: Option<String>,
     pub bytes: u64,
+    /// What the manifest of `current` asks for, so the panel can tell what is granted without reading a file.
+    pub permissions: Vec<String>,
+    /// What the manifest of `pending` asks for: shown before an update that asks for more is switched on.
+    pub pending_permissions: Option<Vec<String>>,
+    /// Served from a folder, with no signature (a debug build with `ADE_PLUGIN_DEV_DIR`).
+    pub dev: bool,
 }
 
 /// What is installed, and what it weighs.
 pub fn list(store: &Store) -> Vec<Listed> {
-    let Some(root) = store.root() else { return Vec::new() };
-    let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
-    let mut out: Vec<Listed> = entries
-        .flatten()
-        .filter(|entry| entry.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        .filter_map(|entry| {
-            let id = entry.file_name().to_string_lossy().into_owned();
-            scheme::valid_id(&id).then(|| Listed {
-                current: store.pointer(&id, CURRENT),
-                pending: store.pointer(&id, PENDING),
-                previous: store.pointer(&id, PREVIOUS),
-                bytes: dir_bytes(&entry.path()),
-                id,
+    let mut out: Vec<Listed> = Vec::new();
+    if let Some(entries) = store.root().and_then(|root| std::fs::read_dir(root).ok()) {
+        out = entries
+            .flatten()
+            .filter(|entry| entry.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .filter_map(|entry| {
+                let id = entry.file_name().to_string_lossy().into_owned();
+                if !scheme::valid_id(&id) {
+                    return None;
+                }
+                let (current, pending) = (store.pointer(&id, CURRENT), store.pointer(&id, PENDING));
+                // A folder with neither is not an installed plugin: what is left of an uninstall, or the data of one under development.
+                if current.is_none() && pending.is_none() {
+                    return None;
+                }
+                let permissions_of =
+                    |version: &Option<String>| version.as_ref().and_then(|v| store.manifest(&id, v).ok()).map(|manifest| manifest.permissions);
+                Some(Listed {
+                    permissions: permissions_of(&current).unwrap_or_default(),
+                    pending_permissions: permissions_of(&pending),
+                    previous: store.pointer(&id, PREVIOUS),
+                    bytes: dir_bytes(&entry.path()),
+                    dev: false,
+                    current,
+                    pending,
+                    id,
+                })
             })
-        })
-        .collect();
+            .collect();
+    }
+    // The plugin under development takes the place of an installed one with the same id.
+    if let Some(dev) = store.dev_plugin() {
+        out.retain(|listed| listed.id != dev.id);
+        out.push(Listed {
+            bytes: dir_bytes(&dev.dir),
+            current: Some(dev.version),
+            pending: None,
+            previous: None,
+            permissions: dev.permissions,
+            pending_permissions: None,
+            dev: true,
+            id: dev.id,
+        });
+    }
     out.sort_by(|a, b| a.id.cmp(&b.id));
     out
 }
@@ -1440,5 +1474,54 @@ mod tests {
         for other in [include_str!("nikverse.rs"), include_str!("nikverse_assets.rs")] {
             assert!(!other.contains("plugin_scheme") && !other.contains("plugin_install"));
         }
+    }
+
+    // ---- what the list says ----
+
+    #[test]
+    fn the_list_says_what_each_version_asks_for_and_what_it_weighs() {
+        let (_scratch, store) = fresh();
+        scheme::tests::install_by_hand(&store, "alpha", "1.0.0", &[("index.html", b"x")], &["storage", "sessions:read"]);
+        // A newer version waiting: its permissions are readable before it is switched on.
+        let pending = store.version_dir("alpha", "1.1.0").unwrap();
+        std::fs::create_dir_all(&pending).unwrap();
+        let manifest = format!(
+            r#"{{"id":"alpha","version":"1.1.0","permissions":["storage","sessions:read","pane:focus"],"files":[{{"path":"index.html","sha256":"{}","size":1}}]}}"#,
+            crate::nikverse::sha256_hex(b"y")
+        );
+        std::fs::write(pending.join(scheme::MANIFEST_FILE), manifest).unwrap();
+        std::fs::write(pending.join("index.html"), b"y").unwrap();
+        store.set_pointer("alpha", PENDING, "1.1.0").unwrap();
+        let listed = list(&store);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].permissions, vec!["storage".to_string(), "sessions:read".to_string()]);
+        assert_eq!(listed[0].pending_permissions, Some(vec!["storage".to_string(), "sessions:read".to_string(), "pane:focus".to_string()]));
+        assert!(!listed[0].dev && listed[0].bytes > 0);
+    }
+
+    #[test]
+    fn a_folder_with_no_version_to_serve_is_not_an_installed_plugin() {
+        // What is left of an uninstall, or the document of a plugin under development.
+        let (scratch, store) = fresh();
+        std::fs::create_dir_all(scratch.0.join("ghost")).unwrap();
+        std::fs::write(scratch.0.join("ghost").join("storage.json"), "{}").unwrap();
+        assert!(list(&store).is_empty());
+    }
+
+    #[test]
+    fn the_plugin_under_development_is_listed_as_such_and_replaces_an_installed_one_of_its_id() {
+        let (scratch, store) = fresh();
+        scheme::tests::install_by_hand(&store, "hello", "1.0.0", &[("index.html", b"x")], &["theme"]);
+        let dev = scratch.0.join("dev-plugin");
+        std::fs::create_dir_all(&dev).unwrap();
+        std::fs::write(dev.join("plugin.json"), r#"{"id":"hello","version":"0.0.1","permissions":["storage"]}"#).unwrap();
+        std::fs::write(dev.join("index.html"), b"12345").unwrap();
+        let store = store.with_dev(Some(dev));
+        let listed = list(&store);
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].dev);
+        assert_eq!(listed[0].current.as_deref(), Some("0.0.1"));
+        assert_eq!(listed[0].permissions, vec!["storage".to_string()]);
+        assert!(listed[0].bytes >= 5);
     }
 }

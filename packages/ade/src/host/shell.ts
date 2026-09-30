@@ -255,6 +255,24 @@ export interface Host {
   nikverseAssetsStatus?: () => Promise<AssetsStatus>
   /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
   nikverseAssetsInstall?: () => Promise<void>
+  /**
+   * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
+   * back and remove a version. All of them answer to the main window only.
+   */
+  pluginList?: () => Promise<InstalledPlugin[]>
+  pluginCheck?: (id: string) => Promise<PluginAvailable>
+  /** Downloads into `pending`; resolves when it is over, `false` when there was nothing to download. */
+  pluginInstall?: (id: string) => Promise<boolean>
+  pluginStatus?: (id: string) => Promise<PluginProgress>
+  /** `pending` becomes `current`; the version now in use. */
+  pluginCommit?: (id: string) => Promise<string>
+  /** `previous` becomes `current`; the version now in use. */
+  pluginRollback?: (id: string) => Promise<string>
+  /** Removes the plugin and its data; the bytes freed. */
+  pluginUninstall?: (id: string) => Promise<number>
+  /** The plugin's own document (`storage.json`), `null` when it never wrote one. */
+  pluginStorageGet?: (id: string) => Promise<unknown>
+  pluginStorageSet?: (id: string, json: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -402,6 +420,7 @@ import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
+import type { InstalledPlugin, PluginAvailable, PluginProgress } from "../plugin-frame/host-types"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -777,6 +796,51 @@ export async function getHost(): Promise<Host | undefined> {
     async nikverseAssetsInstall() {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("nikverse_assets_install")
+    },
+
+    async pluginList() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<InstalledPlugin[]>("plugin_list")
+    },
+
+    async pluginCheck(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<PluginAvailable>("plugin_check", { id })
+    },
+
+    async pluginInstall(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<boolean>("plugin_install", { id })
+    },
+
+    async pluginStatus(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<PluginProgress>("plugin_status", { id })
+    },
+
+    async pluginCommit(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string>("plugin_commit", { id })
+    },
+
+    async pluginRollback(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string>("plugin_rollback", { id })
+    },
+
+    async pluginUninstall(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<number>("plugin_uninstall", { id })
+    },
+
+    async pluginStorageGet(id) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<unknown>("plugin_storage_get", { id })
+    },
+
+    async pluginStorageSet(id, json) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("plugin_storage_set", { id, json })
     },
 
     /*

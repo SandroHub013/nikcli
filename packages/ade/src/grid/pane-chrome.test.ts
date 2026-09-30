@@ -18,6 +18,9 @@ const renderer = read("surface/pane-renderer.tsx")
 
 /** The file a component imported by the renderer lives in, through a barrel if there is one. */
 function componentFile(component: string): string {
+  // A pane loaded only when one opens: `const X = lazy(() => import("../dir/file").then(...))`.
+  const lazily = new RegExp(`const ${component} = lazy\\(\\(\\) => import\\("\\.\\./([^"]+)"\\)`).exec(renderer)?.[1]
+  if (lazily && existsSync(join(src, `${lazily}.tsx`))) return `${lazily}.tsx`
   const from = new RegExp(`import \\{[^}]*\\b${component}\\b[^}]*\\} from "\\.\\./([^"]+)"`).exec(renderer)?.[1]
   if (!from) throw new Error(`${component} is not imported by the renderer`)
   if (existsSync(join(src, `${from}.tsx`))) return `${from}.tsx`
@@ -50,6 +53,7 @@ describe("pane chrome", () => {
         "decisionsPane",
         "designPane",
         "filePane",
+        "framePluginPane",
         "modelPane",
         "nikversePane",
         "pluginPane",

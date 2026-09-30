@@ -17,6 +17,10 @@
 //! a backslash, a NUL, and any `:` at all (a drive, a scheme, and `file::$DATA`, the NTFS alternate stream that reads and writes a file's
 //! other data). An `<id>` outside `^[a-z][a-z0-9-]{1,31}$` is refused too.
 //!
+//! **In a debug build only**, `ADE_PLUGIN_DEV_DIR` names a folder that is served as a plugin with no signature and no hash: its
+//! `plugin.json` (`id`, `version`, `permissions`) says which plugin it stands for, and every file under it is served (read fresh on
+//! each request, and only ever inside the folder). A release build does not read the variable at all (`dev_dir_from`, and a test).
+//!
 //! Every answer, refusals included, carries the plugin's policy: its own prefix (`http://plugin.localhost/<id>/`, `plugin://localhost/<id>/`)
 //! and nothing else. No network, no inline script. Another plugin's prefix is not named, so a plugin cannot load another's files.
 
@@ -80,16 +84,83 @@ pub fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
 /// Where the plugins live: `<app local data>/plugins`. `None` when there is no telling, and then nothing is served.
 pub struct Store {
     root: Option<PathBuf>,
+    /// The folder of the plugin being developed (`ADE_PLUGIN_DEV_DIR`, debug builds only).
+    dev: Option<PathBuf>,
+}
+
+/// The largest file served from a development folder: it is not checked against a manifest, so it is bounded instead.
+const MAX_DEV_FILE_BYTES: u64 = 50 * 1024 * 1024;
+/// The file of a development folder that says which plugin it is.
+pub const DEV_MANIFEST_FILE: &str = "plugin.json";
+
+/// A plugin served from a folder, as its `plugin.json` describes it. Read again on every use, so an edit shows at the next request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DevPlugin {
+    pub dir: PathBuf,
+    pub id: String,
+    pub version: String,
+    pub permissions: Vec<String>,
+}
+
+/// The folder named by `ADE_PLUGIN_DEV_DIR`, but only in a debug build: `debug` says whether this is one, so that a test can show that a
+/// release build reads nothing from the variable.
+pub fn dev_dir_from(variable: Option<&str>, debug: bool) -> Option<PathBuf> {
+    if !debug {
+        return None;
+    }
+    variable.map(str::trim).filter(|text| !text.is_empty()).map(PathBuf::from)
+}
+
+/// The variable itself is read only where the code exists: a release build has no line that looks at it.
+#[cfg(debug_assertions)]
+fn dev_dir_env() -> Option<PathBuf> {
+    dev_dir_from(std::env::var("ADE_PLUGIN_DEV_DIR").ok().as_deref(), true)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_dir_env() -> Option<PathBuf> {
+    dev_dir_from(None, false)
 }
 
 impl Store {
     pub fn new(root: PathBuf) -> Store {
-        Store { root: Some(root) }
+        Store { root: Some(root), dev: None }
     }
 
     /// No folder: every plugin is "not installed".
     pub fn absent() -> Store {
-        Store { root: None }
+        Store { root: None, dev: None }
+    }
+
+    /// The same store, serving `dir` as a plugin under development.
+    pub fn with_dev(mut self, dir: Option<PathBuf>) -> Store {
+        self.dev = dir;
+        self
+    }
+
+    /// The plugin under development, when there is a folder and its `plugin.json` is one ADE accepts.
+    pub fn dev_plugin(&self) -> Option<DevPlugin> {
+        let dir = self.dev.clone()?;
+        let file = dir.join(DEV_MANIFEST_FILE);
+        if std::fs::metadata(&file).ok()?.len() > MAX_MANIFEST_BYTES {
+            return None;
+        }
+        #[derive(Deserialize)]
+        struct Described {
+            id: String,
+            version: String,
+            #[serde(default)]
+            permissions: Vec<String>,
+        }
+        let described: Described = serde_json::from_slice(&std::fs::read(file).ok()?).ok()?;
+        if !valid_id(&described.id)
+            || parse_version(&described.version).is_none()
+            || described.permissions.len() > MAX_PERMISSIONS
+            || described.permissions.iter().any(|p| p.is_empty() || p.len() > 32)
+        {
+            return None;
+        }
+        Some(DevPlugin { dir, id: described.id, version: described.version, permissions: described.permissions })
     }
 
     pub fn root(&self) -> Option<&Path> {
@@ -152,9 +223,12 @@ impl Store {
 /// The store of this run, found once.
 pub fn store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> &'static Store {
     static STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
-    STORE.get_or_init(|| match app.path().app_local_data_dir() {
-        Ok(dir) => Store::new(dir.join("plugins")),
-        Err(_) => Store::absent(),
+    STORE.get_or_init(|| {
+        match app.path().app_local_data_dir() {
+            Ok(dir) => Store::new(dir.join("plugins")),
+            Err(_) => Store::absent(),
+        }
+        .with_dev(dev_dir_env())
     })
 }
 
@@ -208,7 +282,8 @@ impl Manifest {
             || self.permissions.iter().any(|p| {
                 p.is_empty()
                     || p.len() > 32
-                    || !p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'_'))
+                    // `:` is in the names of the API itself (`sessions:read`, `pane:focus`…).
+                    || !p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'_' | b':'))
             })
         {
             return Err("permessi non validi nel manifesto".into());
@@ -394,10 +469,38 @@ fn io_status(error: std::io::Error) -> StatusCode {
     }
 }
 
+/// One file of a plugin under development: whatever is in the folder, and nothing outside it.
+///
+/// `relative` already passed `refused` (no `..`, no `:`, no backslash, no empty component); the canonical path is checked against the
+/// canonical folder all the same, so a link inside the folder that leads out of it is refused too.
+fn read_dev_file(dev: &DevPlugin, relative: &str) -> Result<(&'static str, Vec<u8>), StatusCode> {
+    if relative.split('/').any(|part| part.is_empty() || part.starts_with('.')) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let folder = std::fs::canonicalize(&dev.dir).map_err(io_status)?;
+    let file = std::fs::canonicalize(dev.dir.join(relative)).map_err(io_status)?;
+    if !file.starts_with(&folder) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let meta = std::fs::metadata(&file).map_err(io_status)?;
+    if !meta.is_file() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    if meta.len() > MAX_DEV_FILE_BYTES {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    let bytes = std::fs::read(&file).map_err(io_status)?;
+    Ok((asset_mime(relative), bytes))
+}
+
 /// The bytes of one file the installed manifest lists, or the status to answer with.
 ///
 /// `relative` is compared to the list and is not used as a path: what is read is the list's own `path`.
 fn read_file(store: &Store, id: &str, relative: &str) -> Result<(&'static str, Vec<u8>), StatusCode> {
+    // The plugin under development takes the place of an installed one with the same id: that is what is being tried.
+    if let Some(dev) = store.dev_plugin().filter(|dev| dev.id == id) {
+        return read_dev_file(&dev, relative);
+    }
     let version = store.pointer(id, CURRENT).ok_or(StatusCode::NOT_FOUND)?;
     let manifest = store.manifest(id, &version).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let entry = manifest.files.iter().find(|entry| entry.path == relative).ok_or(StatusCode::NOT_FOUND)?;
@@ -839,5 +942,142 @@ pub(crate) mod tests {
         assert!(Manifest::parse(ok(r#","permissions":["Theme"]"#, &file).as_bytes(), "alpha", "1.0.0").is_err());
         assert!(Manifest::parse(ok(r#","permissions":[""]"#, &file).as_bytes(), "alpha", "1.0.0").is_err());
         assert!(Manifest::parse(b"not json", "alpha", "1.0.0").is_err());
+        // The permissions of the plugin API (`frontend plugin-frame/api.ts`) have a colon in them, and every one of them is accepted.
+        for name in ["sessions:read", "projects:read", "decisions:count", "pane:focus", "command:navigation", "storage"] {
+            let json = format!(r#","permissions":["{name}"]"#);
+            assert!(Manifest::parse(ok(&json, &file).as_bytes(), "alpha", "1.0.0").is_ok(), "{name}");
+        }
+        // A colon is allowed inside a permission's name and nowhere else it could do harm: paths still refuse it.
+        assert!(plain_path("a:b").is_some());
+    }
+
+    // ---- a plugin under development ----
+
+    /// A folder with a `plugin.json` and a few files, and a store that serves it next to an empty plugins folder.
+    fn dev_store(scratch: &Scratch, manifest: &str) -> (Store, PathBuf) {
+        let dev = scratch.0.join("dev-plugin");
+        std::fs::create_dir_all(dev.join("sub")).unwrap();
+        std::fs::write(dev.join(DEV_MANIFEST_FILE), manifest).unwrap();
+        std::fs::write(dev.join("index.html"), b"<html>dev</html>").unwrap();
+        std::fs::write(dev.join("sub").join("a.js"), b"dev()").unwrap();
+        std::fs::write(dev.join(".secret"), b"no").unwrap();
+        (Store::new(scratch.0.join("plugins")).with_dev(Some(dev.clone())), dev)
+    }
+
+    const DEV_JSON: &str = r#"{"id":"hello","version":"0.0.1","permissions":["storage","sessions:read"]}"#;
+
+    #[test]
+    fn a_release_build_reads_nothing_from_the_variable() {
+        assert_eq!(dev_dir_from(Some("C:/somewhere"), false), None);
+        assert_eq!(dev_dir_from(Some("C:/somewhere"), true), Some(PathBuf::from("C:/somewhere")));
+        // Nothing, blank or only spaces is no folder.
+        for text in [None, Some(""), Some("   ")] {
+            assert_eq!(dev_dir_from(text, true), None);
+        }
+        // The variable is read only in a build that has debug assertions: the read is behind `cfg(debug_assertions)`.
+        let source = include_str!("plugin_scheme.rs");
+        let body = source.split("#[cfg(test)]").next().unwrap();
+        let read = body.find("std::env::var(\"ADE_PLUGIN_DEV_DIR\")").expect("the variable is read somewhere");
+        let attribute = body[..read].rfind("#[cfg(").expect("under a cfg");
+        assert!(body[attribute..read].starts_with("#[cfg(debug_assertions)]"), "{}", &body[attribute..read]);
+        assert_eq!(body.matches("ADE_PLUGIN_DEV_DIR\")").count(), 1);
+    }
+
+    #[test]
+    fn a_folder_under_development_is_served_as_its_plugin_with_no_signature() {
+        let scratch = Scratch::new();
+        let (store, _) = dev_store(&scratch, DEV_JSON);
+        let index = get(&store, "plugin://localhost/hello/");
+        assert_eq!(index.status(), StatusCode::OK);
+        assert_eq!(index.body().as_slice(), b"<html>dev</html>");
+        assert_eq!(header(&index, "content-type"), "text/html; charset=utf-8");
+        let script = get(&store, "plugin://localhost/hello/sub/a.js");
+        assert_eq!(script.status(), StatusCode::OK);
+        assert_eq!(header(&script, "content-type"), "text/javascript; charset=utf-8");
+        // The policy is the same as for an installed plugin's: opaque, and no network.
+        let csp = header(&index, "content-security-policy");
+        assert_eq!(csp, csp_for("hello"));
+        assert!(csp.contains("sandbox allow-scripts") && !csp.contains("allow-same-origin"));
+    }
+
+    #[test]
+    fn a_file_edited_after_the_first_request_is_served_as_it_is_now() {
+        let scratch = Scratch::new();
+        let (store, dev) = dev_store(&scratch, DEV_JSON);
+        assert_eq!(get(&store, "plugin://localhost/hello/").body().as_slice(), b"<html>dev</html>");
+        std::fs::write(dev.join("index.html"), b"<html>edited</html>").unwrap();
+        assert_eq!(get(&store, "plugin://localhost/hello/").body().as_slice(), b"<html>edited</html>");
+    }
+
+    #[test]
+    fn a_development_folder_serves_nothing_outside_itself() {
+        let scratch = Scratch::new();
+        let (store, _) = dev_store(&scratch, DEV_JSON);
+        std::fs::write(scratch.0.join("outside.txt"), b"outside").unwrap();
+        for uri in [
+            "plugin://localhost/hello/../outside.txt",
+            "plugin://localhost/hello/%2e%2e/outside.txt",
+            "plugin://localhost/hello/sub/../../outside.txt",
+            "plugin://localhost/hello/..%5Coutside.txt",
+            "plugin://localhost/hello/C:/Windows/win.ini",
+            "plugin://localhost/hello/index.html::$DATA",
+            "plugin://localhost/hello//outside.txt",
+        ] {
+            let response = get(&store, uri);
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+            assert!(response.body().is_empty(), "{uri}");
+        }
+    }
+
+    #[test]
+    fn a_dot_file_a_folder_and_a_missing_file_of_the_development_folder_are_not_found() {
+        let scratch = Scratch::new();
+        let (store, _) = dev_store(&scratch, DEV_JSON);
+        for uri in ["plugin://localhost/hello/.secret", "plugin://localhost/hello/sub/", "plugin://localhost/hello/sub", "plugin://localhost/hello/nope.js"] {
+            assert_eq!(get(&store, uri).status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+
+    #[test]
+    fn the_folder_stands_for_one_plugin_and_no_other() {
+        let scratch = Scratch::new();
+        let (store, _) = dev_store(&scratch, DEV_JSON);
+        assert_eq!(get(&store, "plugin://localhost/other/index.html").status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn it_takes_the_place_of_an_installed_plugin_with_the_same_id() {
+        let scratch = Scratch::new();
+        let (_, dev) = dev_store(&scratch, DEV_JSON);
+        let store = Store::new(scratch.0.join("plugins"));
+        install_by_hand(&store, "hello", "1.0.0", &[("index.html", b"<html>installed</html>")], &[]);
+        assert_eq!(get(&store, "plugin://localhost/hello/").body().as_slice(), b"<html>installed</html>");
+        let store = store.with_dev(Some(dev));
+        assert_eq!(get(&store, "plugin://localhost/hello/").body().as_slice(), b"<html>dev</html>");
+    }
+
+    #[test]
+    fn a_development_folder_with_a_bad_plugin_json_serves_nothing() {
+        for manifest in [
+            "",
+            "not json",
+            r#"{"id":"Hello","version":"0.0.1"}"#,
+            r#"{"id":"hello","version":"1.0"}"#,
+            r#"{"id":"hello"}"#,
+            r#"{"id":"../x","version":"0.0.1"}"#,
+            r#"{"id":"hello","version":"0.0.1","permissions":[""]}"#,
+        ] {
+            let scratch = Scratch::new();
+            let (store, _) = dev_store(&scratch, manifest);
+            assert!(store.dev_plugin().is_none(), "{manifest:?}");
+            assert_eq!(get(&store, "plugin://localhost/hello/").status(), StatusCode::NOT_FOUND, "{manifest:?}");
+        }
+    }
+
+    #[test]
+    fn without_a_folder_there_is_no_development_plugin() {
+        let scratch = Scratch::new();
+        assert!(Store::new(scratch.0.clone()).dev_plugin().is_none());
+        assert!(Store::new(scratch.0.clone()).with_dev(Some(scratch.0.join("missing"))).dev_plugin().is_none());
     }
 }

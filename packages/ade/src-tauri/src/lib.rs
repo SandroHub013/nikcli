@@ -24,6 +24,7 @@ mod nikverse;
 mod nikverse_assets;
 mod plugin_install;
 mod plugin_scheme;
+mod plugin_storage;
 mod project_bytes;
 mod pty;
 mod record;
@@ -2304,6 +2305,8 @@ pub fn run() {
             plugin_install::plugin_commit,
             plugin_install::plugin_rollback,
             plugin_install::plugin_uninstall,
+            plugin_storage::plugin_storage_get,
+            plugin_storage::plugin_storage_set,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
