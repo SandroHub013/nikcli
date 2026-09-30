@@ -21,8 +21,9 @@
 //! its size and hash are still what the binary was built with. The request's
 //! path is only ever compared to the list, never joined to a directory, so
 //! there is nothing to traverse; a file added to the folder after the build, or
-//! swapped for another, is not served. A release finds the folder in the
-//! bundle's resources (`bundle.resources` in `tauri.conf.json`); a debug build
+//! swapped for another, is not served. A release reads the folder in the app's
+//! local data, where `nikverse_assets.rs` fetches what is missing the first time
+//! the world is opened (the installer does not carry the assets); a debug build
 //! reads the sources, so editing an asset shows on the next request, and does
 //! not check the hash, which an edit would break (the list is rebuilt on the
 //! next `cargo build`).
@@ -79,8 +80,8 @@ const PACKAGE: &[PackageFile] = &[
 /// The file served for `/`.
 const INDEX: &str = "index.html";
 
-/// The folder of the assets, next to `Cargo.toml` and, in a bundle, inside the resources.
-/// `build.rs` lists the same folder and `tauri.conf.json` ships it under the same name.
+/// The folder of the assets: next to `Cargo.toml` in the sources, and under the app's local data once fetched.
+/// `build.rs` lists the same folder.
 pub const ASSETS_DIR: &str = "nikverse-assets";
 
 /// The URL prefix of the assets: `nikverse://localhost/assets/<path in the manifest>`.
@@ -112,13 +113,23 @@ impl Source {
         Source { root: None, verify: true }
     }
 
-    /// Debug: the sources, unchecked. Release: the bundle's resources, checked.
-    fn choose(debug: bool, manifest_dir: &Path, resource_dir: Option<PathBuf>) -> Source {
+    /// Debug: the sources, unchecked. Release: the app's local data, checked.
+    pub(crate) fn choose(debug: bool, manifest_dir: &Path, data_dir: Option<PathBuf>) -> Source {
         if debug {
             Source { root: Some(manifest_dir.join(ASSETS_DIR)), verify: false }
         } else {
-            Source { root: resource_dir.map(|dir| dir.join(ASSETS_DIR)), verify: true }
+            Source { root: data_dir.map(|dir| dir.join(ASSETS_DIR)), verify: true }
         }
+    }
+
+    /// The assets folder, when there is one to read.
+    pub fn root(&self) -> Option<&Path> {
+        self.root.as_deref()
+    }
+
+    /// Whether size and hash are checked: a release, where the folder is filled from the network. A debug build has nothing to fetch.
+    pub fn verifies(&self) -> bool {
+        self.verify
     }
 }
 
@@ -129,12 +140,12 @@ pub fn source<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> &'static Source {
         Source::choose(
             cfg!(debug_assertions),
             Path::new(env!("CARGO_MANIFEST_DIR")),
-            app.path().resource_dir().ok(),
+            app.path().app_local_data_dir().ok(),
         )
     })
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
@@ -588,12 +599,12 @@ mod tests {
     #[test]
     fn where_the_assets_are_read_from_debug_the_sources_release_the_bundle() {
         let manifest_dir = Path::new("/src/ade/src-tauri");
-        let resources = PathBuf::from("/opt/ade/resources");
-        let debug = Source::choose(true, manifest_dir, Some(resources.clone()));
+        let data = PathBuf::from("/home/u/.local/share/ade");
+        let debug = Source::choose(true, manifest_dir, Some(data.clone()));
         assert_eq!((debug.root, debug.verify), (Some(manifest_dir.join(ASSETS_DIR)), false));
-        let release = Source::choose(false, manifest_dir, Some(resources.clone()));
-        assert_eq!((release.root, release.verify), (Some(resources.join(ASSETS_DIR)), true));
-        // No resource folder to be found: nothing is served, and nothing is guessed instead.
+        let release = Source::choose(false, manifest_dir, Some(data.clone()));
+        assert_eq!((release.root, release.verify), (Some(data.join(ASSETS_DIR)), true));
+        // No data folder to be found: nothing is served, and nothing is guessed instead.
         let lost = Source::choose(false, manifest_dir, None);
         assert_eq!((lost.root, lost.verify), (None, true));
         let manifest = [entry("a.txt", b"a")];
@@ -641,26 +652,22 @@ mod tests {
     }
 
     #[test]
-    fn the_release_finds_the_assets_where_the_bundle_puts_them() {
-        // What `bundle.resources` says, read from the config the bundler reads.
+    fn the_installer_does_not_carry_the_assets_and_the_release_reads_them_where_they_are_fetched() {
+        // What `bundle.resources` says, read from the config the bundler reads: the assets are not in it any more.
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
-        let resources = config["bundle"]["resources"].as_object().expect("bundle.resources e una mappa");
-        let (from, to) = resources
-            .iter()
-            .find(|(from, _)| from.trim_end_matches('/') == ASSETS_DIR)
-            .expect("bundle.resources non porta la cartella degli asset");
-        let to = to.as_str().expect("destinazione").trim_matches('/');
-        assert_eq!(from.trim_end_matches('/'), ASSETS_DIR);
-        // The runtime looks for the folder under the resources by the same name the bundler gives it.
-        assert_eq!(to, ASSETS_DIR, "il bundle mette gli asset dove il codice non li cerca");
+        let resources = config["bundle"]["resources"].as_object();
+        assert!(
+            resources.map_or(true, |map| !map.keys().any(|from| from.trim_end_matches('/') == ASSETS_DIR)),
+            "l'installer porta di nuovo la cartella degli asset"
+        );
 
-        // The bundler's layout: every file of the folder at `<resources>/<to>/<relative>`.
-        let bundle = Scratch::new();
+        // A release reads `<app local data>/nikverse-assets`, the folder `nikverse_assets.rs` fills, file by file.
+        let data = Scratch::new();
         for entry in MANIFEST {
-            write(&bundle.0.join(to), entry.path, &std::fs::read(source_dir().join(entry.path)).unwrap());
+            write(&data.0.join(ASSETS_DIR), entry.path, &std::fs::read(source_dir().join(entry.path)).unwrap());
         }
-        let release = Source::choose(false, Path::new("/nowhere"), Some(bundle.0.clone()));
+        let release = Source::choose(false, Path::new("/nowhere"), Some(data.0.clone()));
         for entry in MANIFEST {
             let response = respond(
                 &Request::builder().uri(format!("nikverse://localhost/assets/{}", entry.path)).body(Vec::new()).unwrap(),
@@ -669,5 +676,14 @@ mod tests {
             assert_eq!((entry.path, response.status()), (entry.path, StatusCode::OK));
             assert_eq!(response.body().len() as u64, entry.size);
         }
+        // Before the fetch the folder is empty and every asset is "not found": the world shows its placeholders.
+        let empty = Scratch::new();
+        let before = Source::choose(false, Path::new("/nowhere"), Some(empty.0.clone()));
+        let first = MANIFEST.first().expect("un asset");
+        let response = respond(
+            &Request::builder().uri(format!("nikverse://localhost/assets/{}", first.path)).body(Vec::new()).unwrap(),
+            &before,
+        );
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

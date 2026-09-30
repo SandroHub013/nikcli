@@ -933,6 +933,18 @@ fn system_tool(name: &str) -> PathBuf {
     PathBuf::from(system_root).join("System32").join(name)
 }
 
+/// `curl`: the one in System32 on Windows, where a `curl` on the PATH may be anybody's; on the others, the system's.
+fn curl_program() -> PathBuf {
+    #[cfg(windows)]
+    {
+        system_tool("curl.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("curl")
+    }
+}
+
 fn hide_window(command: &mut std::process::Command) {
     #[cfg(windows)]
     {
@@ -968,7 +980,7 @@ fn digest_in(listing: &str) -> Option<String> {
 }
 
 /// How the bytes of one file arrive.
-trait Fetcher {
+pub(crate) trait Fetcher {
     /// Writes the body of `url` into `part` and returns how many bytes it wrote.
     ///
     /// `report` is called with the total so far, as often as there is news.
@@ -991,7 +1003,7 @@ trait Fingerprint {
 }
 
 /// `curl.exe`, the one every Windows 10+ ships, watched while it writes.
-struct Curl;
+pub(crate) struct Curl;
 
 impl Fetcher for Curl {
     fn fetch(
@@ -1001,7 +1013,7 @@ impl Fetcher for Curl {
         report: &mut dyn FnMut(u64),
         stop: &dyn Fn() -> Option<String>,
     ) -> Result<u64, String> {
-        let mut command = std::process::Command::new(system_tool("curl.exe"));
+        let mut command = std::process::Command::new(curl_program());
         command
             .args([
                 "-fsSL".as_ref(),

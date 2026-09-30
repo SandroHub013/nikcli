@@ -8495,6 +8495,7 @@ export function Workbench() {
         else console.warn("[nikverse] scorciatoia non inoltrata: non è di navigazione")
       },
       ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
+      assets: () => getHost(),
     },
     guessServers,
     confirmOpen,

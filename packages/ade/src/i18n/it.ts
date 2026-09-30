@@ -157,6 +157,10 @@ export const it = {
   "newPane.nikverse": "NikVerse",
   "newPane.nikverse.hint": "la città delle tue sessioni, in tempo reale",
   "nikverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
+  "nikverse.assets.fetching": (megabytes: number) => `Scarico il mondo di NikVerse (${megabytes} MB), solo la prima volta…`,
+  "nikverse.assets.failed": (reason: string) =>
+    `Non sono riuscita a scaricare il mondo di NikVerse: ${reason} Per ora vedi i segnaposto.`,
+  "nikverse.assets.retry": "Riprova",
   "nikverse.ask": (what: string) => `NikVerse chiede di: ${what}`,
   "nikverse.allow": "Consenti",
   "nikverse.deny": "Nega",
