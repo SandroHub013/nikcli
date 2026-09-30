@@ -32806,6 +32806,19 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "eager": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -42402,6 +42415,19 @@
                       {
                         "type": "object",
                         "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eager": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
                           "type": "string"
                         }
                       },
@@ -60266,6 +60292,9 @@
             ]
           },
           "enabled": {
+            "type": "boolean"
+          },
+          "deferred": {
             "type": "boolean"
           },
           "togglable": {

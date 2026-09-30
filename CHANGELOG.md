@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.415.0 (September 2026)
+
+## Core
+
+- Introduce deferred tool loading mechanism and enhance tool registry (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(tools): introduce deferred tool loading mechanism and enhance tool registry
+
 ## v1.414.0 (September 2026)
 
 ## Core
