@@ -3,6 +3,26 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.418.0 (September 2026)
+
+## Desktop
+
+- Native Liquid Glass window and refined workbench (@nikomatt69)
+- Glass composer (@nikomatt69)
+- Use the pixel wordmark as the logo (@nikomatt69)
+- Start the sidecar from the home directory (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(desktop): start the sidecar from the home directory
+  - feat(ui): 225 more desktop themes from TUI, mobile and curated palettes
+  - feat(ui): use the pixel wordmark as the logo
+  - feat(ui): Liquid Glass material and refined primitives
+  - feat(app): glass composer
+  - feat(desktop): native Liquid Glass window and refined workbench
+  - feat(web): Liquid Glass across site, docs and studio
+
 ## v1.417.0 (September 2026)
 
 ## Core
