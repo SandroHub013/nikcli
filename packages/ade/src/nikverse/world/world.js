@@ -214,7 +214,7 @@ export function readOptions(search) {
     // `?bench=1` is what ADE asks for in its test build: the gate times the GPU through `window.__nikverseBench`, and nothing else does.
     bench: params.get("bench") === "1",
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
-    // For measuring only, and only where the bench's door is open: `?samples=1|4` and `?maxscale=0.75..1` (see `CityDeps.tune`).
+    // For measuring only, and only where the bench's door is open: `?samples=1|4`, `?maxscale=0.75..1` and `?compile=async` (see `CityDeps.tune`).
     tune: params.get("bench") === "1" || (Number.isInteger(shot) && shot >= 1 && shot <= 8) ? tuneOf(params) : undefined,
   }
 }
@@ -222,9 +222,12 @@ export function readOptions(search) {
 function tuneOf(params) {
   const samples = Number(params.get("samples"))
   const maxScale = Number(params.get("maxscale"))
+  /** @type {{ samples?: number, maxScale?: number, compile?: "async" }} */
   const tune = {}
   if (samples === 1 || samples === 4) tune.samples = samples
   if (Number.isFinite(maxScale) && maxScale >= 0.75 && maxScale <= 1 && params.get("maxscale") !== null) tune.maxScale = maxScale
+  // A trial: the shaders of the first view compiled ahead of its first draw (`city/load-log.ts`).
+  if (params.get("compile") === "async") tune.compile = "async"
   return Object.keys(tune).length ? tune : undefined
 }
 
