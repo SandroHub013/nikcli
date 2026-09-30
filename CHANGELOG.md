@@ -3,6 +3,24 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.417.0 (September 2026)
+
+## Core
+
+- Characterize provider retry, usage and error handling (EOT-11) (@nikomatt69)
+- Load todoread, lsp and artifact from the first request (@nikomatt69)
+
+## Mobile
+
+- Compact session view with wallpaper backdrop and empty-state hero (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mobile): compact session view with wallpaper backdrop and empty-state hero
+  - feat(tools): load todoread, lsp and artifact from the first request
+  - test(session): characterize provider retry, usage and error handling (EOT-11)
+
 ## v1.416.0 (September 2026)
 
 ## Core

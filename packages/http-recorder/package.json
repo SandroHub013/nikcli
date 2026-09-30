@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.416.0",
+  "version": "1.417.0",
   "name": "@nikcli-ai/http-recorder",
   "type": "module",
   "license": "MIT",
