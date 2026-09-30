@@ -61,6 +61,8 @@ interface Row {
   jpg: string
   /** The GPU time of the shot's view, drawn back to back (`window.__nikverseBench`): undefined when it could not be taken. */
   gpu?: GpuTiming
+  /** What the frame drew: triangles and draw calls, as the renderer counts them. */
+  drawn?: { calls: number; triangles: number }
 }
 const rows: Row[] = []
 const failures: string[] = []
@@ -106,10 +108,11 @@ async function shots(level: string) {
         png: `${name}.png`,
         jpg: `${name}.jpg`,
         gpu,
+        drawn: result.drawn,
       })
       const s = result.stats
       console.log(
-        `${found.length ? "FAIL" : "PASS"}  ${name} [${result.backend}]: luminance ${s.luminance.toFixed(3)} (band ${shot.luminance.join("..")}), sky ${(s.sky * 100).toFixed(1)} %, black ${(s.black * 100).toFixed(3)} %, burnt ${(s.burnt * 100).toFixed(3)} %, GPU ${gpu ? `p50 ${gpu.p50.toFixed(1)} ms, p95 ${gpu.p95.toFixed(1)} ms (${gpu.sync}${gpu.scale !== undefined ? `, scale ${gpu.scale}` : ""})` : "n/a"}${found.length ? ` — ${found.join("; ")}` : ""}`,
+        `${found.length ? "FAIL" : "PASS"}  ${name} [${result.backend}]: luminance ${s.luminance.toFixed(3)} (band ${shot.luminance.join("..")}), sky ${(s.sky * 100).toFixed(1)} %, black ${(s.black * 100).toFixed(3)} %, burnt ${(s.burnt * 100).toFixed(3)} %, GPU ${gpu ? `p50 ${gpu.p50.toFixed(1)} ms, p95 ${gpu.p95.toFixed(1)} ms (${gpu.sync}${gpu.scale !== undefined ? `, scale ${gpu.scale}` : ""})` : "n/a"}${result.drawn ? `, drawn ${Math.round(result.drawn.triangles / 1000)}k tris ${result.drawn.calls} calls` : ""}${found.length ? ` — ${found.join("; ")}` : ""}`,
       )
       for (const f of found) failures.push(`${name}: ${f}`)
     } catch (error) {

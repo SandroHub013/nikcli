@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { BufferGeometry, Mesh, MeshBasicMaterial, Object3D } from "three/webgpu"
+import { Matrix4, type BufferGeometry, type InstancedMesh, type Mesh, type MeshBasicMaterial, type Object3D } from "three/webgpu"
 import { readGlb } from "./glb"
-import { SHOP_TINTS, shopLook } from "./kit"
+import { SHOP_TINTS, VEG_SECTORS, VEG_STRIDE, shopLook, vegSector } from "./kit"
 import {
   BACK_BAR,
   CHAIR_SEAT_TOP,
@@ -179,6 +179,69 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
           expect(near(lid.center[1], COMPUTER_HEIGHT)).toBe(true)
           // The glow stands 2 cm in front of the middle, on the side the person sits: past the lid's front face.
           expect(lid.center[2]).toBeLessThan(at.z + 0.02)
+        }
+      }
+    }
+  })
+
+  test("under every roof the sand is darker in its shadow and warmer in the pool of its lamps, and plain at the edges", async () => {
+    const kit = await kitFor(level)
+    for (let v = 0; v < kit.variants; v++) {
+      const shop = kit.shop(v)
+      const colours = (what: string) => {
+        const mesh = piece(shop, what)
+        const c = mesh.geometry.attributes.color
+        const pos = mesh.geometry.attributes.position
+        return Array.from({ length: c.count }, (_, i) => ({ x: pos.getX(i), z: pos.getZ(i), rgb: [c.getX(i), c.getY(i), c.getZ(i)] }))
+      }
+      const shade = colours("shade")
+      const pool = colours("pool")
+      // The shadow: under the roof the sand is at most two thirds of its light.
+      expect([v, Math.min(...shade.map((p) => p.rgb[1])) < 0.67]).toEqual([v, true])
+      // The pool: warm (more red than blue), strongest near the counter.
+      const warmest = pool.reduce((a, b) => (b.rgb[0] > a.rgb[0] ? b : a))
+      expect([v, warmest.rgb[0] > 0.15, warmest.rgb[0] > warmest.rgb[2] * 2]).toEqual([v, true, true])
+      expect([v, Math.abs(warmest.x) < 3.2, Math.abs(warmest.z - COUNTER.z) < 2]).toEqual([v, true, true])
+      // At the edge of the grid both are nothing: the chiringuito's sand melts into the island's.
+      const edge = (p: { x: number; z: number }) => Math.abs(p.x) > 5.4
+      expect([v, Math.max(...pool.filter(edge).map((p) => p.rgb[0])) < 0.01]).toEqual([v, true])
+      expect([v, Math.min(...shade.filter(edge).map((p) => p.rgb[1])) > 0.99]).toEqual([v, true])
+    }
+  })
+
+  test("the plants are instances of the file's prototypes, a slice of the circle each (the palms whole), all out of where one walks", async () => {
+    const kit = await kitFor(level)
+    const glb = cityGlb(level)
+    const lists = new Map(
+      (glb.json.nodes ?? []).flatMap((n) => {
+        const list = (n.extras as { nkv_instances?: number[] } | undefined)?.nkv_instances
+        return list ? [[n.name!.replace(/^veg_/, ""), list] as const] : []
+      }),
+    )
+    expect([...lists.keys()].sort()).toEqual(["lod0", "lod1", "palm"])
+    const planted = kit.plaza.children.filter((c) => (c as InstancedMesh).isInstancedMesh) as InstancedMesh[]
+    // Two LODs of leaves and colas in their slices, and the palms: the plan's 16 draw calls, and one.
+    expect(planted.length).toBeLessThanOrEqual(4 * VEG_SECTORS + 1)
+    for (const [set, list] of lists) {
+      expect(list.length % VEG_STRIDE).toBe(0)
+      const pieces = new Set(planted.filter((m) => m.name.startsWith(`veg_${set}_`)).map((m) => m.name))
+      expect([set, pieces.size > 0]).toEqual([set, true])
+      for (const name of pieces) {
+        const meshes = planted.filter((m) => m.name === name)
+        // Every instance is drawn once, in the slice it is in.
+        expect([name, meshes.reduce((n, m) => n + m.count, 0)]).toEqual([name, list.length / VEG_STRIDE])
+        const at = new Matrix4()
+        for (const mesh of meshes) {
+          for (let k = 0; k < mesh.count; k++) {
+            mesh.getMatrixAt(k, at)
+            const [x, , z] = at.elements.slice(12, 15)
+            // A small set (the palms) is one mesh; the rest are in their slice.
+            if (mesh.userData.nkv_sector !== -1) expect([name, vegSector(x, z)]).toEqual([name, mesh.userData.nkv_sector])
+            // Beyond the foot of the slope: nothing grows where the character walks.
+            expect([name, Math.hypot(x, z) > 33]).toEqual([name, true])
+          }
+          // The colas take the variety of their terrace; the leaves and the palms are their own colour.
+          expect([name, mesh.instanceColor !== null]).toEqual([name, mesh.userData.nkv_instance_tint === 1])
         }
       }
     }

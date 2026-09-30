@@ -59,6 +59,7 @@ import { detailAt, poseDue, shopInRange } from "./lod"
 import { parseLogo, type Logo } from "./logo"
 import type { Player } from "./controller"
 import { GLOW_COLOR, lookOf } from "./states"
+import { createRiseFx, type RiseFx } from "./rise"
 import { liftEase, type AgentEntity, type ShopEntity, type Town } from "./town"
 
 const box = new BoxGeometry(1, 1, 1)
@@ -95,7 +96,8 @@ function signTexture(name: string): CanvasTexture | undefined {
   if (!ctx) return undefined
   ctx.fillStyle = "#0f141c"
   ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = "#38d8ff"
+  // A frame of chalk: cyan is the hologram's alone.
+  ctx.strokeStyle = "#e8dcc4"
   ctx.lineWidth = 8
   ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20)
   ctx.fillStyle = "#f1ecec"
@@ -113,6 +115,63 @@ function signTexture(name: string): CanvasTexture | undefined {
   return texture
 }
 
+/** What a laptop shows: code on a dark ground while the session works, the logo as a screensaver while it is free. */
+type ScreenPicture = "code" | "logo"
+
+const screenPictures = new Map<ScreenPicture, CanvasTexture | undefined>()
+
+/**
+ * The two pictures every screen shares, drawn once. The state's colour tints them (`GLOW_COLOR`): white code for a
+ * session at work, amber for one that waits for a permission, and so on; the ground stays dark whatever the tint.
+ */
+function screenPicture(kind: ScreenPicture, logo: Logo): CanvasTexture | undefined {
+  if (screenPictures.has(kind)) return screenPictures.get(kind)
+  let texture: CanvasTexture | undefined
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas")
+    canvas.width = 256
+    canvas.height = 160
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      ctx.fillStyle = "#0d1016"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      if (kind === "code") {
+        // An editor: a title bar, then lines of code with their indents, in a few quiet syntax colours.
+        ctx.fillStyle = "#1c212b"
+        ctx.fillRect(0, 0, canvas.width, 14)
+        const hues = ["#d6d9df", "#e3b56d", "#8db7e6", "#98cf96", "#cf8f8f", "#b9a2e0"]
+        let seed = 7
+        const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+        let indent = 0
+        for (let y = 22; y < canvas.height - 6; y += 10) {
+          indent = Math.max(0, Math.min(4, indent + (next() < 0.3 ? 1 : next() < 0.3 ? -1 : 0)))
+          let x = 10 + indent * 12
+          const words = 1 + Math.floor(next() * 4)
+          for (let w = 0; w < words && x < canvas.width - 20; w++) {
+            const width = 10 + Math.floor(next() * 38)
+            ctx.fillStyle = hues[Math.floor(next() * hues.length)]
+            ctx.fillRect(x, y, Math.min(width, canvas.width - 10 - x), 5)
+            x += width + 6
+          }
+        }
+      } else {
+        // The logo in the middle, small, as the brand draws it.
+        const scale = (canvas.height * 0.55) / logo.height
+        const left = (canvas.width - logo.width * scale) / 2
+        const top = (canvas.height - logo.height * scale) / 2
+        for (const r of logo.rects) {
+          ctx.fillStyle = r.color
+          ctx.fillRect(left + r.x * scale, top + r.y * scale, r.w * scale, r.h * scale)
+        }
+      }
+      texture = new CanvasTexture(canvas)
+      texture.colorSpace = SRGBColorSpace
+    }
+  }
+  screenPictures.set(kind, texture)
+  return texture
+}
+
 interface ShopView {
   group: Group
   /** The parts that need their own disposal. */
@@ -125,6 +184,8 @@ interface ShopView {
   screens: Map<string, Mesh>
   people: Map<string, Person>
   people3: Group
+  /** The sand it throws while it comes up or goes down. */
+  rise: RiseFx
 }
 
 const WALL_MATERIAL = new MeshStandardMaterial({ color: 0x8a7560, roughness: 0.85 })
@@ -158,7 +219,7 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   if (kit) {
     // The file's shop: one of its variants and colours, by the project's name; the sign's text and the monitors' glow are ours.
     const look = shopLook(entity.shop.name, kit.variants)
-    group.add(kit.shop(look.variant, look.tint))
+    group.add(kit.drawnShop(look.variant, look.tint))
   } else {
     const floor = new Mesh(box, FLOOR_MATERIAL)
     floor.scale.set(SHOP_WIDTH, 0.12, SHOP_DEPTH)
@@ -204,7 +265,11 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   const people3 = new Group()
   group.add(people3)
 
-  return { group, own, name: entity.shop.name, desks: 0, deskGroup, monitors: [], screens: new Map(), people: new Map(), people3 }
+  const rise = createRiseFx()
+  group.add(rise.group)
+  own.push(rise)
+
+  return { group, own, name: entity.shop.name, desks: 0, deskGroup, monitors: [], screens: new Map(), people: new Map(), people3, rise }
 }
 
 /** The monitors own their material (its colour is the session's state), so it goes with them. */
@@ -333,7 +398,11 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     }
     const wanted = town.deskCount(entity.id)
     if (view.desks !== wanted) buildDesks(view, wanted, kit)
-    view.group.position.set(entity.placement.center.x, groundAt(entity.placement.center) - SUNK * (1 - liftEase(entity.lift)), entity.placement.center.z)
+    const sunk = SUNK * (1 - liftEase(entity.lift))
+    view.group.position.set(entity.placement.center.x, groundAt(entity.placement.center) - sunk, entity.placement.center.z)
+    // The sand it throws is at the ground, however deep the chiringuito still is.
+    view.rise.group.position.y = sunk
+    view.rise.update(entity.lift)
     view.group.rotation.y = entity.placement.yaw
     return view
   }
@@ -380,7 +449,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       person.posedAt = t
     }
     // The mark is not the figure's: it is worked out for whoever is in view, box or not.
-    if (seen) setSignal(person, a.look, t, distance)
+    if (seen) setSignal(person, a.look, t, distance, camera.fov)
     // Someone who is away leaves an empty chair; the rest scale in and out.
     const present = a.look.present ? a.presence : 0
     person.group.visible = present > 0.01
@@ -388,7 +457,13 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     if (desk) {
       const monitor = seat.kind === "desk" ? view.monitors[seat.desk] : undefined
       if (monitor) {
-        (monitor.material as MeshBasicMaterial).color.setHex(GLOW_COLOR[a.look.glow])
+        const material = monitor.material as MeshBasicMaterial
+        material.color.setHex(GLOW_COLOR[a.look.glow])
+        const map = screenPicture(a.look.glow === "dim" ? "logo" : "code", logo) ?? null
+        if (material.map !== map) {
+          material.map = map
+          material.needsUpdate = true
+        }
         view.screens.set(a.paneId, monitor)
       }
     }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, type ShaderMaterial, Vector3 } from "three/webgpu"
 import type { Agent, Shop } from "../protocol"
-import { SIGNAL_MAX_SCALE } from "./characters"
+import { SIGNAL_SIZE, SIGNAL_Y } from "./characters"
 import { spawnPlayer } from "./controller"
 import { shopLook } from "./kit"
 import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, ROOF_TOP, placementOf } from "./layout"
@@ -81,6 +81,28 @@ describe("the city drawn from the town", () => {
     }
   })
 
+  test("a shop coming up throws a ring of sand and puffs of it, at the ground, strongest half way and gone when it is up", () => {
+    const town = createTown()
+    const view = createCityScene()
+    town.sync(picture([shop("a", 2)]))
+    const rise = () => view.scene.getObjectByName("shop:a")!.getObjectByName("rise")!
+    const opacity = () => ((rise().children[0] as Mesh).material as MeshBasicMaterial).opacity
+    town.tick(RISE_SECONDS * 0.5)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(rise().visible).toBe(true)
+    const half = opacity()
+    expect(half).toBeGreaterThan(0.3)
+    // At the ground, not with the chiringuito under it.
+    const group = view.scene.getObjectByName("shop:a")!
+    expect(group.position.y + rise().position.y).toBeCloseTo(view.groundAt(placementOf(2).center), 6)
+    town.tick(RISE_SECONDS * 0.4)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(opacity()).toBeLessThan(half)
+    town.tick(RISE_SECONDS)
+    view.update(town, spawnPlayer(), 0, camera)
+    expect(rise().visible).toBe(false)
+  })
+
   test("a shop stands on the ground when it is up, and is under it while it comes up or goes down", () => {
     const town = createTown()
     const view = createCityScene()
@@ -108,6 +130,25 @@ describe("the city drawn from the town", () => {
     expect((view.monitor("p2")!.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.off)
     expect((view.monitor("p1")!.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.cool)
     expect(town.agents()).toHaveLength(2)
+  })
+
+  test("a screen shows code while its session works and the logo while it is free, never the hologram's cyan", () => {
+    const { view } = build(picture([shop("a", 0)], [agent("p1", "a"), agent("p2", "a", { state: "idle" }), agent("p3", "a", { state: "perm" })]))
+    const material = (id: string) => view.monitor(id)!.material as MeshBasicMaterial
+    const pixel = (id: string, x: number, y: number) => {
+      const canvas = material(id).map!.image as HTMLCanvasElement
+      return [...canvas.getContext("2d")!.getImageData(x, y, 1, 1).data.slice(0, 3)]
+    }
+    // Code and a wait for permission share the editor; the free one has the screensaver.
+    expect(material("p1").map).toBeDefined()
+    expect(material("p1").map).toBe(material("p3").map)
+    expect(material("p2").map).not.toBe(material("p1").map)
+    // Both on a dark ground, and the ground stays dark whatever the tint.
+    for (const id of ["p1", "p2"]) expect(Math.max(...pixel(id, 2, 150))).toBeLessThan(30)
+    // The tint of a session at work is neutral: no channel far from the others.
+    const cool = GLOW_COLOR.cool
+    const [r, g, b] = [(cool >> 16) & 255, (cool >> 8) & 255, cool & 255]
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(16)
   })
 
   test("the state shows on the screen and over the head: a permission is amber with a mark, an error red without", () => {
@@ -274,19 +315,55 @@ describe("what is drawn depends on where the camera is", () => {
     expect(view.person("p1")!.signal.visible).toBe(false)
   })
 
-  test("the mark grows with the distance, from 25 metres, up to five times, and stays above the head", () => {
+  test("the mark is never less than 18 pixels of 900 on the screen, keeps its own size near, and stays above the head", () => {
     const { town, view } = one()
-    const scaleAt = (out: number) => {
-      view.update(town, spawnPlayer(), 1, camAt(0, out))
-      return view.person("p2")!.signal.scale.x
+    const person = () => view.person("p2")!
+    /** The mark's height on a 900-pixel-tall screen, from a camera `out` metres in front of the shop. */
+    const pixelsAt = (out: number, fov = 58) => {
+      const camera = camAt(0, out)
+      camera.fov = fov
+      camera.updateProjectionMatrix()
+      view.update(town, spawnPlayer(), 1, camera)
+      const at = person().signal.getWorldPosition(new Vector3())
+      const distance = Math.hypot(camera.position.x - at.x, camera.position.z - at.z)
+      return (SIGNAL_SIZE * person().signal.scale.x * 900) / (2 * Math.tan((fov * Math.PI) / 360) * distance)
     }
-    // The distance is the camera's to the person, who sits a couple of metres inside the shop.
-    expect(scaleAt(8)).toBe(1)
-    expect(scaleAt(20)).toBe(1)
-    expect(scaleAt(60)).toBeGreaterThan(2)
-    expect(scaleAt(60)).toBeLessThan(3)
-    expect(scaleAt(130)).toBe(SIGNAL_MAX_SCALE)
-    expect(view.person("p2")!.signal.position.y).toBeGreaterThan(1.95 + 0.25 * (SIGNAL_MAX_SCALE - 1) - 0.06)
+    for (const out of [20, 38, 60, 130]) for (const fov of [22, 58, 62]) expect([out, fov, pixelsAt(out, fov) >= 18 * 0.97]).toEqual([out, fov, true])
+    // Near, it is its own size, larger than the least.
+    pixelsAt(8)
+    expect(person().signal.scale.x).toBe(1)
+    // Grown, its lower tip is where it was: over the head.
+    pixelsAt(130)
+    const grow = person().signal.scale.x
+    expect(grow).toBeGreaterThan(5)
+    expect(person().signal.position.y - (SIGNAL_SIZE / 2) * grow).toBeGreaterThan(SIGNAL_Y - SIGNAL_SIZE / 2 - 0.06)
+  })
+
+  test("the mark is drawn over whatever stands in front of it, with a dark outline, out of the fog", () => {
+    const { town, view } = one()
+    view.update(town, spawnPlayer(), 1, camAt(0, 60))
+    for (const mark of [view.person("p2")!.attention, view.person("p2")!.question]) {
+      const material = mark.material as MeshBasicMaterial
+      expect([material.depthTest, material.fog]).toEqual([false, false])
+      const outline = mark.children[0] as Mesh
+      expect((outline.material as MeshBasicMaterial).depthTest).toBe(false)
+      expect(outline.renderOrder).toBeLessThan(mark.renderOrder)
+      expect(outline.scale.x).toBeGreaterThan(1)
+    }
+  })
+
+  test("far away a person is one mesh, a capsule with a head, without the floor's shadow, and shorter when seated", () => {
+    const { town, view } = one()
+    view.update(town, spawnPlayer(), 1, camAt(0, 60))
+    const impostor = view.person("p1")!.impostor
+    expect(impostor.visible).toBe(true)
+    expect(impostor.children).toHaveLength(1)
+    expect(view.person("p1")!.blob.visible).toBe(false)
+    view.update(town, spawnPlayer(), 2, camAt(0, 8))
+    expect(view.person("p1")!.blob.visible).toBe(true)
+    view.update(town, spawnPlayer(), 3, camAt(0, 60))
+    const height = new Box3().setFromObject(impostor)
+    expect(height.max.y - height.min.y).toBeLessThan(1.6)
   })
 
   test("past 15 metres the pose is worked out ten times a second, near it every frame, and an impostor's never", () => {
@@ -556,11 +633,17 @@ describe("the island from the file, with its chiringuiti", () => {
     expect(lamps.filter((l) => l.z === 0)).toHaveLength(lamps.length - 2)
   })
 
-  test("a shop is a chiringuito from the file's parts, not boxes: what every one has, a roof with its shadow, a counter, a sign", async () => {
-    const { view } = await withKit([agent("p1", "a")])
-    const all = names(view.scene.getObjectByName("shop:a")!)
+  test("a shop is a chiringuito from the file's parts, merged by material: every part is drawn, in a handful of meshes", async () => {
+    const { view, kit } = await withKit([agent("p1", "a")])
+    const group = view.scene.getObjectByName("shop:a")!.children[0]
+    const drawn = group.children.flatMap((c) => c.name.split("+"))
+    const look = shopLook("a", kit.variants)
+    const parts = kit.shop(look.variant, look.tint).children.map((c) => c.name)
+    expect(drawn.sort()).toEqual(parts.sort())
     for (const name of [/^chir_base_fixtures$/, /^chir_base_accent$/, /^chir_roof\d+_roof$/, /^chir_roof\d+_shade$/, /^chir_roof\d+_pool$/, /^chir_bar\d+_counter$/, /^chir_sign\d+_board$/])
-      expect([String(name), all.some((n) => name.test(n))]).toEqual([String(name), true])
+      expect([String(name), drawn.some((n) => name.test(n))]).toEqual([String(name), true])
+    // The palette's pieces are one mesh, the accents another, the lamps another; the shadow and the pool their own.
+    expect(group.children.length).toBeLessThanOrEqual(6)
   })
 
   test("the shop's desks are all there, and what is added over them is the glow of the desks in use", async () => {

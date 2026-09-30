@@ -14,6 +14,13 @@
  * What changes from one shop to the next beyond that (the sign's text, the screens' colour) is added over them by
  * `view.ts`; the pieces are shared, geometry and material.
  *
+ * The island's plants are instances: a prototype mesh for each piece, `veg_<set>_<piece>` (the near plant's leaves
+ * and its cola, the far one's, the palm), and an empty `veg_<set>` with the instances in its `nkv_instances`,
+ * `VEG_STRIDE` numbers each in the world's frame (x, y, z, turn about y, scale, and a linear r, g, b). A piece with
+ * `nkv_instance_tint` takes each instance's colour (the colas, one variety to a terrace); the rest keep their own.
+ * Each set is split into `VEG_SECTORS` slices of the circle, one instanced mesh each, so that what is behind the
+ * camera is not drawn.
+ *
  * The light is baked (A2): the file says how each mesh is drawn in its `extras`, which the loader puts in
  * `userData`. `nkv_shade` is `lit` (its colour times its lightmap, on the second set of UVs, named by `nkv_lm`),
  * `vcol` (its colour times the light baked in its vertices), `emit` (its colour as it is: lamps, screens, glow),
@@ -25,14 +32,20 @@
 
 import {
   AdditiveBlending,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   MultiplyBlending,
+  Quaternion,
   RepeatWrapping,
   SRGBColorSpace,
+  Vector3,
   type Material,
   type Object3D,
   type Texture,
@@ -70,6 +83,12 @@ export interface CityKit {
    * Two shops of the same variant and tint share every geometry and material.
    */
   shop(variant?: number, tint?: ShopTint): Group
+  /**
+   * The same shop as it is drawn: the pieces that end up with one material (the palette's wood and thatch, the
+   * tinted accents, the lamps) merged into one mesh, so that a chiringuito is a handful of draw calls and not a dozen.
+   * The merged geometry is made once for a variant and shared by every shop that has it.
+   */
+  drawnShop(variant?: number, tint?: ShopTint): Group
   /** Whether every lightmap the file asks for was loaded. */
   lit: boolean
   /** Whether the file is the island (its ground has heights: `islandHeight`), not a flat city. */
@@ -117,6 +136,89 @@ export function shopLook(name: string, variants: number): { variant: number; tin
 const named = (o: Object3D, prefix: string) => o.name.startsWith(prefix)
 
 const SHOP_NAME = /^shop(\d*)_/
+/** A plant's piece (`veg_lod0_leaves`) and the empty that holds a set's instances (`veg_lod0`). */
+const VEG_PIECE = /^veg_([a-z0-9]+)_([a-z]+)$/
+const VEG_SET = /^veg_([a-z0-9]+)$/
+/** Numbers per instance in `nkv_instances`: x, y, z, turn, scale, r, g, b. */
+export const VEG_STRIDE = 8
+/** The slices of the circle the plants are drawn in: two LODs of leaves and colas in four slices, the plan's 16 draw calls. */
+export const VEG_SECTORS = 4
+/** A set with no more instances than this (the palms) is one mesh: slicing it would only add draw calls. */
+export const VEG_WHOLE_UP_TO = 64
+
+/** Which slice of the circle a point of the ground is in, 0..VEG_SECTORS-1. */
+export const vegSector = (x: number, z: number): number =>
+  Math.min(VEG_SECTORS - 1, Math.floor(((Math.atan2(x, z) + Math.PI) / (2 * Math.PI)) * VEG_SECTORS))
+
+/** A prototype drawn at every instance of its set, one instanced mesh a slice of the circle. */
+function planted(proto: Mesh, list: readonly number[], tinted: boolean): InstancedMesh[] {
+  const slices: number[][] = Array.from({ length: VEG_SECTORS }, () => [])
+  const whole = list.length / VEG_STRIDE <= VEG_WHOLE_UP_TO
+  for (let i = 0; i + VEG_STRIDE <= list.length; i += VEG_STRIDE) slices[whole ? 0 : vegSector(list[i], list[i + 2])].push(i)
+  const matrix = new Matrix4()
+  const at = new Vector3()
+  const turn = new Quaternion()
+  const size = new Vector3()
+  const up = new Vector3(0, 1, 0)
+  const colour = new Color()
+  const out: InstancedMesh[] = []
+  for (const [sector, starts] of slices.entries()) {
+    if (starts.length === 0) continue
+    const mesh = new InstancedMesh(proto.geometry, proto.material, starts.length)
+    mesh.name = proto.name
+    mesh.userData = { ...proto.userData, nkv_sector: whole ? -1 : sector }
+    for (const [k, i] of starts.entries()) {
+      at.set(list[i], list[i + 1], list[i + 2])
+      turn.setFromAxisAngle(up, list[i + 3])
+      size.setScalar(list[i + 4])
+      mesh.setMatrixAt(k, matrix.compose(at, turn, size))
+      // The file's colours are linear, as three works.
+      if (tinted) mesh.setColorAt(k, colour.setRGB(list[i + 5], list[i + 6], list[i + 7]))
+    }
+    mesh.computeBoundingSphere()
+    out.push(mesh)
+  }
+  return out
+}
+
+/**
+ * Several meshes' geometries as one, in the frame of the first's parent: every attribute they all have, as floats
+ * (the file's may be quantized), and the indices one after the other. Undefined when they do not share their
+ * attributes, and then they are drawn apart.
+ */
+function mergedGeometry(meshes: readonly Mesh[]): BufferGeometry | undefined {
+  const names = Object.keys(meshes[0].geometry.attributes).sort()
+  if (!meshes.every((m) => Object.keys(m.geometry.attributes).sort().join() === names.join())) return undefined
+  const sources = meshes.map((m) => {
+    m.updateMatrix()
+    return m.matrix.equals(new Matrix4()) ? m.geometry : m.geometry.clone().applyMatrix4(m.matrix)
+  })
+  const out = new BufferGeometry()
+  for (const name of names) {
+    const size = sources[0].getAttribute(name).itemSize
+    if (!sources.every((g) => g.getAttribute(name).itemSize === size)) return undefined
+    const total = sources.reduce((n, g) => n + g.getAttribute(name).count, 0)
+    const data = new Float32Array(total * size)
+    let at = 0
+    for (const g of sources) {
+      const attr = g.getAttribute(name)
+      for (let i = 0; i < attr.count; i++) for (let c = 0; c < size; c++) data[at++] = attr.getComponent(i, c)
+    }
+    out.setAttribute(name, new BufferAttribute(data, size))
+  }
+  const indices: number[] = []
+  let offset = 0
+  for (const g of sources) {
+    const count = g.getAttribute("position").count
+    if (g.index) for (let i = 0; i < g.index.count; i++) indices.push(g.index.getX(i) + offset)
+    else for (let i = 0; i < count; i++) indices.push(i + offset)
+    offset += count
+  }
+  out.setIndex(indices)
+  out.computeBoundingSphere()
+  return out
+}
+
 /** A chiringuito's part: `chir_base_*`, or a roof, a counter or a sign of some kind. */
 const PART_NAME = /^chir_(base|roof|bar|sign)(\d*)_/
 
@@ -189,8 +291,18 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
   const parts = new Map<string, Map<number, Mesh[]>>()
   const signs = new Map<number, SignAnchor>()
   const cache = new Map<string, Material>()
+  /** A variant's pieces merged by material, made once (`null`: they could not be merged). */
+  const merged = new Map<string, BufferGeometry | null>()
+  /** The plants: each set's prototypes, and its instances. */
+  const vegPieces = new Map<string, Mesh[]>()
+  const vegInstances = new Map<string, readonly number[]>()
   let ringY = 0
   for (const child of loaded.scene.children) {
+    const set = VEG_SET.exec(child.name)
+    if (set && Array.isArray(child.userData?.nkv_instances)) {
+      vegInstances.set(set[1], child.userData.nkv_instances as number[])
+      continue
+    }
     if (named(child, "plaza_ring")) {
       ringY = Math.max(ringY, child.position.y)
       continue
@@ -212,7 +324,9 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
     const material = drawnWith(mesh, maps, cache)
     if (material) mesh.material = material
     const shop = SHOP_NAME.exec(child.name)
-    if (part) {
+    const piece = VEG_PIECE.exec(child.name)
+    if (piece) vegPieces.set(piece[1], [...(vegPieces.get(piece[1]) ?? []), mesh])
+    else if (part) {
       const byNumber = parts.get(part[1]) ?? new Map<number, Mesh[]>()
       parts.set(part[1], byNumber)
       const n = Number(part[2] || 0)
@@ -222,6 +336,10 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
       if (!variants.has(variant)) variants.set(variant, [])
       variants.get(variant)!.push(mesh)
     } else plaza.add(mesh)
+  }
+  for (const [set, pieces] of vegPieces) {
+    const list = vegInstances.get(set) ?? []
+    for (const proto of pieces) for (const mesh of planted(proto, list, proto.userData.nkv_instance_tint === 1)) plaza.add(mesh)
   }
   // The chiringuiti: one variant for every roof, counter and sign together.
   const kindsOf = (kind: string) => [...(parts.get(kind)?.keys() ?? [])].sort((a, b) => a - b)
@@ -276,6 +394,39 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
         const copy = mesh.clone()
         copy.material = tintOf(mesh.material as Material, tint, mesh.userData?.nkv_tint)
         group.add(copy)
+      }
+      return group
+    },
+    drawnShop(variant = 0, tint) {
+      const kind = kinds[((variant % kinds.length) + kinds.length) % kinds.length]
+      const pieces = variants.get(kind)!
+      // The same material, the same mesh: a tinted piece's material is the tint's, shared by the pieces with that role.
+      const byMaterial = new Map<Material, Mesh[]>()
+      for (const mesh of pieces) {
+        const material = tintOf(mesh.material as Material, tint, mesh.userData?.nkv_tint)
+        byMaterial.set(material, [...(byMaterial.get(material) ?? []), mesh])
+      }
+      const group = new Group()
+      for (const [material, meshes] of byMaterial) {
+        const names = meshes.map((m) => m.name).join("+")
+        const key = `${kind}|${names}`
+        let geometry = merged.get(key)
+        if (geometry === undefined && meshes.length > 1) {
+          geometry = mergedGeometry(meshes) ?? null
+          merged.set(key, geometry)
+        }
+        if (meshes.length === 1 || !geometry) {
+          for (const mesh of meshes) {
+            const copy = mesh.clone()
+            copy.material = material
+            group.add(copy)
+          }
+          continue
+        }
+        const mesh = new Mesh(geometry, material)
+        mesh.name = names
+        mesh.userData = { ...meshes[0].userData }
+        group.add(mesh)
       }
       return group
     },

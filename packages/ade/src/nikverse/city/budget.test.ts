@@ -6,6 +6,7 @@ import { characterTriangles, imageSizes, nodeNamed, readGlb, subtree, trianglesO
 import { ktx2Format, ktx2GpuBytes, ktx2Size } from "./ktx2-header"
 import { CLIP_NAME, BODIES, ROLES } from "./rig"
 import { LEVEL_IDS } from "./quality"
+import { VEG_STRIDE } from "./kit"
 
 /**
  * The generator's ceilings (`config.json` of N3, copied next to the assets as `budget.json`) against the files
@@ -29,6 +30,10 @@ interface Budget {
     desk_tris: number
     surroundings_tris: number
     island_tris: number
+    veg_lod0_tris: number
+    veg_lod1_tris: number
+    palm_tris: number
+    veg_planted_tris: number
   }
   cast: { user: string; agents: string[] }
 }
@@ -129,6 +134,19 @@ describe("the shipped assets against the generator's ceilings", () => {
         const island = trianglesNamed(glb, "island_") + trianglesNamed(glb, "plaza_")
         expect([island, island <= budget.budget.island_tris]).toEqual([island, true])
         expect(trianglesNamed(glb, "env_")).toBeLessThanOrEqual(budget.budget.surroundings_tris)
+      })
+
+      run("the plants: each prototype within its ceiling, and all of them planted within the vegetation's", () => {
+        const glb = city(level)
+        const instances = (set: string) =>
+          (((glb.json.nodes ?? []).find((n) => n.name === `veg_${set}`)?.extras as { nkv_instances?: number[] } | undefined)?.nkv_instances?.length ?? 0) / VEG_STRIDE
+        const each = { lod0: trianglesNamed(glb, "veg_lod0_"), lod1: trianglesNamed(glb, "veg_lod1_"), palm: trianglesNamed(glb, "veg_palm_") }
+        expect([each.lod0, each.lod0 <= budget.budget.veg_lod0_tris]).toEqual([each.lod0, true])
+        expect([each.lod1, each.lod1 <= budget.budget.veg_lod1_tris]).toEqual([each.lod1, true])
+        expect([each.palm, each.palm <= budget.budget.palm_tris]).toEqual([each.palm, true])
+        // Everything planted, as if it were all drawn at once: the camera sees about three slices of eight, so what it draws is well under this.
+        const all = (Object.keys(each) as Array<keyof typeof each>).reduce((sum, set) => sum + each[set] * instances(set), 0)
+        expect([all, all <= budget.budget.veg_planted_tris]).toEqual([all, true])
       })
 
       // The pictures are KTX2 in the GPU's own block format (BC1/BC5), which the GPU holds as they are: what it holds for them

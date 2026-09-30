@@ -121,9 +121,9 @@ export const SHOTS: ReadonlyArray<Shot> = [
   // 7. Between two chiringuiti up the slope: palms, the plants near and far, the fog. The vegetation's worst case.
   { n: 7, name: "slopes", eye: ring(52, 24, 1.7), look: ring(52, 80, 22), fov: 62,
     about: "Fra due chiringuiti verso il pendio: palme, piante vicine e lontane, nebbia.", luminance: FIRST_RUN },
-  // 8. A chiringuito coming up out of the sand, half way.
-  { n: 8, name: "rise", eye: inShop(5, -3, 2, 14), look: inShop(5, 0, 1, 0), fov: 58,
-    about: "Un chiringuito a metà della salita dalla sabbia: la transizione.", rising: true, luminance: FIRST_RUN },
+  // 8. A chiringuito coming up out of the sand, half way: close, with the ring of sand and the puffs around it.
+  { n: 8, name: "rise", eye: inShop(5, -2.4, 1.9, 8.5), look: inShop(5, 0, 0.9, 0), fov: 58,
+    about: "Un chiringuito a metà della salita dalla sabbia: l'anello di sabbia e gli sbuffi, da 8 m.", rising: true, luminance: FIRST_RUN },
 ]
 
 export function shotOf(n: number): Shot | undefined {

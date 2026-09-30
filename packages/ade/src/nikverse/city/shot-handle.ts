@@ -29,6 +29,8 @@ export interface ShotResult {
   png: string
   /** The same picture as a JPEG (quality 0.9), small enough to put many in a page. */
   jpg: string
+  /** What the frame drew, as the renderer counts it: the plan's ceilings are 600k triangles and 150 draw calls. */
+  drawn?: { calls: number; triangles: number }
 }
 
 export interface ShotParts {
@@ -109,6 +111,8 @@ export async function takeShot(parts: ShotParts): Promise<ShotResult> {
   // The same task as the render: the canvas still holds the frame.
   renderer.render(view.scene, camera)
   g.drawImage(canvas, 0, 0)
+  const info = (renderer as unknown as { info?: { render?: { calls?: number; drawCalls?: number; triangles?: number } } }).info?.render
+  const drawn = info ? { calls: info.drawCalls ?? info.calls ?? 0, triangles: info.triangles ?? 0 } : undefined
   const hex = (view.scene.background as { getHex(): number } | null)?.getHex() ?? 0
   const sky = [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255] as const
   const stats = analyze(g.getImageData(0, 0, SHOT_WIDTH, SHOT_HEIGHT).data, SHOT_WIDTH, SHOT_HEIGHT, sky)
@@ -125,6 +129,7 @@ export async function takeShot(parts: ShotParts): Promise<ShotResult> {
     problems: problemsOf(stats, shot.luminance),
     png,
     jpg,
+    drawn,
   }
 }
 
