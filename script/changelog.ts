@@ -12,7 +12,11 @@ const UNRELEASED_START = "<!-- UNRELEASED:START -->"
 const UNRELEASED_END = "<!-- UNRELEASED:END -->"
 
 export async function getLatestRelease() {
-  return fetch("https://api.github.com/repos/nikcli/nikcli/releases/latest")
+  // Unauthenticated requests share the runner's IP rate limit and fail with 403 on CI.
+  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+  return fetch("https://api.github.com/repos/nikcli/nikcli/releases/latest", {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
