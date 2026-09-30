@@ -4,13 +4,8 @@
  */
 
 export const GATE_LIMITS = {
-  /**
-   * The frame (`nikverse.localhost` renderer), in MB: its private bytes, the worst of the cycles. Not its working set,
-   * which counts the pages it shares (WebView2's DLLs, the memory shared with the GPU process) and moves from one run
-   * to the next with no change to the world: the Architect's decision of 2026-09-30 (`nikverse-gpu-decisione.md`).
-   * 115, not the old 130 on the larger of the two, so that the budget is not widened on the quiet.
-   */
-  frameMb: 115,
+  /** The private frame (`nikverse.localhost` renderer), in MB: the larger of private bytes and working set. */
+  frameMb: 130,
   /** How much ADE's own renderer may grow after the world has been opened and closed, in MB. */
   adeGrowthMb: 5,
   /** CPU, in percent of one core, that the world adds when it draws nothing: its frame, plus what its GPU work adds to the GPU process. */
@@ -29,10 +24,8 @@ export const GATE_LIMITS = {
 
 /** What the script measured. Every number is in MB, milliseconds, percent of a core or frames a second. */
 export interface GateMeasures {
-  /** Worst frame private bytes over the open/close cycles. */
+  /** Worst frame size over the open/close cycles. */
   frameMb: number
-  /** Worst frame working set over the cycles: in the report for information, held to no ceiling. */
-  frameWorkingSetMb?: number
   /** ADE renderer growth (larger of private and working set, and JS heap after a GC) 5 s after the last close. */
   adeGrowthAfter5sMb: number
   /** The same, after the wait for the process to settle. */
@@ -78,7 +71,7 @@ export const immobileCost = (frameCpu: number, gpuCpu: number, baselineGpuCpu: n
 
 export function gateChecks(measures: GateMeasures, limits = GATE_LIMITS): GateCheck[] {
   return [
-    under("frame private MB", measures.frameMb, limits.frameMb),
+    under("frame MB", measures.frameMb, limits.frameMb),
     under("ADE growth after 5 s, MB", measures.adeGrowthAfter5sMb, limits.adeGrowthMb),
     under("ADE growth at rest, MB", measures.adeGrowthAtRestMb, limits.adeGrowthMb),
     under("ADE heap growth, MB", measures.adeHeapGrowthMb, limits.adeGrowthMb),

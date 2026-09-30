@@ -34,15 +34,8 @@ describe("the NikVerse gate", () => {
     expect(gatePasses(gateChecks(good))).toBe(true)
   })
 
-  test("the frame is held to its private bytes, 115 MB; its working set is information and turns nothing red", () => {
-    expect(GATE_LIMITS.frameMb).toBe(115)
-    // The island's run of 2026-09-30: private 93-103, working set 133-143 (shared pages, WebView2 and the GPU's).
-    expect(red({ frameMb: 103, frameWorkingSetMb: 143.5 })).toEqual([])
-    expect(red({ frameMb: 116, frameWorkingSetMb: 120 })).toEqual(["frame private MB"])
-  })
-
   test("each ceiling turns the gate red on its own, by name", () => {
-    expect(red({ frameMb: GATE_LIMITS.frameMb + 1 })).toEqual(["frame private MB"])
+    expect(red({ frameMb: GATE_LIMITS.frameMb + 1 })).toEqual(["frame MB"])
     expect(red({ adeGrowthAfter5sMb: 5.2 })).toEqual(["ADE growth after 5 s, MB"])
     expect(red({ adeGrowthAtRestMb: 5.2 })).toEqual(["ADE growth at rest, MB"])
     expect(red({ adeHeapGrowthMb: 6 })).toEqual(["ADE heap growth, MB"])
