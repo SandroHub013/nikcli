@@ -19,7 +19,7 @@ if (!owner || !profile) process.exit(2)
 const until = Date.now() + (maxMs || 45 * 60_000) + 60_000
 while (isAlive(owner) && existsSync(profile) && Date.now() < until) await Bun.sleep(500)
 
-killByProfile(profile, program, 6)
+killByProfile(profile, program, 20_000)
 for (let i = 0; i < 10; i++) {
   try {
     rmSync(profile, { recursive: true, force: true })
