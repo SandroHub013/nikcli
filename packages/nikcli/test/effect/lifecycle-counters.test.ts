@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test" 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { increment, LIFECYCLE_KEYS, reset, snapshot } from "@/effect/lifecycle-counters"
 import { InstanceScope } from "@/effect/instance-scope"
