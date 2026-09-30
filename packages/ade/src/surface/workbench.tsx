@@ -512,6 +512,7 @@ import {
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
+  dropLegacyParakeet,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -5399,7 +5400,7 @@ export function Workbench() {
     s.alwaysListen &&
     s.activation === "wake-word" &&
     s.mode === "agent" &&
-    (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
+    Boolean(s.openRouterApiKey)
   const listenForName = () => {
     // Not the user's hand: a stop for spending is not lifted by a launch.
     if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
@@ -5822,6 +5823,8 @@ export function Workbench() {
       })
     }
     setBooting(undefined)
+    // The local speech model that was removed left its download in the webview's storage: dropped once, after the screen is up.
+    void dropLegacyParakeet()
   })
 
   const autosave = createAutosave({
@@ -5850,7 +5853,7 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
-        if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+        if (!voiceSettings().openRouterApiKey) {
           if (wb().view !== "agent") {
             setWb((w) => ({ ...w, view: "agent" }))
             return
@@ -6354,7 +6357,7 @@ export function Workbench() {
         )
       }
     } else if (id === "voice.toggle") {
-      if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+      if (!voiceSettings().openRouterApiKey) {
         if (wb().view !== "agent") {
           setWb((w) => ({ ...w, view: "agent" }))
           return

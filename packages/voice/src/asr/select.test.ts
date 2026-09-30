@@ -40,17 +40,12 @@ class SimpleHost implements VoiceHost {
 }
 
 describe("asr/select", () => {
-  test("describeBackends reports exact localized reasons for both backends when unavailable", () => {
-    // The test runner has no OpenRouter key configured and no downloaded model
-    const status = describeBackends({
-      isModelDownloaded: false,
-    })
+  test("describeBackends reports the localized reason when the engine is unavailable", () => {
+    // The test runner has no OpenRouter key configured
+    const status = describeBackends({})
 
-    // 1. Parakeet
-    expect(status.parakeet.usable).toBe(false)
-    expect(status.parakeet.reason).toContain("non è ancora stato scaricato in locale")
-
-    // 2. OpenRouter
+    // OpenRouter, the only engine
+    expect(Object.keys(status)).toEqual(["openrouter"])
     expect(status.openrouter.usable).toBe(false)
     expect(status.openrouter.reason).toContain("Chiave API OpenRouter mancante")
   })
@@ -58,10 +53,8 @@ describe("asr/select", () => {
   test("describeBackends reports usable when requirements are met", () => {
     const status = describeBackends({
       apiKey: "sk-or-valid-test-key",
-      isModelDownloaded: true,
     })
 
-    expect(status.parakeet.usable).toBe(true)
     expect(status.openrouter.usable).toBe(true)
   })
 
@@ -72,24 +65,10 @@ describe("asr/select", () => {
 
     const res = describeBackends(null as any)
     expect(res).toBeDefined()
-    expect(res.parakeet).toBeDefined()
     expect(res.openrouter).toBeDefined()
   })
 
   test("createTranscriberFor instantiates the requested backend or throws clean error for unknown", () => {
-    // Parakeet
-    const parakeet = createTranscriberFor("parakeet", {
-      parakeetOptions: {
-        supportsLanguage: () => true,
-        captureOptions: {
-          mediaStream: { getTracks: () => [] } as any,
-          isTypeSupported: () => true,
-        },
-      },
-    })
-    expect(parakeet).toBeDefined()
-    expect(typeof parakeet.start).toBe("function")
-
     // OpenRouter
     const openrouter = createTranscriberFor("openrouter", {
       apiKey: "test-key",

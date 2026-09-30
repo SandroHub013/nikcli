@@ -1,23 +1,23 @@
 import { describe, expect, it } from "bun:test"
-import { agentHudState, latestExchange, HUD_WAVE, orbRim, preparingHudState, waveBarHeight } from "./voice-hud-state"
+import { agentHudState, latestExchange, HUD_WAVE, orbRim, waveBarHeight } from "./voice-hud-state"
 
 const base = { partial: "", spoken: "", readback: undefined, wakeWord: "hei nik" }
 
 describe("orbRim", () => {
   it("is green while the microphone is open", () => {
-    expect(orbRim({ running: true, preparing: false })).toBe("listening")
+    expect(orbRim({ running: true })).toBe("listening")
   })
 
   it("wears nothing when the microphone is shut and nothing went wrong", () => {
-    expect(orbRim({ running: false, preparing: false })).toBeUndefined()
+    expect(orbRim({ running: false })).toBeUndefined()
   })
 
   it("calls out a microphone that has not been granted on its own", () => {
-    expect(orbRim({ running: false, preparing: false, errorKind: "mic-auth" })).toBe("mic-auth")
+    expect(orbRim({ running: false, errorKind: "mic-auth" })).toBe("mic-auth")
   })
 
   it("is red for everything else that went wrong", () => {
-    expect(orbRim({ running: false, preparing: false, errorKind: "failed" })).toBe("failed")
+    expect(orbRim({ running: false, errorKind: "failed" })).toBe("failed")
   })
 
   /*
@@ -26,40 +26,11 @@ describe("orbRim", () => {
    * green ring around its own failure message.
    */
   it("never shows green over a failure", () => {
-    expect(orbRim({ running: true, preparing: false, errorKind: "mic-auth" })).toBe("mic-auth")
-    expect(orbRim({ running: true, preparing: false, errorKind: "failed" })).toBe("failed")
-  })
-
-  /* Warming up is neither hearing you nor broken, and the pill says so in
-     words and a percentage already. */
-  it("wears nothing while the local model is still downloading", () => {
-    expect(orbRim({ running: true, preparing: true })).toBeUndefined()
+    expect(orbRim({ running: true, errorKind: "mic-auth" })).toBe("mic-auth")
+    expect(orbRim({ running: true, errorKind: "failed" })).toBe("failed")
   })
 })
 
-describe("preparingHudState", () => {
-  it("reports the percentage while the model downloads", () => {
-    const state = preparingHudState({ percent: 42 })
-    expect(state.tone).toBe("working")
-    expect(state.label).toBe("preparo")
-    expect(state.line).toBe("modello vocale · 42%")
-  })
-
-  /*
-   * A download with no content-length reports bytes and no total, so there is
-   * no percentage to show. It still has to say it is working: an empty widget
-   * is the failure this state exists to prevent.
-   */
-  it("still says it is working when there is no total to divide by", () => {
-    expect(preparingHudState({}).line).toBe("modello vocale…")
-    expect(preparingHudState({ percent: Number.NaN }).line).toBe("modello vocale…")
-  })
-
-  it("never reports a percentage outside the bar", () => {
-    expect(preparingHudState({ percent: -5 }).line).toBe("modello vocale · 0%")
-    expect(preparingHudState({ percent: 140 }).line).toBe("modello vocale · 100%")
-  })
-})
 
 describe("agentHudState", () => {
   it("quotes the wake word while the agent sleeps", () => {

@@ -470,9 +470,9 @@ describe("Voice Modes & Settings Interaction", () => {
     const transcriberB = new TrackedTranscriber("transcriberB")
 
     let callCount = 0
-    const mockTranscriberFactory = (backend: TranscriberBackend): Transcriber => {
+    const mockTranscriberFactory = (_backend: TranscriberBackend): Transcriber => {
       callCount++
-      return backend === "openrouter" ? transcriberA : transcriberB
+      return callCount === 1 ? transcriberA : transcriberB
     }
 
     const engine = createVoiceEngine({
@@ -490,8 +490,8 @@ describe("Voice Modes & Settings Interaction", () => {
     await engine.updateSettings({ mode: "transcription", transcriptionSend: "auto" })
     expect(eventOrder).toEqual(["transcriberA.start"])
 
-    // Now change backend from "openrouter" to "parakeet"
-    await engine.updateSettings({ backend: "parakeet" })
+    // Now change what is baked into the transcriber (the language): it is stopped before the next one starts
+    await engine.updateSettings({ language: "en" })
 
     // Verify order: transcriberA.stop MUST come before transcriberB.start!
     expect(eventOrder).toEqual(["transcriberA.start", "transcriberA.stop", "transcriberB.start"])

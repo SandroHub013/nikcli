@@ -20,8 +20,6 @@ export type TranscriptionSendMode = "manual" | "auto"
  */
 export type DictationPress = "hold" | "toggle"
 
-export type ParakeetExecutionBackend = "webgpu" | "wasm" | "auto"
-
 export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
 export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
@@ -212,8 +210,6 @@ export interface VoiceSettings {
   readonly backend: TranscriberBackend
   /** Optional OpenRouter cloud speech API authentication key. */
   readonly openRouterApiKey?: string
-  /** Hardware acceleration tier preference for Parakeet local inference. */
-  readonly parakeetBackend: ParakeetExecutionBackend
   /**
    * Words the speech model has never heard, spelled the way the user writes them.
    *
@@ -332,16 +328,12 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   /*
    * The cloud engine, despite needing a key and sending audio away.
    *
-   * Parakeet was the default and could not keep the promise: running a 0.6B
-   * model inside the webview takes the renderer past four gigabytes and stops
-   * it answering, whichever accelerator it picks — WebGPU cannot run the int8
-   * encoder and silently substitutes the fp32 one, and the WASM build expands
-   * to about the same. It stays selectable, for a machine with the headroom,
-   * and the panel says what it costs. Local transcription that does not freeze
-   * the window needs a process of its own, not a tab.
+   * The only engine. There was a local one (Parakeet) and it is gone: running
+   * a 0.6B model inside the webview took the renderer past four gigabytes and
+   * stopped it answering, whichever accelerator it picked. Local transcription
+   * that does not freeze the window needs a process of its own, not a tab.
    */
   backend: "openrouter",
-  parakeetBackend: "auto",
   /*
    * Empty, not seeded with this project's own jargon.
    *
@@ -646,9 +638,12 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   // Settings saved before the browser recogniser was removed name a backend
   // that no longer exists; they fall through to the default here, which is the
   // same path any other unknown value takes and needs no special case.
+  // "parakeet", the local engine that has been removed, becomes the cloud one
+  // without a word: it is not something the user did wrong, and the model it
+  // downloaded is dropped once, elsewhere (`asr/legacy-parakeet.ts`).
   let backend: TranscriberBackend
   if (candidate.backend === "parakeet" || candidate.backend === "openrouter") {
-    backend = candidate.backend
+    backend = "openrouter"
   } else {
     corrections.push(t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend))
     backend = DEFAULT_VOICE_SETTINGS.backend
@@ -658,21 +653,6 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   let openRouterApiKey: string | undefined = undefined
   if (typeof candidate.openRouterApiKey === "string" && candidate.openRouterApiKey.trim().length > 0) {
     openRouterApiKey = candidate.openRouterApiKey.trim()
-  }
-
-  // 11. Parakeet backend preference
-  let parakeetBackend: ParakeetExecutionBackend
-  if (
-    candidate.parakeetBackend === "webgpu" ||
-    candidate.parakeetBackend === "wasm" ||
-    candidate.parakeetBackend === "auto"
-  ) {
-    parakeetBackend = candidate.parakeetBackend
-  } else {
-    corrections.push(
-      t("vui.fix.parakeetBackend", String(candidate.parakeetBackend), DEFAULT_VOICE_SETTINGS.parakeetBackend),
-    )
-    parakeetBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
   }
 
   /*
@@ -865,7 +845,6 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionChord,
     backend,
     ...(openRouterApiKey ? { openRouterApiKey } : {}),
-    parakeetBackend,
     customWords,
     speakReplies,
     spokenAlerts,

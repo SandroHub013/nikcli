@@ -36,7 +36,6 @@ import {
   type AgentEngine,
   type AgentSpeed,
   type ReplyVoice,
-  type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
   type VoiceMode,
@@ -45,15 +44,6 @@ import {
 import { availableLanguages, isLanguageSupported, type LanguageOption } from "../settings/languages"
 import { describeShortcut, VOICE_COMMAND_AGENT, VOICE_COMMAND_TRANSCRIPTION } from "../settings/shortcuts"
 import { describeBackends, type TranscriberBackend } from "../asr/select"
-import { disposeParakeetModel, isWasmAvailable, isWebGpuAvailable, type ParakeetProgress } from "../asr/parakeet-local"
-import {
-  clearModelCache,
-  downloadParakeetModel,
-  EMPTY_CACHE,
-  inspectModelCache,
-  type CachedModel,
-  type DownloadParakeetProgress,
-} from "../asr/model-cache"
 import { describeChoice, listAudioDevices, onDeviceChange, SYSTEM_DEFAULT, type AudioDevices } from "../audio/devices"
 import { VOCABULARY } from "../intent/vocabulary"
 import type { Binding } from "@nikcli-ai/ade/keyboard/keymap"
@@ -129,8 +119,6 @@ export interface VoiceSettingsPanelProps {
   onDeleteKokoro?: () => void
   /** Speaks a short sample in the voice chosen. Absent: no button. */
   onTestVoice?: () => void
-  /** Optional Parakeet neural model download progress. */
-  parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
   lastCost?: number
   /**
@@ -487,45 +475,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     outputs: [SYSTEM_DEFAULT],
     labelled: false,
   })
-  const [cached, setCached] = createSignal<CachedModel>(EMPTY_CACHE)
-  /* Whether the answer above has been asked for yet. "Not yet known" and
-     "nothing downloaded" look the same in `CachedModel` and must not read the
-     same in the engine list. */
-  const [inspected, setInspected] = createSignal(false)
-  const [clearingCache, setClearingCache] = createSignal(false)
-  const [downloading, setDownloading] = createSignal(false)
-  const [downloadProgress, setDownloadProgress] = createSignal<DownloadParakeetProgress | null>(null)
-  const [downloadError, setDownloadError] = createSignal<string | null>(null)
-  const [downloadSuccess, setDownloadSuccess] = createSignal(false)
-  let cacheGeneration = 0
-  let cacheBackend = props.settings.parakeetBackend
-  createEffect(() => {
-    cacheBackend = props.settings.parakeetBackend
-  })
-
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
   }
-  const parakeetFiles = (backend: ParakeetExecutionBackend): string[] => {
-    const usesWebGpu = backend === "webgpu" || (backend === "auto" && isWebGpuAvailable())
-    return [`encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`, "decoder_joint-model.int8.onnx", "vocab.txt"]
-  }
-  const parakeetTotal = (backend: ParakeetExecutionBackend): number =>
-    parakeetFiles(backend)[0]?.includes("fp16") ? 1_200_000_000 : 670_488_135
-  const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
-    if (backend !== cacheBackend) return EMPTY_CACHE
-    const generation = ++cacheGeneration
-    const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
-    if (generation === cacheGeneration && backend === cacheBackend) {
-      setCached(found)
-      setInspected(true)
-    }
-    return found
-  }
-
   onMount(() => {
     refreshDevices()
-    void refreshCache()
     const stop = onDeviceChange(refreshDevices)
     onCleanup(stop)
   })
@@ -534,20 +488,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const backendStatuses = createMemo(() => {
     return describeBackends({
       apiKey: props.settings.openRouterApiKey,
-      /*
-       * The answer `describeParakeetReadiness` has always accepted and that
-       * nothing outside the tests ever supplied: without it the local engine
-       * was reported as usable whether or not a byte of it had been
-       * downloaded, so the one hint that choosing it means a long wait was
-       * never shown. Undefined until the cache has been inspected, which is
-       * also correct — "not yet known" is not "not downloaded".
-       */
-      isModelDownloaded: inspected() ? cached().present : undefined,
     })
   })
-
-  const hasWebGpu = createMemo(() => isWebGpuAvailable())
-  const hasWasm = createMemo(() => isWasmAvailable())
 
   // Available languages dynamically queried from languages.ts
   const currentLanguages = createMemo<LanguageOption[]>(() => {
@@ -607,21 +549,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     return { text: engineStatus().detail, kind: "hint" as const }
   })
 
-  // Resolve Parakeet download progress from props, direct download, or engine
-  const resolvedProgress = createMemo<ParakeetProgress | undefined>(() => {
-    if (downloadProgress()) return downloadProgress()!
-    if (props.parakeetProgress) return props.parakeetProgress
-    const eng = props.engine as unknown as Record<string, unknown>
-    if (typeof eng.parakeetProgress === "function") {
-      const res = (eng.parakeetProgress as () => unknown)()
-      if (res && typeof res === "object") return res as ParakeetProgress
-    }
-    if (eng.parakeetProgress && typeof eng.parakeetProgress === "object") {
-      return eng.parakeetProgress as ParakeetProgress
-    }
-    return undefined
-  })
-
   // Resolve last request cost from props or engine
   const resolvedCost = createMemo<number | undefined>(() => {
     if (typeof props.lastCost === "number") return props.lastCost
@@ -644,37 +571,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       ...props.settings,
       ...patch,
     })
-  }
-
-  const startDirectDownload = async () => {
-    if (downloading()) return
-    setDownloading(true)
-    setDownloadError(null)
-    setDownloadSuccess(false)
-    setDownloadProgress({
-      loaded: 0,
-      total: parakeetTotal(props.settings.parakeetBackend),
-      percent: 0,
-      message: t("vui.download.starting"),
-    })
-    try {
-      const backend = props.settings.parakeetBackend
-      const files = parakeetFiles(backend)
-      await downloadParakeetModel({
-        quant: files[0]?.includes("fp16") ? "fp16" : "int8",
-        onProgress: (p) => {
-          setDownloadProgress(p)
-        },
-      })
-      if (backend === cacheBackend) await refreshCache(backend)
-      updateSettings({ backend: "parakeet" })
-      setDownloadSuccess(true)
-      setTimeout(() => setDownloadSuccess(false), 6000)
-    } catch (err: any) {
-      setDownloadError(err?.message || t("vui.download.failed"))
-    } finally {
-      setDownloading(false)
-    }
   }
 
   /**
@@ -745,9 +641,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setApiKeyInput("")
     setApiKeyVisible(false)
     setLanguageFilter("")
-    cacheBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
-    void refreshCache(DEFAULT_VOICE_SETTINGS.parakeetBackend)
   }
 
   // Global keyboard listener for modal Escape and shortcut recording cancellation
@@ -1015,30 +909,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
   const fallbackKeys = radioGroupKeys((value) => updateSettings({ codexFallback: value === "on" }))
   const activationKeys = radioGroupKeys((value) => selectActivation(value as VoiceActivation))
-  const backendKeys = radioGroupKeys((value) => {
-    if (value === "parakeet" && !backendStatuses().parakeet.usable) return
-    updateSettings({ backend: value as TranscriberBackend })
-  })
-
-  const parakeetPill = (value: ParakeetExecutionBackend, label: string, enabled: boolean, hint: string) => (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={props.settings.parakeetBackend === value}
-      aria-disabled={enabled ? undefined : "true"}
-      disabled={!enabled}
-      title={hint}
-      data-slot="pill-btn"
-      onClick={() => {
-        if (!enabled) return
-        cacheBackend = value
-        updateSettings({ parakeetBackend: value })
-        void refreshCache(value)
-      }}
-    >
-      {label}
-    </button>
-  )
+  const backendKeys = radioGroupKeys((value) => updateSettings({ backend: value as TranscriberBackend }))
 
   // Render main panel contents
   const renderPanel = () => (
@@ -2125,115 +1996,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 {t("vui.audio.output.note")}
               </p>
             </div>
-
-            <div data-slot="stack">
-              <span data-slot="label">{t("vui.model.title")}</span>
-              <p data-slot="hint">
-                <Show when={cached().files > 0 || cached().present} fallback={<>{t("vui.model.none")}</>}>
-                  {cached().source === "filesystem" ? (
-                    <>
-                      {t(
-                        "vui.model.found",
-                        (cached().bytes / (1024 * 1024)).toFixed(0),
-                        cached().modelFormat?.toUpperCase() || t("vui.model.local"),
-                      )}
-                      {cached().localPath ? (
-                        <span
-                          style={{
-                            display: "block",
-                            "margin-top": "4px",
-                            "font-family": "monospace",
-                            "font-size": "11px",
-                            opacity: "0.8",
-                          }}
-                        >
-                          {t("vui.model.path", cached().localPath ?? "")}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      {t(
-                        cached().present ? "vui.model.cached" : "vui.model.partial",
-                        cached().files,
-                        (cached().bytes / (1024 * 1024)).toFixed(0),
-                      )}
-                    </>
-                  )}
-                </Show>
-              </p>
-
-              <Show when={!cached().present}>
-                <Show
-                  when={downloading()}
-                  fallback={
-                    <div style={{ display: "flex", "align-items": "center", gap: "12px", "flex-wrap": "wrap" }}>
-                      <button type="button" data-slot="solid-btn" onClick={startDirectDownload}>
-                        {t("vui.model.download")}
-                      </button>
-                      <span data-slot="hint">{t("vui.model.download.hint")}</span>
-                    </div>
-                  }
-                >
-                  <div data-slot="progress-box">
-                    <div data-slot="progress-meta">
-                      <span>{downloadProgress()?.message || t("vui.model.downloading")}</span>
-                      <span>
-                        {((downloadProgress()?.loaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
-                        {((downloadProgress()?.total || 670488135) / (1024 * 1024)).toFixed(1)} MB (
-                        {downloadProgress()?.percent ?? 0}%)
-                      </span>
-                    </div>
-                    <div
-                      role="progressbar"
-                      aria-valuenow={downloadProgress()?.percent ?? 0}
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                      data-slot="progressbar-track"
-                    >
-                      <div data-slot="progressbar-fill" style={{ width: `${downloadProgress()?.percent ?? 0}%` }} />
-                    </div>
-                  </div>
-                </Show>
-                <Show when={downloadError()}>
-                  <div data-slot="reason-box">{downloadError()}</div>
-                </Show>
-              </Show>
-
-              <Show when={downloadSuccess()}>
-                <div
-                  data-slot="ready-tag"
-                  data-ready="true"
-                  style={{ "align-self": "flex-start", padding: "6px 12px" }}
-                >
-                  {t("vui.model.downloaded")}
-                </div>
-              </Show>
-              <Show when={cached().source === "indexeddb" && cached().files > 0}>
-                <button
-                  type="button"
-                  data-slot="secondary-btn"
-                  disabled={clearingCache()}
-                  onClick={() => {
-                    setClearingCache(true)
-                    void clearModelCache()
-                      .then(() => disposeParakeetModel())
-                      .finally(() => {
-                        setClearingCache(false)
-                        void refreshCache()
-                      })
-                  }}
-                >
-                  {clearingCache() ? t("vui.model.deleting") : t("vui.model.delete")}
-                </button>
-                <p data-slot="hint">
-                  {/* The only cure for a file that arrived truncated: the download
-                    returns 200 either way, so a short file is cached and served
-                    forever, and nothing else in the application can throw it away. */}
-                  {t("vui.model.delete.hint")}
-                </p>
-              </Show>
-            </div>
           </section>
 
           {/* ── 6. Speech engine ───────────────────────────────────────── */}
@@ -2256,170 +2018,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               data-slot="backend-list"
               onKeyDown={backendKeys}
             >
-              {/* 1. Parakeet Locale */}
-              <div
-                data-slot="backend-card"
-                data-checked={props.settings.backend === "parakeet" ? "true" : undefined}
-                data-unusable={!(hasWebGpu() || hasWasm()) ? "true" : undefined}
-              >
-                <div
-                  data-slot="backend-header"
-                  role="radio"
-                  data-value="parakeet"
-                  tabIndex={props.settings.backend === "parakeet" ? 0 : -1}
-                  aria-checked={props.settings.backend === "parakeet"}
-                  aria-disabled={!(hasWebGpu() || hasWasm()) ? "true" : undefined}
-                  aria-describedby={
-                    !backendStatuses().parakeet.usable && !cached().present ? "backend-parakeet-reason" : undefined
-                  }
-                  onClick={() => {
-                    if (hasWebGpu() || hasWasm() || backendStatuses().parakeet.usable) {
-                      updateSettings({ backend: "parakeet" })
-                    }
-                  }}
-                >
-                  <div data-slot="item-text-group">
-                    <span data-slot="item-title">{t("vui.backend.parakeet")}</span>
-                    <span data-slot="item-desc">{t("vui.backend.parakeet.desc")}</span>
-                  </div>
-                  <span
-                    data-slot="ready-tag"
-                    data-ready={backendStatuses().parakeet.usable || cached().present ? "true" : "false"}
-                  >
-                    {downloading()
-                      ? t("vui.backend.downloading", downloadProgress()?.percent ?? 0)
-                      : cached().present
-                        ? t("vui.backend.readyLocal")
-                        : backendStatuses().parakeet.usable
-                          ? t("vui.backend.ready")
-                          : hasWebGpu() || hasWasm()
-                            ? t("vui.backend.available")
-                            : t("vui.backend.unsupported")}
-                  </span>
-                </div>
-
-                <p data-slot="backend-warning">{t("vui.backend.parakeet.note")}</p>
-
-                {/* Direct download when not available locally */}
-                <Show when={!cached().present}>
-                  <Show
-                    when={downloading()}
-                    fallback={
-                      <div style={{ display: "flex", "align-items": "center", gap: "12px", "flex-wrap": "wrap" }}>
-                        <button type="button" data-slot="solid-btn" onClick={startDirectDownload}>
-                          {t("vui.model.download")}
-                        </button>
-                        <span data-slot="hint">{t("vui.model.download.hint")}</span>
-                      </div>
-                    }
-                  >
-                    <div data-slot="progress-box">
-                      <div data-slot="progress-meta">
-                        <span>{downloadProgress()?.message || t("vui.model.downloading")}</span>
-                        <span>
-                          {((downloadProgress()?.loaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
-                          {((downloadProgress()?.total || 670488135) / (1024 * 1024)).toFixed(1)} MB (
-                          {downloadProgress()?.percent ?? 0}%)
-                        </span>
-                      </div>
-                      <div
-                        role="progressbar"
-                        aria-valuenow={downloadProgress()?.percent ?? 0}
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        data-slot="progressbar-track"
-                      >
-                        <div data-slot="progressbar-fill" style={{ width: `${downloadProgress()?.percent ?? 0}%` }} />
-                      </div>
-                    </div>
-                  </Show>
-                </Show>
-
-                <Show when={downloadSuccess()}>
-                  <div
-                    data-slot="ready-tag"
-                    data-ready="true"
-                    style={{ "align-self": "flex-start", padding: "6px 12px" }}
-                  >
-                    {t("vui.model.downloaded")}
-                  </div>
-                </Show>
-
-                <Show when={downloadError()}>
-                  <div data-slot="reason-box">{downloadError()}</div>
-                </Show>
-
-                {/* Parakeet unusable reason */}
-                <Show when={!backendStatuses().parakeet.usable && !cached().present && !(hasWebGpu() || hasWasm())}>
-                  <div id="backend-parakeet-reason" data-slot="reason-box">
-                    {backendStatuses().parakeet.reason}
-                  </div>
-                </Show>
-
-                {/* Sub-fields under Parakeet */}
-                <Show when={props.settings.backend === "parakeet"}>
-                  <div data-slot="backend-subfields">
-                    <div data-slot="stack">
-                      <span id="parakeet-backend-label" data-slot="label">
-                        {t("vui.backend.accel")}
-                      </span>
-                      <div role="radiogroup" aria-labelledby="parakeet-backend-label" data-slot="pills-row">
-                        {parakeetPill("auto", t("vui.engine.auto"), true, t("vui.backend.accel.auto"))}
-                        {parakeetPill(
-                          "webgpu",
-                          "WebGPU",
-                          hasWebGpu(),
-                          hasWebGpu() ? t("vui.backend.accel.gpu") : t("vui.backend.accel.noGpu"),
-                        )}
-                        {parakeetPill(
-                          "wasm",
-                          "WASM",
-                          hasWasm(),
-                          hasWasm() ? t("vui.backend.accel.cpu") : t("vui.backend.accel.noWasm"),
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Neural model download progress */}
-                    <Show
-                      when={
-                        !downloading() &&
-                        resolvedProgress() &&
-                        (resolvedProgress()!.total > 0 || resolvedProgress()!.percent !== undefined)
-                      }
-                    >
-                      {(() => {
-                        const p = resolvedProgress()!
-                        const percent = p.percent ?? (p.total > 0 ? Math.round((p.loaded / p.total) * 100) : 0)
-                        const loadedMb = (p.loaded / (1024 * 1024)).toFixed(1)
-                        const totalMb = (p.total / (1024 * 1024)).toFixed(1)
-
-                        return (
-                          <div data-slot="progress-box">
-                            <div data-slot="progress-meta">
-                              <span>{t("vui.backend.weights", p.message || t("vui.backend.weights.default"))}</span>
-                              <span>
-                                {loadedMb} MB / {totalMb} MB ({percent}%)
-                              </span>
-                            </div>
-                            <div
-                              role="progressbar"
-                              aria-valuenow={percent}
-                              aria-valuemin="0"
-                              aria-valuemax="100"
-                              data-slot="progressbar-track"
-                            >
-                              <div data-slot="progressbar-fill" style={{ width: `${percent}%` }} />
-                            </div>
-                          </div>
-                        )
-                      })()}
-                    </Show>
-                  </div>
-                </Show>
-              </div>
-
-              {/* 2. OpenRouter Cloud */}
+              {/* OpenRouter Cloud */}
               <div
                 data-slot="backend-card"
                 data-checked={props.settings.backend === "openrouter" ? "true" : undefined}
