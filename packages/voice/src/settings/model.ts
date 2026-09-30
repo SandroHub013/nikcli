@@ -379,12 +379,22 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * `shortcut-only`: a profile on the wake word is back on the shortcut.
  * `name-only`: a profile on the shortcut or toggle now listens for the name.
  * `listening-off`: a profile that listened on its own no longer does.
+ * `parakeet-removed`: a profile on the local engine that is gone is now on the cloud one.
+ * `parakeet-listening-off`: and it listened on its own, which would have sent every voice in the room
+ * to the cloud one, so it no longer does.
  *
  * There is deliberately no migration for a Kokoro voice in the wrong language:
  * the voice that reads such a reply is decided per reply, so there is nothing on
  * disk to move and nothing to put back.
  */
-export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only" | "listening-off"
+export type VoiceMigration =
+  | "wake-word"
+  | "always-listen"
+  | "shortcut-only"
+  | "name-only"
+  | "listening-off"
+  | "parakeet-removed"
+  | "parakeet-listening-off"
 
 /**
  * The locale a profile written before version 8 was really speaking in.
@@ -638,11 +648,21 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   // Settings saved before the browser recogniser was removed name a backend
   // that no longer exists; they fall through to the default here, which is the
   // same path any other unknown value takes and needs no special case.
-  // "parakeet", the local engine that has been removed, becomes the cloud one
-  // without a word: it is not something the user did wrong, and the model it
-  // downloaded is dropped once, elsewhere (`asr/legacy-parakeet.ts`).
+  // "parakeet", the local engine that has been removed, becomes the cloud one.
+  // It is told once (`parakeet-removed`), because what was free and private now
+  // leaves the machine; the model it downloaded is dropped once, elsewhere
+  // (`asr/legacy-parakeet.ts`). Listening on its own is turned off with it: a
+  // profile that heard every phrase in the room for nothing would otherwise send
+  // every one of them to a paid service, under the user, on the first start.
   let backend: TranscriberBackend
-  if (candidate.backend === "parakeet" || candidate.backend === "openrouter") {
+  if (candidate.backend === "parakeet") {
+    backend = "openrouter"
+    migrations.push("parakeet-removed")
+    if (alwaysListen) {
+      alwaysListen = false
+      migrations.push("parakeet-listening-off")
+    }
+  } else if (candidate.backend === "openrouter") {
     backend = "openrouter"
   } else {
     corrections.push(t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend))

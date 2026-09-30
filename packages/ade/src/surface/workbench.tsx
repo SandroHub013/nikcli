@@ -4924,25 +4924,35 @@ export function Workbench() {
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
   const listeningOff = initialVoice.migrations.includes("listening-off")
+  // The local engine is gone and the profile is on the cloud one now; told once (the profile is written back), with
+  // what was turned off under it when it listened on its own.
+  const localEngineRemoved = initialVoice.migrations.includes("parakeet-removed")
+  const cloudListeningOff = initialVoice.migrations.includes("parakeet-listening-off")
+  const localEngineNotice = cloudListeningOff
+    ? t("voice.parakeetRemovedListeningOff", t("vui.listen.always"))
+    : localEngineRemoved
+      ? t("voice.parakeetRemoved")
+      : undefined
   const movedToName = initialVoice.migrations.some(
     (m) => m === "name-only" || m === "wake-word" || m === "always-listen",
   )
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    listeningOff
-      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
-      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-        : movedToShortcut
-          ? t("voice.shortcutOnly", agentShortcut)
-          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-            ? t(
-                "voice.alwaysListening",
-                initialVoice.settings.wakeWord,
-                t("vui.listen.manual"),
-                t("vui.activation.toggle"),
-              )
-            : undefined,
+    localEngineNotice ??
+      (listeningOff
+        ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+        : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+          ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+          : movedToShortcut
+            ? t("voice.shortcutOnly", agentShortcut)
+            : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+              ? t(
+                  "voice.alwaysListening",
+                  initialVoice.settings.wakeWord,
+                  t("vui.listen.manual"),
+                  t("vui.activation.toggle"),
+                )
+              : undefined),
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -4954,6 +4964,8 @@ export function Workbench() {
        * nobody reads.
        */
       listeningOff ? t("voice.listeningOff", agentShortcut, t("vui.listen.always")) : undefined,
+      // Also in the strip: listening turned off under the user, and the service the voice now goes to, are theirs to know.
+      localEngineNotice,
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
         ? initialVoice.corrections.filter((c) => !c.includes("assenti")).join(" ")
         : rawSavedVoice !== null && initialVoice.corrections.length > 0

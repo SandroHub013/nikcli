@@ -100,11 +100,35 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(false)
   })
 
-  test("a profile of the current version that names the removed local engine moves to the cloud one without a word", () => {
+  test("a profile of the current version that names the removed local engine moves to the cloud one, and is told once", () => {
     const res = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, backend: "parakeet", parakeetBackend: "wasm" } as never)
     expect(res.backend).toBe("openrouter")
+    // Not a repair: the strip of corrections stays empty; the move has its own marker.
     expect(res.corrections).toEqual([])
+    expect(res.migrations).toEqual(["parakeet-removed"])
     expect("parakeetBackend" in res).toBe(false)
+  })
+
+  test("a profile on the removed local engine that listened on its own does not listen on its own in the cloud", () => {
+    // It heard every phrase in the room for free; on the paid transcription it would send every one of them
+    // (a key is there) before the user has read a word.
+    const res = normalizeSettings({
+      ...DEFAULT_VOICE_SETTINGS,
+      backend: "parakeet",
+      alwaysListen: true,
+      activation: "wake-word",
+      openRouterApiKey: "sk-or-x",
+    } as never)
+    expect(res.backend).toBe("openrouter")
+    expect(res.alwaysListen).toBe(false)
+    expect(res.settings.alwaysListen).toBe(false)
+    expect(res.migrations).toEqual(["parakeet-removed", "parakeet-listening-off"])
+  })
+
+  test("listening on its own is left alone for whoever was already on the cloud engine", () => {
+    const res = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, backend: "openrouter", alwaysListen: true } as never)
+    expect(res.alwaysListen).toBe(true)
+    expect(res.migrations).toEqual([])
   })
 
   test("a profile written before the name was asked for is moved to it, once and only from toggle", () => {
