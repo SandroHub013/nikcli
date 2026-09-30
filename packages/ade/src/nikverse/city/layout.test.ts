@@ -14,6 +14,7 @@ import {
   RING_SLOTS,
   SHOP_DEPTH,
   POSTS,
+  POTS,
   POST_HALF,
   ROOF_TOP,
   SHOP_WIDTH,
@@ -181,7 +182,7 @@ describe("inside a chiringuito", () => {
     const walls = wallsLocal()
     expect(walls[0]).toEqual(BACK_BAR)
     expect(walls[1]).toEqual(COUNTER)
-    expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length)
+    expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length + POTS.length)
     // The counter faces the hologram: it is in front of the back bar, with room behind it for whoever stands there.
     expect(COUNTER.z - COUNTER.hz - (BACK_BAR.z + BACK_BAR.hz)).toBeGreaterThan(1.5)
     // Round each end of the counter a body gets behind it, between the counter and the front posts.

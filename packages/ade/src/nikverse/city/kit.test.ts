@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { Matrix4, type BufferGeometry, type InstancedMesh, type Mesh, type MeshBasicMaterial, type Object3D } from "three/webgpu"
+import { Matrix4, Vector3, type BufferGeometry, type InstancedMesh, type Mesh, type MeshBasicMaterial, type Object3D } from "three/webgpu"
 import { readGlb } from "./glb"
-import { SHOP_TINTS, VEG_SECTORS, VEG_STRIDE, shopLook, vegSector } from "./kit"
+import { SHOP_TINTS, VEG_NEAR, VEG_SECTORS, VEG_STRIDE, plantDetail, shopLook, vegSector } from "./kit"
 import {
   BACK_BAR,
   CHAIR_SEAT_TOP,
@@ -20,6 +20,8 @@ import {
   PLATFORM_RADIUS,
   PLATFORM_TOP,
   POSTS,
+  POTS,
+  POT_HALF,
   POST_HALF,
   WATER_Y,
   deskLocal,
@@ -139,7 +141,12 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
         expect(near(found!.max[1], EAVE_HEIGHT)).toBe(true)
       }
       for (const lounger of LOUNGERS) expect([v, lounger, fixtures.some((p) => covers(p, { ...lounger, ...LOUNGER_HALF }))]).toEqual([v, lounger, true])
-      expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length)
+      // The pots: a terracotta pot as wide as the box, and the plant in it no taller than the box.
+      for (const pot of POTS) {
+        const found = fixtures.find((p) => covers(p, { ...pot, ...POT_HALF }))
+        expect([v, pot, found !== undefined]).toEqual([v, pot, true])
+      }
+      expect(walls).toHaveLength(2 + POSTS.length + LOUNGERS.length + POTS.length)
     }
   })
 
@@ -219,8 +226,10 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
       }),
     )
     expect([...lists.keys()].sort()).toEqual(["lod0", "lod1", "palm"])
-    const planted = kit.plaza.children.filter((c) => (c as InstancedMesh).isInstancedMesh) as InstancedMesh[]
-    // Two LODs of leaves and colas in their slices, and the palms: the plan's 16 draw calls, and one.
+    const all = kit.plaza.children.filter((c) => (c as InstancedMesh).isInstancedMesh) as InstancedMesh[]
+    // The near plants' far pieces are the same instances drawn another way: the next test's.
+    const planted = all.filter((m) => !m.name.endsWith("_far"))
+    // Two LODs of leaves and colas in their slices, and the palms: the plan's 32 draw calls, and one.
     expect(planted.length).toBeLessThanOrEqual(4 * VEG_SECTORS + 1)
     for (const [set, list] of lists) {
       expect(list.length % VEG_STRIDE).toBe(0)
@@ -245,6 +254,41 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
         }
       }
     }
+  })
+
+  test("a slice of near plants is drawn with its own pieces near the camera and the far ones' away, never both", async () => {
+    const kit = await kitFor(level)
+    const all = kit.plaza.children.filter((c) => (c as InstancedMesh).isInstancedMesh) as InstancedMesh[]
+    const near = all.filter((m) => m.userData.nkv_far)
+    expect(near.length).toBeGreaterThan(0)
+    for (const mesh of near) {
+      const away = mesh.userData.nkv_far as InstancedMesh
+      expect([mesh.name, away.name]).toEqual([mesh.name, `${mesh.name}_far`])
+      // The same instances, the same buffer.
+      expect(away.instanceMatrix).toBe(mesh.instanceMatrix)
+      expect(away.count).toBe(mesh.count)
+    }
+    kit.plaza.updateMatrixWorld(true)
+    const shown = () => near.map((m) => [m.visible, (m.userData.nkv_far as InstancedMesh).visible])
+    // High over the island: every slice far.
+    expect(plantDetail(kit.plaza, new Vector3(0, 400, 0))).toBe(0)
+    expect(shown().every(([a, b]) => !a && b)).toBe(true)
+    // At the foot of one slice: that one near, the far side of the island far.
+    const one = near[0]
+    const centre = one.boundingSphere!.center
+    const eye = new Vector3(centre.x, centre.y + 2, centre.z)
+    const count = plantDetail(kit.plaza, eye)
+    expect(count).toBeGreaterThan(0)
+    expect(count).toBeLessThan(near.length)
+    expect(one.visible).toBe(true)
+    expect(shown().every(([a, b]) => a !== b)).toBe(true)
+    expect(VEG_NEAR).toBeGreaterThan(20)
+    // Through a narrow lens a slice far away is as large as a near one: it is drawn near.
+    const back = new Vector3(centre.x, centre.y + 2, centre.z).addScaledVector(new Vector3(centre.x, 0, centre.z).normalize(), VEG_NEAR * 1.5)
+    plantDetail(kit.plaza, back)
+    expect(one.visible).toBe(false)
+    plantDetail(kit.plaza, back, 22)
+    expect(one.visible).toBe(true)
   })
 
   test("every sign says where the project's name goes, on its board, facing out", async () => {
@@ -356,7 +400,8 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     for (const node of nodes) expect([node.name, glb.json.meshes![node.mesh!].primitives.length]).toEqual([node.name, 1])
     const kit = await kitFor(level)
     // A chiringuito's parts are in many shops; what counts is that each is in at least one.
-    const drawn = new Set(kit.plaza.children.map((c) => c.name))
+    // A near plant's far pieces are the file's far plant's, drawn at the near instances.
+    const drawn = new Set(kit.plaza.children.map((c) => c.name).filter((n) => !n.endsWith("_far")))
     for (let v = 0; v < kit.variants; v++) for (const c of kit.shop(v).children) drawn.add(c.name)
     expect([...drawn].sort()).toEqual(nodes.map((n) => n.name!).sort())
     const shades = ["lit", "vcol", "emit", "add", "mul", "water", "sky"]

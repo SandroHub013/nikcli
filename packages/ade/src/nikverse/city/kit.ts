@@ -45,6 +45,7 @@ import {
   Quaternion,
   RepeatWrapping,
   SRGBColorSpace,
+  Sphere,
   Vector3,
   type Material,
   type Object3D,
@@ -141,17 +142,30 @@ const VEG_PIECE = /^veg_([a-z0-9]+)_([a-z]+)$/
 const VEG_SET = /^veg_([a-z0-9]+)$/
 /** Numbers per instance in `nkv_instances`: x, y, z, turn, scale, r, g, b. */
 export const VEG_STRIDE = 8
-/** The slices of the circle the plants are drawn in: two LODs of leaves and colas in four slices, the plan's 16 draw calls. */
-export const VEG_SECTORS = 4
+/** The slices of the circle the plants are drawn in, eight a LOD as in the plan: what is behind the camera is not drawn. */
+export const VEG_SECTORS = 8
 /** A set with no more instances than this (the palms) is one mesh: slicing it would only add draw calls. */
 export const VEG_WHOLE_UP_TO = 64
+
+/**
+ * Beyond this distance (metres, from the camera to the middle of a slice, where most of its plants are) a near plant
+ * is drawn with the far one's pieces: its leaves and cola at a quarter of the triangles, where they are a few pixels.
+ */
+export const VEG_NEAR = 40
+/** The world's camera's field of view (degrees), which `VEG_NEAR` is for: a narrower one sees a plant larger. */
+export const VEG_NEAR_FOV = 58
+/** The set whose pieces a set's plants are drawn with from afar. */
+const VEG_FAR_SET: Readonly<Record<string, string>> = { lod0: "lod1" }
 
 /** Which slice of the circle a point of the ground is in, 0..VEG_SECTORS-1. */
 export const vegSector = (x: number, z: number): number =>
   Math.min(VEG_SECTORS - 1, Math.floor(((Math.atan2(x, z) + Math.PI) / (2 * Math.PI)) * VEG_SECTORS))
 
-/** A prototype drawn at every instance of its set, one instanced mesh a slice of the circle. */
-function planted(proto: Mesh, list: readonly number[], tinted: boolean): InstancedMesh[] {
+/**
+ * A prototype drawn at every instance of its set, one instanced mesh a slice of the circle. With `far`, each slice
+ * has a second mesh of the far piece at the same instances (`<name>_far`, hidden until `plantDetail` shows it).
+ */
+function planted(proto: Mesh, list: readonly number[], tinted: boolean, far?: Mesh): InstancedMesh[] {
   const slices: number[][] = Array.from({ length: VEG_SECTORS }, () => [])
   const whole = list.length / VEG_STRIDE <= VEG_WHOLE_UP_TO
   for (let i = 0; i + VEG_STRIDE <= list.length; i += VEG_STRIDE) slices[whole ? 0 : vegSector(list[i], list[i + 2])].push(i)
@@ -177,8 +191,42 @@ function planted(proto: Mesh, list: readonly number[], tinted: boolean): Instanc
     }
     mesh.computeBoundingSphere()
     out.push(mesh)
+    if (!far) continue
+    const away = new InstancedMesh(far.geometry, far.material, starts.length)
+    away.name = `${proto.name}_far`
+    away.userData = { ...far.userData, nkv_sector: mesh.userData.nkv_sector }
+    // The same instances: the same buffers, and the same wind's phases.
+    away.instanceMatrix = mesh.instanceMatrix
+    if (tinted && far.userData.nkv_instance_tint === 1) away.instanceColor = mesh.instanceColor
+    away.computeBoundingSphere()
+    away.visible = false
+    mesh.userData.nkv_far = away
+    out.push(away)
   }
   return out
+}
+
+const middle = new Sphere()
+/**
+ * Draws each slice of near plants with its own pieces within `VEG_NEAR` of the camera and with the far ones beyond:
+ * one of the two meshes of a slice is shown, never both. A narrow field of view (`fov`, degrees) brings the plants
+ * nearer: the distance is measured as the world's camera would see them as large. Returns how many slices are near.
+ */
+export function plantDetail(root: Object3D, eye: Vector3, fov = VEG_NEAR_FOV): number {
+  const zoom = Math.tan((fov * Math.PI) / 360) / Math.tan((VEG_NEAR_FOV * Math.PI) / 360)
+  let near = 0
+  root.traverse((o) => {
+    const away = o.userData.nkv_far as InstancedMesh | undefined
+    if (!away) return
+    const mesh = o as InstancedMesh
+    if (!mesh.boundingSphere) mesh.computeBoundingSphere()
+    middle.copy(mesh.boundingSphere!).applyMatrix4(mesh.matrixWorld)
+    const close = eye.distanceTo(middle.center) * zoom <= VEG_NEAR
+    mesh.visible = close
+    away.visible = !close
+    if (close) near++
+  })
+  return near
 }
 
 /**
@@ -339,7 +387,12 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
   }
   for (const [set, pieces] of vegPieces) {
     const list = vegInstances.get(set) ?? []
-    for (const proto of pieces) for (const mesh of planted(proto, list, proto.userData.nkv_instance_tint === 1)) plaza.add(mesh)
+    const farPieces = vegPieces.get(VEG_FAR_SET[set] ?? "") ?? []
+    for (const proto of pieces) {
+      const piece = VEG_PIECE.exec(proto.name)![2]
+      const far = farPieces.find((f) => VEG_PIECE.exec(f.name)![2] === piece)
+      for (const mesh of planted(proto, list, proto.userData.nkv_instance_tint === 1, far)) plaza.add(mesh)
+    }
   }
   // The chiringuiti: one variant for every roof, counter and sign together.
   const kindsOf = (kind: string) => [...(parts.get(kind)?.keys() ?? [])].sort((a, b) => a - b)

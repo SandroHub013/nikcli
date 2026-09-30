@@ -8,6 +8,7 @@
 import { RenderTarget, type PerspectiveCamera } from "three/webgpu"
 import { spawnPlayer } from "./controller"
 import { benchScaled } from "./gpu-idle"
+import { drawnSplit, type DrawnSplit } from "./drawn"
 import { disposeTree, releaseRenderer } from "./release"
 import type { Backend, DrawingSurface } from "./renderers"
 import type { LevelId } from "./quality"
@@ -31,6 +32,8 @@ export interface ShotResult {
   jpg: string
   /** What the frame drew, as the renderer counts it: the plan's ceilings are 600k triangles and 150 draw calls. */
   drawn?: { calls: number; triangles: number }
+  /** The same frame part by part, as `drawn.ts` counts it: where the triangles and the draw calls go. */
+  split?: DrawnSplit
 }
 
 export interface ShotParts {
@@ -130,6 +133,7 @@ export async function takeShot(parts: ShotParts): Promise<ShotResult> {
     png,
     jpg,
     drawn,
+    split: drawnSplit(view.scene, camera),
   }
 }
 

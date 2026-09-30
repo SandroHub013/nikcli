@@ -7,10 +7,11 @@
  */
 
 import {
+  BufferGeometry,
   Color,
   DataTexture,
+  Float32BufferAttribute,
   Group,
-  IcosahedronGeometry,
   InstancedMesh,
   LinearFilter,
   Matrix4,
@@ -25,8 +26,8 @@ import {
 
 /** The ring of sand: inside it is the chiringuito, outside the beach it pushed. */
 export const RISE_RING = { inner: 3.4, outer: 5.8 }
-/** How many puffs along the sides. */
-export const RISE_PUFFS = 18
+/** How many puffs of sand along the sides: small, low, running outward. */
+export const RISE_PUFFS = 28
 
 const ringGeometry = new RingGeometry(RISE_RING.inner, RISE_RING.outer, 48, 1)
 
@@ -51,7 +52,44 @@ function ringFade(size = 64): DataTexture {
   return texture
 }
 const fade = ringFade()
-const puffGeometry = new IcosahedronGeometry(1, 1)
+
+/**
+ * A puff of dust: a low dome of radius 1 whose alpha, in its vertices' colour, goes from most at the middle to nothing
+ * at the rim. Soft at the edge from wherever it is seen, so it reads as dust over the sand and not as a pebble on it.
+ */
+function dustGeometry(segments = 10): BufferGeometry {
+  const rings = [
+    { r: 0, y: 1, a: 0.85 },
+    { r: 0.5, y: 0.75, a: 0.5 },
+    { r: 1, y: 0, a: 0 },
+  ]
+  const position: number[] = []
+  const color: number[] = []
+  const index: number[] = []
+  position.push(0, rings[0].y, 0)
+  color.push(1, 1, 1, rings[0].a)
+  for (const ring of rings.slice(1)) {
+    for (let k = 0; k < segments; k++) {
+      const a = (k / segments) * Math.PI * 2
+      position.push(Math.cos(a) * ring.r, ring.y, Math.sin(a) * ring.r)
+      color.push(1, 1, 1, ring.a)
+    }
+  }
+  for (let k = 0; k < segments; k++) {
+    const next = (k + 1) % segments
+    index.push(0, 1 + next, 1 + k)
+    const [a, b, c, d] = [1 + k, 1 + next, 1 + segments + k, 1 + segments + next]
+    index.push(a, b, d, a, d, c)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute("position", new Float32BufferAttribute(position, 3))
+  geometry.setAttribute("color", new Float32BufferAttribute(color, 4))
+  geometry.setIndex(index)
+  geometry.computeBoundingSphere()
+  return geometry
+}
+const puffGeometry = dustGeometry()
+const UP = new Vector3(0, 1, 0)
 
 export interface RiseFx {
   group: Group
@@ -73,7 +111,8 @@ export function createRiseFx(): RiseFx {
   const ring = new Mesh(ringGeometry, ringMaterial)
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.04
-  const puffMaterial = new MeshBasicMaterial({ color: new Color(0xe6d2b2), transparent: true, opacity: 0, depthWrite: false })
+  // Sand, not smoke: the beach's own colour, a little lighter where it is thrown up.
+  const puffMaterial = new MeshBasicMaterial({ color: new Color(0xd2b58a), vertexColors: true, transparent: true, opacity: 0, depthWrite: false })
   const puffs = new InstancedMesh(puffGeometry, puffMaterial, RISE_PUFFS)
   group.add(ring, puffs)
   group.visible = false
@@ -98,12 +137,16 @@ export function createRiseFx(): RiseFx {
       if (!group.visible) return
       ringMaterial.opacity = 0.7 * s
       ring.scale.setScalar(0.85 + 0.3 * lift)
-      puffMaterial.opacity = 0.28 * s
+      puffMaterial.opacity = 0.6 * s
       for (const [i, { a, k }] of seeds.entries()) {
-        const out = 3.4 + 1.2 * lift * (0.6 + 0.4 * k)
-        at.set(Math.sin(a) * out, 0.15 + 0.9 * lift * (0.5 + 0.5 * k), Math.cos(a) * out * 0.9)
-        const r = (0.15 + 0.3 * lift) * (0.7 + 0.5 * k)
-        size.set(r, r * 0.7, r)
+        // Each runs outward along the ground, lifts a hand off it, and spreads thinner as it goes.
+        const run = lift * (0.7 + 0.6 * k)
+        const out = 3.2 + 2.6 * run
+        at.set(Math.sin(a) * out, 0.03 + 0.12 * Math.sin(Math.PI * Math.min(1, run)), Math.cos(a) * out * 0.9)
+        const r = (0.16 + 0.22 * run) * (0.7 + 0.6 * k)
+        size.set(r * 1.5, r * 0.4, r)
+        // Long along the way it runs.
+        turn.setFromAxisAngle(UP, a - Math.PI / 2)
         matrix.compose(at, turn, size)
         puffs.setMatrixAt(i, matrix)
       }

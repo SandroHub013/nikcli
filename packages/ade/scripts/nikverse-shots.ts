@@ -19,6 +19,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { SHOTS, shotPicture } from "../src/nikverse/city/shots"
 import type { GpuTiming } from "../src/nikverse/city/bench"
+import { drawnOver } from "../src/nikverse/city/drawn"
 import type { ShotResult } from "../src/nikverse/city/shot-handle"
 import { GATE_LIMITS } from "../src/nikverse/gate"
 import { SCALE_DOWN_ABOVE_MS, SCALE_MIN } from "../src/nikverse/city/resolution"
@@ -63,6 +64,8 @@ interface Row {
   gpu?: GpuTiming
   /** What the frame drew: triangles and draw calls, as the renderer counts them. */
   drawn?: { calls: number; triangles: number }
+  /** The same frame part by part (`city/drawn.ts`): vegetation, palms, terrain, water, shops, people, sky, the rest. */
+  split?: ShotResult["split"]
 }
 const rows: Row[] = []
 const failures: string[] = []
@@ -95,6 +98,7 @@ async function shots(level: string) {
       const found = [...result.problems]
       if (info.quality !== level) found.push(`asked for ${level} and the page drew ${info.quality} (${info.why})`)
       if (problems.length) found.push(`${problems.length} browser errors: ${problems[0]}`)
+      found.push(...drawnOver(result.drawn, result.split))
       rows.push({
         level,
         n: shot.n,
@@ -109,11 +113,19 @@ async function shots(level: string) {
         jpg: `${name}.jpg`,
         gpu,
         drawn: result.drawn,
+        split: result.split,
       })
       const s = result.stats
       console.log(
         `${found.length ? "FAIL" : "PASS"}  ${name} [${result.backend}]: luminance ${s.luminance.toFixed(3)} (band ${shot.luminance.join("..")}), sky ${(s.sky * 100).toFixed(1)} %, black ${(s.black * 100).toFixed(3)} %, burnt ${(s.burnt * 100).toFixed(3)} %, GPU ${gpu ? `p50 ${gpu.p50.toFixed(1)} ms, p95 ${gpu.p95.toFixed(1)} ms (${gpu.sync}${gpu.scale !== undefined ? `, scale ${gpu.scale}` : ""})` : "n/a"}${result.drawn ? `, drawn ${Math.round(result.drawn.triangles / 1000)}k tris ${result.drawn.calls} calls` : ""}${found.length ? ` — ${found.join("; ")}` : ""}`,
       )
+      if (result.split)
+        console.log(
+          `      split: ${Object.entries(result.split)
+            .filter(([, p]) => p.calls > 0)
+            .map(([part, p]) => `${part} ${(p.triangles / 1000).toFixed(1)}k/${p.calls}`)
+            .join(", ")}`,
+        )
       for (const f of found) failures.push(`${name}: ${f}`)
     } catch (error) {
       fail(`${name}: ${String((error as Error).message ?? error)}`)

@@ -123,6 +123,12 @@ export const LOUNGERS: ReadonlyArray<Vec2> = [
   { x: 2.3, z: 3.9 },
 ]
 export const LOUNGER_HALF = { hx: 0.33, hz: 0.95, height: 0.45 }
+/** Two potted plants either side of the front, outside the posts: the only plants near the people (plan I1). */
+export const POTS: ReadonlyArray<Vec2> = [
+  { x: -3.35, z: 0.2 },
+  { x: 3.35, z: 0.2 },
+]
+export const POT_HALF = { hx: 0.3, hz: 0.3, height: 1.0 }
 
 export const ringOf = (slot: number) => Math.floor(slot / RING_SLOTS)
 export const ringRadius = (ring: number) => RING_FIRST + RING_STEP * ring
@@ -220,6 +226,7 @@ export function wallsLocal(): LocalBox[] {
     COUNTER,
     ...POSTS.map((p) => ({ x: p.x, z: p.z, hx: POST_HALF, hz: POST_HALF, height: EAVE_HEIGHT })),
     ...LOUNGERS.map((l) => ({ x: l.x, z: l.z, ...LOUNGER_HALF })),
+    ...POTS.map((p) => ({ x: p.x, z: p.z, ...POT_HALF })),
   ]
 }
 

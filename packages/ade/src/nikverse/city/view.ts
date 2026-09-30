@@ -35,7 +35,9 @@ import {
 import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
 import { paintIsland } from "./water"
-import { shopLook, type CityKit } from "./kit"
+import { plantWind } from "./wind"
+import { heightFog } from "./fog"
+import { plantDetail, shopLook, type CityKit } from "./kit"
 import { USER_BODY, bodyOfLook, type Cast } from "./rig"
 import {
   CHAIR_SEAT_TOP,
@@ -85,6 +87,11 @@ const SIGN_Y = EAVE_HEIGHT - 0.35
 const SIGN_Z = 0.9
 /** A laptop's screen, as the glow over it is drawn: the lid leans back 12 degrees, its top away from who sits. */
 const SCREEN = { width: 0.3, height: 0.19, tilt: (-12 * Math.PI) / 180 }
+/**
+ * Beyond this distance (metres) the laptops' glow is not drawn: a screen is three pixels there, and the state is the
+ * mark's over the person. It spares a draw call a desk in the views of the whole island.
+ */
+export const SCREEN_FAR = 45
 
 /** A name, drawn as a texture for the sign. Text only: the name is never parsed as anything. */
 function signTexture(name: string): CanvasTexture | undefined {
@@ -263,6 +270,8 @@ function buildShop(entity: ShopEntity, kit?: CityKit): ShopView {
   const deskGroup = new Group()
   group.add(deskGroup)
   const people3 = new Group()
+  // The bench's split counts what hangs from here as the people (`drawn.ts`).
+  people3.name = "people"
   group.add(people3)
 
   const rise = createRiseFx()
@@ -367,6 +376,9 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
 
   // The island's lagoon and dusk sky are painted here, not by the file.
   const island = kit?.island ? paintIsland(kit.plaza, kind) : undefined
+  // The plants sway, and on WebGPU a height fog lies at the foot of the slopes.
+  const wind = kit?.island ? plantWind(kit.plaza, kind) : undefined
+  if (kit?.island && kind === "tsl" && scene.fog instanceof Fog) heightFog(scene, scene.fog)
 
   // On N3's pedestal the hologram has no base of its own, and floats where the file's ring anchor says.
   const hologram = createHologram(logo, kind, kit ? { base: false, ringY: kit.ringY } : undefined)
@@ -487,6 +499,10 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         const inView =
           shopInRange({ x: camera.position.x, z: camera.position.z }, entity.placement.center, SHOP_RADIUS) && frustum.intersectsSphere(sphere)
         view.group.visible = inView
+        if (kit) {
+          const far = Math.hypot(camera.position.x - entity.placement.center.x, camera.position.z - entity.placement.center.z)
+          view.deskGroup.visible = far <= SCREEN_FAR
+        }
         reconcilePeople(view, entity, town, t, camera, inView)
       }
       for (const [id, view] of shops) {
@@ -504,6 +520,9 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         // The water reflects the lamps of the chiringuiti that are up, as much as they are.
         island.shops(town.shops().map((e) => ({ x: e.placement.center.x, z: e.placement.center.z, up: liftEase(e.lift) })))
         island.update(t, camera)
+        // The near plants with their own pieces only where they are near: from afar, the far ones' (a quarter).
+        if (kit) plantDetail(kit.plaza, camera.position, camera.fov)
+        wind?.update(t)
       }
     },
     person(paneId) {

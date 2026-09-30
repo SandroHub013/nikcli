@@ -8,7 +8,7 @@ import { CHAIR_SEAT_TOP, COMPUTER_HEIGHT, DESKS_PER_SHOP, PLATFORM_TOP, ROOF_TOP
 import { castOf, kitFor } from "./test-cast"
 import { GLOW_COLOR } from "./states"
 import { RISE_SECONDS, createTown, type Picture, type Town } from "./town"
-import { SHOP_MIDDLE, SHOP_RADIUS, createCityScene } from "./view"
+import { SCREEN_FAR, SHOP_MIDDLE, SHOP_RADIUS, createCityScene } from "./view"
 
 const shop = (id: string, slot?: number, name = id): Shop => ({ id, name, slot })
 const agent = (paneId: string, shopId: string, over: Partial<Agent> = {}): Agent => ({
@@ -92,6 +92,13 @@ describe("the city drawn from the town", () => {
     expect(rise().visible).toBe(true)
     const half = opacity()
     expect(half).toBeGreaterThan(0.3)
+    // The puffs are dust, soft at the edge: their vertices' alpha is most at the middle and nothing at the rim.
+    const puffs = rise().children[1] as Mesh
+    const alpha = puffs.geometry.getAttribute("color")
+    expect(alpha.itemSize).toBe(4)
+    expect((puffs.material as MeshBasicMaterial).vertexColors).toBe(true)
+    const alphas = Array.from({ length: alpha.count }, (_, i) => alpha.getW(i))
+    expect([Math.min(...alphas), Math.max(...alphas) > 0.5]).toEqual([0, true])
     // At the ground, not with the chiringuito under it.
     const group = view.scene.getObjectByName("shop:a")!
     expect(group.position.y + rise().position.y).toBeCloseTo(view.groundAt(placementOf(2).center), 6)
@@ -656,6 +663,23 @@ describe("the island from the file, with its chiringuiti", () => {
     expect((monitor.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.amber)
   })
 
+  test("the laptops' glow is not drawn beyond SCREEN_FAR, and is again coming back", async () => {
+    const { town, view } = await withKit([agent("p1", "a")])
+    const shown = () => view.monitor("p1")!.parent!.visible
+    expect(shown()).toBe(true)
+    const p = placementOf(0)
+    const away = new Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw))
+    const far = new PerspectiveCamera(58, 1.6, 0.1, 400)
+    far.position.set(p.center.x, 20, p.center.z).addScaledVector(away, SCREEN_FAR + 10)
+    far.lookAt(p.center.x, 1, p.center.z)
+    far.updateMatrixWorld(true)
+    view.update(town, spawnPlayer(), 1, far)
+    expect(view.scene.getObjectByName("shop:a")!.visible).toBe(true)
+    expect(shown()).toBe(false)
+    view.update(town, spawnPlayer(), 1, camera)
+    expect(shown()).toBe(true)
+  })
+
   test("the sign's text is where the file's sign says, as wide and tall, turned as it is", async () => {
     for (const name of ["a", "docs", "nikcli", "voice"]) {
       const { view, kit } = await withKit([], [shop(name, 0)])
@@ -692,6 +716,28 @@ describe("the island from the file, with its chiringuiti", () => {
       // The pelvis is raised to the seat's height.
       expect(person.body.position.y + person.rig!.seatY).toBeCloseTo(CHAIR_SEAT_TOP, 6)
       expect(top.max.y).toBeGreaterThan(CHAIR_SEAT_TOP)
+    }
+  })
+
+  test("the plants sway in materials of their own, and on WebGPU a height fog lies over the scene", async () => {
+    const kit = await kitFor("bassa")
+    for (const kind of ["shader", "tsl"] as const) {
+      const view = createCityScene(undefined, kind, await castOf("bassa"), kit)
+      const plants: Mesh[] = []
+      view.scene.traverse((o) => {
+        if ((o as Mesh).isMesh && o.name.startsWith("veg_")) plants.push(o as Mesh)
+      })
+      expect(plants.length).toBeGreaterThan(0)
+      const rocks = view.scene.getObjectByName("island_rocks") as Mesh
+      for (const plant of plants) {
+        expect([plant.name, plant.userData.nkv_wind]).toEqual([plant.name, kind])
+        // Not the rocks' material: they do not sway.
+        expect(plant.material).not.toBe(rocks.material)
+        if (kind === "tsl") expect([plant.name, (plant.material as { positionNode?: unknown }).positionNode != null]).toEqual([plant.name, true])
+        else expect([plant.name, typeof (plant.material as MeshBasicMaterial).onBeforeCompile]).toEqual([plant.name, "function"])
+      }
+      const fogNode = (view.scene as unknown as { fogNode?: unknown }).fogNode
+      expect([kind, fogNode != null]).toEqual([kind, kind === "tsl"])
     }
   })
 
