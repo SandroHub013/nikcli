@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.416.0 (September 2026)
+
+## Core
+
+- Prompt closes on its own surface; footer stays on one row (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(tui): prompt closes on its own surface; footer stays on one row
+
 ## v1.415.0 (September 2026)
 
 ## Core
