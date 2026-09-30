@@ -75,6 +75,23 @@ describe("the governor", () => {
     expect(g.scale()).toBe(0.95)
   })
 
+  test("a ceiling below 1 (the measuring door's) holds: the scale never goes up past it, and starts at it", async () => {
+    expect(nextScale(0.9, 8, 0.9)).toBe(0.9)
+    expect(nextScale(0.85, 8, 0.9)).toBe(0.9)
+    const g = createGovernor(0.9, 2, 0.9)
+    expect(g.scale()).toBe(0.9)
+    g.push(5)
+    expect(g.push(5)).toBeUndefined()
+    // The bench settles from the same ceiling: a view that fits is measured once, at it.
+    const seen: number[] = []
+    const settled = await settle(async (scale) => {
+      seen.push(scale)
+      return timing(10)
+    }, 0.9)
+    expect(seen).toEqual([0.9])
+    expect(settled.scale).toBe(0.9)
+  })
+
   test("it decides on the 95th percentile of the window, not on its mean or its worst", () => {
     const g = createGovernor(1, 20)
     // 18 fast frames and 2 slow: the 95th percentile of 20 is the 19th, which is slow.

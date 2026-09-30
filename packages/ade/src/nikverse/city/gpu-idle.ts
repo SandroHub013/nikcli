@@ -173,6 +173,8 @@ export interface ScaledBench {
   height: number
   /** Whether the level moves its scale with the GPU time (WebGPU with a clock): the bench then settles where the governor would. */
   dynamic: boolean
+  /** The ceiling of the scale for the measuring door (`?maxscale=`); the level's own is 1. */
+  maxScale?: number
   frames?: number
 }
 
@@ -192,5 +194,5 @@ export async function benchScaled(bench: ScaledBench): Promise<GpuTiming | Settl
       target.dispose()
     }
   }
-  return bench.dynamic ? settle(at) : at(1)
+  return bench.dynamic ? settle(at, bench.maxScale) : at(bench.maxScale ?? 1)
 }

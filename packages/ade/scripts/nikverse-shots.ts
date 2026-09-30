@@ -29,6 +29,8 @@ const label = arg("--label") ?? "shots"
 const out = arg("--out") ?? join(tmpdir(), "nikverse-shots", label)
 const levels = (arg("--levels") ?? "bassa,media").split(",").filter(Boolean)
 const only = arg("--shots")?.split(",").map(Number)
+// For measuring: `--tune samples=1&maxscale=0.9` rides on the shot pages' query (`CityDeps.tune`); the pictures name it in `label`.
+const tune = arg("--tune")
 const NONCE = "0123456789abcdef".repeat(3)
 mkdirSync(out, { recursive: true })
 
@@ -79,7 +81,7 @@ async function shots(level: string) {
     const name = `${level}-${shot.n}-${shot.name}`
     try {
       problems.length = 0
-      await open(`/?shot=${shot.n}&quality=${level}#n=${NONCE}`, { width: 1600, height: 900 })
+      await open(`/?shot=${shot.n}&quality=${level}${tune ? `&${tune}` : ""}#n=${NONCE}`, { width: 1600, height: 900 })
       await until(
         `document.documentElement.dataset.shot === "ready" || document.documentElement.dataset.shot === "failed" || document.documentElement.dataset.city === "failed"`,
         `shot ${name}`,

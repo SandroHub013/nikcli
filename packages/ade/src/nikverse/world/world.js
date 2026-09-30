@@ -214,7 +214,18 @@ export function readOptions(search) {
     // `?bench=1` is what ADE asks for in its test build: the gate times the GPU through `window.__nikverseBench`, and nothing else does.
     bench: params.get("bench") === "1",
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
+    // For measuring only, and only where the bench's door is open: `?samples=1|4` and `?maxscale=0.75..1` (see `CityDeps.tune`).
+    tune: params.get("bench") === "1" || (Number.isInteger(shot) && shot >= 1 && shot <= 8) ? tuneOf(params) : undefined,
   }
+}
+
+function tuneOf(params) {
+  const samples = Number(params.get("samples"))
+  const maxScale = Number(params.get("maxscale"))
+  const tune = {}
+  if (samples === 1 || samples === 4) tune.samples = samples
+  if (Number.isFinite(maxScale) && maxScale >= 0.75 && maxScale <= 1 && params.get("maxscale") !== null) tune.maxScale = maxScale
+  return Object.keys(tune).length ? tune : undefined
 }
 
 /** Starts the page: waits for ADE's port, then lives on it. Only ever once per document. */
@@ -255,6 +266,7 @@ export function boot(win, options = {}) {
         classic: query.classic,
         quality: query.quality,
         shot: query.shot,
+        tune: query.tune,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
       }),

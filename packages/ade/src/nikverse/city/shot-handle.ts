@@ -48,6 +48,8 @@ export interface ShotParts {
   camera: PerspectiveCamera
   /** Whether the level moves its resolution with the GPU time: the bench then settles where the governor would. */
   dynamic: boolean
+  /** The measuring door's samples and scale ceiling (`main.ts`). */
+  tune?: { samples?: 1 | 4; maxScale?: number }
   /** Whether N3's people and shops loaded, for `info()`. */
   cast: boolean
   kit: boolean
@@ -171,7 +173,8 @@ export async function startShot(parts: ShotParts) {
         backend: parts.backend as Backend,
         scene: parts.view.scene,
         camera: parts.camera,
-        makeTarget: (width, height) => new RenderTarget(width, height, { samples: 4 }),
+        makeTarget: (width, height) => new RenderTarget(width, height, { samples: parts.tune?.samples ?? 4 }),
+        maxScale: parts.tune?.maxScale,
         width: parts.canvas.width,
         height: parts.canvas.height,
         dynamic: parts.dynamic,

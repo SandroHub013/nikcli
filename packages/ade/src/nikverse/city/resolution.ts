@@ -24,10 +24,10 @@ export const SAMPLE_WINDOW = 20
 const round = (scale: number) => Math.round(scale * 100) / 100
 
 /** The scale after looking at a p95: a step down, a step up, or the same. A p95 that is not a number changes nothing. */
-export function nextScale(scale: number, p95: number): number {
+export function nextScale(scale: number, p95: number, max = SCALE_MAX): number {
   if (!Number.isFinite(p95)) return scale
   if (p95 > SCALE_DOWN_ABOVE_MS) return Math.max(SCALE_MIN, round(scale - SCALE_STEP))
-  if (p95 < SCALE_UP_BELOW_MS) return Math.min(SCALE_MAX, round(scale + SCALE_STEP))
+  if (p95 < SCALE_UP_BELOW_MS) return Math.min(max, round(scale + SCALE_STEP))
   return scale
 }
 
@@ -37,7 +37,8 @@ export interface Governor {
   push(ms: number): number | undefined
 }
 
-export function createGovernor(start = SCALE_MAX, window = SAMPLE_WINDOW): Governor {
+/** `max` is the ceiling of the scale (the measuring door's, `?maxscale=`); a level's own is 1. */
+export function createGovernor(start = SCALE_MAX, window = SAMPLE_WINDOW, max = SCALE_MAX): Governor {
   let scale = start
   let times: number[] = []
   return {
@@ -52,7 +53,7 @@ export function createGovernor(start = SCALE_MAX, window = SAMPLE_WINDOW): Gover
         0.95,
       )
       times = []
-      const next = nextScale(scale, p95)
+      const next = nextScale(scale, p95, max)
       if (next === scale) return undefined
       scale = next
       return next
@@ -71,9 +72,9 @@ export interface Settled extends GpuTiming {
  * What the governor would settle at for a fixed view: measure at full scale, and while the p95 is over the line and there is
  * room, take a step down and measure again. `measure` draws the view at that scale and times it.
  */
-export async function settle(measure: (scale: number) => Promise<GpuTiming>): Promise<Settled> {
+export async function settle(measure: (scale: number) => Promise<GpuTiming>, max = SCALE_MAX): Promise<Settled> {
   const steps: Settled["steps"] = []
-  let scale = SCALE_MAX
+  let scale = max
   for (;;) {
     const timing = await measure(scale)
     steps.push({ scale, p95: timing.p95 })

@@ -66,6 +66,11 @@ export interface CityDeps {
   classic?: boolean
   /** The level asked for (`?quality=`): `auto`, or a level's id. Whatever the machine cannot run is lowered (`quality.ts`). */
   quality?: string
+  /**
+   * For measuring, and only through the bench's door (`?bench=1` or `?shot=`): the samples of the antialiasing (4, or 1 for none; WebGPU has
+   * no 2) and the ceiling of the dynamic resolution's scale. Absent, a level is what it is.
+   */
+  tune?: { samples?: 1 | 4; maxScale?: number }
   /** The bench's shot (`?shot=N`, 1 to 8): the page draws the fixed scene from that camera once, and keeps the picture (`shot-handle.ts`). */
   shot?: number
   /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
@@ -102,7 +107,7 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
       return canvas
     },
     gpu: (deps.win.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu,
-    options: { antialias: !check, alpha: check },
+    options: { antialias: !check && deps.tune?.samples !== 1, alpha: check },
     classic,
     createWebGPU: async (canvas, options) => {
       const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
@@ -175,7 +180,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined)
-    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), cast: cast !== undefined, kit: kit !== undefined })
+    return startShot({ win, shot: deps.shot, renderer, canvas, backend, level: level.id, view, town, camera, dynamic: level.dynamicResolution && backend === "webgpu" && hasTimestampQuery(renderer), tune: deps.tune, cast: cast !== undefined, kit: kit !== undefined })
   let player: Player = spawnPlayer()
   let orbit: Orbit = startOrbit()
   let keys: Input = { ...NO_INPUT }
@@ -206,8 +211,10 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   // Dynamic resolution: where the level asks for it and the GPU has a clock, the frame's pixels follow its GPU time.
   const gpuClock = level.dynamicResolution && backend === "webgpu" ? liveGpuTimer(renderer) : undefined
-  const governor = gpuClock ? createGovernor() : undefined
-  let renderScale = 1
+  const maxScale = deps.tune?.maxScale ?? 1
+  const samples = deps.tune?.samples ?? 4
+  const governor = gpuClock ? createGovernor(maxScale, undefined, maxScale) : undefined
+  let renderScale = maxScale
   let sampling = false
   let framesDrawn = 0
   doc.documentElement.dataset.renderScale = String(renderScale)
@@ -472,7 +479,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
           backend,
           scene: view.scene,
           camera,
-          makeTarget: (width, height) => new RenderTarget(width, height, { samples: 4 }),
+          makeTarget: (width, height) => new RenderTarget(width, height, { samples }),
+          maxScale,
           width: Math.round(canvas.width / renderScale),
           height: Math.round(canvas.height / renderScale),
           dynamic: governor !== undefined,
