@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Vivid",
+  "id": "vivid",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8f8",
+      "primary": "#6da6e6",
+      "success": "#9ccf5e",
+      "warning": "#e79c5d",
+      "error": "#ef6b7a",
+      "info": "#59d4d4",
+      "interactive": "#6da6e6",
+      "diffAdd": "#9ccf5e",
+      "diffDelete": "#ef6b7a"
+    },
+    "overrides": {
+      "background-base": "#f8f8f8",
+      "background-weak": "#e8e8e8",
+      "background-strong": "#f8f8f8",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1a1a",
+      "text-base": "#3d474b",
+      "text-weak": "#728b95",
+      "text-weaker": "#98a8af",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d4d4d4",
+      "border-strong-base": "#6da6e6"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#041523",
+      "primary": "#6da6e6",
+      "success": "#9ccf5e",
+      "warning": "#e79c5d",
+      "error": "#ef6b7a",
+      "info": "#59d4d4",
+      "interactive": "#6da6e6",
+      "diffAdd": "#9ccf5e",
+      "diffDelete": "#ef6b7a"
+    },
+    "overrides": {
+      "background-base": "#041523",
+      "background-weak": "#06283a",
+      "background-strong": "#041523",
+      "background-stronger": "#031a26",
+      "surface-raised-stronger-non-alpha": "#031a26",
+      "text-strong": "#d6d6d6",
+      "text-base": "#b8c1c5",
+      "text-weak": "#7f9aa5",
+      "text-weaker": "#546b78",
+      "border-weak-base": "#031a26",
+      "border-base": "#2d5a70",
+      "border-strong-base": "#59d4d4"
+    }
+  }
+}

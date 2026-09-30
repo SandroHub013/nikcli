@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Panda",
+  "id": "panda",
+  "light": {
+    "seeds": {
+      "neutral": "#f0f0f0",
+      "primary": "#bf5888",
+      "success": "#0e8977",
+      "warning": "#a67846",
+      "error": "#f22a68",
+      "info": "#347fbb",
+      "interactive": "#bf5888",
+      "diffAdd": "#0e8977",
+      "diffDelete": "#f22a68"
+    },
+    "overrides": {
+      "background-base": "#f0f0f0",
+      "background-weak": "#e6e6e6",
+      "background-strong": "#f0f0f0",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1e1e1f",
+      "text-base": "#404041",
+      "text-weak": "#808081",
+      "text-weaker": "#9f9fa0",
+      "border-weak-base": "#e1e1e1",
+      "border-base": "#d1d1d1",
+      "border-strong-base": "#929293"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#292a2b",
+      "primary": "#ff75b5",
+      "success": "#19f9d8",
+      "warning": "#ffb86c",
+      "error": "#ff2c6d",
+      "info": "#45a9f9",
+      "interactive": "#ff75b5",
+      "diffAdd": "#19f9d8",
+      "diffDelete": "#ff2c6d"
+    },
+    "overrides": {
+      "background-base": "#292a2b",
+      "background-weak": "#343536",
+      "background-strong": "#292a2b",
+      "background-stronger": "#242526",
+      "surface-raised-stronger-non-alpha": "#242526",
+      "text-strong": "#e6e6e6",
+      "text-base": "#babbc0",
+      "text-weak": "#767a86",
+      "text-weaker": "#62656e",
+      "border-weak-base": "#313337",
+      "border-base": "#373b41",
+      "border-strong-base": "#74777b"
+    }
+  }
+}

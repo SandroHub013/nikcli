@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Nordic",
+  "id": "nordic",
+  "light": {
+    "seeds": {
+      "neutral": "#f0f4f8",
+      "primary": "#81a1c1",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#88c0d0",
+      "interactive": "#81a1c1",
+      "diffAdd": "#a3be8c",
+      "diffDelete": "#bf616a"
+    },
+    "overrides": {
+      "background-base": "#f0f4f8",
+      "background-weak": "#e0e8f0",
+      "background-strong": "#f0f4f8",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#2e3440",
+      "text-base": "#454b56",
+      "text-weak": "#707580",
+      "text-weaker": "#9da1aa",
+      "border-weak-base": "#f0f4f8",
+      "border-base": "#d0d8e0",
+      "border-strong-base": "#81a1c1"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1d23",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#88c0d0",
+      "interactive": "#88c0d0",
+      "diffAdd": "#a3be8c",
+      "diffDelete": "#bf616a"
+    },
+    "overrides": {
+      "background-base": "#1a1d23",
+      "background-weak": "#242a35",
+      "background-strong": "#1a1d23",
+      "background-stronger": "#0d0f12",
+      "surface-raised-stronger-non-alpha": "#0d0f12",
+      "text-strong": "#d4d4dc",
+      "text-base": "#b1b3bc",
+      "text-weak": "#707580",
+      "text-weaker": "#52565f",
+      "border-weak-base": "#0d0f12",
+      "border-base": "#2d3544",
+      "border-strong-base": "#88c0d0"
+    }
+  }
+}

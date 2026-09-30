@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Gruvbox Material",
+  "id": "gruvbox-material",
+  "light": {
+    "seeds": {
+      "neutral": "#fbf1c7",
+      "primary": "#6c782e",
+      "success": "#6c782e",
+      "warning": "#b47109",
+      "error": "#c14a4a",
+      "info": "#45707a",
+      "interactive": "#6c782e",
+      "diffAdd": "#6c782e",
+      "diffDelete": "#c14a4a"
+    },
+    "overrides": {
+      "background-base": "#fbf1c7",
+      "background-weak": "#f2e7be",
+      "background-strong": "#fbf1c7",
+      "background-stronger": "#f9f5d7",
+      "surface-raised-stronger-non-alpha": "#f9f5d7",
+      "text-strong": "#654735",
+      "text-base": "#755c4b",
+      "text-weak": "#928374",
+      "text-weaker": "#aea28a",
+      "border-weak-base": "#f2e5bb",
+      "border-base": "#ebdbb2",
+      "border-strong-base": "#bca786"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#282828",
+      "primary": "#a9b665",
+      "success": "#a9b665",
+      "warning": "#d8a657",
+      "error": "#ea6962",
+      "info": "#7daea3",
+      "interactive": "#a9b665",
+      "diffAdd": "#a9b665",
+      "diffDelete": "#ea6962"
+    },
+    "overrides": {
+      "background-base": "#282828",
+      "background-weak": "#32312f",
+      "background-strong": "#282828",
+      "background-stronger": "#1d2021",
+      "surface-raised-stronger-non-alpha": "#1d2021",
+      "text-strong": "#d4be98",
+      "text-base": "#bda98b",
+      "text-weak": "#928374",
+      "text-weaker": "#6d6359",
+      "border-weak-base": "#333130",
+      "border-base": "#3c3836",
+      "border-strong-base": "#716758"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Aurora Borealis",
+  "id": "aurora-borealis",
+  "light": {
+    "seeds": {
+      "neutral": "#f3f5f6",
+      "primary": "#2ca066",
+      "success": "#308b5b",
+      "warning": "#a56428",
+      "error": "#9e3b30",
+      "info": "#31868a",
+      "interactive": "#2ca066",
+      "diffAdd": "#2b669a",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f3f5f6",
+      "background-weak": "#e6ebed",
+      "background-strong": "#f3f5f6",
+      "background-stronger": "#edf1f2",
+      "surface-raised-stronger-non-alpha": "#edf1f2",
+      "text-strong": "#181d20",
+      "text-base": "#2d363b",
+      "text-weak": "#55656d",
+      "text-weaker": "#8c979d",
+      "border-weak-base": "#cbd3d7",
+      "border-base": "#b1babe",
+      "border-strong-base": "#2ca066"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0a1115",
+      "primary": "#62da9e",
+      "success": "#74d0a0",
+      "warning": "#d39a62",
+      "error": "#cf8278",
+      "info": "#6ec3c7",
+      "interactive": "#62da9e",
+      "diffAdd": "#74a9d4",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#0a1115",
+      "background-weak": "#14252e",
+      "background-strong": "#0a1115",
+      "background-stronger": "#0f1b21",
+      "surface-raised-stronger-non-alpha": "#0f1b21",
+      "text-strong": "#ecedee",
+      "text-base": "#cdd3d6",
+      "text-weak": "#92a2aa",
+      "text-weaker": "#626f76",
+      "border-weak-base": "#2c434e",
+      "border-base": "#445d69",
+      "border-strong-base": "#62da9e"
+    }
+  }
+}

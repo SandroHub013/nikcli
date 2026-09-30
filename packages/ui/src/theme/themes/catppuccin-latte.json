@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Catppuccin Latte",
+  "id": "catppuccin-latte",
+  "light": {
+    "seeds": {
+      "neutral": "#eff1f5",
+      "primary": "#1e66f5",
+      "success": "#40a02b",
+      "warning": "#fe640b",
+      "error": "#d20f39",
+      "info": "#04a5e5",
+      "interactive": "#1e66f5",
+      "diffAdd": "#40a02b",
+      "diffDelete": "#d20f39"
+    },
+    "overrides": {
+      "background-base": "#eff1f5",
+      "background-weak": "#ccd0da",
+      "background-strong": "#eff1f5",
+      "background-stronger": "#e6e9ef",
+      "surface-raised-stronger-non-alpha": "#e6e9ef",
+      "text-strong": "#484b64",
+      "text-base": "#575a73",
+      "text-weak": "#6c6f85",
+      "text-weaker": "#9a9dac",
+      "border-weak-base": "#ccd0da",
+      "border-base": "#bcc0cc",
+      "border-strong-base": "#1e66f5"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1e1d2e",
+      "primary": "#1e66f5",
+      "success": "#40a02b",
+      "warning": "#fe640b",
+      "error": "#d20f39",
+      "info": "#04a5e5",
+      "interactive": "#1e66f5",
+      "diffAdd": "#40a02b",
+      "diffDelete": "#d20f39"
+    },
+    "overrides": {
+      "background-base": "#1e1d2e",
+      "background-weak": "#313244",
+      "background-strong": "#1e1d2e",
+      "background-stronger": "#181825",
+      "surface-raised-stronger-non-alpha": "#181825",
+      "text-strong": "#95a5fe",
+      "text-base": "#8190e2",
+      "text-weak": "#9ca0b0",
+      "text-weaker": "#707283",
+      "border-weak-base": "#313244",
+      "border-base": "#45475a",
+      "border-strong-base": "#7287fd"
+    }
+  }
+}

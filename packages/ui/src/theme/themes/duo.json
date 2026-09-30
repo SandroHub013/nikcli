@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Duo",
+  "id": "duo",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8f8",
+      "primary": "#7c9ecf",
+      "success": "#8abeb1",
+      "warning": "#f9a856",
+      "error": "#e6482e",
+      "info": "#5eacd3",
+      "interactive": "#7c9ecf",
+      "diffAdd": "#8abeb1",
+      "diffDelete": "#e6482e"
+    },
+    "overrides": {
+      "background-base": "#f8f8f8",
+      "background-weak": "#e4e4e4",
+      "background-strong": "#f8f8f8",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1a1a",
+      "text-base": "#353535",
+      "text-weak": "#666666",
+      "text-weaker": "#999999",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d0d0d0",
+      "border-strong-base": "#7c9ecf"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0a0a0a",
+      "primary": "#5eacd3",
+      "success": "#8abeb1",
+      "warning": "#f9a856",
+      "error": "#e6482e",
+      "info": "#5eacd3",
+      "interactive": "#5eacd3",
+      "diffAdd": "#8abeb1",
+      "diffDelete": "#e6482e"
+    },
+    "overrides": {
+      "background-base": "#0a0a0a",
+      "background-weak": "#1a1a1a",
+      "background-strong": "#0a0a0a",
+      "background-stronger": "#000000",
+      "surface-raised-stronger-non-alpha": "#000000",
+      "text-strong": "#d4d4d4",
+      "text-base": "#aeaeae",
+      "text-weak": "#666666",
+      "text-weaker": "#4f4f4f",
+      "border-weak-base": "#000000",
+      "border-base": "#303030",
+      "border-strong-base": "#5eacd3"
+    }
+  }
+}

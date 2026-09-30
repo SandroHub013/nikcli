@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Neon",
+  "id": "neon",
+  "light": {
+    "seeds": {
+      "neutral": "#f5f5f5",
+      "primary": "#6daaf7",
+      "success": "#89d185",
+      "warning": "#e5a95d",
+      "error": "#e35d5a",
+      "info": "#52d1d0",
+      "interactive": "#6daaf7",
+      "diffAdd": "#89d185",
+      "diffDelete": "#e35d5a"
+    },
+    "overrides": {
+      "background-base": "#f5f5f5",
+      "background-weak": "#e8e8e8",
+      "background-strong": "#f5f5f5",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1b1e",
+      "text-base": "#414449",
+      "text-weak": "#838890",
+      "text-weaker": "#9ea1a7",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d4d4d4",
+      "border-strong-base": "#6daaf7"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1b1e",
+      "primary": "#6daaf7",
+      "success": "#89d185",
+      "warning": "#e5a95d",
+      "error": "#e35d5a",
+      "info": "#52d1d0",
+      "interactive": "#6daaf7",
+      "diffAdd": "#89d185",
+      "diffDelete": "#e35d5a"
+    },
+    "overrides": {
+      "background-base": "#1a1b1e",
+      "background-weak": "#25282d",
+      "background-strong": "#1a1b1e",
+      "background-stronger": "#141518",
+      "surface-raised-stronger-non-alpha": "#141518",
+      "text-strong": "#d4d4d4",
+      "text-base": "#babcbf",
+      "text-weak": "#8a8f98",
+      "text-weaker": "#63666d",
+      "border-weak-base": "#141518",
+      "border-base": "#3c3c3c",
+      "border-strong-base": "#52d1d0"
+    }
+  }
+}

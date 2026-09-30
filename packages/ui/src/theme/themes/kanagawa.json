@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Kanagawa",
+  "id": "kanagawa",
+  "light": {
+    "seeds": {
+      "neutral": "#f2e9de",
+      "primary": "#2d4f67",
+      "success": "#98bb6c",
+      "warning": "#d7a657",
+      "error": "#e82424",
+      "info": "#76946a",
+      "interactive": "#2d4f67",
+      "diffAdd": "#98bb6c",
+      "diffDelete": "#e82424"
+    },
+    "overrides": {
+      "background-base": "#f2e9de",
+      "background-weak": "#e3dcd2",
+      "background-strong": "#f2e9de",
+      "background-stronger": "#eae4d7",
+      "surface-raised-stronger-non-alpha": "#eae4d7",
+      "text-strong": "#54433a",
+      "text-base": "#6e5f56",
+      "text-weak": "#7e766e",
+      "text-weaker": "#9f968e",
+      "border-weak-base": "#dcd4c9",
+      "border-base": "#d4cbbf",
+      "border-strong-base": "#c38d9d"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1f1f28",
+      "primary": "#7e9cd8",
+      "success": "#98bb6c",
+      "warning": "#d7a657",
+      "error": "#e82424",
+      "info": "#76946a",
+      "interactive": "#7e9cd8",
+      "diffAdd": "#98bb6c",
+      "diffDelete": "#e82424"
+    },
+    "overrides": {
+      "background-base": "#1f1f28",
+      "background-weak": "#363646",
+      "background-strong": "#1f1f28",
+      "background-stronger": "#2a2a37",
+      "surface-raised-stronger-non-alpha": "#2a2a37",
+      "text-strong": "#dcd7ba",
+      "text-base": "#b7b39e",
+      "text-weak": "#807f78",
+      "text-weaker": "#5e5d5b",
+      "border-weak-base": "#363646",
+      "border-base": "#54546d",
+      "border-strong-base": "#c38d9d"
+    }
+  }
+}

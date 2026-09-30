@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Liquid Ember",
+  "id": "liquid-ember",
+  "light": {
+    "seeds": {
+      "neutral": "#ede4e1",
+      "primary": "#a04b2c",
+      "success": "#3d8154",
+      "warning": "#b35a21",
+      "error": "#ac3129",
+      "info": "#3f7c83",
+      "interactive": "#a04b2c",
+      "diffAdd": "#395c93",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#ede4e1",
+      "background-weak": "#ede4e1",
+      "background-strong": "#ede4e1",
+      "background-stronger": "#ede4e1",
+      "surface-raised-stronger-non-alpha": "#ede4e1",
+      "text-strong": "#201a18",
+      "text-base": "#3a312e",
+      "text-weak": "#6b5b56",
+      "text-weaker": "#998b87",
+      "border-weak-base": "#d5cfcd",
+      "border-base": "#a04b2c",
+      "border-strong-base": "#a66730"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#462c24",
+      "primary": "#da8262",
+      "success": "#83c699",
+      "warning": "#e18f5b",
+      "error": "#de7771",
+      "info": "#7db9c0",
+      "interactive": "#da8262",
+      "diffAdd": "#829ecc",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#462c24",
+      "background-weak": "#462c24",
+      "background-strong": "#462c24",
+      "background-stronger": "#462c24",
+      "surface-raised-stronger-non-alpha": "#462c24",
+      "text-strong": "#eeedec",
+      "text-base": "#d6cfcd",
+      "text-weak": "#aa9892",
+      "text-weaker": "#87726c",
+      "border-weak-base": "#493731",
+      "border-base": "#da8262",
+      "border-strong-base": "#daaa81"
+    }
+  }
+}

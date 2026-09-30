@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Dawnfox",
+  "id": "dawnfox",
+  "light": {
+    "seeds": {
+      "neutral": "#f6f5f4",
+      "primary": "#3568d6",
+      "success": "#578e57",
+      "warning": "#d66b26",
+      "error": "#d72e45",
+      "info": "#4699a3",
+      "interactive": "#3568d6",
+      "diffAdd": "#578e57",
+      "diffDelete": "#d72e45"
+    },
+    "overrides": {
+      "background-base": "#f6f5f4",
+      "background-weak": "#e3e0d8",
+      "background-strong": "#f6f5f4",
+      "background-stronger": "#f0eeea",
+      "surface-raised-stronger-non-alpha": "#f0eeea",
+      "text-strong": "#474c52",
+      "text-base": "#63686e",
+      "text-weak": "#7d8085",
+      "text-weaker": "#a0a2a4",
+      "border-weak-base": "#f5f4f0",
+      "border-base": "#d8d4cc",
+      "border-strong-base": "#3568d6"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1d21",
+      "primary": "#3568d6",
+      "success": "#578e57",
+      "warning": "#d66b26",
+      "error": "#d72e45",
+      "info": "#4699a3",
+      "interactive": "#3568d6",
+      "diffAdd": "#578e57",
+      "diffDelete": "#d72e45"
+    },
+    "overrides": {
+      "background-base": "#1a1d21",
+      "background-weak": "#30363d",
+      "background-strong": "#1a1d21",
+      "background-stronger": "#252a30",
+      "surface-raised-stronger-non-alpha": "#252a30",
+      "text-strong": "#b7babd",
+      "text-base": "#90959a",
+      "text-weak": "#9ca0a6",
+      "text-weaker": "#6f7277",
+      "border-weak-base": "#252a30",
+      "border-base": "#404a55",
+      "border-strong-base": "#4699a3"
+    }
+  }
+}

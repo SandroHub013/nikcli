@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Lucent Orng",
+  "id": "lucent-orng",
+  "light": {
+    "seeds": {
+      "neutral": "#fff5f0",
+      "primary": "#ec5b2b",
+      "success": "#0062d1",
+      "warning": "#ec5b2b",
+      "error": "#d1383d",
+      "info": "#318795",
+      "interactive": "#ec5b2b",
+      "diffAdd": "#0062d1",
+      "diffDelete": "#c53b53"
+    },
+    "overrides": {
+      "background-base": "#fff5f0",
+      "background-weak": "#fff5f0",
+      "background-strong": "#fff5f0",
+      "background-stronger": "#fff5f0",
+      "surface-raised-stronger-non-alpha": "#fff5f0",
+      "text-strong": "#1a1a1a",
+      "text-base": "#414141",
+      "text-weak": "#8a8a8a",
+      "text-weaker": "#aaa6a5",
+      "border-weak-base": "#d4d4d4",
+      "border-base": "#ec5b2b",
+      "border-strong-base": "#c94d24"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#2a1a15",
+      "primary": "#ec5b2b",
+      "success": "#6ba1e6",
+      "warning": "#ec5b2b",
+      "error": "#e06c75",
+      "info": "#56b6c2",
+      "interactive": "#ec5b2b",
+      "diffAdd": "#6ba1e6",
+      "diffDelete": "#c53b53"
+    },
+    "overrides": {
+      "background-base": "#2a1a15",
+      "background-weak": "#2a1a15",
+      "background-strong": "#2a1a15",
+      "background-stronger": "#2a1a15",
+      "surface-raised-stronger-non-alpha": "#2a1a15",
+      "text-strong": "#eeeeee",
+      "text-base": "#c8c8c8",
+      "text-weak": "#808080",
+      "text-weaker": "#625c5b",
+      "border-weak-base": "#3c3c3c",
+      "border-base": "#ec5b2b",
+      "border-strong-base": "#ee7948"
+    }
+  }
+}
