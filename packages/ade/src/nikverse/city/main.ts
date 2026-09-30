@@ -164,7 +164,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     },
     decode: pictures.decode,
   })
-  pictures.dispose()
+  // Not closed yet: the people's pictures are decoded as they come near (`assets.warmPictures`); it goes with the city.
   const { cast, kit } = loaded
   const data = doc.documentElement.dataset
   data.quality = level.id
@@ -506,6 +506,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       // Everything the scene holds goes back to the GPU now, not when the frame's process is collected.
       disposeTree(view.scene)
       releaseRenderer(renderer)
+      pictures.dispose()
       canvas.remove()
     },
   }

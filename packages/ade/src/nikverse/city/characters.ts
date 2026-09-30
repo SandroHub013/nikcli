@@ -20,10 +20,13 @@ import {
   SphereGeometry,
   TorusGeometry,
   MeshBasicMaterial,
+  type Material,
 } from "three/webgpu"
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js"
 import { jointsFor, mixJoints, walkSwing, type Joints } from "./pose"
-import { advance, createRig, lodAt, paceOf, play, roleAtSpeed, ROLE_OF_POSE, showLod, type Rig, type Template } from "./rig"
+import { advance, createRig, LOD_UP_TO, lodAt, paceOf, play, roleAtSpeed, ROLE_OF_POSE, showLod, type Rig, type Template } from "./rig"
+import { warmPictures } from "./assets"
+import { wearsAccessories } from "./glb"
 import type { StateLook } from "./states"
 import { hairColor, personColor } from "./states"
 import { CHAIR_SEAT_TOP } from "./layout"
@@ -120,6 +123,23 @@ export function showDetail(person: Person, detail: "full" | "slow" | "impostor",
   person.blob.visible = !far
   // A rigged person also draws the LOD their distance asks for.
   if (person.rig && !far) showLod(person.rig, lodAt(distance) ?? 2)
+}
+
+/** A LOD's pictures are decoded when the person is within this many times its band of distance: ready before it is shown. */
+export const WARM_AHEAD = 1.5
+
+/**
+ * Asks for the pictures of the LODs a person at `distance` shows or is about to show (`assets.warmPictures`): LOD k is
+ * shown from `LOD_UP_TO[k - 1]` to `LOD_UP_TO[k]`, and warmed from that band's near end over `WARM_AHEAD` to its far end
+ * times it. The hat and the cape go with LOD 0 and 1. A body no one wears is never warmed.
+ */
+export function warmRig(rig: Rig, distance: number, warm: (material: Material) => unknown = warmPictures): void {
+  for (const k of [0, 1, 2] as const) {
+    const near = k === 0 ? 0 : LOD_UP_TO[k - 1] / WARM_AHEAD
+    if (distance < near || distance > LOD_UP_TO[k] * WARM_AHEAD) continue
+    for (const m of [rig.lods[k].material].flat()) warm(m)
+    if (wearsAccessories(k)) for (const piece of rig.accessories) for (const m of [(piece as Mesh).material].flat()) warm(m)
+  }
 }
 
 export interface PersonStyle {

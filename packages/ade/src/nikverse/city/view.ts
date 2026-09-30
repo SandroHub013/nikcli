@@ -32,7 +32,7 @@ import {
   Vector3,
   type PerspectiveCamera,
 } from "three/webgpu"
-import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, type Person } from "./characters"
+import { createPerson, paint, poseSeated, poseWalking, setSignal, showDetail, sit, styleOf, warmRig, type Person } from "./characters"
 import { createHologram, type Hologram, type HologramKind } from "./hologram"
 import { paintIsland } from "./water"
 import { plantWind } from "./wind"
@@ -454,6 +454,8 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     const world = toWorld(shop.placement, at)
     const distance = Math.hypot(camera.position.x - world.x, camera.position.z - world.z)
     const detail = detailAt(distance)
+    // The pictures of the LODs they show or are about to: decoded before they are needed, and only then.
+    if (person.rig) warmRig(person.rig, distance)
     showDetail(person, detail, distance)
     if (seen && poseDue(detail, t, person.posedAt)) {
       poseSeated(person, a.look, a.previous, a.blend, t, desk)
@@ -513,6 +515,8 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         shops.delete(id)
       }
       user.group.position.set(player.x, groundAt(player), player.z)
+      // The camera follows the user from a few metres: their near LOD.
+      if (user.rig) warmRig(user.rig, 0)
       user.group.rotation.y = player.heading
       poseWalking(user, player.speed, t)
       hologram.update(t, camera)

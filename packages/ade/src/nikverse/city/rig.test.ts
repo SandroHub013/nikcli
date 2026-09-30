@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Quaternion, Vector3 } from "three/webgpu"
+import { Quaternion, Vector3, type Mesh } from "three/webgpu"
 import { castOf, presentLevels } from "./test-cast"
 import { unpack, readGlb } from "./glb"
 import { isKtx2 } from "./ktx2-header"
@@ -225,3 +225,35 @@ describe("which LOD, and how fast to walk", () => {
     expect(paceOf("sit", 3)).toBe(1)
   })
 })
+
+describe("the pictures a person needs, a little ahead", () => {
+  test("a LOD's pictures are warmed within 1.5 times its band of distance, and only the worn pieces' with LOD 0 and 1", async () => {
+    const { warmRig, WARM_AHEAD } = await import("./characters")
+    const { LOD_UP_TO, createRig } = await import("./rig")
+    const cast = await castOf("bassa")
+    const rig = createRig([...cast.values()][0])
+    // N3's bodies wear one material on every LOD (so what waits is a whole body no one wears); here each LOD has its
+    // own, to see the bands.
+    const { MeshBasicMaterial } = await import("three/webgpu")
+    for (const mesh of rig.lods) mesh.material = new MeshBasicMaterial()
+    const warmed = (distance: number) => {
+      const seen = new Set<unknown>()
+      warmRig(rig, distance, (m) => void seen.add(m))
+      return [0, 1, 2].filter((k) => seen.has(rig.lods[k].material))
+    }
+    expect(WARM_AHEAD).toBe(1.5)
+    // Close: its own LOD only.
+    expect(warmed(1)).toEqual([0])
+    // Near the edge of LOD 0, the next is readied.
+    expect(warmed(LOD_UP_TO[0] * 0.9)).toEqual([0, 1])
+    expect(warmed(LOD_UP_TO[1] * 1.2)).toEqual([1, 2])
+    expect(warmed(LOD_UP_TO[2] * 1.4)).toEqual([2])
+    // Far beyond the last LOD (the capsule): nothing.
+    expect(warmed(LOD_UP_TO[2] * 1.6)).toEqual([])
+    // The hat and the cape go with LOD 0 and 1.
+    const worn = new Set<unknown>()
+    warmRig(rig, 1, (m) => void worn.add(m))
+    for (const piece of rig.accessories) expect(worn.has((piece as Mesh).material)).toBe(true)
+  })
+})
+

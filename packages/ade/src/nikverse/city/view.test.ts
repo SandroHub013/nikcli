@@ -663,6 +663,35 @@ describe("the island from the file, with its chiringuiti", () => {
     expect((monitor.material as MeshBasicMaterial).color.getHex()).toBe(GLOW_COLOR.amber)
   })
 
+  test("the pictures of a body no one wears are never decoded; the user's and a seated agent's are, as they come near", async () => {
+    const { loadCast, picturesPending } = await import("./assets")
+    const { join } = await import("node:path")
+    const { LEVELS_DIR } = await import("./test-cast")
+    const { Texture } = await import("three/webgpu")
+    // A cast of its own, with pictures to decode: the shared one has none.
+    const cast = await loadCast({
+      base: "file:///assets/",
+      level: "bassa",
+      fetchBytes: async (url) => (await Bun.file(join(LEVELS_DIR, url.replace("file:///assets/levels/", ""))).arrayBuffer()) as ArrayBuffer,
+      decode: async () => new Texture({ width: 4, height: 4 } as never),
+    })
+    const material = (body: string) => (cast.get(body as never)!.scene.getObjectByProperty("isSkinnedMesh", true) as Mesh).material as never
+    const bodies = [...cast.keys()]
+    expect(bodies.every((b) => picturesPending(material(b)))).toBe(true)
+    const town = createTown()
+    const view = createCityScene(undefined, "shader", cast, await kitFor("bassa"))
+    town.sync(picture([shop("a", 0)], [agent("p1", "a")]))
+    for (let t = 0; t < 3; t += 0.05) town.tick(0.05)
+    view.update(town, spawnPlayer(), 1, camera)
+    // The decoding is queued: let it run.
+    await new Promise((r) => setTimeout(r, 50))
+    const warm = bodies.filter((b) => !picturesPending(material(b)))
+    // The user's body, and the seated agent's (a few metres from the camera); the others wait.
+    expect(warm.length).toBeGreaterThanOrEqual(1)
+    expect(warm.length).toBeLessThan(bodies.length)
+    expect(warm).toContain("user")
+  })
+
   test("the laptops' glow is not drawn beyond SCREEN_FAR, and is again coming back", async () => {
     const { town, view } = await withKit([agent("p1", "a")])
     const shown = () => view.monitor("p1")!.parent!.visible
