@@ -83,3 +83,40 @@ test.skipIf(!live)(
   },
   180_000,
 )
+
+test.skipIf(!live)(
+  "a benchmark described in words comes back as a parseable run_script with its code",
+  async () => {
+    const { Agent, Gateway, agentLayer, gatewayLayer, textOf } = await import("./agent")
+    const { ASSISTANT_TOOLS, SYSTEM_PROMPT, parseActions, wrapUserMessage, renderContext } = await import("./actions")
+    const [providerID, modelID] = (process.env.DEVHUB_MODEL ?? "minimax-coding-plan/MiniMax-M2").split("/")
+    const gw = gatewayLayer(() => "live")
+    const agent = agentLayer(() => process.cwd()).pipe(Layer.provideMerge(gw))
+
+    const program = Effect.gen(function* () {
+      const a = yield* Agent
+      const reply = yield* a.ask({
+        title: "[devhub] script protocol test",
+        system: SYSTEM_PROMPT,
+        tools: ASSISTANT_TOOLS,
+        model: { providerID, modelID },
+        text: wrapUserMessage(
+          renderContext({ page: "playground", repo: process.cwd(), runs: [] }),
+          "Create a benchmark that compares JSON.parse with structuredClone on a 10k-key object, and run it.",
+        ),
+      })
+      return { text: textOf(reply), parsed: yield* parseActions(textOf(reply)) }
+    })
+    const out = await Effect.runPromise(program.pipe(Effect.provide(Layer.mergeAll(agent, gw))))
+    const script = out.parsed.find((p) => p.ok && p.action.action === "run_script")
+    console.log(
+      "actions:",
+      out.parsed.map((p) => (p.ok ? p.action.action : `INVALID: ${p.error.slice(0, 80)}`)),
+    )
+    expect(script).toBeDefined()
+    expect(script && script.ok && script.action.action === "run_script" && script.action.code?.length).toBeGreaterThan(
+      40,
+    )
+  },
+  240_000,
+)

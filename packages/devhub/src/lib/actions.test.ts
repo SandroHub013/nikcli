@@ -193,3 +193,41 @@ test("gateway drops null and GET bodies instead of sending them", async () => {
   expect(sent[3].headers?.["content-type"]).toBe("application/json")
   expect(sent[0].headers?.["content-type"]).toBeUndefined()
 })
+
+test("run_script takes its code from the fence that follows, so multi-line source never needs JSON escaping", async () => {
+  const text = [
+    "Writing it.",
+    "```devhub-action",
+    '{"action":"run_script","kind":"script","name":"bench"}',
+    "```",
+    "```ts",
+    'const s = "quoted \\"text\\""',
+    "console.log(s)",
+    "```",
+  ].join("\n")
+  const [p] = await Effect.runPromise(parseActions(text))
+  expect(p.ok).toBe(true)
+  expect(p.ok && p.action.action === "run_script" && p.action.code).toBe(
+    'const s = "quoted \\"text\\""\nconsole.log(s)\n',
+  )
+  expect(stripActions(text)).toBe("Writing it.")
+})
+
+test("repairs raw line breaks and trailing commas inside an action, and says how to fix what it cannot", async () => {
+  const raw = '{"action":"run_script","kind":"script","code":"let a = 1\nconsole.log(a)",}'
+  const fixed = await Effect.runPromise(parseActions("```devhub-action\n" + raw + "\n```"))
+  expect(fixed[0].ok && fixed[0].action.action === "run_script" && fixed[0].action.code).toBe(
+    "let a = 1\nconsole.log(a)",
+  )
+
+  const broken = await Effect.runPromise(
+    parseActions('```devhub-action\n{"action":"run_script","code":"say "hi" now"}\n```'),
+  )
+  expect(broken[0].ok).toBe(false)
+  expect(!broken[0].ok && broken[0].error).toContain("```ts block directly after")
+})
+
+test("a run_script without any code fails with a precise message instead of writing an empty file", async () => {
+  const exit = await Effect.runPromiseExit(execute({ action: "run_script", kind: "script" }).pipe(Effect.provide(env)))
+  expect(String(exit)).toContain("has no code")
+})

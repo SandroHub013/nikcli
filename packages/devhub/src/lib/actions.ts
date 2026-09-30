@@ -57,7 +57,8 @@ export const ActionSchema = Schema.Union([
     action: Schema.Literal("run_script"),
     kind: Schema.Literals(["script", "test"]),
     name: Schema.optional(Schema.String),
-    code: Schema.String,
+    /** Inline source, or — when omitted — the ```ts block that directly follows the action block. */
+    code: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     action: Schema.Literal("run_bench"),
@@ -122,44 +123,101 @@ export type ParsedAction = { readonly index: number; readonly raw: string } & (
   | { readonly ok: false; readonly error: string }
 )
 
-const FENCE = /```devhub-action[^\n]*\n([\s\S]*?)```/g
+/** An action block, optionally followed directly by a code fence (the source of a `run_script`). */
+const FENCE =
+  /```devhub-action[^\n]*\n([\s\S]*?)```(?:[ \t]*\n\s*```(?:tsx?|typescript|jsx?|javascript)[^\n]*\n([\s\S]*?)```)?/g
+
+/**
+ * Models often write multi-line code straight into a JSON string. Strict JSON forbids raw line breaks
+ * inside strings and trailing commas; both are fixed here so one slip does not cost the whole action.
+ * Unescaped quotes inside a string cannot be repaired reliably — that is what the code fence is for.
+ */
+export function repairJson(raw: string): string {
+  let out = ""
+  let inString = false
+  let escaped = false
+  for (const ch of raw) {
+    if (inString) {
+      if (escaped) ((out += ch), (escaped = false))
+      else if (ch === "\\") ((out += ch), (escaped = true))
+      else if (ch === '"') ((out += ch), (inString = false))
+      else if (ch === "\n") out += "\\n"
+      else if (ch === "\r") out += "\\r"
+      else if (ch === "\t") out += "\\t"
+      else out += ch
+    } else {
+      if (ch === '"') inString = true
+      out += ch
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1")
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw)
+  } catch (first) {
+    try {
+      return JSON.parse(repairJson(raw))
+    } catch {
+      throw first
+    }
+  }
+}
+
+const JSON_HINT =
+  'Strings cannot contain raw line breaks or unescaped double quotes. For run_script, leave "code" out of the JSON and put the complete file in a ```ts block directly after the action block.'
 
 /** Extracts and validates every action block in an assistant message, in order. */
 export function parseActions(text: string): Effect.Effect<ParsedAction[]> {
-  const blocks = [...text.matchAll(FENCE)].map((m) => m[1].trim())
-  return Effect.forEach(
-    blocks.flatMap((b, i) => splitBlock(b).map((raw) => ({ raw, blockIndex: i }))),
-    ({ raw }, index) =>
-      Effect.try({
-        try: () => JSON.parse(raw) as unknown,
-        catch: () => new ActionError({ message: "block is not valid JSON" }),
-      }).pipe(
-        Effect.flatMap((json) =>
-          Schema.decodeUnknownEffect(ActionSchema)(json).pipe(
-            Effect.mapError(
-              (e) => new ActionError({ message: `unknown or malformed action: ${String(e.message).slice(0, 240)}` }),
-            ),
+  const items = [...text.matchAll(FENCE)].flatMap((m) => {
+    const parts = splitBlock(m[1].trim())
+    // The code fence that follows the block belongs to its first run_script that has no inline code.
+    let followingCode: string | undefined = m[2]
+    return parts.map((raw) => {
+      const code = followingCode
+      if (code !== undefined && /"action"\s*:\s*"run_script"/.test(raw) && !/"code"\s*:/.test(raw))
+        followingCode = undefined
+      else if (code !== undefined) return { raw, code: undefined }
+      return { raw, code }
+    })
+  })
+  return Effect.forEach(items, ({ raw, code }, index) =>
+    Effect.try({
+      try: () => parseJson(raw) as unknown,
+      catch: (e) => new ActionError({ message: `block is not valid JSON (${(e as Error).message}). ${JSON_HINT}` }),
+    }).pipe(
+      Effect.map((json) =>
+        code !== undefined && json && typeof json === "object" && (json as { code?: unknown }).code === undefined
+          ? { ...(json as object), code: code.replace(/\n$/, "") + "\n" }
+          : json,
+      ),
+      Effect.flatMap((json) =>
+        Schema.decodeUnknownEffect(ActionSchema)(json).pipe(
+          Effect.mapError(
+            (e) => new ActionError({ message: `unknown or malformed action: ${String(e.message).slice(0, 240)}` }),
           ),
         ),
-        Effect.match({
-          onFailure: (e): ParsedAction => ({ index, raw, ok: false, error: e.message }),
-          onSuccess: (action): ParsedAction => ({ index, raw, ok: true, action }),
-        }),
       ),
+      Effect.match({
+        onFailure: (e): ParsedAction => ({ index, raw, ok: false, error: e.message }),
+        onSuccess: (action): ParsedAction => ({ index, raw, ok: true, action }),
+      }),
+    ),
   )
 }
 
 /** A block may hold one object or an array of objects. */
 function splitBlock(block: string): string[] {
   try {
-    const v = JSON.parse(block)
+    const v = parseJson(block)
     return Array.isArray(v) ? v.map((x) => JSON.stringify(x)) : [block]
   } catch {
     return [block]
   }
 }
 
-/** Text of a message without its action blocks, for display. */
+/** Text of a message without its action blocks (and the script fences that belong to them), for display. */
 export const stripActions = (text: string) =>
   text
     .replace(FENCE, "")
@@ -300,7 +358,10 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
         const root = host.repoRoot()
         if (!root) return yield* fail("repository not found")
         const name = `${(action.name ?? "chat").replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 40) || "chat"}-${Date.now().toString(36)}.${action.kind === "test" ? "test.ts" : "ts"}`
-        const rel = yield* safe("write script", () => host.writeScratch(name, action.code))
+        if (!action.code?.trim())
+          return yield* fail("run_script has no code: put it in a ```ts block right after the action block")
+        const code = action.code
+        const rel = yield* safe("write script", () => host.writeScratch(name, code))
         const run = yield* safe("run script", () =>
           host.runTask({
             kind: action.kind === "test" ? "test" : "bench",
@@ -412,7 +473,7 @@ Actions:
 - {"action":"runs","limit":10} — recent test/benchmark/check runs
 - {"action":"list_tests","package":"nikcli","filter":"session"}
 - {"action":"run_tests","package":"nikcli","files":["test/a.test.ts"],"pattern":"regex for -t","timeoutMs":30000} — omit files to run the whole package (nikcli uses the sharded suite)
-- {"action":"run_script","kind":"script|test","name":"short-name","code":"<complete Bun TypeScript file>"} — use this to CREATE A BENCHMARK FROM A DESCRIPTION: write a self-contained script that measures with performance.now() (warm-up, many iterations, print median/p95/min/max and ops/sec), or a bun:test file for kind "test". It runs with Bun inside packages/nikcli, so it can import repo code via relative paths.
+- {"action":"run_script","kind":"script|test","name":"short-name"} followed IMMEDIATELY by a \`\`\`ts code block holding the complete Bun TypeScript file (never put multi-line code inside the JSON) — use this to CREATE A BENCHMARK FROM A DESCRIPTION: write a self-contained script that measures with performance.now() (warm-up, many iterations, print median/p95/min/max and ops/sec), or a bun:test file for kind "test". It runs with Bun inside packages/nikcli, so it can import repo code via relative paths.
 - {"action":"run_bench","target":"suite|probe","samples":30} — the repo benchmark suite, or a live route latency probe
 - {"action":"http","method":"GET","path":"/analytics/global","body":null} — request to the nikcli HttpApi
 - {"action":"model_bench","prompt":"...","models":[{"providerID":"openai","modelID":"gpt-5.4"}],"runs":3} — same prompt across models; use model ids from the API (GET /provider)

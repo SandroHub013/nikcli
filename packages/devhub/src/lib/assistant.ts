@@ -222,6 +222,25 @@ function createAssistant() {
     if (!batch) await maybeContinue(card.messageID)
   }
 
+  /**
+   * Runs a code block the assistant wrote in plain prose (no action block). Same path as an action:
+   * a card with status and output, and the result goes back to the model.
+   */
+  const runCode = async (messageID: string, index: number, code: string) => {
+    const key = `${messageID}:code${index}`
+    if (cards[key]) return
+    const kind = /from ["']bun:test["']/.test(code) ? "test" : "script"
+    setCards(key, {
+      key,
+      messageID,
+      index: 1000 + index,
+      raw: "",
+      action: { action: "run_script", kind, name: "chat", code },
+      status: "pending",
+    })
+    await run(key)
+  }
+
   const skip = async (key: string) => {
     const card = cards[key]
     if (!card || card.status !== "pending") return
@@ -320,6 +339,7 @@ function createAssistant() {
     send: (text: string) => turn(text, false),
     run: (k: string) => run(k),
     skip,
+    runCode,
     stop,
     reset,
     resume,

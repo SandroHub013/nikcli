@@ -112,10 +112,37 @@ function ActionCard(props: { card: Card }) {
       <Show when={c().action?.action === "run_script"}>
         <details class="dh-action__details">
           <summary>script</summary>
-          <pre>{(c().action as { code: string }).code}</pre>
+          <pre>{(c().action as { code?: string }).code ?? ""}</pre>
         </details>
       </Show>
     </div>
+  )
+}
+
+/** Code the assistant wrote in prose: offer to run it, exactly like an action would. */
+function CodeRunners(props: { messageID: string; text: string }) {
+  const blocks = createMemo(() =>
+    [...props.text.matchAll(/```(?:tsx?|typescript|jsx?|javascript)[^\n]*\n([\s\S]*?)```/g)]
+      .map((m) => m[1])
+      .filter((code) => code.trim().length > 40),
+  )
+  return (
+    <Show when={blocks().length}>
+      <div class="dh-action__buttons">
+        <For each={blocks()}>
+          {(code, i) => (
+            <Button
+              size="small"
+              icon="code"
+              disabled={assistant.busy() || !!assistant.cards[`${props.messageID}:code${i()}`]}
+              onClick={() => void assistant.runCode(props.messageID, i(), code)}
+            >
+              {blocks().length > 1 ? `Run block ${i() + 1} as script` : "Run as script"}
+            </Button>
+          )}
+        </For>
+      </div>
+    </Show>
   )
 }
 
@@ -361,6 +388,7 @@ export function Assistant() {
                       <Markdown text={item.text} cacheKey={item.message.info.id} class="dh-md" />
                     </Show>
                     <For each={assistant.cardsOf(item.message.info.id)}>{(card) => <ActionCard card={card} />}</For>
+                    <CodeRunners messageID={item.message.info.id} text={item.text} />
                     <Show when={item.message.info.error}>
                       <div class="dh-action__error">
                         {item.message.info.error!.data?.message ?? item.message.info.error!.name}
