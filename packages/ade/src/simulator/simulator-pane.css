@@ -138,7 +138,7 @@
   background: var(--ade-overlay);
   border-bottom: 1px solid var(--ade-border);
   color: var(--ade-text-soft);
-  font-size: 12px;
+  font-size: var(--ade-font-md);
 }
 
 [data-slot="sim-traffic"] {

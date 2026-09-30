@@ -260,7 +260,7 @@
   width: 20px;
   height: 20px;
   border-radius: var(--ade-radius-sm);
-  font-size: 13px;
+  font-size: var(--ade-font-lg);
   font-weight: var(--ade-weight-bold);
   border: 1px solid var(--ade-border-strong);
   color: var(--ade-text-weak);
@@ -492,11 +492,16 @@
 /* The marker carries the outcome, so the step text stays readable rather than
    being recoloured into low contrast. */
 [data-slot="agent-plan-step"]::before {
-  content: "✓";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-check) center / contain no-repeat;
   flex: 0 0 auto;
-  width: 12px;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-sm);
+  /* On the first line of a step that wraps, not across the whole step. */
+  align-self: flex-start;
+  margin-top: calc((1lh - var(--ade-icon-size)) / 2);
   color: var(--ade-done);
 }
 
@@ -505,7 +510,7 @@
 }
 
 [data-slot="agent-plan-step"][data-ok="false"]::before {
-  content: "✕";
+  mask-image: var(--ade-icon-cross);
   color: var(--ade-error);
 }
 

@@ -112,7 +112,7 @@
 [data-slot="settings-choice"][data-active] {
   border-color: var(--ade-text);
   background: var(--ade-text);
-  color: var(--ade-bg);
+  color: var(--ade-on-ink);
 }
 
 [data-slot="settings-choice"]:focus-visible {

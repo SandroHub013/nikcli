@@ -435,7 +435,7 @@
 [data-slot="bots-msg-text"] {
   margin: 0;
   max-width: 68ch;
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -478,11 +478,18 @@
   display: none;
 }
 [data-slot="bots-tool-head"]::before {
-  content: "▸";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-chevron-right) center / contain no-repeat;
+  flex: 0 0 auto;
+  align-self: center;
   color: var(--ade-text-weak);
 }
 [data-slot="bots-tool"][open] [data-slot="bots-tool-head"]::before {
-  content: "▾";
+  mask-image: var(--ade-icon-chevron-down);
 }
 
 [data-slot="bots-tool-name"] {
@@ -660,7 +667,7 @@
   border-radius: var(--ade-radius-lg);
   /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
   background: var(--ade-text);
-  color: var(--ade-surface);
+  color: var(--ade-on-ink);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
@@ -762,7 +769,7 @@
 [data-slot="bots-card-desc"] {
   margin: 0;
   color: var(--ade-text-soft);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
 }
 
@@ -1289,7 +1296,7 @@
   padding: 1px var(--ade-space-3);
   border-radius: var(--ade-radius-full);
   background: var(--ade-accent);
-  color: var(--ade-surface);
+  color: var(--ade-accent-fg);
   font-size: var(--ade-font-xs);
   white-space: nowrap;
 }

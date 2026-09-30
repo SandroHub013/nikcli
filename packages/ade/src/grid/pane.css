@@ -232,7 +232,7 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-raised);
   color: var(--ade-text);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
@@ -270,7 +270,7 @@
   background: none;
   color: var(--ade-text-weak);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--ade-font-lg);
   line-height: 1;
 }
 
@@ -415,7 +415,7 @@
   padding: var(--ade-space-2) var(--ade-space-3);
   background: var(--ade-sunken);
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
   display: flex;
   flex-direction: column;
@@ -728,26 +728,17 @@
   color: var(--ade-text-weak);
 }
 
-[data-slot="pane-agent"] {
-  color: var(--ade-text-soft);
-}
-
-/* Agent and mode, activity and elapsed, are two facts each — without a mark
-   between them they read as one broken phrase ("agy auto", "Ragionando 41s"). */
-[data-slot="pane-agent"]::after,
-[data-slot="pane-tree"]::before,
-[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  content: "·";
-  color: var(--ade-text-weak);
-}
-
-[data-slot="pane-agent"]::after,
-[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  margin-left: var(--ade-space-2);
-}
-
+/* The tree is a fact of its own: a dot keeps it from reading as part of what comes before. */
 [data-slot="pane-tree"]::before {
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-dot-width);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
+  vertical-align: middle;
   margin-right: var(--ade-space-2);
+  color: var(--ade-text-weak);
 }
 
 /* An orphaned separator would open the row with a dot that separates nothing. */
@@ -790,19 +781,6 @@
   color: var(--ade-working);
 }
 
-/* The state never truncates and never wraps: everything else on the row gives
-   way to it, because a pane that cannot say what it is doing is not useful. */
-[data-slot="pane-state"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  flex: 0 0 auto;
-  white-space: nowrap;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
-  color: var(--ade-text-weak);
-}
-
 [data-slot="pane-activity-word"] {
   color: var(--pane-status);
 }
@@ -832,7 +810,6 @@
 
 @container (max-width: 340px) {
   [data-slot="pane-tokens"],
-  [data-slot="pane-agent"],
   [data-slot="pane-meta"] {
     display: none;
   }
@@ -1057,7 +1034,6 @@
 /* Meta in the same face as the title: a pill of glass is one object, and a
    change of typeface halfway along splits it in two. */
 [data-component="session-pane"] [data-slot="pane-who"],
-[data-component="session-pane"] [data-slot="pane-state"],
 [data-component="session-pane"] [data-slot="pane-tokens"],
 [data-component="session-pane"] [data-slot="pane-cost"] {
   font-family: var(--ade-sans);
@@ -1069,13 +1045,6 @@
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--pane-status) 14%, transparent);
   font-weight: var(--ade-weight-medium);
-}
-
-/* The dot that split "Ragionando 41s" is drawn on the word itself, and a
-   word with a ground of its own would carry the dot inside the pill. The
-   pill is the separation now. */
-[data-component="session-pane"] [data-slot="pane-state"] > span:first-child:not(:only-child)::after {
-  content: none;
 }
 
 [data-component="session-pane"] [data-slot="pane-action"] {
@@ -1262,7 +1231,7 @@
 }
 
 .hA .nm {
-  font-size: 12px;
+  font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-semibold);
   letter-spacing: -0.012em;
   color: var(--ade-text);
@@ -1283,7 +1252,7 @@
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--st) 14%, transparent);
   color: var(--ade-text-soft);
-  font: var(--ade-weight-medium) 11px / 1 var(--ade-sans);
+  font: var(--ade-weight-medium) var(--ade-font-sm) / 1 var(--ade-sans);
   white-space: nowrap;
   min-width: 0;
   overflow: hidden;
@@ -1323,7 +1292,7 @@
 }
 
 .hA .tok {
-  font: 10px var(--ade-mono);
+  font: var(--ade-font-xs) var(--ade-mono);
   color: var(--ade-text-weak);
   white-space: nowrap;
   flex: 0 0 auto;
@@ -1370,19 +1339,25 @@
 }
 
 .hA .qv {
-  font: var(--ade-weight-semibold) 10px var(--ade-mono);
+  font: var(--ade-weight-semibold) var(--ade-font-xs) var(--ade-mono);
   color: var(--qc);
   font-variant-numeric: tabular-nums;
 }
 
 .hA [data-lv="crit"] .qv::before {
-  content: "!";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-alert) center / contain no-repeat;
+  vertical-align: middle;
   margin-right: 1px;
 }
 
 .hA .qk,
 .hA .qr {
-  font: 10px var(--ade-mono);
+  font: var(--ade-font-xs) var(--ade-mono);
   color: var(--ade-text-weak);
   white-space: nowrap;
 }
@@ -1392,7 +1367,7 @@
   align-items: center;
   gap: 4px;
   color: var(--ade-text-weak);
-  font: 10px var(--ade-mono);
+  font: var(--ade-font-xs) var(--ade-mono);
   min-width: 0;
   flex: 0 50 auto;
 }
@@ -1414,7 +1389,7 @@
 }
 
 .hA .a-mode {
-  font: 10px var(--ade-mono);
+  font: var(--ade-font-xs) var(--ade-mono);
   color: var(--ade-text-weak);
   white-space: nowrap;
   flex: 0 0 auto;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 /*
@@ -106,5 +106,53 @@ describe("text contrast of the tokens (AA, 4.5:1)", () => {
     expect(contrast(weak.light, lightDark("--ade-surface").light)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(weak.light, lightDark("--ade-overlay").light)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(weak.dark, lightDark("--ade-overlay").dark)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe("the words on a solid ink fill (the chosen value, the primary action)", () => {
+  // `background: var(--ade-text); color: var(--ade-on-ink)` is the pair every ink fill uses.
+  for (const scheme of ["light", "dark"] as const) {
+    test(`${scheme}: on-ink on the ink fill`, () => {
+      expect(css).toMatch(/--ade-on-ink:\s*var\(--ade-bg\);/)
+      expect(contrast(lightDark("--ade-bg")[scheme], lightDark("--ade-text")[scheme])).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+
+  test("glass: on-ink is a solid colour and reads on the white ink fill", () => {
+    const ground = /--ade-glass-ground:\s*(#[0-9a-fA-F]{6});/.exec(css)?.[1]
+    expect(glass("--ade-on-ink")).toBe("var(--ade-glass-ground)")
+    expect(ground).toBeDefined()
+    expect(contrast(hex(ground!), hex(glass("--ade-text")))).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe("no text colour resolves to transparent", () => {
+  // In glass the containers' grounds are `transparent`: as a `color` they paint nothing (white on white, 1.00:1).
+  const block = css.slice(css.indexOf('[data-component="ade-shell"][data-theme="glass"],'))
+  const clear = [...block.matchAll(/(--ade-[a-z-]+):\s*transparent;/g)].map((m) => m[1]!)
+
+  function stylesheets(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return entry.name === "node_modules" ? [] : stylesheets(path)
+      return entry.name.endsWith(".css") ? [path] : []
+    })
+  }
+
+  test("the glass block does clear the grounds this test looks for", () => {
+    expect(clear).toContain("--ade-bg")
+    expect(clear).toContain("--ade-surface")
+  })
+
+  test("no `color:` in any stylesheet is a token that glass makes transparent", () => {
+    const offenders: string[] = []
+    for (const file of stylesheets(import.meta.dir)) {
+      const lines = readFileSync(file, "utf-8").split(/\r?\n/)
+      lines.forEach((line, i) => {
+        const match = /(?<![-\w])color:\s*var\((--ade-[a-z-]+)\)/.exec(line)
+        if (match && clear.includes(match[1]!)) offenders.push(`${file.slice(import.meta.dir.length + 1)}:${i + 1} ${line.trim()}`)
+      })
+    }
+    expect(offenders).toEqual([])
   })
 })

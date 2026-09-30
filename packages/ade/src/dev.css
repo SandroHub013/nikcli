@@ -308,7 +308,7 @@
   background: var(--ade-error, #e5484d);
   color: #fff;
   font-family: var(--ade-sans);
-  font-size: 9px;
+  font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-bold);
   line-height: 14px;
   text-align: center;
@@ -568,7 +568,7 @@
   background: #ff8c00;
   color: #000;
   font-family: var(--ade-sans);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-bold);
   letter-spacing: 0.06em;
   line-height: 14px;
@@ -733,7 +733,7 @@
   }
   [data-slot="ade-view-tab"] {
     padding: 0 var(--ade-space-3);
-    font-size: 11px;
+    font-size: var(--ade-font-sm);
   }
 }
 
@@ -833,7 +833,12 @@
 }
 
 [data-slot="ade-meta-item"] + [data-slot="ade-meta-item"]::before {
-  content: "·";
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-dot-width);
+  height: var(--ade-icon-size);
+  background-color: currentColor;
+  mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
   margin-right: var(--ade-space-1);
   color: var(--ade-text-weak);
 }
