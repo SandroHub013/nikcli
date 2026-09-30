@@ -1,6 +1,6 @@
 /**
  * The live gate for NikVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
- * fails above the ceilings in `src/nikverse/gate.ts` (frame 130 MB, ADE +5 MB, nothing drawn 1 % of a core over what
+ * fails above the ceilings in `src/nikverse/gate.ts` (frame 115 MB private, ADE +5 MB, nothing drawn 1 % of a core over what
  * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory +250 MB). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
  *
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
@@ -348,7 +348,8 @@ try {
       pr.filter((p) => p.type === "renderer" && p.id !== adePid).sort((a, b) => big(m[b.id]) - big(m[a.id]))[0]?.id ?? 0
     cycles.push({
       cycle: c,
-      frameMb: big(m[framePid]),
+      // The ceiling is on the private bytes; the working set is kept for information (`GATE_LIMITS.frameMb`).
+      frameMb: m[framePid]?.priv ?? Number.NaN,
       framePrivMb: m[framePid]?.priv,
       frameWsMb: m[framePid]?.ws,
       frameHeapMb: await heapMb(browser, session),
@@ -573,6 +574,7 @@ try {
   const rows = modes as unknown as { moving: any; still: any; immobile: any }[]
   const measures = {
     frameMb: Math.max(...cycles.map((c) => c.frameMb as number)),
+    frameWorkingSetMb: Math.max(...cycles.map((c) => (c.frameWsMb as number) ?? Number.NaN)),
     adeGrowthAfter5sMb: after5.adeMb - base.adeMb,
     adeGrowthAtRestMb: rest.adeMb - base.adeMb,
     adeHeapGrowthMb: Math.max(after5.adeHeapMb, rest.adeHeapMb) - base.adeHeapMb,
