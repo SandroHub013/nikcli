@@ -279,6 +279,10 @@
   white-space: nowrap;
 }
 
+[data-slot="pane-mouse-hint"] .hint-short {
+  display: none;
+}
+
 [data-slot="pane-tokens"],
 [data-slot="pane-cost"] {
   flex: 0 0 auto;
@@ -1505,6 +1509,26 @@
   }
   .hA [data-urg] .qr {
     display: inline;
+  }
+  /*
+   * The mouse hint stays, short: two columns are where Shift+drag is needed,
+   * and the tokens go before it (mouse sessions, Verifiche's point 4).
+   */
+  .hA [data-slot="pane-mouse-hint"] {
+    display: inline;
+  }
+  .hA [data-slot="pane-mouse-hint"] .hint-long {
+    display: none;
+  }
+  .hA [data-slot="pane-mouse-hint"] .hint-short {
+    display: inline;
+  }
+}
+
+/* Below the cost's width, the header's buttons come first (audit 0.7.7, MEDIO 18). */
+@container (max-width: 420px) {
+  .hA [data-slot="pane-mouse-hint"] {
+    display: none;
   }
 }
 
