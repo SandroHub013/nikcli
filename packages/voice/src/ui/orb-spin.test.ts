@@ -19,7 +19,7 @@ describe("when the arcs turn", () => {
 
   test("not in dictation: the words go through untouched and the orb holds still", () => {
     for (const status of STATUSES) expect(orbSpins(true, status, "transcription")).toBe(false)
-    expect(orbSpins(true, "listening", "assistant")).toBe(true)
+    expect(orbSpins(true, "listening", "agent")).toBe(true)
   })
 })
 
