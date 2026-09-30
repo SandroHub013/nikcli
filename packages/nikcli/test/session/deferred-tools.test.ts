@@ -93,11 +93,11 @@ describe.serial("deferred tools", () => {
   it("offers core tools, keeps the rest callable but deferred, and indexes them", async () => {
     await withSession(async ({ resolve }) => {
       const { tools, deferred } = await resolve()
-      for (const id of ["read", "edit", "bash", "grep", "glob", "task", "search_tools", "monitor"]) {
+      for (const id of ["read", "edit", "bash", "grep", "glob", "task", "search_tools", "monitor", "todoread"]) {
         expect(tools[id]).toBeDefined()
         expect(deferred.has(id)).toBe(false)
       }
-      for (const id of ["webfetch", "todoread", "generate_image", "opentui"]) {
+      for (const id of ["webfetch", "generate_image", "opentui"]) {
         // Still in the map, so a call by name runs.
         expect(tools[id]).toBeDefined()
         expect(deferred.has(id)).toBe(true)
@@ -168,9 +168,9 @@ describe.serial("deferred tools", () => {
   it("loads a deferred tool the model calls by name", async () => {
     await withSession(async ({ session, resolve }) => {
       const { tools } = await resolve()
-      await tools.todoread.execute!({}, callOptions())
-      expect((await session()).disabledTools?.todoread).toBe(false)
-      expect((await resolve()).deferred.has("todoread")).toBe(false)
+      await tools.tree.execute!({}, callOptions())
+      expect((await session()).disabledTools?.tree).toBe(false)
+      expect((await resolve()).deferred.has("tree")).toBe(false)
     })
   })
 

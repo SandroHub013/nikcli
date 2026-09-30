@@ -96,8 +96,10 @@ export namespace ToolRegistry {
    *
    * - the edit loop: `read`, `edit`/`write` (`apply_patch` for GPT), `bash`,
    *   `glob`, `grep`;
-   * - how the agent organises its work: `task`, `todowrite`, `skill`,
-   *   `question`, and `search_tools` itself;
+   * - how the agent organises its work: `task`, `todowrite`/`todoread`,
+   *   `skill`, `question`, and `search_tools` itself;
+   * - code intelligence and publishing the agent is expected to reach for
+   *   unprompted: `lsp` and `artifact`;
    * - tools the primary agents' prompts name as the way to do something:
    *   `monitor` (long-running commands), `delegation` (background results),
    *   `plan_enter`/`plan_exit`, and the goal tools the `/goal`, mission and
@@ -122,6 +124,9 @@ export namespace ToolRegistry {
     "grep",
     "task",
     "todowrite",
+    "todoread",
+    "lsp",
+    "artifact",
     "skill",
     "question",
     "search_tools",
