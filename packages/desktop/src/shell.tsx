@@ -7,7 +7,7 @@ import { Button } from "@nikcli-ai/ui/button"
 import { DropdownMenu } from "@nikcli-ai/ui/dropdown-menu"
 import { Popover } from "@nikcli-ai/ui/popover"
 import { TextField } from "@nikcli-ai/ui/text-field"
-import { Mark, Splash } from "@nikcli-ai/ui/logo"
+import { Logo, Splash } from "@nikcli-ai/ui/logo"
 import {
   useAccount,
   useCommand,
@@ -729,19 +729,11 @@ function DesktopSidebar() {
 
   return (
     <div class="desktop-sidebar">
-      <div class="desktop-sidebar__titlebar" data-tauri-drag-region>
-        <div class="desktop-sidebar__history" aria-hidden="true">
-          <Icon name="arrow-left" size="small" />
-          <Icon name="arrow-right" size="small" />
-        </div>
-      </div>
+      <div class="desktop-sidebar__titlebar" data-tauri-drag-region />
 
       <div class="desktop-sidebar__primary">
         <div class="desktop-sidebar__brand">
-          <span>
-            <Mark class="desktop-sidebar__brand-mark" />
-          </span>
-          <strong>Nikcli</strong>
+          <Logo class="desktop-sidebar__wordmark" />
           <small>Desktop</small>
         </div>
         <NavButton icon="edit-small-2" label={t("desktop.sidebar.newChat")} primary onClick={newSession} />

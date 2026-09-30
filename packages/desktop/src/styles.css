@@ -37,7 +37,7 @@ html.desktop-shell-resizing * {
   height: 100%;
   overflow: hidden;
   background: color-mix(in srgb, var(--background-stronger) 92%, black 8%);
-  border-right: 1px solid var(--border-weak-base);
+  border-right: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 #desktop-sidebar-mount > div,
@@ -168,16 +168,9 @@ html.desktop-shell-resizing * {
 
 .desktop-sidebar__titlebar {
   display: flex;
-  flex: 0 0 54px;
+  flex: 0 0 44px;
   align-items: center;
   padding: 0 16px 0 108px;
-}
-
-.desktop-sidebar__history {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  color: var(--icon-disabled);
 }
 
 .desktop-sidebar__primary {
@@ -191,9 +184,9 @@ html.desktop-shell-resizing * {
 .desktop-sidebar__brand {
   display: flex;
   align-items: center;
-  height: 42px;
+  height: 52px;
   gap: 9px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   padding: 0 9px;
   color: var(--text-strong);
 }
@@ -203,7 +196,7 @@ html.desktop-shell-resizing * {
   width: 28px;
   height: 28px;
   color: var(--icon-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 9px;
   background: var(--surface-base);
   place-items: center;
@@ -217,11 +210,11 @@ html.desktop-shell-resizing * {
 .desktop-nav-button--primary {
   color: var(--text-strong);
   font-weight: 560;
-  border: 1px solid var(--border-weak-base);
-  background: var(--surface-raised-base);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 6%),
-    inset 0 1px rgb(255 255 255 / 4%);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
+  background: var(--glass-fill-tint);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: var(--glass-rim);
 }
 
 .desktop-nav-button--primary:hover {
@@ -245,7 +238,7 @@ html.desktop-shell-resizing * {
   padding: 2px 7px;
   color: var(--text-weaker);
   font-size: 10px;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 999px;
 }
 
@@ -262,11 +255,17 @@ html.desktop-shell-resizing * {
   font-weight: 450;
   text-align: left;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   transition:
     color 100ms ease,
-    background 100ms ease;
+    background 100ms ease,
+    scale 160ms var(--ease-out-strong);
+}
+
+.desktop-nav-button:active,
+.desktop-sidebar__settings:active {
+  scale: 0.98;
 }
 
 .desktop-nav-button:hover,
@@ -300,7 +299,7 @@ html.desktop-shell-resizing * {
   font-size: 10px;
   line-height: 16px;
   text-align: center;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 999px;
   background: var(--surface-base);
 }
@@ -346,7 +345,7 @@ html.desktop-shell-resizing * {
 .desktop-sidebar__section-heading--nested {
   height: 34px;
   margin-top: 10px;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 .desktop-sidebar__scroll {
@@ -549,7 +548,7 @@ button.desktop-sidebar__list-item:hover {
   color: var(--text-weaker);
   font-family: inherit;
   font-size: 9px;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 5px;
   background: var(--surface-base);
 }
@@ -560,7 +559,7 @@ button.desktop-sidebar__list-item:hover {
   color: var(--text-weak);
   font-size: 12px;
   line-height: 1.5;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 8px;
   background: var(--surface-base);
 }
@@ -585,7 +584,7 @@ button.desktop-sidebar__list-item:hover {
   gap: 2px;
   margin: 0 9px 8px;
   padding-top: 7px;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 .desktop-sidebar__server {
@@ -737,7 +736,7 @@ button.desktop-sidebar__list-item:hover {
   z-index: 80;
   width: 264px;
   padding: 6px;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 12px;
   background: var(--surface-raised-base);
   box-shadow: 0 12px 32px rgb(0 0 0 / 36%);
@@ -868,7 +867,7 @@ button.desktop-sidebar__list-item:hover {
   width: var(--desktop-tools-width);
   min-height: 0;
   padding: 0;
-  border-left: 1px solid var(--border-weak-base);
+  border-left: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-base) 96%, black 4%);
   pointer-events: auto;
   transition: bottom 120ms ease;
@@ -895,7 +894,7 @@ button.desktop-sidebar__list-item:hover {
 .desktop-tools--review .desktop-workbench__bar,
 .desktop-tools--terminal .desktop-workbench__bar,
 .desktop-tools--files .desktop-workbench__bar {
-  border-left: 1px solid var(--border-weak-base);
+  border-left: var(--hairline, 1px) solid var(--border-weak-base);
   pointer-events: auto;
 }
 
@@ -909,7 +908,7 @@ button.desktop-sidebar__list-item:hover {
   padding: 0 10px;
   overflow-x: auto;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-stronger) 90%, black 10%);
 }
 
@@ -966,7 +965,7 @@ button.desktop-sidebar__list-item:hover {
   gap: 6px;
   padding: 0 8px;
   color: var(--text-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 8px;
   background: var(--surface-base);
   font-size: 12px;
@@ -1025,7 +1024,7 @@ button.desktop-sidebar__list-item:hover {
 
 [data-component="desktop-shell"]:has(.desktop-tools--collapsed) .desktop-tools {
   width: 44px !important;
-  border-left: 1px solid var(--border-weak-base);
+  border-left: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-stronger) 90%, black 10%);
   /* Review/terminal/files modes set pointer-events:none on .desktop-tools so the
      in-app panels receive clicks. When collapsed those panels are hidden, but the
@@ -1104,7 +1103,7 @@ button.desktop-sidebar__list-item:hover {
   gap: 10px;
   min-height: 58px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 .desktop-automation__status-icon {
@@ -1113,7 +1112,7 @@ button.desktop-sidebar__list-item:hover {
   width: 32px;
   height: 32px;
   color: var(--icon-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 9px;
   background: var(--surface-base);
   place-items: center;
@@ -1147,7 +1146,7 @@ button.desktop-sidebar__list-item:hover {
   color: var(--text-weaker);
   font-size: 9px;
   text-transform: capitalize;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 999px;
   background: var(--surface-base);
 }
@@ -1340,7 +1339,7 @@ button.desktop-sidebar__list-item:hover {
   font-size: 10px;
   line-height: 1.45;
   white-space: pre-wrap;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-stronger) 85%, transparent);
 }
 
@@ -1379,7 +1378,7 @@ button.desktop-sidebar__list-item:hover {
   gap: 10px;
   min-height: 58px;
   padding: 10px 12px 10px 14px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 .desktop-preview__header > div {
@@ -1413,7 +1412,7 @@ button.desktop-sidebar__list-item:hover {
   height: 30px;
   padding: 0;
   color: var(--icon-weak-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 8px;
   background: var(--surface-base);
   place-items: center;
@@ -1459,7 +1458,7 @@ button.desktop-sidebar__list-item:hover {
   color: var(--text-weaker);
   font-size: 10px;
   line-height: 1.45;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
 }
 
 .desktop-preview__empty {
@@ -1497,7 +1496,7 @@ button.desktop-sidebar__list-item:hover {
   gap: 7px;
   padding: 9px 10px;
   overflow-x: auto;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-stronger) 85%, transparent);
 }
 
@@ -1511,7 +1510,7 @@ button.desktop-sidebar__list-item:hover {
   padding: 4px 7px 4px 4px;
   color: var(--text-base);
   text-align: left;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 8px;
   background: var(--surface-base);
 }
@@ -1571,7 +1570,7 @@ button.desktop-sidebar__list-item:hover {
 .desktop-app-host header {
   height: 40px;
   min-height: 40px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-base) 96%, black 4%);
   container-name: desktop-titlebar;
   container-type: inline-size;
@@ -1704,7 +1703,7 @@ button.desktop-sidebar__list-item:hover {
   width: var(--desktop-tools-width);
   height: auto !important;
   border-top: 0;
-  border-left: 1px solid var(--border-weak-base);
+  border-left: var(--hairline, 1px) solid var(--border-weak-base);
   background: var(--background-base);
 }
 
@@ -1749,7 +1748,7 @@ button.desktop-sidebar__list-item:hover {
   flex-shrink: 0;
   padding: 3px;
   grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 999px;
   background: color-mix(in srgb, var(--background-stronger) 88%, black 12%);
 }
@@ -1808,7 +1807,7 @@ button.desktop-sidebar__list-item:hover {
   height: 48px;
   margin-bottom: 4px;
   color: var(--icon-weak-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 15px;
   background: linear-gradient(145deg, var(--surface-raised-base), var(--surface-base));
   box-shadow: 0 12px 36px rgb(0 0 0 / 18%);
@@ -1869,7 +1868,7 @@ button.desktop-sidebar__list-item:hover {
   padding: 16px;
   color: var(--text-base);
   text-align: left;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 15px;
   background: color-mix(in srgb, var(--surface-base) 78%, transparent);
   box-shadow: inset 0 1px rgb(255 255 255 / 2%);
@@ -2029,7 +2028,7 @@ div[data-tauri-decorum-tb] {
 }
 
 [data-component="dialog"] [data-slot="dialog-content"] {
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 18px;
   background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 97%, white 3%);
   box-shadow:
@@ -2123,7 +2122,7 @@ div[data-tauri-decorum-tb] {
   padding: 3px !important;
   gap: 2px !important;
   height: 36px !important;
-  border: 1px solid var(--border-weak-base) !important;
+  border: var(--hairline, 1px) solid var(--border-weak-base) !important;
   border-radius: 10px;
   background: var(--surface-base) !important;
 }
@@ -2149,7 +2148,7 @@ div[data-tauri-decorum-tb] {
 [data-component="context-menu-content"],
 [data-component="context-menu-sub-content"],
 [data-component="select-content"] {
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 96%, white 4%);
   box-shadow:
@@ -2190,7 +2189,7 @@ div[data-tauri-decorum-tb] {
 
 [data-component="dialog"] [data-component="list"] [data-slot="list-search"] {
   min-height: 42px;
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 11px;
   background: var(--surface-base);
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 5%);
@@ -2288,7 +2287,7 @@ div[data-tauri-decorum-tb] {
     inset: auto;
     width: 100%;
     height: min(42vh, 320px) !important;
-    border-top: 1px solid var(--border-weak-base);
+    border-top: var(--hairline, 1px) solid var(--border-weak-base);
     border-left: 0;
   }
 }
@@ -2367,11 +2366,11 @@ div[data-tauri-decorum-tb] {
 .desktop-nav-button.desktop-nav-button--primary {
   color: var(--text-strong);
   font-weight: 560;
-  border: 1px solid var(--border-weak-base);
-  background: var(--surface-raised-base);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 6%),
-    inset 0 1px rgb(255 255 255 / 4%);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
+  background: var(--glass-fill-tint);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: var(--glass-rim);
 }
 
 .desktop-nav-button.desktop-nav-button--primary:hover {
@@ -2407,7 +2406,7 @@ div[data-tauri-decorum-tb] {
 
 /* User message card — softer, bordered, less heavy */
 .desktop-app-host [data-slot="user-message-text"] {
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-raised-base) 86%, transparent);
 }
@@ -2418,7 +2417,7 @@ div[data-tauri-decorum-tb] {
 
 /* Workbench — collapsed strip reads as intentional chrome */
 .desktop-tools--collapsed {
-  border-left: 1px solid var(--border-weak-base);
+  border-left: var(--hairline, 1px) solid var(--border-weak-base);
   background: color-mix(in srgb, var(--background-stronger) 94%, black 6%);
 }
 
@@ -2494,4 +2493,435 @@ div[data-tauri-decorum-tb] {
     transition: none;
     transform: none;
   }
+}
+
+/*
+ * Native glass (macOS): Rust applies NSGlassEffectView / vibrancy behind the webview and
+ * sets data-native-glass on <html>. The sidebar lets it show through; the workspace becomes
+ * a floating card with a squircle-ish radius, like macOS 26+ apps.
+ */
+html[data-native-glass="true"],
+html[data-native-glass="true"] body,
+html[data-native-glass="true"] #root,
+html[data-native-glass="true"] [data-component="desktop-shell"] {
+  background: transparent;
+}
+
+html[data-native-glass="true"] #desktop-sidebar-mount {
+  background: transparent;
+  border-right: 0;
+}
+
+html[data-native-glass="true"] .desktop-sidebar {
+  background: transparent;
+}
+
+html[data-native-glass="true"] .desktop-sidebar-resize::after {
+  background: transparent;
+}
+
+html[data-native-glass="true"] .desktop-sidebar-resize:hover::after,
+html[data-native-glass="true"] .desktop-sidebar-resize:focus-visible::after,
+html[data-native-glass="true"].desktop-shell-resizing .desktop-sidebar-resize::after {
+  background: var(--border-focus);
+}
+
+html[data-native-glass="true"] .desktop-app-host {
+  margin: 8px 8px 8px 0;
+  height: calc(100% - 16px);
+  border-radius: var(--glass-radius-xl, 26px);
+  background: var(--background-base);
+  box-shadow:
+    0 0 0 0.5px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
+    0 10px 30px -10px rgb(0 0 0 / 0.35);
+}
+
+/* Sidebar rows on glass: stronger text and a light fill so hover reads over any wallpaper */
+html[data-native-glass="true"] .desktop-nav-button:hover,
+html[data-native-glass="true"] .desktop-sidebar__settings:hover,
+html[data-native-glass="true"] .desktop-nav-button--active {
+  background: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+}
+
+html[data-native-glass="true"] .desktop-nav-button--primary {
+  background: light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.1));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-native-glass="true"] #desktop-sidebar-mount {
+    background: var(--background-stronger);
+  }
+}
+
+/* Keep the workbench panel and its resize handle aligned with the floating card */
+html[data-native-glass="true"] #desktop-tools-mount {
+  inset: 2px 0 0 auto;
+  border-radius: 0 var(--glass-radius-xl, 26px) var(--glass-radius-xl, 26px) 0;
+  overflow: hidden;
+}
+
+html[data-native-glass="true"] .desktop-review-resize {
+  right: calc(var(--desktop-review-width) + 5px);
+}
+
+html[data-native-glass="true"] [data-component="desktop-shell"]:has(.desktop-tools--files) .desktop-review-resize {
+  right: calc(var(--desktop-files-width) + 5px);
+}
+
+.desktop-sidebar__wordmark {
+  flex: 0 0 auto;
+}
+
+/* The brand row used to hold a bordered icon tile in a <span>; the wordmark replaces it */
+.desktop-sidebar__brand > .desktop-sidebar__wordmark {
+  display: block;
+  width: auto;
+  height: 46px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.desktop-sidebar__wordmark img {
+  width: auto;
+  height: 100%;
+}
+
+/* ─── Refinement layer ─────────────────────────────────────────────────────────
+ * Shared rules so every desktop surface speaks the same language as @nikcli-ai/ui:
+ * half-pixel hairlines, squircle-ish radii, glass for anything floating over content,
+ * instant press feedback and eased release.
+ */
+
+/* Sidebar rows: one radius, one press feel */
+.desktop-project__header,
+.desktop-session-row,
+.desktop-sidebar__list-item,
+.desktop-account,
+.desktop-sidebar__server {
+  border-radius: 10px;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease,
+    scale 160ms var(--ease-out-strong, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.desktop-session-row:active,
+.desktop-sidebar__list-item:active,
+.desktop-project__header:active,
+.desktop-account:active,
+.desktop-sidebar__server:active {
+  scale: 0.985;
+  transition-duration: 90ms;
+}
+
+/* Active rows read as a lit lens, not a grey slab */
+.desktop-nav-button--active,
+.desktop-session-row--active {
+  background: var(--glass-fill-strong, var(--surface-base-hover));
+  box-shadow: var(--glass-rim, none);
+  color: var(--text-strong);
+}
+
+.desktop-nav-button--primary {
+  border: 0;
+  box-shadow: var(--glass-rim, none);
+  scale: 1;
+}
+
+.desktop-nav-button--primary:hover {
+  background: var(--glass-fill, var(--surface-raised-base-hover));
+}
+
+.desktop-nav-button--primary:active {
+  scale: 0.98;
+  transform: none;
+}
+
+.desktop-nav-button__badge {
+  border: 0;
+  background: var(--surface-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-sidebar__brand small {
+  border: 0;
+  background: var(--surface-base);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section headings: quiet caps-free labels with size-specific tracking */
+.desktop-sidebar__section-heading {
+  letter-spacing: 0.004em;
+}
+
+/* Footer block separated by a hairline instead of a rule line */
+.desktop-sidebar__footer {
+  border-top: var(--hairline, 1px) solid var(--border-weak-base);
+}
+
+/* ─── Workbench: a glass segmented bar floating over the content ─── */
+.desktop-workbench__bar {
+  flex-basis: 52px;
+  gap: 4px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--background-stronger) 74%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: inset 0 calc(var(--hairline, 1px) * -1) 0 var(--border-weak-base);
+  border-bottom: 0;
+}
+
+.desktop-workbench__tab {
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-weak);
+  font-weight: 500;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 160ms var(--ease-out-strong, ease),
+    scale 160ms var(--ease-out-strong, ease);
+}
+
+.desktop-workbench__tab:active:not(:disabled) {
+  scale: 0.96;
+  transition-duration: 90ms;
+}
+
+.desktop-workbench__tab:hover:not(:disabled):not(.desktop-workbench__tab--active) {
+  color: var(--text-strong);
+  background: var(--surface-base-hover);
+}
+
+.desktop-workbench__tab--active {
+  color: var(--text-strong);
+  border: 0;
+  background: var(--glass-fill-strong, var(--surface-base-hover));
+  box-shadow: var(--glass-rim, none), var(--glass-shadow-sm, none);
+}
+
+.desktop-workbench__controls button,
+.desktop-workbench__collapsed-trigger {
+  border-radius: 10px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    scale 160ms var(--ease-out-strong, ease);
+}
+
+.desktop-workbench__controls button:active {
+  scale: 0.92;
+  transition-duration: 90ms;
+}
+
+.desktop-workbench__controls button:focus-visible,
+.desktop-workbench__collapsed-trigger:focus-visible,
+.desktop-nav-button:focus-visible,
+.desktop-sidebar__settings:focus-visible,
+.desktop-session-row:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--border-weak-selected, var(--border-focus));
+}
+
+/* ─── Automation / preview panels ─── */
+.desktop-automation__status {
+  min-height: 60px;
+  padding: 12px 16px;
+}
+
+.desktop-automation__status-icon {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-weak);
+  box-shadow: var(--glass-rim, none);
+}
+
+.desktop-automation__status strong {
+  letter-spacing: -0.006em;
+}
+
+.desktop-automation__badge {
+  border: 0;
+  background: var(--surface-weak);
+  font-size: 10px;
+  padding: 3px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-automation__badge[data-status="running"] {
+  border: 0;
+  background: color-mix(in srgb, var(--icon-interactive-base) 54%, var(--surface-base));
+}
+
+.desktop-automation__badge[data-status="error"] {
+  border: 0;
+}
+
+.desktop-automation__live,
+.desktop-automation__image {
+  border-radius: 0 0 var(--glass-radius-xl, 26px) 0;
+}
+
+.desktop-automation__empty button,
+.desktop-automation__setup button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--glass-fill-tint, var(--surface-base));
+  box-shadow: var(--glass-rim, none);
+  transition:
+    background-color 120ms ease,
+    scale 160ms var(--ease-out-strong, ease);
+}
+
+.desktop-automation__empty button:active,
+.desktop-automation__setup button:active:not(:disabled) {
+  scale: 0.97;
+  transition-duration: 90ms;
+}
+
+.desktop-automation__setup {
+  border: 0;
+  border-radius: var(--glass-radius-lg, 18px);
+  background: var(--glass-fill-strong, var(--surface-raised-stronger-non-alpha));
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: var(--glass-rim, none), var(--glass-shadow, 0 18px 50px rgb(0 0 0 / 42%));
+}
+
+.desktop-automation__setup input,
+.desktop-automation__setup-field select {
+  height: 36px;
+  border: var(--hairline, 1px) solid var(--border-base);
+  border-radius: 10px;
+  transition:
+    border-color 140ms ease,
+    box-shadow 160ms var(--ease-out-strong, ease);
+}
+
+.desktop-automation__setup input:focus,
+.desktop-automation__setup-field select:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--border-weak-selected, var(--border-focus));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-session-row:active,
+  .desktop-sidebar__list-item:active,
+  .desktop-project__header:active,
+  .desktop-workbench__tab:active,
+  .desktop-workbench__controls button:active,
+  .desktop-nav-button:active {
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .desktop-workbench__bar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--background-stronger);
+  }
+}
+
+/* ─── Workbench panel as floating glass ─────────────────────────────────────────
+ * The panel overlays the conversation, so it can be real glass: the session shows
+ * through, blurred, instead of a flat grey slab with a hard divider.
+ */
+.desktop-tools,
+.desktop-tools--review .desktop-workbench__bar,
+.desktop-tools--terminal .desktop-workbench__bar,
+.desktop-tools--files .desktop-workbench__bar {
+  border-left: 0;
+}
+
+.desktop-tools {
+  box-shadow: -24px 0 48px -28px light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.6));
+}
+
+.desktop-tools--review,
+.desktop-tools--terminal,
+.desktop-tools--files {
+  box-shadow: none;
+}
+
+.desktop-automation {
+  background:
+    radial-gradient(120% 70% at 20% 0%, light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)), transparent 60%),
+    color-mix(in srgb, var(--background-base) 62%, transparent);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  backdrop-filter: blur(32px) saturate(180%);
+  box-shadow: inset var(--hairline, 1px) 0 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.08));
+}
+
+.desktop-automation__status {
+  border-bottom: 0;
+  background: var(--glass-fill-tint, transparent);
+  box-shadow: inset 0 calc(var(--hairline, 1px) * -1) 0 var(--border-weak-base);
+}
+
+/* Empty states: a quiet glass card, no dashed outline */
+.desktop-preview__empty,
+.desktop-automation__empty {
+  margin: 28px;
+  border: 0;
+  border-radius: var(--glass-radius-xl, 26px);
+  background: var(--glass-fill-tint, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--glass-rim, none);
+}
+
+.desktop-workbench__bar {
+  background:
+    linear-gradient(180deg, light-dark(rgb(255 255 255 / 0.4), rgb(255 255 255 / 0.04)), transparent),
+    color-mix(in srgb, var(--background-stronger) 66%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) brightness(1.03);
+  backdrop-filter: blur(28px) saturate(190%) brightness(1.03);
+}
+
+/* Active tab: lens with the same bevel as every other glass control */
+.desktop-workbench__tab--active {
+  background: var(--glass-sheen, none), var(--glass-fill-strong, var(--surface-base-hover));
+}
+
+/* Collapsed workbench: no slab, just a glass button that reopens the panel */
+[data-component="desktop-shell"]:has(.desktop-tools--collapsed) .desktop-tools,
+.desktop-tools--collapsed {
+  border-left: 0;
+  /* Same tone as the session view; the composer shadow is kept inside this margin */
+  background: var(--background-stronger);
+  box-shadow: none;
+}
+
+/* Fill the card with the workspace tone, so the rail strip matches the session view */
+html[data-native-glass="true"] .desktop-app-host {
+  background: var(--background-stronger);
+}
+
+.desktop-tools--collapsed .desktop-workbench__collapsed-trigger {
+  width: 32px;
+  height: 32px;
+  margin: 10px auto 0;
+  border-radius: 999px;
+  color: var(--icon-base);
+  background: var(--glass-sheen, none), var(--glass-fill-tint, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  backdrop-filter: blur(16px) saturate(170%);
+  box-shadow: var(--glass-rim, none), var(--glass-shadow-sm, none);
+}
+
+.desktop-tools--collapsed .desktop-workbench__collapsed-trigger:hover {
+  color: var(--icon-strong-base);
+  background: var(--glass-sheen, none), var(--glass-fill, transparent);
+}
+
+.desktop-tools--collapsed .desktop-workbench__collapsed-trigger:active {
+  scale: 0.92;
+  transition-duration: 90ms;
 }
