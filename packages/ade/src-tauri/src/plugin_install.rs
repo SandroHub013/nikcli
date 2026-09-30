@@ -534,7 +534,9 @@ fn prune(store: &Store, id: &str) {
     }
 }
 
-/// `pending` becomes `current` and `current` becomes `previous`. Called once the panel has answered `ready`.
+/// `pending` becomes `current` and `current` becomes `previous`. Called when the panel opens, BEFORE the frame loads: the scheme serves
+/// only `current`, so a pending version cannot answer `ready` until it is committed. The order is commit, then `ready` within 15 s, and
+/// `rollback` if it does not come.
 pub fn commit(store: &Store, id: &str) -> Result<String, String> {
     let pending = store.pointer(id, PENDING).ok_or("nessuna versione da attivare")?;
     // What is turned on is a version that is whole and whose manifest is still a manifest.

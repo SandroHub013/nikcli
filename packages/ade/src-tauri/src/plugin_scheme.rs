@@ -350,13 +350,17 @@ fn asset_mime(path: &str) -> &'static str {
 ///
 /// The host is named, not `'self'`, because the frame's origin is opaque: `http://plugin.localhost` is the scheme as Windows answers it,
 /// `plugin:` as the others do. Only this plugin's prefix is named, so it cannot load another plugin's files (or ADE's).
+///
+/// `sandbox allow-scripts` is in the answer itself, not only in the `sandbox` attribute of the panel's frame: this scheme is a LOCAL origin
+/// for Tauri's IPC ACL, so a page of a plugin that was ever loaded without the attribute (a bug, another panel, a top-level navigation)
+/// would have every command. With the directive the document is opaque whoever frames it, and never `allow-same-origin`.
 pub fn csp_for(id: &str) -> String {
     let prefix = format!("http://plugin.localhost/{id}/ plugin://localhost/{id}/");
-    format!("default-src {prefix}; script-src {prefix} 'wasm-unsafe-eval'; img-src {prefix} data: blob:; connect-src {prefix}")
+    format!("default-src {prefix}; script-src {prefix} 'wasm-unsafe-eval'; img-src {prefix} data: blob:; connect-src {prefix}; sandbox allow-scripts")
 }
 
-/// What a request with no plugin to name (a refused id) is answered under: nothing may load.
-const NOTHING: &str = "default-src 'none'";
+/// What a request with no plugin to name (a refused id) is answered under: nothing may load, and the document is opaque all the same.
+const NOTHING: &str = "default-src 'none'; sandbox allow-scripts";
 
 fn with_headers(mut builder: tauri::http::response::Builder, id: Option<&str>) -> tauri::http::response::Builder {
     let csp = match id {
@@ -704,8 +708,21 @@ pub(crate) mod tests {
         // Even a request that names no plugin at all: nothing may load under it.
         for uri in ["plugin://localhost/", "plugin://localhost/Bad_Id/x", "plugin://localhost/a/x"] {
             let response = get(&store, uri);
-            assert_eq!(header(&response, "content-security-policy"), "default-src 'none'", "{uri}");
+            assert_eq!(header(&response, "content-security-policy"), "default-src 'none'; sandbox allow-scripts", "{uri}");
             assert_eq!(header(&response, "x-content-type-options"), "nosniff", "{uri}");
+        }
+        // Every answer, a refusal or not, makes the document opaque itself, and never gives it back its origin.
+        for uri in [
+            "plugin://localhost/alpha/index.html",
+            "plugin://localhost/alpha/nope.js",
+            "plugin://localhost/alpha/../beta/index.html",
+            "plugin://localhost/",
+            "plugin://localhost/Bad_Id/x",
+        ] {
+            let response = get(&store, uri);
+            let csp = header(&response, "content-security-policy");
+            assert!(csp.split(';').map(str::trim).any(|d| d == "sandbox allow-scripts"), "{uri}: {csp}");
+            assert!(!csp.contains("allow-same-origin"), "{uri}: {csp}");
         }
         // A method that is refused is answered under the plugin's policy too.
         let post = Request::builder().method(Method::POST).uri("plugin://localhost/alpha/").body(Vec::new()).unwrap();
