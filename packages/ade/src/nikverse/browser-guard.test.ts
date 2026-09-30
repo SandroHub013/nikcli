@@ -5,6 +5,8 @@ import {
   browserProcesses,
   isAlive,
   killByProfile,
+  type BrowserProcess,
+  type KillDeps,
   killTree,
   namesProfile,
   newProfile,
@@ -49,6 +51,22 @@ const waitFor = async (condition: () => boolean, ms: number) => {
   return condition()
 }
 
+/**
+ * How long the real Edge's processes may take to go after their script, on a machine that is busy (the gate runs this beside a browser
+ * of its own): a deadline on the thing itself going, and the wait ends the moment it has.
+ */
+const HELPERS_GONE_MS = 30_000
+
+/** True when `condition` held at every look for `ms`; false at the first look it did not. */
+const staysTrue = async (condition: () => boolean, ms: number) => {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (!condition()) return false
+    await Bun.sleep(100)
+  }
+  return condition()
+}
+
 /** Is any process of the stand-in browser of this profile alive? */
 const standInAlive = (profile: string, program = "bun") =>
   browserProcesses(program).some((p) => namesProfile(p.commandLine, profile))
@@ -88,16 +106,94 @@ describe("the profile", () => {
   })
 
   test("ownerOf reads the pid from any folder, and nothing from a browser that is not ours", () => {
-    expect(ownerOf(`--user-data-dir=C:\\Users\\x\\AppData\\Local\\Temp\\nikverse-browser-4242 --headless=new`)).toBe(4242)
+    expect(ownerOf(`--user-data-dir=C:\\Users\\x\\AppData\\Local\\Temp\\nikverse-browser-4242 --headless=new`)).toBe(
+      4242,
+    )
     expect(ownerOf("--user-data-dir=/tmp/nikverse-browser-77")).toBe(77)
     expect(ownerOf("msedge.exe --user-data-dir=C:\\Users\\x\\edge-profile")).toBeUndefined()
     expect(ownerOf("--user-data-dir=/tmp/nikverse-browser-old")).toBeUndefined()
   })
 
   test("a profile is named exactly: the one of pid 123 is not the one of pid 1234", () => {
-    expect(namesProfile('msedge.exe --user-data-dir="C:\\a\\nikverse-browser-123" --x', "C:\\a\\nikverse-browser-123")).toBe(true)
-    expect(namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-123", "c:\\a\\NIKVERSE-browser-123")).toBe(true)
-    expect(namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-1234 --x", "C:\\a\\nikverse-browser-123")).toBe(false)
+    expect(
+      namesProfile('msedge.exe --user-data-dir="C:\\a\\nikverse-browser-123" --x', "C:\\a\\nikverse-browser-123"),
+    ).toBe(true)
+    expect(namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-123", "c:\\a\\NIKVERSE-browser-123")).toBe(
+      true,
+    )
+    expect(
+      namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-1234 --x", "C:\\a\\nikverse-browser-123"),
+    ).toBe(false)
+  })
+})
+
+/** A browser whose helpers stay listed for a while after they are killed, or come back: what Edge's GPU process does. */
+function slowBrowser(profile: string, stillListedAfter: number) {
+  let kills = 0
+  let clock = 0
+  const log: number[][] = []
+  const deps: KillDeps = {
+    list: () =>
+      kills >= stillListedAfter
+        ? []
+        : [
+            {
+              pid: 1,
+              commandLine: `msedge.exe --user-data-dir=${profile} --type=gpu-process`,
+            } satisfies BrowserProcess,
+          ],
+    kill: (...pids) => {
+      kills++
+      log.push(pids)
+    },
+    now: () => clock,
+    pause: (ms) => {
+      clock += ms
+    },
+  }
+  return { deps, kills: () => kills, log }
+}
+
+describe("killing a browser by its profile waits for the last helper to be gone, and says whether it is", () => {
+  const profile = "C:/a/nikverse-browser-123"
+
+  test("a helper that is still listed after four kills is killed again: the count of passes is not what ends it", () => {
+    // Edge's GPU process: listed for a while after it is killed, or started again as the browser goes.
+    const browser = slowBrowser(profile, 6)
+    expect(killByProfile(profile, undefined, 10_000, browser.deps)).toBe(true)
+    expect(browser.kills()).toBe(6)
+  })
+
+  test("nothing listed is nothing to do, and no pause", () => {
+    const browser = slowBrowser(profile, 0)
+    expect(killByProfile(profile, undefined, 10_000, browser.deps)).toBe(true)
+    expect(browser.kills()).toBe(0)
+  })
+
+  test("a helper that never goes ends at the deadline and says so", () => {
+    const browser = slowBrowser(profile, Infinity)
+    expect(killByProfile(profile, undefined, 1000, browser.deps)).toBe(false)
+    // Killed over and over until the time was up, with a pause between the tries.
+    expect(browser.kills()).toBeGreaterThan(5)
+  })
+
+  test("it only takes what names this profile", () => {
+    const killed: number[][] = []
+    let listed = 2
+    const deps: KillDeps = {
+      list: () =>
+        listed-- > 0
+          ? [
+              { pid: 7, commandLine: `msedge.exe --user-data-dir=${profile}` },
+              { pid: 8, commandLine: "msedge.exe --user-data-dir=C:/a/nikverse-browser-1234" },
+            ]
+          : [],
+      kill: (...pids) => void killed.push(pids),
+      now: () => 0,
+      pause: () => {},
+    }
+    expect(killByProfile(profile, undefined, 1000, deps)).toBe(true)
+    expect(killed.flat()).toEqual([7, 7])
   })
 })
 
@@ -159,7 +255,11 @@ describe.skipIf(!processes)("the sweep at the start of a run", () => {
       const profile = join(scratch, `nikverse-browser-${ownerPid}`)
       mkdirSync(profile, { recursive: true })
       profiles.add(profile)
-      const child = Bun.spawn([process.execPath, dummy, `--user-data-dir=${profile}`], { stdin: "ignore", stdout: "ignore", stderr: "ignore" })
+      const child = Bun.spawn([process.execPath, dummy, `--user-data-dir=${profile}`], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      })
       spawned.push(child.pid)
       return { pid: child.pid, profile }
     }
@@ -178,7 +278,10 @@ describe.skipIf(!processes)("the sweep at the start of a run", () => {
   })
 })
 
-const edge = ["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Microsoft/Edge/Application/msedge.exe"].find(existsSync)
+const edge = [
+  "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+  "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+].find(existsSync)
 
 describe.skipIf(!processes || !edge || process.platform !== "win32")("the real headless Edge of the harness", () => {
   test("no msedge of the harness is left after a script that dies with it open, or is killed hard, or closes it", async () => {
@@ -199,25 +302,28 @@ setInterval(() => {}, 1000)
       const child = Bun.spawn([process.execPath, script, mode], { stdout: "pipe", stderr: "pipe", cwd: packageRoot })
       spawned.push(child.pid)
       const text = await saidLaunched(child, "open")
-      if (!text.includes("open")) throw new Error(`the harness did not open: ${text} ${await new Response(child.stderr as ReadableStream).text()}`)
+      if (!text.includes("open"))
+        throw new Error(
+          `the harness did not open: ${text} ${await new Response(child.stderr as ReadableStream).text()}`,
+        )
       return child
     }
     // A script that closes its browser.
     const closing = await start("close")
     await closing.exited
     // Edge's helpers (its GPU process) take a moment to go after the browser: waited for, as in the two cases below, and never left.
-    expect(await waitFor(() => ours(closing.pid).length === 0, 10_000)).toBe(true)
+    expect(await waitFor(() => ours(closing.pid).length === 0, HELPERS_GONE_MS)).toBe(true)
     // A script that exits without closing: the exit hook takes the whole browser.
     const first = await start("exit")
     await first.exited
-    expect(await waitFor(() => ours(first.pid).length === 0, 10_000)).toBe(true)
+    expect(await waitFor(() => ours(first.pid).length === 0, HELPERS_GONE_MS)).toBe(true)
     // A script killed hard: the watchdog takes it. The real browser is up and stays up for as long as its script lives.
     const second = await start("hang")
-    expect(await waitFor(() => ours(second.pid).length > 0, 10_000)).toBe(true)
-    await Bun.sleep(4000)
-    expect(ours(second.pid).length).toBeGreaterThan(0)
+    expect(await waitFor(() => ours(second.pid).length > 0, HELPERS_GONE_MS)).toBe(true)
+    // Up for as long as its script lives: seen up at every look for four seconds, not looked at once after a wait.
+    expect(await staysTrue(() => ours(second.pid).length > 0, 4000)).toBe(true)
     second.kill("SIGKILL")
     await second.exited
-    expect(await waitFor(() => ours(second.pid).length === 0, 30_000)).toBe(true)
+    expect(await waitFor(() => ours(second.pid).length === 0, HELPERS_GONE_MS * 3)).toBe(true)
   }, 180_000)
 })

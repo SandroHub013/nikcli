@@ -112,12 +112,45 @@ function parse(text: string): BrowserProcess[] {
   return found
 }
 
-/** Kills every process that names `profile`, again and again until none is left (a launcher can still be handing over). */
-export function killByProfile(profile: string, program?: string, passes = 4): void {
-  for (let pass = 0; pass < passes; pass++) {
-    const mine = browserProcesses(program).filter((p) => namesProfile(p.commandLine, profile))
-    if (!mine.length) return
-    killTree(...mine.map((p) => p.pid))
+/** How long `killByProfile` keeps looking for what is left of a browser. */
+export const KILL_DEADLINE_MS = 10_000
+
+/** The pause between two looks: a helper that is dying is listed for a moment, and one the browser starts as it goes needs a moment to appear. */
+const KILL_PAUSE_MS = 150
+
+/** What `killByProfile` uses, for the tests to replace. */
+export interface KillDeps {
+  list: (program?: string) => BrowserProcess[]
+  kill: (...pids: number[]) => void
+  now: () => number
+  pause: (ms: number) => void
+}
+
+const realKillDeps: KillDeps = {
+  list: browserProcesses,
+  kill: killTree,
+  now: () => Date.now(),
+  pause: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+}
+
+/**
+ * Kills every process that names `profile` until none is listed, or `deadlineMs` has passed (a launcher can still be handing over,
+ * the GPU process of Edge is listed for a while after it is killed and a helper can be started as the browser goes).
+ * Not a count of passes and not a fixed wait: it ends when the last one is gone, and says whether that happened.
+ */
+export function killByProfile(
+  profile: string,
+  program?: string,
+  deadlineMs = KILL_DEADLINE_MS,
+  deps: KillDeps = realKillDeps,
+): boolean {
+  const end = deps.now() + deadlineMs
+  for (;;) {
+    const mine = deps.list(program).filter((p) => namesProfile(p.commandLine, profile))
+    if (!mine.length) return true
+    if (deps.now() >= end) return false
+    deps.kill(...mine.map((p) => p.pid))
+    deps.pause(KILL_PAUSE_MS)
   }
 }
 
