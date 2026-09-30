@@ -190,6 +190,17 @@ export const en: Messages = {
   "sidebar.settings": "Settings",
   "sidebar.stats": "Resources used by ADE",
   "sidebar.resize": "Resize sidebar",
+  "sidebar.menu.session": "Session actions",
+  "sidebar.menu.workspace": "Project actions",
+  "sidebar.menu.rename": "Rename",
+  "sidebar.menu.restart": "Restart",
+  "sidebar.menu.resume": "Resume",
+  "sidebar.menu.close": "Close",
+  "sidebar.menu.copyId": "Copy id",
+  "sidebar.menu.openSession": "Open session",
+  "sidebar.menu.newSession": "New session",
+  "sidebar.menu.openProject": "Open project",
+  "sidebar.menu.closeProjectSessions": "Close all sessions",
 
   // Panels, grid, palette, empty project
   "pane.tree.stale.short": "last commit only",

@@ -37,8 +37,15 @@ export interface Closer {
   readonly close: (id: string, how?: CloseHow) => boolean
   /** Settles once the pane is closed (true) or kept (false). */
   readonly closeAsking: (id: string, how?: CloseHow) => Promise<boolean>
-  /** Closes each in turn, asking about one unsaved file at a time. */
-  readonly closeAll: (ids: readonly string[]) => Promise<void>
+  /**
+   * Closes each in turn, asking about one unsaved file at a time.
+   *
+   * `how` reaches every one of them: closing a whole project used to pass the
+   * ids alone, so an agent at work went with no question at all, where the
+   * same close from the shortcut or the palette asks first (review
+   * sidebar-clic, ALTO 1).
+   */
+  readonly closeAll: (ids: readonly string[], how?: CloseHow) => Promise<void>
 }
 
 export function createCloser(deps: CloserDeps): Closer {
@@ -83,8 +90,8 @@ export function createCloser(deps: CloserDeps): Closer {
       return false
     },
     closeAsking,
-    closeAll: async (ids) => {
-      for (const id of ids) if (deps.exists(id)) await closeAsking(id)
+    closeAll: async (ids, how) => {
+      for (const id of ids) if (deps.exists(id)) await closeAsking(id, how)
     },
   }
 }

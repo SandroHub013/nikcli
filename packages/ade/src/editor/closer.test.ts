@@ -87,6 +87,49 @@ describe("chiudere un pannello con un file non salvato", () => {
     expect(tree.indexOf("asking.push(pane.title)")).toBeLessThan(tree.indexOf("closed.push(pane.title)"))
   })
 
+  /*
+   * Chiudere tutte le sessioni di un progetto, e la ✕ della riga della
+   * sidebar, passavano gli id senza dire come: un agente al lavoro veniva
+   * chiuso senza parola, mentre la stessa chiusura dal pulsante del pannello
+   * chiede prima (review sidebar-clic, ALTO 1 e MEDIO 2).
+   */
+  test("chiudere le sessioni di un progetto e la ✕ della riga chiedono prima di fermare un agente in esecuzione", () => {
+    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+
+    const closeAll = source.slice(source.indexOf("const closeProjectSessions"), source.indexOf("const projectOfPane"))
+    expect(closeAll).toContain("confirmRunning: true")
+
+    const fromSidebar = source.slice(source.indexOf("onCloseSession="), source.indexOf("onRestartSession="))
+    expect(fromSidebar).toContain("confirmRunning: true")
+  })
+
+  test("closeAll con confirmRunning chiede prima, e al no l'agente resta al lavoro (ALTO 1)", async () => {
+    const panes = new Set(["a", "b"])
+    const closed: string[] = []
+    const asks: { agent: string; answer: (yes: boolean) => void }[] = []
+    const closer = createCloser({
+      unsaved: () => undefined,
+      ask: () => Promise.resolve(true),
+      closeNow: (id) => {
+        closed.push(id)
+        panes.delete(id)
+      },
+      exists: (id) => panes.has(id),
+      running: (id) => (id === "b" ? "Claude Code" : undefined),
+      askRunning: (agent) => new Promise<boolean>((resolve) => asks.push({ agent, answer: resolve })),
+    })
+
+    const all = closer.closeAll(["a", "b"], { confirmRunning: true })
+    await tick()
+    // A pane with no agent still goes at once: the question is only for the one at work.
+    expect(closed).toEqual(["a"])
+    expect(asks.map((q) => q.agent)).toEqual(["Claude Code"])
+
+    asks[0]!.answer(false)
+    await all
+    expect(closed).toEqual(["a"])
+  })
+
   test("closeAll chiede un file alla volta (BASSO 2)", async () => {
     const s = setup({ f: "C:/p/f.ts", g: "C:/p/g.ts" })
     const all = s.closer.closeAll(["a", "f", "g", "b"])
