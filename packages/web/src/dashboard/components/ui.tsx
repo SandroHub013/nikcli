@@ -14,20 +14,20 @@ export function cn(...parts: Array<string | false | null | undefined>): string {
  * dark light-mode accent, dark text on the light dark-mode accent).
  * ------------------------------------------------------------------ */
 
-export const cardClass = "rounded-[var(--radius-card)] border border-terminal-border bg-terminal-panel"
+export const cardClass = "glass rounded-[var(--radius-card)] border"
 
 export const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-terminal-accent px-4 py-2.5 text-sm font-semibold text-terminal-bg transition-all duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 
 export const btnGhost =
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border border-terminal-border px-4 py-2.5 text-sm font-medium text-terminal-text transition-colors duration-150 hover:bg-terminal-border/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+  "glass-chip inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-2.5 text-sm font-medium text-terminal-text active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 
 export const btnDanger =
   "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border border-terminal-error/30 bg-terminal-error/10 px-4 py-2.5 text-sm font-semibold text-terminal-error transition-colors duration-150 hover:bg-terminal-error/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 
 /** Small pill-sized variants for inline row actions. */
 export const btnGhostSm =
-  "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-terminal-border px-3 py-1.5 text-xs font-medium text-terminal-text transition-colors duration-150 hover:bg-terminal-border/40 disabled:cursor-not-allowed disabled:opacity-50"
+  "glass-chip inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-medium text-terminal-text active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
 
 export const btnDangerSm =
   "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-terminal-error/30 px-3 py-1.5 text-xs font-medium text-terminal-error transition-colors duration-150 hover:bg-terminal-error/10 disabled:cursor-not-allowed disabled:opacity-50"
@@ -36,7 +36,7 @@ export const btnAccentSm =
   "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-terminal-accent/40 px-3 py-1.5 text-xs font-medium text-terminal-accent transition-colors duration-150 hover:bg-terminal-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
 
 export const inputClass =
-  "w-full rounded-[var(--radius-md)] border border-terminal-border bg-terminal-bg px-3.5 py-2.5 text-sm text-terminal-text placeholder:text-terminal-muted/50 outline-none transition-colors duration-150 focus:border-terminal-accent focus:ring-2 focus:ring-terminal-accent/20"
+  "w-full rounded-[var(--radius-md)] border border-terminal-border/70 bg-terminal-bg/70 px-3.5 py-2.5 text-sm text-terminal-text shadow-[inset_0_1px_2px_rgb(var(--terminal-shadow)/0.06)] placeholder:text-terminal-muted/50 outline-none transition-[border-color,box-shadow] duration-150 focus:border-terminal-accent/70 focus:ring-2 focus:ring-terminal-accent/20"
 
 export const selectClass = inputClass
 
@@ -181,12 +181,12 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-[var(--radius-card)] border bg-terminal-panel px-6 py-16 text-center",
-        dashed ? "border-dashed border-terminal-border" : "border-terminal-border",
+        "glass flex flex-col items-center justify-center rounded-[var(--radius-card)] border px-6 py-16 text-center",
+        dashed && "glass-empty",
       )}
     >
       {icon && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-terminal-accent/20 bg-terminal-accent/10 text-terminal-accent">
+        <div className="glass-chip mb-4 flex h-14 w-14 items-center justify-center rounded-[var(--radius-lg)] border text-terminal-accent">
           {icon}
         </div>
       )}
