@@ -184,6 +184,20 @@ describe("a recipe is nothing but component patches", () => {
     expect(tabRows(compact.styles["session.tabs"].box)).toBe(2)
   })
 
+  it("draws the prompt the catalog draws when the recipe is the default one", () => {
+    // Saving the default preset must not change how the prompt looks.
+    const stock = resolve([]).styles["session.prompt"].box
+    const compact = resolve([recipeToPatches({ ...DEFAULT_SESSION_STYLE, density: "compact" })]).styles[
+      "session.prompt"
+    ].box
+    expect(compact.paddingTop).toBe(0)
+    expect(compact.paddingBottom).toBe(0)
+    const regular = resolve([recipeToPatches(DEFAULT_SESSION_STYLE)]).styles["session.prompt"].box
+    expect(regular.paddingTop).toBe(stock.paddingTop)
+    expect(regular.paddingBottom).toBe(stock.paddingBottom)
+    expect(regular.gap).toBe(stock.gap)
+  })
+
   it("leaves the catalog default untouched, so a recipe is removable", () => {
     resolve([recipeToPatches({ ...DEFAULT_SESSION_STYLE, density: "compact" })])
     expect(COMPONENT_DEFAULTS["session.user-message"].box.paddingTop).toBe(1)
