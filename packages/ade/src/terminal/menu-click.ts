@@ -196,7 +196,13 @@ export function screenRows(terminal: MenuTerminal): string[] {
 export function registerMenuClicks(
   terminal: MenuTerminal,
   element: HTMLElement,
-  options: { enabled: () => boolean; send: (keys: string) => void; now?: () => number },
+  options: {
+    enabled: () => boolean
+    send: (keys: string) => void
+    now?: () => number
+    /** The program asked for the mouse only for the wheel: its clicks are still ADE's. */
+    wheelOnly?: () => boolean
+  },
 ): () => void {
   const now = options.now ?? (() => Date.now())
   let pending: PendingChoice | undefined
@@ -227,7 +233,7 @@ export function registerMenuClicks(
     // xterm settles its selection after the mouseup (xterm 6): read it on the next turn.
     setTimeout(() => {
       if (!options.enabled()) return
-      if (terminal.modes.mouseTrackingMode !== "none") return
+      if (terminal.modes.mouseTrackingMode !== "none" && !options.wheelOnly?.()) return
       if (terminal.hasSelection()) return
       const buffer = terminal.buffer.active
       if (buffer.viewportY !== buffer.baseY) return

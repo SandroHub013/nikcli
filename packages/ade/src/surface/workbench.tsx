@@ -325,6 +325,8 @@ import {
   formatUnread,
   formatWedged,
   interruptKeys,
+  shellRefusal,
+  typesMailInto,
   WEDGE_MS,
   openDecisions,
   type OpenDecision,
@@ -2012,6 +2014,11 @@ export function Workbench() {
         })),
     )
 
+  const agentOfPane = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return pane?.agent ?? pane?.model
+  }
+
   /** Long enough for a TUI's paste detection to close before Enter arrives. */
   const SUBMIT_DELAY_MS = 400
   let delivering = false
@@ -3119,6 +3126,11 @@ export function Workbench() {
           continue
         heldLines.splice(heldLines.indexOf(item), 1)
         if (item.suspended) saveSuspendedMail()
+      } else if (!typesMailInto(agentOfPane(item.paneId))) {
+        // A shell runs what is typed: the line is shown in the pane as a notice and never given to it.
+        heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
+        tellPane(item.paneId, t("note.mailNotTyped", asOneLine(item.text).slice(0, 160)))
       } else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         if (item.suspended) saveSuspendedMail()
@@ -3957,6 +3969,12 @@ export function Workbench() {
     const target = resolveTarget(panes, message.to, message.from)
     if ("error" in target) {
       await answer(`errore: ${target.error}`)
+      return true
+    }
+    // A shell would run the line as a command: refused before anything is typed or booked.
+    const forShell = shellRefusal(message.kind, target.pane)
+    if (forShell) {
+      await answer(forShell)
       return true
     }
     // Nothing wakes a suspended session: a restart is refused, and mail is queued below.

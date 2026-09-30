@@ -143,9 +143,19 @@ const ALLOWED_AGENTS: &[&str] = &[
 /// reminders never stopped), or was not on PATH at all. `NIKCLI_SERVICE=0` is
 /// nikcli's own switch for a private in-process server, which is the pane's
 /// process and carries the pane's `ADE_PANE_ID`, token and PATH.
+///
+/// Claude Code 2.1.284, drawn full screen, takes the whole mouse: one click
+/// on a menu entry chose and confirmed it, a permission among them.
+/// `CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1` is Claude's own switch that keeps the
+/// wheel and drops the clicks; the pane gives the left button back to ADE
+/// (`programHasWheelOnly` in `terminal/registry.ts`), where a click takes two
+/// (`menu-click.ts`). Only in the panes ADE starts: never the user's settings.
 fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
-    if command_stem(command.trim()).eq_ignore_ascii_case("nikcli") {
+    let stem = command_stem(command.trim());
+    if stem.eq_ignore_ascii_case("nikcli") {
         &[("NIKCLI_SERVICE", "0")]
+    } else if stem.eq_ignore_ascii_case("claude") {
+        &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")]
     } else {
         &[]
     }
@@ -2205,8 +2215,15 @@ mod tests {
         for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
             assert_eq!(agent_env(name), &[("NIKCLI_SERVICE", "0")], "{name}");
         }
-        for name in ["claude", "codex", "opencode", "agy", "pwsh", "nikcli-island"] {
+        for name in ["codex", "opencode", "agy", "pwsh", "nikcli-island", "claude-island"] {
             assert!(agent_env(name).is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn claude_is_started_with_its_clicks_off_and_its_wheel_on() {
+        for name in ["claude", "Claude", "claude.exe", "claude.cmd"] {
+            assert_eq!(agent_env(name), &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")], "{name}");
         }
     }
 

@@ -272,6 +272,21 @@ export function unverifiedSenderRefusal(message: Message): string | undefined {
   return "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
 }
 
+/**
+ * A plain terminal pane runs a shell, and a shell takes whatever is typed into
+ * it as a command: a line of mail typed there is executed, not read. Mail for
+ * such a pane is never typed, whatever its kind and whoever holds it.
+ */
+export function typesMailInto(agent: string | undefined): boolean {
+  return agent !== "terminal"
+}
+
+/** The receipt a sender gets for a `send` or `ask` aimed at a pane that runs a shell; undefined for any other target. */
+export function shellRefusal(kind: Message["kind"], target: Pick<MailPane, "title" | "agent">): string | undefined {
+  if ((kind !== "send" && kind !== "ask") || typesMailInto(target.agent)) return undefined
+  return `errore: "${target.title}" è un terminale semplice: una riga digitata lì la eseguirebbe la shell come comando. Scrivi a una sessione con un agente, o dillo all'utente`
+}
+
 /** The kinds that write into a session or act on one, and what the voice says each would do. */
 const ACTING: Readonly<Record<string, string>> = {
   send: "inviare a",

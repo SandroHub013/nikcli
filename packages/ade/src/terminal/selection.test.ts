@@ -3,6 +3,7 @@ import {
   copyToClipboard,
   isCopyShortcut,
   configureTerminalSelection,
+  programHasWheelOnly,
   createTerminalKeyHandler,
   getTerminal,
   disposeTerminal,
@@ -379,6 +380,28 @@ describe("terminal selection & copy (S50)", () => {
       expect(source).toContain("private _dragScrollIntervalTimer: number | undefined;")
       expect(source).toContain("this._dragScrollIntervalTimer = undefined;")
       expect(source).toMatch(/public disable\(\): void \{\s+this\.clearSelection\(\);\s+this\._enabled = false;/)
+    })
+
+    /* Claude Code 2.1.284, started by ADE with its clicks off: the wheel is Claude's, the left button ADE's. */
+    it("with the program on the wheel only, every left press is ADE's: a drag selects, a click is step B's", () => {
+      let wheel = true
+      const { sel } = service()
+      configureTerminalSelection({ _core: { _selectionService: sel } } as any, undefined, () => wheel)
+      const press = (init: Partial<MouseEvent>) =>
+        sel.shouldForceSelection({ button: 0, shiftKey: false, ctrlKey: false, metaKey: false, ...init })
+      expect(press({})).toBe(true)
+      expect(press({ button: 2 })).toBe(false)
+      wheel = false
+      expect(press({})).toBe(false)
+    })
+
+    it("the wheel only is mode 1000 of a pane that asked for it; a program asking for drags keeps its clicks", () => {
+      const at = (mouseTrackingMode: string) => ({ modes: { mouseTrackingMode } }) as any
+      expect(programHasWheelOnly(at("vt200"), true)).toBe(true)
+      expect(programHasWheelOnly(at("vt200"), false)).toBe(false)
+      expect(programHasWheelOnly(at("drag"), true)).toBe(false)
+      expect(programHasWheelOnly(at("any"), true)).toBe(false)
+      expect(programHasWheelOnly(at("none"), true)).toBe(false)
     })
 
     it("Ctrl+click on a link is ADE's, and the program does not get it too; off a link it is the program's", () => {
