@@ -99,6 +99,29 @@ describe("the ring of shops", () => {
     }
   })
 
+  test("the beach's shore is not a circle: it comes and goes a metre or two, and never reaches the chiringuiti", () => {
+    const waterline = (a: number) => {
+      for (let r = 12; r < 30; r += 0.02) if (islandHeight({ x: Math.sin(a) * r, z: -Math.cos(a) * r }) > WATER_Y) return r
+      return Infinity
+    }
+    // Round the circle, but off the pier (straight ahead), whose deck stands over the water.
+    const radii = Array.from({ length: 72 }, (_, k) => (k / 72) * Math.PI * 2)
+      .filter((a) => Math.cos(a) < 0.99)
+      .map(waterline)
+    expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(2)
+    for (const r of radii) {
+      expect(r).toBeGreaterThan(15.5)
+      expect(r).toBeLessThan(21.5)
+    }
+    // Every slot of the first ring stands on flat sand, corner to corner.
+    for (let slot = 0; slot < 12; slot++) {
+      const p = placementOf(slot)
+      const level = islandHeight(p.center)
+      for (const x of [-SHOP_WIDTH / 2, SHOP_WIDTH / 2])
+        for (const z of [-SHOP_DEPTH / 2, SHOP_DEPTH / 2]) expect([slot, islandHeight(toWorld(p, { x, z })) - level]).toEqual([slot, 0])
+    }
+  })
+
   test("every shop's door faces the square: the door is nearer to the centre than the back wall", () => {
     for (const slot of SLOTS) {
       const p = placementOf(slot)

@@ -406,7 +406,11 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
       user.group.rotation.y = player.heading
       poseWalking(user, player.speed, t)
       hologram.update(t, camera)
-      island?.update(t, camera)
+      if (island) {
+        // The water reflects the lamps of the chiringuiti that are up, as much as they are.
+        island.shops(town.shops().map((e) => ({ x: e.placement.center.x, z: e.placement.center.z, up: liftEase(e.lift) })))
+        island.update(t, camera)
+      }
     },
     person(paneId) {
       for (const v of shops.values()) {

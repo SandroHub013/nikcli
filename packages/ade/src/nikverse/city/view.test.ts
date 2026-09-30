@@ -545,6 +545,16 @@ describe("the island from the file, with its chiringuiti", () => {
     expect(water.geometry.hasAttribute("color")).toBe(true)
   })
 
+  test("the water reflects the lamps of the chiringuiti that are up, where they stand, and no others", async () => {
+    const { view, town } = await withKit([], [shop("a", 0), shop("b", 3)])
+    const water = view.scene.getObjectByName("island_water") as Mesh
+    const lamps = (water.material as ShaderMaterial).uniforms.uShops.value as Array<{ x: number; y: number; z: number }>
+    const up = lamps.filter((l) => l.z > 0.99)
+    expect(up).toHaveLength(2)
+    for (const e of town.shops()) expect(up.some((l) => Math.hypot(l.x - e.placement.center.x, l.y - e.placement.center.z) < 1e-6)).toBe(true)
+    expect(lamps.filter((l) => l.z === 0)).toHaveLength(lamps.length - 2)
+  })
+
   test("a shop is N3's pieces, not boxes: floor, shell, window, awning, desks, chairs, screens", async () => {
     const { view } = await withKit([agent("p1", "a")])
     const all = names(view.scene.getObjectByName("shop:a")!)

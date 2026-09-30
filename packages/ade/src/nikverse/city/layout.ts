@@ -54,9 +54,27 @@ export const ISLAND_PROFILE: ReadonlyArray<readonly [number, number]> = [
 /** The pier from the islet to the north beach, straight ahead of the spawn: its half width, where it runs, its deck. */
 export const PIER = { halfWidth: 1.1, fromZ: -19.5, toZ: -7.2, top: PLATFORM_TOP }
 
+/**
+ * How far the beach's shore comes out into the lagoon (positive) or goes back (m), by the angle clockwise from
+ * straight ahead: the generator's `shore_wobble`, so the shore is not a circle.
+ */
+export function shoreWobble(p: Vec2): number {
+  const a = Math.atan2(p.x, -p.z)
+  return 1.2 * Math.sin(3 * a + 0.4) + 0.7 * Math.sin(7 * a + 1.3) + 0.4 * Math.sin(13 * a + 2.1)
+}
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Where the shore moves: on the beach's waterline, not on the islet nor under the chiringuiti. */
+const shoreBand = (r: number) => smooth(13, 16, r) * (1 - smooth(22, 25, r))
+
 /** The height of the island's ground under a point: the profile along the radius, and the pier's deck over it. */
 export function islandHeight(p: Vec2): number {
-  const ground = profileHeight(Math.hypot(p.x, p.z))
+  const r = Math.hypot(p.x, p.z)
+  const ground = profileHeight(r - shoreWobble(p) * shoreBand(r))
   const onPier = Math.abs(p.x) <= PIER.halfWidth && p.z >= PIER.fromZ && p.z <= PIER.toZ
   return onPier ? Math.max(ground, PIER.top) : ground
 }
