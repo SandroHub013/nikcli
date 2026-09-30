@@ -14,6 +14,7 @@
  */
 
 import { restoreHistory } from "../browser/history"
+import { restoreNotes, type SheetNote } from "../design/notes"
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -117,7 +118,7 @@ export interface BrowserPaneState {
   projectRoot?: string
   span?: { columns: number; rows: number }
   /** A design sheet the pane shows, see `design/sheet.ts`. */
-  sheet?: { file: string; from: string; title?: string }
+  sheet?: { file: string; from: string; title?: string; notes?: SheetNote[] }
 }
 
 export interface WorkspaceState {
@@ -286,9 +287,15 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
     const sheetFile = isObject(entry.sheet) ? asOptionalString(entry.sheet.file) : undefined
     const sheetFrom = isObject(entry.sheet) ? asOptionalString(entry.sheet.from) : undefined
     const sheetTitle = isObject(entry.sheet) ? asOptionalString(entry.sheet.title) : undefined
+    const sheetNotes = isObject(entry.sheet) ? restoreNotes(entry.sheet.notes) : undefined
     const sheet =
       sheetFile && sheetFrom
-        ? { file: sheetFile, from: sheetFrom, ...(sheetTitle ? { title: sheetTitle } : {}) }
+        ? {
+            file: sheetFile,
+            from: sheetFrom,
+            ...(sheetTitle ? { title: sheetTitle } : {}),
+            ...(sheetNotes ? { notes: sheetNotes } : {}),
+          }
         : undefined
     browsers.push({
       id,

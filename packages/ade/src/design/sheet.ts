@@ -10,6 +10,7 @@
 import type { DirEntry } from "../host/shell"
 import type { ReadDir, WatchedRegister } from "../host/register-watch"
 import { mediaUrl } from "../video/video"
+import type { SheetNote } from "./notes"
 
 /** What a web pane showing a sheet remembers, and keeps across a restart. */
 export interface PaneSheet {
@@ -19,6 +20,8 @@ export interface PaneSheet {
   from: string
   /** The pane's title as the session gave it; the file's name without it. */
   title?: string
+  /** The notes the user left and has not sent yet (`design/notes.ts`). */
+  notes?: SheetNote[]
 }
 
 /** The longest title a session may give its sheet. */
@@ -95,6 +98,80 @@ export function sheetChanged(
 ): boolean {
   if (!previous || !entry) return false
   return previous.modified !== entry.modified_ms || previous.size !== entry.size
+}
+
+/** How long a document loaded in a sheet's frame has to say where it is. */
+export const SHEET_WHERE_MS = 3000
+/** How many times a sheet is brought back within {@link SHEET_LEAVE_WINDOW_MS} before ADE stops. */
+export const SHEET_LEAVE_LIMIT = 3
+export const SHEET_LEAVE_WINDOW_MS = 10_000
+
+export interface SheetStay {
+  /** The frame loaded a document. */
+  loaded: () => void
+  /** The frame script said where its document is (`visual-editor:location`). */
+  located: (href: string) => void
+  /** ADE itself is loading the sheet: what came before no longer counts. */
+  reset: () => void
+  dispose: () => void
+}
+
+/**
+ * Keeps a sheet's frame on the sheet (design sheet, piece 2).
+ *
+ * The frame has no origin, so ADE cannot read where it is; its frame script,
+ * which runs before the page and speaks only on the pane's secret channel,
+ * says it for every document. A document at another address is a leave; so is
+ * a document that never says (a `data:` page, which the script does not run
+ * in): every load must be matched by one address within {@link SHEET_WHERE_MS}.
+ * `left` is called to bring the sheet back, with `stopped` once the sheet has
+ * left {@link SHEET_LEAVE_LIMIT} times in {@link SHEET_LEAVE_WINDOW_MS}: a page
+ * that leaves at every load is not reloaded forever.
+ */
+export function watchSheetStay(options: {
+  isSheet: (href: string) => boolean
+  left: (stopped: boolean) => void
+  later?: (run: () => void, ms: number) => unknown
+  cancel?: (handle: unknown) => void
+  now?: () => number
+}): SheetStay {
+  const later = options.later ?? ((run, ms) => setTimeout(run, ms))
+  const cancel = options.cancel ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>))
+  const now = options.now ?? (() => Date.now())
+  let loads = 0
+  let wheres = 0
+  let timer: unknown
+  let leaves: number[] = []
+  const stopTimer = () => {
+    if (timer !== undefined) cancel(timer)
+    timer = undefined
+  }
+  const leave = () => {
+    stopTimer()
+    wheres = loads
+    const at = now()
+    leaves = [...leaves.filter((when) => at - when < SHEET_LEAVE_WINDOW_MS), at]
+    options.left(leaves.length > SHEET_LEAVE_LIMIT)
+  }
+  return {
+    loaded: () => {
+      loads += 1
+      stopTimer()
+      timer = later(() => {
+        timer = undefined
+        if (loads > wheres) leave()
+      }, SHEET_WHERE_MS)
+    },
+    located: (href) => {
+      wheres += 1
+      if (!options.isSheet(href)) leave()
+    },
+    reset: () => {
+      stopTimer()
+      wheres = loads
+    },
+    dispose: stopTimer,
+  }
 }
 
 /** How long after the last write the frame loads again: an agent writes a file in more than one go. */

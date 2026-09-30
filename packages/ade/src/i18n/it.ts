@@ -874,6 +874,21 @@ export const it = {
   "devServer.dismiss": "Ignora",
   "note.browserRequest": (title: string) =>
     `Richiesta dal pannello web «${title}» in coda: arriva quando finisce il turno.`,
+  "note.sheetNotes": (title: string) => `Note sul foglio «${title}» in coda: arrivano quando finisce il turno.`,
+  "sheet.note.add": "Aggiungi nota",
+  "sheet.note.placeholder": "Scegli un elemento o seleziona un testo, poi scrivi la nota…",
+  "sheet.note.whole": "sul foglio intero",
+  "sheet.note.remove": (n: number) => `Togli la nota ${n}`,
+  "sheet.text.label": "testo",
+  "sheet.text.remove": "Togli il testo selezionato",
+  "sheet.notes.title": "Note sul foglio",
+  "sheet.notes.count": (n: number) => (n === 1 ? "1 nota" : `${n} note`),
+  "sheet.notes.send": "Invia alla sessione",
+  "sheet.notes.sent": (title: string) => `Note inviate a «${title}»: arrivano quando finisce il turno.`,
+  "sheet.notes.ask": "La sessione che ha scritto il foglio non è in esecuzione. A quale sessione le mando?",
+  "sheet.notes.none": "nessuna nota da inviare",
+  "sheet.left.reloaded": "Il foglio ha aperto un altro indirizzo: ADE l'ha ricaricato.",
+  "sheet.left.stopped": "Il foglio continua a lasciare il suo indirizzo: ADE ha smesso di ricaricarlo.",
 
   // Decisions
   "date.today": "oggi",
