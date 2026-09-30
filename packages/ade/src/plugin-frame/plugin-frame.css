@@ -1,0 +1,120 @@
+[data-component="plugin-frame-pane"] {
+  --ade-pane-ground: var(--ade-bg);
+}
+
+[data-slot="frame-plugin-body"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+[data-slot="frame-plugin-frame"] {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+[data-slot="frame-plugin-dev-badge"] {
+  font-size: var(--ade-font-sm);
+  padding: 1px 6px;
+  border-radius: var(--ade-radius-full);
+  border: 1px solid currentColor;
+  color: var(--ade-text-dim, currentColor);
+  white-space: nowrap;
+}
+
+[data-slot="frame-plugin-unloaded"],
+[data-slot="frame-plugin-placeholder"],
+[data-slot="frame-plugin-failed"] {
+  margin: auto;
+  padding: 16px;
+  max-width: 40ch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="frame-plugin-consent"],
+[data-slot="frame-plugin-confirm"] {
+  margin: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--ade-border, currentColor);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface, transparent);
+}
+
+[data-slot="frame-plugin-consent-title"],
+[data-slot="frame-plugin-confirm-title"] {
+  margin: 0;
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="frame-plugin-consent"] ul,
+[data-slot="frame-plugin-confirm"] ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+[data-slot="frame-plugin-consent-actions"],
+[data-slot="frame-plugin-confirm-actions"] {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The rows of «Estensioni › Plugin». */
+[data-slot="frame-plugin-rows"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-slot="frame-plugin-row"] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--ade-border, transparent);
+}
+
+[data-slot="frame-plugin-row-name"] {
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="frame-plugin-row-meta"] {
+  grid-column: 1;
+  font-size: var(--ade-font-md);
+  color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="frame-plugin-row-actions"] {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+[data-slot="frame-plugin-row-update"] {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--ade-accent, currentColor);
+  vertical-align: middle;
+}
+
+[data-slot="frame-plugin-row-confirm"] {
+  grid-column: 1 / -1;
+}

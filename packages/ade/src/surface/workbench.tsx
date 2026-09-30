@@ -1,4 +1,4 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
+import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, lazy, Show, For, Suspense } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -353,6 +353,13 @@ import type { Snapshot } from "../nikverse/protocol"
 import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
 import { forwardedCommand } from "../nikverse/chords"
 import { nikverseOpening } from "../nikverse/open"
+import { framePluginOpening } from "../plugin-frame/open"
+import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigation"
+import { anyFramePlugin } from "../plugin-frame/marker"
+import type { FramePaneInput } from "../plugin-frame/plugin-pane"
+
+/** The list of plugins in a frame, loaded when Estensioni is opened: ADE with none never fetches it. */
+const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 import {
@@ -1834,6 +1841,33 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "nikverse",
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+    }))
+  }
+
+  /**
+   * Opens the panel of an installed plugin, or takes the user to the one already open: one per plugin, in the project it was opened in.
+   * The plugin is not looked at here: the panel does that when it opens, and shows its placeholder if the plugin is not there.
+   */
+  const openFramePluginPane = async (pluginId: string, title?: string) => {
+    const opening = framePluginOpening(wb().panes, pluginId, project()?.root, pathEquals)
+    if (opening.kind === "focus") {
+      if (opening.switchTo) await switchProjectTo(opening.switchTo)
+      setStarting(false)
+      setWb((w) => ({ ...w, view: "code", focusedId: opening.id }))
+      return
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: newPaneId("fp"),
+        title: title ?? pluginId,
+        status: "working",
+        model: "—",
+        mode: "plugin-frame",
+        framePlugin: { id: pluginId },
         ...here(),
         lines: [],
       }),
@@ -4587,6 +4621,10 @@ export function Workbench() {
       },
       // A window nobody is looking at does not poll: see `watch.ts`.
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
+      // The plugins in a frame look at their own index on the same schedule, but only when one is installed: ADE with none never loads this.
+      onChecked: () => {
+        if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
+      },
       /*
        * Coming back to ADE is the moment to look: the release may have been
        * published while the window sat behind something else. `focus` and
@@ -4624,6 +4662,7 @@ export function Workbench() {
     }
     setCheckingUpdate(true)
     try {
+      if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
       const result = await updateWatch.check({ force: true })
       /*
        * The release already has its line in the bell. Repeating it would be
@@ -8454,6 +8493,38 @@ export function Workbench() {
     })
   })
 
+  /*
+   * What the plugins in a frame are shown of ADE is made from this, by each panel with its own salt (`plugin-frame/bridge.ts`). Held only
+   * while a plugin panel exists, so the quota store is not kept for nobody; read inside an effect it subscribes to what changed.
+   */
+  let pluginQuota: ReturnType<typeof useSharedQuota> | undefined
+  const framePluginOpen = createMemo(() => wb().panes.some((pane) => Boolean(pane.framePlugin)))
+  createEffect(() => {
+    if (framePluginOpen()) return
+    pluginQuota?.release()
+    pluginQuota = undefined
+  })
+  onCleanup(() => pluginQuota?.release())
+  const framePluginInput = (): FramePaneInput | undefined => {
+    const panes = wb().panes
+    if (!framePluginOpen()) return undefined
+    pluginQuota ??= useSharedQuota()
+    const quotas = pluginQuota.store
+    const open = project()
+    return {
+      panes,
+      ...(open ? { open: { name: open.name, root: open.root } } : {}),
+      facts: (pane) => ({
+        activity: records.reports()[pane.id]?.activity,
+        exited: !isRunning(pane.id),
+        hasActions: Boolean(records.permissions()[pane.id]),
+        quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now()),
+      }),
+      decisions: choicesCounts().waiting,
+      now: Date.now(),
+    }
+  }
+
   /** A project's folder, from the id the world knows its shop by: the world never sees a path. */
   const rootOfShop = (id: string): string | undefined => {
     const known = [
@@ -8508,6 +8579,24 @@ export function Workbench() {
       },
       ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
       assets: () => getHost(),
+    },
+    framePlugin: {
+      input: framePluginInput,
+      host: getHost,
+      // The same way NikVerse takes the user to a session.
+      focusPane: (paneId) => void openSession(paneId),
+      // Read as one of ADE's own bindings, and run by its id only if it is navigation: no key event is made for the plugin.
+      chord: (chord) => {
+        const id = forwardedNavigation(bindings, chord, platform)
+        if (id) {
+          void runCommand(id)
+          return true
+        }
+        return false
+      },
+      ignored: (reason) => console.warn(`[plugin-frame] ignorato: ${reason}`),
+      rolledBack: (name) => setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
+      install: () => openVoiceSettings("set-sec-extensions"),
     },
     guessServers,
     confirmOpen,
@@ -9519,14 +9608,19 @@ export function Workbench() {
                     pluginCount={pluginRuntime.registry.sections().length}
                     onOpenGuide={(url) => openGuide(url)}
                     plugins={() => (
-                      <Show
-                        when={pluginRuntime.registry.sections().length > 0}
-                        fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
-                      >
-                        <For each={pluginRuntime.registry.sections()}>
-                          {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
-                        </For>
-                      </Show>
+                      <>
+                        <Show
+                          when={pluginRuntime.registry.sections().length > 0}
+                          fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
+                        >
+                          <For each={pluginRuntime.registry.sections()}>
+                            {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
+                          </For>
+                        </Show>
+                        <Suspense>
+                          <FramePluginRows host={getHost} onOpen={(id) => void openFramePluginPane(id)} />
+                        </Suspense>
+                      </>
                     )}
                   />
                 ),

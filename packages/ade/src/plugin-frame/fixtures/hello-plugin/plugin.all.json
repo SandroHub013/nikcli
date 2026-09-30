@@ -1,0 +1,13 @@
+{
+  "id": "hello",
+  "version": "0.0.1",
+  "name": "Hello",
+  "permissions": [
+    "sessions:read",
+    "projects:read",
+    "decisions:count",
+    "pane:focus",
+    "command:navigation",
+    "storage"
+  ]
+}
