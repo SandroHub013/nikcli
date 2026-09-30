@@ -223,6 +223,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         title={current().title}
         initialUrl={current().browserUrl}
         initialHistory={current().browserHistory}
+        sheet={current().designSheet?.file}
         onNavigate={(url, history) =>
           setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
         }

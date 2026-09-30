@@ -472,6 +472,7 @@ import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
+import { createSheetWatch, sheetLabel, sheetPaneFor, sheetTitle, sheetUrl, type PaneSheet } from "../design/sheet"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -929,10 +930,17 @@ export function Workbench() {
       .panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId)
       .at(-1)
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
-  const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
+  /** `sheet`: a design sheet's pane is born with it, or its first load refuses the `ade-media` address. */
+  const openOwnedBrowser = (
+    url: string,
+    owner: { id: string; title: string },
+    focus: boolean,
+    sheet?: PaneSheet,
+  ): Pane => {
     const pane: Pane = {
       id: newPaneId("b"),
-      title: "Browser",
+      title: sheet ? sheetLabel(sheet) : "Browser",
+      ...(sheet ? { designSheet: sheet } : {}),
       status: "working",
       model: "—",
       mode: "browser",
@@ -952,6 +960,16 @@ export function Workbench() {
     setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
     return pane
   }
+  /*
+   * The design sheets' reload: one more register in the pass that lists `.ade/`
+   * already (`watchRegisters` below). The pane's own Reload does it, so the
+   * address and the history stay as they are.
+   */
+  const sheetWatch = createSheetWatch({
+    sheets: () =>
+      wb().panes.flatMap((pane) => (pane.designSheet ? [{ id: pane.id, file: pane.designSheet.file }] : [])),
+    reload: (id) => browserControllers.get(id)?.reload(),
+  })
   panels.register("browser", {
     verbs: BROWSER_VERBS,
     run: (request, from) =>
@@ -1741,7 +1759,7 @@ export function Workbench() {
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
     onCleanup(
-      watchRegisters([decisionsRegister, designRegister], async () => {
+      watchRegisters([decisionsRegister, designRegister, sheetWatch], async () => {
         const host = await getHost()
         return host?.readDir ? (path: string) => host.readDir!(path) : undefined
       }),
@@ -3951,6 +3969,45 @@ export function Workbench() {
           (rerouted ? `; instradata ${rerouted}` : "") +
           (quotaNote ? `; attenzione: ${quotaNote}` : ""),
       )
+      return true
+    }
+
+    /*
+     * `ade-msg design <file>`: a page the session wrote in its `.ade/design/`,
+     * shown in a web pane beside it. It names no session, so it is handled
+     * before one is resolved. Rust checks the file (`media.rs`,
+     * `design_sheet`); the same file again reloads the pane that shows it.
+     */
+    if (message.kind === "design") {
+      const from = message.from ? wb().panes.find((pane) => pane.id === message.from) : undefined
+      if (!from || isPanelPane(from) || !running.has(from.id)) {
+        await answer("errore: design richiede una sessione avviata da ADE")
+        return true
+      }
+      const cwd = activityOf.get(from.id)?.cwd || from.cwd || from.projectRoot
+      if (!cwd || !host.designSheetPath) {
+        await answer("errore: non so in che cartella lavori, e il foglio va cercato lì")
+        return true
+      }
+      let file: string
+      try {
+        file = await host.designSheetPath(message.path, cwd)
+      } catch (err) {
+        await answer(`errore: ${typeof err === "string" ? err : err instanceof Error ? err.message : String(err)}`)
+        return true
+      }
+      const shown = sheetPaneFor(wb().panes, file)
+      // The same sheet sent again without --title keeps the one it was given.
+      const title = sheetTitle(message.title) ?? shown?.designSheet?.title
+      const sheet: PaneSheet = { file, from: from.id, ...(title ? { title } : {}) }
+      if (shown) {
+        setWb((w) => updatePane(w, shown.id, { designSheet: sheet, title: sheetLabel(sheet) }))
+        browserControllers.get(shown.id)?.reload()
+        await answer(`ok: ricaricato il foglio già aperto: ${sheetLabel(sheet)}`)
+        return true
+      }
+      openOwnedBrowser(sheetUrl(file), { id: from.id, title: from.title }, false, sheet)
+      await answer(`ok: aperto accanto a te: ${sheetLabel(sheet)}`)
       return true
     }
 
@@ -6437,6 +6494,7 @@ export function Workbench() {
     paneNonces.delete(id)
     activityOf.delete(id)
     bracketedPaste.delete(id)
+    sheetWatch.forget(id)
   }
 
   /*

@@ -392,6 +392,7 @@ $profile = $null
 $file = $null
 $via = $null
 $budget = $null
+$title = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type,
 # registro a register and an operation; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory' -or $cmd -eq 'registro') { 2 } else { 1 }
@@ -409,6 +410,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--note' -and $hasNext) { $note = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--effort' -and $hasNext) { $effort = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--profile' -and $hasNext) { $profile = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--title' -and $hasNext) { $title = $all[$i + 1]; $i++; continue }
     # D73: seconds, a whole number from 60 to 14400; anything else is a usage error.
     elseif ($a -eq '--budget' -and $hasNext) { $b = 0; if ($all[$i + 1] -notmatch '^[1-9][0-9]*$' -or -not [int]::TryParse($all[$i + 1], [ref]$b) -or $b -lt 60 -or $b -gt 14400) { Usage }; $budget = $b; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
@@ -657,6 +659,14 @@ switch ($cmd) {
     if (-not $head) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'interrupt'; to = $head })
   }
+  'design' {
+    if (-not $head) { Usage }
+    $sheet = if ([IO.Path]::IsPathRooted($head)) { [IO.Path]::GetFullPath($head) } else { [IO.Path]::GetFullPath((Join-Path (Get-Location).ProviderPath $head)) }
+    if (-not (Test-Path -LiteralPath $sheet -PathType Leaf)) { Fail "file non trovato: $head" }
+    $fields = [ordered]@{ kind = 'design'; path = $sheet }
+    if ($title) { $fields['title'] = $title }
+    PostAndConfirm $fields
+  }
   'close' {
     if (-not $head) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'close'; to = $head; force = $force })
@@ -723,7 +733,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""; title=""
 lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -739,6 +749,7 @@ while [ $# -gt 0 ]; do
       --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
       --effort) [ $# -ge 2 ] && { effort="$2"; shift 2; continue; } ;;
       --profile) [ $# -ge 2 ] && { profile="$2"; shift 2; continue; } ;;
+      --title) [ $# -ge 2 ] && { title="$2"; shift 2; continue; } ;;
       --budget) [ $# -ge 2 ] && { budget="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
@@ -910,6 +921,11 @@ case "$cmd" in
     [ -n "$text" ] || usage
     confirm "\"kind\":\"update\",\"ref\":\"$head\",\"state\":\"$second\"" ;;
   interrupt) [ -n "$head" ] || usage; confirm "\"kind\":\"interrupt\",\"to\":\"$(esc "$head")\"" ;;
+  design)
+    [ -n "$head" ] || usage
+    [ -f "$head" ] || fail "file non trovato: $head"
+    sheet="$(cd "$(dirname "$head")" && { pwd -W 2>/dev/null || pwd; })/$(basename "$head")"
+    confirm "\"kind\":\"design\",\"path\":\"$(esc "$sheet")\",\"title\":\"$(esc "$title")\"" ;;
   close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\",\"force\":$force" ;;
   relaunch)
     [ -n "$head" ] || usage
@@ -1164,6 +1180,24 @@ mod tests {
         let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
         assert_eq!(from_stdin["text"], json);
         assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn design_posts_the_sheet_as_an_absolute_path_with_its_title() {
+        let dir = Scratch::new("design");
+        let sheet = dir.0.join(".ade").join("design").join("menu.html");
+        fs::create_dir_all(sheet.parent().unwrap()).unwrap();
+        fs::write(&sheet, "<p>menu</p>").unwrap();
+        let posted = posted_by_ps1("design", &["design", sheet.to_str().unwrap(), "--title", "Il menu"], None);
+        assert_eq!(posted["kind"], "design");
+        // Rooted stays as it is: joining it to the current folder doubled the drive.
+        assert_eq!(posted["path"], sheet.to_str().unwrap());
+        assert_eq!(posted["title"], "Il menu");
+        // The sh twin: the same fields, the path made absolute in Git Bash's Windows spelling.
+        assert!(SH.contains("--title) [ $# -ge 2 ] && { title=\"$2\"; shift 2; continue; } ;;"));
+        assert!(SH.contains("pwd -W 2>/dev/null || pwd;"));
+        assert!(SH.contains("\\\"kind\\\":\\\"design\\\",\\\"path\\\":"));
     }
 
     /// Runs the real `ade-msg.ps1` in `base` on `args`; what it printed, and how long it took.

@@ -36,7 +36,8 @@ import { canStep, currentEntry, restoreHistory, step, visit, type BrowserHistory
 import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
-import { BROWSE_SANDBOX } from "./sandbox"
+import { BROWSE_SANDBOX, DESIGN_SANDBOX } from "./sandbox"
+import { isSheetAddress } from "../design/sheet"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
@@ -77,6 +78,12 @@ export interface BrowserPaneProps {
    * drawn again, and without them it came back on the URL it was opened with.
    */
   onNavigate?: (url: string, history: BrowserHistory) => void
+  /**
+   * The design sheet the pane shows (`ade-msg design`): its frame has no origin
+   * of its own (`DESIGN_SANDBOX`), and that one `ade-media` address is let past
+   * the refusal of ADE's origins.
+   */
+  sheet?: string
 }
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
@@ -181,7 +188,11 @@ function EditFields(props: {
 }
 
 export function BrowserPane(props: BrowserPaneProps): JSX.Element {
-  const defaultUrl = normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
+  /** The sheet's own address, the one `ade-media` URL this pane may load. */
+  const isSheet = (target: string) => props.sheet !== undefined && isSheetAddress(target, props.sheet)
+  const accepted = (raw: string) => (isSheet(raw) ? raw : normalizeUrl(raw))
+  const refused = (target: string) => !isSheet(target) && isAdeOrigin(target, window.location.origin)
+  const defaultUrl = accepted(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
 
   const [url, setUrl] = createSignal(defaultUrl)
   const [inputUrl, setInputUrl] = createSignal(url())
@@ -364,7 +375,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   /** `initial`: the frame already has `target` as its first `src`; no new token, no new navigation. */
   const load = (target: string, initial = false) => {
-    if (isAdeOrigin(target, window.location.origin)) {
+    if (refused(target)) {
       setNotice("ade-origin")
       setLoadState("ready")
       return
@@ -413,9 +424,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const navigateTo = (raw: string) => {
-    const normalized = normalizeUrl(raw)
+    const normalized = accepted(raw)
     if (!normalized) return
-    if (isAdeOrigin(normalized, window.location.origin)) {
+    if (refused(normalized)) {
       setNotice("ade-origin")
       return
     }
@@ -443,7 +454,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     on(
       () => props.initialUrl,
       (next) => {
-        const normalized = next ? normalizeUrl(next) : undefined
+        const normalized = next ? accepted(next) : undefined
         if (normalized && normalized !== url()) navigateTo(normalized)
       },
       { defer: true },
@@ -1077,7 +1088,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                 src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
                 srcdoc={srcdoc() ?? undefined}
                 onLoad={onFrameLoad}
-                sandbox={BROWSE_SANDBOX}
+                sandbox={props.sheet === undefined ? BROWSE_SANDBOX : DESIGN_SANDBOX}
                 name={FRAME_NAME}
                 title={props.title || t("browser.preview")}
               />

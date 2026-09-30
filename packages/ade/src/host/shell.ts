@@ -254,6 +254,12 @@ export interface Host {
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
+  /**
+   * The file `ade-msg design` names, once Rust checked it (`media.rs`,
+   * `design_sheet`): a `.html` in `<cwd>/.ade/design/`, under the open folders,
+   * no link leading out. Rejects with the reason, in Italian, for the CLI.
+   */
+  designSheetPath?: (path: string, cwd: string) => Promise<string>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
   writeTextFile?: (path: string, contents: string) => Promise<string | null>
   /**
@@ -639,6 +645,11 @@ export async function getHost(): Promise<Host | undefined> {
     },
 
     // -- Filesystem access (backed by dedicated Tauri commands) -------------
+
+    async designSheetPath(path, cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<string>("design_sheet_path", { path, cwd })
+    },
 
     async readDir(path) {
       const { invoke } = await import("@tauri-apps/api/core")
