@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { READY_MS, createActivation, type InstalledPlugin, type Phase } from "./activation"
+import { READY_MS, createActivation, type InstalledPlugin, type Phase, type Unconfirmed } from "./activation"
 import type { Permission } from "./api"
 
 const entry = (over: Partial<InstalledPlugin> = {}): InstalledPlugin => ({
@@ -10,10 +10,15 @@ const entry = (over: Partial<InstalledPlugin> = {}): InstalledPlugin => ({
   ...over,
 })
 
-function rig(installed: InstalledPlugin | undefined, options: { accepted?: Permission[]; commitFails?: string; rollbackFails?: string } = {}) {
+function rig(
+  installed: InstalledPlugin | undefined,
+  options: { accepted?: Permission[]; commitFails?: string; rollbackFails?: string; unconfirmed?: Unconfirmed } = {},
+) {
   const log: string[] = []
   const phases: Phase[] = []
-  let accepted = options.accepted ?? []
+  // What was accepted, unless a test says otherwise: what the installed manifest asks for (the ordinary case of a plugin that was installed).
+  let accepted = options.accepted ?? ((installed?.permissions ?? []) as Permission[])
+  let mark = options.unconfirmed
   let now = 0
   const timers = new Map<number, { at: number; run: () => void }>()
   let next = 0
@@ -36,6 +41,15 @@ function rig(installed: InstalledPlugin | undefined, options: { accepted?: Permi
       accepted = [...accepted, ...permissions]
     },
     rejected: { add: (_id, version) => void rejected.push(version) },
+    unconfirmed: () => mark,
+    watch: (version, hadEarlier) => {
+      mark = { version, hadEarlier }
+      log.push(`watch ${version}`)
+    },
+    unwatch: () => {
+      mark = undefined
+      log.push("unwatch")
+    },
     schedule: (run, ms) => {
       const id = next++
       timers.set(id, { at: now + ms, run })
@@ -49,6 +63,7 @@ function rig(installed: InstalledPlugin | undefined, options: { accepted?: Permi
     log,
     phases,
     rejected,
+    mark: () => mark,
     async advance(ms: number) {
       now += ms
       for (const [id, timer] of [...timers]) {
@@ -87,6 +102,9 @@ describe("opening the panel", () => {
       accepted: () => [],
       accept() {},
       rejected: { add() {} },
+      unconfirmed: () => undefined,
+      watch() {},
+      unwatch() {},
       schedule: () => () => {},
       phase() {},
     })
@@ -104,7 +122,8 @@ describe("opening the panel", () => {
   })
 
   test("a plugin served from a folder is loaded as a development plugin, with no commit and no clock", async () => {
-    const { activation, log } = rig(entry({ dev: true, current: "0.0.1" }))
+    // Nothing accepted, and nothing asked: a folder's plugin is the developer's own.
+    const { activation, log } = rig(entry({ dev: true, current: "0.0.1" }), { accepted: [] })
     await activation.open()
     expect(activation.phase()).toEqual({ kind: "loading", version: "0.0.1", committed: false, dev: true, permissions: ["sessions:read"] })
     expect(log).toEqual([])
@@ -117,7 +136,7 @@ describe("a pending version: commit, then load, then wait for ready", () => {
       accepted: ["sessions:read"],
     })
     await activation.open()
-    expect(log).toEqual(["commit", "schedule 15000"])
+    expect(log).toEqual(["commit", "watch 1.1.0", "schedule 15000"])
     expect(phases.map((phase) => phase.kind)).toEqual(["checking", "loading"])
     expect(activation.phase()).toEqual({ kind: "loading", version: "1.1.0", committed: true, dev: false, permissions: ["sessions:read"] })
   })
@@ -189,6 +208,207 @@ describe("a pending version: commit, then load, then wait for ready", () => {
   })
 })
 
+describe("an installed version whose accepted permissions were lost asks again", () => {
+  // ADE's own storage was cleared (the webview's profile was reset): the plugin is installed, and nothing says the user accepted what it asks.
+  const lost = () => entry({ permissions: ["sessions:read", "storage"] })
+
+  test("it asks, naming what the manifest asks for, instead of loading with no permissions and no word", async () => {
+    const { activation, log } = rig(lost(), { accepted: [] })
+    await activation.open()
+    expect(activation.phase()).toEqual({ kind: "consent", version: "1.0.0", added: ["sessions:read", "storage"], current: "1.0.0" })
+    expect(log).toEqual([])
+  })
+
+  test("only what is missing is asked", async () => {
+    const { activation } = rig(lost(), { accepted: ["sessions:read"] })
+    await activation.open()
+    expect(activation.phase()).toEqual({ kind: "consent", version: "1.0.0", added: ["storage"], current: "1.0.0" })
+  })
+
+  test("yes: it is accepted, and the version in use loads as it is: no commit, no clock", async () => {
+    const { activation, log } = rig(lost(), { accepted: [] })
+    await activation.open()
+    await activation.answer(true)
+    expect(log).toEqual(["accept sessions:read,storage"])
+    expect(activation.phase()).toEqual({ kind: "loading", version: "1.0.0", committed: false, dev: false, permissions: ["sessions:read", "storage"] })
+  })
+
+  test("no: nothing is accepted, it loads anyway (granted only what was accepted, which is decided where the frame is loaded), and it asks again next time", async () => {
+    const { activation, log } = rig(lost(), { accepted: [] })
+    await activation.open()
+    await activation.answer(false)
+    expect(log).toEqual([])
+    expect(activation.phase()).toMatchObject({ kind: "loading", version: "1.0.0", committed: false })
+    await activation.open()
+    expect(activation.phase().kind).toBe("consent")
+  })
+
+  test("what the manifest asks for and ADE does not know is not a question", async () => {
+    const { activation } = rig(entry({ permissions: ["sessions:read", "root"] }), { accepted: ["sessions:read"] })
+    await activation.open()
+    expect(activation.phase().kind).toBe("loading")
+  })
+
+  test("a manifest that asks for nothing never asks", async () => {
+    const { activation } = rig(entry({ permissions: [] }), { accepted: [] })
+    await activation.open()
+    expect(activation.phase().kind).toBe("loading")
+  })
+
+  test("a pending version whose permissions were accepted still commits: the question is about the version that stays", async () => {
+    const { activation, log } = rig(entry({ permissions: ["storage"], pending: "1.1.0", pending_permissions: ["sessions:read"] }), {
+      accepted: ["sessions:read"],
+    })
+    await activation.open()
+    expect(log[0]).toBe("commit")
+  })
+})
+
+describe("a commit is watched until ready, even if the panel was closed meanwhile", () => {
+  const committed = () => entry({ pending: "1.1.0", pending_permissions: [] })
+
+  test("the commit is written down, and ready clears it", async () => {
+    const { activation, mark, log } = rig(committed())
+    await activation.open()
+    expect(mark()).toEqual({ version: "1.1.0", hadEarlier: true })
+    activation.ready()
+    expect(mark()).toBeUndefined()
+    expect(log).toContain("unwatch")
+  })
+
+  test("closed inside the 15 s: the version stays written down", async () => {
+    const { activation, mark, advance } = rig(committed())
+    await activation.open()
+    await advance(READY_MS - 1000)
+    activation.dispose()
+    await advance(READY_MS * 2)
+    expect(mark()).toEqual({ version: "1.1.0", hadEarlier: true })
+  })
+
+  test("the next opening takes the watch up again, and a version that still does not answer is rolled back", async () => {
+    // The panel was closed after the commit: the installed list now says 1.1.0 is current, with nothing pending, and the book remembers it.
+    const { activation, log, advance, rejected, mark } = rig(entry({ current: "1.1.0" }), { unconfirmed: { version: "1.1.0", hadEarlier: true } })
+    await activation.open()
+    expect(activation.phase()).toEqual({ kind: "loading", version: "1.1.0", committed: true, dev: false, permissions: ["sessions:read"] })
+    expect(log).toEqual(["schedule 15000"])
+    await advance(READY_MS)
+    expect(log).toContain("rollback")
+    expect(rejected).toEqual(["1.1.0"])
+    expect(mark()).toBeUndefined()
+    expect(activation.phase().kind).toBe("rolled-back")
+  })
+
+  test("and one that answers is confirmed for good: the next opening has no clock", async () => {
+    const { activation, log, mark } = rig(entry({ current: "1.1.0" }), { unconfirmed: { version: "1.1.0", hadEarlier: true } })
+    await activation.open()
+    activation.ready()
+    expect(mark()).toBeUndefined()
+    log.length = 0
+    await activation.open()
+    expect(activation.phase()).toMatchObject({ kind: "loading", committed: false })
+    expect(log).toEqual([])
+  })
+
+  test("a version that was never written down is loaded with no clock", async () => {
+    const { activation, log } = rig(entry({ current: "1.1.0" }))
+    await activation.open()
+    expect(activation.phase()).toMatchObject({ kind: "loading", committed: false })
+    expect(log).toEqual([])
+  })
+
+  test("a note about another version says nothing about this one", async () => {
+    const { activation, log } = rig(entry({ current: "1.2.0" }), { unconfirmed: { version: "1.1.0", hadEarlier: true } })
+    await activation.open()
+    expect(activation.phase()).toMatchObject({ kind: "loading", version: "1.2.0", committed: false })
+    expect(log).toEqual([])
+  })
+
+  test("a version with nothing earlier to go back to fails with the error, and is not rolled back", async () => {
+    const { activation, log, advance } = rig(entry({ current: "1.0.0" }), { unconfirmed: { version: "1.0.0", hadEarlier: false } })
+    await activation.open()
+    await advance(READY_MS)
+    expect(log).not.toContain("rollback")
+    expect(activation.phase()).toMatchObject({ kind: "failed", version: "1.0.0" })
+  })
+
+  test("a rollback that fails is a failure with its reason, and the note stays for the next opening", async () => {
+    const { activation, advance, mark } = rig(entry({ current: "1.1.0" }), {
+      unconfirmed: { version: "1.1.0", hadEarlier: true },
+      rollbackFails: "nessuna versione precedente",
+    })
+    await activation.open()
+    await advance(READY_MS)
+    expect(activation.phase()).toEqual({ kind: "failed", version: "1.1.0", reason: "nessuna versione precedente" })
+    expect(mark()).toEqual({ version: "1.1.0", hadEarlier: true })
+  })
+
+  test("a commit that fails writes nothing down", async () => {
+    const { activation, mark } = rig(committed(), { commitFails: "non è integra" })
+    await activation.open()
+    expect(mark()).toBeUndefined()
+  })
+
+  test("a development plugin is never watched, whatever the book says", async () => {
+    const { activation, log } = rig(entry({ dev: true, current: "1.1.0" }), { unconfirmed: { version: "1.1.0", hadEarlier: true } })
+    await activation.open()
+    expect(activation.phase()).toMatchObject({ kind: "loading", committed: false, dev: true })
+    expect(log).toEqual([])
+  })
+})
+
+describe("a first installation that was not allowed waits, it is not absent", () => {
+  const first = () => entry({ current: null, pending: "1.0.0", pending_permissions: ["sessions:read", "storage"] })
+
+  test("the question has no version to stay on", async () => {
+    const { activation, log } = rig(first(), { accepted: [] })
+    await activation.open()
+    expect(activation.phase()).toEqual({ kind: "consent", version: "1.0.0", added: ["sessions:read", "storage"] })
+    expect(log).toEqual([])
+  })
+
+  test("«Non ora»: it waits for the user's consent, with what it asks for, and nothing is committed or accepted", async () => {
+    const { activation, log } = rig(first(), { accepted: [] })
+    await activation.open()
+    await activation.answer(false)
+    expect(activation.phase()).toEqual({ kind: "waiting", version: "1.0.0", added: ["sessions:read", "storage"] })
+    expect(log).toEqual([])
+  })
+
+  test("and the answer can still come: yes accepts, commits, and loads", async () => {
+    const { activation, log } = rig(first(), { accepted: [] })
+    await activation.open()
+    await activation.answer(false)
+    await activation.answer(true)
+    expect(log.slice(0, 2)).toEqual(["accept sessions:read,storage", "commit"])
+    expect(activation.phase()).toMatchObject({ kind: "loading", version: "1.0.0", committed: true })
+  })
+
+  test("saying no again stays waiting", async () => {
+    const { activation, log } = rig(first(), { accepted: [] })
+    await activation.open()
+    await activation.answer(false)
+    await activation.answer(false)
+    expect(activation.phase().kind).toBe("waiting")
+    expect(log).toEqual([])
+  })
+
+  test("the next opening asks again, it does not show the placeholder", async () => {
+    const { activation } = rig(first(), { accepted: [] })
+    await activation.open()
+    await activation.answer(false)
+    await activation.open()
+    expect(activation.phase().kind).toBe("consent")
+  })
+
+  test("a commit that fails after the yes shows the error, as any first installation does", async () => {
+    const { activation } = rig(first(), { accepted: [], commitFails: "non è integra" })
+    await activation.open()
+    await activation.answer(false)
+    await activation.answer(true)
+    expect(activation.phase()).toEqual({ kind: "failed", version: "1.0.0", reason: "non è integra" })
+  })
+})
+
 describe("an update that asks for a permission more does not switch on by itself", () => {
   const asking = () => entry({ pending: "1.1.0", pending_permissions: ["sessions:read", "storage"] })
 
@@ -224,7 +444,7 @@ describe("an update that asks for a permission more does not switch on by itself
   })
 
   test("an answer with no question asked does nothing", async () => {
-    const { activation, log } = rig(entry())
+    const { activation, log } = rig(entry(), { accepted: ["sessions:read"] })
     await activation.open()
     await activation.answer(true)
     expect(log).toEqual([])

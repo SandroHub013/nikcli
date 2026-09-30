@@ -22,6 +22,7 @@ export interface BookStorage {
 export const GRANTS_KEY = "ade.plugin-grants"
 export const REJECTED_KEY = "ade.plugin-rejected"
 export const SALTS_KEY = "ade.plugin-salts"
+export const UNCONFIRMED_KEY = "ade.plugin-unconfirmed"
 
 type Book<T> = { [id: string]: T }
 
@@ -121,6 +122,44 @@ export function createRejectedBook(storage: BookStorage | undefined) {
   }
 }
 export type RejectedBook = ReturnType<typeof createRejectedBook>
+
+/** A version that was switched on and has not yet said `ready`: what `activation.ts` needs to go on watching it if the panel was closed. */
+export interface Unconfirmed {
+  version: string
+  /** There was an earlier version to go back to. */
+  hadEarlier: boolean
+}
+
+/**
+ * The version each plugin has that was committed and never said `ready`.
+ *
+ * Closing the panel within `READY_MS` of a commit cancels the clock, and the new version stays `current` without having proved it starts. This
+ * book is what lets the next opening take up the watch again (and roll back if the version still does not answer). `ready` clears it.
+ */
+export function createUnconfirmedBook(storage: BookStorage | undefined) {
+  const keep = (value: unknown): Unconfirmed | undefined => {
+    if (!value || typeof value !== "object") return undefined
+    const { version, hadEarlier } = value as Record<string, unknown>
+    return typeof version === "string" && version.length > 0 && version.length <= 64 && typeof hadEarlier === "boolean" ? { version, hadEarlier } : undefined
+  }
+  return {
+    get(id: string): Unconfirmed | undefined {
+      return readRecord(storage, UNCONFIRMED_KEY, keep)[id]
+    },
+    set(id: string, version: string, hadEarlier: boolean): void {
+      const all = readRecord(storage, UNCONFIRMED_KEY, keep)
+      all[id] = { version, hadEarlier }
+      writeRecord(storage, UNCONFIRMED_KEY, all)
+    },
+    clear(id: string): void {
+      const all = readRecord(storage, UNCONFIRMED_KEY, keep)
+      if (!(id in all)) return
+      delete all[id]
+      writeRecord(storage, UNCONFIRMED_KEY, all)
+    },
+  }
+}
+export type UnconfirmedBook = ReturnType<typeof createUnconfirmedBook>
 
 /** The salt each plugin's project ids are made with: made once, kept, and the plugin's alone. */
 export function createSaltBook(storage: BookStorage | undefined, make: () => string = newSalt) {

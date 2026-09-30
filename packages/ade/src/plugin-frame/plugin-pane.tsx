@@ -98,6 +98,9 @@ export function PluginFramePane(props: {
     accepted: () => books.grants.accepted(props.pluginId),
     accept: (permissions) => books.grants.accept(props.pluginId, permissions),
     rejected: { add: (id, version) => books.rejected.add(id, version) },
+    unconfirmed: () => books.unconfirmed.get(props.pluginId),
+    watch: (version, hadEarlier) => books.unconfirmed.set(props.pluginId, version, hadEarlier),
+    unwatch: () => books.unconfirmed.clear(props.pluginId),
     schedule: timer,
     phase: (next) => {
       setPhase(next)
@@ -204,7 +207,7 @@ export function PluginFramePane(props: {
         const entry = (await host?.pluginList?.().catch(() => undefined))?.find((plugin) => plugin.id === props.pluginId)
         const present = Boolean(entry && (entry.current || entry.pending))
         const kind = phase().kind
-        const showsIt = kind === "loading" || kind === "ready" || kind === "consent"
+        const showsIt = kind === "loading" || kind === "ready" || kind === "consent" || kind === "waiting"
         if (present !== showsIt) void activation.open()
       },
       { defer: true },
@@ -266,6 +269,13 @@ export function PluginFramePane(props: {
     }
   }
 
+  /** The words of the question: a new version asks for more, or the version in use needs the answer again. */
+  const consentTitle = (question: { version: string; current?: string }) =>
+    t(question.version === question.current ? "plugin.consent.again" : "plugin.consent.title", props.title, question.version)
+  /** The way out of the question: stay on the version in use, go on without, or (a first installation, nothing to stay on) not now. */
+  const declineLabel = (question: { version: string; current?: string }) =>
+    t(!question.current ? "plugin.consent.later" : question.version === question.current ? "plugin.consent.without" : "plugin.consent.keep")
+
   const running = () => {
     const kind = phase().kind
     return kind === "loading" || kind === "ready"
@@ -326,8 +336,8 @@ export function PluginFramePane(props: {
 
         <Show when={asking() && phase().kind === "consent" ? (phase() as Extract<Phase, { kind: "consent" }>) : undefined}>
           {(consent) => (
-            <div data-slot="frame-plugin-consent" role="alertdialog" aria-label={t("plugin.consent.title", props.title, consent().version)}>
-              <p data-slot="frame-plugin-consent-title">{t("plugin.consent.title", props.title, consent().version)}</p>
+            <div data-slot="frame-plugin-consent" role="alertdialog" aria-label={consentTitle(consent())}>
+              <p data-slot="frame-plugin-consent-title">{consentTitle(consent())}</p>
               <ul>
                 <For each={consent().added}>{(permission) => <li>{permissionText(permission)}</li>}</For>
               </ul>
@@ -350,7 +360,30 @@ export function PluginFramePane(props: {
                     void activation.answer(false)
                   }}
                 >
-                  {t("plugin.consent.keep")}
+                  {declineLabel(consent())}
+                </button>
+              </div>
+            </div>
+          )}
+        </Show>
+
+        <Show when={phase().kind === "waiting" ? (phase() as Extract<Phase, { kind: "waiting" }>) : undefined}>
+          {(waiting) => (
+            <div data-slot="frame-plugin-consent" data-waiting="true" role="alertdialog" aria-label={t("plugin.waiting.title", props.title, waiting().version)}>
+              <p data-slot="frame-plugin-consent-title">{t("plugin.waiting.title", props.title, waiting().version)}</p>
+              <ul>
+                <For each={waiting().added}>{(permission) => <li>{permissionText(permission)}</li>}</For>
+              </ul>
+              <div data-slot="frame-plugin-consent-actions">
+                <button
+                  type="button"
+                  data-slot="settings-choice" data-frame-plugin="consent-allow" data-active="true"
+                  onClick={() => void activation.answer(true)}
+                >
+                  {t("plugin.consent.allow")}
+                </button>
+                <button type="button" data-slot="settings-choice" data-frame-plugin="uninstall" disabled={busy()} onClick={() => void uninstall()}>
+                  {t("plugin.uninstall")}
                 </button>
               </div>
             </div>

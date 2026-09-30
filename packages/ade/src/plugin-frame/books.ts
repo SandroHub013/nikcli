@@ -1,6 +1,15 @@
-/** The three books ADE keeps about plugins in a frame, on top of its own storage (`grants.ts`): one set for the whole window. */
+/** The four books ADE keeps about plugins in a frame, on top of its own storage (`grants.ts`): one set for the whole window. */
 
-import { createGrantBook, createRejectedBook, createSaltBook, type BookStorage, type GrantBook, type RejectedBook } from "./grants"
+import {
+  createGrantBook,
+  createRejectedBook,
+  createSaltBook,
+  createUnconfirmedBook,
+  type BookStorage,
+  type GrantBook,
+  type RejectedBook,
+  type UnconfirmedBook,
+} from "./grants"
 
 function storage(): BookStorage | undefined {
   try {
@@ -14,6 +23,7 @@ export interface PluginBooks {
   grants: GrantBook
   rejected: RejectedBook
   salts: ReturnType<typeof createSaltBook>
+  unconfirmed: UnconfirmedBook
 }
 
 let books: PluginBooks | undefined
@@ -23,6 +33,7 @@ export function pluginBooks(): PluginBooks {
     grants: createGrantBook(storage()),
     rejected: createRejectedBook(storage()),
     salts: createSaltBook(storage()),
+    unconfirmed: createUnconfirmedBook(storage()),
   }
   return books
 }
@@ -33,4 +44,5 @@ export function forgetPlugin(id: string): void {
   all.grants.forget(id)
   all.rejected.forget(id)
   all.salts.forget(id)
+  all.unconfirmed.clear(id)
 }
