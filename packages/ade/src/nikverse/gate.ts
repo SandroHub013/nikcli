@@ -10,7 +10,7 @@ export const GATE_LIMITS = {
    * next (133-143 MB on the same build), so it is reported and not judged. 115 and not 130, so the budget is not widened by the change of measure.
    */
   frameMb: 115,
-  /** How much the private frame may grow from the third cycle to the fifth, in MB: a leak shows, the warming of the first cycles does not count. */
+  /** How much the private frame may rise above its third cycle in any later one, in MB: a leak shows, the warming of the first cycles does not count. */
   frameGrowthAfterWarmupMb: 3,
   /** How much ADE's own renderer may grow after the world has been opened and closed, in MB. */
   adeGrowthMb: 5,
@@ -36,7 +36,7 @@ export const GATE_LIMITS = {
 export interface GateMeasures {
   /** Highest private memory of the frame over the open/close cycles (the working set is information). */
   frameMb: number
-  /** Private memory of the frame at the fifth cycle minus the third; NaN with fewer than five cycles. */
+  /** The highest private memory of the frame from the third cycle on, minus the third's; NaN with fewer than five cycles. */
   frameGrowthAfterWarmupMb: number
   /** ADE renderer growth (larger of private and working set, and JS heap after a GC) 5 s after the last close. */
   adeGrowthAfter5sMb: number
@@ -84,7 +84,7 @@ export const immobileCost = (frameCpu: number, gpuCpu: number, baselineGpuCpu: n
 export function gateChecks(measures: GateMeasures, limits = GATE_LIMITS): GateCheck[] {
   return [
     under("frame MB", measures.frameMb, limits.frameMb),
-    under("frame growth from cycle 3 to 5, MB", measures.frameGrowthAfterWarmupMb, limits.frameGrowthAfterWarmupMb),
+    under("frame growth over cycle 3, MB", measures.frameGrowthAfterWarmupMb, limits.frameGrowthAfterWarmupMb),
     under("ADE growth after 5 s, MB", measures.adeGrowthAfter5sMb, limits.adeGrowthMb),
     under("ADE growth at rest, MB", measures.adeGrowthAtRestMb, limits.adeGrowthMb),
     under("ADE heap growth, MB", measures.adeHeapGrowthMb, limits.adeGrowthMb),
@@ -118,13 +118,14 @@ export const median = (values: readonly number[]) => {
 export const mean = (values: readonly number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : Number.NaN
 
-/** The frame's private memory, by cycle, as the gate judges it: the highest, and the growth once the first cycles have warmed it. */
+/** The frame's private memory, by cycle, as the gate judges it: the highest, and the growth over the third cycle once the first ones have warmed it. */
 export function framePrivate(cycles: readonly number[]): { peakMb: number; growthAfterWarmupMb: number } {
   const ok = cycles.length > 0 && cycles.every(Number.isFinite)
   return {
     peakMb: ok ? Math.max(...cycles) : Number.NaN,
-    // The third and fifth cycle (indexes 2 and 4): fewer than five cycles cannot tell a leak from a warm-up, and is not a pass.
-    growthAfterWarmupMb: ok && cycles.length >= 5 ? cycles[4] - cycles[2] : Number.NaN,
+    // Every cycle from the third on against the third, so a peak at the fourth does not slip by and more than five cycles all count; fewer than
+    // five cannot tell a leak from a warm-up, and is not a pass.
+    growthAfterWarmupMb: ok && cycles.length >= 5 ? Math.max(...cycles.slice(2)) - cycles[2] : Number.NaN,
   }
 }
 
