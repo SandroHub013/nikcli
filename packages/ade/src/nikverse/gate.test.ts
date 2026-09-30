@@ -195,6 +195,9 @@ describe("the frame's private memory the gate reads", () => {
     expect(framePrivate([80, 95, 96, 96, 96]).growthAfterWarmupMb).toBe(0)
     // A peak at the fourth cycle that the fifth has given back still counts; and with more than five cycles every one from the third does.
     expect(framePrivate([90, 92, 94, 99, 95]).growthAfterWarmupMb).toBe(5)
+    // Master's example: 106 at the fourth cycle over the third's 102 is 4 MB, red, though the fifth (103) is only 1 over.
+    expect(framePrivate([100, 101, 102, 106, 103]).growthAfterWarmupMb).toBe(4)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([100, 101, 102, 106, 103]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
     expect(framePrivate([90, 92, 94, 95, 96, 96, 101]).growthAfterWarmupMb).toBe(7)
     expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94, 97, 99]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
   })
