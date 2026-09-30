@@ -12,24 +12,20 @@
  * `bun scripts/build-nikverse-world.ts` prints the size; `--check` builds in memory and writes nothing.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { gzipSync } from "node:zlib"
-import { OUT_DIR, OUT_FILE, buildWorld } from "../src/nikverse/city/build-world"
+import { OUT_FILE, ensureWorld } from "../src/nikverse/city/build-world"
 
 const started = performance.now()
-const built = await buildWorld()
-if (!built.ok) {
-  console.error(["nikverse world: build failed", ...built.errors].join("\n"))
+const check = process.argv.includes("--check")
+const world = await ensureWorld({ check })
+if (!world.ok) {
+  console.error(["nikverse world: build failed", ...world.errors].join("\n"))
   process.exit(1)
 }
-const bytes = Buffer.byteLength(built.text)
-const gz = gzipSync(built.text).length
-const same = existsSync(OUT_FILE) && readFileSync(OUT_FILE, "utf8") === built.text
-if (!process.argv.includes("--check") && !same) {
-  mkdirSync(OUT_DIR, { recursive: true })
-  writeFileSync(OUT_FILE, built.text)
-}
+const gz = gzipSync(readFileSync(OUT_FILE)).length
 console.log(
-  `nikverse world: ${(bytes / 1024).toFixed(0)} kB (${(gz / 1024).toFixed(0)} kB gzip) in ${Math.round(performance.now() - started)} ms` +
-    (same ? ", unchanged" : process.argv.includes("--check") ? ", not written" : ", written"),
+  `nikverse world: ${(world.bytes / 1024).toFixed(0)} kB (${(gz / 1024).toFixed(0)} kB gzip) in ${Math.round(performance.now() - started)} ms` +
+    (world.written ? ", written" : check ? ", not written" : ", unchanged") +
+    `, sha256 ${world.sha256.slice(0, 12)}`,
 )
