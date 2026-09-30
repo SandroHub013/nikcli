@@ -147,6 +147,31 @@ export interface Page {
 
 export type Slot = (props: Record<string, unknown>) => JSX.Element
 
+/**
+ * A command a plugin adds to the command palette and, optionally, to the `/`
+ * slash menu. Mirrors what a v1 plugin registers with `keymap.registerLayer`, so
+ * migrating a plugin to v2 does not change which commands the user sees.
+ */
+export interface UICommand {
+  /** Unique command id, e.g. `browser.sessions`. */
+  readonly name: string
+  readonly title: string
+  readonly description?: string
+  /** Command palette category. */
+  readonly namespace?: string
+  /** Registers the command as `/<slash.name>`. */
+  readonly slash?: {
+    readonly name: string
+    readonly aliases?: readonly string[]
+    /** `/name <text>` runs the command with `<text>` as `input` instead of selecting it. */
+    readonly arguments?: boolean
+  }
+  readonly suggested?: boolean
+  readonly hidden?: boolean
+  readonly enabled?: boolean
+  readonly run: (input?: string) => void
+}
+
 export interface UI {
   readonly router: {
     register(page: Page): () => void
@@ -154,6 +179,16 @@ export interface UI {
     current(): Route
   }
   readonly slot: (name: string, render: Slot) => () => void
+  /** Adds a command. Needs the `commands` capability when the plugin has a manifest. Returns unregister. */
+  readonly command: (command: UICommand) => () => void
+  /**
+   * The host dialog stack, the part a command needs to show something. Not gated:
+   * a dialog is only reachable from a command or page the plugin already declared.
+   */
+  readonly dialog: {
+    replace(render: () => JSX.Element, onClose?: () => void): void
+    clear(): void
+  }
 }
 
 export interface Storage {

@@ -6,32 +6,25 @@
  * TUI as a self-contained plugin instead of a hard-coded command in `app.tsx`.
  * Registers the `/browser` slash command that opens a dialog listing active
  * background browser sessions.
+ *
+ * A v2 plugin (`specs/effect-tui/14-plugin-v2-architecture.md`): the first
+ * internal plugin that registers a command rather than a slot.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import { Plugin } from "@nikcli-ai/plugin/v2/tui"
 import { DialogBrowserControl } from "@tui/component/dialog-browser-control"
 
-const id = "internal:browser"
-
-const tui: TuiPlugin = async (api) => {
-  api.keymap.registerLayer({
-    commands: [
-      {
-        name: "browser.sessions",
-        title: "Browser Control",
-        namespace: "Tool",
-        description: "Inspect and manage active background browser sessions",
-        slashName: "browser",
-        run() {
-          api.ui.dialog.replace(() => <DialogBrowserControl />)
-        },
+export default Plugin.define({
+  id: "internal:browser",
+  setup(ctx) {
+    ctx.ui.command({
+      name: "browser.sessions",
+      title: "Browser Control",
+      namespace: "Tool",
+      description: "Inspect and manage active background browser sessions",
+      slash: { name: "browser" },
+      run() {
+        ctx.ui.dialog.replace(() => <DialogBrowserControl />)
       },
-    ],
-  })
-}
-
-const plugin: TuiPluginModule & { id: string } = {
-  id,
-  tui,
-}
-
-export default plugin
+    })
+  },
+})

@@ -92,7 +92,7 @@ export interface Host {
 }
 
 /** What the TUI runtime can supply today. The rest of the vocabulary has no surface yet. */
-export const TUI_HOST_CAPABILITIES: readonly Capability[] = ["routes"]
+export const TUI_HOST_CAPABILITIES: readonly Capability[] = ["routes", "commands"]
 
 function defaultHost(): Host {
   return {
@@ -167,6 +167,7 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
   return async (api, options) => {
     const pages = new Set<string>()
     const slots = new Set<string>()
+    const commands = new Set<string>()
     const context: Context = {
       options: options ?? {},
       // Handed over as plain properties. Gating them behind getters changed the
@@ -204,6 +205,40 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
           current() {
             return currentRoute(api)
           },
+        },
+        dialog: {
+          replace: (render, onClose) => api.ui.dialog.replace(render, onClose),
+          clear: () => api.ui.dialog.clear(),
+        },
+        command(command) {
+          requireCapability(manifest, "commands", definition.id)
+          if (!command.name) throw new TypeError(`V2 TUI plugin ${definition.id} registered an empty command name`)
+          if (commands.has(command.name)) throw new Error(`Command already registered: ${command.name}`)
+          commands.add(command.name)
+          const dispose = api.keymap.registerLayer({
+            commands: [
+              {
+                name: command.name,
+                title: command.title,
+                description: command.description,
+                namespace: command.namespace,
+                slashName: command.slash?.name,
+                slashAliases: command.slash?.aliases ? [...command.slash.aliases] : undefined,
+                slashArguments: command.slash?.arguments,
+                suggested: command.suggested,
+                hidden: command.hidden,
+                enabled: command.enabled,
+                run: command.run,
+              },
+            ],
+          })
+          let active = true
+          return () => {
+            if (!active) return
+            active = false
+            commands.delete(command.name)
+            dispose()
+          }
         },
         slot(name, render) {
           // Slots register UI surface the same way routes do, so they share the
