@@ -2252,6 +2252,8 @@ pub fn run() {
             agent_link::sweep(app.handle());
             // `ade-msg` on disk before any session can look for it.
             mailbox::install(app.handle());
+            // The installer an earlier update left in the temp folder, removed in the background.
+            update::sweep_leftovers(app.handle());
             // The bots' gateways the user left on; they read once the page listens.
             gateway::resume(app.handle());
             if let Err(error) = open_main_window(app.handle()) {

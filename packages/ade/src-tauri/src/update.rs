@@ -168,6 +168,71 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
     app.restart()
 }
 
+/*
+ * The installer of an update that has been installed.
+ *
+ * The updater plugin writes the downloaded installer into a folder of its own in the user's temp folder, `<app>-<version>-updater-<random>`, and
+ * keeps it (`TempDir::keep`): the installer has to outlive this process, which exits right after launching it. Nothing ever removes it, so every
+ * update leaves 15-25 MB behind in `%TEMP%`. The new version removes it at its first start: the folders of the updater named for this app, for
+ * this version or an older one. A folder for a newer version is an update still on its way, and is never touched.
+ */
+
+/// `x.y.z` as numbers, ignoring a pre-release or build suffix; `None` when it is not one.
+fn numbers(version: &str) -> Option<(u64, u64, u64)> {
+    let core = version.split(['-', '+']).next()?;
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
+    let found = (parts.next()??, parts.next()??, parts.next()??);
+    parts.next().is_none().then_some(found)
+}
+
+/// The updater's folders in `temp` that are left from an update to `current` or before: named `<app_name>-<version>-updater-<random>`, a plain
+/// folder (not a link) that holds only installer files (`.exe` or `.msi`, as plain files). Anything of another shape is somebody else's.
+pub(crate) fn leftover_installers(temp: &std::path::Path, app_name: &str, current: &str) -> Vec<std::path::PathBuf> {
+    let Some(current) = numbers(current) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(temp) else { return Vec::new() };
+    let prefix = format!("{app_name}-");
+    entries
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(rest) = name.strip_prefix(&prefix) else { return false };
+            let Some((version, random)) = rest.split_once("-updater-") else { return false };
+            if random.is_empty() || !numbers(version).is_some_and(|found| found <= current) {
+                return false;
+            }
+            holds_only_installers(&entry.path())
+        })
+        .map(|entry| entry.path())
+        .collect()
+}
+
+fn holds_only_installers(folder: &std::path::Path) -> bool {
+    match std::fs::symlink_metadata(folder) {
+        Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => {}
+        _ => return false,
+    }
+    let Ok(entries) = std::fs::read_dir(folder) else { return false };
+    entries.flatten().all(|entry| {
+        let is_file = std::fs::symlink_metadata(entry.path()).map(|meta| meta.file_type().is_file()).unwrap_or(false);
+        let extension = entry.path().extension().map(|ext| ext.to_string_lossy().to_lowercase());
+        is_file && matches!(extension.as_deref(), Some("exe") | Some("msi"))
+    })
+}
+
+/// Removes them; how many went. One that will not (the setup is still finishing and holds its file) stays for the next start.
+pub(crate) fn sweep_installers(temp: &std::path::Path, app_name: &str, current: &str) -> usize {
+    leftover_installers(temp, app_name, current).into_iter().filter(|folder| std::fs::remove_dir_all(folder).is_ok()).count()
+}
+
+/// At every start, out of the way: the first start of a new version finds the installer that brought it, and later ones find nothing.
+pub fn sweep_leftovers(app: &tauri::AppHandle) {
+    let info = app.package_info();
+    let (name, version) = (info.name.clone(), info.version.to_string());
+    std::thread::spawn(move || {
+        sweep_installers(&std::env::temp_dir(), &name, &version);
+    });
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -216,5 +281,111 @@ mod tests {
         assert_eq!(updater.endpoints.len(), 1);
         assert!(updater.endpoints[0].as_str().starts_with("https://github.com/SandroHub013/nikcli/releases/"));
         assert!(!updater.pubkey.is_empty());
+    }
+
+    // ----- the installer an update leaves in the temp folder -----
+
+    fn temp_with(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "ade-update-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// What the updater leaves: the folder, with the installer in it.
+    fn left(temp: &std::path::Path, folder: &str, file: &str) -> std::path::PathBuf {
+        let dir = temp.join(folder);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(file), vec![1u8; 64]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_installer_that_brought_this_version_and_the_ones_before_it_are_removed() {
+        let temp = temp_with("sweep");
+        let this = left(&temp, "ADE-0.9.2-updater-AbC123", "ADE-0.9.2-installer.exe");
+        let older = left(&temp, "ADE-0.9.1-updater-Zz9", "ADE-0.9.1-installer.exe");
+        let oldest = left(&temp, "ADE-0.8.10-updater-q1w2e3", "ADE-0.8.10-installer.exe");
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.2"), 3);
+        assert!(!this.exists() && !older.exists() && !oldest.exists());
+        // The temp folder itself stays, and a second start finds nothing.
+        assert!(temp.exists());
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.2"), 0);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn the_folder_of_a_newer_update_is_an_update_on_its_way_and_stays() {
+        let temp = temp_with("newer");
+        let coming = left(&temp, "ADE-0.9.3-updater-AbC123", "ADE-0.9.3-installer.exe");
+        let later = left(&temp, "ADE-1.0.0-updater-x", "ADE-1.0.0-installer.exe");
+        let tenth = left(&temp, "ADE-0.10.0-updater-y", "ADE-0.10.0-installer.exe");
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.2"), 0);
+        assert!(coming.exists() && later.exists() && tenth.exists());
+        // Versions are numbers: 0.10.0 is after 0.9.2, and before 0.10.1; 1.0.0 is after both.
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.10.1"), 2);
+        assert!(later.exists());
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn only_this_apps_folders_are_taken_not_another_apps_nor_another_shape() {
+        let temp = temp_with("shape");
+        let other_app = left(&temp, "ADE Test-0.9.1-updater-AbC", "ADE Test-0.9.1-installer.exe");
+        let other_name = left(&temp, "Other-0.9.1-updater-AbC", "Other-0.9.1-installer.exe");
+        let not_updater = left(&temp, "ADE-0.9.1-notes", "a.exe");
+        let no_random = left(&temp, "ADE-0.9.1-updater-", "ADE-0.9.1-installer.exe");
+        let no_version = left(&temp, "ADE-latest-updater-AbC", "ADE-latest-installer.exe");
+        let a_file = temp.join("ADE-0.9.1-updater-file");
+        std::fs::write(&a_file, "x").unwrap();
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.2"), 0);
+        for kept in [&other_app, &other_name, &not_updater, &no_random, &no_version, &a_file] {
+            assert!(kept.exists(), "{} was removed", kept.display());
+        }
+        // The test build takes its own.
+        assert_eq!(super::sweep_installers(&temp, "ADE Test", "0.9.2"), 1);
+        assert!(!other_app.exists());
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn a_folder_that_holds_anything_but_installer_files_is_not_ours() {
+        let temp = temp_with("contents");
+        let mixed = left(&temp, "ADE-0.9.1-updater-AbC", "ADE-0.9.1-installer.exe");
+        std::fs::write(mixed.join("notes.txt"), "mine").unwrap();
+        let nested = left(&temp, "ADE-0.9.1-updater-Def", "ADE-0.9.1-installer.exe");
+        std::fs::create_dir_all(nested.join("sub")).unwrap();
+        let msi = left(&temp, "ADE-0.9.1-updater-Ghi", "ADE-0.9.1-installer.msi");
+        let empty = temp.join("ADE-0.9.1-updater-Jkl");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.2"), 2);
+        assert!(mixed.exists() && nested.exists());
+        assert!(!msi.exists() && !empty.exists());
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn a_version_that_is_not_numbers_removes_nothing() {
+        let temp = temp_with("version");
+        let there = left(&temp, "ADE-0.9.1-updater-AbC", "ADE-0.9.1-installer.exe");
+        for current in ["", "dev", "0.9", "1.2.3.4", "a.b.c"] {
+            assert_eq!(super::sweep_installers(&temp, "ADE", current), 0, "{current:?}");
+        }
+        assert!(there.exists());
+        // A pre-release or build suffix on the running version counts for its numbers.
+        assert_eq!(super::sweep_installers(&temp, "ADE", "0.9.1-beta.2"), 1);
+        assert_eq!(super::sweep_installers(&temp.join("manca"), "ADE", "0.9.1"), 0);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn the_sweep_runs_at_every_start_out_of_the_way() {
+        let source = include_str!("lib.rs");
+        let setup = &source[source.find(".setup(|app| {").unwrap()..];
+        let setup = &setup[..setup.find("open_main_window(app.handle())").unwrap()];
+        assert!(setup.contains("update::sweep_leftovers(app.handle())"));
     }
 }
