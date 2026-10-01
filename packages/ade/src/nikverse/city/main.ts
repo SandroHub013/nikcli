@@ -40,7 +40,7 @@ import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
 import { benchScaled, gpuIdleOf, hasTimestampQuery, liveGpuTimer } from "./gpu-idle"
-import { createLoadLog, shortUrl } from "./load-log"
+import { createLoadLog, drawProbe, shortUrl } from "./load-log"
 import { createGovernor } from "./resolution"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
@@ -71,7 +71,7 @@ export interface CityDeps {
    * For measuring, and only through the bench's door (`?bench=1` or `?shot=`): the samples of the antialiasing (4, or 1 for none; WebGPU has
    * no 2) and the ceiling of the dynamic resolution's scale. Absent, a level is what it is.
    */
-  tune?: { samples?: 1 | 4; maxScale?: number }
+  tune?: { samples?: 1 | 4; maxScale?: number; compile?: "async" }
   /** The bench's shot (`?shot=N`, 1 to 8): the page draws the fixed scene from that camera once, and keeps the picture (`shot-handle.ts`). */
   shot?: number
   /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
@@ -248,6 +248,14 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let renderScale = maxScale
   let sampling = false
   let framesDrawn = 0
+  // The opening's draws, split into compiling and drawing (`load-log.ts`); only WebGPU's queue is waited on, never a stall.
+  const gpuIdle = gpuIdleOf(renderer, backend)
+  const probe = drawProbe(log, gpuIdle.sync === "queue" ? async () => gpuIdle.idle() : undefined)
+  const compileAsync =
+    deps.tune?.compile === "async"
+      ? (renderer as unknown as { compileAsync?(scene: unknown, camera: unknown): Promise<void> }).compileAsync
+      : undefined
+  let compileTrial: "pending" | "running" | "done" = compileAsync ? "pending" : "done"
   doc.documentElement.dataset.renderScale = String(renderScale)
 
   const resize = () => {
@@ -345,9 +353,20 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     const paced = pace(ts, nextDraw, mode === "moving" ? movingInterval : STILL_INTERVAL_MS)
     nextDraw = paced.next
     if (paced.draw) {
-      // The first draw builds every material's shader (TSL to WGSL, in JS); the GPU then compiles them and draws.
-      const first = doc.documentElement.dataset.ready !== "1"
-      if (first) log.phase("first-draw")
+      // The trial (`?compile=async`): every shader of the first view compiled ahead, and nothing drawn until then.
+      if (compileTrial === "pending") {
+        compileTrial = "running"
+        log.phase("compile")
+        void compileAsync!
+          .call(renderer, view.scene, camera)
+          .catch(() => {})
+          .finally(() => {
+            compileTrial = "done"
+            wake()
+          })
+      }
+      if (compileTrial === "running") return
+      probe.before()
       // One frame in three of the moving mode is timed by the GPU's clock: about twenty a second, no cost for the rest.
       const timed = governor !== undefined && mode === "moving" && !sampling && ++framesDrawn % 3 === 0
       if (timed) gpuClock!.begin()
@@ -369,14 +388,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
-      if (first) {
-        doc.documentElement.dataset.ready = "1"
-        log.phase("first-draw-gpu")
-        const gpuIdle = gpuIdleOf(renderer, backend)
-        // WebGL compiled its shaders inside the draw; only WebGPU's queue says when the GPU is done without stalling.
-        if (gpuIdle.sync === "queue") void Promise.resolve(gpuIdle.idle()).then(log.done, log.done)
-        else log.done()
-      }
+      if (probe.after()) doc.documentElement.dataset.ready = "1"
     }
     schedule(mode === "moving")
   }

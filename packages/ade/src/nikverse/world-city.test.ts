@@ -88,6 +88,8 @@ describe("the 3D city the page starts", () => {
     expect(readOptions("?x=1").quality).toBeUndefined()
     // For measuring, `?samples=1|4` and `?maxscale=0.75..1`, and only through the bench's door: a page without it ignores them.
     expect(readOptions("?bench=1&samples=1&maxscale=0.9").tune).toEqual({ samples: 1, maxScale: 0.9 })
+    expect(readOptions("?bench=1&compile=async").tune).toEqual({ compile: "async" })
+    expect(readOptions("?compile=async").tune).toBeUndefined()
     expect(JSON.parse(JSON.stringify(readOptions("?shot=3&samples=4").tune))).toEqual({ samples: 4 })
     expect(readOptions("?samples=1&maxscale=0.9").tune).toBeUndefined()
     // WebGPU has no 2x, and a scale outside the governor's range is nothing.

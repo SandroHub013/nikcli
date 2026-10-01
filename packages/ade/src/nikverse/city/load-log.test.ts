@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createLoadLog, shortUrl, type LoadEntry } from "./load-log"
+import { createLoadLog, drawProbe, shortUrl, type LoadEntry } from "./load-log"
 
 function page() {
   let now = 0
@@ -65,5 +65,57 @@ describe("the opening's phases", () => {
 
   test("a piece's name keeps the end of the address", () => {
     expect(shortUrl("plugin://nikverse/assets/levels/media/city.glb?v=3")).toBe("levels/media/city.glb")
+  })
+})
+
+describe("the opening's draws", () => {
+  test("the first draw and the GPU's part of it, then a warm draw to compare: what compiling cost is the difference", async () => {
+    const p = page()
+    const log = createLoadLog(p.win)
+    const gpu: Array<() => void> = []
+    const probe = drawProbe(log, () => new Promise<void>((done) => gpu.push(done)))
+    log.phase("first-frame")
+    p.at(10)
+    probe.before()
+    p.at(90)
+    expect(probe.after()).toBe(true)
+    // Until the GPU is done, a draw is neither the first nor the warm one.
+    p.at(100)
+    probe.before()
+    expect(probe.after()).toBe(false)
+    p.at(400)
+    gpu.shift()!()
+    await Promise.resolve()
+    p.at(500)
+    probe.before()
+    p.at(504)
+    expect(probe.after()).toBe(false)
+    p.at(510)
+    gpu.shift()!()
+    await Promise.resolve()
+    probe.before()
+    probe.after()
+    expect(gpu).toHaveLength(0)
+    expect(p.entries().map(({ name, ms }) => [name, ms])).toEqual([
+      ["first-frame", 10],
+      ["first-draw", 80],
+      ["first-draw-gpu", 310],
+      ["warm-wait", 100],
+      ["warm-draw", 4],
+      ["warm-draw-gpu", 6],
+    ])
+    expect(p.data.load).toBe("ready")
+  })
+
+  test("without a queue to wait on (WebGL) the GPU's parts close at once", () => {
+    const p = page()
+    const log = createLoadLog(p.win)
+    const probe = drawProbe(log)
+    probe.before()
+    expect(probe.after()).toBe(true)
+    probe.before()
+    probe.after()
+    expect(p.entries().map((e) => e.name)).toEqual(["first-draw", "first-draw-gpu", "warm-wait", "warm-draw", "warm-draw-gpu"])
+    expect(p.data.load).toBe("ready")
   })
 })
