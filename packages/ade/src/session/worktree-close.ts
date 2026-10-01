@@ -40,11 +40,17 @@ export const isAdeBranch = (branch: string | undefined): branch is string => Boo
  * commits on its branch that the project's branch does not have, are work that closing would strand.
  */
 export async function worktreeWork(run: GitRun, facts: WorktreeFacts): Promise<string | undefined> {
+  // An answer that is not an answer is not «clean»: when git cannot say, the folder stays.
   const status = await run("git", ["status", "--porcelain"], facts.worktree)
-  if (status.code === 0 && status.stdout.trim()) return `"${facts.title}" ha modifiche non committate in ${facts.worktree}`
-  if (facts.branch && facts.root) {
+  if (status.code !== 0) return `"${facts.title}": git non riesce a dire se ci sono modifiche in ${facts.worktree}`
+  if (status.stdout.trim()) return `"${facts.title}" ha modifiche non committate in ${facts.worktree}`
+  // Commits made on a detached HEAD, or on a branch ADE did not cut, are in no branch the project's branch can be compared with: removing
+  // the folder would leave them to the reflog.
+  if (!isAdeBranch(facts.branch)) return `"${facts.title}": non so su quale branch di ADE lavora (${facts.branch ?? "nessuno"}), non posso dire se il lavoro è integrato`
+  if (facts.root) {
     const merged = await run("git", ["branch", "--list", facts.branch, "--merged"], facts.root)
-    if (merged.code === 0 && !merged.stdout.trim()) return `"${facts.title}" ha commit sul branch ${facts.branch} non ancora integrati`
+    if (merged.code !== 0) return `"${facts.title}": git non riesce a dire se il branch ${facts.branch} è integrato`
+    if (!merged.stdout.trim()) return `"${facts.title}" ha commit sul branch ${facts.branch} non ancora integrati`
   }
   return undefined
 }

@@ -48,17 +48,33 @@ describe("a session's worktree when its work has landed", () => {
     expect(await reclaimWorktree(run, facts(), rescued)).toEqual({ kind: "removed", branchDeleted: false })
   })
 
-  test("a branch that is not one of ADE's own is never deleted, even when it is merged", async () => {
+  test("a branch that is not one of ADE's own keeps the worktree: it is the user's, and it is never deleted", async () => {
     const { run, calls } = git({ "branch --list feature/x --merged": { stdout: "  feature/x\n" } })
-    expect(await reclaimWorktree(run, facts({ branch: "feature/x" }), rescued)).toEqual({ kind: "removed", branchDeleted: false })
-    expect(calls.some((call) => call.startsWith("branch -d"))).toBe(false)
-    expect(calls).toContain(`worktree remove ${TREE} @ ${ROOT}`)
+    const result = await reclaimWorktree(run, facts({ branch: "feature/x" }), rescued)
+    expect(result.kind).toBe("kept")
+    expect(result.kind === "kept" && result.reason).toContain("feature/x")
+    expect(calls.some((call) => call.startsWith("branch -d") || call.startsWith("worktree remove"))).toBe(false)
   })
 
-  test("with no branch recorded there is nothing to check or delete after the worktree", async () => {
+  test("with no branch recorded the worktree stays: commits on a detached HEAD are in no branch to compare", async () => {
     const { run, calls } = git()
-    expect(await reclaimWorktree(run, facts({ branch: undefined }), rescued)).toEqual({ kind: "removed", branchDeleted: false })
-    expect(calls).toEqual([`status --porcelain @ ${TREE}`, `worktree remove ${TREE} @ ${ROOT}`])
+    const result = await reclaimWorktree(run, facts({ branch: undefined }), rescued)
+    expect(result.kind).toBe("kept")
+    expect(calls).toEqual([`status --porcelain @ ${TREE}`])
+  })
+
+  test("when git cannot say whether there are changes, the worktree stays", async () => {
+    const { run, calls } = git({ "status --porcelain": { code: 128, stderr: "fatal: not a git repository" }, ...landed })
+    const result = await reclaimWorktree(run, facts(), rescued)
+    expect(result.kind).toBe("kept")
+    expect(calls.some((call) => call.startsWith("worktree remove") || call.startsWith("branch -d"))).toBe(false)
+  })
+
+  test("when git cannot say whether the branch has landed, the worktree stays", async () => {
+    const { run, calls } = git({ "branch --list ade/fix --merged": { code: 128, stderr: "fatal: bad object" } })
+    const result = await reclaimWorktree(run, facts(), rescued)
+    expect(result.kind).toBe("kept")
+    expect(calls.some((call) => call.startsWith("worktree remove") || call.startsWith("branch -d"))).toBe(false)
   })
 })
 
