@@ -45,7 +45,7 @@ import {
 } from "./effect/services"
 import { bridgeTranscriber } from "./effect/layers"
 import { makeVoiceProgram, type VoiceProgramHandle } from "./effect/program"
-import { createOpenRouterCompletion, type Completion } from "./plan/planner"
+import type { Completion } from "./plan/planner"
 import { appendEntry, type AgentEntry } from "./agent/log"
 import { describeStep } from "./plan/execute"
 
@@ -79,14 +79,10 @@ export interface VoiceEngineOptions {
   /**
    * Overrides the planner used for sentences the grammar cannot match.
    *
-   * Injected by tests so the whole path runs without a network; left unset in
-   * the app, where it is built from the OpenRouter key in settings.
+   * Injected by tests so the whole path runs without a model; left unset in
+   * the app, where the host plans (`VoiceHost.plan`) on the agent's own runner.
    */
   plan?: Completion
-  /** Overrides the planner model. */
-  plannerModel?: string
-  /** Overrides the planner's fetch, for tests. */
-  plannerFetch?: typeof fetch
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
   /** Where a stop for spending is written down; the browser's storage by default. */
@@ -900,27 +896,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   /**
    * The planner, or nothing.
    *
-   * Nothing is a working configuration: with no key, an unmatched sentence
-   * gets the suggestions it always got, and the rest of the voice stack —
-   * which is entirely offline once the transcriber is local — keeps working.
-   * An injected `plan` wins, so tests never reach the network.
+   * It is the host's, on the same runner and subscription as the agent: no key, no
+   * per-call bill. Nothing is a working configuration: with the agent off, or a host
+   * that cannot plan, an unmatched sentence gets what it always got, and the rest of
+   * the voice stack keeps working. An injected `plan` wins, so tests never reach a model.
    */
   function resolvePlanner(): Completion | undefined {
     if (options.plan) return options.plan
-    const key = currentSettings().openRouterApiKey
-    if (!key) return undefined
-    const completion = createOpenRouterCompletion({
-      apiKey: key,
-      ...(options.plannerFetch ? { fetchFn: options.plannerFetch } : {}),
-      ...(options.plannerModel ? { model: options.plannerModel } : {}),
-      onUsage: (usage) => {
-        if (typeof usage.cost === "number") setListenSpend(spendTally.addCost(now(), usage.cost))
-      },
-    })
-    return async (request) => {
-      setListenSpend(spendTally.add(now(), undefined))
-      return completion(request)
-    }
+    const plan = host.plan
+    const settings = currentSettings()
+    if (!plan || settings.agentEngine === "off") return undefined
+    const { agentEngine: engine, agentSpeed: speed } = settings
+    return (request) => plan.call(host, { ...request, engine, ...(speed ? { speed } : {}) })
   }
 
   function resolveTranscriber(s: VoiceSettings): Transcriber {

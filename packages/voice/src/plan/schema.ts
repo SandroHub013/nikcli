@@ -32,6 +32,11 @@ export interface PlanContext {
   projects: readonly { name: string; root: string; isOpen: boolean }[]
   /** How many panes are open, so a pane index can be checked. */
   paneCount: number
+  /**
+   * The panes by name, agent and state, so «manda a Mimo», «apri la sessione di Dario» and «chi è bloccato»
+   * can be answered from what is really open. `index` is the number `focus_pane` and `send_prompt` take.
+   */
+  panes?: readonly { index: number; title: string; agent?: string; status: string }[]
   /** Command ids `runCommand` accepts. */
   commands: readonly string[]
   /** Recent dialogue turns for multi-turn conversational reasoning. */
@@ -58,6 +63,11 @@ export interface ValidatedPlan {
    * contextualizes the operations it is carrying out.
    */
   speech?: string
+  /**
+   * The planner says the sentence is for the agent: `speech` was a short «ci penso» said while the
+   * agent works, and nothing is executed here.
+   */
+  handoff?: boolean
 }
 
 /**
@@ -195,7 +205,8 @@ export function validatePlan(raw: unknown, context: PlanContext): ValidatedPlan 
     }
   }
 
-  return { steps, refusals, ...(speech ? { speech } : {}) }
+  const handoff = typeof raw === "object" && raw !== null && (raw as Record<string, unknown>).agent === true
+  return { steps, refusals, ...(speech ? { speech } : {}), ...(handoff ? { handoff: true } : {}) }
 }
 
 function validateStep(entry: unknown, context: PlanContext, refusals: string[]): PlanStep | undefined {
