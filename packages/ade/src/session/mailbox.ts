@@ -1024,6 +1024,32 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   }
 }
 
+/**
+ * A pane's turn activity, from this spawn's file or, while that one is silent,
+ * from the previous spawn's (review of activity-prime-pi, MEDIO 1).
+ *
+ * Prime's daemon workers outlive ADE: after a restart `prime --resume` attaches
+ * to the worker that is still running, and that worker keeps writing under the
+ * nonce of the spawn that started it. The old file is believed only when it names
+ * the pane's own conversation: `sessionId` is required and must be `resumeId`,
+ * where {@link parseActivity} lets a file without one through.
+ */
+export function activityOrFormer(
+  current: string | null | undefined,
+  former: string | null | undefined,
+  resumeId: string | undefined,
+): Activity | undefined {
+  if (current) return parseActivity(current, resumeId)
+  if (!former || !resumeId) return undefined
+  try {
+    const raw = JSON.parse(former.replace(/^\ufeff/, "")) as Record<string, unknown>
+    if (raw.sessionId !== resumeId) return undefined
+  } catch {
+    return undefined
+  }
+  return parseActivity(former, resumeId)
+}
+
 /** All `isQuestionOpen` needs from a prompt found by reading the screen: that there is one. */
 type ScreenPrompt = { what: string } | undefined
 

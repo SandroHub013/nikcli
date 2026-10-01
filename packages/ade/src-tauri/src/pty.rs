@@ -872,6 +872,19 @@ pub async fn pty_spawn(
      */
     let resolved = which_on_path(&command).unwrap_or_else(|| command.clone());
     /*
+     * Prime Agent and pi report their turns through an extension ADE passes on
+     * the command line, and only to a spawn that has a nonce to report under.
+     * Added here, before `launch_plan` quotes the line for cmd.exe, and after
+     * `check_args`, which judges what the page sent and not what ADE adds.
+     */
+    let mut args = args;
+    if link.is_some() {
+        if let Some(extension) = crate::agent_link::activity_extension(&app, command_stem(&command)) {
+            args.push("-e".to_string());
+            args.push(extension.to_string_lossy().into_owned());
+        }
+    }
+    /*
      * A `.cmd` or `.bat` is run by cmd.exe, which reads its command line again
      * with its own rules (B1, audit A1): `&` ran a second command, `%VAR%`
      * expanded, and everything after a line break was lost — a bot's first
