@@ -2272,6 +2272,7 @@ pub fn run() {
             git_run,
             bot_delete,
             ade_prune::ade_prune,
+            ade_prune::ade_container_remove,
             nikcli_bot,
             claude_agents,
             claude_version,

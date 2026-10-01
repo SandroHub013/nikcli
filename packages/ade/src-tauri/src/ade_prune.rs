@@ -85,6 +85,35 @@ pub async fn ade_prune(window: tauri::WebviewWindow, roots: tauri::State<'_, Wri
     tauri::async_runtime::spawn_blocking(move || prune_files(&inside)).await.map_err(|e| e.to_string())
 }
 
+/// The folder ADE makes beside a project for its sessions' worktrees: `<project>-worktrees`, a sibling, never inside it.
+pub fn container_of(root: &Path) -> Option<std::path::PathBuf> {
+    let name = root.file_name()?.to_string_lossy().into_owned();
+    Some(root.with_file_name(format!("{name}-worktrees")))
+}
+
+/// Removes the project's `-worktrees` folder when nothing is left in it. `remove_dir` refuses a folder that is not empty, which is the check,
+/// so a worktree that is still there (or anything else of the user's) keeps it. A link is not followed.
+pub fn remove_empty_container(root: &Path) -> bool {
+    let Some(container) = container_of(root) else { return false };
+    match std::fs::symlink_metadata(&container) {
+        Ok(meta) if meta.is_dir() => std::fs::remove_dir(&container).is_ok(),
+        _ => false,
+    }
+}
+
+/// Removes the empty `<project>-worktrees` folder beside an open project: whether it was removed. Only for the root of a project that is
+/// open (not a folder inside one), since the folder it names is outside the project and is not otherwise in the window's reach.
+#[tauri::command]
+pub async fn ade_container_remove(window: tauri::WebviewWindow, roots: tauri::State<'_, WriteRoots>, root: String) -> Result<bool, String> {
+    main_only(window.label())?;
+    let resolved = crate::within_roots(&roots, &root)?;
+    let is_a_root = roots.0.lock().map_err(|_| "radici bloccate")?.iter().any(|open| *open == resolved);
+    if !is_a_root {
+        return Ok(false);
+    }
+    tauri::async_runtime::spawn_blocking(move || remove_empty_container(&resolved)).await.map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +263,63 @@ mod tests {
         let body = &source[source.find("pub async fn ade_prune").unwrap()..];
         let first = body.lines().nth(1).unwrap().trim();
         assert_eq!(first, "main_only(window.label())?;");
+    }
+    #[test]
+    fn the_container_is_the_sibling_named_after_the_project() {
+        assert_eq!(container_of(&sep("/work/app")), Some(sep("/work/app-worktrees")));
+        assert_eq!(container_of(&sep("/work/app/")), Some(sep("/work/app-worktrees")));
+        assert_eq!(container_of(&sep("/")), None);
+    }
+
+    #[test]
+    fn an_empty_container_is_removed_and_the_project_is_not_touched() {
+        let parent = scratch("container-empty");
+        let project = parent.join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("main.rs"), b"fn main() {}").unwrap();
+        let container = parent.join("app-worktrees");
+        std::fs::create_dir_all(&container).unwrap();
+        assert!(remove_empty_container(&project));
+        assert!(!container.exists());
+        assert!(project.join("main.rs").is_file());
+        // Again: there is nothing to remove, and it is not an error.
+        assert!(!remove_empty_container(&project));
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn a_container_that_still_holds_a_worktree_or_anything_else_stays() {
+        let parent = scratch("container-full");
+        let project = parent.join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        let container = parent.join("app-worktrees");
+        std::fs::create_dir_all(container.join("fix")).unwrap();
+        assert!(!remove_empty_container(&project));
+        assert!(container.join("fix").is_dir());
+        std::fs::remove_dir(container.join("fix")).unwrap();
+        std::fs::write(container.join("notes.txt"), b"mine").unwrap();
+        assert!(!remove_empty_container(&project));
+        assert!(container.join("notes.txt").is_file());
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn a_file_with_the_name_of_the_container_is_not_removed() {
+        let parent = scratch("container-file");
+        let project = parent.join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        let odd = parent.join("app-worktrees");
+        std::fs::write(&odd, b"a file").unwrap();
+        assert!(!remove_empty_container(&project));
+        assert!(odd.is_file());
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn the_container_command_answers_to_the_main_window_and_only_for_the_root_of_an_open_project() {
+        let source = include_str!("ade_prune.rs");
+        let body = &source[source.find("pub async fn ade_container_remove").unwrap()..];
+        assert_eq!(body.lines().nth(1).unwrap().trim(), "main_only(window.label())?;");
+        assert!(body.contains("is_a_root"));
     }
 }

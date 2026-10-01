@@ -394,6 +394,8 @@ export interface Host {
    * The host refuses any path that is not a plain file of one of those three folders inside an open project.
    */
   adePrune?: (paths: string[]) => Promise<number>
+  /** Removes the `<project>-worktrees` folder beside an open project, when nothing is left in it; whether it was removed. */
+  adeContainerRemove?: (root: string) => Promise<boolean>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -515,6 +517,11 @@ export async function getHost(): Promise<Host | undefined> {
     async claudeVersion() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string | null>("claude_version").catch(() => null)
+    },
+
+    async adeContainerRemove(root) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<boolean>("ade_container_remove", { root })
     },
 
     async adePrune(paths) {

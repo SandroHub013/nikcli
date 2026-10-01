@@ -6853,7 +6853,10 @@ export function Workbench() {
       const host = await getHost()
       if (!host?.run) return { kind: "kept", reason: `"${pane.title}": ${worktree}` }
       const owner = found.kind === "open" ? open : await discoverProject(host, found.root).catch(() => open)
-      return reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, WORKTREE_RETRY)
+      const outcome = await reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, WORKTREE_RETRY)
+      // The folder ADE makes beside a project for its worktrees goes with the last of them: nothing is left in it but the name.
+      if (outcome.kind === "removed" && owner?.root) await host.adeContainerRemove?.(owner.root).catch(() => false)
+      return outcome
     })().catch((error): Reclaimed => ({ kind: "kept", reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}` }))
     reclaims.set(pane.id, done)
     void done.then((outcome) => {
