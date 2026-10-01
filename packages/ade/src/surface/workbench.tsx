@@ -299,6 +299,9 @@ import {
   formatDelivery,
   holdsForAnswer,
   quietOutcome,
+  hookClosesScreenPrompt,
+  interruptEnds,
+  afterInterrupt,
   isFree,
   isQuestionOpen,
   activityOccupiesPane,
@@ -334,6 +337,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
 import {
   deliveryResult,
@@ -2436,7 +2440,10 @@ export function Workbench() {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
       activity = keptActivity(
         activity,
-        parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+        afterInterrupt(
+          parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+          interruptSettled.get(paneId),
+        ),
       )
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
@@ -2726,10 +2733,23 @@ export function Workbench() {
 
   /** When each pane last printed anything: a session silent for a while has stopped working. */
   const lastOutputAt = new Map<string, number>()
+  /** When anything was last typed or sent into each pane: the output after it is its echo. */
+  const lastInputAt = new Map<string, number>()
+  /** Each idle pane's run of windows with output (`session/output-activity.ts`). */
+  const outputRuns = new Map<string, OutputRun>()
 
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
   const activityOf = new Map<string, Activity>()
+  /**
+   * When ADE last saw a question in each pane open or close by itself, without
+   * the hook: a hook written before that is older news (`statusFromActivity`).
+   */
+  const questionSeenAt = new Map<string, number>()
+  /** When each pane was last interrupted by an Esc or a Ctrl-C, typed or sent by `ade-msg interrupt`. */
+  const interruptedAt = new Map<string, number>()
+  /** The interruption that last ended a hooked pane's turn: older hook reads are its idle (`afterInterrupt`). */
+  const interruptSettled = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
@@ -2896,6 +2916,37 @@ export function Workbench() {
   }
 
   /*
+   * A line submitted by the user in the pane: Enter in the terminal, or the composer.
+   *
+   * It went straight to working without `workingSince`, so on the next mail
+   * pass the previous turn's Stop counted as newer than the turn just typed and
+   * set the pane idle again, until `UserPromptSubmit` came: a flicker of a
+   * second or so on every Enter in a hooked Claude Code.
+   *
+   * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
+   */
+  const turnSubmitted = (paneId: string) => {
+    promptAnswered(paneId)
+    markWorking(paneId)
+  }
+
+  /*
+   * A key typed into a prompt only the hook reported: its answer.
+   *
+   * The screen reading, which closes the prompts it finds, never had this one,
+   * and the hook says nothing until the turn ends: without this the pane stayed
+   * on «Permesso» for the rest of the turn, after a «1» as after an Enter. The
+   * hook's `permission` still keeps mail out until its next write
+   * (`isQuestionOpen`); only the status moves.
+   */
+  const promptAnswered = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (pane?.status !== "waiting" || permissions()[paneId] || activityOf.get(paneId)?.state !== "permission") return
+    questionSeenAt.set(paneId, Date.now())
+    setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
+  }
+
+  /*
    * The turn activity of every running session with hooks, each mail pass.
    *
    * Not only of those that owe an answer: the status in the sidebar and in
@@ -2911,7 +2962,7 @@ export function Workbench() {
     const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
     for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = parseActivity(texts[index] ?? null, pane?.resumeId)
+      const read = afterInterrupt(parseActivity(texts[index] ?? null, pane?.resumeId), interruptSettled.get(paneId))
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
@@ -2922,8 +2973,18 @@ export function Workbench() {
       const activity = read
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
-      const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
-      if (next === "working") {
+      if (permissions()[paneId] && hookClosesScreenPrompt(activity, questionSeenAt.get(paneId))) {
+        permissions.forget(paneId)
+        // What is still in the window was answered: not to be found again on the next line.
+        rawWindows.forget(paneId)
+        if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+      }
+      const next = pane
+        ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
+        : undefined
+      if (next === "waiting") {
+        setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
+      } else if (next === "working") {
         panels.newTurn(paneId, activity.at)
         workingSince.set(paneId, Date.now())
         setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
@@ -3978,6 +4039,7 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
+      interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
       tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
@@ -6258,7 +6320,12 @@ export function Workbench() {
       paneId,
       setTimeout(() => {
         quietTimers.delete(paneId)
-        if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
+        const status = wb().panes.find((pane) => pane.id === paneId)?.status
+        // Only where the hook reports turns: without it silence settles the pane
+        // anyway, and a prompt the screen found is not taken back on an Esc
+        // that another TUI may not honour.
+        const cut = hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))
+        if (status !== "working" && !(cut && status === "waiting")) return
         // Without turn hooks, a session that owes an answer is working until it answers (S14).
         // A prompt counts as work here too, so a pane waiting on a key is not offered
         // as idle: see `activityOccupiesPane`.
@@ -6266,14 +6333,60 @@ export function Workbench() {
           hooked: hooked(paneId),
           busy: activityOccupiesPane(activityOf.get(paneId)?.state),
           owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
+          interrupted: cut,
         })
         // The hold has to be re-armed: it ends with time passing, and nothing
         // else would come back to look at a pane whose terminal has gone quiet.
         if (outcome === "recheck") return settleWhenQuiet(paneId)
         if (outcome === "wait") return
+        if (cut) settleInterrupt(paneId)
         setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
       }, QUIET_MS),
     )
+  }
+  /*
+   * An Esc or a Ctrl-C in a pane: the turn may be over, and only silence will say.
+   *
+   * Claude Code reports an interruption to no hook, so its file goes on saying
+   * busy, or permission after an Esc on a prompt. The quiet timer is armed here
+   * as well as by the output that follows, because a pane on a prompt is not
+   * working and its output would not arm it.
+   */
+  const interrupted = (paneId: string) => {
+    interruptedAt.set(paneId, Date.now())
+    settleWhenQuiet(paneId)
+  }
+  /** The idle the CLI never wrote, for an interrupted turn that has gone quiet. */
+  const settleInterrupt = (paneId: string) => {
+    const at = interruptedAt.get(paneId)
+    if (at === undefined) return
+    interruptSettled.set(paneId, at)
+    const idle = afterInterrupt(activityOf.get(paneId), at)
+    if (idle) activityOf.set(paneId, idle)
+    // An Esc on a prompt the screen found cancels it: Claude Code answers no to the tool.
+    if (permissions()[paneId]) {
+      permissions.forget(paneId)
+      rawWindows.forget(paneId)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+    }
+  }
+  /*
+   * An idle agent printing without pause has started a turn ADE did not see begin.
+   *
+   * Only where no hook reports turns: there the hook is the truth both ways. Not
+   * for a plain terminal, whose running program is not an agent's turn and which
+   * nobody sends mail to.
+   */
+  const noticeWorkFromOutput = (pane: Pane) => {
+    if ((pane.agent ?? pane.model) === "terminal" || hooked(pane.id)) return
+    const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
+    if (!outputSaysWorking(run)) {
+      if (run) outputRuns.set(pane.id, run)
+      else outputRuns.delete(pane.id)
+      return
+    }
+    outputRuns.delete(pane.id)
+    markWorking(pane.id)
   }
   const forgetQuiet = (paneId: string) => {
     clearTimeout(quietTimers.get(paneId))
@@ -6297,6 +6410,9 @@ export function Workbench() {
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
     if (pane.status === "working") settleWhenQuiet(paneId)
+    // An interrupted pane on a prompt is not working, and still waits for its silence.
+    else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
+    else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
     writeToTerminal(paneId, chunk)
     screenRequests.fed(paneId)
@@ -6432,10 +6548,16 @@ export function Workbench() {
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
+    lastInputAt.delete(id)
+    outputRuns.delete(id)
     usageOf.delete(id)
     paneTokens.delete(id)
     paneNonces.delete(id)
     activityOf.delete(id)
+    questionSeenAt.delete(id)
+    workingSince.delete(id)
+    interruptedAt.delete(id)
+    interruptSettled.delete(id)
     bracketedPaste.delete(id)
   }
 
@@ -6836,6 +6958,7 @@ export function Workbench() {
         return
       }
       permissions.forget(paneId)
+      questionSeenAt.set(paneId, Date.now())
       // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
       if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
@@ -6847,6 +6970,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
+    questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
       void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
@@ -7532,6 +7656,7 @@ export function Workbench() {
       })
 
       spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
+      stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -7767,7 +7892,7 @@ export function Workbench() {
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
-      spawned = session
+      spawned = stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -8065,6 +8190,9 @@ export function Workbench() {
     close,
     saveFile: (id) => void saveFile(id),
     answerPermission,
+    turnSubmitted,
+    promptAnswered,
+    interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
     suspend: (id) => void suspendSession(id),
