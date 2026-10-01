@@ -49,6 +49,18 @@ export async function worktreeWork(run: GitRun, facts: WorktreeFacts): Promise<s
   return undefined
 }
 
+/**
+ * Saves what the session wrote under its worktree's `.ade/` into the project's own before the worktree goes (`ade_worktree_rescue`): its
+ * results, captures and design notes. `.ade/` is out of git's sight, so `git worktree remove` would take it with the folder and a sub-agent's
+ * report would vanish with its tab. It throws when something cannot be saved, and the worktree then stays.
+ */
+export type Rescue = (root: string, worktree: string) => Promise<number>
+
+/** For a host that cannot save them: the worktree is then kept rather than removed over files nobody has read. */
+export const noRescue: Rescue = async () => {
+  throw new Error("questo host non può mettere al sicuro i rapporti della sessione")
+}
+
 /** Trying `git worktree remove` again: the session's process may still be leaving the folder (on Windows it holds it until it has gone). */
 export interface Retry {
   times: number
@@ -57,16 +69,33 @@ export interface Retry {
 }
 
 /**
- * Removes the worktree and then its branch, when the work has landed and the folder is clean; otherwise nothing is touched.
+ * Removes the worktree and then its branch, when the work has landed and the folder is clean; otherwise nothing is touched. What the session
+ * left in its `.ade/` is saved into the project's first (`rescue`), and if that fails the worktree stays.
  *
  * The branch goes with `git branch -d`, never `-D`: git refuses by itself a branch the project's branch does not contain, so even a wrong
  * answer above cannot lose a commit. Only `ade/*` branches are deleted. A worktree git will not remove (a file it holds is open, say) stays,
  * and so does its branch, which is still checked out there.
  */
-export async function reclaimWorktree(run: GitRun, facts: WorktreeFacts, retry?: Retry): Promise<Reclaimed> {
+export async function reclaimWorktree(run: GitRun, facts: WorktreeFacts, rescue: Rescue, retry?: Retry): Promise<Reclaimed> {
   const work = await worktreeWork(run, facts)
   if (work) return { kind: "kept", reason: work }
   if (!facts.root) return { kind: "kept", reason: `"${facts.title}": non trovo il progetto da cui è nata la worktree ${facts.worktree}` }
+  // Saved before anything is removed, and tried again like the removal: the session's process may still be leaving its files.
+  let saved: unknown
+  for (let again = 0; again <= (retry?.times ?? 0); again++) {
+    if (again > 0) await retry!.wait(retry!.ms)
+    try {
+      await rescue(facts.root, facts.worktree)
+      saved = undefined
+      break
+    } catch (error) {
+      saved = error
+    }
+  }
+  if (saved !== undefined) {
+    const said = saved instanceof Error ? saved.message : String(saved)
+    return { kind: "kept", reason: `"${facts.title}": non riesco a mettere al sicuro i rapporti della sessione, la worktree resta in ${facts.worktree} (${said})` }
+  }
   let removed = await run("git", ["worktree", "remove", facts.worktree], facts.root)
   for (let again = 0; removed.code !== 0 && retry && again < retry.times; again++) {
     await retry.wait(retry.ms)

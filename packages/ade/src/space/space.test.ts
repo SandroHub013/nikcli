@@ -73,6 +73,10 @@ function setup(over: Partial<SpaceHost> = {}, deps: Partial<SpaceDeps> = {}, say
       return true
     },
     adeWorktreeBytes: async (_root, path) => (path === FIX ? 300_000_000 : 120_000_000),
+    adeWorktreeRescue: async (_root, path) => {
+      removedBy.push(`rescue ${path}`)
+      return 0
+    },
     ...over,
   }
   const answers = { next: true }
@@ -270,6 +274,21 @@ describe("what each button does", () => {
     expect(outcome).toEqual({ kind: "done", freed: 300_000_000 })
     expect(destructive(fake.calls)).toEqual([`worktree remove ${FIX} @ ${ROOT}`, `branch -d ade/fix @ ${ROOT}`])
     expect(removedBy).toContain(`container ${ROOT}`)
+    // What the session wrote in its .ade/ is saved first.
+    expect(removedBy.indexOf(`rescue ${FIX}`)).toBeGreaterThanOrEqual(0)
+    expect(removedBy.indexOf(`rescue ${FIX}`)).toBeLessThan(removedBy.indexOf(`container ${ROOT}`))
+  })
+
+  test("a worktree whose reports cannot be saved is not removed", async () => {
+    const { space, fake } = setup({
+      adeWorktreeRescue: async () => {
+        throw new Error("disco pieno")
+      },
+    })
+    await space.refresh()
+    const outcome = await space.remove(`worktree:${normalized(FIX)}`)
+    expect(outcome.kind).toBe("failed")
+    expect(destructive(fake.calls)).toEqual([])
   })
 
   test("a worktree that got work in it since the list was read is not removed: the same check is made again at the click", async () => {

@@ -141,6 +141,98 @@ pub async fn ade_worktree_bytes(
     tauri::async_runtime::spawn_blocking(move || worktree_bytes(&resolved, Path::new(&worktree))).await.map_err(|e| e.to_string())
 }
 
+/// The three folders of `.ade/` that a session writes into, relative to `.ade/`.
+const SESSION_FOLDERS: [&[&str]; 3] = [&["results"], &["browser"], &["design", "note"]];
+
+/// The first name beside `wanted` that is free in `dir`: `a.md`, then `a-2.md`, `a-3.md`... Both files are kept, never one over the other.
+fn free_name(dir: &Path, wanted: &std::ffi::OsStr) -> std::path::PathBuf {
+    let first = dir.join(wanted);
+    if std::fs::symlink_metadata(&first).is_err() {
+        return first;
+    }
+    let name = Path::new(wanted);
+    let stem = name.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let extension = name.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    (2..)
+        .map(|n| dir.join(format!("{stem}-{n}{extension}")))
+        .find(|candidate| std::fs::symlink_metadata(candidate).is_err())
+        .unwrap_or(first)
+}
+
+/// Moves a file, by rename when the disk allows and by copy and remove when it does not. Nothing is removed from the source before the copy
+/// is whole.
+fn move_file(from: &Path, to: &Path) -> Result<(), String> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to).map_err(|e| format!("{}: {e}", from.display()))?;
+    std::fs::remove_file(from).map_err(|e| format!("{}: {e}", from.display()))
+}
+
+/// Saves what a session wrote under its worktree's `.ade/` before the worktree goes. `.ade/` is out of git's sight (`.git/info/exclude`), so
+/// `git worktree remove` takes it without a word: a sub-agent's result would go with its tab. Its `results/`, `browser/` and `design/note/`
+/// files are moved into the same folders of the project's own `.ade/`; a name already there is kept and the new one gets a number. Plain
+/// files only, nothing followed, and only from a worktree inside the project's own `-worktrees` folder. The number of files moved; an error
+/// when one cannot be, and the caller then keeps the worktree.
+pub fn rescue_reports(root: &Path, worktree: &Path) -> Result<u32, String> {
+    let container = container_of(root).ok_or("progetto senza nome")?.canonicalize().map_err(|e| e.to_string())?;
+    let tree = worktree.canonicalize().map_err(|e| e.to_string())?;
+    if tree == container || !tree.starts_with(&container) {
+        return Err("la worktree non è nella cartella del progetto".into());
+    }
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let mut moved = 0;
+    for folder in SESSION_FOLDERS {
+        let mut from = tree.join(".ade");
+        let mut into = root.join(".ade");
+        for part in folder {
+            from.push(part);
+            into.push(part);
+        }
+        // A folder that is not there has nothing to save; one that is a link is not followed.
+        match std::fs::symlink_metadata(&from) {
+            Ok(meta) if meta.is_dir() => {}
+            _ => continue,
+        }
+        let entries: Vec<_> = std::fs::read_dir(&from).map_err(|e| format!("{}: {e}", from.display()))?.flatten().collect();
+        let files: Vec<_> = entries
+            .iter()
+            .filter(|entry| std::fs::symlink_metadata(entry.path()).map(|m| m.file_type().is_file()).unwrap_or(false))
+            .collect();
+        if files.is_empty() {
+            continue;
+        }
+        std::fs::create_dir_all(&into).map_err(|e| format!("{}: {e}", into.display()))?;
+        // `.ade/` could be a link out of the project; what is saved must land inside it.
+        if !into.canonicalize().map_err(|e| e.to_string())?.starts_with(&root) {
+            return Err(format!("{} esce dal progetto", into.display()));
+        }
+        for entry in files {
+            move_file(&entry.path(), &free_name(&into, &entry.file_name()))?;
+            moved += 1;
+        }
+    }
+    Ok(moved)
+}
+
+/// Saves a session's results, captures and design notes from its worktree into the project's `.ade/` before the worktree is removed. Only for
+/// the root of an open project; an error (including «not a root») means the caller keeps the worktree.
+#[tauri::command]
+pub async fn ade_worktree_rescue(
+    window: tauri::WebviewWindow,
+    roots: tauri::State<'_, WriteRoots>,
+    root: String,
+    worktree: String,
+) -> Result<u32, String> {
+    main_only(window.label())?;
+    let resolved = crate::within_roots(&roots, &root)?;
+    let is_a_root = roots.0.lock().map_err(|_| "radici bloccate")?.iter().any(|open| *open == resolved);
+    if !is_a_root {
+        return Err("il progetto non è aperto".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || rescue_reports(&resolved, Path::new(&worktree))).await.map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,5 +472,102 @@ mod tests {
         let body = &source[source.find("pub async fn ade_worktree_bytes").unwrap()..];
         assert_eq!(body.lines().nth(6).unwrap().trim(), "main_only(window.label())?;");
         assert!(body.contains("is_a_root"));
+    }
+
+    /// A project `app` with its `.ade/` and a worktree `app-worktrees/fix` that has written into the three folders.
+    fn project_with_worktree(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let parent = scratch(name);
+        let project = parent.join("app");
+        let tree = parent.join("app-worktrees").join("fix");
+        for folder in ["results", "browser", "design/note"] {
+            std::fs::create_dir_all(tree.join(".ade").join(folder)).unwrap();
+        }
+        std::fs::create_dir_all(&project).unwrap();
+        (parent, project, tree)
+    }
+
+    #[test]
+    fn a_sessions_results_captures_and_notes_are_moved_into_the_project_before_the_worktree_goes() {
+        let (parent, project, tree) = project_with_worktree("rescue");
+        std::fs::write(tree.join(".ade/results/r.md"), "report").unwrap();
+        std::fs::write(tree.join(".ade/browser/20260901-a.png"), vec![1u8; 10]).unwrap();
+        std::fs::write(tree.join(".ade/browser/20260901-a.md"), "note").unwrap();
+        std::fs::write(tree.join(".ade/design/note/n.md"), "design note").unwrap();
+        assert_eq!(rescue_reports(&project, &tree), Ok(4));
+        assert_eq!(std::fs::read_to_string(project.join(".ade/results/r.md")).unwrap(), "report");
+        assert_eq!(std::fs::read(project.join(".ade/browser/20260901-a.png")).unwrap().len(), 10);
+        assert_eq!(std::fs::read_to_string(project.join(".ade/design/note/n.md")).unwrap(), "design note");
+        // Nothing is left behind to be taken with the folder.
+        assert!(!tree.join(".ade/results/r.md").exists());
+        // A second time there is nothing to move.
+        assert_eq!(rescue_reports(&project, &tree), Ok(0));
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn a_name_the_project_already_has_is_kept_and_the_new_file_gets_a_number() {
+        let (parent, project, tree) = project_with_worktree("rescue-clash");
+        std::fs::create_dir_all(project.join(".ade/results")).unwrap();
+        std::fs::write(project.join(".ade/results/r.md"), "old").unwrap();
+        std::fs::write(project.join(".ade/results/r-2.md"), "older").unwrap();
+        std::fs::write(tree.join(".ade/results/r.md"), "new").unwrap();
+        assert_eq!(rescue_reports(&project, &tree), Ok(1));
+        assert_eq!(std::fs::read_to_string(project.join(".ade/results/r.md")).unwrap(), "old");
+        assert_eq!(std::fs::read_to_string(project.join(".ade/results/r-2.md")).unwrap(), "older");
+        assert_eq!(std::fs::read_to_string(project.join(".ade/results/r-3.md")).unwrap(), "new");
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn only_those_three_folders_and_only_plain_files_are_moved() {
+        let (parent, project, tree) = project_with_worktree("rescue-scope");
+        std::fs::write(tree.join(".ade/decisions.jsonl"), "x").unwrap();
+        std::fs::create_dir_all(tree.join(".ade/design/1")).unwrap();
+        std::fs::write(tree.join(".ade/design/1/a.html"), "x").unwrap();
+        std::fs::create_dir_all(tree.join(".ade/results/sub")).unwrap();
+        std::fs::write(tree.join(".ade/results/sub/deep.md"), "x").unwrap();
+        std::fs::write(tree.join("src.txt"), "x").unwrap();
+        assert_eq!(rescue_reports(&project, &tree), Ok(0));
+        assert!(!project.join(".ade/decisions.jsonl").exists());
+        assert!(!project.join(".ade/results/sub").exists());
+        assert!(tree.join(".ade/results/sub/deep.md").exists());
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn a_folder_that_is_not_a_worktree_of_this_project_is_refused_and_nothing_moves() {
+        let (parent, project, tree) = project_with_worktree("rescue-refuse");
+        std::fs::write(tree.join(".ade/results/r.md"), "report").unwrap();
+        // The container itself, the project, a folder elsewhere and one that does not exist.
+        assert!(rescue_reports(&project, &parent.join("app-worktrees")).is_err());
+        let elsewhere = parent.join("other");
+        std::fs::create_dir_all(elsewhere.join(".ade/results")).unwrap();
+        std::fs::write(elsewhere.join(".ade/results/x.md"), "x").unwrap();
+        assert!(rescue_reports(&project, &elsewhere).is_err());
+        assert!(elsewhere.join(".ade/results/x.md").exists());
+        assert!(rescue_reports(&project, &parent.join("app-worktrees").join("missing")).is_err());
+        assert!(!project.join(".ade/results/r.md").exists());
+        assert!(tree.join(".ade/results/r.md").exists());
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn a_project_that_cannot_take_the_files_is_an_error_and_the_source_stays() {
+        let (parent, project, tree) = project_with_worktree("rescue-fails");
+        std::fs::write(tree.join(".ade/results/r.md"), "report").unwrap();
+        // `.ade` in the project is a plain file, so `.ade/results` cannot be made there.
+        std::fs::write(project.join(".ade"), "not a folder").unwrap();
+        assert!(rescue_reports(&project, &tree).is_err());
+        assert!(tree.join(".ade/results/r.md").exists());
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn the_rescue_command_answers_to_the_main_window_and_refuses_what_is_not_the_root_of_an_open_project() {
+        let source = include_str!("ade_prune.rs");
+        let body = &source[source.find("pub async fn ade_worktree_rescue").unwrap()..];
+        assert_eq!(body.lines().nth(6).unwrap().trim(), "main_only(window.label())?;");
+        // Not a root is an error, not a zero: the caller keeps the worktree.
+        assert!(body.contains("return Err(\"il progetto non è aperto\".into())"));
     }
 }

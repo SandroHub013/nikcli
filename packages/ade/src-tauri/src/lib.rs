@@ -2274,6 +2274,7 @@ pub fn run() {
             ade_prune::ade_prune,
             ade_prune::ade_container_remove,
             ade_prune::ade_worktree_bytes,
+            ade_prune::ade_worktree_rescue,
             tts::tts_disk_report,
             nikcli_bot,
             claude_agents,

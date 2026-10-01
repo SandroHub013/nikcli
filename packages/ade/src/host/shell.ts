@@ -400,6 +400,8 @@ export interface Host {
   adeContainerRemove?: (root: string) => Promise<boolean>
   /** What a worktree folder beside an open project weighs (0 for anything that is not one). */
   adeWorktreeBytes?: (root: string, worktree: string) => Promise<number>
+  /** Moves a session's results, captures and design notes from its worktree's `.ade/` into the project's, before the worktree goes; throws when it cannot. */
+  adeWorktreeRescue?: (root: string, worktree: string) => Promise<number>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -521,6 +523,11 @@ export async function getHost(): Promise<Host | undefined> {
     async claudeVersion() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string | null>("claude_version").catch(() => null)
+    },
+
+    async adeWorktreeRescue(root, worktree) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_worktree_rescue", { root, worktree })
     },
 
     async adeWorktreeBytes(root, worktree) {

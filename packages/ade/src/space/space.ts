@@ -13,7 +13,7 @@
 import type { RunResult } from "../host/shell"
 import { t } from "../i18n"
 import { pruneFolders, pruneSummary, type Listed } from "../session/ade-prune"
-import { isAdeBranch, reclaimWorktree, worktreeWork } from "../session/worktree-close"
+import { isAdeBranch, noRescue, reclaimWorktree, worktreeWork } from "../session/worktree-close"
 
 export type Group = "voices" | "assets" | "worktrees" | "branches" | "project"
 
@@ -42,6 +42,7 @@ export interface SpaceHost {
   adePrune?: (paths: string[]) => Promise<number>
   adeContainerRemove?: (root: string) => Promise<boolean>
   adeWorktreeBytes?: (root: string, worktree: string) => Promise<number>
+  adeWorktreeRescue?: (root: string, worktree: string) => Promise<number>
 }
 
 export interface SpaceDeps {
@@ -196,7 +197,7 @@ export function createSpace(deps: SpaceDeps) {
       })
       if (!why) {
         plans.set(id, async () => {
-          const result = await reclaimWorktree(async (command, args, cwd) => host.run!(command, args, cwd), facts)
+          const result = await reclaimWorktree(async (command, args, cwd) => host.run!(command, args, cwd), facts, host.adeWorktreeRescue ?? noRescue)
           if (result.kind === "kept") throw new Error(result.reason)
           await host.adeContainerRemove?.(root).catch(() => false)
           return bytes ?? 0
