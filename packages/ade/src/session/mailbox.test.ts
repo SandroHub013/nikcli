@@ -188,6 +188,19 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
 })
 
+test("an unverified design is refused: a page opens beside a session only for that session", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"design","from":"","path":"C:/p/.ade/design/a.html"}',
+    '{"kind":"design","from":"n1-0","token":"falso","path":"C:/p/.ade/design/a.html"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+  }
+  const verified = '{"kind":"design","from":"n1-0","token":"segreto","path":"C:/p/.ade/design/a.html"}'
+  expect(unverifiedSenderRefusal(verifySender(parseMessage(verified)!, tokenOf))).toBeUndefined()
+})
+
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
   const voiceSend = verifySender(
@@ -840,6 +853,26 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2" }))).toMatchObject({ kind: "relaunch", note: "" })
     expect(parseMessage(JSON.stringify({ kind: "interrupt", to: "2" }))).toMatchObject({ kind: "interrupt", to: "2" })
     expect(parseMessage(JSON.stringify({ kind: "interrupt" }))).toBeUndefined()
+  })
+
+  test("design carries the sheet's path and its title, and needs the path", () => {
+    expect(
+      parseMessage(JSON.stringify({ kind: "design", from: "n1-0", path: "C:/p/.ade/design/menu.html", title: "Menu" })),
+    ).toEqual({
+      kind: "design",
+      from: "n1-0",
+      token: undefined,
+      path: "C:/p/.ade/design/menu.html",
+      title: "Menu",
+      text: "",
+    })
+    // The sh script sends an empty title when there is none.
+    const untitled = parseMessage(
+      JSON.stringify({ kind: "design", from: "n1-0", path: "C:/p/.ade/design/a.html", title: "" }),
+    )
+    expect(untitled).toMatchObject({ kind: "design", path: "C:/p/.ade/design/a.html" })
+    expect(untitled && "title" in untitled).toBe(false)
+    expect(parseMessage(JSON.stringify({ kind: "design", from: "n1-0" }))).toBeUndefined()
   })
 
   test("open decisions are the keyed ones no later risolta answered, and status prints them", () => {

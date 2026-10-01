@@ -1,4 +1,5 @@
 import { redactHistory, redactUrl, type BrowserHistory } from "../browser/history"
+import type { PaneSheet } from "../design/sheet"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
@@ -171,6 +172,8 @@ export interface Pane {
    * session is gone. See `browser/binding.ts`.
    */
   browserOwner?: { id: string; title: string }
+  /** The design sheet a web pane shows (`ade-msg design`, `design/sheet.ts`). */
+  designSheet?: PaneSheet
   /**
    * The video panel's file, empty when the panel is open with nothing in it.
    *
@@ -587,6 +590,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       url: redactUrl(p.browserUrl!),
       ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
       ...(p.browserOwner ? { owner: { id: p.browserOwner.id, title: p.browserOwner.title } } : {}),
+      ...(p.designSheet ? { sheet: { ...p.designSheet } } : {}),
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
@@ -764,6 +768,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
             browserUrl: b.url,
             ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
             ...(b.owner ? { browserOwner: { id: b.owner.id, title: b.owner.title } } : {}),
+            ...(b.sheet ? { designSheet: { ...b.sheet } } : {}),
             workspaceId: b.project || owner,
             ...(b.projectRoot ? { projectRoot: b.projectRoot } : {}),
             ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
