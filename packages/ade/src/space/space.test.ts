@@ -191,6 +191,16 @@ describe("what the panel lists", () => {
     expect(await space.refresh()).toEqual([])
   })
 
+  const LS = "ls-files -z -- .ade/browser .ade/results .ade/design/note"
+
+  test("an old file that git tracks is not offered; with all of them tracked there is no row, and with git silent there is none either", async () => {
+    const tracked = setup({}, {}, { [LS]: { stdout: ".ade/results/a.md\0" } })
+    expect((await tracked.space.refresh()).some((row) => row.group === "project")).toBe(false)
+    const failing = setup({}, {}, { [LS]: { code: 128, stderr: "fatal: not a git repository" } })
+    expect((await failing.space.refresh()).some((row) => row.group === "project")).toBe(false)
+    expect(failing.removedBy).toEqual([])
+  })
+
   test("nothing of a project's memory is ever a row", async () => {
     const { space } = setup({ readDir: async (path) => (path.endsWith("/results") ? [{ name: "memory.md", path: `${ROOT}/.ade/results/memory.md`, is_dir: false, modified_ms: NOW - 900 * DAY, size: 99 }] : []) })
     const rows = await space.refresh()

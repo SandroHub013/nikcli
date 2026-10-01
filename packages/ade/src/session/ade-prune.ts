@@ -13,11 +13,15 @@
  * previews of the design proposals (`design/<k>/<n>.html`) are not in these folders and are never named here, and a protected name in one
  * of them would not be chosen anyway.
  *
+ * A project may keep some of these files in git (a team that commits its results or notes): those are the project's, not ADE's, and are
+ * never chosen; a project where git cannot say what it tracks is not pruned at all.
+ *
  * Pure, so what is chosen can be tested: it gets the listings and the time, and returns the paths to remove. Doing it is the host's, and the
  * host refuses anything that is not a file of one of these three folders (`ade_prune.rs`).
  */
 
 import type { DirEntry } from "../host/shell"
+import type { GitRun } from "./worktree-close"
 
 export const KEEP_CAPTURES = 50
 export const MAX_AGE_DAYS = 30
@@ -70,18 +74,38 @@ export function oldFiles(entries: readonly Listed[], now: number, extensions: re
   return entries.filter((entry) => candidate(entry, extensions) && entry.modified_ms > 0 && entry.modified_ms < cutoff).map((entry) => entry.path)
 }
 
-/** Everything of the three folders that is to be removed at `now`. */
-export function pruneChoices(listings: Listings, now: number): string[] {
+/** A path as two spellings of it can be compared: forward slashes, no trailing one, lower case (the disks are case-insensitive). */
+export const pathKey = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+
+/**
+ * The files of the three folders that git tracks, as `pathKey`s of their full paths; `undefined` when git cannot say (not a repository, git
+ * missing): then nothing may be taken for untracked.
+ */
+export async function trackedFiles(run: GitRun, root: string): Promise<Set<string> | undefined> {
+  const folders = pruneFolders(root)
+  const trimmed = root.replace(/[\\/]+$/, "")
+  const relative = [folders.browser, folders.results, folders.notes].map((folder) => folder.slice(trimmed.length + 1).replace(/\\/g, "/"))
+  try {
+    const listed = await run("git", ["ls-files", "-z", "--", ...relative], root)
+    if (listed.code !== 0) return undefined
+    return new Set(listed.stdout.split("\0").filter(Boolean).map((file) => pathKey(`${trimmed}/${file}`)))
+  } catch {
+    return undefined
+  }
+}
+
+/** Everything of the three folders that is to be removed at `now`, but what git tracks (`tracked`, from `trackedFiles`). */
+export function pruneChoices(listings: Listings, now: number, tracked: ReadonlySet<string>): string[] {
   return [
     ...oldCaptures(listings.browser),
     ...oldFiles(listings.results, now, ["md"]),
     ...oldFiles(listings.notes, now, ["md"]),
-  ]
+  ].filter((path) => !tracked.has(pathKey(path)))
 }
 
 /** What `pruneChoices` would remove, and how much that is: for the panel that says it before it does it. */
-export function pruneSummary(listings: Listings, now: number): { paths: string[]; bytes: number } {
-  const paths = pruneChoices(listings, now)
+export function pruneSummary(listings: Listings, now: number, tracked: ReadonlySet<string>): { paths: string[]; bytes: number } {
+  const paths = pruneChoices(listings, now, tracked)
   const chosen = new Set(paths)
   const bytes = [...listings.browser, ...listings.results, ...listings.notes].reduce((sum, entry) => sum + (chosen.has(entry.path) ? (entry.size ?? 0) : 0), 0)
   return { paths, bytes }
@@ -97,6 +121,8 @@ export function pruneFolders(root: string): { browser: string; results: string; 
 
 /** The part of the host this needs. */
 export interface PruneHost {
+  /** git, to know which files the project keeps in its repository. Without it nothing is pruned. */
+  run?: GitRun
   readDir?: (path: string) => Promise<Listed[]>
   /** Removes the files; the bytes freed. */
   adePrune?: (paths: string[]) => Promise<number>
@@ -104,13 +130,15 @@ export interface PruneHost {
 
 /** Prunes one project's `.ade/`; the bytes freed (0 when there is nothing to do or the host cannot). Never throws. */
 export async function pruneProject(host: PruneHost, root: string, now: number): Promise<number> {
-  if (!host.readDir || !host.adePrune) return 0
+  if (!host.readDir || !host.adePrune || !host.run) return 0
   try {
+    const tracked = await trackedFiles(host.run, root)
+    if (!tracked) return 0
     const folders = pruneFolders(root)
     const [browser, results, notes] = await Promise.all(
       [folders.browser, folders.results, folders.notes].map((folder) => host.readDir!(folder).catch(() => [] as Listed[])),
     )
-    const paths = pruneChoices({ browser: browser!, results: results!, notes: notes! }, now)
+    const paths = pruneChoices({ browser: browser!, results: results!, notes: notes! }, now, tracked)
     return paths.length > 0 ? await host.adePrune(paths) : 0
   } catch {
     return 0

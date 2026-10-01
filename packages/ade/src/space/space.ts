@@ -12,7 +12,7 @@
 
 import type { RunResult } from "../host/shell"
 import { t } from "../i18n"
-import { pruneFolders, pruneSummary, type Listed } from "../session/ade-prune"
+import { pruneFolders, pruneSummary, trackedFiles, type Listed } from "../session/ade-prune"
 import { isAdeBranch, noRescue, reclaimWorktree, worktreeWork } from "../session/worktree-close"
 
 export type Group = "voices" | "assets" | "worktrees" | "branches" | "project"
@@ -223,11 +223,13 @@ export function createSpace(deps: SpaceDeps) {
       })
     }
 
-    if (host.readDir && host.adePrune) {
+    // What git tracks is the project's: with no answer from git nothing of `.ade/` is offered.
+    const tracked = host.run ? await trackedFiles(async (command, args, cwd) => host.run!(command, args, cwd), root) : undefined
+    if (host.readDir && host.adePrune && tracked) {
       const folders = pruneFolders(root)
       const read = (folder: string) => host.readDir!(folder).catch(() => [] as (Listed & { size?: number })[])
       const [browser, results, notes] = await Promise.all([read(folders.browser), read(folders.results), read(folders.notes)])
-      const summary = pruneSummary({ browser, results, notes }, deps.now())
+      const summary = pruneSummary({ browser, results, notes }, deps.now(), tracked)
       if (summary.paths.length > 0) {
         const id = `prune:${normalized(root)}`
         rows.push({

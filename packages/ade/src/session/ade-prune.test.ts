@@ -6,16 +6,32 @@ import {
   oldCaptures,
   oldFiles,
   pruneChoices,
+  pathKey,
   pruneFolders,
   pruneProject,
   pruneSummary,
+  trackedFiles,
   type Listed,
   type Listings,
 } from "./ade-prune"
+import type { GitRun } from "./worktree-close"
 
 const DAY = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 9, 2, 12, 0, 0)
 const BASE = "C:/work/app/.ade"
+/** Nothing in git. */
+const none: ReadonlySet<string> = new Set()
+
+/** A fake git for `ls-files`: what the project tracks (relative paths), or a failure; every call is kept. */
+function gitSays(tracked?: string[] | "fails") {
+  const calls: { args: string[]; cwd: string | undefined }[] = []
+  const run: GitRun = async (_command, args, cwd) => {
+    calls.push({ args, cwd })
+    if (tracked === "fails") return { code: 128, stdout: "", stderr: "fatal: not a git repository" }
+    return { code: 0, stdout: (tracked ?? []).map((file) => file + "\0").join(""), stderr: "" }
+  }
+  return Object.assign(run, { calls })
+}
 
 const file = (folder: string, name: string, ageDays: number): Listed => ({
   name,
@@ -34,6 +50,23 @@ function captures(n: number): Listed[] {
     out.push(file("browser", `${stem}.png`, age), file("browser", `${stem}.md`, age))
   }
   return out
+}
+
+function host(listings: Record<string, Listed[]>, options: { readFails?: string[]; pruneFails?: boolean; tracked?: string[] | "fails" } = {}) {
+  const removed: string[][] = []
+  return {
+    removed,
+    run: gitSays(options.tracked),
+    readDir: async (path: string) => {
+      if (options.readFails?.includes(path)) throw new Error("manca")
+      return listings[path] ?? []
+    },
+    adePrune: async (paths: string[]) => {
+      if (options.pruneFails) throw new Error("host")
+      removed.push(paths)
+      return paths.length * 100
+    },
+  }
 }
 
 describe("the captures of the browser pane: the last fifty, in pairs", () => {
@@ -131,18 +164,18 @@ describe("what is never chosen", () => {
   })
 
   test("not in browser/, results/ or design/note/, however old and wherever listed", () => {
-    expect(pruneChoices(everywhere, NOW)).toEqual([])
+    expect(pruneChoices(everywhere, NOW, none)).toEqual([])
   })
 
   test("not in a different case either", () => {
     const shouting: Listings = { browser: [], results: [file("results", "MEMORY.MD", 900), file("results", "Decisions.JSONL", 900)], notes: [file("design/note", "MEMORY.md", 900)] }
-    expect(pruneChoices(shouting, NOW)).toEqual([])
+    expect(pruneChoices(shouting, NOW, none)).toEqual([])
   })
 
   test("the previews of the design proposals are not listed here, so they are not chosen: design/<k>/<n>.html", () => {
     // The caller lists three folders only; design/note is one of them, design/ itself is not.
     const listings: Listings = { browser: [], results: [], notes: [file("design/note", "a.md", 100)] }
-    expect(pruneChoices(listings, NOW)).toEqual([`${BASE}/design/note/a.md`])
+    expect(pruneChoices(listings, NOW, none)).toEqual([`${BASE}/design/note/a.md`])
   })
 })
 
@@ -153,7 +186,7 @@ describe("all three folders at once", () => {
       results: [file("results", "a.md", 31), file("results", "b.md", 1)],
       notes: [file("design/note", "n.md", 45), file("design/note", "m.md", 2)],
     }
-    const chosen = pruneChoices(listings, NOW)
+    const chosen = pruneChoices(listings, NOW, none)
     expect(chosen).toHaveLength(4 + 1 + 1)
     expect(chosen).toContain(`${BASE}/results/a.md`)
     expect(chosen).toContain(`${BASE}/design/note/n.md`)
@@ -162,7 +195,7 @@ describe("all three folders at once", () => {
   })
 
   test("nothing to prune is an empty list, not a call", () => {
-    expect(pruneChoices({ browser: [], results: [], notes: [] }, NOW)).toEqual([])
+    expect(pruneChoices({ browser: [], results: [], notes: [] }, NOW, none)).toEqual([])
   })
 })
 
@@ -176,21 +209,6 @@ describe("the folders of a project", () => {
 })
 
 describe("pruning a project through the host", () => {
-  function host(listings: Record<string, Listed[]>, options: { readFails?: string[]; pruneFails?: boolean } = {}) {
-    const removed: string[][] = []
-    return {
-      removed,
-      readDir: async (path: string) => {
-        if (options.readFails?.includes(path)) throw new Error("manca")
-        return listings[path] ?? []
-      },
-      adePrune: async (paths: string[]) => {
-        if (options.pruneFails) throw new Error("host")
-        removed.push(paths)
-        return paths.length * 100
-      },
-    }
-  }
 
   test("it lists the three folders, hands over what is chosen, and returns the bytes freed", async () => {
     const h = host({ "C:/work/app/.ade/results": [file("results", "a.md", 40), file("results", "b.md", 2)] })
@@ -225,20 +243,83 @@ describe("pruneSummary", () => {
     const fresh = sized(file("results", "fresh.md", 2), 9000)
     const oldNote = sized(file("note", "n.md", 31), 500)
     const listings: Listings = { browser: [], results: [old, fresh], notes: [oldNote] }
-    const summary = pruneSummary(listings, NOW)
-    expect(summary.paths).toEqual(pruneChoices(listings, NOW))
+    const summary = pruneSummary(listings, NOW, none)
+    expect(summary.paths).toEqual(pruneChoices(listings, NOW, none))
     expect(summary.bytes).toBe(3500)
   })
 
   test("a file with no known size weighs nothing, and nothing to prune is zero", () => {
-    const summary = pruneSummary({ browser: [], results: [file("results", "old.md", 40)], notes: [] }, NOW)
+    const summary = pruneSummary({ browser: [], results: [file("results", "old.md", 40)], notes: [] }, NOW, none)
     expect(summary.paths).toHaveLength(1)
     expect(summary.bytes).toBe(0)
-    expect(pruneSummary({ browser: [], results: [], notes: [] }, NOW)).toEqual({ paths: [], bytes: 0 })
+    expect(pruneSummary({ browser: [], results: [], notes: [] }, NOW, none)).toEqual({ paths: [], bytes: 0 })
   })
 
   test("the project's memory is never counted, however old and big", () => {
     const memory = sized(file("results", "memory.md", 900), 99_999)
-    expect(pruneSummary({ browser: [], results: [memory], notes: [] }, NOW)).toEqual({ paths: [], bytes: 0 })
+    expect(pruneSummary({ browser: [], results: [memory], notes: [] }, NOW, none)).toEqual({ paths: [], bytes: 0 })
+  })
+})
+
+describe("what git tracks is the project's, not ADE's", () => {
+  const trackedOld = file("results", "kept.md", 400)
+  const looseOld = file("results", "loose.md", 400)
+
+  test("an old file that git tracks is not chosen, and one that it does not is", () => {
+    const listings: Listings = { browser: [], results: [trackedOld, looseOld], notes: [] }
+    const tracked = new Set([`${BASE}/results/kept.md`.toLowerCase()])
+    expect(pruneChoices(listings, NOW, tracked)).toEqual([looseOld.path])
+    expect(pruneChoices(listings, NOW, none)).toEqual([trackedOld.path, looseOld.path])
+  })
+
+  test("a capture of the browser pane with one of its two files tracked loses only the other", () => {
+    const old = captures(KEEP_CAPTURES + 1).slice(-2)
+    const tracked = new Set([old[0]!.path.toLowerCase()])
+    const chosen = pruneChoices({ browser: captures(KEEP_CAPTURES + 1), results: [], notes: [] }, NOW, tracked)
+    expect(chosen).toEqual([old[1]!.path])
+  })
+
+  test("the summary counts only what would be removed", () => {
+    const sized = (entry: Listed, size: number): Listed => ({ ...entry, size })
+    const listings: Listings = { browser: [], results: [sized(trackedOld, 5000), sized(looseOld, 70)], notes: [] }
+    const summary = pruneSummary(listings, NOW, new Set([trackedOld.path.toLowerCase()]))
+    expect(summary).toEqual({ paths: [looseOld.path], bytes: 70 })
+  })
+
+  test("trackedFiles asks git once, in the project, for the three folders only, and reads the names up to the NUL", async () => {
+    const run = gitSays([".ade/results/Kept One.md", ".ade/design/note/n.md"])
+    const tracked = await trackedFiles(run, "C:/work/app/")
+    expect(run.calls).toEqual([{ args: ["ls-files", "-z", "--", ".ade/browser", ".ade/results", ".ade/design/note"], cwd: "C:/work/app/" }])
+    expect([...tracked!].sort()).toEqual(["c:/work/app/.ade/design/note/n.md", "c:/work/app/.ade/results/kept one.md"])
+  })
+
+  test("a project written with backslashes compares the same", async () => {
+    const run = gitSays([".ade/results/a.md"])
+    const tracked = await trackedFiles(run, "C:\\Work\\App")
+    expect(tracked?.has(pathKey("C:\\work\\app\\.ade\\results\\A.md"))).toBe(true)
+    expect(run.calls[0]!.args.slice(3)).toEqual([".ade/browser", ".ade/results", ".ade/design/note"])
+  })
+
+  test("git that cannot answer is no answer: nothing may be taken for untracked", async () => {
+    expect(await trackedFiles(gitSays("fails"), "C:/work/app")).toBeUndefined()
+    const throwing: GitRun = async () => {
+      throw new Error("git non c'è")
+    }
+    expect(await trackedFiles(throwing, "C:/work/app")).toBeUndefined()
+  })
+
+  test("pruneProject spares a tracked file and removes the rest", async () => {
+    const h = host({ "C:/work/app/.ade/results": [trackedOld, looseOld] }, { tracked: [".ade/results/kept.md"] })
+    expect(await pruneProject(h, "C:/work/app", NOW)).toBe(100)
+    expect(h.removed).toEqual([[looseOld.path]])
+  })
+
+  test("pruneProject with git failing, or with no git at all, removes nothing and does not even ask the host to", async () => {
+    const failing = host({ "C:/work/app/.ade/results": [looseOld] }, { tracked: "fails" })
+    expect(await pruneProject(failing, "C:/work/app", NOW)).toBe(0)
+    expect(failing.removed).toEqual([])
+    const { run: _run, ...noGit } = host({ "C:/work/app/.ade/results": [looseOld] })
+    expect(await pruneProject(noGit, "C:/work/app", NOW)).toBe(0)
+    expect(noGit.removed).toEqual([])
   })
 })
