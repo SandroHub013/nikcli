@@ -16,7 +16,12 @@ function factory(options: { has: boolean; outcome?: "success" | "error" | "block
       })
       return request
     },
-    ...(options.list === false ? {} : { databases: async () => (options.has ? [{ name: LEGACY_PARAKEET_DB }, { name: "other" }] : [{ name: "other" }]) }),
+    ...(options.list === false
+      ? {}
+      : {
+          databases: async () =>
+            options.has ? [{ name: LEGACY_PARAKEET_DB }, { name: "other" }] : [{ name: "other" }],
+        }),
   }
   return { indexedDB, deleted }
 }
@@ -72,7 +77,11 @@ describe("the leftovers of the removed Parakeet engine", () => {
   test("without IndexedDB, or with one that throws, it does nothing and never throws", async () => {
     expect(await dropLegacyParakeet({ storage: memory() })).toEqual({ dropped: false, skipped: true })
     const broken: LegacyParakeetEnv = {
-      indexedDB: { deleteDatabase: () => { throw new Error("no") } },
+      indexedDB: {
+        deleteDatabase: () => {
+          throw new Error("no")
+        },
+      },
       storage: memory(),
     }
     expect(await dropLegacyParakeet(broken)).toEqual({ dropped: false, skipped: false })

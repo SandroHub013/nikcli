@@ -31,7 +31,6 @@ describe("orbRim", () => {
   })
 })
 
-
 describe("agentHudState", () => {
   it("quotes the wake word while the agent sleeps", () => {
     const state = agentHudState({ ...base, status: "asleep" })

@@ -3,6 +3,10 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.421.0 (October 2026)
+
+- No notable changes
+
 ## v1.420.0 (October 2026)
 
 - No notable changes

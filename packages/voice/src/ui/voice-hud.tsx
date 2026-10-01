@@ -33,14 +33,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "so
 import type { VoiceEngine } from "../engine"
 import { OrbMark } from "./orb-mark"
 import { orbLevel } from "./voice-orb"
-import {
-  agentHudState,
-  latestExchange,
-  HUD_WAVE,
-  orbRim,
-  waveBarHeight,
-  type HudState,
-} from "./voice-hud-state"
+import { agentHudState, latestExchange, HUD_WAVE, orbRim, waveBarHeight, type HudState } from "./voice-hud-state"
 import "./voice-hud.css"
 import { t } from "@nikcli-ai/ade/i18n"
 
@@ -172,8 +165,7 @@ export function VoiceHud(props: VoiceHudProps) {
   const visible = createMemo(() =>
     props.open !== undefined
       ? props.open
-      : (running() && (mode() === "transcription" || agentNeedsPill())) ||
-        failure() !== undefined,
+      : (running() && (mode() === "transcription" || agentNeedsPill())) || failure() !== undefined,
   )
 
   const state = createMemo<HudState>(() => {
