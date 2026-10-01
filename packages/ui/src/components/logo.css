@@ -2,3 +2,42 @@
   width: 16px;
   aspect-ratio: 4/5;
 }
+
+[data-component="logo-wordmark"] {
+  display: inline-block;
+  aspect-ratio: 632 / 206;
+  user-select: none;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+
+  /* Light surface (default): ink letters */
+  img[data-tone="dark"] {
+    display: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-color-scheme="light"]) [data-component="logo-wordmark"] {
+    img[data-tone="dark"] {
+      display: block;
+    }
+    img[data-tone="light"] {
+      display: none;
+    }
+  }
+}
+
+html[data-color-scheme="dark"] [data-component="logo-wordmark"] {
+  img[data-tone="dark"] {
+    display: block;
+  }
+  img[data-tone="light"] {
+    display: none;
+  }
+}

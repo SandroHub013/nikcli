@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Cyberpunk",
+  "id": "cyberpunk",
+  "light": {
+    "seeds": {
+      "neutral": "#eeeeee",
+      "primary": "#7e7705",
+      "success": "#008c56",
+      "warning": "#b36f14",
+      "error": "#f22868",
+      "info": "#038d97",
+      "interactive": "#7e7705",
+      "diffAdd": "#008c56",
+      "diffDelete": "#f22868"
+    },
+    "overrides": {
+      "background-base": "#eeeeee",
+      "background-weak": "#e4e4e4",
+      "background-strong": "#eeeeee",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#08080c",
+      "text-base": "#303034",
+      "text-weak": "#7b7b7d",
+      "text-weaker": "#9b9b9d",
+      "border-weak-base": "#dfdfdf",
+      "border-base": "#cfcfcf",
+      "border-strong-base": "#89898b"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0b0b10",
+      "primary": "#fcee0a",
+      "success": "#00ff9c",
+      "warning": "#ff9f1c",
+      "error": "#ff2a6d",
+      "info": "#05d9e8",
+      "interactive": "#fcee0a",
+      "diffAdd": "#00ff9c",
+      "diffDelete": "#ff2a6d"
+    },
+    "overrides": {
+      "background-base": "#0b0b10",
+      "background-weak": "#19191e",
+      "background-strong": "#0b0b10",
+      "background-stronger": "#121218",
+      "surface-raised-stronger-non-alpha": "#121218",
+      "text-strong": "#eceff4",
+      "text-base": "#c5c8d5",
+      "text-weak": "#7c809a",
+      "text-weaker": "#54576a",
+      "border-weak-base": "#181821",
+      "border-base": "#23232f",
+      "border-strong-base": "#696a74"
+    }
+  }
+}

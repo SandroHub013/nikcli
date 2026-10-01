@@ -15,7 +15,7 @@ const pathname = Astro.url.pathname;
   aria-label="Primary navigation"
 >
   <!-- Backdrop -->
-  <div class="absolute inset-0 bg-terminal-bg/80 backdrop-blur-xl border-b border-terminal-border/50 -z-10"></div>
+  <div class="glass-bar absolute inset-0 -z-10"></div>
 
   <div class="page-shell flex h-[var(--topbar-height)] items-center justify-between gap-4">
 
@@ -48,14 +48,14 @@ const pathname = Astro.url.pathname;
     <!-- Desktop nav -->
     <nav class="hidden md:flex items-center gap-1" aria-label="Main">
       <!-- Nav links pill container -->
-      <div class="flex items-center rounded-xl border border-terminal-border/40 bg-terminal-bg/60 p-[3px] shadow-soft">
+      <div class="glass-chip flex items-center rounded-[14px] border p-[3px]">
         {navItems.map((item) => {
           const isActive = !item.external && pathname.startsWith(item.href);
           return (
             <a
               href={item.href}
               class={[
-                "relative px-3.5 py-[6px] rounded-[9px] text-[13px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 ease-out",
+                "relative px-3.5 py-[6px] rounded-[11px] text-[13px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 ease-out",
                 isActive
                   ? "bg-terminal-panel text-terminal-text shadow-soft ring-1 ring-terminal-border/50"
                   : "text-terminal-muted hover:text-terminal-text",
@@ -95,7 +95,7 @@ const pathname = Astro.url.pathname;
       <button
         id="theme-toggle"
         type="button"
-        class="flex h-9 w-9 items-center justify-center rounded-full border border-terminal-border/50 bg-terminal-panel/70 text-terminal-muted transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-terminal-accent/40 hover:text-terminal-accent hover:bg-terminal-accent/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-accent focus-visible:ring-offset-1 active:scale-[0.97]"
+        class="glass-chip flex h-9 w-9 items-center justify-center rounded-full border text-terminal-muted transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-terminal-accent/40 hover:text-terminal-accent hover:bg-terminal-accent/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-accent focus-visible:ring-offset-1 active:scale-[0.97]"
         aria-label="Toggle theme"
         aria-pressed="false"
       >
@@ -128,7 +128,7 @@ const pathname = Astro.url.pathname;
     <button
       id="mobile-menu-btn"
       type="button"
-      class="md:hidden flex h-9 w-9 items-center justify-center rounded-lg border border-terminal-border/50 bg-terminal-panel/70 text-terminal-muted -mr-1 transition-[background-color,color,transform] duration-150 ease-out hover:text-terminal-text active:scale-[0.97]"
+      class="glass-chip md:hidden flex h-9 w-9 items-center justify-center rounded-xl border text-terminal-muted -mr-1 transition-[background-color,color,transform] duration-150 ease-out hover:text-terminal-text active:scale-[0.97]"
       aria-label="Open menu"
       aria-controls="mobile-menu"
       aria-expanded="false"
@@ -145,7 +145,7 @@ const pathname = Astro.url.pathname;
   <!-- Mobile menu -->
   <div
     id="mobile-menu"
-    class="hidden md:hidden absolute top-full inset-x-0 z-50 border-b border-terminal-border bg-terminal-bg/96 backdrop-blur-xl shadow-strong px-[var(--page-gutter)] pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+    class="glass-strong hidden md:hidden absolute top-full inset-x-0 z-50 rounded-b-[26px] border-b shadow-strong px-[var(--page-gutter)] pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
     aria-label="Mobile navigation"
   >
     <nav class="flex flex-col gap-1 mb-4">

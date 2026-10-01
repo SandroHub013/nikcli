@@ -33,7 +33,7 @@
 
 import type { PermissionRule } from "../chat/rules"
 
-export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none"
+export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none" | "planner"
 
 const rule = (permission: string, action: PermissionRule["action"], pattern = "*"): PermissionRule => ({
   permission,
@@ -214,6 +214,8 @@ const PROFILE_RULES: Record<BotProfile, readonly PermissionRule[]> = {
     rule("browser_control", "deny"),
     ...["edit", "write", "patch", "repo_clone", "generate_image", "artifact"].map((tool) => rule(tool, "deny")),
   ],
+  // The voice's planner: it answers from what it is given, so no tool at all.
+  planner: [rule("*", "deny")],
   "remote-ask": [
     rule("bash", "ask"),
     rule("external_directory", "ask"),
@@ -258,9 +260,12 @@ export function profileFor(spec: {
   readonly remote?: { readonly commands: boolean }
   readonly unattended?: boolean
   readonly approvals?: boolean
+  /** No tool at all (`TurnRequest.noTools`). */
+  readonly noTools?: boolean
   /** The bot's shell is on (`bash` not among its disabled tools). */
   readonly shell: boolean
 }): BotProfile {
+  if (spec.noTools) return "planner"
   if (spec.remote) return spec.remote.commands ? "remote-ask" : "remote-none"
   if (spec.unattended) return "read-only"
   if (spec.approvals) return spec.shell ? "ask" : "ask-outside"

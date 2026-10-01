@@ -107,6 +107,9 @@ import {
   HOOK_TARGETS,
   HOOK_TIMEOUT,
   hookTarget,
+  reportsTurns,
+  takesActivityExtension,
+  reportFamily,
   readHookStatus,
   refreshHookScript,
   type HookHost,
@@ -227,7 +230,12 @@ import {
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
-import { clearNaturalVoiceFailure, naturalVoiceFailureFor, type NaturalVoiceFailure } from "../agent/onboarding"
+import {
+  clearNaturalVoiceFailure,
+  naturalVoiceFailureFor,
+  transcriptionReady,
+  type NaturalVoiceFailure,
+} from "../agent/onboarding"
 import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
@@ -261,7 +269,7 @@ import {
 } from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
-import { importPluginModule } from "../plugin/loader"
+import { FILE_PLUGINS_DISABLED, importPluginModule } from "../plugin/loader"
 import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
@@ -286,7 +294,7 @@ import {
   timeNoteFor,
   lineIsTaken,
   formatUpdate,
-  parseActivity,
+  activityOrFormer,
   keptActivity,
   parseOpenRequests,
   shouldRering,
@@ -299,6 +307,9 @@ import {
   formatDelivery,
   holdsForAnswer,
   quietOutcome,
+  hookClosesScreenPrompt,
+  interruptEnds,
+  afterInterrupt,
   isFree,
   isQuestionOpen,
   activityOccupiesPane,
@@ -334,6 +345,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
 import {
   deliveryResult,
@@ -389,6 +401,7 @@ import { createInFlight } from "../session/in-flight"
 import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
+import { splashRemainingMs } from "../splash/timing"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
 import { acceptsRequests, panelsHelp } from "../panels/protocol"
 import { alternateRows, createScreenRequests } from "../panels/screen-requests"
@@ -472,6 +485,8 @@ import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
+import { createSheetWatch, sheetLabel, sheetPaneFor, sheetTitle, sheetUrl, type PaneSheet } from "../design/sheet"
+import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } from "../design/notes"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -489,6 +504,7 @@ import {
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
+  dropLegacyParakeet,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -511,6 +527,7 @@ import {
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
+  copyToClipboard,
   disposeTerminal,
   getTerminal,
   hasTerminal,
@@ -595,15 +612,6 @@ const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
  * separately by `transcript-budget`.
  */
 const MAX_PANE_LINES = 200
-
-/**
- * The shortest time the startup screen stays up.
- *
- * A warm start finishes in under a tenth of a second, and a screen that
- * appears and vanishes in that time reads as a glitch. Long enough to be
- * looked at, short enough not to be waited for.
- */
-const SPLASH_FLOOR_MS = 7000
 
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
@@ -929,10 +937,17 @@ export function Workbench() {
       .panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId)
       .at(-1)
   /** A new web pane on `url`, bound to `owner`, in the owner's project. */
-  const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
+  /** `sheet`: a design sheet's pane is born with it, or its first load refuses the `ade-media` address. */
+  const openOwnedBrowser = (
+    url: string,
+    owner: { id: string; title: string },
+    focus: boolean,
+    sheet?: PaneSheet,
+  ): Pane => {
     const pane: Pane = {
       id: newPaneId("b"),
-      title: "Browser",
+      title: sheet ? sheetLabel(sheet) : "Browser",
+      ...(sheet ? { designSheet: sheet } : {}),
       status: "working",
       model: "—",
       mode: "browser",
@@ -952,6 +967,16 @@ export function Workbench() {
     setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
     return pane
   }
+  /*
+   * The design sheets' reload: one more register in the pass that lists `.ade/`
+   * already (`watchRegisters` below). The pane's own Reload does it, so the
+   * address and the history stay as they are.
+   */
+  const sheetWatch = createSheetWatch({
+    sheets: () =>
+      wb().panes.flatMap((pane) => (pane.designSheet ? [{ id: pane.id, file: pane.designSheet.file }] : [])),
+    reload: (id) => browserControllers.get(id)?.reload(),
+  })
   panels.register("browser", {
     verbs: BROWSER_VERBS,
     run: (request, from) =>
@@ -1741,7 +1766,7 @@ export function Workbench() {
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
     onCleanup(
-      watchRegisters([decisionsRegister, designRegister], async () => {
+      watchRegisters([decisionsRegister, designRegister, sheetWatch], async () => {
         const host = await getHost()
         return host?.readDir ? (path: string) => host.readDir!(path) : undefined
       }),
@@ -1977,6 +2002,38 @@ export function Workbench() {
     return { ok: true }
   }
 
+  /*
+   * A design sheet's notes, to the session that wrote the sheet (piece 2): the
+   * Markdown file beside the sheet, and one line that points at it. Only the
+   * pane's «Invia» button calls this, and the recipient is the session saved
+   * by `ade-msg design` or the one the user picked, never one the page names.
+   */
+  const sendSheetNotes = async (
+    paneId: string,
+    to?: string,
+  ): Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }> => {
+    const sheet = wb().panes.find((pane) => pane.id === paneId)?.designSheet
+    const notes = sheet?.notes ?? []
+    if (!sheet || notes.length === 0) return { ok: false, reason: t("sheet.notes.none") }
+    const target = to ?? sheet.from
+    const session = wb().panes.find((pane) => pane.id === target && !isPanelPane(pane))
+    if (!session || !running.has(target)) return { ok: false, reason: t("browser.send.stopped"), stopped: true }
+    const host = await getHost()
+    if (!host?.writeTextFile) return { ok: false, reason: t("browser.send.noProject") }
+    const at = new Date()
+    const failure = await host.writeTextFile(notesFilePath(sheet.file, at), formatNotesFile(sheet.file, notes, at))
+    if (failure) return { ok: false, reason: failure }
+    heldLines.push({
+      paneId: target,
+      text: formatNotesLine(sheet.file, notes.length, notesFileRelative(sheet.file, at)),
+    })
+    tellPane(target, t("note.sheetNotes", sheetLabel(sheet)))
+    // Sent: the list empties, and a session the user picked is where the next notes go.
+    const { notes: _sent, ...kept } = sheet
+    setWb((w) => updatePane(w, paneId, { designSheet: { ...kept, from: target } }))
+    return { ok: true, title: session.title }
+  }
+
   // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
   const running = new RunningSessions()
   onCleanup(() => running.endAll())
@@ -2176,8 +2233,7 @@ export function Workbench() {
       while (true) {
         await new Promise((resolve) => setTimeout(resolve, 500))
         if (running.get(paneId) !== session || questionOpen(paneId)) return
-        const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+        const activity = await paneActivity(host, paneId, await host.readAgentActivity(nonce))
         const check = submitCheck({ typedAt, activity, now: Date.now(), deadline })
         if (check === "confirmed") {
           activityOf.set(paneId, activity!)
@@ -2433,10 +2489,12 @@ export function Workbench() {
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
-      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
       activity = keptActivity(
         activity,
-        parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId),
+        afterInterrupt(
+          await paneActivity(host, paneId, await readsOf(host, host.readAgentActivity).read(nonce)),
+          interruptSettled.get(paneId),
+        ),
       )
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
@@ -2726,13 +2784,47 @@ export function Workbench() {
 
   /** When each pane last printed anything: a session silent for a while has stopped working. */
   const lastOutputAt = new Map<string, number>()
+  /** When anything was last typed or sent into each pane: the output after it is its echo. */
+  const lastInputAt = new Map<string, number>()
+  /** Each idle pane's run of windows with output (`session/output-activity.ts`). */
+  const outputRuns = new Map<string, OutputRun>()
 
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
+  /*
+   * The nonce of a pane's previous spawn, while this one's file is silent: a
+   * Prime worker that outlived ADE still writes under it (`activityOrFormer`).
+   */
+  const formerNonces = new Map<string, string>()
+  /** A pane's activity from this spawn's file, or from the previous spawn's while this one is silent. */
+  const paneActivity = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    paneId: string,
+    text: string | null,
+  ): Promise<Activity | undefined> => {
+    const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+    const former = formerNonces.get(paneId)
+    // This spawn speaks: the old file has nothing more to say.
+    if (text !== null) formerNonces.delete(paneId)
+    const formerText =
+      text === null && former && resumeId && host.readAgentActivity
+        ? await readsOf(host, host.readAgentActivity).read(former)
+        : null
+    return activityOrFormer(text, formerText, resumeId)
+  }
   const activityOf = new Map<string, Activity>()
+  /**
+   * When ADE last saw a question in each pane open or close by itself, without
+   * the hook: a hook written before that is older news (`statusFromActivity`).
+   */
+  const questionSeenAt = new Map<string, number>()
+  /** When each pane was last interrupted by an Esc or a Ctrl-C, typed or sent by `ade-msg interrupt`. */
+  const interruptedAt = new Map<string, number>()
+  /** The interruption that last ended a hooked pane's turn: older hook reads are its idle (`afterInterrupt`). */
+  const interruptSettled = new Map<string, number>()
   const hooked = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
+    return paneNonces.has(paneId) && reportsTurns(pane?.agent ?? pane?.model ?? "")
   }
 
   /*
@@ -2896,6 +2988,37 @@ export function Workbench() {
   }
 
   /*
+   * A line submitted by the user in the pane: Enter in the terminal, or the composer.
+   *
+   * It went straight to working without `workingSince`, so on the next mail
+   * pass the previous turn's Stop counted as newer than the turn just typed and
+   * set the pane idle again, until `UserPromptSubmit` came: a flicker of a
+   * second or so on every Enter in a hooked Claude Code.
+   *
+   * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
+   */
+  const turnSubmitted = (paneId: string) => {
+    promptAnswered(paneId)
+    markWorking(paneId)
+  }
+
+  /*
+   * A key typed into a prompt only the hook reported: its answer.
+   *
+   * The screen reading, which closes the prompts it finds, never had this one,
+   * and the hook says nothing until the turn ends: without this the pane stayed
+   * on «Permesso» for the rest of the turn, after a «1» as after an Enter. The
+   * hook's `permission` still keeps mail out until its next write
+   * (`isQuestionOpen`); only the status moves.
+   */
+  const promptAnswered = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (pane?.status !== "waiting" || permissions()[paneId] || activityOf.get(paneId)?.state !== "permission") return
+    questionSeenAt.set(paneId, Date.now())
+    setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
+  }
+
+  /*
    * The turn activity of every running session with hooks, each mail pass.
    *
    * Not only of those that owe an answer: the status in the sidebar and in
@@ -2911,7 +3034,7 @@ export function Workbench() {
     const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
     for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = parseActivity(texts[index] ?? null, pane?.resumeId)
+      const read = afterInterrupt(await paneActivity(host, paneId, texts[index] ?? null), interruptSettled.get(paneId))
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
@@ -2922,8 +3045,18 @@ export function Workbench() {
       const activity = read
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
-      const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
-      if (next === "working") {
+      if (permissions()[paneId] && hookClosesScreenPrompt(activity, questionSeenAt.get(paneId))) {
+        permissions.forget(paneId)
+        // What is still in the window was answered: not to be found again on the next line.
+        rawWindows.forget(paneId)
+        if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+      }
+      const next = pane
+        ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
+        : undefined
+      if (next === "waiting") {
+        setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
+      } else if (next === "working") {
         panels.newTurn(paneId, activity.at)
         workingSince.set(paneId, Date.now())
         setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
@@ -3954,6 +4087,45 @@ export function Workbench() {
       return true
     }
 
+    /*
+     * `ade-msg design <file>`: a page the session wrote in its `.ade/design/`,
+     * shown in a web pane beside it. It names no session, so it is handled
+     * before one is resolved. Rust checks the file (`media.rs`,
+     * `design_sheet`); the same file again reloads the pane that shows it.
+     */
+    if (message.kind === "design") {
+      const from = message.from ? wb().panes.find((pane) => pane.id === message.from) : undefined
+      if (!from || isPanelPane(from) || !running.has(from.id)) {
+        await answer("errore: design richiede una sessione avviata da ADE")
+        return true
+      }
+      const cwd = activityOf.get(from.id)?.cwd || from.cwd || from.projectRoot
+      if (!cwd || !host.designSheetPath) {
+        await answer("errore: non so in che cartella lavori, e il foglio va cercato lì")
+        return true
+      }
+      let file: string
+      try {
+        file = await host.designSheetPath(message.path, cwd)
+      } catch (err) {
+        await answer(`errore: ${typeof err === "string" ? err : err instanceof Error ? err.message : String(err)}`)
+        return true
+      }
+      const shown = sheetPaneFor(wb().panes, file)
+      // The same sheet sent again without --title keeps the one it was given.
+      const title = sheetTitle(message.title) ?? shown?.designSheet?.title
+      const sheet: PaneSheet = { file, from: from.id, ...(title ? { title } : {}) }
+      if (shown) {
+        setWb((w) => updatePane(w, shown.id, { designSheet: sheet, title: sheetLabel(sheet) }))
+        browserControllers.get(shown.id)?.reload()
+        await answer(`ok: ricaricato il foglio già aperto: ${sheetLabel(sheet)}`)
+        return true
+      }
+      openOwnedBrowser(sheetUrl(file), { id: from.id, title: from.title }, false, sheet)
+      await answer(`ok: aperto accanto a te: ${sheetLabel(sheet)}`)
+      return true
+    }
+
     const target = resolveTarget(panes, message.to, message.from)
     if ("error" in target) {
       await answer(`errore: ${target.error}`)
@@ -3978,6 +4150,7 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
+      interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
       tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
@@ -4699,25 +4872,35 @@ export function Workbench() {
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
   const listeningOff = initialVoice.migrations.includes("listening-off")
+  // The local engine is gone and the profile is on the cloud one now; told once (the profile is written back), with
+  // what was turned off under it when it listened on its own.
+  const localEngineRemoved = initialVoice.migrations.includes("parakeet-removed")
+  const cloudListeningOff = initialVoice.migrations.includes("parakeet-listening-off")
+  const localEngineNotice = cloudListeningOff
+    ? t("voice.parakeetRemovedListeningOff", t("vui.listen.always"))
+    : localEngineRemoved
+      ? t("voice.parakeetRemoved")
+      : undefined
   const movedToName = initialVoice.migrations.some(
     (m) => m === "name-only" || m === "wake-word" || m === "always-listen",
   )
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    listeningOff
-      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
-      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-        : movedToShortcut
-          ? t("voice.shortcutOnly", agentShortcut)
-          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-            ? t(
-                "voice.alwaysListening",
-                initialVoice.settings.wakeWord,
-                t("vui.listen.manual"),
-                t("vui.activation.toggle"),
-              )
-            : undefined,
+    localEngineNotice ??
+      (listeningOff
+        ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+        : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+          ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+          : movedToShortcut
+            ? t("voice.shortcutOnly", agentShortcut)
+            : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+              ? t(
+                  "voice.alwaysListening",
+                  initialVoice.settings.wakeWord,
+                  t("vui.listen.manual"),
+                  t("vui.activation.toggle"),
+                )
+              : undefined),
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -4729,6 +4912,8 @@ export function Workbench() {
        * nobody reads.
        */
       listeningOff ? t("voice.listeningOff", agentShortcut, t("vui.listen.always")) : undefined,
+      // Also in the strip: listening turned off under the user, and the service the voice now goes to, are theirs to know.
+      localEngineNotice,
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
         ? initialVoice.corrections.filter((c) => !c.includes("assenti")).join(" ")
         : rawSavedVoice !== null && initialVoice.corrections.length > 0
@@ -5170,7 +5355,7 @@ export function Workbench() {
     s.alwaysListen &&
     s.activation === "wake-word" &&
     s.mode === "agent" &&
-    (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
+    Boolean(s.openRouterApiKey)
   const listenForName = () => {
     // Not the user's hand: a stop for spending is not lifted by a launch.
     if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
@@ -5348,6 +5533,13 @@ export function Workbench() {
     load: importPluginModule,
     internal: ({ status, registry }) => [createManagerPlugin(status, registry)],
     async trust(root, plugins) {
+      /*
+       * Consent is a question about code that is about to run. The loader
+       * refuses every file plugin first, so the dialog would be asking the
+       * user to authorize nothing: `hasConsent` and the question below come
+       * back the day the loader does (brief: bloccare il caricatore).
+       */
+      if (FILE_PLUGINS_DISABLED) return true
       let stored: string | null = null
       try {
         stored = localStorage.getItem(CONSENT_KEY)
@@ -5573,7 +5765,7 @@ export function Workbench() {
      * A floor, not a delay: when the start really does take two seconds the
      * splash goes the moment it is over.
      */
-    const remaining = SPLASH_FLOOR_MS - (Date.now() - startedAt)
+    const remaining = splashRemainingMs(startedAt, Date.now())
     if (remaining > 0 && booting() !== undefined) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, remaining)
@@ -5584,6 +5776,8 @@ export function Workbench() {
       })
     }
     setBooting(undefined)
+    // The local speech model that was removed left its download in the webview's storage: dropped once, after the screen is up.
+    void dropLegacyParakeet()
   })
 
   const autosave = createAutosave({
@@ -5612,7 +5806,7 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
-        if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+        if (!voiceSettings().openRouterApiKey) {
           if (wb().view !== "agent") {
             setWb((w) => ({ ...w, view: "agent" }))
             return
@@ -6113,7 +6307,7 @@ export function Workbench() {
         )
       }
     } else if (id === "voice.toggle") {
-      if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+      if (!voiceSettings().openRouterApiKey) {
         if (wb().view !== "agent") {
           setWb((w) => ({ ...w, view: "agent" }))
           return
@@ -6258,7 +6452,12 @@ export function Workbench() {
       paneId,
       setTimeout(() => {
         quietTimers.delete(paneId)
-        if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
+        const status = wb().panes.find((pane) => pane.id === paneId)?.status
+        // Only where the hook reports turns: without it silence settles the pane
+        // anyway, and a prompt the screen found is not taken back on an Esc
+        // that another TUI may not honour.
+        const cut = hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))
+        if (status !== "working" && !(cut && status === "waiting")) return
         // Without turn hooks, a session that owes an answer is working until it answers (S14).
         // A prompt counts as work here too, so a pane waiting on a key is not offered
         // as idle: see `activityOccupiesPane`.
@@ -6266,14 +6465,61 @@ export function Workbench() {
           hooked: hooked(paneId),
           busy: activityOccupiesPane(activityOf.get(paneId)?.state),
           owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
+          interrupted: cut,
         })
         // The hold has to be re-armed: it ends with time passing, and nothing
         // else would come back to look at a pane whose terminal has gone quiet.
         if (outcome === "recheck") return settleWhenQuiet(paneId)
         if (outcome === "wait") return
+        if (cut) settleInterrupt(paneId)
         setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
       }, QUIET_MS),
     )
+  }
+  /*
+   * An Esc or a Ctrl-C in a pane: the turn may be over, and only silence will say.
+   *
+   * Claude Code reports an interruption to no hook, so its file goes on saying
+   * busy, or permission after an Esc on a prompt. The quiet timer is armed here
+   * as well as by the output that follows, because a pane on a prompt is not
+   * working and its output would not arm it.
+   */
+  const interrupted = (paneId: string) => {
+    interruptedAt.set(paneId, Date.now())
+    settleWhenQuiet(paneId)
+  }
+  /** The idle the CLI never wrote, for an interrupted turn that has gone quiet. */
+  const settleInterrupt = (paneId: string) => {
+    const at = interruptedAt.get(paneId)
+    if (at === undefined) return
+    interruptSettled.set(paneId, at)
+    const idle = afterInterrupt(activityOf.get(paneId), at)
+    if (idle) activityOf.set(paneId, idle)
+    // An Esc on a prompt the screen found cancels it: Claude Code answers no to the tool.
+    if (permissions()[paneId]) {
+      permissions.forget(paneId)
+      rawWindows.forget(paneId)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
+    }
+  }
+  /*
+   * An idle agent printing without pause has started a turn ADE did not see begin.
+   *
+   * Only where no hook reports turns: there the hook is the truth both ways. Not
+   * for a plain terminal, whose running program is not an agent's turn and which
+   * nobody sends mail to.
+   */
+  const noticeWorkFromOutput = (pane: Pane) => {
+    // A hooked pane whose hook has said nothing yet is guessed like any other.
+    if ((pane.agent ?? pane.model) === "terminal" || (hooked(pane.id) && activityOf.has(pane.id))) return
+    const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
+    if (!outputSaysWorking(run)) {
+      if (run) outputRuns.set(pane.id, run)
+      else outputRuns.delete(pane.id)
+      return
+    }
+    outputRuns.delete(pane.id)
+    markWorking(pane.id)
   }
   const forgetQuiet = (paneId: string) => {
     clearTimeout(quietTimers.get(paneId))
@@ -6297,6 +6543,9 @@ export function Workbench() {
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
     if (pane.status === "working") settleWhenQuiet(paneId)
+    // An interrupted pane on a prompt is not working, and still waits for its silence.
+    else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
+    else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
     writeToTerminal(paneId, chunk)
     screenRequests.fed(paneId)
@@ -6432,11 +6681,19 @@ export function Workbench() {
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
+    lastInputAt.delete(id)
+    outputRuns.delete(id)
     usageOf.delete(id)
     paneTokens.delete(id)
     paneNonces.delete(id)
+    formerNonces.delete(id)
     activityOf.delete(id)
+    questionSeenAt.delete(id)
+    workingSince.delete(id)
+    interruptedAt.delete(id)
+    interruptSettled.delete(id)
     bracketedPaste.delete(id)
+    sheetWatch.forget(id)
   }
 
   /*
@@ -6836,6 +7093,7 @@ export function Workbench() {
         return
       }
       permissions.forget(paneId)
+      questionSeenAt.set(paneId, Date.now())
       // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
       if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
@@ -6847,6 +7105,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
+    questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
       void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
@@ -7045,6 +7304,7 @@ export function Workbench() {
     resumeId?: string
     otherDir?: string
     linkNonce?: string
+    agent?: string
   }) => {
     const nonce = pane.linkNonce
     if (!nonce) return undefined
@@ -7052,7 +7312,7 @@ export function Workbench() {
     const text = (await host?.readAgentLink?.(nonce).catch(() => null)) ?? null
     if (text === null) return undefined
     await host?.clearAgentLink?.(nonce).catch(() => {})
-    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId)
+    const id = lastReportedId(text, { pane: pane.id, nonce }, pane.resumeId, reportFamily(pane.agent ?? ""))
     if (id) {
       const report = parseReport(text)
       const elsewhere = report && pane.cwd ? followedFolder(report, pane.cwd, pane) : undefined
@@ -7187,6 +7447,35 @@ export function Workbench() {
     }
     setWb((w) => updatePane(w, paneId, { suspended: undefined }))
     saveSuspendedMail()
+  }
+
+  /*
+   * The sidebar row menu's verbs: the same functions the palette and the pane's
+   * own buttons reach, called from the row the pointer is on.
+   *
+   * Two of them need a step the palette does not. Renaming goes through the
+   * DOM (`requestRename`), so a session with no pane on screen has nothing to
+   * ask — it is opened first and asked again a frame later, when its pane is
+   * there. Closing every session of a project is `closeAll`, which the tray's
+   * "chiudi sessioni" already uses, given the ids of that one project.
+   */
+  const renameSession = async (id: string) => {
+    if (requestRename(id)) return
+    await openSession(id)
+    requestAnimationFrame(() => void requestRename(id))
+  }
+
+  const restartSession = (id: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === id)
+    if (pane) void reopen(pane)
+  }
+
+  const closeProjectSessions = async (workspaceId: string) => {
+    const workspace = workspaces().find((candidate) => candidate.id === workspaceId)
+    // An agent of the project may be at work: the tray's own "close sessions"
+    // goes through closeAll bare too, but this one comes from a menu the user
+    // reached without seeing the panes (review sidebar-clic, ALTO 1).
+    await closer.closeAll(workspace?.sessions.map((session) => session.id) ?? [], { confirmRunning: true })
   }
 
   /**
@@ -7387,11 +7676,17 @@ export function Workbench() {
      * Only when the user has installed the hook — see the settings panel.
      * Without it the variables are not set, and nothing changes.
      */
-    const linked = hookStates()[agentId]?.installed ?? false
+    // Prime and pi need nothing installed: their reporter comes with the spawn (`takesActivityExtension`).
+    const linked = (hookStates()[agentId]?.installed ?? false) || takesActivityExtension(agentId)
     const nonce = linked ? newNonce() : undefined
     // Kept per pane so turn activity can be read for as long as this spawn lives.
     if (nonce) paneNonces.set(paneId, nonce)
     else paneNonces.delete(paneId)
+    // The previous spawn's, saved with the pane: its worker may still be the one writing (MEDIO 1).
+    const formerNonce = wb().panes.find((pane) => pane.id === paneId)?.linkNonce
+    if (nonce && formerNonce && formerNonce !== nonce && takesActivityExtension(agentId)) {
+      formerNonces.set(paneId, formerNonce)
+    } else formerNonces.delete(paneId)
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
     let spawned: SpawnedSession | undefined
@@ -7532,6 +7827,7 @@ export function Workbench() {
       })
 
       spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
+      stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -7587,9 +7883,11 @@ export function Workbench() {
        */
       if (nonce) {
         // And after it: a `/resume` or `/clear` inside the CLI moves the pane too.
+        const family = reportFamily(agentId)
         void followReports({
           pane: paneId,
           nonce,
+          ...(family ? { family } : {}),
           read: (n) => host.readAgentLink?.(n) ?? Promise.resolve(null),
           clear: async (n) => {
             await host.clearAgentLink?.(n)
@@ -7767,7 +8065,7 @@ export function Workbench() {
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
-      spawned = session
+      spawned = stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -8065,6 +8363,9 @@ export function Workbench() {
     close,
     saveFile: (id) => void saveFile(id),
     answerPermission,
+    turnSubmitted,
+    promptAnswered,
+    interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
     suspend: (id) => void suspendSession(id),
@@ -8098,6 +8399,7 @@ export function Workbench() {
     pluginRuntime,
     browserControllers,
     sendBrowserRequest,
+    sendSheetNotes,
   })
 
   const paletteChord = createMemo(() => {
@@ -8482,6 +8784,18 @@ export function Workbench() {
           onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
           onSelectProject={(id) => void switchProject(id)}
           onNewSession={() => setStarting(true)}
+          /* The row menu's verbs: one callback each, into the functions above. */
+          onRenameSession={(id) => void renameSession(id)}
+          onCloseSession={(id) => {
+            // The sidebar's ✕ is a click, not a shortcut held down: an agent
+            // at work is stopped only after it is said out loud, the way the
+            // pane's own ✕ does (review sidebar-clic, MEDIO 2).
+            closer.close(id, { confirmRunning: true })
+          }}
+          onRestartSession={restartSession}
+          onResumeSession={(id) => void resumeSession(id)}
+          onCopySessionId={(id) => void copyToClipboard(id)}
+          onCloseProjectSessions={(id) => void closeProjectSessions(id)}
           project={project()}
           searchFiles={hasHost() ? searchProjectFiles : undefined}
           selectedFilePath={selectedFile()}
@@ -8780,8 +9094,8 @@ export function Workbench() {
               running={voiceEngine.isRunning()}
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
-              canPlan={Boolean(voiceSettings().openRouterApiKey)}
-              hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
+              canPlan={hasVoiceAgent() && voiceSettings().agentEngine !== "off"}
+              hasKey={transcriptionReady(voiceSettings())}
               hasAgent={hasVoiceAgent()}
               hasVoice={voiceInstalled() && !voiceError()}
               isVoiceDownloading={voiceDownloading()}

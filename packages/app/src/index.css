@@ -7,9 +7,12 @@
   margin: 0;
   padding: 6px;
   list-style: none;
-  border: 1px solid var(--border-weak-base);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-base) 72%, transparent);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
+  border-radius: var(--glass-radius-lg);
+  background: var(--glass-fill-tint);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--glass-rim);
 }
 
 .home-recent__row {
@@ -21,9 +24,15 @@
   color: var(--text-base);
   text-align: left;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
-  transition: background 120ms ease;
+  transition:
+    background 120ms ease,
+    scale 160ms var(--ease-out-strong);
+}
+
+.home-recent__row:active {
+  scale: 0.985;
 }
 
 .home-recent__row:hover {
@@ -41,7 +50,7 @@
   height: 32px;
   flex: 0 0 auto;
   color: var(--icon-weak-base);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   border-radius: 9px;
   background: var(--surface-base);
   place-items: center;

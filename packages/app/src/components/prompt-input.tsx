@@ -1040,6 +1040,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       />
       <form
         onSubmit={handleSubmit}
+        data-glass="strong"
         classList={{
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,

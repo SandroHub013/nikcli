@@ -6,8 +6,8 @@
   [data-slot="radio-group-wrapper"] {
     all: unset;
     background-color: var(--surface-base);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs-border);
+    border-radius: var(--glass-radius-md, 14px);
+    box-shadow: var(--shadow-xxs-border);
     margin: 0;
     padding: 0;
     position: relative;
@@ -22,17 +22,17 @@
 
   [data-slot="radio-group-indicator"] {
     background: var(--button-secondary-base);
-    border-radius: var(--radius-md);
+    border-radius: calc(var(--glass-radius-md, 14px) - 3px);
     box-shadow: var(--shadow-xs-border);
     content: "";
     opacity: var(--indicator-opacity, 1);
     position: absolute;
     transition:
-      opacity 300ms ease-in-out,
-      box-shadow 100ms ease-in-out,
-      width 150ms ease,
-      height 150ms ease,
-      transform 150ms ease;
+      opacity 200ms var(--ease-out-strong),
+      box-shadow 120ms ease,
+      width 260ms var(--ease-drawer),
+      height 260ms var(--ease-drawer),
+      transform 260ms var(--ease-drawer);
   }
 
   [data-slot="radio-group-item"] {
@@ -63,7 +63,7 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    border-radius: var(--radius-md);
+    border-radius: calc(var(--glass-radius-md, 14px) - 3px);
     cursor: pointer;
     display: flex;
     flex-wrap: nowrap;
@@ -72,9 +72,9 @@
     padding: 6px 12px;
     place-content: center;
     position: relative;
-    transition-duration: 150ms;
+    transition-duration: 160ms;
     transition-property: color, opacity;
-    transition-timing-function: ease-in-out;
+    transition-timing-function: var(--ease-out-strong);
     user-select: none;
   }
 

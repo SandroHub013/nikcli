@@ -249,8 +249,16 @@ export async function watchForReport(watch: LinkWatch): Promise<LinkReport | und
  */
 const LATER_SOURCES: ReadonlySet<string> = new Set(["resume", "clear", "switch"])
 
-/** Whether a report after the first one moves the pane to a new conversation. */
-export function acceptsLaterReport(report: LinkReport, current: string): boolean {
+/**
+ * Whether a report after the first one moves the pane to a new conversation.
+ *
+ * `family` is the `agent` the pane's own CLI writes (`reportFamily`). A Prime
+ * worker hands its environment, nonce included, to whatever it runs: a Claude
+ * Code with the hook, started from it, would report `resume` under the Prime
+ * pane's nonce and move it onto a Claude conversation.
+ */
+export function acceptsLaterReport(report: LinkReport, current: string, family?: string): boolean {
+  if (family !== undefined && report.agent !== family) return false
   return report.source !== undefined && LATER_SOURCES.has(report.source) && report.sessionId !== current
 }
 
@@ -263,6 +271,8 @@ export interface LinkFollow extends LinkWatch {
    * lines, and nothing else writes a later report.
    */
   readonly linesSent?: () => number
+  /** The `agent` of the pane's own CLI: later reports of another are not the pane's. */
+  readonly family?: string
 }
 
 /**
@@ -332,7 +342,7 @@ export async function followReports(follow: LinkFollow): Promise<void> {
     step = 0
     await follow.clear(follow.nonce)
     if (!acceptsReport(report, follow)) continue
-    if (current !== undefined && !acceptsLaterReport(report, current)) continue
+    if (current !== undefined && !acceptsLaterReport(report, current, follow.family)) continue
     current = report.sessionId
     follow.onReport(report)
   }
@@ -384,10 +394,11 @@ export function lastReportedId(
   text: string | null | undefined,
   expected: { pane: string; nonce: string },
   current: string | undefined,
+  family?: string,
 ): string | undefined {
   const report = text ? parseReport(text) : undefined
   if (!report || !acceptsReport(report, expected)) return undefined
-  if (current !== undefined && !acceptsLaterReport(report, current)) return undefined
+  if (current !== undefined && !acceptsLaterReport(report, current, family)) return undefined
   return report.sessionId
 }
 

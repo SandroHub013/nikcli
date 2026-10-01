@@ -46,6 +46,14 @@ export interface VoicePrerequisiteItem {
   error?: string
 }
 
+/**
+ * Whether transcription is ready as far as the key goes: the one engine, OpenRouter, needs one. (There was a local
+ * engine that did not; it is gone.)
+ */
+export function transcriptionReady(settings: { backend?: string; openRouterApiKey?: string }): boolean {
+  return Boolean(settings.openRouterApiKey?.trim())
+}
+
 /** Returns true when all voice prerequisites are met. */
 export function isVoiceReady(state: VoicePrerequisitesState): boolean {
   return state.hasKey && state.hasAgent && state.hasVoice

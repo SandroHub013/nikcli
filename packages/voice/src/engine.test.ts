@@ -4,7 +4,6 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
-import { createParakeetTranscriber, disposeParakeetModel } from "./asr/parakeet-local"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
@@ -522,78 +521,6 @@ describe("engine/createVoiceEngine", () => {
     await engine.stop()
   })
 
-  test("stopping a local Parakeet session releases its shared model", async () => {
-    await disposeParakeetModel()
-    let disposed = false
-    const model = {
-      createStreamingTranscriber: () => ({
-        processChunk: async () => ({ text: "" }),
-        finalize: async () => ({ text: "" }),
-        reset: () => {},
-      }),
-      dispose: async () => {
-        disposed = true
-      },
-    }
-    const transcriber = createParakeetTranscriber({
-      keepWarm: true,
-      fromHub: async () => model,
-      supportsLanguage: () => true,
-      captureOptions: {
-        mediaStream: { getTracks: () => [] } as unknown as MediaStream,
-        isTypeSupported: () => true,
-      },
-    })
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet" },
-      createTranscriber: () => transcriber,
-    })
-
-    await engine.start()
-    expect(disposed).toBe(false)
-    await engine.stop()
-    expect(disposed).toBe(true)
-    await disposeParakeetModel()
-  })
-
-  test("removing an unused OpenRouter key leaves local Parakeet listening", async () => {
-    const authorizations: string[] = []
-    const transcriber = createFakeTranscriber()
-    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
-      return new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "[]" } }],
-          usage: { cost: 0.002 },
-        }),
-        { status: 200 },
-      )
-    }) as unknown as typeof fetch
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
-      createTranscriber: () => transcriber,
-      plannerFetch: fetchFn,
-    })
-
-    await engine.start()
-    await engine.updateSettings({ openRouterApiKey: undefined })
-    transcriber.emit("raccontami una storia mai raccontata", true)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    await engine.submitText("raccontami un'altra storia mai raccontata")
-
-    expect(authorizations).toEqual([])
-    expect(engine.isRunning()).toBe(true)
-    expect(transcriber.isStarted).toBe(true)
-    expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
-    await engine.stop()
-  })
-
   test("destructive command requires explicit confirmation before executing", async () => {
     const { engine, host, transcriber, speaker } = setupEngine()
 
@@ -995,182 +922,73 @@ describe("engine/push-to-talk tap latches", () => {
   })
 })
 
-describe("planner key changes", () => {
-  function setup(key: string) {
-    const authorizations: string[] = []
-    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
-      return new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "[]" } }],
-          usage: { cost: 0.002 },
-        }),
-        { status: 200 },
-      )
+describe("the planner is the host's, on the agent's own runner", () => {
+  /* Any fetch at all is a request to a service billed per call: the planner must never make one. */
+  const withFetchSpy = async (run: (fetched: string[]) => Promise<void>) => {
+    const fetched: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: URL | RequestInfo) => {
+      fetched.push(String(input instanceof Request ? input.url : input))
+      return new Response("{}", { status: 200 })
     }) as unknown as typeof fetch
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { agentEngine: "off", openRouterApiKey: key },
-      plannerFetch: fetchFn,
-    })
-    return { authorizations, engine }
+    try {
+      await run(fetched)
+    } finally {
+      globalThis.fetch = original
+    }
   }
 
-  test("a removed key is not used by the next typed request", async () => {
-    const { authorizations, engine } = setup("old")
-    await engine.submitText("raccontami una storia mai raccontata")
-    expect(authorizations).toEqual(["Bearer old"])
-    expect(engine.listenSpend()).toMatchObject({ calls: 1, cost: 0.002 })
-
-    await engine.updateSettings({ openRouterApiKey: undefined })
-    await engine.submitText("raccontami un'altra storia mai raccontata")
-
-    expect(authorizations).toEqual(["Bearer old"])
-    expect(engine.isRunning()).toBe(false)
-  })
-
-  test("removing the key stops an open microphone before its old planner can run", async () => {
-    const authorizations: string[] = []
-    const transcriber = createFakeTranscriber()
-    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
-      return new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "[]" } }],
-          usage: { cost: 0.002 },
-        }),
-        { status: 200 },
-      )
-    }) as unknown as typeof fetch
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      transcriber,
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "wake-word", alwaysListen: true, agentEngine: "off", openRouterApiKey: "old" },
-      plannerFetch: fetchFn,
-      creditLeft: async () => undefined,
-    })
-
-    await engine.start("agent", { waitForName: true })
-    const removing = engine.updateSettings({ openRouterApiKey: undefined })
-    transcriber.emit("parola senza regola", true)
-    await removing
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
-    expect(engine.isRunning()).toBe(false)
-    expect(transcriber.isStarted).toBe(false)
-    expect(authorizations).toEqual([])
-  })
-
-  test("removing the key aborts an in-flight Parakeet planner without stopping the microphone", async () => {
+  function setup(settings: Record<string, unknown>, plan?: NonNullable<VoiceHost["plan"]>) {
     const host = new MockVoiceHost()
-    const authorizations: string[] = []
-    const transcriber = createFakeTranscriber()
-    let plannerSignal: AbortSignal | undefined
-    let finishPlanner: (() => void) | undefined
-    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
-      plannerSignal = init?.signal ?? undefined
-      return await new Promise<Response>((resolve) => {
-        finishPlanner = () =>
-          resolve(
-            new Response(
-              JSON.stringify({
-                choices: [{ message: { content: '[{"action":"run_command","command":"palette.open"}]' } }],
-                usage: { cost: 0.002 },
-              }),
-              { status: 200 },
-            ),
-          )
-      })
-    }) as unknown as typeof fetch
+    if (plan) (host as VoiceHost).plan = plan
+    const speaker = createFakeSpeaker()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
-      transcriber,
-      speaker: createFakeSpeaker(),
+      speaker,
       now: () => 10_000,
-      settings: {
-        activation: "toggle",
-        alwaysListen: true,
-        agentEngine: "off",
-        backend: "parakeet",
-        openRouterApiKey: "old",
-      },
-      plannerFetch: fetchFn,
+      transcriber: createFakeTranscriber(),
+      settings: { activation: "toggle", backend: "openrouter", ...settings } as never,
     })
+    return { engine, host, speaker }
+  }
 
-    await engine.start("agent")
-    transcriber.emit("raccontami una storia mai raccontata", true)
-    for (let i = 0; i < 100 && !plannerSignal; i++) await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(plannerSignal).toBeDefined()
-
-    await engine.updateSettings({ openRouterApiKey: undefined })
-    expect(plannerSignal?.aborted).toBe(true)
-    finishPlanner?.()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
-    expect(host.calls.filter((call) => call.method === "runCommand")).toHaveLength(0)
-    expect(engine.isRunning()).toBe(true)
-    expect(transcriber.isStarted).toBe(true)
-
-    transcriber.emit("raccontami un'altra storia mai raccontata", true)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(authorizations).toEqual(["Bearer old"])
-    await engine.stop()
-  })
-
-  test("removing the key invalidates a cached text program while a start is stopping", async () => {
-    const authorizations: string[] = []
-    let releaseStart: (() => void) | undefined
-    const transcriber = createFakeTranscriber()
-    transcriber.start = () =>
-      new Promise<void>((resolve) => {
-        releaseStart = resolve
-      })
-    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
-      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
-      return new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "[]" } }],
-          usage: { cost: 0.002 },
-        }),
-        { status: 200 },
+  test("an unmatched sentence is planned by the host, with the agent's engine and speed, and nothing is fetched", async () => {
+    await withFetchSpy(async (fetched) => {
+      const seen: { engine: string; speed?: string; system: string; user: string }[] = []
+      const { engine } = setup(
+        { agentEngine: "claude", agentSpeed: "fast", openRouterApiKey: "sk-or-key" },
+        async (request) => {
+          seen.push({ engine: request.engine, speed: request.speed, system: request.system, user: request.user })
+          return '{"speech":"Apro il progetto nikcli.","steps":[{"action":"open_project","project":"nikcli"}]}'
+        },
       )
-    }) as unknown as typeof fetch
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      transcriber,
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "wake-word", alwaysListen: true, agentEngine: "off", openRouterApiKey: "old" },
-      plannerFetch: fetchFn,
+      await engine.submitText("portami nel progetto dei test")
+      expect(seen).toHaveLength(1)
+      expect(seen[0].engine).toBe("claude")
+      expect(seen[0].speed).toBe("fast")
+      expect(seen[0].user).toContain("portami nel progetto dei test")
+      expect(fetched).toEqual([])
     })
-
-    const starting = engine.start()
-    while (!releaseStart) await new Promise((resolve) => setTimeout(resolve, 0))
-    await engine.submitText("prima della rimozione")
-    expect(authorizations).toEqual(["Bearer old"])
-
-    const stopping = engine.stop()
-    const removing = engine.updateSettings({ openRouterApiKey: undefined })
-    releaseStart?.()
-    await Promise.all([starting, stopping, removing])
-    await engine.submitText("dopo la rimozione")
-
-    expect(authorizations).toEqual(["Bearer old"])
   })
 
-  test("a replacement key is used by the next typed request", async () => {
-    const { authorizations, engine } = setup("old")
-    await engine.submitText("raccontami una storia mai raccontata")
-    await engine.updateSettings({ openRouterApiKey: "new" })
-    await engine.submitText("raccontami un'altra storia mai raccontata")
+  test("a key in the settings does not make the planner call a service: with no host planner, there is none", async () => {
+    await withFetchSpy(async (fetched) => {
+      const { engine } = setup({ agentEngine: "claude", openRouterApiKey: "sk-or-key" })
+      await engine.submitText("raccontami una storia mai raccontata")
+      expect(fetched).toEqual([])
+      expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
+    })
+  })
 
-    expect(authorizations).toEqual(["Bearer old", "Bearer new"])
-    expect(engine.listenSpend()).toMatchObject({ calls: 2, cost: 0.004 })
+  test("with the agent off there is no planner either: the user chose no model turns", async () => {
+    let planned = 0
+    const { engine } = setup({ agentEngine: "off" }, async () => {
+      planned++
+      return "[]"
+    })
+    await engine.submitText("raccontami una storia mai raccontata")
+    expect(planned).toBe(0)
   })
 })
 
@@ -1725,6 +1543,7 @@ describe("always-on listening", () => {
     const speaker = createFakeSpeaker()
     let clock = 10_000
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       transcriber,
       speaker,
@@ -1823,6 +1642,7 @@ describe("always-on listening", () => {
     const transcriber = createFakeTranscriber()
     const host = new MockVoiceHost()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -1833,7 +1653,6 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1870,6 +1689,7 @@ describe("always-on listening", () => {
       )
     const transcriber = createFakeTranscriber()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => 10_000,
@@ -1880,7 +1700,6 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1971,6 +1790,7 @@ describe("always-on listening", () => {
     let clock = 0
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -1981,7 +1801,6 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
-      creditLeft: async () => undefined,
       listenRequestsPerHour: 3,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
@@ -2017,6 +1836,7 @@ describe("always-on listening", () => {
     let gate: any
     let usage: ((u: { cost?: number }, context: { gated: boolean }) => void) | undefined
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -2027,7 +1847,6 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         usage = options?.openRouterOptions?.onUsage
@@ -2087,13 +1906,13 @@ describe("always-on listening", () => {
     }
     let gate: any
     const first = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
       settings,
       haltStore,
       listenRequestsPerHour: 1,
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -2108,13 +1927,13 @@ describe("always-on listening", () => {
 
     // ADE closed and opened: the microphone stays shut, and says why.
     const next = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       transcriber: createFakeTranscriber(),
       now: () => Date.now(),
       settings,
       haltStore,
-      creditLeft: async () => undefined,
     })
     expect(next.listenHalted()).toBe(true)
     expect(next.listenWarning()).toContain("smesso di ascoltare")
@@ -2141,6 +1960,7 @@ describe("always-on listening", () => {
     }
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
@@ -2153,7 +1973,6 @@ describe("always-on listening", () => {
       },
       haltStore,
       listenRequestsPerHour: 1,
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -2177,6 +1996,7 @@ describe("always-on listening", () => {
     // A dictation handing the microphone back is not a hand on the switch:
     // a stop that arrived while dictating still holds when it ends.
     const back = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
@@ -2189,7 +2009,6 @@ describe("always-on listening", () => {
       },
       haltStore,
       listenRequestsPerHour: 1,
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return createFakeTranscriber()
@@ -2300,6 +2119,7 @@ describe("always-on listening", () => {
     let gate: any
     const transcriber = createFakeTranscriber()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => 10_000,
@@ -2310,7 +2130,6 @@ describe("always-on listening", () => {
         backend: "openrouter",
         openRouterApiKey: "k",
       },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -2776,6 +2595,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
     const transcriber = createFakeTranscriber()
     const cues: string[] = []
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       transcriber,
       speaker: createFakeSpeaker(),
@@ -2961,11 +2781,11 @@ describe("interrupted while it talks", () => {
     const transcriber = createFakeTranscriber()
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker,
       now: () => 10_000,
       settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -3039,11 +2859,11 @@ describe("a television talking on does not keep the window open", () => {
     let gate: any
     let clock = 10_000
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,
       settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
-      creditLeft: async () => undefined,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber

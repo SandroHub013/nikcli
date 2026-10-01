@@ -54,6 +54,19 @@ const PLUGIN_NAME: &str = "ade-agent-session.js";
 /// The TypeScript tests load this same file and run it.
 const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
 
+/// The turn reporter ADE hands Prime Agent and pi with `-e`, compiled in like
+/// the plugin above: the page cannot choose what these agents load.
+const ACTIVITY_EXTENSION_TEXT: &str = include_str!("../plugins/ade-activity.js");
+
+/// Its filename, in ADE's own application data. Mirrors `ACTIVITY_EXTENSION_NAME` in `agent-hooks.ts`.
+const ACTIVITY_EXTENSION_NAME: &str = "ade-activity.js";
+
+/// Beside the drop directory and not in it: the sweep there deletes what is a day old.
+const EXTENSION_SUBDIR: &str = "agent-extensions";
+
+/// The commands that get it. Mirrors `ACTIVITY_EXTENSION_AGENTS` in `agent-hooks.ts`.
+const ACTIVITY_EXTENSION_AGENTS: &[&str] = &["prime", "pi"];
+
 /// Where a target's paths start.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Base {
@@ -107,6 +120,34 @@ pub fn link_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     let dir = base.join(LINK_SUBDIR);
     fs::create_dir_all(&dir).ok()?;
     Some(dir)
+}
+
+/// The turn reporter for a spawn of `stem`, written where it is loaded from, or
+/// `None` for an agent that does not take one.
+///
+/// Nothing is installed in the agent's own configuration: the file lives in
+/// ADE's application data and reaches only the processes ADE starts, through
+/// their command line. A copy that differs from this build's (an older ADE, a
+/// hand edit) is written over before the spawn.
+pub fn activity_extension(app: &tauri::AppHandle, stem: &str) -> Option<PathBuf> {
+    if !takes_activity_extension(stem) {
+        return None;
+    }
+    let dir = app.path().app_local_data_dir().ok()?.join(EXTENSION_SUBDIR);
+    write_activity_extension(&dir)
+}
+
+fn takes_activity_extension(stem: &str) -> bool {
+    ACTIVITY_EXTENSION_AGENTS.iter().any(|agent| agent.eq_ignore_ascii_case(stem))
+}
+
+fn write_activity_extension(dir: &Path) -> Option<PathBuf> {
+    fs::create_dir_all(dir).ok()?;
+    let path = dir.join(ACTIVITY_EXTENSION_NAME);
+    if fs::read_to_string(&path).ok().as_deref() != Some(ACTIVITY_EXTENSION_TEXT) {
+        write_atomic(&path, ACTIVITY_EXTENSION_TEXT.as_bytes()).ok()?;
+    }
+    Some(path)
 }
 
 /// Deletes drop files nobody came back for.
@@ -1008,6 +1049,26 @@ mod tests {
         // SHA-256("abc"), the standard test vector: what the page computes of the script it built.
         assert_eq!(file_digest(&path).as_deref(), Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
         assert_eq!(file_digest(&dir.join("assente.ps1")), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prime_and_pi_get_this_builds_turn_reporter_and_nothing_else_does() {
+        assert!(takes_activity_extension("prime"));
+        assert!(takes_activity_extension("PI"));
+        assert!(!takes_activity_extension("claude"));
+        assert!(!takes_activity_extension("pipx"));
+        assert!(ACTIVITY_EXTENSION_TEXT.contains("process.env.ADE_SPAWN_NONCE"));
+        assert!(ACTIVITY_EXTENSION_TEXT.contains("export default"));
+
+        let dir = std::env::temp_dir().join(format!("ade-extension-{}", std::process::id()));
+        let path = write_activity_extension(&dir).expect("written");
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some(ACTIVITY_EXTENSION_NAME));
+        assert_eq!(fs::read_to_string(&path).expect("the file"), ACTIVITY_EXTENSION_TEXT);
+        // A copy that is not this build's is written over before the spawn.
+        fs::write(&path, b"// altro").expect("a tampered copy");
+        write_activity_extension(&dir).expect("written again");
+        assert_eq!(fs::read_to_string(&path).expect("the file"), ACTIVITY_EXTENSION_TEXT);
         let _ = fs::remove_dir_all(&dir);
     }
 

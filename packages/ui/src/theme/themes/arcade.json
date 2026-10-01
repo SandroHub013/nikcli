@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Arcade",
+  "id": "arcade",
+  "light": {
+    "seeds": {
+      "neutral": "#f5f4f6",
+      "primary": "#ae1e7e",
+      "success": "#3f7b5d",
+      "warning": "#b5552b",
+      "error": "#ae2b33",
+      "info": "#41778d",
+      "interactive": "#ae1e7e",
+      "diffAdd": "#3b569d",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f5f4f6",
+      "background-weak": "#eae7ec",
+      "background-strong": "#f5f4f6",
+      "background-stronger": "#f0eef2",
+      "surface-raised-stronger-non-alpha": "#f0eef2",
+      "text-strong": "#1d1820",
+      "text-base": "#362e3b",
+      "text-weak": "#65566c",
+      "text-weaker": "#978d9c",
+      "border-weak-base": "#d2cdd5",
+      "border-base": "#b9b3bc",
+      "border-strong-base": "#ae1e7e"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#110b13",
+      "primary": "#ea5ebb",
+      "success": "#85c1a3",
+      "warning": "#e38b66",
+      "error": "#df737c",
+      "info": "#7fb4cb",
+      "interactive": "#ea5ebb",
+      "diffAdd": "#849ad7",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#110b13",
+      "background-weak": "#24182a",
+      "background-strong": "#110b13",
+      "background-stronger": "#1a121f",
+      "surface-raised-stronger-non-alpha": "#1a121f",
+      "text-strong": "#edecee",
+      "text-base": "#d3cdd6",
+      "text-weak": "#a292aa",
+      "text-weaker": "#6f6375",
+      "border-weak-base": "#413149",
+      "border-base": "#5b4a64",
+      "border-strong-base": "#ea5ebb"
+    }
+  }
+}

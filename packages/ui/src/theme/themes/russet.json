@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Russet",
+  "id": "russet",
+  "light": {
+    "seeds": {
+      "neutral": "#f6f5f4",
+      "primary": "#a0562c",
+      "success": "#3d8254",
+      "warning": "#b35b21",
+      "error": "#ac3229",
+      "info": "#3f7e83",
+      "interactive": "#a0562c",
+      "diffAdd": "#395d93",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f6f5f4",
+      "background-weak": "#ebe9e8",
+      "background-strong": "#f6f5f4",
+      "background-stronger": "#f1efef",
+      "surface-raised-stronger-non-alpha": "#f1efef",
+      "text-strong": "#201b18",
+      "text-base": "#39332f",
+      "text-weak": "#685f5a",
+      "text-weaker": "#9a9490",
+      "border-weak-base": "#d4d0ce",
+      "border-base": "#bbb7b5",
+      "border-strong-base": "#a0562c"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#15110f",
+      "primary": "#da8e62",
+      "success": "#83c799",
+      "warning": "#e1915b",
+      "error": "#de7971",
+      "info": "#7dbac0",
+      "interactive": "#da8e62",
+      "diffAdd": "#82a0cc",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#15110f",
+      "background-weak": "#2a221d",
+      "background-strong": "#15110f",
+      "background-stronger": "#1f1916",
+      "surface-raised-stronger-non-alpha": "#1f1916",
+      "text-strong": "#eeedec",
+      "text-base": "#d6d0cd",
+      "text-weak": "#aa9a92",
+      "text-weaker": "#766a64",
+      "border-weak-base": "#453b35",
+      "border-base": "#5f544e",
+      "border-strong-base": "#da8e62"
+    }
+  }
+}

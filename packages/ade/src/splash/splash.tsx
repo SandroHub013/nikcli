@@ -4,6 +4,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import type * as THREE from "three"
 import { t } from "../i18n"
 import "./splash.css"
+import { SPLASH_SCENE_DELAY_MS, sceneIsWorthBuilding } from "./timing"
 
 export interface SplashProps {
   /** Hidden when this goes false. The fade is handled here. */
@@ -66,6 +67,7 @@ function SplashView(props: { visible: boolean; onDismiss?: () => void }) {
     const container = canvasContainerRef
     const asciiLayer = asciiLayerRef
     if (!container || !asciiLayer) return
+    const appearedAt = performance.now()
 
     // Set by the async start once there is something to tear down. Cleanup can
     // run before `import("three")` resolves (a boot faster than the fade), so
@@ -92,10 +94,15 @@ function SplashView(props: { visible: boolean; onDismiss?: () => void }) {
       return
     }
 
-    void startScene(container, asciiLayer).then((stop) => {
-      if (disposed) stop?.()
-      else teardown = stop
-    })
+    // Not at once: a boot that is over within the delay never loads three.js nor takes a GPU context for a screen that is already going.
+    const starting = setTimeout(() => {
+      if (disposed) return
+      void startScene(container, asciiLayer, appearedAt).then((stop) => {
+        if (disposed) stop?.()
+        else teardown = stop
+      })
+    }, SPLASH_SCENE_DELAY_MS)
+    onCleanup(() => clearTimeout(starting))
   })
 
   return (
@@ -140,13 +147,19 @@ function hasWebGL(): boolean {
 }
 
 /** Builds the scene and runs it. Resolves to the function that undoes all of it. */
-async function startScene(container: HTMLDivElement, asciiLayer: HTMLPreElement): Promise<(() => void) | undefined> {
+async function startScene(
+  container: HTMLDivElement,
+  asciiLayer: HTMLPreElement,
+  appearedAt: number,
+): Promise<(() => void) | undefined> {
   let three: typeof THREE
   try {
     three = await import("three")
   } catch {
     return undefined
   }
+  // three.js arrived too late for the scene to be seen: not built at all (see `SPLASH_SCENE_DEADLINE_MS`).
+  if (!sceneIsWorthBuilding(appearedAt, performance.now())) return undefined
 
   // ── Three.js Scene Setup ────────────────────────────────────────────────
   const scene = new three.Scene()

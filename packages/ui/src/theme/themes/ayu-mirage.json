@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Ayu Mirage",
+  "id": "ayu-mirage",
+  "light": {
+    "seeds": {
+      "neutral": "#fcfcfc",
+      "primary": "#ff9940",
+      "success": "#86b300",
+      "warning": "#f2ae49",
+      "error": "#f07171",
+      "info": "#399ee6",
+      "interactive": "#ff9940",
+      "diffAdd": "#86b300",
+      "diffDelete": "#f07171"
+    },
+    "overrides": {
+      "background-base": "#fcfcfc",
+      "background-weak": "#f2f3f3",
+      "background-strong": "#fcfcfc",
+      "background-stronger": "#f3f4f5",
+      "surface-raised-stronger-non-alpha": "#f3f4f5",
+      "text-strong": "#4e5257",
+      "text-base": "#676c72",
+      "text-weak": "#7c838a",
+      "text-weaker": "#a0a4a9",
+      "border-weak-base": "#f0f1f2",
+      "border-base": "#e7e8e9",
+      "border-strong-base": "#b6b9bb"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1f2430",
+      "primary": "#ffcc66",
+      "success": "#87d96c",
+      "warning": "#ffad66",
+      "error": "#f28779",
+      "info": "#73d0ff",
+      "interactive": "#ffcc66",
+      "diffAdd": "#87d96c",
+      "diffDelete": "#f28779"
+    },
+    "overrides": {
+      "background-base": "#1f2430",
+      "background-weak": "#292e39",
+      "background-strong": "#1f2430",
+      "background-stronger": "#1a1f29",
+      "surface-raised-stronger-non-alpha": "#1a1f29",
+      "text-strong": "#cccac2",
+      "text-base": "#acaeaf",
+      "text-weak": "#707a8c",
+      "text-weaker": "#545c6c",
+      "border-weak-base": "#272c39",
+      "border-base": "#2d3340",
+      "border-strong-base": "#65686e"
+    }
+  }
+}

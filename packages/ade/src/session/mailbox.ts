@@ -77,6 +77,12 @@ export type Message = { from: string; token?: string; text: string } &
     | { kind: "relaunch"; to: string; model?: string; effort?: string; fresh: boolean; note: string }
     /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
     | { kind: "interrupt"; to: string }
+    /**
+     * A page the sender wrote in `.ade/design/`, to show in a web pane beside it
+     * (`ade-msg design`). `path` is absolute, as the sender's shell resolved it;
+     * ADE checks it again (`media.rs`, `design_sheet`). `text` is empty.
+     */
+    | { kind: "design"; path: string; title?: string }
     /** Withdraws a request the sender made. `text` is empty. */
     | { kind: "cancel"; ref: string }
     /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
@@ -162,6 +168,11 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "interrupt") {
     const to = str("to")
     return to ? { kind, from, token, to, text: "" } : undefined
+  }
+  if (kind === "design") {
+    const path = str("path")
+    const title = str("title")
+    return path ? { kind, from, token, path, ...(title ? { title } : {}), text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
@@ -265,7 +276,14 @@ export function verifySender<M extends Message>(message: M, tokenOf: (paneId: st
   return proven ? message : { ...message, from: "" }
 }
 
-const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn", "interrupt", "close"])
+const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
+  "send",
+  "ask",
+  "spawn",
+  "interrupt",
+  "close",
+  "design",
+])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {
   if (message.from || !UNVERIFIED_ACTING.has(message.kind)) return undefined
@@ -871,24 +889,51 @@ export function sameDir(a: string, b: string): boolean {
  * a session working on a request typed in by `ade-msg` stayed "Disponibile"
  * for its whole turn, in the sidebar and in `ade-msg list`. Where the CLI has
  * turn hooks they are the truth both ways. An idle written before the pane was
- * last set working is the previous turn's and does not end this one; a
- * permission question, an error or a pane still opening is not overridden.
+ * last set working is the previous turn's and does not end this one; an error
+ * or a pane still opening is not overridden.
+ *
+ * `seenAt` is when ADE last saw a question in the pane open or close by
+ * itself: the reading of the screen, or an Enter typed into the prompt. Two
+ * sources that disagree: the more recent one wins, and a hook written at the
+ * same moment beats what ADE saw.
  */
 export function statusFromActivity(
   status: string,
   activity: Activity | undefined,
   workingSince: number | undefined,
-): "working" | "idle" | undefined {
+  seenAt?: number,
+): "working" | "idle" | "waiting" | undefined {
   if (!activity) return undefined
-  if (status !== "idle" && status !== "working") return undefined
-  // A prompt is work: the session is stopped on a question, and a pane that says
-  // "Disponibile" while a permission question stands is a pane someone will send
-  // a message into. Same as busy, and never downgraded to idle by it.
-  if (activity.state === "busy" || activity.state === "permission") {
-    return status === "working" ? undefined : "working"
-  }
-  if (status !== "working") return undefined
+  if (status !== "idle" && status !== "working" && status !== "waiting") return undefined
+  if (seenAt !== undefined && activity.at < seenAt) return undefined
+  /*
+   * A prompt is a question waiting, and it shows as one.
+   *
+   * It was mapped to working: never "Disponibile", which was the point, but
+   * not "Permesso" either. The sidebar shows a prompt only for a waiting pane
+   * or one whose question the screen reading understood, so the prompt the
+   * reading missed — the case the hook was added for — read «Al lavoro» in
+   * the sidebar and `working` in `ade-msg list`, while it waited on a key.
+   */
+  if (activity.state === "permission") return status === "waiting" ? undefined : "waiting"
+  if (activity.state === "busy") return status === "working" ? undefined : "working"
+  if (status === "idle") return undefined
   return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
+}
+
+/**
+ * Whether the hook's turn start or end closes a prompt the screen reading found.
+ *
+ * The screen reading was the only thing that closed its own prompts, and it
+ * reads a window of raw lines that can still hold the question after it was
+ * answered in a way the reading does not see. A Stop after that left the pane
+ * on «Permesso», and closed to mail, with the turn over. A busy or an idle
+ * written at or after the moment the prompt was seen is the CLI saying it has
+ * moved on; an older one was already there when the prompt appeared.
+ */
+export function hookClosesScreenPrompt(activity: Activity | undefined, seenAt: number | undefined): boolean {
+  if (!activity || activity.state === "permission") return false
+  return seenAt === undefined || activity.at >= seenAt
 }
 
 /** A CLI without turn hooks counts as free once it has printed nothing for this long. */
@@ -977,6 +1022,32 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   } catch {
     return undefined
   }
+}
+
+/**
+ * A pane's turn activity, from this spawn's file or, while that one is silent,
+ * from the previous spawn's (review of activity-prime-pi, MEDIO 1).
+ *
+ * Prime's daemon workers outlive ADE: after a restart `prime --resume` attaches
+ * to the worker that is still running, and that worker keeps writing under the
+ * nonce of the spawn that started it. The old file is believed only when it names
+ * the pane's own conversation: `sessionId` is required and must be `resumeId`,
+ * where {@link parseActivity} lets a file without one through.
+ */
+export function activityOrFormer(
+  current: string | null | undefined,
+  former: string | null | undefined,
+  resumeId: string | undefined,
+): Activity | undefined {
+  if (current) return parseActivity(current, resumeId)
+  if (!former || !resumeId) return undefined
+  try {
+    const raw = JSON.parse(former.replace(/^\ufeff/, "")) as Record<string, unknown>
+    if (raw.sessionId !== resumeId) return undefined
+  } catch {
+    return undefined
+  }
+  return parseActivity(former, resumeId)
 }
 
 /** All `isQuestionOpen` needs from a prompt found by reading the screen: that there is one. */
@@ -1101,6 +1172,58 @@ export function formatWedged(request: OpenRequest, answerer: MailPane | undefine
     `[ade-msg] ${who(answerer)} lavora alla richiesta ${request.id} da ${age(now - (request.deliveredAt ?? request.at))} ` +
     `senza output né modifiche: forse bloccata. Guarda il suo pane, poi ade-msg interrupt ${answerer?.id ?? "<sessione>"} o relaunch --note.`
   )
+}
+
+/**
+ * Whether what was typed into a terminal interrupts the agent's turn: a lone
+ * Esc, which is the Escape key and not the start of an arrow or an Alt chord,
+ * or a Ctrl-C anywhere in it.
+ */
+export function isInterruptInput(data: string): boolean {
+  return data === String.fromCharCode(27) || data.includes(String.fromCharCode(3))
+}
+
+/**
+ * Whether what was typed into a pane standing on a prompt answers it.
+ *
+ * A digit, a letter, an Enter: Claude Code's permission menu takes «1», «2»,
+ * «3» as the answer itself. Not what only moves around it or is not a key at
+ * all — an arrow, Home, a function key, the focus reports xterm sends when the
+ * window gains or loses focus, all of which arrive as an escape sequence —
+ * and not a lone Esc, which is an interruption (`isInterruptInput`).
+ */
+export function answersPrompt(data: string): boolean {
+  if (data.length === 0) return false
+  const ESC = String.fromCharCode(27)
+  if (data === ESC) return false
+  return !(data.startsWith(`${ESC}[`) || data.startsWith(`${ESC}O`))
+}
+
+/**
+ * Whether an interruption ended the turn the hook still reports.
+ *
+ * Claude Code runs no hook when the user interrupts it: `Stop` is for a turn
+ * that finished, and nothing else is sent. So the file kept its `busy`, or
+ * the `permission` of the prompt the Esc cancelled, and the pane stayed «Al
+ * lavoro» with its mail held — for the half hour of the stale-busy rule, and
+ * for good on a prompt. A busy or a prompt written before the interruption is
+ * the turn it stopped; the caller still waits for the terminal to go quiet,
+ * because an agent that carries on repaints.
+ */
+export function interruptEnds(activity: Activity | undefined, interruptedAt: number | undefined): boolean {
+  if (interruptedAt === undefined || !activity) return false
+  return activityOccupiesPane(activity.state) && activity.at < interruptedAt
+}
+
+/**
+ * The activity to believe once an interruption at `interruptedAt` ended the
+ * turn: the hook's file still says busy or permission, and says it until the
+ * next turn writes it, so every read older than the interruption is the idle
+ * the CLI never wrote. A newer read is a new turn, and stands.
+ */
+export function afterInterrupt(read: Activity | undefined, interruptedAt: number | undefined): Activity | undefined {
+  if (!read || !interruptEnds(read, interruptedAt)) return read
+  return { ...read, state: "idle", at: interruptedAt! }
 }
 
 /**
@@ -1373,6 +1496,8 @@ export const USAGE =
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
   "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
+  "  ade-msg design <file.html> [--title T]  mostra una pagina di .ade/design/ accanto a te; riscrivila e si ricarica\n" +
+  "                                          un file solo: CSS e JS dentro, immagini data:, niente CDN né fetch\n" +
   '  ade-msg memory add decisione|fatto|trappola|todo "<testo>"\n' +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +
@@ -1494,10 +1619,17 @@ export type QuietOutcome =
    */
   | "recheck"
 
-export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer: boolean }): QuietOutcome {
+export function quietOutcome(pane: {
+  hooked: boolean
+  busy: boolean
+  owesAnswer: boolean
+  /** The turn the hook reports was interrupted before this silence (`interruptEnds`). */
+  interrupted?: boolean
+}): QuietOutcome {
   // With turn hooks silence is not the end of a turn (a long tool call is
   // silent): the hook says when, and its `idle` settles the pane on its own.
-  if (pane.hooked) return pane.busy ? "wait" : "settle"
+  // Except after an interruption, which the hook never reports.
+  if (pane.hooked) return pane.busy && !pane.interrupted ? "wait" : "settle"
   return pane.owesAnswer ? "recheck" : "settle"
 }
 

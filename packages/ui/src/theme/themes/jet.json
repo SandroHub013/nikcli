@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Jet",
+  "id": "jet",
+  "light": {
+    "seeds": {
+      "neutral": "#f5f5f0",
+      "primary": "#3a8dc9",
+      "success": "#3bbc95",
+      "warning": "#f18e53",
+      "error": "#d72638",
+      "info": "#5bc0de",
+      "interactive": "#3a8dc9",
+      "diffAdd": "#3bbc95",
+      "diffDelete": "#d72638"
+    },
+    "overrides": {
+      "background-base": "#f5f5f0",
+      "background-weak": "#e8e8e3",
+      "background-strong": "#f5f5f0",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1a1a",
+      "text-base": "#363636",
+      "text-weak": "#6b6b6b",
+      "text-weaker": "#9b9b9a",
+      "border-weak-base": "#f0f0eb",
+      "border-base": "#d4d4d0",
+      "border-strong-base": "#3a8dc9"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0a0a0a",
+      "primary": "#5bc0de",
+      "success": "#3bbc95",
+      "warning": "#f18e53",
+      "error": "#d72638",
+      "info": "#5bc0de",
+      "interactive": "#5bc0de",
+      "diffAdd": "#3bbc95",
+      "diffDelete": "#d72638"
+    },
+    "overrides": {
+      "background-base": "#0a0a0a",
+      "background-weak": "#1a1a1a",
+      "background-strong": "#0a0a0a",
+      "background-stronger": "#000000",
+      "surface-raised-stronger-non-alpha": "#000000",
+      "text-strong": "#e8e8e3",
+      "text-base": "#bcbcb9",
+      "text-weak": "#6b6b6b",
+      "text-weaker": "#525252",
+      "border-weak-base": "#000000",
+      "border-base": "#333333",
+      "border-strong-base": "#5bc0de"
+    }
+  }
+}

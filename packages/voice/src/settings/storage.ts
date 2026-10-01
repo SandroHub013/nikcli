@@ -91,7 +91,9 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
      */
     const storedVersion =
       typeof parsed === "object" && parsed !== null ? (parsed as { version?: unknown }).version : undefined
-    if (merged !== null && storedVersion !== normalized.settings.version) {
+    // Also a profile of the current version that a migration still moved (a backend that was removed
+    // after it was written): without the write it is moved, and told, at every start.
+    if (merged !== null && (storedVersion !== normalized.settings.version || normalized.migrations.length > 0)) {
       writeSettings(store, normalized.settings)
     }
 

@@ -117,7 +117,7 @@ describe("Effect-TS Voice Backend", () => {
     expect(errorKind(new MicPermissionDenied({}))).toBe("mic-auth")
     expect(errorKind(new MicUnavailable({}))).toBe("mic-auth")
     expect(errorKind(new ApiKeyMissing({}))).toBe("failed")
-    expect(errorKind(new ModelLoadFailed({ backend: "parakeet" }))).toBe("failed")
+    expect(errorKind(new ModelLoadFailed({ backend: "openrouter" }))).toBe("failed")
     expect(errorKind(new Error("boom"))).toBe("failed")
     expect(errorKind(undefined)).toBe("failed")
   })
@@ -145,7 +145,7 @@ describe("Effect-TS Voice Backend", () => {
         message: `Format error with ${fakeKey}`,
       }),
       new SpeechRecognitionUnavailable({ message: `Missing API ${fakeKey}` }),
-      new ModelLoadFailed({ backend: "parakeet", message: `Fail ${fakeKey}` }),
+      new ModelLoadFailed({ backend: "openrouter", message: `Fail ${fakeKey}` }),
       new TranscriptionFailed({
         cause: new Error(`Failed with ${fakeKey}`),
         message: `Trans failed ${fakeKey}`,

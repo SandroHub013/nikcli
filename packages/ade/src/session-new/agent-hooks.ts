@@ -105,8 +105,14 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
      * and it is the same hook the user already installed from the settings — no
      * new file in their home, no new permission, and the screen reading stays as
      * the fallback for a session whose hooks were never installed.
+     *
+     * StopFailure, for a turn that ends on an API error — a rate limit, an
+     * overload, an expired login. `Stop` is not sent then, and the pane stayed
+     * «Al lavoro» with its mail held, as after an interruption. Claude Code has
+     * had it since 2.1.78; an install from before is found missing and the
+     * panel offers the update.
      */
-    activityEvents: ["UserPromptSubmit", "Stop", "Notification"],
+    activityEvents: ["UserPromptSubmit", "Stop", "Notification", "StopFailure"],
     execForm: true,
   },
   {
@@ -136,6 +142,45 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
 /** The target for an agent id, if ADE knows one. */
 export function hookTarget(agentId: string): HookTarget | undefined {
   return HOOK_TARGETS.find((target) => target.id === agentId)
+}
+
+/*
+ * Prime Agent and pi: an extension ADE passes with `-e`, not a hook.
+ *
+ * Both load extensions that hear the agent's own `agent_start` and `agent_end`,
+ * and Prime hands the flag and the pane's environment to the daemon worker where
+ * its agent runs. So ADE ships one file (`src-tauri/plugins/ade-activity.js`),
+ * writes it into its own application data and adds it to the command line of the
+ * spawns it starts: nothing in the user's configuration, nothing to install, and
+ * a Prime or pi started outside ADE never sees it. Rust keeps the same list
+ * (`ACTIVITY_EXTENSION_AGENTS` in `agent_link.rs`); a test holds them together.
+ */
+export const ACTIVITY_EXTENSION_AGENTS: readonly string[] = ["prime", "pi"]
+
+/** The file's name in ADE's application data. */
+export const ACTIVITY_EXTENSION_NAME = "ade-activity.js"
+
+/** The extension's text, relative to this module, for the tests. Rust compiles in the same file. */
+export const ACTIVITY_EXTENSION_SOURCE = "../../src-tauri/plugins/ade-activity.js"
+
+/** Whether ADE starts this agent with its turn reporter. */
+export function takesActivityExtension(agentId: string): boolean {
+  return ACTIVITY_EXTENSION_AGENTS.includes(agentId)
+}
+
+/**
+ * The `agent` a pane's own CLI writes in its reports: the hook's, or `pi` for
+ * the extension (Prime is a fork of pi). A report of another family, with this
+ * spawn's nonce, comes from a CLI the session started, which inherited the
+ * pane's environment (review of activity-prime-pi, MEDIO 2).
+ */
+export function reportFamily(agentId: string): string | undefined {
+  return takesActivityExtension(agentId) ? "pi" : hookTarget(agentId)?.agent
+}
+
+/** Whether a spawn of this agent with a nonce reports its turns: a hook with activity events, or the extension. */
+export function reportsTurns(agentId: string): boolean {
+  return Boolean(hookTarget(agentId)?.activityEvents?.length) || takesActivityExtension(agentId)
 }
 
 /** How the config file invokes the script. */
@@ -697,14 +742,24 @@ $event = "$($payload.hook_event_name)"
 # so; the reading of the screen stays as the fallback for a session whose hooks
 # were never installed.
 $permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq "permission_prompt"
-if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $permission) {
+# Claude Code waiting at its prompt for a while: the turn is over, even one that
+# ended with no Stop — an interruption, which no hook reports.
+$waiting = $event -eq "Notification" -and "$($payload.notification_type)" -eq "idle_prompt"
+# A turn that ended on an API error ends like any other: back at the prompt.
+$failed = $event -eq "StopFailure"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $failed -or $permission -or $waiting) {
+  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
+  # Never over a prompt: an Enter from a delivery would answer it. Only a turn
+  # starting or ending says it was answered.
+  if ($waiting -and (Test-Path -LiteralPath $target)) {
+    try { if (([IO.File]::ReadAllText($target) | ConvertFrom-Json).state -eq "permission") { exit 0 } } catch {}
+  }
   $activity = [ordered]@{
-    state     = $(if ($event -eq "Stop") { "idle" } elseif ($permission) { "permission" } else { "busy" })
+    state     = $(if ($event -eq "UserPromptSubmit") { "busy" } elseif ($permission) { "permission" } else { "idle" })
     sessionId = "$sessionId"
     cwd       = "$($payload.cwd)"
     at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   }
-  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
   $staging = $target + ".part"
   try {
     [IO.File]::WriteAllText($staging, ($activity | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))

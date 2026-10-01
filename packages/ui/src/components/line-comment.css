@@ -11,7 +11,8 @@
 [data-component="line-comment"] [data-slot="line-comment-button"] {
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-md);
+  border-radius: 999px;
+  transition: scale 160ms var(--ease-out-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -23,6 +24,10 @@
 
 [data-component="line-comment"] [data-component="icon"] {
   color: var(--white);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-button"]:active {
+  scale: 0.92;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-button"]:focus {
@@ -40,7 +45,7 @@
   z-index: var(--line-comment-popover-z, 40);
   min-width: 200px;
   max-width: min(320px, calc(100vw - 48px));
-  border-radius: 8px;
+  border-radius: var(--glass-radius-md, 14px);
   background: var(--surface-raised-stronger-non-alpha);
   box-shadow: var(--shadow-lg-border-base);
   padding: 12px;
@@ -89,8 +94,8 @@
 [data-component="line-comment"] [data-slot="line-comment-textarea"] {
   width: 100%;
   resize: vertical;
-  padding: 8px;
-  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  border-radius: 10px;
   background: var(--surface-base);
   border: 1px solid var(--border-base);
   color: var(--text-strong);

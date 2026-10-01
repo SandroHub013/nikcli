@@ -6,5 +6,5 @@
   "surface/workbench.tsx": 2,
   "video/video-pane.tsx": 2,
   "voice/ui/voice-hud.tsx": 3,
-  "voice/ui/voice-settings-panel.tsx": 7
+  "voice/ui/voice-settings-panel.tsx": 1
 }

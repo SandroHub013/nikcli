@@ -3,12 +3,12 @@
  *
  * Why this file exists:
  * In the legacy implementation, resource cleanup (closing AudioContext, terminating
- * MediaStream tracks, and unloading neural model weights in Parakeet) depended entirely
+ * MediaStream tracks, and unloading a neural model's weights) depended entirely
  * on the caller manually remembering to invoke `stop()`. If an error occurred midway,
  * or if a component was unmounted abruptly, the hardware microphone remained locked
  * and memory was leaked.
  *
- * Here, microphone capture, AudioContext, and Parakeet neural models are acquired via
+ * Here, microphone capture and the AudioContext are acquired via
  * `Effect.acquireRelease` inside a managed `Scope`. Release is strictly guaranteed by
  * the Effect runtime even if the surrounding program fails, aborts, or is interrupted.
  */
@@ -16,11 +16,6 @@
 import { Effect, Layer, Option, Queue, Stream, type Scope } from "effect"
 import type { VoiceHost } from "../bridge/host"
 import type { TranscriptEvent, Transcriber as TranscriberContract } from "../asr/transcriber"
-import {
-  createParakeetTranscriber,
-  describeParakeetReadiness,
-  type ParakeetTranscriberOptions,
-} from "../asr/parakeet-local"
 import { createOpenRouterTranscriber, type OpenRouterTranscriberOptions } from "../asr/openrouter"
 import type { SelectTranscriberOptions, TranscriberBackend } from "../asr/select"
 import { createMicCapture, type CapturedSegment, type MicCaptureOptions } from "../audio/capture"
@@ -39,7 +34,6 @@ import {
   HostActionFailed,
   MicPermissionDenied,
   MicUnavailable,
-  ModelLoadFailed,
   QuotaExhausted,
   RequestTimeout,
   SpeechRecognitionUnavailable,
@@ -106,9 +100,6 @@ export function mapToVoiceError(err: unknown): VoiceError {
   }
   if (lower.includes("timeout") || lower.includes("scaduta per timeout") || lower.includes("non ha risposto in")) {
     return new RequestTimeout({ message: msg })
-  }
-  if (lower.includes("parakeet")) {
-    return new ModelLoadFailed({ backend: "parakeet", message: msg, cause: err })
   }
   return new TranscriptionFailed({ cause: err, message: msg })
 }
@@ -254,26 +245,6 @@ export const MicCaptureLive = (options?: MicCaptureOptions): Layer.Layer<MicCapt
 // 2. Transcriber Concrete Implementations as Scoped Layers
 // ---------------------------------------------------------------------------
 
-export const TranscriberParakeetLive = (
-  options?: ParakeetTranscriberOptions,
-): Layer.Layer<TranscriberService, VoiceError> =>
-  Layer.scoped(
-    Transcriber,
-    Effect.gen(function* () {
-      const readiness = describeParakeetReadiness()
-      if (!readiness.usable) {
-        return yield* Effect.fail(
-          new ModelLoadFailed({
-            backend: "parakeet",
-            message: readiness.reason ?? "Parakeet non disponibile.",
-          }),
-        )
-      }
-      const transcriber = createParakeetTranscriber(options)
-      return yield* bridgeTranscriber(transcriber)
-    }),
-  )
-
 export const TranscriberOpenRouterLive = (
   options: OpenRouterTranscriberOptions,
 ): Layer.Layer<TranscriberService, VoiceError> =>
@@ -306,8 +277,6 @@ export const TranscriberSelectLive = (
   options: SelectTranscriberOptions = {},
 ): Layer.Layer<TranscriberService, VoiceError> => {
   switch (backend) {
-    case "parakeet":
-      return TranscriberParakeetLive(options.parakeetOptions)
     case "openrouter": {
       const apiKey = options.apiKey ?? options.openRouterOptions?.apiKey ?? ""
       return TranscriberOpenRouterLive({

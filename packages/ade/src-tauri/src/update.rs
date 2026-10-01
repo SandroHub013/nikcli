@@ -51,6 +51,23 @@ async fn within<T>(limit: std::time::Duration, future: impl std::future::Future<
         .unwrap_or_else(|_| Err(format!("nessuna risposta dal server degli aggiornamenti per {} secondi", limit.as_secs())))
 }
 
+/// Why this build may not install an update, or `None` when it may.
+///
+/// The installer is the real one, and on Windows NSIS closes every
+/// `ade-desktop.exe` before it writes, whatever window started it. So a test
+/// build (`ai.nikcli.ade.test`) or a dev build that pressed «Aggiorna e
+/// riavvia» closed the user's own ADE, with its sessions, and installed the
+/// release over it: an update is for the installed ADE only.
+pub(crate) fn install_refused(identifier: &str, dev_build: bool) -> Option<String> {
+    if identifier.ends_with(".test") {
+        return Some("questa è una build di test: l'aggiornamento si installa solo dall'ADE installata, perché il setup chiuderebbe anche quella".to_string());
+    }
+    if dev_build {
+        return Some("questa è una build di sviluppo: l'aggiornamento si installa solo dall'ADE installata, perché il setup chiuderebbe anche quella".to_string());
+    }
+    None
+}
+
 /// Downloads the newest signed ADE release, installs it and restarts into it.
 ///
 /// Everything happens here rather than through the updater plugin's JavaScript
@@ -62,6 +79,9 @@ async fn within<T>(limit: std::time::Duration, future: impl std::future::Future<
 /// the new bundle is in place when the download returns, and ADE restarts.
 #[tauri::command]
 pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(refusal) = install_refused(&app.config().identifier, cfg!(debug_assertions)) {
+        return Err(refusal);
+    }
     use tauri_plugin_updater::UpdaterExt;
     let updater = app.updater().map_err(|e| e.to_string())?;
     let update = within(CHECK_AFTER, async { updater.check().await.map_err(|e| e.to_string()) })
@@ -150,6 +170,20 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+
+    /* A test or dev build pressing «Aggiorna e riavvia» ran the real NSIS, which closes the installed ADE too. */
+    #[test]
+    fn a_test_or_dev_build_never_installs_an_update() {
+        assert!(super::install_refused("ai.nikcli.ade.test", false).unwrap().contains("build di test"));
+        assert!(super::install_refused("ai.nikcli.ade.test", true).is_some());
+        assert!(super::install_refused("ai.nikcli.ade", true).unwrap().contains("build di sviluppo"));
+        assert_eq!(super::install_refused("ai.nikcli.ade", false), None);
+        // Refused before the updater is even asked: nothing is downloaded, nothing is run.
+        let source = include_str!("update.rs");
+        let guard = source.find(&["install_refused(&app.", "config().identifier"].concat()).expect("la guardia manca");
+        let updater = source.find(&["app.", "updater()"].concat()).expect("nessun updater");
+        assert!(guard < updater, "la guardia va prima dell'updater");
+    }
 
     /* G11 review, BASSO 1. */
     #[test]

@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
+import { registerMenuClicks } from "./menu-click"
 import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
@@ -237,23 +238,45 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
 }
 
 /**
- * The left button is ADE's: it selects, even when the program has asked for the mouse.
+ * When the program has asked for the mouse, the mouse is the program's, and
+ * Shift+drag selects: the rule of the common terminals (mouse sessions).
  *
- * xterm consults this only while the program has mouse reporting on, so a shell
- * or Codex keeps Alt+drag as today's column selection.
- *
- * The trade-off: a program that uses the left click, a clickable menu for
- * instance, gets it only with Alt held. Claude Code and Codex are driven from
- * the keyboard, and a plain drag in Claude Code was measured to do nothing at
- * all. The wheel and the right and middle buttons stay the program's, because
- * in the alternate buffer scrolling is the program's to do, not xterm's.
+ * xterm consults this only while the program has mouse reporting on; in a
+ * shell, or in Claude Code, Kimi and pi, which do not ask, the left button
+ * selects as before. It was ADE's always, the program getting it only with
+ * Alt: the clickable menus of OpenCode, nikcli and Grok, which were measured
+ * to act on a click (ade-team/results/mouse-sessioni-misura.md), could not be
+ * clicked. xterm's own rule is Shift, but Option on a Mac; ADE says Shift
+ * everywhere, as its hint does. The wheel and the right and middle buttons
+ * were the program's already.
  */
-export function configureTerminalSelection(terminal: Terminal): void {
+export function configureTerminalSelection(terminal: Terminal, overLink: () => boolean = () => false): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
+    /*
+     * Ctrl (or Cmd) on a link is ADE's too: the click opens the link, and the
+     * program must not get it as well (`\e[<16;…M`, a Ctrl+click of its own).
+     * Forced, the press goes to the selection, which a click leaves empty.
+     */
     sel.shouldForceSelection = (event: MouseEvent) =>
-      (event.button === 0 || event.button === undefined) && !event.altKey
+      (event.button === 0 || event.button === undefined) &&
+      (event.shiftKey || (Boolean(event.ctrlKey || event.metaKey) && overLink()))
+  }
+  /*
+   * A Shift+drag begun in a pane that had not the focus was cleared at once:
+   * the press focuses the terminal, xterm tells the program (`\e[I`), OpenCode
+   * answers by asking for the mouse again, and xterm's `disable()` clears the
+   * selection that has just started. While a drag is on (xterm's drag timer
+   * runs from press to release) the selection is kept; the mode still changes.
+   */
+  if (sel && typeof sel.disable === "function" && !sel.adeKeepsDrag) {
+    const disable = sel.disable.bind(sel)
+    sel.disable = () => {
+      if (sel._dragScrollIntervalTimer !== undefined) sel._enabled = false
+      else disable()
+    }
+    sel.adeKeepsDrag = true
   }
 }
 
@@ -443,6 +466,14 @@ export function getTerminal(id: string): SessionTerminal {
     minimumContrastRatio: contrastFor(currentThemeName()),
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
+    /*
+     * The page's document, not the pane's. The pane is opened while Solid still
+     * holds it in its template's document, an inert about:blank, and xterm
+     * listens there for the release and the drag of a click it gave the
+     * program: none ever came, and OpenCode highlighted an entry without
+     * running it (mouse sessions, Verifiche's test of step A, problem 1).
+     */
+    documentOverride: typeof document === "undefined" ? undefined : document,
   })
 
   const fit = new FitAddon()
@@ -511,6 +542,8 @@ export interface AttachOptions {
   onMouseMode?: (reporting: boolean) => void
   /** A URL or a file path in the output was clicked. See `links.ts`. */
   onLink?: (request: LinkRequest) => void
+  /** Whether a click on a keyboard menu becomes its keys, through `onInput`: Claude Code's. See `menu-click.ts`. */
+  menuClicks?: () => boolean
 }
 
 /**
@@ -637,7 +670,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     }
   }
   session.element = element
-  configureTerminalSelection(session.terminal)
+  let overLink = false
+  configureTerminalSelection(session.terminal, () => overLink)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 
@@ -652,7 +686,16 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
           })
         })
 
-  const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+  const stopLinks = options.onLink
+    ? registerLinks(terminal, element, options.onLink, (hovered) => {
+        overLink = hovered
+      })
+    : undefined
+  const onInput = options.onInput
+  const stopMenuClicks =
+    options.menuClicks && onInput
+      ? registerMenuClicks(terminal, element, { enabled: options.menuClicks, send: onInput })
+      : undefined
 
   session.copyBlocked = options.onCopyBlocked
   session.copied = options.onCopied
@@ -729,6 +772,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     inputHandler?.dispose()
     stopCopy?.()
     stopLinks?.()
+    stopMenuClicks?.()
     modeWatch?.dispose()
     if (modeTimer) clearTimeout(modeTimer)
     session.uncover?.()

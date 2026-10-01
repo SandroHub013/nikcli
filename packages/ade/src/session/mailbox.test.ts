@@ -7,6 +7,11 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  hookClosesScreenPrompt,
+  isInterruptInput,
+  answersPrompt,
+  interruptEnds,
+  afterInterrupt,
   holdsForAnswer,
   quietOutcome,
   ANSWER_HOLD_MS,
@@ -183,6 +188,19 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
 })
 
+test("an unverified design is refused: a page opens beside a session only for that session", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"design","from":"","path":"C:/p/.ade/design/a.html"}',
+    '{"kind":"design","from":"n1-0","token":"falso","path":"C:/p/.ade/design/a.html"}',
+  ]) {
+    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+  }
+  const verified = '{"kind":"design","from":"n1-0","token":"segreto","path":"C:/p/.ade/design/a.html"}'
+  expect(unverifiedSenderRefusal(verifySender(parseMessage(verified)!, tokenOf))).toBeUndefined()
+})
+
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
   const voiceSend = verifySender(
@@ -273,8 +291,7 @@ describe("a session's status follows its turn hooks", () => {
     expect(statusFromActivity("working", { state: "idle", at: 100 }, 150)).toBeUndefined()
   })
 
-  test("a permission question, an error or no hook data are left alone", () => {
-    expect(statusFromActivity("waiting", { state: "idle", at: 200 }, 0)).toBeUndefined()
+  test("an error or no hook data are left alone", () => {
     expect(statusFromActivity("error", { state: "busy", at: 200 }, 0)).toBeUndefined()
     expect(statusFromActivity("idle", undefined, 0)).toBeUndefined()
     expect(statusFromActivity("working", { state: "busy", at: 200 }, 0)).toBeUndefined()
@@ -436,9 +453,43 @@ describe("the permission prompt the hook says", () => {
     expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
   })
 
-  test("the status in the sidebar says working while a prompt stands", () => {
-    // The pane is not free, so it is not idle, whatever the previous state said.
-    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("working")
+  test("the status in the sidebar says Permesso while a prompt the hook reported stands (fix 3)", () => {
+    // The pane is not free, so it is not idle, whatever the previous state said;
+    // and it is not «Al lavoro» either: it waits on a key.
+    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("waiting")
+    expect(statusFromActivity("working", { state: "permission", at: now - 1_000 }, now - 5_000)).toBe("waiting")
+    expect(statusFromActivity("waiting", { state: "permission", at: now - 1_000 }, undefined)).toBeUndefined()
+  })
+
+  test("a newer turn start or end takes the prompt away (fix 3)", () => {
+    expect(statusFromActivity("waiting", { state: "busy", at: now }, now - 5_000)).toBe("working")
+    expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000)).toBe("idle")
+    // The previous turn's idle does not end a question asked in this one.
+    expect(statusFromActivity("waiting", { state: "idle", at: now - 9_000 }, now - 5_000)).toBeUndefined()
+  })
+
+  test("a Stop or a new turn after the screen found its prompt closes it (fix 4)", () => {
+    expect(hookClosesScreenPrompt({ state: "idle", at: now }, now - 1_000)).toBe(true)
+    expect(hookClosesScreenPrompt({ state: "busy", at: now }, now - 1_000)).toBe(true)
+    // At the same moment the hook wins.
+    expect(hookClosesScreenPrompt({ state: "idle", at: now }, now)).toBe(true)
+    // The turn's busy was there before the prompt appeared: it answers nothing.
+    expect(hookClosesScreenPrompt({ state: "busy", at: now - 3_000 }, now - 1_000)).toBe(false)
+    // The hook asking too is not an answer, and no hook is not one either.
+    expect(hookClosesScreenPrompt({ state: "permission", at: now }, now - 1_000)).toBe(false)
+    expect(hookClosesScreenPrompt(undefined, now - 1_000)).toBe(false)
+  })
+
+  test("what ADE saw after the hook wrote wins, and at the same moment the hook wins (fix 4)", () => {
+    // The screen found a prompt after the turn's busy: the busy is older news.
+    expect(statusFromActivity("waiting", { state: "busy", at: now - 3_000 }, now - 5_000, now - 1_000)).toBeUndefined()
+    // The screen saw the question answered after the hook reported it: no going back to Permesso.
+    expect(
+      statusFromActivity("working", { state: "permission", at: now - 3_000 }, now - 5_000, now - 1_000),
+    ).toBeUndefined()
+    // A Stop after the screen opened its prompt ends the turn.
+    expect(statusFromActivity("waiting", { state: "idle", at: now }, now - 5_000, now - 1_000)).toBe("idle")
+    expect(statusFromActivity("waiting", { state: "idle", at: now - 1_000 }, now - 5_000, now - 1_000)).toBe("idle")
   })
 })
 
@@ -804,6 +855,26 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(parseMessage(JSON.stringify({ kind: "interrupt" }))).toBeUndefined()
   })
 
+  test("design carries the sheet's path and its title, and needs the path", () => {
+    expect(
+      parseMessage(JSON.stringify({ kind: "design", from: "n1-0", path: "C:/p/.ade/design/menu.html", title: "Menu" })),
+    ).toEqual({
+      kind: "design",
+      from: "n1-0",
+      token: undefined,
+      path: "C:/p/.ade/design/menu.html",
+      title: "Menu",
+      text: "",
+    })
+    // The sh script sends an empty title when there is none.
+    const untitled = parseMessage(
+      JSON.stringify({ kind: "design", from: "n1-0", path: "C:/p/.ade/design/a.html", title: "" }),
+    )
+    expect(untitled).toMatchObject({ kind: "design", path: "C:/p/.ade/design/a.html" })
+    expect(untitled && "title" in untitled).toBe(false)
+    expect(parseMessage(JSON.stringify({ kind: "design", from: "n1-0" }))).toBeUndefined()
+  })
+
   test("open decisions are the keyed ones no later risolta answered, and status prints them", () => {
     const log = [
       "2026-09-15T16:40 Voice decisione [k=S25-casella] quale variabile",
@@ -846,6 +917,76 @@ describe("holdsForAnswer: a session without hooks is working until it answers", 
   test("any of several requests holds it", () => {
     const old = { to: "p1", at: 0, deliveredAt: 0 }
     expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("a key typed into a prompt answers it", () => {
+  const ESC = String.fromCharCode(27)
+
+  test("a digit, a letter or an Enter answer; arrows, focus reports and Esc do not", () => {
+    expect(answersPrompt("1")).toBe(true)
+    expect(answersPrompt("n")).toBe(true)
+    expect(answersPrompt(String.fromCharCode(13))).toBe(true)
+    expect(answersPrompt(`${ESC}[B`)).toBe(false)
+    expect(answersPrompt(`${ESC}OA`)).toBe(false)
+    expect(answersPrompt(`${ESC}[I`)).toBe(false)
+    expect(answersPrompt(`${ESC}[O`)).toBe(false)
+    expect(answersPrompt(ESC)).toBe(false)
+    expect(answersPrompt("")).toBe(false)
+  })
+})
+
+describe("an interrupted turn, which Claude Code reports to no hook (fix 1)", () => {
+  const ESC = String.fromCharCode(27)
+  const CTRL_C = String.fromCharCode(3)
+
+  test("Esc alone and Ctrl-C interrupt; an arrow, an Alt chord or a word do not", () => {
+    expect(isInterruptInput(ESC)).toBe(true)
+    expect(isInterruptInput(CTRL_C)).toBe(true)
+    expect(isInterruptInput(`abc${CTRL_C}`)).toBe(true)
+    expect(isInterruptInput(`${ESC}[A`)).toBe(false)
+    expect(isInterruptInput(`${ESC}b`)).toBe(false)
+    expect(isInterruptInput("ciao")).toBe(false)
+  })
+
+  test("a busy or a prompt written before the Esc is the turn it stopped", () => {
+    expect(interruptEnds({ state: "busy", at: 100 }, 200)).toBe(true)
+    expect(interruptEnds({ state: "permission", at: 100 }, 200)).toBe(true)
+    // A turn that began after it, a turn already over, no Esc at all: nothing to end.
+    expect(interruptEnds({ state: "busy", at: 300 }, 200)).toBe(false)
+    expect(interruptEnds({ state: "idle", at: 100 }, 200)).toBe(false)
+    expect(interruptEnds({ state: "busy", at: 100 }, undefined)).toBe(false)
+    expect(interruptEnds(undefined, 200)).toBe(false)
+  })
+
+  test("silence after an interruption settles a hooked pane the hook still calls busy", () => {
+    // The bug: `wait` for good, and mail held for the half hour of the stale-busy rule.
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false, interrupted: true })).toBe("settle")
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false, interrupted: false })).toBe("wait")
+  })
+
+  test("the file keeps saying busy; every read older than the Esc is the idle never written", () => {
+    expect(afterInterrupt({ state: "busy", at: 100, cwd: "C:/w" }, 200)).toEqual({
+      state: "idle",
+      at: 200,
+      cwd: "C:/w",
+    })
+    expect(afterInterrupt({ state: "permission", at: 100 }, 200)).toEqual({ state: "idle", at: 200 })
+    // The next turn's busy stands, and so does everything without an interruption.
+    expect(afterInterrupt({ state: "busy", at: 300 }, 200)).toEqual({ state: "busy", at: 300 })
+    expect(afterInterrupt({ state: "busy", at: 100 }, undefined)).toEqual({ state: "busy", at: 100 })
+    expect(afterInterrupt(undefined, 200)).toBeUndefined()
+  })
+
+  test("an interrupted pane is free again, and a new turn after it is not", () => {
+    const now = 10_000
+    const read = { state: "busy" as const, at: now - 5_000 }
+    const target = { hooked: true, permissionPending: false, lastOutputAt: now - 3_000 }
+    expect(isFree({ ...target, activity: read }, now)).toBe(false)
+    expect(isFree({ ...target, activity: afterInterrupt(read, now - 4_000) }, now)).toBe(true)
+    expect(isFree({ ...target, activity: afterInterrupt({ state: "busy", at: now - 1_000 }, now - 4_000) }, now)).toBe(
+      false,
+    )
   })
 })
 

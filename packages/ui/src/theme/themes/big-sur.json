@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Big Sur",
+  "id": "big-sur",
+  "light": {
+    "seeds": {
+      "neutral": "#fdf3f6",
+      "primary": "#e5325a",
+      "success": "#2f9e57",
+      "warning": "#c77700",
+      "error": "#d92d20",
+      "info": "#2b86b3",
+      "interactive": "#e5325a",
+      "diffAdd": "#2f9e57",
+      "diffDelete": "#d92d20"
+    },
+    "overrides": {
+      "background-base": "#fdf3f6",
+      "background-weak": "#f0e6e9",
+      "background-strong": "#fdf3f6",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#2b151e",
+      "text-base": "#482d38",
+      "text-weak": "#7d5a69",
+      "text-weaker": "#aa909a",
+      "border-weak-base": "#f5e1e8",
+      "border-base": "#efd3dd",
+      "border-strong-base": "#aa919a"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1016",
+      "primary": "#ff6482",
+      "success": "#30d158",
+      "warning": "#ff9f0a",
+      "error": "#ff453a",
+      "info": "#5ac8fa",
+      "interactive": "#ff6482",
+      "diffAdd": "#30d158",
+      "diffDelete": "#ff453a"
+    },
+    "overrides": {
+      "background-base": "#1a1016",
+      "background-weak": "#281d23",
+      "background-strong": "#1a1016",
+      "background-stronger": "#24161e",
+      "surface-raised-stronger-non-alpha": "#24161e",
+      "text-strong": "#fbeef3",
+      "text-base": "#decbd3",
+      "text-weak": "#a88a98",
+      "text-weaker": "#765f6b",
+      "border-weak-base": "#2a1a23",
+      "border-base": "#37222d",
+      "border-strong-base": "#7c6972"
+    }
+  }
+}

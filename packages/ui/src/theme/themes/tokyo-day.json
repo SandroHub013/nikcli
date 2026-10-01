@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Tokyo Day",
+  "id": "tokyo-day",
+  "light": {
+    "seeds": {
+      "neutral": "#e1e2e7",
+      "primary": "#2e7de9",
+      "success": "#587539",
+      "warning": "#8c6c3e",
+      "error": "#f52a65",
+      "info": "#007197",
+      "interactive": "#2e7de9",
+      "diffAdd": "#587539",
+      "diffDelete": "#f52a65"
+    },
+    "overrides": {
+      "background-base": "#e1e2e7",
+      "background-weak": "#d7dae5",
+      "background-strong": "#e1e2e7",
+      "background-stronger": "#d5d6db",
+      "surface-raised-stronger-non-alpha": "#d5d6db",
+      "text-strong": "#243e7c",
+      "text-base": "#3c579e",
+      "text-weak": "#5c6ca7",
+      "text-weaker": "#8791b9",
+      "border-weak-base": "#c8c9ce",
+      "border-base": "#b4b5b9",
+      "border-strong-base": "#8897bb"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1b26",
+      "primary": "#7aa2f7",
+      "success": "#9ece6a",
+      "warning": "#e0af68",
+      "error": "#f7768e",
+      "info": "#7dcfff",
+      "interactive": "#7aa2f7",
+      "diffAdd": "#9ece6a",
+      "diffDelete": "#f7768e"
+    },
+    "overrides": {
+      "background-base": "#1a1b26",
+      "background-weak": "#242632",
+      "background-strong": "#1a1b26",
+      "background-stronger": "#16161e",
+      "surface-raised-stronger-non-alpha": "#16161e",
+      "text-strong": "#c0caf5",
+      "text-base": "#9ba5cf",
+      "text-weak": "#676f95",
+      "text-weaker": "#545975",
+      "border-weak-base": "#222535",
+      "border-base": "#292e42",
+      "border-strong-base": "#5e6581"
+    }
+  }
+}

@@ -16,7 +16,7 @@
       justify-content: center;
       flex-shrink: 0;
       color: var(--text-weak);
-      transition: transform 0.1s ease-in-out;
+      transition: transform 160ms var(--ease-out-strong);
     }
 
     &[data-expanded] {
@@ -48,7 +48,7 @@
     [data-slot="select-select-trigger"] {
       padding: 6px 6px 6px 12px;
       box-shadow: none;
-      border-radius: 6px;
+      border-radius: 10px;
       min-width: 160px;
       height: 32px;
       justify-content: flex-end;
@@ -71,8 +71,8 @@
         flex-shrink: 0;
         color: var(--text-weak);
         background-color: var(--surface-raised-base);
-        border-radius: 4px;
-        transition: transform 0.1s ease-in-out;
+        border-radius: 6px;
+        transition: transform 160ms var(--ease-out-strong);
       }
 
       &[data-slot="select-select-trigger"]:hover:not(:disabled),
@@ -129,9 +129,9 @@
     position: relative;
     display: flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: 4px 8px;
     gap: 12px;
-    border-radius: 4px;
+    border-radius: 8px;
     cursor: default;
 
     /* text-12-medium */
@@ -145,8 +145,8 @@
     color: var(--text-strong);
 
     transition:
-      background-color 0.2s ease-in-out,
-      color 0.2s ease-in-out;
+      background-color 100ms ease,
+      color 100ms ease;
     outline: none;
     user-select: none;
 
