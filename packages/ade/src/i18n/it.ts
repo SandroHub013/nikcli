@@ -188,6 +188,17 @@ export const it = {
   "sidebar.settings": "Impostazioni",
   "sidebar.stats": "Risorse usate da ADE",
   "sidebar.resize": "Ridimensiona barra laterale",
+  "sidebar.menu.session": "Azioni sulla sessione",
+  "sidebar.menu.workspace": "Azioni sullo space",
+  "sidebar.menu.rename": "Rinomina",
+  "sidebar.menu.restart": "Riavvia",
+  "sidebar.menu.resume": "Riprendi",
+  "sidebar.menu.close": "Chiudi",
+  "sidebar.menu.copyId": "Copia l'id",
+  "sidebar.menu.openSession": "Apri la sessione",
+  "sidebar.menu.newSession": "Nuova sessione",
+  "sidebar.menu.openProject": "Apri progetto",
+  "sidebar.menu.closeProjectSessions": "Chiudi tutte le sessioni",
 
   // Panels, grid, palette, empty project
   "pane.tree.stale.short": "solo l'ultimo commit",

@@ -73,6 +73,7 @@ import {
 } from "./workspace-tree"
 import { mergeChildren, markDirectoryError } from "./fs-tree"
 import { describeStats, type StatView } from "./system-stats"
+import { bindMenu } from "../ui/menu"
 import { t } from "../i18n"
 import { activityLabel, isReadyActivity } from "../grid/activity"
 
@@ -158,13 +159,34 @@ export interface SidebarProps {
   minWidth?: number
   maxWidth?: number
   storage?: Storage
+  /**
+   * The verbs the right button offers on a session row.
+   *
+   * Each is the workbench's own function, reached through the palette or a
+   * button today: nothing here is invented for the menu. Absent in the browser
+   * harness, and then the row simply has no menu.
+   */
+  onRenameSession?: (id: string) => void
+  onCloseSession?: (id: string) => void
+  onRestartSession?: (id: string) => void
+  onResumeSession?: (id: string) => void
+  onCopySessionId?: (id: string) => void
+  /** The verbs the right button offers on a project row. */
+  onCloseProjectSessions?: (id: string) => void
 }
+
+/** What a row carries to the menu: which kind of row, and its id. */
+type RowMenuKind = "workspace" | "session"
+
+/** Raised by a row on the right button, and by Shift+F10 / the Menu key. */
+type RowMenuHandler = (kind: RowMenuKind, id: string, event: MouseEvent | KeyboardEvent) => void
 
 export function WorkspaceHeaderRow(props: {
   row: FlatWorkspaceHeaderRow
   isActive?: boolean
   onToggle: (id: string) => void
   onSelectProject?: (id: string) => void
+  onMenu?: RowMenuHandler
 }) {
   return (
     <div
@@ -181,11 +203,14 @@ export function WorkspaceHeaderRow(props: {
       data-missing={props.row.workspace.missing ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
+      onContextMenu={(event) => props.onMenu?.("workspace", props.row.id, event)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault()
           props.onToggle(props.row.id)
         }
+        // The same menu the right button opens, for a keyboard that has no right button.
+        props.onMenu?.("workspace", props.row.id, event)
       }}
     >
       <svg data-slot="workspace-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -278,7 +303,12 @@ function rangesWithin(ranges: [number, number][], start: number, end: number): [
   return out
 }
 
-function SessionChildRow(props: { row: FlatSessionChildRow; now: number; onSelect?: (id: string) => void }) {
+function SessionChildRow(props: {
+  row: FlatSessionChildRow
+  now: number
+  onSelect?: (id: string) => void
+  onMenu?: RowMenuHandler
+}) {
   const displayStatus = () => mapAgentStatus(props.row.session.status, props.row.session.suspended)
   const folder = () => {
     if (props.row.session.cwd) {
@@ -301,6 +331,8 @@ function SessionChildRow(props: { row: FlatSessionChildRow; now: number; onSelec
       data-selected={props.row.isSelected ? "true" : undefined}
       aria-selected={props.row.isSelected}
       onClick={() => props.onSelect?.(props.row.id)}
+      onContextMenu={(event) => props.onMenu?.("session", props.row.id, event)}
+      onKeyDown={(event) => props.onMenu?.("session", props.row.id, event)}
       title={
         props.row.session.activity && !isReadyActivity(props.row.session.activity)
           ? `${props.row.session.title} — ${activityLabel(props.row.session.activity)}`
@@ -369,6 +401,7 @@ function ActiveAgentRow(props: {
   isSelected: boolean
   now: number
   onSelect?: (id: string) => void
+  onMenu?: RowMenuHandler
 }) {
   const displayStatus = () => mapAgentStatus(props.session.status, props.session.suspended)
   const folder = () => {
@@ -391,6 +424,8 @@ function ActiveAgentRow(props: {
       data-selected={props.isSelected ? "true" : undefined}
       aria-selected={props.isSelected}
       onClick={() => props.onSelect?.(props.session.id)}
+      onContextMenu={(event) => props.onMenu?.("session", props.session.id, event)}
+      onKeyDown={(event) => props.onMenu?.("session", props.session.id, event)}
       title={
         props.session.activity && !isReadyActivity(props.session.activity)
           ? `${props.session.title} — ${activityLabel(props.session.activity)}`
@@ -460,6 +495,7 @@ export function WorkspaceTreeRow(props: {
   onToggleWorkspace: (id: string) => void
   onSelectProject?: (id: string) => void
   onSelectSession?: (id: string) => void
+  onMenu?: RowMenuHandler
 }) {
   if (props.row.type === "workspace") {
     return (
@@ -468,10 +504,11 @@ export function WorkspaceTreeRow(props: {
         isActive={props.isActiveSpace}
         onToggle={props.onToggleWorkspace}
         onSelectProject={props.onSelectProject}
+        onMenu={props.onMenu}
       />
     )
   }
-  return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} />
+  return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} onMenu={props.onMenu} />
 }
 
 type FlatFileNodeWithRanges = FlatFileNode & { ranges?: [number, number][] }
@@ -813,6 +850,150 @@ export function Sidebar(props: SidebarProps) {
     }
     return list
   })
+
+  /*
+   * The menu the right button opens on a row — the column's first context menu.
+   *
+   * One at a time: a second right-click replaces the first, so there is never
+   * more than one `role="menu"` open here. The anchor is the row that opened
+   * it, which is where Esc gives the focus back (`bindMenu`). The pointer's
+   * coordinates travel with it because a row is not a place to hang a menu
+   * from: a session row is a `<button>` and a `<button>` may not hold other
+   * buttons, so the menu is a sibling of the column's children, placed at the
+   * press rather than under the anchor.
+   */
+  const [rowMenu, setRowMenu] = createSignal<{
+    kind: RowMenuKind
+    id: string
+    anchor: HTMLElement
+    x: number
+    y: number
+  } | null>(null)
+
+  const sessionById = (id: string): SidebarSession | undefined => {
+    for (const workspace of props.workspaces) {
+      const found = workspace.sessions.find((session) => session.id === id)
+      if (found) return found
+    }
+    return undefined
+  }
+
+  type RowMenuItem = { kind: "item"; label: string; run: () => void } | { kind: "separator" }
+
+  /**
+   * What the menu for this row would hold, given the callbacks that were wired.
+   *
+   * Asked before opening, so a row with nothing to offer (no callback at all)
+   * opens no menu rather than an empty one, and again while it is open, so the
+   * items follow the props.
+   */
+  const rowMenuItems = (kind: RowMenuKind, id: string): RowMenuItem[] => {
+    const items: RowMenuItem[] = []
+    if (kind === "workspace") {
+      if (props.onNewSession) {
+        items.push({ kind: "item", label: t("sidebar.menu.newSession"), run: () => props.onNewSession?.() })
+      }
+      if (props.onSelectProject) {
+        items.push({ kind: "item", label: t("sidebar.menu.openProject"), run: () => props.onSelectProject?.(id) })
+      }
+      if (props.onCloseProjectSessions) {
+        items.push({ kind: "separator" })
+        items.push({
+          kind: "item",
+          label: t("sidebar.menu.closeProjectSessions"),
+          run: () => props.onCloseProjectSessions?.(id),
+        })
+      }
+    } else {
+      if (props.onRenameSession) {
+        items.push({ kind: "item", label: t("sidebar.menu.rename"), run: () => props.onRenameSession?.(id) })
+      }
+      // "Riavvia" restarts a session whose process is gone. On one still at
+      // work `reopen` returns at once, so the verb would sit there and do
+      // nothing: it is offered on the sessions the pane's own button takes
+      // (review sidebar-clic, MEDIO 3). An unknown session keeps it — there
+      // is nothing here to say it cannot be restarted.
+      const session = sessionById(id)
+      const restartable =
+        session === undefined || (!session.suspended && (session.status === "done" || session.status === "error"))
+      if (props.onRestartSession && restartable) {
+        items.push({ kind: "item", label: t("sidebar.menu.restart"), run: () => props.onRestartSession?.(id) })
+      }
+      // "Riprendi" means a suspended session: on any other it would do nothing.
+      if (sessionById(id)?.suspended && props.onResumeSession) {
+        items.push({ kind: "item", label: t("sidebar.menu.resume"), run: () => props.onResumeSession?.(id) })
+      }
+      if (props.onCloseSession) {
+        items.push({ kind: "item", label: t("sidebar.menu.close"), run: () => props.onCloseSession?.(id) })
+      }
+      items.push({ kind: "separator" })
+      if (props.onCopySessionId) {
+        items.push({ kind: "item", label: t("sidebar.menu.copyId"), run: () => props.onCopySessionId?.(id) })
+      }
+      if (props.onSelectSession) {
+        items.push({ kind: "item", label: t("sidebar.menu.openSession"), run: () => props.onSelectSession?.(id) })
+      }
+    }
+    while (items.length > 0 && items[items.length - 1].kind === "separator") items.pop()
+    return items
+  }
+
+  const openRowMenu: RowMenuHandler = (kind, id, event) => {
+    const anchor = event.currentTarget as HTMLElement | null
+    if (!anchor) return
+    let x: number
+    let y: number
+    if (event.type === "contextmenu") {
+      event.preventDefault()
+      const mouse = event as MouseEvent
+      if (mouse.clientX === 0 && mouse.clientY === 0) {
+        // The keyboard's own context menu: Shift+F10 and the Menu key open it
+        // from a keydown and the browser follows with a `contextmenu` that has
+        // no pointer behind it (detail 0, coordinates 0,0). Rebuilding the menu
+        // here would drop it at the column's top-left corner, and the keydown
+        // a moment before already opened it on this row (review sidebar-clic,
+        // MEDIO 5).
+        const open = rowMenu()
+        if (open && open.kind === kind && open.id === id) return
+        const rect = anchor.getBoundingClientRect()
+        x = rect.left + 24
+        y = rect.bottom
+      } else {
+        x = mouse.clientX
+        y = mouse.clientY
+      }
+    } else {
+      // The keyboard's way in: the Menu key, and Shift+F10 where there is none.
+      const key = event as KeyboardEvent
+      if (key.key !== "ContextMenu" && !(key.key === "F10" && key.shiftKey)) return
+      event.preventDefault()
+      const rect = anchor.getBoundingClientRect()
+      x = rect.left + 24
+      y = rect.bottom
+    }
+    if (rowMenuItems(kind, id).length === 0) return
+    setRowMenu({ kind, id, anchor, x, y })
+  }
+
+  /*
+   * Where the menu lands, once it is in the page.
+   *
+   * The ref runs before insertion, against the template's inert document, so
+   * the coordinates are read a microtask later — the same moment `bindMenu`
+   * finds its items. Measured against the column: its container query makes it
+   * the containing block, so an absolutely positioned child resolves against
+   * it and not against the window. Clamped inside it, and never past its
+   * bottom, where the resize handle is.
+   */
+  const placeRowMenu = (menu: HTMLElement, at: { x: number; y: number }) => {
+    const host = menu.closest<HTMLElement>('aside[data-component="ade-sidebar"]')
+    if (!host) return
+    const box = host.getBoundingClientRect()
+    const left = Math.max(4, Math.min(at.x - box.left, Math.max(4, box.width - menu.offsetWidth - 4)))
+    const top = Math.max(4, Math.min(at.y - box.top, Math.max(4, box.height - menu.offsetHeight - 4)))
+    menu.style.left = `${left}px`
+    menu.style.top = `${top}px`
+  }
 
   const isWorkspaceActive = (wsId: string, wsPath?: string, wsName?: string) => {
     const currentRoot = project()?.root ?? props.project?.root
@@ -1199,6 +1380,7 @@ export function Sidebar(props: SidebarProps) {
                         }}
                         onSelectProject={props.onSelectProject}
                         onSelectSession={props.onSelectSession}
+                        onMenu={openRowMenu}
                       />
                     )
                   }}
@@ -1281,6 +1463,7 @@ export function Sidebar(props: SidebarProps) {
                         isSelected={item.isSelected}
                         now={now()}
                         onSelect={props.onSelectSession}
+                        onMenu={openRowMenu}
                       />
                     )}
                   </For>
@@ -1661,6 +1844,76 @@ export function Sidebar(props: SidebarProps) {
         aria-orientation="vertical"
         aria-label={t("sidebar.resize")}
       />
+
+      {/*
+       * The row menu itself: one for the whole column, at the press.
+       *
+       * `keyed`, so a second right-click while one menu is open rebuilds it
+       * for the new row: unkeyed, `<Show>` compares only truthiness and the
+       * first row's verbs would stay on screen over the second row.
+       *
+       * The items are the verbs the workbench already has, offered because
+       * the row is where the thing they act on is under the pointer. An item
+       * closes the menu first and then runs, the way the bar's menus do, so
+       * the verb is never read over an open menu.
+       */}
+      <Show when={rowMenu()} keyed>
+        {(menu) => {
+          const items = rowMenuItems(menu.kind, menu.id)
+          return (
+            <div
+              data-slot="ade-row-menu"
+              role="menu"
+              aria-label={menu.kind === "workspace" ? t("sidebar.menu.workspace") : t("sidebar.menu.session")}
+              ref={(element) => {
+                const close = () => setRowMenu(null)
+                /*
+                 * The two ways out `bindMenu` does not take, each handled here
+                 * because the bar's menus share it (review sidebar-clic, MEDIO 4):
+                 * it lets a press on the anchor pass, so a left button on the row
+                 * that opened the menu left the menu over the session it had just
+                 * opened; and it has no word for the focus, so Tab out of the menu
+                 * left it on screen with nothing under it.
+                 */
+                const onFocusOut = (event: FocusEvent) => {
+                  const next = event.relatedTarget as Node | null
+                  if (!next || !element.contains(next)) close()
+                }
+                const onAnchorClick = () => close()
+                element.addEventListener("focusout", onFocusOut)
+                menu.anchor.addEventListener("click", onAnchorClick)
+                onCleanup(() => {
+                  element.removeEventListener("focusout", onFocusOut)
+                  menu.anchor.removeEventListener("click", onAnchorClick)
+                })
+                onCleanup(bindMenu(element, { close, anchor: menu.anchor }))
+                queueMicrotask(() => placeRowMenu(element, menu))
+              }}
+            >
+              <For each={items}>
+                {(item) =>
+                  item.kind === "separator" ? (
+                    <div data-slot="ade-row-menu-separator" role="separator" />
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-slot="ade-menu-item"
+                      onClick={() => {
+                        const run = item.run
+                        setRowMenu(null)
+                        run()
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                }
+              </For>
+            </div>
+          )
+        }}
+      </Show>
     </aside>
   )
 }
