@@ -39,7 +39,7 @@ export function SessionPromptDock(props: {
   return (
     <div
       ref={props.setPromptDockRef}
-      class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+      class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger/60 to-transparent pointer-events-none"
     >
       <div
         classList={{

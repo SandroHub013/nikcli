@@ -40,7 +40,7 @@ const osIcon = (icon: string): string => {
     <article
       data-os={detect ? group.os : undefined}
       class:list={[
-        "rounded-[var(--radius-card)] border border-terminal-border/60 bg-terminal-panel p-6 shadow-soft",
+        "glass rounded-[var(--radius-card)] border p-6",
         detect && "os-card transition-[border-color,box-shadow] duration-200 hover:border-terminal-accent/30 hover:shadow-strong",
       ]}
     >
@@ -55,7 +55,7 @@ const osIcon = (icon: string): string => {
           <li>
             <a
               href={a.url}
-              class="group flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-terminal-border/50 bg-terminal-bg/50 px-3.5 py-2.5 transition-[border-color,background-color] duration-150 hover:border-terminal-accent/40 hover:bg-terminal-accent/8"
+              class="glass-chip group flex items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3.5 py-2.5 transition-[border-color,background-color] duration-150 hover:border-terminal-accent/40 hover:bg-terminal-accent/8"
             >
               <span class="flex flex-col">
                 <span class="text-[13.5px] font-semibold text-terminal-text group-hover:text-terminal-accent">{a.label}</span>

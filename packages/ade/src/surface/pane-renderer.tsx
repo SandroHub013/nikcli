@@ -12,6 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
+import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
@@ -71,6 +72,15 @@ export interface PaneRendererDeps {
   close: (id: string) => void
   saveFile: (id: string) => void
   answerPermission: (id: string, answer: PermissionAnswer) => void
+  /**
+   * A line submitted in the pane, by Enter in the terminal or by the composer:
+   * the turn starts now, so the previous turn's Stop does not end it.
+   */
+  turnSubmitted: (id: string) => void
+  /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
+  promptAnswered: (id: string) => void
+  /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
+  interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
   restart: (pane: Pane, line?: string) => void
@@ -123,6 +133,11 @@ export interface PaneRendererDeps {
     request: BrowserRequest,
     capture: { crop: Rect; redact: Rect[]; scale: number },
   ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
+  /** Writes a design sheet's notes beside it and queues their line for its session (piece 2). */
+  sendSheetNotes: (
+    paneId: string,
+    to?: string,
+  ) => Promise<{ ok: true; title: string } | { ok: false; reason: string; stopped?: boolean }>
 }
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
@@ -223,6 +238,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         title={current().title}
         initialUrl={current().browserUrl}
         initialHistory={current().browserHistory}
+        sheet={current().designSheet?.file}
+        sheetNotes={current().designSheet?.notes}
+        onSheetNotes={(notes) => {
+          const sheet = current().designSheet
+          if (sheet) setWb((w) => updatePane(w, current().id, { designSheet: { ...sheet, notes } }))
+        }}
+        onSendSheetNotes={(to) => deps.sendSheetNotes(current().id, to)}
         onNavigate={(url, history) =>
           setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
         }
@@ -429,10 +451,12 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
-          if (data.includes("\r")) deps.panels.newTurn(current().id)
-          if (data.includes("\r") && current().status === "idle") {
-            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
+          if (answersPrompt(data)) deps.promptAnswered(current().id)
+          if (data.includes("\r")) {
+            deps.panels.newTurn(current().id)
+            deps.turnSubmitted(current().id)
           }
+          if (isInterruptInput(data)) deps.interrupted(current().id)
           session.write(data)
         }}
         /*
@@ -470,6 +494,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 // The composer types into the terminal like a keyboard would,
                 // carriage return included: the CLI cannot tell the
                 // difference, which is the point.
+                deps.turnSubmitted(current().id)
                 deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
                 deps.sessionFor(current().id)?.write(`${line}\r`)
               }

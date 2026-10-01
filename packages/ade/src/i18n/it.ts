@@ -188,6 +188,17 @@ export const it = {
   "sidebar.settings": "Impostazioni",
   "sidebar.stats": "Risorse usate da ADE",
   "sidebar.resize": "Ridimensiona barra laterale",
+  "sidebar.menu.session": "Azioni sulla sessione",
+  "sidebar.menu.workspace": "Azioni sullo space",
+  "sidebar.menu.rename": "Rinomina",
+  "sidebar.menu.restart": "Riavvia",
+  "sidebar.menu.resume": "Riprendi",
+  "sidebar.menu.close": "Chiudi",
+  "sidebar.menu.copyId": "Copia l'id",
+  "sidebar.menu.openSession": "Apri la sessione",
+  "sidebar.menu.newSession": "Nuova sessione",
+  "sidebar.menu.openProject": "Apri progetto",
+  "sidebar.menu.closeProjectSessions": "Chiudi tutte le sessioni",
 
   // Panels, grid, palette, empty project
   "pane.tree.stale.short": "solo l'ultimo commit",
@@ -264,12 +275,12 @@ export const it = {
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
   "agent.noPlanner":
-    "Senza una chiave OpenRouter nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
+    "Senza un agente (Claude Code o Codex) acceso nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica: frasi come «avvia quattro sessioni claude» non possono essere pianificate.",
   "agent.onboarding.title": "Prima di parlarci",
-  "agent.onboarding.subtitle": "Per usare la voce servono tre elementi. Ecco cosa è pronto e cosa manca:",
+  "agent.onboarding.subtitle": "Per usare la voce servono alcuni elementi. Ecco cosa è pronto e cosa manca:",
   "agent.onboarding.key.title": "Chiave OpenRouter",
   "agent.onboarding.key.desc":
-    "Serve per la trascrizione rapida (Whisper / Gemma). Si ottiene gratuitamente o a consumo su openrouter.ai.",
+    "Serve solo per la trascrizione rapida con OpenRouter (Whisper / Gemma); con la trascrizione locale non serve. Si ottiene gratuitamente o a consumo su openrouter.ai.",
   "agent.onboarding.key.action": "Imposta chiave",
   "agent.onboarding.key.done": "Configurata",
   "agent.onboarding.agent.title": "Agente (Claude Code o Codex)",
@@ -877,6 +888,21 @@ export const it = {
   "devServer.dismiss": "Ignora",
   "note.browserRequest": (title: string) =>
     `Richiesta dal pannello web «${title}» in coda: arriva quando finisce il turno.`,
+  "note.sheetNotes": (title: string) => `Note sul foglio «${title}» in coda: arrivano quando finisce il turno.`,
+  "sheet.note.add": "Aggiungi nota",
+  "sheet.note.placeholder": "Scegli un elemento o seleziona un testo, poi scrivi la nota…",
+  "sheet.note.whole": "sul foglio intero",
+  "sheet.note.remove": (n: number) => `Togli la nota ${n}`,
+  "sheet.text.label": "testo",
+  "sheet.text.remove": "Togli il testo selezionato",
+  "sheet.notes.title": "Note sul foglio",
+  "sheet.notes.count": (n: number) => (n === 1 ? "1 nota" : `${n} note`),
+  "sheet.notes.send": "Invia alla sessione",
+  "sheet.notes.sent": (title: string) => `Note inviate a «${title}»: arrivano quando finisce il turno.`,
+  "sheet.notes.ask": "La sessione che ha scritto il foglio non è in esecuzione. A quale sessione le mando?",
+  "sheet.notes.none": "nessuna nota da inviare",
+  "sheet.left.reloaded": "Il foglio ha aperto un altro indirizzo: ADE l'ha ricaricato.",
+  "sheet.left.stopped": "Il foglio continua a lasciare il suo indirizzo: ADE ha smesso di ricaricarlo.",
 
   // Decisions
   "date.today": "oggi",
@@ -1344,6 +1370,10 @@ export const it = {
     `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "voice.listeningOff": (shortcut: string, always: string) =>
     `Da questa versione ADE non ascolta più da sola: il microfono si apre con la scorciatoia ${shortcut} o con il tasto in alto, e il nome funziona lì dentro. Ascoltare sempre costa, perché ogni voce in stanza viene mandata al servizio che trascrive: se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
+  "voice.parakeetRemoved":
+    "La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, con la tua chiave.",
+  "voice.parakeetRemovedListeningOff": (always: string) =>
+    `La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, e l'ascolto continuo è spento, perché ogni voce in stanza sarebbe stata mandata al servizio a pagamento. Se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
   "voice.alert.permission": (pane: string, what: string) =>
     `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,
@@ -1847,6 +1877,10 @@ export const it = {
   "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
     `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+  "bots.serve.toolInPlanner": (tool: string) =>
+    `Un turno senza strumenti ha provato a usare «${tool}»: il turno è stato fermato.`,
+  "bots.serve.noFreeModel":
+    "Nel catalogo del server di nikcli non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>
     `Lo sforzo «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di nikcli, e questo turno usa lo sforzo predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>

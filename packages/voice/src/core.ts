@@ -27,6 +27,9 @@ export type {
 // The agent console's record of the session
 export { appendEntry, groupIntoTurns, MAX_AGENT_ENTRIES, type AgentEntry, type AgentTurn } from "./agent/log"
 
+// What plans a sentence the grammar could not match: the rules a host holds once, and its completion type
+export { PLANNER_SYSTEM, type Completion } from "./plan/planner"
+
 export { dispatch, resolveTargetPane, type DispatchContext, type DispatchOutcome } from "./bridge/dispatch"
 
 // Intent recognition and parsing
@@ -143,36 +146,8 @@ export {
   type SupportedAudioFormat,
 } from "./audio/capture"
 
-// Local neural ASR (Parakeet TDT 0.6B v3 via parakeet.js)
-export {
-  createParakeetTranscriber,
-  describeParakeetReadiness,
-  disposeParakeetModel,
-  isParakeetModelWarmedUp,
-  isWasmAvailable,
-  isWebGpuAvailable,
-  warmupParakeetModel,
-  type ParakeetBackend,
-  type ParakeetProgress,
-  type ParakeetProgressCallback,
-  type ParakeetReadiness,
-  type ParakeetTranscriber,
-  type ParakeetTranscriberOptions,
-  type WarmupParakeetOptions,
-} from "./asr/parakeet-local"
-
-// The downloaded model, on disk
-export {
-  clearModelCache,
-  downloadParakeetModel,
-  EMPTY_CACHE,
-  inspectModelCache,
-  requestPersistentStorage,
-  type CachedModel,
-  type DownloadParakeetOptions,
-  type DownloadParakeetProgress,
-  type DownloadParakeetProgressCallback,
-} from "./asr/model-cache"
+// The local model that was removed: its leftovers are dropped once
+export { dropLegacyParakeet, LEGACY_PARAKEET_DB } from "./asr/legacy-parakeet"
 
 // Cloud ASR (OpenRouter microsoft/mai-transcribe-2)
 export {
@@ -247,7 +222,6 @@ export {
   SpeakerLive,
   TranscriberFake,
   TranscriberOpenRouterLive,
-  TranscriberParakeetLive,
   TranscriberSelectLive,
   VoiceHostLive,
   bridgeTranscriber,
@@ -281,7 +255,6 @@ export {
   type AgentSpeed,
   normalizeSettings,
   type NormalizedVoiceSettings,
-  type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
   type VoiceMode,

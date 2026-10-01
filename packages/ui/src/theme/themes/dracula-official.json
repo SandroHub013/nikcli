@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Dracula Official",
+  "id": "dracula-official",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8f2",
+      "primary": "#bd93f9",
+      "success": "#50fa7b",
+      "warning": "#ffb86c",
+      "error": "#ff5555",
+      "info": "#8be9fd",
+      "interactive": "#bd93f9",
+      "diffAdd": "#50fa7b",
+      "diffDelete": "#ff5555"
+    },
+    "overrides": {
+      "background-base": "#f8f8f2",
+      "background-weak": "#e8e8e8",
+      "background-strong": "#f8f8f2",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#21222c",
+      "text-base": "#383e56",
+      "text-weak": "#6272a4",
+      "text-weaker": "#97a1bf",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d4d4d4",
+      "border-strong-base": "#bd93f9"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#282a36",
+      "primary": "#bd93f9",
+      "success": "#50fa7b",
+      "warning": "#ffb86c",
+      "error": "#ff5555",
+      "info": "#8be9fd",
+      "interactive": "#bd93f9",
+      "diffAdd": "#50fa7b",
+      "diffDelete": "#ff5555"
+    },
+    "overrides": {
+      "background-base": "#282a36",
+      "background-weak": "#3a3d52",
+      "background-strong": "#282a36",
+      "background-stronger": "#21222c",
+      "surface-raised-stronger-non-alpha": "#21222c",
+      "text-strong": "#f8f8f2",
+      "text-base": "#c4c9d7",
+      "text-weak": "#6a79a9",
+      "text-weaker": "#576184",
+      "border-weak-base": "#21222c",
+      "border-base": "#44475a",
+      "border-strong-base": "#ff79c6"
+    }
+  }
+}

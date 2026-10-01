@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Rosé Pine Moon",
+  "id": "rosepine-moon",
+  "light": {
+    "seeds": {
+      "neutral": "#f0eff1",
+      "primary": "#8975a2",
+      "success": "#5e7c82",
+      "warning": "#947447",
+      "error": "#c85e7c",
+      "info": "#3b88a7",
+      "interactive": "#8975a2",
+      "diffAdd": "#5e7c82",
+      "diffDelete": "#c85e7c"
+    },
+    "overrides": {
+      "background-base": "#f0eff1",
+      "background-weak": "#e6e5e7",
+      "background-strong": "#f0eff1",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#191827",
+      "text-base": "#3c3b48",
+      "text-weak": "#7e7d85",
+      "text-weaker": "#9e9da2",
+      "border-weak-base": "#e1e0e2",
+      "border-base": "#d1d0d2",
+      "border-strong-base": "#919096"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#232136",
+      "primary": "#c4a7e7",
+      "success": "#9ccfd8",
+      "warning": "#f6c177",
+      "error": "#eb6f92",
+      "info": "#3e8fb0",
+      "interactive": "#c4a7e7",
+      "diffAdd": "#9ccfd8",
+      "diffDelete": "#eb6f92"
+    },
+    "overrides": {
+      "background-base": "#232136",
+      "background-weak": "#2e2c41",
+      "background-strong": "#232136",
+      "background-stronger": "#2a273f",
+      "surface-raised-stronger-non-alpha": "#2a273f",
+      "text-strong": "#e0def4",
+      "text-base": "#c4c1da",
+      "text-weak": "#908caa",
+      "text-weaker": "#6a6781",
+      "border-weak-base": "#2f2c45",
+      "border-base": "#393552",
+      "border-strong-base": "#73708b"
+    }
+  }
+}

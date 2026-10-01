@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import {
   clearNaturalVoiceFailure,
   isVoiceReady,
+  transcriptionReady,
   naturalVoiceFailureFor,
   voicePrerequisitesList,
   type VoicePrerequisitesState,
@@ -119,5 +120,26 @@ describe("voice onboarding prerequisites", () => {
     expect(items[1].actionLabel).toBe("Configure agent")
     expect(items[2].title).toBe("Natural voice (Piper)")
     expect(items[2].actionLabel).toBe("Download voice")
+  })
+})
+
+describe("the OpenRouter key is a prerequisite of the transcription", () => {
+  afterEach(() => {
+    setLocalePreference("it")
+  })
+
+  test("the transcription needs the key, whatever backend an old profile names", () => {
+    expect(transcriptionReady({ backend: "parakeet" })).toBe(false)
+    expect(transcriptionReady({ backend: "openrouter" })).toBe(false)
+    expect(transcriptionReady({ backend: "openrouter", openRouterApiKey: "  " })).toBe(false)
+    expect(transcriptionReady({ backend: "openrouter", openRouterApiKey: "sk-x" })).toBe(true)
+  })
+
+  test("the introduction does not promise a number of items, and the key says what it is for", async () => {
+    const { t } = await import("../i18n")
+    expect(t("agent.onboarding.subtitle")).not.toMatch(/b(tre|three)b/i)
+    setLocalePreference("en")
+    expect(t("agent.onboarding.subtitle")).not.toMatch(/b(tre|three)b/i)
+    expect(t("agent.onboarding.key.desc")).toMatch(/only|solo/i)
   })
 })

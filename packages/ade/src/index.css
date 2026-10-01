@@ -128,6 +128,8 @@
    * The linear line is a fallback: an engine without `pow()` gets a
    * reasonable ground rather than no declaration at all.
    */
+  --ade-glass-ground: #131111;
+  --ade-on-ink: var(--ade-glass-ground);
   --ade-glass-veil: rgba(19, 17, 17, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
   --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
   --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
@@ -315,6 +317,13 @@ body[data-theme="glass"] #root,
   --ade-text: light-dark(#1a1817, #ecebeb);
   --ade-text-soft: light-dark(#5f5a57, #a9a4a4);
   --ade-text-weak: light-dark(#716c69, #938e8e);
+  /*
+   * The words on a solid `--ade-text` fill (the chosen value, the primary
+   * action). It is the page ground, except in glass where the ground is
+   * transparent and text in it paints nothing: there it is the dark the glass
+   * reads on (`--ade-glass-ground`).
+   */
+  --ade-on-ink: var(--ade-bg);
 
   /* ── accent ─────────────────────────────────────────────────────────────── */
   /*
@@ -472,6 +481,42 @@ body[data-theme="glass"] #root,
   --ade-font-xl: 16px;
   --ade-font-2xl: 18px;
   --ade-font-3xl: 24px;
+  /*
+   * Text that is read rather than scanned: card bodies, messages, lists, the
+   * sidebar. The density the user chose (DS-B = compact) puts it at 12px;
+   * one token, so a denser or roomier ADE is one line.
+   */
+  --ade-font-body: 12px;
+
+  /*
+   * ── icons ──────────────────────────────────────────────────────────────────
+   * One set, drawn in line with a 1.5px stroke (DS-C = 1), for the marks a
+   * ::before or ::after used to take from the font (✓ ✕ ▸ ▾ ! ·), which drew
+   * each at another weight in each font. They are masks: the element paints
+   * `background-color: currentColor` through them, so an icon takes the
+   * colour of its text in every theme. A 12×12 box at --ade-icon-size keeps
+   * the stroke at 1.5px. Drawn as:
+   *   content: ""; display: inline-block;
+   *   width: var(--ade-icon-size); height: var(--ade-icon-size);
+   *   background-color: currentColor;
+   *   mask: var(--ade-icon-check) center / contain no-repeat;
+   */
+  --ade-icon-size: 12px;
+  /*
+   * A separator dot takes the room of the «·» it replaced, not a 12px box:
+   * the box is as narrow as the glyph was, and the mask keeps its 12px scale.
+   * The dot's diameter (2 units at that scale) is the box's width: a bigger
+   * circle is cut at the sides, a smaller one never reaches full ink.
+   * Drawn as: width: var(--ade-icon-dot-width);
+   *   mask: var(--ade-icon-dot) center / var(--ade-icon-size) no-repeat;
+   */
+  --ade-icon-dot-width: 2px;
+  --ade-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E");
+  --ade-icon-cross: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3l6 6M9 3l-6 6'/%3E%3C/svg%3E");
+  --ade-icon-chevron-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 2.5L8 6l-3.5 3.5'/%3E%3C/svg%3E");
+  --ade-icon-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+  --ade-icon-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2.75v2.75'/%3E%3Ccircle cx='6' cy='7.9' r='0.8' fill='black' stroke='none'/%3E%3C/svg%3E");
+  --ade-icon-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='1' fill='black' stroke='none'/%3E%3C/svg%3E");
 
   --ade-weight-normal: 400;
   --ade-weight-medium: 500;
@@ -726,11 +771,11 @@ body,
 [data-slot="drop-zone-label"] {
   padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-full);
-  font-size: 12px;
+  font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-semibold);
   /* The zone's own neutral, inverted so the word reads over the wash: the
      accent pill was the one green left in a grey zone (contorni-terzo, 3). */
-  color: var(--ade-bg);
+  color: var(--ade-on-ink);
   background: var(--ade-text);
   transition: background var(--ade-dur-fast) var(--ade-ease);
 }
@@ -992,7 +1037,7 @@ body,
   background: transparent;
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   text-align: left;
   cursor: pointer;
   transition:
@@ -1074,7 +1119,7 @@ body,
   background: transparent;
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   text-align: left;
   cursor: pointer;
   transition:
@@ -1208,7 +1253,7 @@ body,
   background: color-mix(in oklab, red 12%, var(--ade-surface));
   color: var(--ade-text);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: var(--ade-btn-transition);
@@ -1247,7 +1292,7 @@ body,
   display: grid;
   gap: 8px;
   padding: 12px 16px;
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
 }
 [data-component="record-consent"] [data-slot="record-consent-note"] {
   color: var(--ade-text-weak);
@@ -1276,7 +1321,7 @@ body,
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text-weak);
 }
@@ -1288,7 +1333,7 @@ body,
   display: grid;
   gap: 8px;
   padding: 0 16px 8px;
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
   color: var(--ade-text-soft);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-body"] p {
@@ -1299,13 +1344,13 @@ body,
 }
 [data-component="update-dialog"] [data-slot="update-dialog-problem"] {
   font-family: var(--ade-mono);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   overflow-wrap: anywhere;
 }
 [data-component="update-dialog"] [data-slot="update-dialog-link"] {
   width: fit-content;
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-accent);
   text-decoration: none;
   border-radius: 3px;
@@ -1341,12 +1386,12 @@ body,
 }
 [data-component="update-dialog"] [data-slot="update-dialog-hint"] {
   margin-right: auto;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-hint"] kbd {
   font-family: var(--ade-mono);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   padding: 0 4px;
   border: 1px solid currentColor;
   border-radius: 3px;

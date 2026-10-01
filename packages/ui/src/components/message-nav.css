@@ -48,8 +48,8 @@
   width: 16px;
   background-color: var(--icon-base);
   transition:
-    width 0.2s,
-    background-color 0.2s;
+    width 200ms var(--ease-out-strong),
+    background-color 160ms ease;
 }
 
 [data-slot="message-nav-tick-button"]:hover [data-slot="message-nav-tick-line"] {
@@ -66,8 +66,8 @@
   cursor: default;
   border: none;
   background: none;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  border-radius: 8px;
 }
 
 [data-slot="message-nav-title-preview"] {

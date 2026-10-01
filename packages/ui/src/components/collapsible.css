@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   background-color: var(--surface-inset-base);
-  border: 1px solid var(--border-weaker-base);
+  border: var(--hairline, 1px) solid var(--border-weaker-base);
   transition: background-color 0.15s ease;
   border-radius: var(--radius-md);
   overflow: clip;
@@ -51,11 +51,11 @@
     overflow: hidden;
 
     &[data-expanded] {
-      animation: slideDown 250ms ease-out;
+      animation: slideDown 250ms var(--ease-out-strong);
     }
 
     &[data-closed] {
-      animation: slideUp 250ms ease-out;
+      animation: slideUp 250ms var(--ease-out-strong);
     }
   }
 

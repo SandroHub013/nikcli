@@ -1,14 +1,28 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { clearPluginStorage, pluginStorage, storageKey } from "./storage"
 
+/*
+ * Only the keys this module writes. `localStorage.clear()` would take the
+ * whole origin with it — `ade.locale` among them — and the language of every
+ * test after it would then depend on the machine, which is how the manager's
+ * own rows came out in English on a machine set to English. Plugin storage
+ * has no business emptying ADE's storage.
+ */
+function clearPluginKeys() {
+  for (let index = localStorage.length - 1; index >= 0; index--) {
+    const key = localStorage.key(index)
+    if (key?.startsWith("ade.plugin.")) localStorage.removeItem(key)
+  }
+}
+
 beforeEach(() => {
   clearPluginStorage()
-  localStorage.clear()
+  clearPluginKeys()
 })
 
 afterEach(() => {
   clearPluginStorage()
-  localStorage.clear()
+  clearPluginKeys()
 })
 
 describe("memory", () => {

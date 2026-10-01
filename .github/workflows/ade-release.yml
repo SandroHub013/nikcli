@@ -396,7 +396,7 @@ jobs:
             if [ "$HAS_SIGNATURE" != "true" ]; then
               printf '%s\n\n' '**Windows.** Il setup non è ancora firmato, quindi Windows lo ferma con «PC protetto da Windows»: premi *Ulteriori informazioni* e poi *Esegui comunque*. Gli aggiornamenti dall'"'"'app non lo chiedono.'
             fi
-            printf '%s\n\n' '**macOS.** L'"'"'app non è notarizzata: la prima volta, tasto destro sull'"'"'app e *Apri*.'
+            printf '%s\n\n' '**macOS.** L'"'"'app non è notarizzata, quindi la prima apertura viene bloccata («impossibile aprire»). Dopo quel tentativo: *Impostazioni di Sistema → Privacy e sicurezza → Apri comunque*. Su macOS 15 e successivi il tasto destro e *Apri* non basta più. In alternativa, dal Terminale: `xattr -dr com.apple.quarantine /Applications/ADE.app`.'
             printf '%s\n\n' '**Impronte SHA-256** dei file qui sopra, anche in `SHA256SUMS.txt`. Per confrontare un file scaricato: su Windows `certutil -hashfile <file> SHA256`, su macOS e Linux `shasum -a 256 <file>`.'
             printf '```\n'
             cat SHA256SUMS.txt

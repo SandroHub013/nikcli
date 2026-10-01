@@ -183,6 +183,17 @@ export const en: Messages = {
   "sidebar.settings": "Settings",
   "sidebar.stats": "Resources used by ADE",
   "sidebar.resize": "Resize sidebar",
+  "sidebar.menu.session": "Session actions",
+  "sidebar.menu.workspace": "Project actions",
+  "sidebar.menu.rename": "Rename",
+  "sidebar.menu.restart": "Restart",
+  "sidebar.menu.resume": "Resume",
+  "sidebar.menu.close": "Close",
+  "sidebar.menu.copyId": "Copy id",
+  "sidebar.menu.openSession": "Open session",
+  "sidebar.menu.newSession": "New session",
+  "sidebar.menu.openProject": "Open project",
+  "sidebar.menu.closeProjectSessions": "Close all sessions",
 
   // Panels, grid, palette, empty project
   "pane.tree.stale.short": "last commit only",
@@ -259,12 +270,12 @@ export const en: Messages = {
   "agent.mic.stop": "Turn off microphone",
   "agent.settings": "Settings",
   "agent.noPlanner":
-    "Without an OpenRouter key in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
+    "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
   "agent.onboarding.title": "Before speaking to nik",
-  "agent.onboarding.subtitle":
-    "Three prerequisites are needed to use voice. Here is what is ready and what is missing:",
+  "agent.onboarding.subtitle": "A few things are needed to use voice. Here is what is ready and what is missing:",
   "agent.onboarding.key.title": "OpenRouter API Key",
-  "agent.onboarding.key.desc": "Required for fast speech transcription (Whisper / Gemma). Obtainable at openrouter.ai.",
+  "agent.onboarding.key.desc":
+    "Needed only for fast transcription through OpenRouter (Whisper / Gemma); local transcription does not need it. Obtainable at openrouter.ai.",
   "agent.onboarding.key.action": "Set API key",
   "agent.onboarding.key.done": "Configured",
   "agent.onboarding.agent.title": "Agent (Claude Code or Codex)",
@@ -856,6 +867,21 @@ export const en: Messages = {
   "devServer.open": "Open in a web pane",
   "devServer.dismiss": "Dismiss",
   "note.browserRequest": (title) => `Request from the web pane “${title}” queued: it arrives when the turn ends.`,
+  "note.sheetNotes": (title) => `Notes on the sheet “${title}” queued: they arrive when the turn ends.`,
+  "sheet.note.add": "Add note",
+  "sheet.note.placeholder": "Pick an element or select some text, then write the note…",
+  "sheet.note.whole": "on the whole sheet",
+  "sheet.note.remove": (n) => `Remove note ${n}`,
+  "sheet.text.label": "text",
+  "sheet.text.remove": "Remove the selected text",
+  "sheet.notes.title": "Notes on the sheet",
+  "sheet.notes.count": (n) => (n === 1 ? "1 note" : `${n} notes`),
+  "sheet.notes.send": "Send to the session",
+  "sheet.notes.sent": (title) => `Notes sent to “${title}”: they arrive when the turn ends.`,
+  "sheet.notes.ask": "The session that wrote the sheet is not running. Which session should get the notes?",
+  "sheet.notes.none": "no notes to send",
+  "sheet.left.reloaded": "The sheet opened another address: ADE loaded it again.",
+  "sheet.left.stopped": "The sheet keeps leaving its address: ADE stopped loading it again.",
 
   // Decisions
   "date.today": "today",
@@ -1308,6 +1334,10 @@ export const en: Messages = {
     `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "voice.listeningOff": (shortcut, always) =>
     `Starting with this version ADE no longer listens by itself: the microphone opens with ${shortcut} or the button at the top, and the name works inside it. Listening all the time costs money, because every voice in the room is sent to the transcription service: to have it back, turn on “${always}” in the voice settings.`,
+  "voice.parakeetRemoved":
+    "Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, with your key.",
+  "voice.parakeetRemovedListeningOff": (always) =>
+    `Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, and listening all the time is off, because every voice in the room would have been sent to the paid service. To have it back, turn on “${always}” in the voice settings.`,
   "voice.alert.permission": (pane, what) => `${pane} is requesting permission for: ${what}. Do you want to allow it?`,
   "voice.alert.completed": (pane, details) => `${pane} has finished: ${details}.`,
   "voice.alert.completedSimple": (pane) => `${pane} has finished the work.`,
@@ -1793,6 +1823,9 @@ export const en: Messages = {
   "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
   "bots.serve.noModel": (model) =>
     `The model ${model} is not in the nikcli server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
+  "bots.serve.toolInPlanner": (tool) => `A turn with no tools tried to use «${tool}»: the turn was stopped.`,
+  "bots.serve.noFreeModel":
+    "None of the free models this turn may use is in the nikcli server's catalog: the turn did not start.",
   "bots.serve.effortNoModel": (effort) =>
     `The effort «${effort}» applies to a chosen model: this bot uses nikcli's default model, and this turn uses the default effort. Choose a model in the bot's settings.`,
   "bots.serve.effortDropped": (effort, model, variants) =>

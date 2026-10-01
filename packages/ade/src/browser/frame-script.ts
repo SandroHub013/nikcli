@@ -151,6 +151,8 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
     scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"
 
   if (!bridgeHere) return
+  // Where this document is, read before any page script can move it with the history API.
+  const startHref = String(location.href)
 
   const eventProto = win.MessageEvent.prototype
   const getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data")!.get!)
@@ -211,6 +213,8 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
     }
     if (data.type !== "ade-browser:hello" || secret !== undefined || typeof data.secret !== "string") return
     secret = data.secret as string
+    // First, where this document is: a design sheet's pane reloads a sheet that left its address.
+    send({ type: "visual-editor:location", href: startHref })
     while (queue.length) send(shift(queue))
     if (started) return
     started = true

@@ -106,13 +106,12 @@
 }
 
 /*
- * Asleep the arcs are at opacity 0, and turning something nobody can see still
- * costs a frame every frame for as long as the window is open. Paused rather
- * than removed: a paused animation asks for nothing, and it keeps the angle it
- * reached, so the arcs neither snap back to 0deg during the fade-out nor start
- * from the same place every time the orb wakes.
+ * The arcs turn, and the iris breathes, only while there is something to show (`data-spin`, from `orb-spin.ts`: the voice listens, waits for an answer or
+ * carries one out). Turning something nobody is meant to watch costs a frame every frame for as long as the window is open (about
+ * 11 % of a core per arc, measured), and a paused animation asks for nothing. Paused rather than removed: it keeps the angle it
+ * reached, so the arcs neither snap back to 0deg during the fade-out nor start from the same place every time the orb wakes.
  */
-[data-component="orb-mark"]:not([data-awake]) [data-slot="orb-swirl"] {
+[data-component="orb-mark"]:not([data-spin]) [data-slot="orb-swirl"] {
   animation-play-state: paused;
 }
 
@@ -310,6 +309,11 @@
   animation: ade-orb-breathe 3.4s var(--ade-ease, ease-in-out) infinite;
 }
 
+/* The iris breathes only while the arcs turn. After the rule above, whose `animation` shorthand would otherwise set the play state back to running. */
+[data-component="orb-mark"][data-awake]:not([data-spin]) [data-slot="orb-iris"] {
+  animation-play-state: paused;
+}
+
 [data-component="orb-mark"][data-awake] [data-slot="orb-pupil"] {
   background: radial-gradient(circle, color-mix(in srgb, var(--orb-lit) 55%, transparent), transparent 70%);
 }
@@ -318,6 +322,11 @@
    sphere, standing in its own light. */
 [data-component="orb-mark"][data-awake] [data-slot="orb-mark-n"] {
   color: var(--orb-lit);
+}
+
+/* An open microphone that is not turning (waiting for the wake word, or between two things): the eye is open, nothing circulates. */
+[data-component="orb-mark"][data-awake]:not([data-spin]) [data-slot="orb-swirl"] {
+  opacity: 0.12;
 }
 
 /*

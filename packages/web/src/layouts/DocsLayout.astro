@@ -69,9 +69,9 @@ const pathname = Astro.url.pathname;
     <div class="page-shell relative flex w-full flex-1 min-h-0 flex-col xl:flex-row">
 
       <!-- Mobile Docs Menu Toggle -->
-       <div class="sticky top-[calc(var(--topbar-height)+var(--docs-subnav-height))] z-40 flex min-h-[var(--docs-mobilebar-height)] items-center justify-between border-b border-terminal-border/60 bg-terminal-bg/90 px-0 py-3 shadow-sm backdrop-blur-xl dark:border-white/5 dark:bg-terminal-bg/80 xl:hidden">
+       <div class="sticky top-[calc(var(--topbar-height)+var(--docs-subnav-height))] z-40 flex min-h-[var(--docs-mobilebar-height)] items-center justify-between glass-bar px-0 py-3 xl:hidden">
           <span class="text-sm font-semibold text-terminal-text">Docs</span>
-          <button id="mobile-docs-toggle" type="button" class="inline-flex items-center gap-2 rounded-full border border-terminal-border/60 bg-terminal-panel/90 px-3 py-2 text-sm font-semibold text-terminal-text shadow-sm transition-[background-color,transform] duration-150 ease-out hover:bg-surface-hover active:scale-[0.97]" aria-label="Open docs navigation" aria-controls="docs-sidebar" aria-expanded="false">
+          <button id="mobile-docs-toggle" type="button" class="glass-chip inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold text-terminal-text transition-[background-color,transform] duration-150 ease-out hover:bg-surface-hover active:scale-[0.97]" aria-label="Open docs navigation" aria-controls="docs-sidebar" aria-expanded="false">
            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h6M4 12h6M4 18h6M14 5h6v14h-6z"></path></svg>
            <span>Browse</span>
          </button>

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Tokyonight Storm",
+  "id": "tokyonight-storm",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8f8",
+      "primary": "#7aa2f7",
+      "success": "#9ece6a",
+      "warning": "#ff9e64",
+      "error": "#f7768e",
+      "info": "#7aa2f7",
+      "interactive": "#7aa2f7",
+      "diffAdd": "#9ece6a",
+      "diffDelete": "#f7768e"
+    },
+    "overrides": {
+      "background-base": "#f8f8f8",
+      "background-weak": "#e6e6e6",
+      "background-strong": "#f8f8f8",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1b26",
+      "text-base": "#2f3349",
+      "text-weak": "#565f89",
+      "text-weaker": "#8f95b0",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d4d4d4",
+      "border-strong-base": "#7aa2f7"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1a1b26",
+      "primary": "#7aa2f7",
+      "success": "#9ece6a",
+      "warning": "#ff9e64",
+      "error": "#f7768e",
+      "info": "#7aa2f7",
+      "interactive": "#7aa2f7",
+      "diffAdd": "#9ece6a",
+      "diffDelete": "#f7768e"
+    },
+    "overrides": {
+      "background-base": "#1a1b26",
+      "background-weak": "#292e42",
+      "background-strong": "#1a1b26",
+      "background-stronger": "#16161e",
+      "surface-raised-stronger-non-alpha": "#16161e",
+      "text-strong": "#a9b1d6",
+      "text-base": "#8c94bb",
+      "text-weak": "#676f95",
+      "text-weaker": "#545975",
+      "border-weak-base": "#16161e",
+      "border-base": "#292e42",
+      "border-strong-base": "#7aa2f7"
+    }
+  }
+}

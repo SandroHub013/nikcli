@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Slate Blue",
+  "id": "slate-blue",
+  "light": {
+    "seeds": {
+      "neutral": "#f1f4f9",
+      "primary": "#2f63d8",
+      "success": "#1f8a5f",
+      "warning": "#a66b00",
+      "error": "#c62f44",
+      "info": "#1d7fb0",
+      "interactive": "#2f63d8",
+      "diffAdd": "#1f8a5f",
+      "diffDelete": "#c62f44"
+    },
+    "overrides": {
+      "background-base": "#f1f4f9",
+      "background-weak": "#e4e7ed",
+      "background-strong": "#f1f4f9",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a2233",
+      "text-base": "#313c50",
+      "text-weak": "#5d6b85",
+      "text-weaker": "#919bae",
+      "border-weak-base": "#e3e8f2",
+      "border-base": "#d8dfec",
+      "border-strong-base": "#969dab"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#10141c",
+      "primary": "#6b9bff",
+      "success": "#5fd3a0",
+      "warning": "#f5c065",
+      "error": "#ff7f8f",
+      "info": "#6fd0ff",
+      "interactive": "#6b9bff",
+      "diffAdd": "#5fd3a0",
+      "diffDelete": "#ff7f8f"
+    },
+    "overrides": {
+      "background-base": "#10141c",
+      "background-weak": "#1d2129",
+      "background-strong": "#10141c",
+      "background-stronger": "#171c27",
+      "surface-raised-stronger-non-alpha": "#171c27",
+      "text-strong": "#e7ecf5",
+      "text-base": "#c4ccdb",
+      "text-weak": "#8491aa",
+      "text-weaker": "#5b6578",
+      "border-weak-base": "#1c222e",
+      "border-base": "#252d3d",
+      "border-strong-base": "#69707d"
+    }
+  }
+}

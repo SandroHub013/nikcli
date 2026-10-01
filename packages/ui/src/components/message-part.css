@@ -30,10 +30,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
     background: var(--surface-weak);
-    border: 1px solid var(--border-weak-base);
+    border: var(--hairline, 1px) solid var(--border-weak-base);
     transition: border-color 0.15s ease;
 
     &:hover {
@@ -89,9 +89,9 @@
     word-break: break-word;
     overflow: hidden;
     background: var(--surface-weak);
-    border: 1px solid var(--border-weak-base);
+    border: var(--hairline, 1px) solid var(--border-weak-base);
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: 14px;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -317,7 +317,7 @@
 }
 
 [data-component="edit-content"] {
-  border-top: 1px solid var(--border-weaker-base);
+  border-top: var(--hairline, 1px) solid var(--border-weaker-base);
   max-height: 420px;
   overflow-y: auto;
 
@@ -330,7 +330,7 @@
 }
 
 [data-component="write-content"] {
-  border-top: 1px solid var(--border-weaker-base);
+  border-top: var(--hairline, 1px) solid var(--border-weaker-base);
   max-height: 240px;
   overflow-y: auto;
 
@@ -471,7 +471,7 @@
     top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
     z-index: 20;
-    border-radius: 6px;
+    border-radius: 14px;
     border: none;
     box-shadow: var(--shadow-xs-border-base);
     background-color: var(--surface-raised-base);
@@ -505,7 +505,7 @@
       position: absolute;
       inset: -1.5px;
       top: -5px;
-      border-radius: 7.5px;
+      border-radius: 15.5px;
       border: 1.5px solid transparent;
       background:
         linear-gradient(var(--background-base) 0 0) padding-box,
@@ -525,7 +525,7 @@
 
   &[data-question="true"] {
     background: var(--background-base);
-    border: 1px solid var(--border-weak-base);
+    border: var(--hairline, 1px) solid var(--border-weak-base);
   }
 }
 
@@ -550,7 +550,7 @@
   flex-direction: column;
   padding: 8px 12px;
   background-color: var(--surface-raised-strong);
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 14px 14px;
 
   [data-slot="permission-actions"] {
     display: flex;
@@ -565,7 +565,7 @@
   flex-direction: column;
   padding: 12px;
   background-color: var(--surface-inset-base);
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 14px 14px;
   gap: 12px;
 
   [data-slot="question-tabs"] {
@@ -576,7 +576,7 @@
     [data-slot="question-tab"] {
       padding: 4px 12px;
       font-size: 13px;
-      border-radius: 4px;
+      border-radius: 8px;
       background-color: var(--surface-base);
       color: var(--text-base);
       border: none;
@@ -623,8 +623,8 @@
       gap: 2px;
       padding: 8px 12px;
       background-color: var(--surface-base);
-      border: 1px solid var(--border-weaker-base);
-      border-radius: 6px;
+      border: var(--hairline, 1px) solid var(--border-weaker-base);
+      border-radius: 10px;
       cursor: pointer;
       text-align: left;
       width: 100%;
@@ -671,7 +671,7 @@
         padding: 8px 12px;
         font-size: 14px;
         border: 1px solid var(--border-base);
-        border-radius: 6px;
+        border-radius: 10px;
         background-color: var(--surface-base);
         color: var(--text-base);
         outline: none;
@@ -758,10 +758,10 @@
 [data-component="apply-patch-file"] {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-weaker-base);
+  border-top: var(--hairline, 1px) solid var(--border-weaker-base);
 
   &:first-child {
-    border-top: 1px solid var(--border-weaker-base);
+    border-top: var(--hairline, 1px) solid var(--border-weaker-base);
   }
 
   [data-slot="apply-patch-file-header"] {
@@ -844,13 +844,14 @@
   flex-direction: column;
   margin: 4px 0;
   overflow: hidden;
-  border: 1px solid var(--border-weaker-base);
-  border-radius: var(--radius-md);
+  border: var(--hairline, 1px) solid var(--border-weaker-base);
+  border-radius: var(--glass-radius-lg, 18px);
   background: var(--surface-inset-base);
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    scale 160ms var(--ease-out-strong);
 
   &:hover {
     background: var(--surface-raised-base-hover);
@@ -898,7 +899,7 @@
     width: 100%;
     gap: 10px;
     padding: 8px 10px;
-    border-top: 1px solid var(--border-weaker-base);
+    border-top: var(--hairline, 1px) solid var(--border-weaker-base);
   }
 
   [data-slot="artifact-card-info"] {

@@ -11,6 +11,7 @@ import Loops from "../feature-plugins/loops"
 import Missions from "../feature-plugins/mission"
 import Brain from "../feature-plugins/brain"
 import Browser from "../feature-plugins/browser"
+import Simulator from "../feature-plugins/simulator"
 import Chatbot from "../feature-plugins/chatbot"
 import Discord from "../feature-plugins/discord"
 import Computer from "../feature-plugins/computer"
@@ -51,6 +52,7 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   Loops,
   Brain,
   Browser,
+  Simulator,
   Chatbot,
   Discord,
   Computer,

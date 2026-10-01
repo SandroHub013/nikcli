@@ -26,7 +26,6 @@ import type { Speaker } from "./tts/speaker"
 import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
-import { disposeParakeetModel, type ParakeetProgress } from "./asr/parakeet-local"
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { voiceStorage } from "./settings/storage"
@@ -45,7 +44,7 @@ import {
 } from "./effect/services"
 import { bridgeTranscriber } from "./effect/layers"
 import { makeVoiceProgram, type VoiceProgramHandle } from "./effect/program"
-import { createOpenRouterCompletion, type Completion } from "./plan/planner"
+import type { Completion } from "./plan/planner"
 import { appendEntry, type AgentEntry } from "./agent/log"
 import { describeStep } from "./plan/execute"
 
@@ -79,14 +78,10 @@ export interface VoiceEngineOptions {
   /**
    * Overrides the planner used for sentences the grammar cannot match.
    *
-   * Injected by tests so the whole path runs without a network; left unset in
-   * the app, where it is built from the OpenRouter key in settings.
+   * Injected by tests so the whole path runs without a model; left unset in
+   * the app, where the host plans (`VoiceHost.plan`) on the agent's own runner.
    */
   plan?: Completion
-  /** Overrides the planner model. */
-  plannerModel?: string
-  /** Overrides the planner's fetch, for tests. */
-  plannerFetch?: typeof fetch
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
   /** Where a stop for spending is written down; the browser's storage by default. */
@@ -164,14 +159,6 @@ export interface VoiceEngine {
    * write, and a value that changes between renders is simply missed.
    */
   readonly history: () => AgentEntry[]
-  /**
-   * Progress of the local model's first download, while one is happening.
-   *
-   * The engine owns this because the engine builds the transcriber: the panel
-   * and the HUD have no other way to tell "warming up, 40% of 600 MB" from
-   * "started and heard nothing", and those look identical to someone talking.
-   */
-  readonly parakeetProgress: () => ParakeetProgress | undefined
   /**
    * What dictation has heard this session, oldest first.
    *
@@ -438,7 +425,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [lastParseResult, setLastParseResult] = createSignal<ParseResult | undefined>(undefined)
   const [isRunning, setIsRunning] = createSignal<boolean>(false)
   const [hearing, setHearing] = createSignal<boolean>(false)
-  const [parakeetProgress, setParakeetProgress] = createSignal<ParakeetProgress | undefined>(undefined)
   /*
    * The last few dictated sentences, newest last.
    *
@@ -866,7 +852,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     if (drain) await drainSession()
 
     setPartialTranscript("")
-    setParakeetProgress(undefined)
     setDictated([])
     chordHeld = false
     openedWithoutChord = false
@@ -883,9 +868,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     cancelSpeech()
 
     await releaseSession()
-    if (!keepAgent && currentSettings().backend === "parakeet") {
-      await disposeParakeetModel()
-    }
 
     setDialogState((prev) => ({ ...prev, status: "asleep" }))
   }
@@ -900,27 +882,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   /**
    * The planner, or nothing.
    *
-   * Nothing is a working configuration: with no key, an unmatched sentence
-   * gets the suggestions it always got, and the rest of the voice stack —
-   * which is entirely offline once the transcriber is local — keeps working.
-   * An injected `plan` wins, so tests never reach the network.
+   * It is the host's, on the same runner and subscription as the agent: no key, no
+   * per-call bill. Nothing is a working configuration: with the agent off, or a host
+   * that cannot plan, an unmatched sentence gets what it always got, and the rest of
+   * the voice stack keeps working. An injected `plan` wins, so tests never reach a model.
    */
   function resolvePlanner(): Completion | undefined {
     if (options.plan) return options.plan
-    const key = currentSettings().openRouterApiKey
-    if (!key) return undefined
-    const completion = createOpenRouterCompletion({
-      apiKey: key,
-      ...(options.plannerFetch ? { fetchFn: options.plannerFetch } : {}),
-      ...(options.plannerModel ? { model: options.plannerModel } : {}),
-      onUsage: (usage) => {
-        if (typeof usage.cost === "number") setListenSpend(spendTally.addCost(now(), usage.cost))
-      },
-    })
-    return async (request) => {
-      setListenSpend(spendTally.add(now(), undefined))
-      return completion(request)
-    }
+    const plan = host.plan
+    const settings = currentSettings()
+    if (!plan || settings.agentEngine === "off") return undefined
+    const { agentEngine: engine, agentSpeed: speed } = settings
+    return (request) => plan.call(host, { ...request, engine, ...(speed ? { speed } : {}) })
   }
 
   function resolveTranscriber(s: VoiceSettings): Transcriber {
@@ -990,32 +963,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             setMicLevel(lvl)
             options.backendOptions?.openRouterOptions?.captureOptions?.onLevel?.(lvl)
           },
-        },
-      },
-      parakeetOptions: {
-        ...options.backendOptions?.parakeetOptions,
-        // The panel's acceleration choice, which until now went nowhere.
-        executionBackend: s.parakeetBackend,
-        captureOptions: {
-          ...options.backendOptions?.parakeetOptions?.captureOptions,
-          ...captureOptions,
-          onLevel: (lvl: number) => {
-            setMicLevel(lvl)
-            options.backendOptions?.parakeetOptions?.captureOptions?.onLevel?.(lvl)
-          },
-        },
-        /*
-         * Reported as it arrives, and cleared only when the session is up.
-         *
-         * It used to be cleared the moment a file reached 100%, and a download
-         * is three or four files fetched one after another: the bar vanished
-         * when the encoder finished and the user watched nothing at all while
-         * the decoder, the vocabulary and the runtime compile went on. The end
-         * of the download is not a percentage, it is the session starting.
-         */
-        onProgress: (progress) => {
-          setParakeetProgress(progress)
-          options.backendOptions?.parakeetOptions?.onProgress?.(progress)
         },
       },
     })
@@ -1327,7 +1274,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
       setIsRunning(true)
       clearError()
-      setParakeetProgress(undefined)
       setListenPaused(false)
       keepListeningAwake()
       void warnAboutCredit(currentSettings())
@@ -1418,7 +1364,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
       setIsRunning(true)
       clearError()
-      setParakeetProgress(undefined)
       setListenPaused(false)
       keepListeningAwake()
       void warnAboutCredit(currentSettings())
@@ -1453,7 +1398,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     hearing,
     settings: currentSettings,
     activeMode,
-    parakeetProgress,
     dictated,
     history,
     held,
@@ -1753,8 +1697,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       /*
        * The language belongs in this list because it is baked into the
        * transcriber at construction: OpenRouter sends it in every request
-       * body, and Parakeet checks the model's coverage of it before loading.
-       * Left out, changing the language while listening changed the label and
+       * body. Left out, changing the language while listening changed the label and
        * nothing else, and only stopping and starting again applied it.
        */
       /*
@@ -1766,7 +1709,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const backendChanged =
         normalized.backend !== prev.backend ||
         normalized.openRouterApiKey !== prev.openRouterApiKey ||
-        normalized.parakeetBackend !== prev.parakeetBackend ||
         normalized.language !== prev.language ||
         normalized.inputDeviceId !== prev.inputDeviceId
 
@@ -1785,20 +1727,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       // Mode and activation are half of the name gate.
       refreshHearing()
 
-      if (backendChanged && prev.backend === "parakeet" && normalized.backend !== "parakeet") {
-        void disposeParakeetModel().catch(() => {})
-      }
-
       const keyChanged = normalized.openRouterApiKey !== prev.openRouterApiKey
       const keyRemoved = keyChanged && !normalized.openRouterApiKey
       const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
       if (keyRemoved) {
-        if (normalized.backend !== "parakeet" || prev.backend === "openrouter") {
-          await stop({ drain: false, releaseText: true })
-          return
-        }
-        if (programHandle) await Effect.runPromise(programHandle.cancelPlanner)
-        await releaseTextProgram()
+        await stop({ drain: false, releaseText: true })
         return
       }
       if (keyChanged || (sessionPending && backendChanged)) {

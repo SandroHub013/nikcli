@@ -156,6 +156,14 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .resolve("", BaseDirectory::AppLocalData)
         .expect("Failed to resolve app local data dir");
 
+    // The CLI indexes and watches its working directory. In `tauri dev` that is
+    // src-tauri (with a multi-GB target/), which keeps `debug config` from ever
+    // exiting and leaves the app stuck on "Setting up server connection".
+    let cwd = app
+        .path()
+        .home_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+
     #[cfg(target_os = "windows")]
     return app
         .shell()
@@ -165,7 +173,8 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .env("NIKCLI_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("NIKCLI_EXPERIMENTAL_FILEWATCHER", "true")
         .env("NIKCLI_CLIENT", "desktop")
-        .env("XDG_STATE_HOME", &state_dir);
+        .env("XDG_STATE_HOME", &state_dir)
+        .current_dir(&cwd);
 
     #[cfg(not(target_os = "windows"))]
     return {
@@ -184,6 +193,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
             .env("NIKCLI_EXPERIMENTAL_FILEWATCHER", "true")
             .env("NIKCLI_CLIENT", "desktop")
             .env("XDG_STATE_HOME", &state_dir)
+            .current_dir(&cwd)
             .args(["-il", "-c", &cmd])
     };
 }

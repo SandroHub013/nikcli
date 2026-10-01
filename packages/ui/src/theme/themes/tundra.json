@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Tundra",
+  "id": "tundra",
+  "light": {
+    "seeds": {
+      "neutral": "#f7f7f8",
+      "primary": "#2c79a0",
+      "success": "#308662",
+      "warning": "#a55f2f",
+      "error": "#9e3637",
+      "info": "#318291",
+      "interactive": "#2c79a0",
+      "diffAdd": "#2b61a1",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f7f7f8",
+      "background-weak": "#ebeced",
+      "background-strong": "#f7f7f8",
+      "background-stronger": "#f2f2f3",
+      "surface-raised-stronger-non-alpha": "#f2f2f3",
+      "text-strong": "#181d20",
+      "text-base": "#303538",
+      "text-weak": "#5d6265",
+      "text-weaker": "#939698",
+      "border-weak-base": "#cfd1d3",
+      "border-base": "#b6b8ba",
+      "border-strong-base": "#2c79a0"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#121516",
+      "primary": "#62b2da",
+      "success": "#74cca7",
+      "warning": "#d39569",
+      "error": "#cf7d7f",
+      "info": "#6ebecf",
+      "interactive": "#62b2da",
+      "diffAdd": "#74a4db",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#121516",
+      "background-weak": "#22272a",
+      "background-strong": "#121516",
+      "background-stronger": "#1a1e20",
+      "surface-raised-stronger-non-alpha": "#1a1e20",
+      "text-strong": "#ecedee",
+      "text-base": "#cdd2d6",
+      "text-weak": "#94a0a8",
+      "text-weaker": "#676f75",
+      "border-weak-base": "#383e42",
+      "border-base": "#51585c",
+      "border-strong-base": "#62b2da"
+    }
+  }
+}

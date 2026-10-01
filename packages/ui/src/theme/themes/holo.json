@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Holo",
+  "id": "holo",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8f8",
+      "primary": "#5f87ff",
+      "success": "#5fdf5f",
+      "warning": "#ffaf5f",
+      "error": "#ff5f5f",
+      "info": "#5fdfff",
+      "interactive": "#5f87ff",
+      "diffAdd": "#5fdf5f",
+      "diffDelete": "#ff5f5f"
+    },
+    "overrides": {
+      "background-base": "#f8f8f8",
+      "background-weak": "#e8e8e8",
+      "background-strong": "#f8f8f8",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1a1a1a",
+      "text-base": "#383838",
+      "text-weak": "#707070",
+      "text-weaker": "#a0a0a0",
+      "border-weak-base": "#f0f0f0",
+      "border-base": "#d4d4d4",
+      "border-strong-base": "#5f87ff"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0a0a0a",
+      "primary": "#00ff9d",
+      "success": "#5fdf5f",
+      "warning": "#ffaf5f",
+      "error": "#ff5f5f",
+      "info": "#5fdfff",
+      "interactive": "#00ff9d",
+      "diffAdd": "#5fdf5f",
+      "diffDelete": "#ff5f5f"
+    },
+    "overrides": {
+      "background-base": "#0a0a0a",
+      "background-weak": "#1a1a1a",
+      "background-strong": "#0a0a0a",
+      "background-stronger": "#000000",
+      "surface-raised-stronger-non-alpha": "#000000",
+      "text-strong": "#e0e0e0",
+      "text-base": "#b9b9b9",
+      "text-weak": "#707070",
+      "text-weaker": "#4c4c4c",
+      "border-weak-base": "#000000",
+      "border-base": "#2a2a2a",
+      "border-strong-base": "#00ff9d"
+    }
+  }
+}

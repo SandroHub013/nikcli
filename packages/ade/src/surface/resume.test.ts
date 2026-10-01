@@ -310,6 +310,49 @@ describe("browser panes across a restart", () => {
     expect(roundTrip([browser()]).restored.panes[0].browserOwner).toBeUndefined()
   })
 
+  test("a design sheet's pane comes back on the same file, from the same session", () => {
+    const sheet = { file: "C:/p/.ade/design/menu.html", from: "p1", title: "Menu" }
+    const { restored } = roundTrip([session(), browser({ designSheet: sheet })])
+    expect(restored.panes.find((p) => p.id === "b1")?.designSheet).toEqual(sheet)
+    expect(roundTrip([browser()]).restored.panes[0].designSheet).toBeUndefined()
+  })
+
+  test("the notes not sent yet come back with the sheet", () => {
+    const notes = [
+      {
+        id: "n1",
+        targets: [{ kind: "text" as const, tag: "p", selector: "#intro", text: "Prenota" }],
+        text: "più caldo",
+        at: 7,
+      },
+    ]
+    const sheet = { file: "C:/p/.ade/design/menu.html", from: "p1", notes }
+    const { restored } = roundTrip([session(), browser({ designSheet: sheet })])
+    expect(restored.panes.find((p) => p.id === "b1")?.designSheet?.notes).toEqual(notes)
+  })
+
+  test("a damaged sheet is dropped, the pane is kept", () => {
+    const saved = parseWorkspace(
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        panes: [],
+        browsers: [
+          { id: "b1", title: "B", url: "https://a.test/", sheet: { from: "n1-1" } },
+          { id: "b2", title: "B", url: "https://a.test/", sheet: "C:/p/.ade/design/a.html" },
+          { id: "b3", title: "B", url: "https://a.test/", sheet: { file: "C:/p/.ade/design/a.html", from: "n1-1" } },
+        ],
+        currentView: "code",
+        sidebarWidth: 260,
+      }),
+    )
+    expect(saved?.browsers?.map((b) => b.id)).toEqual(["b1", "b2", "b3"])
+    expect(saved?.browsers?.map((b) => b.sheet)).toEqual([
+      undefined,
+      undefined,
+      { file: "C:/p/.ade/design/a.html", from: "n1-1" },
+    ])
+  })
+
   test("a damaged binding is dropped, the pane is kept", () => {
     const saved = parseWorkspace(
       JSON.stringify({

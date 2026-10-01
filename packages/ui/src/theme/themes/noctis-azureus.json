@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Noctis Azureus",
+  "id": "noctis-azureus",
+  "light": {
+    "seeds": {
+      "neutral": "#eef0f1",
+      "primary": "#3781af",
+      "success": "#2c8c64",
+      "warning": "#977564",
+      "error": "#cf5b2e",
+      "info": "#4b8490",
+      "interactive": "#3781af",
+      "diffAdd": "#2c8c64",
+      "diffDelete": "#cf5b2e"
+    },
+    "overrides": {
+      "background-base": "#eef0f1",
+      "background-weak": "#e4e6e7",
+      "background-strong": "#eef0f1",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#051c2a",
+      "text-base": "#2c3f4b",
+      "text-weak": "#747f87",
+      "text-weaker": "#979fa3",
+      "border-weak-base": "#dfe1e2",
+      "border-base": "#cfd1d2",
+      "border-strong-base": "#889297"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#07273b",
+      "primary": "#49ace9",
+      "success": "#49e9a6",
+      "warning": "#e9b49a",
+      "error": "#e66533",
+      "info": "#7ddcf0",
+      "interactive": "#49ace9",
+      "diffAdd": "#49e9a6",
+      "diffDelete": "#e66533"
+    },
+    "overrides": {
+      "background-base": "#07273b",
+      "background-weak": "#123144",
+      "background-strong": "#07273b",
+      "background-stronger": "#051b29",
+      "surface-raised-stronger-non-alpha": "#051b29",
+      "text-strong": "#c5cdd3",
+      "text-base": "#a7b6c3",
+      "text-weak": "#6f8ca5",
+      "text-weaker": "#4b6980",
+      "border-weak-base": "#09314a",
+      "border-base": "#0b3a57",
+      "border-strong-base": "#4c6d82"
+    }
+  }
+}

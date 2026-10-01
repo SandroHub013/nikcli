@@ -212,6 +212,13 @@ export interface TurnSpec {
    */
   readonly lean?: boolean
   /**
+   * No tool at all: Claude Code gets `--tools ""`, not even `ade-msg`, and nikcli's session denies every
+   * tool (`planner` in `serve-rules.ts`). For a turn that only answers from what it is given, such as the
+   * voice's planner, whose input carries text others can write (pane titles). Codex has no such flag and
+   * ignores it.
+   */
+  readonly noTools?: boolean
+  /**
    * The folder `ade-msg` drops its messages in (`<mailbox>/outbox`), for a
    * turn that may not write but must still talk to ADE. Codex's read-only
    * sandbox refuses that write too, so such a turn runs in `workspace-write`
@@ -450,8 +457,13 @@ export function turnCommand(
        * The thread reports the refusal (`permission_denials`).
        */
       if (allowed.includes("Bash")) disallowed.push(...claudeRefusals(spec.approvals ? (spec.always ?? []) : undefined))
-      if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
-      if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
+      if (spec.noTools) {
+        // Nothing to allow and nothing to refuse: with no tool there is no `ade-msg` to run either.
+        args.push("--tools", "")
+      } else {
+        if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
+        if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
+      }
       const budget = spec.maxBudgetUsd
       if (budget !== undefined && Number.isFinite(budget) && budget > 0) args.push("--max-budget-usd", String(budget))
       if (!spec.stdin) args.push("--", message)

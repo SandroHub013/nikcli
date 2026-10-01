@@ -53,4 +53,5 @@
 @import "../components/typewriter.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
+@import "./glass.css" layer(utilities);
 @import "./animations.css" layer(utilities);

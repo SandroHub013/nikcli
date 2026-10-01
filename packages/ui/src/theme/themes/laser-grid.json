@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Laser Grid",
+  "id": "laser-grid",
+  "light": {
+    "seeds": {
+      "neutral": "#f4f4f6",
+      "primary": "#1694a1",
+      "success": "#2d8962",
+      "warning": "#a3632f",
+      "error": "#9c3937",
+      "info": "#2f8591",
+      "interactive": "#1694a1",
+      "diffAdd": "#2864a1",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f4f4f6",
+      "background-weak": "#e7e8eb",
+      "background-strong": "#f4f4f6",
+      "background-stronger": "#eeeff1",
+      "surface-raised-stronger-non-alpha": "#eeeff1",
+      "text-strong": "#181920",
+      "text-base": "#2e303a",
+      "text-weak": "#585b6a",
+      "text-weaker": "#8f919b",
+      "border-weak-base": "#cecfd4",
+      "border-base": "#b4b5bb",
+      "border-strong-base": "#1694a1"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#08090c",
+      "primary": "#5de0ef",
+      "success": "#74d1a9",
+      "warning": "#d29a6c",
+      "error": "#cf8382",
+      "info": "#6ec4d1",
+      "interactive": "#5de0ef",
+      "diffAdd": "#73a9dd",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#08090c",
+      "background-weak": "#161822",
+      "background-strong": "#08090c",
+      "background-stronger": "#0f1017",
+      "surface-raised-stronger-non-alpha": "#0f1017",
+      "text-strong": "#ecedee",
+      "text-base": "#cdcfd6",
+      "text-weak": "#9296aa",
+      "text-weaker": "#626573",
+      "border-weak-base": "#333747",
+      "border-base": "#4c5061",
+      "border-strong-base": "#5de0ef"
+    }
+  }
+}

@@ -169,7 +169,7 @@ function ServerSetup() {
           <div className="text-[12px] text-terminal-muted">Connect to your server</div>
         </div>
 
-        <div className="rounded-[var(--radius-card)] border border-terminal-border bg-terminal-panel p-6">
+        <div className="glass-strong rounded-[var(--radius-card)] border p-6">
           <h2 className="mb-1 text-[15px] font-semibold text-terminal-text">Server URL</h2>
           <p className="mb-4 text-[13px] text-terminal-muted">Enter the address of your running nikcli server</p>
           <form onSubmit={handleConnect} className="space-y-3">
@@ -307,7 +307,7 @@ function DashboardShellInner({ title, children }: DashboardShellProps) {
       {/* Sidebar — positioned below the main Navbar; off-canvas drawer on mobile */}
       <aside
         className={[
-          "fixed left-0 bottom-0 z-40 w-64 max-w-[82vw] border-r border-terminal-border bg-terminal-panel flex flex-col",
+          "glass-strong fixed left-0 bottom-0 z-40 w-64 max-w-[82vw] border-r flex flex-col",
           "transition-transform duration-200 ease-out lg:translate-x-0 lg:shadow-none",
           navOpen ? "translate-x-0 shadow-strong" : "-translate-x-full",
         ].join(" ")}
@@ -368,7 +368,7 @@ function DashboardShellInner({ title, children }: DashboardShellProps) {
             </div>
             <button
               onClick={() => logout()}
-              className="shrink-0 rounded-[var(--radius-sm)] border border-terminal-border px-2.5 py-1 text-[11px] font-medium text-terminal-muted transition-all duration-100 hover:border-terminal-error/50 hover:text-terminal-error active:scale-[0.94]"
+              className="glass-chip shrink-0 rounded-[var(--radius-sm)] border px-2.5 py-1 text-[11px] font-medium text-terminal-muted transition-all duration-100 hover:border-terminal-error/50 hover:text-terminal-error active:scale-[0.94]"
             >
               Out
             </button>
@@ -387,13 +387,13 @@ function DashboardShellInner({ title, children }: DashboardShellProps) {
       {/* Main content */}
       <main className="flex-1 min-w-0 lg:ml-64 min-h-[calc(100vh-4rem)]">
         {/* Subtle page breadcrumb + mobile nav toggle */}
-        <div className="sticky top-[var(--topbar-height)] z-20 flex items-center gap-1.5 h-12 px-4 sm:px-6 lg:px-8 border-b border-terminal-border/40 bg-terminal-bg/80 backdrop-blur-sm">
+        <div className="glass-bar sticky top-[var(--topbar-height)] z-20 flex items-center gap-1.5 h-12 px-4 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() => setNavOpen((v) => !v)}
             aria-label={navOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={navOpen}
-            className="-ml-1.5 mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-terminal-border text-terminal-muted transition-colors hover:bg-terminal-border/40 hover:text-terminal-text lg:hidden"
+            className="glass-chip -ml-1.5 mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border text-terminal-muted hover:text-terminal-text lg:hidden"
           >
             <svg
               width="18"

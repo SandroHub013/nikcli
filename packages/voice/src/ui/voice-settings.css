@@ -1419,71 +1419,7 @@
   border-top: 1px solid var(--ade-border-subtle);
 }
 
-/* Parakeet Pill Select */
-
-[data-component="voice-settings-panel"] [data-slot="pills-row"] {
-  display: flex;
-  gap: var(--ade-space-3);
-  flex-wrap: wrap;
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"] {
-  padding: var(--ade-space-2) var(--ade-space-5);
-  border-radius: var(--ade-radius-full);
-  border: 1px solid var(--ade-border);
-  background: var(--ade-surface);
-  color: var(--ade-text-soft);
-  font-family: inherit;
-  font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-medium);
-  cursor: pointer;
-  /* Pills are flipped often (the engine sub-fields). Add transform so the
-     press-scale rides the same frame as the colour change. */
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    border-color var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease-out);
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"]:hover:not(:disabled) {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"]:not(:disabled):active {
-  /* Slightly stronger press than a card — pills are smaller and rely more on
-     the scale to communicate the gesture. */
-  transform: scale(0.96);
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"]:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
-[data-component="voice-settings-panel"] [data-slot="pill-btn"][aria-checked="true"] {
-  background: var(--ade-accent-soft);
-  border-color: var(--ade-accent);
-  color: var(--ade-accent-strong);
-  font-weight: var(--ade-weight-semibold);
-}
-
-/* The checked pill keeps its tint; focus layers on top, not over. */
-[data-component="voice-settings-panel"] [data-slot="pill-btn"][aria-checked="true"]:focus-visible {
-  background: var(--ade-accent-soft);
-  border-color: var(--ade-accent);
-  color: var(--ade-accent-strong);
-  font-weight: var(--ade-weight-semibold);
-  box-shadow: var(--ade-focus-ring);
-}
-
-/* Parakeet Model Download Progress Bar */
+/* Download progress bar (the voice packs') */
 
 [data-component="voice-settings-panel"] [data-slot="progress-box"] {
   background: var(--ade-sunken);

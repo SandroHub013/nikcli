@@ -592,7 +592,7 @@
 [data-slot="preview-content"] {
   margin: 0;
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
 }
 
@@ -1128,7 +1128,7 @@
 
 [data-slot="session-title"],
 [data-slot="active-agent-title"] {
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text);
   white-space: nowrap;
@@ -1287,7 +1287,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   min-width: 0;
   line-height: 1.2;
@@ -1310,7 +1310,7 @@
   display: block;
   color: var(--ade-text-soft);
   font-weight: var(--ade-weight-medium);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1325,7 +1325,7 @@
 [data-slot="agent-card-sep"] {
   color: var(--ade-border);
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--ade-font-xs);
   margin-inline: 1px;
   opacity: 0.7;
 }
@@ -1336,7 +1336,7 @@
   display: block;
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
-  font-size: 10.5px;
+  font-size: var(--ade-font-xs);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1355,7 +1355,7 @@
 [data-slot="agent-card-time"] {
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-family: var(--ade-mono);
   color: var(--ade-text-weak);
   font-variant-numeric: tabular-nums;
@@ -1475,7 +1475,7 @@ aside[data-component="ade-sidebar"] {
 }
 
 [data-slot="project-name-text"] {
-  font-size: 14px;
+  font-size: var(--ade-font-lg);
 }
 
 /* ── i gruppi: nessun divisore, solo due pixel d'aria ── */
@@ -1521,7 +1521,7 @@ aside[data-component="ade-sidebar"] {
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
   color: var(--ade-text-soft);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   line-height: 16px;
 }
 
@@ -1643,7 +1643,7 @@ aside[data-component="ade-sidebar"] {
   border-radius: var(--ade-radius-full);
   background: transparent;
   color: var(--ade-text-weak);
-  font-size: 14px;
+  font-size: var(--ade-font-lg);
   line-height: 1;
   cursor: pointer;
   transition: var(--ade-btn-transition);
@@ -1791,7 +1791,7 @@ aside[data-component="ade-sidebar"] {
   overflow: hidden;
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ade-text-soft);
   white-space: nowrap;
@@ -1911,4 +1911,38 @@ aside[data-component="ade-sidebar"] {
    would sit on top of the sessions and files it replaces. */
 [data-slot="sidebar-sections"][hidden] {
   display: none;
+}
+
+/*
+ * Il menu del clic destro su una riga.
+ *
+ * Un solo menu per la colonna, posizionato sul puntatore invece di penzolare
+ * dall'ancora: la riga sessione e' un `<button>` e dentro un `<button>` non ci
+ * stanno altri `<button>`, quindi il menu e' fratello delle righe e non loro
+ * figlio. E' assoluto, non fisso, perche' il `container-type` della colonna la
+ * rende il containing block dei discendenti posizionati: le coordinate arrivano
+ * dal puntatore e vengono riscalate sulla colonna quando il nodo e' in pagina.
+ * Sotto al fondo, mai oltre: l'ultima cosa in colonna e' l'impugnatura di
+ * ridimensionamento.
+ */
+[data-slot="ade-row-menu"] {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: var(--ade-space-2);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-raised);
+  box-shadow: var(--ade-shadow-lg, 0 12px 32px rgb(0 0 0 / 0.32));
+}
+
+[data-slot="ade-row-menu-separator"] {
+  height: 1px;
+  margin: var(--ade-space-1) var(--ade-space-2);
+  background: var(--ade-border);
 }
