@@ -26,7 +26,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** Never chosen, wherever they are listed: the project's memory and what keeps `.ade/` out of git. */
 export const PROTECTED = new Set(["decisions.jsonl", "design.jsonl", "memory.md", ".gitignore"])
 
-export type Listed = Pick<DirEntry, "name" | "path" | "is_dir" | "modified_ms">
+export type Listed = Pick<DirEntry, "name" | "path" | "is_dir" | "modified_ms"> & { size?: number }
 
 export interface Listings {
   /** `.ade/browser/` */
@@ -77,6 +77,14 @@ export function pruneChoices(listings: Listings, now: number): string[] {
     ...oldFiles(listings.results, now, ["md"]),
     ...oldFiles(listings.notes, now, ["md"]),
   ]
+}
+
+/** What `pruneChoices` would remove, and how much that is: for the panel that says it before it does it. */
+export function pruneSummary(listings: Listings, now: number): { paths: string[]; bytes: number } {
+  const paths = pruneChoices(listings, now)
+  const chosen = new Set(paths)
+  const bytes = [...listings.browser, ...listings.results, ...listings.notes].reduce((sum, entry) => sum + (chosen.has(entry.path) ? (entry.size ?? 0) : 0), 0)
+  return { paths, bytes }
 }
 
 /** The three folders of a project, as paths: `sep` is the one the project's own path uses. */

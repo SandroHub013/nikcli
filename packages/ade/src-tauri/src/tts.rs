@@ -669,6 +669,22 @@ pub fn tts_piper_delete(app: tauri::AppHandle, voice_id: Option<String>) -> Resu
     remove_locked(&app.state::<Piper>(), &root, voice_id.as_deref())
 }
 
+/// What the local voices weigh on this disk, for the «Spazio su disco» panel: Piper's runtime and each voice, and Kokoro.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct VoiceReport {
+    pub piper: PiperBytes,
+    pub kokoro: u64,
+}
+
+#[tauri::command]
+pub async fn tts_disk_report(app: tauri::AppHandle) -> Result<VoiceReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(VoiceReport { piper: piper_bytes(&root(&app)?), kokoro: dir_bytes(&kokoro_root(&app)?) })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub fn tts_piper_status(app: tauri::AppHandle, voice_id: String) -> Result<PiperStatus, String> {
     voice(&voice_id)?;

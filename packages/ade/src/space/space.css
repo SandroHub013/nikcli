@@ -1,0 +1,82 @@
+/*
+ * «Spazio su disco» inside the settings panel. Built on the panel's own rows and buttons (`settings-choice`, `settings-empty`, from
+ * `settings/sections.css`); only what is particular to this list is here.
+ */
+
+[data-slot="space-actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  margin: var(--ade-space-4) 0 0;
+}
+
+[data-slot="space-busy"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="space-notice"] {
+  margin: var(--ade-space-3) 0 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="space-notice"][data-failed] {
+  color: var(--ade-danger, var(--ade-text));
+}
+
+[data-slot="space-group"] {
+  display: flex;
+  flex-direction: column;
+  margin: var(--ade-space-5) 0 0;
+}
+
+[data-slot="space-group-title"] {
+  margin: 0 0 var(--ade-space-2);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-slot="space-row"] {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: var(--ade-space-1) var(--ade-space-4);
+  padding: var(--ade-space-3) 0;
+  border-top: 1px solid var(--ade-border);
+}
+
+[data-slot="space-row-name"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ade-text);
+}
+
+[data-slot="space-row-size"] {
+  grid-column: 2;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="space-row-actions"] {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+[data-slot="space-row-detail"],
+[data-slot="space-row-kept"] {
+  grid-column: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="space-row"][data-kept] [data-slot="space-row-name"] {
+  color: var(--ade-text-weak);
+}

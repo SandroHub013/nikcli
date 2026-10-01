@@ -114,6 +114,33 @@ pub async fn ade_container_remove(window: tauri::WebviewWindow, roots: tauri::St
     tauri::async_runtime::spawn_blocking(move || remove_empty_container(&resolved)).await.map_err(|e| e.to_string())
 }
 
+/// What a worktree folder weighs, for the panel that lists them. Only a folder inside the project's own `-worktrees` folder, and only for the
+/// root of an open project: the folder is outside the project, so it is the one place this door reads.
+pub fn worktree_bytes(root: &Path, worktree: &Path) -> u64 {
+    let Some(container) = container_of(root) else { return 0 };
+    let (Ok(container), Ok(worktree)) = (container.canonicalize(), worktree.canonicalize()) else { return 0 };
+    if worktree == container || !worktree.starts_with(&container) {
+        return 0;
+    }
+    crate::tts::dir_bytes(&worktree)
+}
+
+#[tauri::command]
+pub async fn ade_worktree_bytes(
+    window: tauri::WebviewWindow,
+    roots: tauri::State<'_, WriteRoots>,
+    root: String,
+    worktree: String,
+) -> Result<u64, String> {
+    main_only(window.label())?;
+    let resolved = crate::within_roots(&roots, &root)?;
+    let is_a_root = roots.0.lock().map_err(|_| "radici bloccate")?.iter().any(|open| *open == resolved);
+    if !is_a_root {
+        return Ok(0);
+    }
+    tauri::async_runtime::spawn_blocking(move || worktree_bytes(&resolved, Path::new(&worktree))).await.map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +347,38 @@ mod tests {
         let source = include_str!("ade_prune.rs");
         let body = &source[source.find("pub async fn ade_container_remove").unwrap()..];
         assert_eq!(body.lines().nth(1).unwrap().trim(), "main_only(window.label())?;");
+        assert!(body.contains("is_a_root"));
+    }
+    #[test]
+    fn a_worktrees_weight_is_counted_only_inside_the_projects_container() {
+        let parent = scratch("worktree-bytes");
+        let project = parent.join("app");
+        std::fs::create_dir_all(&project).unwrap();
+        let tree = parent.join("app-worktrees").join("fix");
+        std::fs::create_dir_all(tree.join("src")).unwrap();
+        std::fs::write(tree.join("src/a.rs"), vec![0u8; 700]).unwrap();
+        std::fs::write(tree.join("b.txt"), vec![0u8; 30]).unwrap();
+        assert_eq!(worktree_bytes(&project, &tree), 730);
+        // The container itself, the project, and a folder elsewhere are none of this door's business.
+        assert_eq!(worktree_bytes(&project, &parent.join("app-worktrees")), 0);
+        assert_eq!(worktree_bytes(&project, &project), 0);
+        std::fs::write(project.join("big.bin"), vec![0u8; 5000]).unwrap();
+        assert_eq!(worktree_bytes(&project, &project.join("big.bin")), 0);
+        let elsewhere = parent.join("other");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("x"), vec![0u8; 100]).unwrap();
+        assert_eq!(worktree_bytes(&project, &elsewhere), 0);
+        // A path that climbs out of the container does not count what it reaches.
+        assert_eq!(worktree_bytes(&project, &tree.join("..").join("..").join("other")), 0);
+        assert_eq!(worktree_bytes(&project, &parent.join("app-worktrees").join("missing")), 0);
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn the_worktree_weight_command_answers_to_the_main_window_and_only_for_the_root_of_an_open_project() {
+        let source = include_str!("ade_prune.rs");
+        let body = &source[source.find("pub async fn ade_worktree_bytes").unwrap()..];
+        assert_eq!(body.lines().nth(6).unwrap().trim(), "main_only(window.label())?;");
         assert!(body.contains("is_a_root"));
     }
 }

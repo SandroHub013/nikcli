@@ -8,6 +8,7 @@ import {
   pruneChoices,
   pruneFolders,
   pruneProject,
+  pruneSummary,
   type Listed,
   type Listings,
 } from "./ade-prune"
@@ -213,5 +214,31 @@ describe("pruning a project through the host", () => {
     expect(await pruneProject({ readDir: async () => [] }, "C:/work/app", NOW)).toBe(0)
     const failing = host({ "C:/work/app/.ade/results": [file("results", "a.md", 40)] }, { pruneFails: true })
     expect(await pruneProject(failing, "C:/work/app", NOW)).toBe(0)
+  })
+})
+
+describe("pruneSummary", () => {
+  const sized = (entry: Listed, size: number): Listed => ({ ...entry, size })
+
+  test("the paths are the ones pruneChoices picks, and the bytes are those of exactly those files", () => {
+    const old = sized(file("results", "old.md", 40), 3000)
+    const fresh = sized(file("results", "fresh.md", 2), 9000)
+    const oldNote = sized(file("note", "n.md", 31), 500)
+    const listings: Listings = { browser: [], results: [old, fresh], notes: [oldNote] }
+    const summary = pruneSummary(listings, NOW)
+    expect(summary.paths).toEqual(pruneChoices(listings, NOW))
+    expect(summary.bytes).toBe(3500)
+  })
+
+  test("a file with no known size weighs nothing, and nothing to prune is zero", () => {
+    const summary = pruneSummary({ browser: [], results: [file("results", "old.md", 40)], notes: [] }, NOW)
+    expect(summary.paths).toHaveLength(1)
+    expect(summary.bytes).toBe(0)
+    expect(pruneSummary({ browser: [], results: [], notes: [] }, NOW)).toEqual({ paths: [], bytes: 0 })
+  })
+
+  test("the project's memory is never counted, however old and big", () => {
+    const memory = sized(file("results", "memory.md", 900), 99_999)
+    expect(pruneSummary({ browser: [], results: [memory], notes: [] }, NOW)).toEqual({ paths: [], bytes: 0 })
   })
 })

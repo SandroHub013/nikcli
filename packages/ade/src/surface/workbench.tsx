@@ -360,6 +360,9 @@ import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigat
 import { anyFramePlugin } from "../plugin-frame/marker"
 import type { FramePaneInput } from "../plugin-frame/plugin-pane"
 
+/** «Spazio su disco», loaded when the section is opened: ADE with the panel closed never reads a folder for it. */
+const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
+
 /** The list of plugins in a frame, loaded when Estensioni is opened: ADE with none never fetches it. */
 const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
 import { quotaForAgent } from "../session/quota"
@@ -9668,6 +9671,22 @@ export function Workbench() {
                       </>
                     )}
                   />
+                ),
+              },
+              {
+                id: "set-sec-space",
+                label: t("settings.space"),
+                glyph: "◫",
+                render: () => (
+                  <Suspense>
+                    <SpaceSection
+                      host={getHost}
+                      roots={() => (project()?.root ? [project()!.root] : [])}
+                      openWorktrees={() => wb().panes.flatMap((pane) => (pane.worktree ? [pane.worktree] : []))}
+                      ask={(message) => askYesNo(message, { ok: t("space.remove"), cancel: t("window.closeConfirm.cancel") })}
+                      now={Date.now}
+                    />
+                  </Suspense>
                 ),
               },
               {

@@ -250,6 +250,8 @@ export interface Host {
    * Refused while a synthesis is running or a download is writing into those files.
    */
   ttsPiperDelete?: (voiceId?: string) => Promise<number>
+  /** What the local voices weigh on this disk: Piper's runtime and each installed voice, and Kokoro. */
+  ttsDiskReport?: () => Promise<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
@@ -396,6 +398,8 @@ export interface Host {
   adePrune?: (paths: string[]) => Promise<number>
   /** Removes the `<project>-worktrees` folder beside an open project, when nothing is left in it; whether it was removed. */
   adeContainerRemove?: (root: string) => Promise<boolean>
+  /** What a worktree folder beside an open project weighs (0 for anything that is not one). */
+  adeWorktreeBytes?: (root: string, worktree: string) => Promise<number>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -517,6 +521,11 @@ export async function getHost(): Promise<Host | undefined> {
     async claudeVersion() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string | null>("claude_version").catch(() => null)
+    },
+
+    async adeWorktreeBytes(root, worktree) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_worktree_bytes", { root, worktree })
     },
 
     async adeContainerRemove(root) {
@@ -900,6 +909,11 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalInstall(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_local_install", { provider })
+    },
+
+    async ttsDiskReport() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>("tts_disk_report")
     },
 
     async ttsPiperDelete(voiceId) {

@@ -2273,6 +2273,8 @@ pub fn run() {
             bot_delete,
             ade_prune::ade_prune,
             ade_prune::ade_container_remove,
+            ade_prune::ade_worktree_bytes,
+            tts::tts_disk_report,
             nikcli_bot,
             claude_agents,
             claude_version,
