@@ -12,6 +12,7 @@
 /// always passes a data directory derived from the bundle identifier, and an
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
+mod ade_prune;
 mod agent_link;
 mod brand;
 mod append;
@@ -2270,6 +2271,11 @@ pub fn run() {
             allow_write_root,
             git_run,
             bot_delete,
+            ade_prune::ade_prune,
+            ade_prune::ade_container_remove,
+            ade_prune::ade_worktree_bytes,
+            ade_prune::ade_worktree_rescue,
+            tts::tts_disk_report,
             nikcli_bot,
             claude_agents,
             claude_version,
@@ -2284,6 +2290,7 @@ pub fn run() {
             usage::transcript_usage,
             mailbox::mailbox_take,
             tts::tts_piper_status,
+            tts::tts_piper_delete,
             tts::tts_piper_install,
             tts::tts_piper_speak,
             tts::tts_piper_stop,
@@ -2298,6 +2305,8 @@ pub fn run() {
             tts::tts_install_cancel,
             nikverse_assets::nikverse_assets_status,
             nikverse_assets::nikverse_assets_install,
+            nikverse_assets::nikverse_assets_bytes,
+            nikverse_assets::nikverse_assets_remove,
             plugin_install::plugin_list,
             plugin_install::plugin_check,
             plugin_install::plugin_install,

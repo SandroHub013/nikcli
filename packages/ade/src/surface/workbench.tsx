@@ -206,6 +206,8 @@ function askCloseConfirmation(message: string): Promise<boolean> {
 
 import { askYesNo } from "../host/ask"
 import { createCloser } from "../editor/closer"
+import { pruneProject } from "../session/ade-prune"
+import { noRescue, reclaimWorktree, worktreeWork, type Reclaimed, type Retry } from "../session/worktree-close"
 import {
   createWorkbench,
   type Pane,
@@ -357,6 +359,9 @@ import { framePluginOpening } from "../plugin-frame/open"
 import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigation"
 import { anyFramePlugin } from "../plugin-frame/marker"
 import type { FramePaneInput } from "../plugin-frame/plugin-pane"
+
+/** «Spazio su disco», loaded when the section is opened: ADE with the panel closed never reads a folder for it. */
+const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
 
 /** The list of plugins in a frame, loaded when Estensioni is opened: ADE with none never fetches it. */
 const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
@@ -3201,17 +3206,8 @@ export function Workbench() {
   ): Promise<string | undefined> => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane?.worktree || !host.run) return undefined
-    const status = await host.run("git", ["status", "--porcelain"], pane.worktree)
-    if (status.code === 0 && status.stdout.trim())
-      return `"${pane.title}" ha modifiche non committate in ${pane.worktree}`
-    const branch = pane.tree?.branch
     const root = (await projectOfPane(host, paneId))?.root
-    if (branch && root) {
-      const merged = await host.run("git", ["branch", "--list", branch, "--merged"], root)
-      if (merged.code === 0 && !merged.stdout.trim())
-        return `"${pane.title}" ha commit sul branch ${branch} non ancora integrati`
-    }
-    return undefined
+    return worktreeWork(host.run, { title: pane.title, worktree: pane.worktree, branch: pane.tree?.branch, root })
   }
 
   /**
@@ -3258,17 +3254,15 @@ export function Workbench() {
           )
       }
       spawnedBy.delete(id)
-      close(id)
+      // Already weighed against the work in the worktree above: not asked again. `closeNow` gives the worktree back (or keeps it).
+      treeClosing.add(id)
+      closer.close(id, { decided: true })
       closed.push(pane.title)
       if (pane.worktree) {
-        const root = (await projectOfPane(host, id))?.root
-        if (!blocked.has(id) && root && host.run) {
-          const removed = await host.run("git", ["worktree", "remove", pane.worktree], root)
-          if (removed.code !== 0) kept.push(pane.worktree)
-        } else {
-          kept.push(pane.worktree)
-        }
+        const outcome = await reclaims.get(id)
+        if (outcome?.kind !== "removed") kept.push(pane.worktree)
       }
+      treeClosing.delete(id)
     }
     saveSpawned()
     return { closed, kept, asking }
@@ -5399,6 +5393,23 @@ export function Workbench() {
     void checkVoiceInstalled()
   }
 
+  /*
+   * What ADE left in a project's `.ade/` and no longer needs goes when the project opens: the browser captures past the last fifty, the
+   * results and design notes older than thirty days (`session/ade-prune.ts`). Once for each project in a run of ADE, after it opens and
+   * out of the way: it never delays anything and a failure is nothing.
+   */
+  const prunedProjects = new Set<string>()
+  createEffect(
+    on(
+      () => project()?.root,
+      (root) => {
+        if (!root || prunedProjects.has(root)) return
+        prunedProjects.add(root)
+        void getHost().then((host) => (host ? pruneProject(host, root, Date.now()) : undefined))
+      },
+    ),
+  )
+
   // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
   createEffect(
     on(
@@ -6819,10 +6830,47 @@ export function Workbench() {
       return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
     },
     askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
+    hasWorktree: (id) => Boolean(wb().panes.find((candidate) => candidate.id === id)?.worktree),
+    worktreeWork: async (id) => {
+      const host = await getHost()
+      return host ? unintegrated(host, id) : undefined
+    },
+    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason)),
   })
   const close = (id: string): boolean => closer.close(id)
 
+  /*
+   * A session's worktree, given back when the session closes, whichever way it closes.
+   *
+   * Removed (and its `ade/*` branch with it) when the work has landed and the folder is clean; kept, with the branch, when not. What was
+   * decided is read now, from the pane, because the pane is gone by the time git runs. `closeTree` awaits it to report what stayed.
+   */
+  const reclaims = new Map<string, Promise<Reclaimed>>()
+  const treeClosing = new Set<string>()
+  const WORKTREE_RETRY: Retry = { times: 3, ms: 1500, wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)) }
+  const giveBackWorktree = (pane: Pane, worktree: string) => {
+    const open = project()
+    const found = paneProject(pane, open, recents())
+    const branch = pane.tree?.branch
+    const done = (async (): Promise<Reclaimed> => {
+      const host = await getHost()
+      if (!host?.run) return { kind: "kept", reason: `"${pane.title}": ${worktree}` }
+      const owner = found.kind === "open" ? open : await discoverProject(host, found.root).catch(() => open)
+      const outcome = await reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, host.adeWorktreeRescue ?? noRescue, WORKTREE_RETRY)
+      // The folder ADE makes beside a project for its worktrees goes with the last of them: nothing is left in it but the name.
+      if (outcome.kind === "removed" && owner?.root) await host.adeContainerRemove?.(owner.root).catch(() => false)
+      return outcome
+    })().catch((error): Reclaimed => ({ kind: "kept", reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}` }))
+    reclaims.set(pane.id, done)
+    void done.then((outcome) => {
+      if (reclaims.get(pane.id) === done) reclaims.delete(pane.id)
+      if (outcome.kind === "kept" && !treeClosing.has(pane.id)) toast.show(t("pane.worktreeKept", outcome.reason))
+    })
+  }
+
   const closeNow = (id: string) => {
+    const closing = wb().panes.find((candidate) => candidate.id === id)
+    if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
@@ -9623,6 +9671,22 @@ export function Workbench() {
                       </>
                     )}
                   />
+                ),
+              },
+              {
+                id: "set-sec-space",
+                label: t("settings.space"),
+                glyph: "◫",
+                render: () => (
+                  <Suspense>
+                    <SpaceSection
+                      host={getHost}
+                      roots={() => (project()?.root ? [project()!.root] : [])}
+                      openWorktrees={() => wb().panes.flatMap((pane) => (pane.worktree ? [pane.worktree] : []))}
+                      ask={(message) => askYesNo(message, { ok: t("space.remove"), cancel: t("window.closeConfirm.cancel") })}
+                      now={Date.now}
+                    />
+                  </Suspense>
                 ),
               },
               {

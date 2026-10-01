@@ -20,6 +20,12 @@ export interface CloserDeps {
   readonly running?: (id: string) => string | undefined
   /** The user's answer: true ends the agent. */
   readonly askRunning?: (agent: string) => Promise<boolean>
+  /** The session works in a worktree of its own (`session/worktree-close.ts`). */
+  readonly hasWorktree?: (id: string) => boolean
+  /** Why that worktree holds work that closing would strand (changes, or commits not yet integrated), or nothing. */
+  readonly worktreeWork?: (id: string) => Promise<string | undefined>
+  /** The user's answer: true closes the session anyway, and the folder stays on disk with its branch. */
+  readonly askWorktree?: (reason: string) => Promise<boolean>
 }
 
 /**
@@ -27,9 +33,14 @@ export interface CloserDeps {
  * palette, where one key ended the agent at work with nothing to take it back
  * (review of the frontend, ALTO 6). `ade-msg close` and the pane's own ✕ are
  * a decision already.
+ *
+ * `decided`: the close was already weighed against the work in the session's
+ * worktree (`ade-msg close` refuses when there is some, unless forced), so it
+ * is not asked again.
  */
 export interface CloseHow {
   readonly confirmRunning?: boolean
+  readonly decided?: boolean
 }
 
 export interface Closer {
@@ -57,6 +68,12 @@ export function createCloser(deps: CloserDeps): Closer {
     if (path !== undefined) return () => deps.ask(path)
     const agent = how?.confirmRunning ? deps.running?.(id) : undefined
     if (agent !== undefined && deps.askRunning) return () => deps.askRunning!(agent)
+    // Work in the session's worktree is not lost by closing (the folder stays), but the user is told before it is left behind.
+    if (!how?.decided && deps.hasWorktree?.(id) && deps.worktreeWork && deps.askWorktree)
+      return async () => {
+        const reason = await deps.worktreeWork!(id).catch(() => undefined)
+        return reason === undefined ? true : deps.askWorktree!(reason)
+      }
     return undefined
   }
 

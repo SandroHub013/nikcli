@@ -242,6 +242,95 @@ pub async fn nikverse_assets_status(app: tauri::AppHandle) -> Result<Status, Str
     .map_err(|e| e.to_string())
 }
 
+/// What the assets weigh on this disk: the files of the list that are there, by the size the disk says (no hashing: this is asked to show a
+/// number), and what a fetch that died left as `<name>.part`.
+pub fn installed_bytes(root: &Path, manifest: &[ManifestEntry]) -> u64 {
+    manifest
+        .iter()
+        .map(|entry| {
+            let file = root.join(entry.path);
+            let size = |f: &Path| std::fs::metadata(f).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0);
+            size(&file) + size(&staging(&file))
+        })
+        .sum()
+}
+
+/// Takes the assets away again, and says how much that freed; they are fetched again the next time the world opens.
+///
+/// Only the files the list names (and their `.part` leftovers) go, never the folder as a whole: what is in `root` that the binary did not name
+/// is not this code's to remove. The folders left empty go after them, the root last. Refused while a fetch is running, which is told by the
+/// same turn the fetch takes: the removal takes it too, so a fetch that starts meanwhile finds it taken and waits for nothing, and the files
+/// of a fetch in progress are not deleted from under it.
+pub fn remove_from(root: &Path, manifest: &[ManifestEntry], assets: &Assets) -> Result<u64, String> {
+    if !assets.begin(0, 0) {
+        return Err("Il download è in corso: fermalo prima di cancellare.".into());
+    }
+    let outcome = remove_files(root, manifest);
+    assets.update(|progress| {
+        progress.running = false;
+        progress.error = None;
+    });
+    outcome
+}
+
+fn remove_files(root: &Path, manifest: &[ManifestEntry]) -> Result<u64, String> {
+    let mut freed = 0;
+    let mut folders: Vec<PathBuf> = Vec::new();
+    for entry in manifest {
+        let file = root.join(entry.path);
+        for target in [file.clone(), staging(&file)] {
+            match std::fs::metadata(&target) {
+                Ok(meta) if meta.is_file() => {
+                    let size = meta.len();
+                    std::fs::remove_file(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+                    freed += size;
+                }
+                _ => {}
+            }
+        }
+        let mut parent = file.parent().map(Path::to_path_buf);
+        while let Some(dir) = parent {
+            if dir == root || !dir.starts_with(root) {
+                break;
+            }
+            if !folders.contains(&dir) {
+                folders.push(dir.clone());
+            }
+            parent = dir.parent().map(Path::to_path_buf);
+        }
+    }
+    // Deepest first, so a folder is empty by the time it is asked; `remove_dir` refuses one that is not, which is the check.
+    folders.sort_by_key(|dir| std::cmp::Reverse(dir.components().count()));
+    for dir in folders {
+        let _ = std::fs::remove_dir(&dir);
+    }
+    let _ = std::fs::remove_dir(root);
+    Ok(freed)
+}
+
+#[tauri::command]
+pub async fn nikverse_assets_bytes(app: tauri::AppHandle) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(target(crate::nikverse::source(&app)).map(|root| installed_bytes(root, MANIFEST)).unwrap_or(0))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Takes the fetched assets off the disk; the bytes freed (nothing in a debug build, which reads the sources and has none fetched).
+#[tauri::command]
+pub async fn nikverse_assets_remove(app: tauri::AppHandle) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Assets>();
+        match target(crate::nikverse::source(&app)) {
+            Some(root) => remove_from(root, MANIFEST, &state),
+            None => Ok(0),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Fetches what is missing. Returns when it is over (the panel watches the progress meanwhile); an error comes back as the message to show.
 #[tauri::command]
 pub async fn nikverse_assets_install(app: tauri::AppHandle) -> Result<(), String> {
@@ -575,5 +664,101 @@ mod tests {
         assert!(!root.0.join("b.txt").exists() && !root.0.join("b.txt.part").exists());
         assert_eq!(assets.read().files_done, 1);
         assert_eq!(assets.read().error.as_deref(), Some(error.as_str()));
+    }
+    // ---- taking the assets away (C4 of the file hygiene)
+
+    fn fetched(scratch: &Scratch, manifest: &[ManifestEntry], bodies: &[&[u8]]) {
+        for (entry, body) in manifest.iter().zip(bodies) {
+            let dest = scratch.0.join(entry.path);
+            std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            std::fs::write(dest, body).unwrap();
+        }
+    }
+
+    #[test]
+    fn what_the_assets_weigh_is_the_listed_files_that_are_there_and_the_half_fetched_ones() {
+        let scratch = Scratch::new();
+        let manifest = [entry("models/a.glb", b"aaaa"), entry("city.js", b"bb"), entry("lights/c.ktx2", b"c")];
+        fetched(&scratch, &manifest[..2], &[b"aaaa", b"bb"]);
+        std::fs::create_dir_all(scratch.0.join("lights")).unwrap();
+        std::fs::write(scratch.0.join("lights/c.ktx2.part"), b"cc").unwrap();
+        assert_eq!(installed_bytes(&scratch.0, &manifest), 4 + 2 + 2);
+        assert_eq!(installed_bytes(&scratch.0.join("nowhere"), &manifest), 0);
+    }
+
+    #[test]
+    fn removing_frees_what_was_counted_and_leaves_no_folder_of_its_own_behind() {
+        let scratch = Scratch::new();
+        let manifest = [entry("models/a.glb", b"aaaa"), entry("models/deep/b.glb", b"bbb"), entry("city.js", b"cc")];
+        fetched(&scratch, &manifest, &[b"aaaa", b"bbb", b"cc"]);
+        let counted = installed_bytes(&scratch.0, &manifest);
+        assert_eq!(remove_from(&scratch.0, &manifest, &Assets::default()), Ok(counted));
+        assert!(!scratch.0.exists(), "the root is removed once it is empty");
+    }
+
+    #[test]
+    fn a_half_fetched_file_goes_too() {
+        let scratch = Scratch::new();
+        let manifest = [entry("a.glb", b"aaaa")];
+        fetched(&scratch, &manifest, &[b"aaaa"]);
+        std::fs::write(scratch.0.join("a.glb.part"), b"aa").unwrap();
+        assert_eq!(remove_from(&scratch.0, &manifest, &Assets::default()), Ok(6));
+        assert!(!scratch.0.join("a.glb.part").exists());
+    }
+
+    #[test]
+    fn what_the_list_does_not_name_is_not_touched_and_keeps_its_folder() {
+        let scratch = Scratch::new();
+        let manifest = [entry("models/a.glb", b"aaaa")];
+        fetched(&scratch, &manifest, &[b"aaaa"]);
+        std::fs::write(scratch.0.join("models/mine.txt"), b"keep").unwrap();
+        std::fs::write(scratch.0.join("readme.md"), b"keep").unwrap();
+        assert_eq!(remove_from(&scratch.0, &manifest, &Assets::default()), Ok(4));
+        assert_eq!(std::fs::read(scratch.0.join("models/mine.txt")).unwrap(), b"keep");
+        assert_eq!(std::fs::read(scratch.0.join("readme.md")).unwrap(), b"keep");
+        assert!(!scratch.0.join("models/a.glb").exists());
+    }
+
+    #[test]
+    fn nothing_fetched_frees_nothing_and_is_not_an_error() {
+        let scratch = Scratch::new();
+        let manifest = [entry("a.glb", b"aaaa")];
+        assert_eq!(remove_from(&scratch.0, &manifest, &Assets::default()), Ok(0));
+    }
+
+    #[test]
+    fn it_is_refused_while_a_fetch_is_running_and_nothing_is_deleted() {
+        let scratch = Scratch::new();
+        let manifest = [entry("a.glb", b"aaaa")];
+        fetched(&scratch, &manifest, &[b"aaaa"]);
+        let assets = Assets::default();
+        assert!(assets.begin(1, 4), "a fetch takes its turn");
+        let refused = remove_from(&scratch.0, &manifest, &assets);
+        assert!(refused.unwrap_err().contains("download è in corso"));
+        assert!(scratch.0.join("a.glb").is_file());
+        assert!(assets.read().running, "the fetch's turn is still the fetch's");
+    }
+
+    #[test]
+    fn the_turn_is_given_back_so_a_fetch_can_follow() {
+        let scratch = Scratch::new();
+        let manifest = [entry("a.glb", b"aaaa")];
+        fetched(&scratch, &manifest, &[b"aaaa"]);
+        let assets = Assets::default();
+        remove_from(&scratch.0, &manifest, &assets).unwrap();
+        assert!(!assets.read().running);
+        assert!(assets.begin(1, 4));
+    }
+
+    #[test]
+    fn a_fetch_after_the_removal_brings_the_files_back() {
+        let scratch = Scratch::new();
+        let manifest = [entry("models/a.glb", b"aaaa")];
+        fetched(&scratch, &manifest, &[b"aaaa"]);
+        let assets = Assets::default();
+        remove_from(&scratch.0, &manifest, &assets).unwrap();
+        let fetcher = table(&manifest, &[b"aaaa"]);
+        install_into(&scratch.0, &manifest, &url_of, &fetcher, &assets, &never).unwrap();
+        assert!(present(&scratch.0, &manifest[0]));
     }
 }

@@ -245,6 +245,13 @@ export interface Host {
   ttsLocalStop?: () => Promise<void>
   /** Takes the second backend away again; the host answers with the bytes freed. */
   ttsLocalDelete?: (provider: string) => Promise<void>
+  /**
+   * Takes a Piper voice off the disk (and the runtime with the last one), or all of Piper without a voice id; the bytes freed.
+   * Refused while a synthesis is running or a download is writing into those files.
+   */
+  ttsPiperDelete?: (voiceId?: string) => Promise<number>
+  /** What the local voices weigh on this disk: Piper's runtime and each installed voice, and Kokoro. */
+  ttsDiskReport?: () => Promise<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
@@ -255,6 +262,10 @@ export interface Host {
   nikverseAssetsStatus?: () => Promise<AssetsStatus>
   /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
   nikverseAssetsInstall?: () => Promise<void>
+  /** What the fetched NikVerse assets weigh on this disk (0 in a debug build, which has none). */
+  nikverseAssetsBytes?: () => Promise<number>
+  /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
+  nikverseAssetsRemove?: () => Promise<number>
   /**
    * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
    * back and remove a version. All of them answer to the main window only.
@@ -380,6 +391,17 @@ export interface Host {
   claudeVersion?: () => Promise<string | null>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
+  /**
+   * Removes files ADE left in a project's `.ade/` (captures, results, design notes: `session/ade-prune.ts` chooses which); the bytes freed.
+   * The host refuses any path that is not a plain file of one of those three folders inside an open project.
+   */
+  adePrune?: (paths: string[]) => Promise<number>
+  /** Removes the `<project>-worktrees` folder beside an open project, when nothing is left in it; whether it was removed. */
+  adeContainerRemove?: (root: string) => Promise<boolean>
+  /** What a worktree folder beside an open project weighs (0 for anything that is not one). */
+  adeWorktreeBytes?: (root: string, worktree: string) => Promise<number>
+  /** Moves a session's results, captures and design notes from its worktree's `.ade/` into the project's, before the worktree goes; throws when it cannot. */
+  adeWorktreeRescue?: (root: string, worktree: string) => Promise<number>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -501,6 +523,26 @@ export async function getHost(): Promise<Host | undefined> {
     async claudeVersion() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string | null>("claude_version").catch(() => null)
+    },
+
+    async adeWorktreeRescue(root, worktree) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_worktree_rescue", { root, worktree })
+    },
+
+    async adeWorktreeBytes(root, worktree) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_worktree_bytes", { root, worktree })
+    },
+
+    async adeContainerRemove(root) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<boolean>("ade_container_remove", { root })
+    },
+
+    async adePrune(paths) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_prune", { paths })
     },
 
     async deleteBotFile(path) {
@@ -798,6 +840,16 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("nikverse_assets_install")
     },
 
+    async nikverseAssetsBytes() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("nikverse_assets_bytes")
+    },
+
+    async nikverseAssetsRemove() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("nikverse_assets_remove")
+    },
+
     async pluginList() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<InstalledPlugin[]>("plugin_list")
@@ -864,6 +916,16 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalInstall(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_local_install", { provider })
+    },
+
+    async ttsDiskReport() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>("tts_disk_report")
+    },
+
+    async ttsPiperDelete(voiceId) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("tts_piper_delete", { voiceId: voiceId ?? null })
     },
 
     async ttsLocalDelete(provider) {
