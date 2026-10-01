@@ -885,6 +885,8 @@ export function SessionPane(props: SessionPaneProps) {
               onMouseMode: setMouseReporting,
               onLink: (request) => props.onLink?.(request),
               menuClicks: () => props.agent === "claude-code",
+              // ADE starts Claude Code with its clicks off (`pty.rs`): the wheel is Claude's, the left button ADE's.
+              wheelOnly: () => props.agent === "claude-code",
             })
             onCleanup(detach)
           }}

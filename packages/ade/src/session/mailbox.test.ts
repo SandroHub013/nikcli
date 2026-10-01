@@ -41,6 +41,8 @@ import {
   sessionsTable,
   verifySender,
   unverifiedSenderRefusal,
+  shellRefusal,
+  typesMailInto,
   formatNudge,
   formatUpdate,
   parseActivity,
@@ -186,6 +188,37 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
     expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBeUndefined()
   }
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
+})
+
+describe("a terminal pane runs a shell: mail is never typed into it", () => {
+  const shell = { id: "n4-3", title: "Terminale", agent: "terminal", status: "idle" }
+  const all = [...panes, shell]
+  const kinds = ["send", "ask"] as const
+
+  test("a send or an ask to it is refused, with the reason, whichever way it is addressed", () => {
+    for (const to of ["n4-3", "4", "Terminale", "terminal"]) {
+      const resolved = resolveTarget(all, to, "n1-0")
+      if ("error" in resolved) throw new Error(resolved.error)
+      for (const kind of kinds) {
+        const refusal = shellRefusal(kind, resolved.pane)
+        expect([to, kind, refusal?.startsWith("errore: ")]).toEqual([to, kind, true])
+        expect(refusal).toContain('"Terminale"')
+        expect(refusal).toContain("shell")
+      }
+    }
+  })
+
+  test("a session with an agent is not refused, nor is any other kind of message", () => {
+    for (const pane of panes) for (const kind of kinds) expect(shellRefusal(kind, pane)).toBeUndefined()
+    for (const kind of ["reply", "update", "cancel", "interrupt", "close", "relaunch"] as const)
+      expect(shellRefusal(kind, shell)).toBeUndefined()
+    expect(shellRefusal("send", { title: "senza agente" })).toBeUndefined()
+  })
+
+  test("held lines are typed for an agent and for a pane without a known agent, never for a shell", () => {
+    expect(typesMailInto("terminal")).toBe(false)
+    for (const agent of ["claude-code", "codex", "agy", "nikcli", undefined]) expect(typesMailInto(agent)).toBe(true)
+  })
 })
 
 test("an unverified design is refused: a page opens beside a session only for that session", () => {

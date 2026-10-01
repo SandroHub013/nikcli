@@ -250,7 +250,11 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
  * everywhere, as its hint does. The wheel and the right and middle buttons
  * were the program's already.
  */
-export function configureTerminalSelection(terminal: Terminal, overLink: () => boolean = () => false): void {
+export function configureTerminalSelection(
+  terminal: Terminal,
+  overLink: () => boolean = () => false,
+  wheelOnly: () => boolean = () => false,
+): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
@@ -261,7 +265,7 @@ export function configureTerminalSelection(terminal: Terminal, overLink: () => b
      */
     sel.shouldForceSelection = (event: MouseEvent) =>
       (event.button === 0 || event.button === undefined) &&
-      (event.shiftKey || (Boolean(event.ctrlKey || event.metaKey) && overLink()))
+      (event.shiftKey || (Boolean(event.ctrlKey || event.metaKey) && overLink()) || wheelOnly())
   }
   /*
    * A Shift+drag begun in a pane that had not the focus was cleared at once:
@@ -544,6 +548,27 @@ export interface AttachOptions {
   onLink?: (request: LinkRequest) => void
   /** Whether a click on a keyboard menu becomes its keys, through `onInput`: Claude Code's. See `menu-click.ts`. */
   menuClicks?: () => boolean
+  /**
+   * Whether this pane's program was started with its clicks off, the wheel
+   * kept: Claude Code, with `CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1` (`pty.rs`,
+   * `agent_env`). See `programHasWheelOnly`.
+   */
+  wheelOnly?: () => boolean
+}
+
+/**
+ * Whether the program asked for the mouse only to have the wheel.
+ *
+ * Claude Code 2.1.284 draws full screen and asks for the whole mouse, and a
+ * click then chose and confirmed a menu entry at once. ADE starts it with its
+ * clicks off: it asks for button reports (1000) only to get the wheel, and
+ * takes no click. The left button is ADE's again there: a click is step B's
+ * (`menu-click.ts`), a drag selects and copies, a link opens on a click.
+ * Only in mode 1000: a Claude that still asks for drags or motion (1002,
+ * 1003) wants its clicks, and keeps them.
+ */
+export function programHasWheelOnly(terminal: Pick<Terminal, "modes">, wheelOnly: boolean): boolean {
+  return wheelOnly && terminal.modes.mouseTrackingMode === "vt200"
 }
 
 /**
@@ -671,7 +696,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   }
   session.element = element
   let overLink = false
-  configureTerminalSelection(session.terminal, () => overLink)
+  const wheelOnly = () => programHasWheelOnly(session.terminal, Boolean(options.wheelOnly?.()))
+  configureTerminalSelection(session.terminal, () => overLink, wheelOnly)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 
@@ -687,14 +713,20 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
         })
 
   const stopLinks = options.onLink
-    ? registerLinks(terminal, element, options.onLink, (hovered) => {
-        overLink = hovered
-      })
+    ? registerLinks(
+        terminal,
+        element,
+        options.onLink,
+        (hovered) => {
+          overLink = hovered
+        },
+        () => terminal.modes.mouseTrackingMode !== "none" && !wheelOnly(),
+      )
     : undefined
   const onInput = options.onInput
   const stopMenuClicks =
     options.menuClicks && onInput
-      ? registerMenuClicks(terminal, element, { enabled: options.menuClicks, send: onInput })
+      ? registerMenuClicks(terminal, element, { enabled: options.menuClicks, send: onInput, wheelOnly })
       : undefined
 
   session.copyBlocked = options.onCopyBlocked
@@ -709,7 +741,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   let modeTimer: ReturnType<typeof setTimeout> | undefined
   const readMode = () => {
     modeTimer = undefined
-    const now = terminal.modes.mouseTrackingMode !== "none"
+    // The hint says Shift+drag; where a plain drag selects, it would be wrong.
+    const now = terminal.modes.mouseTrackingMode !== "none" && !wheelOnly()
     if (now === reporting) return
     reporting = now
     options.onMouseMode?.(now)
