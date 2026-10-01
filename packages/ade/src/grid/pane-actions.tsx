@@ -10,7 +10,13 @@ import { t } from "../i18n"
  * so the header this sits in carries `class="pill hA"`. `children` goes
  * before expand, for a pane's own button in the same row.
  */
-export function PaneActions(props: { onExpand?: () => void; onClose?: () => void; children?: JSX.Element }) {
+export function PaneActions(props: {
+  onExpand?: () => void
+  onClose?: () => void
+  /** The pane fills the grid: the button says «Riduci», not «Ingrandisci». */
+  expanded?: boolean
+  children?: JSX.Element
+}) {
   return (
     <span class="acts" data-slot="pane-actions">
       {props.children}
@@ -19,8 +25,8 @@ export function PaneActions(props: { onExpand?: () => void; onClose?: () => void
         class="act"
         data-slot="pane-action"
         onClick={() => props.onExpand?.()}
-        aria-label={t("pane.expand")}
-        title={t("pane.expand")}
+        aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}
+        title={props.expanded ? t("pane.restore") : t("pane.expand")}
       >
         <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
           <path

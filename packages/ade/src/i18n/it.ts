@@ -443,6 +443,7 @@ export const it = {
 
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",
+  "pane.restore": "Riduci",
   "pane.copied": "Copiato",
   "pane.noticeDismiss": "Chiudi la nota",
   "pane.copyBlocked": "Non copiato: durante la ripresa la selezione tocca una riga coperta",
@@ -462,8 +463,10 @@ export const it = {
   "pane.link.unc": "percorso di rete non aperto",
   "pane.link.outside": "fuori dal progetto",
   "pane.link.outsideConfirm": "fuori dal progetto: clicca di nuovo per aprirlo",
-  "pane.mouseHint": "Alt+clic al programma",
-  "pane.mouseHint.tip": "Il clic sinistro seleziona e copia. Per mandare un clic al programma, tieni Alt.",
+  "pane.mouseHint": "Maiusc+trascina per selezionare",
+  "pane.mouseHint.short": "Maiusc+trascina",
+  "pane.mouseHint.tip":
+    "Il programma riceve i clic e la rotella. Per selezionare e copiare il testo, tieni Maiusc e trascina. Ctrl+clic apre un link.",
   "pane.close": "Chiudi",
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",

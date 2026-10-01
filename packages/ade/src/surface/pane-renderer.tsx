@@ -398,6 +398,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         model={current().model}
         mode={current().mode}
         agent={current().agent}
+        expanded={wb().expandedId === current().id}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
         suspend={(() => {
