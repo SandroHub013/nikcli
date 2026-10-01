@@ -321,7 +321,7 @@ fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
 /// `~/AppData/Roaming/nikcli/plugin/tui`, a folder nikcli never scans, and the
 /// panel said it was installed (lettura di Mimo, F1). Arguments rather than
 /// the environment, so both platforms are tested on either.
-fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String>, home: Option<PathBuf>) -> Option<PathBuf> {
+pub(crate) fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String>, home: Option<PathBuf>) -> Option<PathBuf> {
     let set = |value: Option<String>| value.filter(|value| !value.trim().is_empty()).map(PathBuf::from);
     if windows {
         set(appdata).or_else(|| home.map(|home| home.join("AppData").join("Roaming")))
@@ -336,7 +336,7 @@ fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String
 /// tests below can point it somewhere harmless: these functions write into the
 /// real `~/.claude`, and a test that did that would be a bug report from the
 /// user's next Claude Code session.
-fn dirs_home() -> Option<PathBuf> {
+pub(crate) fn dirs_home() -> Option<PathBuf> {
     #[cfg(windows)]
     let candidates = ["USERPROFILE", "HOME"];
     #[cfg(not(windows))]
@@ -766,6 +766,150 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     })
 }
 
+/*
+ * Taking ADE out of the other programs, when ADE is uninstalled.
+ *
+ * The hooks in `~/.claude` and `~/.codex` and the plugin in nikcli's folder are files of other programs that ADE wrote with the user's
+ * consent, and they run a script of ADE's every time that program starts. Left behind after an uninstall they go on launching PowerShell for
+ * a script of an application that is no longer there. `ade-desktop.exe --unlink-agents` (the installer's PREUNINSTALL hook, never on an
+ * update) takes them out with the same rules as the panel's «Rimuovi»: only ADE's own entries leave the configuration (the same check as an
+ * install, so a configuration that would change in anything else is refused and left as it is), then ADE's script, then the folders the
+ * install made if they are empty. A configuration that is not JSON is not touched, and then neither is its script.
+ */
+
+/// A hook configuration with ADE's entries taken out, or `None` when it held none. Mirrors `removeHook` in `agent-hooks.ts`: a group that held
+/// only ADE's hook goes with it, one that held it beside someone else's keeps the someone else, an event emptied of ADE's entry goes unless it is
+/// `SessionStart` (an empty list the user can see is less surprising than a key that vanished). Anything that is not a group of hooks is
+/// somebody's hand edit and goes back as it came. The file keeps its key order (`preserve_order`).
+fn config_without_ade(text: &str) -> Result<Option<String>, String> {
+    use serde_json::Value;
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    let mut config: Value = serde_json::from_str(text).map_err(|e| format!("configurazione non leggibile, non la tocco: {e}"))?;
+    let Some(hooks) = config.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return Ok(None);
+    };
+    let is_ade = |leaf: &Value| command_of(leaf).is_some_and(|command| command.contains(SCRIPT_NAME));
+    let mut changed = false;
+    let events: Vec<String> = hooks.keys().cloned().collect();
+    for event in events {
+        let Some(groups) = hooks.get(&event).and_then(Value::as_array) else { continue };
+        let holds_ade = groups.iter().any(|group| group.get("hooks").and_then(Value::as_array).is_some_and(|leaves| leaves.iter().any(is_ade)));
+        if !holds_ade {
+            continue;
+        }
+        let mut kept: Vec<Value> = Vec::new();
+        for group in groups {
+            let Some(leaves) = group.get("hooks").and_then(Value::as_array) else {
+                kept.push(group.clone());
+                continue;
+            };
+            let others: Vec<Value> = leaves.iter().filter(|leaf| !is_ade(leaf)).cloned().collect();
+            if others.len() == leaves.len() {
+                kept.push(group.clone());
+            } else if !others.is_empty() {
+                let mut group = group.clone();
+                group["hooks"] = Value::Array(others);
+                kept.push(group);
+            }
+        }
+        if kept.is_empty() && event != "SessionStart" {
+            hooks.shift_remove(&event);
+        } else {
+            hooks.insert(event, Value::Array(kept));
+        }
+        changed = true;
+    }
+    if !changed {
+        return Ok(None);
+    }
+    Ok(Some(format!("{}\n", serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?)))
+}
+
+/// What taking ADE out of one program did.
+#[derive(Debug, PartialEq)]
+pub enum Unlinked {
+    /// ADE had nothing there.
+    Nothing,
+    /// Its entry, its script or its plugin was taken out.
+    Removed,
+}
+
+fn path_in(base: &Path, segments: &[&str]) -> PathBuf {
+    segments.iter().fold(base.to_path_buf(), |path, segment| path.join(segment))
+}
+
+/// Takes ADE out of one target, with its bases given: `home` for `~`, `config_home` for nikcli's configuration folder.
+fn unlink_target(target: &HookTarget, home: &Path, config_home: &Path) -> Result<Unlinked, String> {
+    let base = match target.base {
+        Base::Home => home,
+        Base::ConfigHome => config_home,
+    };
+    let script = path_in(base, target.script);
+    if target.config.is_empty() {
+        // A plugin: one file, and the two folders the install made if they are empty.
+        if !script.is_file() {
+            return Ok(Unlinked::Nothing);
+        }
+        write_plugin_file(&script, None, |_| false)?;
+        return Ok(Unlinked::Removed);
+    }
+    let config = path_in(base, target.config);
+    let current = fs::read_to_string(&config).ok();
+    let next = match current.as_deref() {
+        Some(text) => config_without_ade(text)?,
+        None => None,
+    };
+    let script_there = script.is_file();
+    if next.is_none() && !script_there {
+        return Ok(Unlinked::Nothing);
+    }
+    match next {
+        // The same check and the same writes as the panel's removal: ADE's entries only, the script, then the configuration.
+        Some(text) => write_hook_files(&config, &script, &text, None, |_| false)?,
+        // No entry of ADE's in the configuration, only a script lying there: nothing runs it, and it is ADE's.
+        None => match fs::remove_file(&script) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("script non rimosso: {error}")),
+        },
+    }
+    // `.claude/hooks` is a folder ADE may have made: gone when empty, and never when it holds anything else.
+    if target.script.len() > 2 {
+        if let Some(folder) = script.parent() {
+            let _ = fs::remove_dir(folder);
+        }
+    }
+    Ok(Unlinked::Removed)
+}
+
+/// Takes ADE out of every program it knows, each on its own: one that fails does not stop the others. `(target, result)` for each.
+pub fn unlink_all(home: &Path, config_home: &Path) -> Vec<(&'static str, Result<Unlinked, String>)> {
+    HOOK_TARGETS.iter().map(|target| (target.id, unlink_target(target, home, config_home))).collect()
+}
+
+/// `--unlink-agents`: from the environment's home. The exit code: 0 when every program is clean now, 1 when one could not be.
+pub fn unlink_from_env() -> i32 {
+    let Some(home) = dirs_home() else {
+        eprintln!("ADE: cartella utente non trovata, hook non tolti");
+        return 1;
+    };
+    let config = config_home(cfg!(windows), std::env::var("APPDATA").ok(), std::env::var("XDG_CONFIG_HOME").ok(), Some(home.clone()));
+    let Some(config) = config else {
+        eprintln!("ADE: cartella di configurazione non trovata, hook non tolti");
+        return 1;
+    };
+    let mut code = 0;
+    for (id, result) in unlink_all(&home, &config) {
+        if let Err(error) = result {
+            eprintln!("ADE: hook di {id} non tolto: {error}");
+            code = 1;
+        }
+    }
+    code
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1178,5 +1322,179 @@ mod tests {
         let mut own = exec_entry("powershell", &script, &[]);
         own["timeout"] = serde_json::json!(10);
         assert_eq!(check_hook_config(Some(&current), &with_ade_entry(own), &command), Ok(()));
+    }
+
+    // ----- taking ADE out when it is uninstalled: a home that is not the user's -----
+
+    /// A made-up home and nikcli configuration folder, in a folder of their own under the test TEMP; never the real `~`.
+    fn fake_home(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let (_, _, dir) = hook_scratch(tag);
+        let home = dir.join("home");
+        let config = dir.join("appdata");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&config).unwrap();
+        (dir, home, config)
+    }
+
+    /// ADE's SessionStart entry beside a user's own, in Claude Code's file; the keys in an order that is not alphabetical.
+    fn claude_settings(script: &Path) -> String {
+        serde_json::json!({
+            "theme": "dark",
+            "model": "opus",
+            "hooks": {
+                "Stop": [{ "hooks": [{ "type": "command", "command": "notify" }] }],
+                "SessionStart": [
+                    { "matcher": "startup", "hooks": [exec_entry("powershell", script, &[]), { "type": "command", "command": "mine" }] },
+                    { "matcher": "resume", "hooks": [exec_entry("powershell", script, &[])] }
+                ],
+                "UserPromptSubmit": [{ "hooks": [exec_entry("powershell", script, &[])] }]
+            },
+            "permissions": { "allow": ["Bash"] }
+        })
+        .to_string()
+    }
+
+    /// The three programs ADE can be in, all installed.
+    fn install_everywhere(home: &Path, config: &Path) {
+        let claude_script = home.join(".claude").join("hooks").join(SCRIPT_NAME);
+        fs::create_dir_all(claude_script.parent().unwrap()).unwrap();
+        fs::write(&claude_script, "# ade").unwrap();
+        fs::write(home.join(".claude").join("settings.json"), claude_settings(&claude_script)).unwrap();
+        let codex_script = home.join(".codex").join(SCRIPT_NAME);
+        fs::create_dir_all(codex_script.parent().unwrap()).unwrap();
+        fs::write(&codex_script, "# ade").unwrap();
+        fs::write(
+            home.join(".codex").join("hooks.json"),
+            serde_json::json!({ "hooks": { "SessionStart": [{ "hooks": [exec_entry("powershell", &codex_script, &[])] }] } }).to_string(),
+        )
+        .unwrap();
+        let plugin = config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME);
+        fs::create_dir_all(plugin.parent().unwrap()).unwrap();
+        fs::write(&plugin, "// ade").unwrap();
+    }
+
+    #[test]
+    fn uninstalling_takes_ade_out_of_claude_codex_and_nikcli_and_leaves_what_is_theirs() {
+        let (dir, home, config) = fake_home("unlink-all");
+        install_everywhere(&home, &config);
+        fs::write(home.join(".claude").join("history.jsonl"), "x").unwrap();
+
+        let done = unlink_all(&home, &config);
+        assert_eq!(
+            done.iter().map(|(id, result)| (*id, result.as_ref().map(|r| r == &Unlinked::Removed))).collect::<Vec<_>>(),
+            vec![("claude-code", Ok(true)), ("codex", Ok(true)), ("nikcli", Ok(true))]
+        );
+
+        // The scripts and the plugin are gone, and the folders the install made with them.
+        assert!(!home.join(".claude").join("hooks").exists());
+        assert!(!home.join(".codex").join(SCRIPT_NAME).exists());
+        assert!(!config.join("nikcli").join("plugin").exists());
+        // Claude's file: ADE's entries are out, the user's are in, in the order they were written.
+        let settings = fs::read_to_string(home.join(".claude").join("settings.json")).unwrap();
+        assert!(!settings.contains(SCRIPT_NAME));
+        let parsed: serde_json::Value = serde_json::from_str(&settings).unwrap();
+        assert_eq!(parsed.as_object().unwrap().keys().collect::<Vec<_>>(), vec!["theme", "model", "hooks", "permissions"]);
+        assert_eq!(parsed["hooks"]["Stop"][0]["hooks"][0]["command"], "notify");
+        assert_eq!(parsed["hooks"]["SessionStart"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["hooks"]["SessionStart"][0]["matcher"], "startup");
+        assert_eq!(parsed["hooks"]["SessionStart"][0]["hooks"], serde_json::json!([{ "type": "command", "command": "mine" }]));
+        // An event that held only ADE's entry is not left behind empty.
+        assert!(parsed["hooks"].get("UserPromptSubmit").is_none());
+        assert_eq!(parsed["permissions"]["allow"][0], "Bash");
+        assert!(settings.ends_with("}\n"));
+        // Codex's file stays, with an empty list where ADE's was; nothing else of the user's was touched.
+        let codex: serde_json::Value = serde_json::from_str(&fs::read_to_string(home.join(".codex").join("hooks.json")).unwrap()).unwrap();
+        assert_eq!(codex["hooks"]["SessionStart"], serde_json::json!([]));
+        assert!(home.join(".claude").join("history.jsonl").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_second_time_there_is_nothing_to_take_out_and_nothing_is_created() {
+        let (dir, home, config) = fake_home("unlink-twice");
+        install_everywhere(&home, &config);
+        unlink_all(&home, &config);
+        let settings = fs::read_to_string(home.join(".claude").join("settings.json")).unwrap();
+        assert!(unlink_all(&home, &config).iter().all(|(_, result)| result == &Ok(Unlinked::Nothing)));
+        assert_eq!(fs::read_to_string(home.join(".claude").join("settings.json")).unwrap(), settings);
+
+        // A computer that never had ADE's hooks: no folder appears in the programs' homes.
+        let (clean, home, config) = fake_home("unlink-never");
+        assert!(unlink_all(&home, &config).iter().all(|(_, result)| result == &Ok(Unlinked::Nothing)));
+        assert!(!home.join(".claude").exists() && !home.join(".codex").exists() && !config.join("nikcli").exists());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&clean);
+    }
+
+    #[test]
+    fn a_script_with_no_entry_left_in_the_configuration_goes_alone() {
+        let (dir, home, config) = fake_home("unlink-script-only");
+        let script = home.join(".codex").join(SCRIPT_NAME);
+        fs::create_dir_all(script.parent().unwrap()).unwrap();
+        fs::write(&script, "# ade").unwrap();
+        let theirs = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"mine"}]}]}}"#;
+        fs::write(home.join(".codex").join("hooks.json"), theirs).unwrap();
+        let done = unlink_all(&home, &config);
+        assert_eq!(done[1], ("codex", Ok(Unlinked::Removed)));
+        assert!(!script.exists());
+        // The configuration was not even rewritten.
+        assert_eq!(fs::read_to_string(home.join(".codex").join("hooks.json")).unwrap(), theirs);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_configuration_that_is_not_json_is_left_as_it_is_and_so_is_its_script() {
+        let (dir, home, config) = fake_home("unlink-garbage");
+        install_everywhere(&home, &config);
+        let settings = home.join(".claude").join("settings.json");
+        fs::write(&settings, "{ \"hooks\": // a comment\n }").unwrap();
+        let done = unlink_all(&home, &config);
+        assert!(done[0].1.is_err(), "{:?}", done[0]);
+        assert_eq!(fs::read_to_string(&settings).unwrap(), "{ \"hooks\": // a comment\n }");
+        assert!(home.join(".claude").join("hooks").join(SCRIPT_NAME).exists());
+        // One that fails does not stop the others.
+        assert_eq!(done[1].1, Ok(Unlinked::Removed));
+        assert_eq!(done[2].1, Ok(Unlinked::Removed));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_entry_that_carries_more_than_ades_own_fields_is_refused_and_nothing_is_removed() {
+        let (dir, home, config) = fake_home("unlink-smuggled");
+        let script = home.join(".claude").join("hooks").join(SCRIPT_NAME);
+        fs::create_dir_all(script.parent().unwrap()).unwrap();
+        fs::write(&script, "# ade").unwrap();
+        let mut entry = exec_entry("powershell", &script, &[]);
+        entry["env"] = serde_json::json!({ "X": "1" });
+        let text = with_ade_entry(entry);
+        fs::write(home.join(".claude").join("settings.json"), &text).unwrap();
+        let done = unlink_all(&home, &config);
+        assert!(done[0].1.is_err());
+        assert_eq!(fs::read_to_string(home.join(".claude").join("settings.json")).unwrap(), text);
+        assert!(script.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_with_something_of_the_users_in_it_stays_with_it() {
+        let (dir, home, config) = fake_home("unlink-foreign");
+        install_everywhere(&home, &config);
+        fs::write(home.join(".claude").join("hooks").join("mine.ps1"), "# mine").unwrap();
+        fs::write(config.join("nikcli").join("plugin").join("tui").join("other.js"), "// theirs").unwrap();
+        unlink_all(&home, &config);
+        assert!(home.join(".claude").join("hooks").join("mine.ps1").exists());
+        assert!(!home.join(".claude").join("hooks").join(SCRIPT_NAME).exists());
+        assert!(config.join("nikcli").join("plugin").join("tui").join("other.js").exists());
+        assert!(!config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_hook_text_with_no_ade_in_it_is_not_rewritten() {
+        assert_eq!(config_without_ade(""), Ok(None));
+        assert_eq!(config_without_ade("{}"), Ok(None));
+        assert_eq!(config_without_ade(r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify"}]}]}}"#), Ok(None));
+        assert_eq!(config_without_ade(r#"{"hooks":"not a table"}"#), Ok(None));
+        assert!(config_without_ade("not json").is_err());
     }
 }

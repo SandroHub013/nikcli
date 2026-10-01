@@ -37,6 +37,7 @@ mod mailbox;
 mod stats;
 mod tray;
 mod tts;
+mod uninstall;
 mod usage;
 mod vision;
 mod update;
@@ -2146,6 +2147,11 @@ pub fn run() {
     import_login_path();
 
     let context = tauri::generate_context!();
+    // The installer's own calls (`windows/hooks.nsh`): one flag, done before anything of the app starts, then out. Before the single-instance
+    // plugin too, so a running ADE is not told anything.
+    if let Some(code) = uninstall::dispatch(&std::env::args().skip(1).collect::<Vec<_>>(), &context.config().identifier) {
+        std::process::exit(code);
+    }
     let builder = tauri::Builder::default();
     // The first plugin: a second ADE of this identity ends before anything of its own starts.
     let builder = if tray::single_instance(&context.config().identifier, std::env::var("ADE_SINGLE_INSTANCE").ok().as_deref()) {

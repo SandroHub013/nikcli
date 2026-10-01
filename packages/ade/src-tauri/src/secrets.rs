@@ -92,6 +92,48 @@ impl Vault for SystemVault {
     }
 }
 
+/// What taking every secret out of the keychain did: how many names were cleared (a name the keychain never had counts, as it is clear
+/// either way) and the ones it refused, each with the keychain's words.
+#[derive(Debug, Default, PartialEq)]
+pub struct Forgotten {
+    pub cleared: u32,
+    pub failed: Vec<String>,
+}
+
+impl Forgotten {
+    pub fn one(&mut self, name: &str, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.cleared += 1,
+            Err(error) => self.failed.push(format!("{name}: {error}")),
+        }
+    }
+}
+
+/// Every key the index names, out of the vault; the index itself is left to whoever removes the folder. Used when ADE is uninstalled with
+/// «elimina i dati»: the keychain cannot list its own entries, so the index is the only list there is. One that will not go does not stop
+/// the others.
+pub fn forget_all_in(vault: &dyn Vault, service: &str, path: &std::path::Path) -> Forgotten {
+    let mut out = Forgotten::default();
+    for key in read_index(path).keys {
+        out.one(&key.name, vault.delete(service, &key.name));
+    }
+    out
+}
+
+/// `--delete-secrets`: the keys, and the gateway's bot tokens, of the app with this identifier. `config` and `data` are the app's configuration
+/// and data folders, where the key index and the gateway's state are. The exit code: 0 when every one is gone, 1 when the keychain refused one.
+pub fn forget_all(identifier: &str, config: &std::path::Path, data: &std::path::Path) -> i32 {
+    let vault = SystemVault;
+    let mut gone = forget_all_in(&vault, &format!("{identifier}.secrets"), &config.join("secrets-index.json"));
+    let tokens = crate::gateway::forget_all_tokens(&vault, &format!("{identifier}.gateway"), &data.join("gateway").join("state.json"));
+    gone.cleared += tokens.cleared;
+    gone.failed.extend(tokens.failed);
+    for failure in &gone.failed {
+        eprintln!("ADE: segreto non tolto dal portachiavi: {failure}");
+    }
+    i32::from(!gone.failed.is_empty())
+}
+
 /// Serialises index writes: two saves at once would each drop the other's key.
 #[derive(Default)]
 pub struct SecretsLock(Mutex<()>);
@@ -459,6 +501,60 @@ mod tests {
             self.0.lock().unwrap().remove(&(service.into(), name.into()));
             Ok(())
         }
+    }
+
+    #[test]
+    fn forgetting_every_key_takes_those_of_the_index_out_of_the_vault_and_nothing_else() {
+        let vault = MemoryVault::default();
+        let path = temp_index("forget-all");
+        save_in(&vault, "svc", &path, "openai", "OPENAI_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "altra", "ALTRA_API_KEY", vec![], Some("sk-altra-0000000000000"), 2).unwrap();
+        vault.set("svc", "fuori-indice", "non-in-indice-000000").unwrap();
+        vault.set("altro-servizio", "openai", "di-un-altra-app-000000").unwrap();
+        let gone = forget_all_in(&vault, "svc", &path);
+        assert_eq!(gone, Forgotten { cleared: 2, failed: vec![] });
+        assert_eq!(vault.get("svc", "openai").unwrap(), None);
+        assert_eq!(vault.get("svc", "altra").unwrap(), None);
+        // What the index does not name, and another service's entry of the same name, are not ADE's to take.
+        assert!(vault.get("svc", "fuori-indice").unwrap().is_some());
+        assert!(vault.get("altro-servizio", "openai").unwrap().is_some());
+        // The index is the folder's: it is not rewritten.
+        assert!(std::fs::read_to_string(&path).unwrap().contains("openai"));
+    }
+
+    #[test]
+    fn a_key_the_keychain_refuses_is_reported_and_the_others_still_go() {
+        struct Stubborn(MemoryVault);
+        impl Vault for Stubborn {
+            fn get(&self, service: &str, name: &str) -> Result<Option<String>, String> {
+                self.0.get(service, name)
+            }
+            fn set(&self, service: &str, name: &str, value: &str) -> Result<(), String> {
+                self.0.set(service, name, value)
+            }
+            fn delete(&self, service: &str, name: &str) -> Result<(), String> {
+                if name == "openai" {
+                    return Err("il portachiavi di sistema ha rifiutato l'operazione".into());
+                }
+                self.0.delete(service, name)
+            }
+        }
+        let vault = Stubborn(MemoryVault::default());
+        let path = temp_index("forget-stubborn");
+        save_in(&vault, "svc", &path, "openai", "OPENAI_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "altra", "ALTRA_API_KEY", vec![], Some("sk-altra-0000000000000"), 2).unwrap();
+        let gone = forget_all_in(&vault, "svc", &path);
+        assert_eq!(gone.cleared, 1);
+        assert_eq!(gone.failed.len(), 1);
+        assert!(gone.failed[0].starts_with("openai: "));
+        assert_eq!(vault.get("svc", "altra").unwrap(), None);
+    }
+
+    #[test]
+    fn no_index_is_no_keys() {
+        let vault = MemoryVault::default();
+        let path = temp_index("forget-none");
+        assert_eq!(forget_all_in(&vault, "svc", &path), Forgotten::default());
     }
 
     fn temp_index(tag: &str) -> PathBuf {
