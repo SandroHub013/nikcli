@@ -2286,6 +2286,7 @@ pub fn run() {
             usage::transcript_usage,
             mailbox::mailbox_take,
             tts::tts_piper_status,
+            tts::tts_piper_delete,
             tts::tts_piper_install,
             tts::tts_piper_speak,
             tts::tts_piper_stop,

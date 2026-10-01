@@ -533,6 +533,142 @@ pub struct PiperStop {
     busy: bool,
 }
 
+/// What a folder weighs, in bytes: every file below it. A link is not followed, so what is counted is what is on this disk under the folder.
+pub(crate) fn dir_bytes(folder: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(folder) else { return 0 };
+    entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| match std::fs::symlink_metadata(entry.path()) {
+            Ok(meta) if meta.is_dir() => dir_bytes(&entry.path()),
+            Ok(meta) if meta.is_file() => meta.len(),
+            _ => 0,
+        })
+        .sum()
+}
+
+fn file_bytes(file: &Path) -> u64 {
+    std::fs::metadata(file).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0)
+}
+
+/// A voice's two files: the model and its config.
+fn voice_files(root: &Path, id: &str) -> [PathBuf; 2] {
+    let model = model_path(root, id);
+    let config = model.with_extension("onnx.json");
+    [model, config]
+}
+
+/// What one installed voice weighs on disk.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct VoiceBytes {
+    pub id: &'static str,
+    pub bytes: u64,
+}
+
+/// What Piper holds on this machine: the runtime that every voice shares, and each voice that is there.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct PiperBytes {
+    pub runtime: u64,
+    pub voices: Vec<VoiceBytes>,
+}
+
+pub fn piper_bytes(root: &Path) -> PiperBytes {
+    let runtime = dir_bytes(&root.join("piper")) + dir_bytes(&root.join("scratch")) + file_bytes(&root.join("piper.zip.part"));
+    let voices = VOICES
+        .iter()
+        .map(|v| VoiceBytes { id: v.id, bytes: voice_files(root, v.id).iter().map(|f| file_bytes(f)).sum() })
+        .filter(|v| v.bytes > 0)
+        .collect();
+    PiperBytes { runtime, voices }
+}
+
+/// Removes a file; the bytes it weighed. One that is not there weighs nothing and is not an error: what was asked for is gone either way.
+fn remove_counted(file: &Path) -> Result<u64, String> {
+    let size = file_bytes(file);
+    match std::fs::remove_file(file) {
+        Ok(()) => Ok(size),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(e) => Err(format!("{}: {e}", file.display())),
+    }
+}
+
+/// Takes the runtime away: its folder, what a synthesis left in `scratch/`, and an archive that was never unpacked.
+fn remove_runtime(root: &Path) -> Result<u64, String> {
+    let mut freed = file_bytes(&root.join("piper.zip.part"));
+    let _ = std::fs::remove_file(root.join("piper.zip.part"));
+    for folder in ["piper", "scratch"] {
+        let dir = root.join(folder);
+        freed += dir_bytes(&dir);
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{}: {e}", dir.display())),
+        }
+    }
+    Ok(freed)
+}
+
+/// Takes Piper away from the disk, and says how much that freed.
+///
+/// With `voice`: that voice's two files, and the runtime too when no other voice is left to use it. With `None`: the runtime and every voice.
+/// Only the files ADE itself puts there are named (the pinned voices and the runtime's folder), so an id that came from the interface cannot
+/// point it anywhere else.
+pub fn remove_piper(root: &Path, voice: Option<&str>) -> Result<u64, String> {
+    let mut freed = 0;
+    match voice {
+        Some(id) => {
+            voice_of(id)?;
+            for file in voice_files(root, id) {
+                freed += remove_counted(&file)?;
+            }
+            if !VOICES.iter().any(|v| model_path(root, v.id).is_file()) {
+                freed += remove_runtime(root)?;
+            }
+        }
+        None => {
+            freed += remove_runtime(root)?;
+            for v in VOICES {
+                for file in voice_files(root, v.id) {
+                    freed += remove_counted(&file)?;
+                }
+            }
+        }
+    }
+    // `voices/` is left only if something is still in it; `remove_dir` refuses a folder that is not empty, which is the check.
+    let _ = std::fs::remove_dir(root.join("voices"));
+    Ok(freed)
+}
+
+/// `voice` for a removal: the same list of pinned voices, under the name this part uses.
+fn voice_of(id: &str) -> Result<&'static Voice, String> {
+    voice(id)
+}
+
+/// The removal with the two locks it needs, and no wait on either (it runs on the window's thread, like Kokoro's).
+///
+/// The installer's, so a download that is writing into these files is not deleted under: refused, with the words Kokoro's removal uses. And
+/// the resident process's: a synthesis holds it for as long as it runs, so a removal that finds it taken says so instead of waiting. When it
+/// is free the process is ended first, because a process with the model open does not give the model back (a DLL locked, on Windows).
+fn remove_locked(state: &Piper, root: &Path, voice: Option<&str>) -> Result<u64, String> {
+    let slot = state.installer.slot(PIPER);
+    let _install = state.installer.hold_for_removal(&slot)?;
+    let mut resident = match state.resident.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => return Err("C'è una sintesi in corso: aspetta che finisca prima di cancellare.".into()),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+    };
+    if forget_resident(&mut resident) {
+        state.clear_abandoned_for_stop();
+    }
+    remove_piper(root, voice)
+}
+
+/// Removes one Piper voice (and the runtime with the last one), or all of Piper; the bytes freed.
+#[tauri::command]
+pub fn tts_piper_delete(app: tauri::AppHandle, voice_id: Option<String>) -> Result<u64, String> {
+    let root = root(&app)?;
+    remove_locked(&app.state::<Piper>(), &root, voice_id.as_deref())
+}
+
 #[tauri::command]
 pub fn tts_piper_status(app: tauri::AppHandle, voice_id: String) -> Result<PiperStatus, String> {
     voice(&voice_id)?;
@@ -1523,6 +1659,120 @@ mod tests {
         assert!(!status.supported, "senza la release dell'host Kokoro non si offre");
         assert!(!status.installed);
         assert_eq!(status.size_bytes, None, "nessuna dimensione accanto a un pulsante che non c'è");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- taking Piper away (C3 of the file hygiene)
+
+    fn piper_folder(name: &str, voices: &[(&str, usize)], runtime: usize) -> PathBuf {
+        let root = test_root(name);
+        std::fs::create_dir_all(root.join("piper")).unwrap();
+        std::fs::create_dir_all(root.join("voices")).unwrap();
+        std::fs::write(exe_path(&root), vec![0u8; runtime]).unwrap();
+        std::fs::write(runtime_marker(&root), RUNTIME.sha256).unwrap();
+        for (id, bytes) in voices {
+            std::fs::write(model_path(&root, id), vec![0u8; *bytes]).unwrap();
+            std::fs::write(model_path(&root, id).with_extension("onnx.json"), vec![0u8; 10]).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn piper_reports_what_the_runtime_and_each_voice_weigh() {
+        let root = piper_folder("piper-bytes", &[("ugo", 1000), ("paola", 2000)], 500);
+        let report = piper_bytes(&root);
+        assert_eq!(report.runtime, 500 + RUNTIME.sha256.len() as u64);
+        assert_eq!(report.voices, vec![VoiceBytes { id: "ugo", bytes: 1010 }, VoiceBytes { id: "paola", bytes: 2010 }]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn piper_with_nothing_installed_weighs_nothing() {
+        let root = test_root("piper-nothing");
+        assert_eq!(piper_bytes(&root), PiperBytes { runtime: 0, voices: vec![] });
+        assert_eq!(remove_piper(&root, None), Ok(0));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn removing_a_voice_frees_its_two_files_and_keeps_the_runtime_while_another_voice_uses_it() {
+        let root = piper_folder("piper-one", &[("ugo", 1000), ("paola", 2000)], 500);
+        assert_eq!(remove_piper(&root, Some("ugo")), Ok(1010));
+        assert!(!model_path(&root, "ugo").exists());
+        assert!(!model_path(&root, "ugo").with_extension("onnx.json").exists());
+        assert!(model_path(&root, "paola").is_file());
+        assert!(runtime_ready(&root));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_last_voice_takes_the_runtime_with_it_and_the_bytes_are_all_counted() {
+        let root = piper_folder("piper-last", &[("ugo", 1000)], 500);
+        let runtime = piper_bytes(&root).runtime;
+        assert_eq!(remove_piper(&root, Some("ugo")), Ok(1010 + runtime));
+        assert!(!root.join("piper").exists());
+        assert!(!root.join("voices").exists(), "an empty voices/ is not left behind");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn removing_all_of_piper_takes_the_scratch_and_a_half_downloaded_archive_too() {
+        let root = piper_folder("piper-all", &[("ugo", 1000), ("lessac", 300)], 500);
+        std::fs::create_dir_all(root.join("scratch")).unwrap();
+        std::fs::write(root.join("scratch/0.wav"), vec![0u8; 77]).unwrap();
+        std::fs::write(root.join("piper.zip.part"), vec![0u8; 55]).unwrap();
+        let before = piper_bytes(&root);
+        let total = before.runtime + before.voices.iter().map(|v| v.bytes).sum::<u64>();
+        assert_eq!(remove_piper(&root, None), Ok(total));
+        assert!(!root.join("piper").exists() && !root.join("scratch").exists() && !root.join("piper.zip.part").exists());
+        assert_eq!(piper_bytes(&root), PiperBytes { runtime: 0, voices: vec![] });
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_voice_that_is_not_installed_frees_nothing_and_is_not_an_error() {
+        let root = piper_folder("piper-absent", &[("ugo", 1000)], 500);
+        assert_eq!(remove_piper(&root, Some("paola")), Ok(0));
+        assert!(model_path(&root, "ugo").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_id_the_interface_made_up_names_no_file() {
+        let root = piper_folder("piper-made-up", &[("ugo", 1000)], 500);
+        assert!(remove_piper(&root, Some("../../evil")).is_err());
+        assert!(remove_piper(&root, Some("giorgio")).is_err());
+        assert!(model_path(&root, "ugo").is_file());
+        assert!(runtime_ready(&root));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_removal_is_refused_while_a_synthesis_holds_the_resident_process_and_nothing_is_deleted() {
+        let root = piper_folder("piper-busy", &[("ugo", 1000)], 500);
+        let state = Piper::default();
+        let synthesis = state.lock_resident();
+        let refused = remove_locked(&state, &root, Some("ugo"));
+        assert!(refused.unwrap_err().contains("sintesi in corso"));
+        assert!(model_path(&root, "ugo").is_file());
+        assert!(runtime_ready(&root));
+        drop(synthesis);
+        // The synthesis ended: the same call goes through.
+        assert!(remove_locked(&state, &root, Some("ugo")).unwrap() > 1000);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_removal_is_refused_while_an_install_is_running_and_nothing_is_deleted() {
+        let root = piper_folder("piper-installing", &[("ugo", 1000)], 500);
+        let state = Piper::default();
+        let slot = state.installer.slot(PIPER);
+        let install = state.installer.hold_for_removal(&slot).unwrap();
+        let refused = remove_locked(&state, &root, None);
+        assert!(refused.unwrap_err().contains("installazione in corso"));
+        assert!(model_path(&root, "ugo").is_file());
+        drop(install);
+        assert!(remove_locked(&state, &root, None).is_ok());
         let _ = std::fs::remove_dir_all(&root);
     }
 

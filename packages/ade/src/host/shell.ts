@@ -245,6 +245,11 @@ export interface Host {
   ttsLocalStop?: () => Promise<void>
   /** Takes the second backend away again; the host answers with the bytes freed. */
   ttsLocalDelete?: (provider: string) => Promise<void>
+  /**
+   * Takes a Piper voice off the disk (and the runtime with the last one), or all of Piper without a voice id; the bytes freed.
+   * Refused while a synthesis is running or a download is writing into those files.
+   */
+  ttsPiperDelete?: (voiceId?: string) => Promise<number>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
   /** K3: how the install of a provider's files is going, running or just ended. */
@@ -874,6 +879,11 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsLocalInstall(provider) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_local_install", { provider })
+    },
+
+    async ttsPiperDelete(voiceId) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("tts_piper_delete", { voiceId: voiceId ?? null })
     },
 
     async ttsLocalDelete(provider) {
