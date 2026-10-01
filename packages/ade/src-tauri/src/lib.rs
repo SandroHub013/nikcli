@@ -2301,6 +2301,8 @@ pub fn run() {
             tts::tts_install_cancel,
             nikverse_assets::nikverse_assets_status,
             nikverse_assets::nikverse_assets_install,
+            nikverse_assets::nikverse_assets_bytes,
+            nikverse_assets::nikverse_assets_remove,
             plugin_install::plugin_list,
             plugin_install::plugin_check,
             plugin_install::plugin_install,

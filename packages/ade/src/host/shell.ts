@@ -260,6 +260,10 @@ export interface Host {
   nikverseAssetsStatus?: () => Promise<AssetsStatus>
   /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
   nikverseAssetsInstall?: () => Promise<void>
+  /** What the fetched NikVerse assets weigh on this disk (0 in a debug build, which has none). */
+  nikverseAssetsBytes?: () => Promise<number>
+  /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
+  nikverseAssetsRemove?: () => Promise<number>
   /**
    * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
    * back and remove a version. All of them answer to the main window only.
@@ -811,6 +815,16 @@ export async function getHost(): Promise<Host | undefined> {
     async nikverseAssetsInstall() {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("nikverse_assets_install")
+    },
+
+    async nikverseAssetsBytes() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("nikverse_assets_bytes")
+    },
+
+    async nikverseAssetsRemove() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("nikverse_assets_remove")
     },
 
     async pluginList() {
