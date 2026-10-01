@@ -401,6 +401,7 @@ import { createInFlight } from "../session/in-flight"
 import { bindMenu } from "../ui/menu"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
+import { splashRemainingMs } from "../splash/timing"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
 import { acceptsRequests, panelsHelp } from "../panels/protocol"
 import { alternateRows, createScreenRequests } from "../panels/screen-requests"
@@ -611,15 +612,6 @@ const newPaneId = (prefix: string) => `${prefix}${Date.now()}-${++paneSequence}`
  * separately by `transcript-budget`.
  */
 const MAX_PANE_LINES = 200
-
-/**
- * The shortest time the startup screen stays up.
- *
- * A warm start finishes in under a tenth of a second, and a screen that
- * appears and vanishes in that time reads as a glitch. Long enough to be
- * looked at, short enough not to be waited for.
- */
-const SPLASH_FLOOR_MS = 7000
 
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
@@ -5773,7 +5765,7 @@ export function Workbench() {
      * A floor, not a delay: when the start really does take two seconds the
      * splash goes the moment it is over.
      */
-    const remaining = SPLASH_FLOOR_MS - (Date.now() - startedAt)
+    const remaining = splashRemainingMs(startedAt, Date.now())
     if (remaining > 0 && booting() !== undefined) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, remaining)
