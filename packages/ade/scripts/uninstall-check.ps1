@@ -166,6 +166,8 @@ switch ($Phase) {
     Install
     Plant
     $app = Start-Process -FilePath (Join-Path $InstallDir $Exe) -PassThru
+    # Reading the handle keeps it, so that the exit time is still there once the process is gone.
+    $null = $app.Handle
     # The app has to be up, with its WebView2 profile open: that is what would hold the cache files if the hook ran with it still open.
     $cache = Join-Path $Local 'EBWebView\Default\Cache'
     $deadline = (Get-Date).AddSeconds(120)
@@ -179,8 +181,14 @@ switch ($Phase) {
     $env:ADE_UNLINK_AGENTS_FOR_TEST = $null
     Check ($code -eq 0) "the uninstaller exited 0 (was $code)"
     Check (-not (Get-Process -Name 'ade-test' -ErrorAction SilentlyContinue)) 'the app is closed'
-    # Files a running app holds are not removed: the cache can only be gone if the app was closed before the hook ran.
-    Check (-not (Test-Path $cache)) 'the WebView2 cache is gone: nothing held it when the hook ran'
+    # The order, proved by the clock: the hook rewrote settings.json (ADE's entry went), and the app had already exited by then. The cache
+    # being gone is not proof of it on its own: Chromium opens its files with delete sharing, and Rust removes them the POSIX way.
+    $null = $app.WaitForExit(30000)
+    Check $app.HasExited 'the app we started has exited'
+    $rewritten = (Get-Item $Settings).LastWriteTime
+    $exited = if ($app.HasExited) { $app.ExitTime } else { [DateTime]::MaxValue }
+    Check ($exited -le $rewritten) "the app exited ($($exited.ToString('o'))) before the hook rewrote settings.json ($($rewritten.ToString('o')))"
+    Check (-not (Test-Path $cache)) 'the WebView2 cache is gone'
     Check (-not (Test-Path (Join-Path $Local 'tts'))) 'the voices are gone'
     Check (-not (Entry-Present)) "ADE's entry is out of settings.json"
     Check (Other-Kept) "the other program's entry is still in settings.json"
