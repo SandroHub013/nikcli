@@ -214,6 +214,20 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// Every token of every link in the gateway's state, out of the vault: for the uninstall that is asked to delete the data. The state file is
+/// left to whoever removes the folder. A token the keychain will not give up is reported and does not stop the others.
+pub fn forget_all_tokens(vault: &dyn Vault, service: &str, state: &std::path::Path) -> crate::secrets::Forgotten {
+    let mut out = crate::secrets::Forgotten::default();
+    for link in Store::new(state.to_path_buf()).read().links {
+        out.one(&token_name(&link.bot, link.platform), vault.delete(service, &token_name(&link.bot, link.platform)));
+        if link.platform.needs_app_token() {
+            let app = secret_name(&link.bot, link.platform, TokenKind::App);
+            out.one(&app, vault.delete(service, &app));
+        }
+    }
+    out
+}
+
 fn token_name(bot: &str, platform: Platform) -> String {
     format!("{}:{}", platform.id(), bot_key(bot))
 }
@@ -1049,6 +1063,54 @@ mod tests {
             self.0.lock().unwrap().remove(&(service.into(), name.into()));
             Ok(())
         }
+    }
+
+    #[test]
+    fn forgetting_every_token_takes_each_links_secrets_out_and_nothing_of_another_service() {
+        let dir = std::env::temp_dir().join(format!("ade-forget-tokens-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let state = dir.join("state.json");
+        let store = Store::new(state.clone());
+        store.update(BOT, Platform::Telegram, |_, _| Ok(())).unwrap();
+        store.update(BOT, Platform::Slack, |_, _| Ok(())).unwrap();
+        let vault = MapVault::default();
+        vault.set("svc", &token_name(BOT, Platform::Telegram), TOKEN).unwrap();
+        vault.set("svc", &token_name(BOT, Platform::Slack), "xoxb-finto").unwrap();
+        vault.set("svc", &secret_name(BOT, Platform::Slack, TokenKind::App), "xapp-finto").unwrap();
+        vault.set("svc", "altro-nome", "non-di-un-link").unwrap();
+        vault.set("altro-servizio", &token_name(BOT, Platform::Telegram), "di-un-altra-app").unwrap();
+
+        let gone = forget_all_tokens(&vault, "svc", &state);
+        assert_eq!(gone.cleared, 3);
+        assert!(gone.failed.is_empty());
+        assert_eq!(vault.get("svc", &token_name(BOT, Platform::Telegram)).unwrap(), None);
+        assert_eq!(vault.get("svc", &token_name(BOT, Platform::Slack)).unwrap(), None);
+        assert_eq!(vault.get("svc", &secret_name(BOT, Platform::Slack, TokenKind::App)).unwrap(), None);
+        assert!(vault.get("svc", "altro-nome").unwrap().is_some());
+        assert!(vault.get("altro-servizio", &token_name(BOT, Platform::Telegram)).unwrap().is_some());
+        // The state is the folder's, and a missing one is no links.
+        assert!(state.exists());
+        assert_eq!(forget_all_tokens(&vault, "svc", &dir.join("manca.json")), crate::secrets::Forgotten::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_token_the_keychain_refuses_is_reported_and_the_rest_still_go() {
+        let dir = std::env::temp_dir().join(format!("ade-forget-refuse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let state = dir.join("state.json");
+        let store = Store::new(state.clone());
+        store.update(BOT, Platform::Telegram, |_, _| Ok(())).unwrap();
+        store.update(BOT, Platform::Discord, |_, _| Ok(())).unwrap();
+        let vault = MapVault::default();
+        vault.set("svc", &token_name(BOT, Platform::Telegram), TOKEN).unwrap();
+        vault.set("svc", &token_name(BOT, Platform::Discord), "discord-finto").unwrap();
+        vault.1.lock().unwrap().push(token_name(BOT, Platform::Telegram));
+        let gone = forget_all_tokens(&vault, "svc", &state);
+        assert_eq!(gone.cleared, 1);
+        assert_eq!(gone.failed.len(), 1);
+        assert_eq!(vault.get("svc", &token_name(BOT, Platform::Discord)).unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[derive(Default)]

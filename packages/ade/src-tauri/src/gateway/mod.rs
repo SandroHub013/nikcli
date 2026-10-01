@@ -14,6 +14,7 @@ mod authz;
 mod chunk;
 mod discord;
 mod hub;
+pub use hub::forget_all_tokens;
 mod known;
 mod markdown_v2;
 mod redact;
