@@ -13,6 +13,9 @@ name: ade-uninstall-check
 #
 # Costs minutes of CI on a public repository, no money. Run it from the Actions tab: ade-uninstall-check › Run workflow.
 on:
+  # The branch the proof is pushed to, and no other: a push to it starts the job; nothing else does.
+  push:
+    branches: [ade/uninstall-check]
   workflow_dispatch:
 
 concurrency:
