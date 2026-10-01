@@ -1,7 +1,8 @@
 //! What ADE takes off the computer when it is uninstalled, run by the installer's PREUNINSTALL hook (`windows/hooks.nsh`) as the app's own
 //! executable with one flag, before anything of the app starts: no window, no second instance forwarded to a running one, no network.
 //!
-//! - `--unlink-agents`: ADE's hooks and plugin out of Claude Code, Codex and nikcli (`agent_link::unlink_all`);
+//! - `--unlink-agents`: ADE's hooks and plugin out of Claude Code, Codex and nikcli (`agent_link::unlink_all`), only for the released
+//!   identity (`unlink_allowed`): they are global, and a build of another identity must not strip the installed ADE of them;
 //! - `--clean-caches`: what the app downloaded and can download again, out of its local data folder (below);
 //! - `--delete-secrets`: the API keys and the bots' tokens out of the system keychain; the hook runs it only when the user ticked «elimina
 //!   i dati».
@@ -12,11 +13,30 @@
 use crate::agent_link;
 use std::path::{Path, PathBuf};
 
+/// The identity of the released app: the only one whose uninstall touches the hooks of other programs.
+pub const RELEASE_IDENTIFIER: &str = "ai.nikcli.ade";
+
+/// The variable a test build is given by the CI job that proves the uninstaller (`.github/workflows/ade-uninstall-check.yml`), to take the hooks of
+/// a home that is the runner's. A release build never needs it.
+pub const UNLINK_FOR_TEST_VAR: &str = "ADE_UNLINK_AGENTS_FOR_TEST";
+
+/// Whether this build may take ADE out of the other programs. The hooks and the plugin are global: one script name, one path, for every ADE on
+/// the computer. Only the released app (`ai.nikcli.ade`) removes them, so uninstalling ADE Test or a build of someone's own does not strip the
+/// installed ADE of its hooks. A build that is not the release does it only when the proving job says so, and says so out loud.
+pub fn unlink_allowed(identifier: &str, test_override: Option<&str>) -> bool {
+    identifier == RELEASE_IDENTIFIER || test_override == Some("1")
+}
+
 /// The one place the flags are read: `Some(exit code)` when `args` is one of them, and then nothing of the app should start.
 pub fn dispatch(args: &[String], identifier: &str) -> Option<i32> {
     let [flag] = args else { return None };
     match flag.as_str() {
-        "--unlink-agents" => Some(agent_link::unlink_from_env()),
+        "--unlink-agents" => Some(if unlink_allowed(identifier, std::env::var(UNLINK_FOR_TEST_VAR).ok().as_deref()) {
+            agent_link::unlink_from_env()
+        } else {
+            eprintln!("ADE: {identifier} non è l'app rilasciata: gli hook degli altri programmi restano");
+            0
+        }),
         "--clean-caches" => Some(with_dirs(identifier, |dirs| {
             let cleaned = clean_caches(&dirs.local);
             for failed in &cleaned.failed {
@@ -376,15 +396,54 @@ mod tests {
         let hook = include_str!("../windows/hooks.nsh");
         let body = &hook[hook.find("!macro NSIS_HOOK_PREUNINSTALL").unwrap()..hook.find("!macroend").unwrap()];
         let at = |what: &str| body.find(what).unwrap_or_else(|| panic!("{what} is not in the hook"));
+        // The question "ADE is open, close it?" comes first: it can be answered with Cancel, and nothing may be gone by then.
+        let first = body.lines().skip(1).map(str::trim).filter(|line| !line.is_empty() && !line.starts_with(';')).collect::<Vec<_>>();
+        assert_eq!(first[0], "${If} $UpdateMode <> 1");
+        assert_eq!(first[1], r#"!insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}""#);
+        assert!(at("CheckIfAppIsRunning") < at("--unlink-agents"));
         assert!(at("$UpdateMode <> 1") < at("--unlink-agents"));
         assert!(at("$UpdateMode <> 1") < at("--clean-caches"));
         assert!(at("$DeleteAppDataCheckboxState = 1") < at("--delete-secrets"));
         assert!(at("--delete-secrets") > at("--unlink-agents"));
         // Each launch is the app's own executable, so a build with another binary name uses its own.
-        assert_eq!(body.matches("${MAINBINARYNAME}.exe").count(), 3);
+        assert_eq!(body.matches("${MAINBINARYNAME}.exe").count(), 4, "the question about a running ADE and the three launches");
         // Nothing of the hook removes a folder itself: Tauri's own «elimina i dati» does, after the secrets are out.
         assert!(!body.contains("RMDir") && !body.contains("Delete "));
         let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         assert_eq!(config["bundle"]["windows"]["nsis"]["installerHooks"].as_str(), Some("windows/hooks.nsh"));
+    }
+
+    #[test]
+    fn the_installer_is_per_user_so_the_hook_runs_as_the_user_whose_files_it_removes() {
+        // Under `perMachine` a standard user who elevates with an administrator's credentials would run the hook as the administrator, and
+        // it would clean the wrong home. Whoever changes this changes the hook with it.
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let mode = config["bundle"]["windows"]["nsis"]["installMode"].as_str();
+        assert!(mode.is_none() || mode == Some("currentUser"), "installMode is {mode:?}");
+    }
+
+    #[test]
+    fn only_the_released_identity_takes_the_hooks_of_other_programs() {
+        assert!(unlink_allowed("ai.nikcli.ade", None));
+        // ADE Test, and any other identity, leave them alone...
+        assert!(!unlink_allowed("ai.nikcli.ade.test", None));
+        assert!(!unlink_allowed("com.example.myade", None));
+        assert!(!unlink_allowed("ai.nikcli.ade.test", Some("0")));
+        assert!(!unlink_allowed("ai.nikcli.ade.test", Some("")));
+        // ...unless the proving job says so; the release does not need to be told.
+        assert!(unlink_allowed("ai.nikcli.ade.test", Some("1")));
+        assert!(unlink_allowed("ai.nikcli.ade", Some("0")));
+    }
+
+    #[test]
+    fn a_build_that_is_not_the_release_ends_the_flag_with_nothing_touched() {
+        // `dispatch` answers 0 (nothing to do, the installer goes on) without reading any home: the identity is what decides, before the files.
+        if std::env::var(UNLINK_FOR_TEST_VAR).is_err() {
+            assert_eq!(dispatch(&args(&["--unlink-agents"]), "ai.nikcli.ade.test"), Some(0));
+            assert_eq!(dispatch(&args(&["--unlink-agents"]), "other.app"), Some(0));
+        }
+        let source = include_str!("uninstall.rs");
+        let arm = &source[source.find("\"--unlink-agents\" => Some(if").unwrap()..];
+        assert!(arm[..arm.find("\"--clean-caches\"").unwrap()].contains("unlink_allowed(identifier"));
     }
 }
