@@ -380,6 +380,11 @@ export interface Host {
   claudeVersion?: () => Promise<string | null>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
+  /**
+   * Removes files ADE left in a project's `.ade/` (captures, results, design notes: `session/ade-prune.ts` chooses which); the bytes freed.
+   * The host refuses any path that is not a plain file of one of those three folders inside an open project.
+   */
+  adePrune?: (paths: string[]) => Promise<number>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -501,6 +506,11 @@ export async function getHost(): Promise<Host | undefined> {
     async claudeVersion() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string | null>("claude_version").catch(() => null)
+    },
+
+    async adePrune(paths) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<number>("ade_prune", { paths })
     },
 
     async deleteBotFile(path) {

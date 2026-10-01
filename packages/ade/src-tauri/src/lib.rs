@@ -12,6 +12,7 @@
 /// always passes a data directory derived from the bundle identifier, and an
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
+mod ade_prune;
 mod agent_link;
 mod brand;
 mod append;
@@ -2270,6 +2271,7 @@ pub fn run() {
             allow_write_root,
             git_run,
             bot_delete,
+            ade_prune::ade_prune,
             nikcli_bot,
             claude_agents,
             claude_version,

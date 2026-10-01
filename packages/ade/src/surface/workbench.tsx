@@ -206,6 +206,7 @@ function askCloseConfirmation(message: string): Promise<boolean> {
 
 import { askYesNo } from "../host/ask"
 import { createCloser } from "../editor/closer"
+import { pruneProject } from "../session/ade-prune"
 import { reclaimWorktree, worktreeWork, type Reclaimed, type Retry } from "../session/worktree-close"
 import {
   createWorkbench,
@@ -5388,6 +5389,23 @@ export function Workbench() {
   const preloadNaturalVoice = () => {
     void checkVoiceInstalled()
   }
+
+  /*
+   * What ADE left in a project's `.ade/` and no longer needs goes when the project opens: the browser captures past the last fifty, the
+   * results and design notes older than thirty days (`session/ade-prune.ts`). Once for each project in a run of ADE, after it opens and
+   * out of the way: it never delays anything and a failure is nothing.
+   */
+  const prunedProjects = new Set<string>()
+  createEffect(
+    on(
+      () => project()?.root,
+      (root) => {
+        if (!root || prunedProjects.has(root)) return
+        prunedProjects.add(root)
+        void getHost().then((host) => (host ? pruneProject(host, root, Date.now()) : undefined))
+      },
+    ),
+  )
 
   // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
   createEffect(
