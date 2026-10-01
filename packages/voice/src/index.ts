@@ -88,18 +88,8 @@ export {
   type AudioDevices,
 } from "./audio/devices"
 
-// The downloaded model, on disk
-export {
-  clearModelCache,
-  downloadParakeetModel,
-  EMPTY_CACHE,
-  inspectModelCache,
-  requestPersistentStorage,
-  type CachedModel,
-  type DownloadParakeetOptions,
-  type DownloadParakeetProgress,
-  type DownloadParakeetProgressCallback,
-} from "./asr/model-cache"
+// The local model that was removed: its leftovers are dropped once
+export { dropLegacyParakeet, LEGACY_PARAKEET_DB } from "./asr/legacy-parakeet"
 
 // Text to speech (TTS)
 export {
@@ -208,24 +198,6 @@ export {
   type SupportedAudioFormat,
 } from "./audio/capture"
 
-// Local neural ASR (Parakeet TDT 0.6B v3 via parakeet.js)
-export {
-  createParakeetTranscriber,
-  describeParakeetReadiness,
-  disposeParakeetModel,
-  isParakeetModelWarmedUp,
-  isWasmAvailable,
-  isWebGpuAvailable,
-  warmupParakeetModel,
-  type ParakeetBackend,
-  type ParakeetProgress,
-  type ParakeetProgressCallback,
-  type ParakeetReadiness,
-  type ParakeetTranscriber,
-  type ParakeetTranscriberOptions,
-  type WarmupParakeetOptions,
-} from "./asr/parakeet-local"
-
 // Cloud ASR (OpenRouter microsoft/mai-transcribe-2)
 export {
   blobToBase64,
@@ -297,7 +269,6 @@ export {
   SpeakerLive,
   TranscriberFake,
   TranscriberOpenRouterLive,
-  TranscriberParakeetLive,
   TranscriberSelectLive,
   VoiceHostLive,
   bridgeTranscriber,
@@ -336,7 +307,6 @@ export {
   type AgentSpeed,
   normalizeSettings,
   type NormalizedVoiceSettings,
-  type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
   type VoiceMode,

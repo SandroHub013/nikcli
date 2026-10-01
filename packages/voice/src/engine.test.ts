@@ -4,7 +4,6 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
-import { createParakeetTranscriber, disposeParakeetModel } from "./asr/parakeet-local"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
@@ -522,65 +521,6 @@ describe("engine/createVoiceEngine", () => {
     await engine.stop()
   })
 
-  test("stopping a local Parakeet session releases its shared model", async () => {
-    await disposeParakeetModel()
-    let disposed = false
-    const model = {
-      createStreamingTranscriber: () => ({
-        processChunk: async () => ({ text: "" }),
-        finalize: async () => ({ text: "" }),
-        reset: () => {},
-      }),
-      dispose: async () => {
-        disposed = true
-      },
-    }
-    const transcriber = createParakeetTranscriber({
-      keepWarm: true,
-      fromHub: async () => model,
-      supportsLanguage: () => true,
-      captureOptions: {
-        mediaStream: { getTracks: () => [] } as unknown as MediaStream,
-        isTypeSupported: () => true,
-      },
-    })
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet" },
-      createTranscriber: () => transcriber,
-    })
-
-    await engine.start()
-    expect(disposed).toBe(false)
-    await engine.stop()
-    expect(disposed).toBe(true)
-    await disposeParakeetModel()
-  })
-
-  test("removing an unused OpenRouter key leaves local Parakeet listening", async () => {
-    const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({
-      host: new MockVoiceHost(),
-      speaker: createFakeSpeaker(),
-      now: () => 10_000,
-      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
-      createTranscriber: () => transcriber,
-    })
-
-    await engine.start()
-    await engine.updateSettings({ openRouterApiKey: undefined })
-    transcriber.emit("raccontami una storia mai raccontata", true)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    await engine.submitText("raccontami un'altra storia mai raccontata")
-
-    expect(engine.isRunning()).toBe(true)
-    expect(transcriber.isStarted).toBe(true)
-    expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
-    await engine.stop()
-  })
-
   test("destructive command requires explicit confirmation before executing", async () => {
     const { engine, host, transcriber, speaker } = setupEngine()
 
@@ -1007,7 +947,7 @@ describe("the planner is the host's, on the agent's own runner", () => {
       speaker,
       now: () => 10_000,
       transcriber: createFakeTranscriber(),
-      settings: { activation: "toggle", backend: "parakeet", ...settings } as never,
+      settings: { activation: "toggle", backend: "openrouter", ...settings } as never,
     })
     return { engine, host, speaker }
   }
