@@ -12,7 +12,7 @@
   align-items: center;
   gap: 4px;
   margin-top: -2px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   line-height: 1.3;
   overflow: hidden;
@@ -29,7 +29,7 @@
 
 [data-slot="variant-preview-source-path"] {
   font-family: var(--ade-mono);
-  font-size: 10.5px;
+  font-size: var(--ade-font-xs);
   color: var(--ade-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -75,7 +75,7 @@
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-raised);
-  font-size: 12px;
+  font-size: var(--ade-font-body);
   color: var(--ade-text);
   display: flex;
   flex-direction: column;
@@ -97,7 +97,7 @@
 [data-slot="design-key"] {
   flex: 0 0 auto;
   font-family: var(--ade-font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: var(--ade-radius-sm);
@@ -107,14 +107,14 @@
 
 [data-slot="design-title"] {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--ade-font-lg);
   font-weight: 600;
   color: var(--ade-text);
   letter-spacing: -0.01em;
 }
 
 [data-slot="design-meta"] {
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
 
@@ -132,7 +132,7 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-sunken);
   border: 1px solid var(--ade-border-subtle);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   line-height: 1.4;
 }
 
@@ -219,7 +219,7 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-sunken);
   color: var(--ade-text-soft);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-weight: 600;
   font-family: var(--ade-font-mono, ui-monospace, monospace);
 }
@@ -230,14 +230,14 @@
 }
 
 [data-slot="variant-name"] {
-  font-size: 12px;
+  font-size: var(--ade-font-md);
   font-weight: 600;
   color: var(--ade-text);
 }
 
 [data-slot="variant-desc"] {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-soft);
   line-height: 1.4;
   min-height: 30px;
@@ -247,7 +247,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-1);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   line-height: 1.4;
   color: var(--ade-text-soft);
 }
@@ -323,7 +323,7 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-raised);
   color: var(--ade-text);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   font-weight: 500;
   cursor: pointer;
   margin-top: var(--ade-space-1);
@@ -349,7 +349,7 @@
   min-width: 160px;
   max-width: 100%;
   min-height: 80px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
 
@@ -369,7 +369,7 @@
   background: var(--ade-sunken);
   color: var(--ade-text);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   resize: vertical;
   min-height: 48px;
 }
@@ -432,7 +432,7 @@
   background: transparent;
   color: var(--ade-text-soft);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   cursor: pointer;
 }
 
@@ -443,7 +443,7 @@
 
 [data-slot="design-hint"] {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
 
@@ -457,7 +457,7 @@
   border-radius: var(--ade-radius-sm);
   background: rgba(220, 38, 38, 0.1);
   color: #ef4444;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
 }
 
 /*
@@ -481,7 +481,7 @@
 
 [data-slot="design-section"] {
   margin: 12px 0 4px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -515,7 +515,7 @@
   background: var(--ade-surface);
   color: inherit;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ade-font-body);
   cursor: pointer;
   text-align: left;
 }
@@ -537,7 +537,7 @@
 }
 
 [data-slot="design-pill"] {
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   padding: 1px 6px;
   border-radius: var(--ade-radius-full);
   background: var(--ade-sunken);
@@ -556,7 +556,7 @@
   border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-surface);
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
 }
 
 [data-slot="design-recipient"] {
@@ -579,7 +579,7 @@
   height: 24px;
   padding: 0 6px;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
 }
 
 [data-slot="design-confirm"] {
@@ -587,7 +587,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
 }
 
 /* The select above its sentence, as S75 asks; in the DOM the sentence comes first, as its label. */
@@ -607,7 +607,7 @@
   align-self: flex-start;
   max-width: 100%;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ade-font-md);
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
   border: 1px solid var(--ade-warning, #b7791f);
@@ -618,7 +618,7 @@
 /* «giro N» next to the key, from the second round on. */
 [data-slot="design-round"] {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: var(--ade-radius-sm);
@@ -628,13 +628,13 @@
 
 /* «puoi sceglierne più d'una», under the title of a multiple question. */
 [data-slot="design-multi"] {
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-soft);
 }
 
 /* Two variants on one page: the user would see it twice and never the variant. */
 [data-slot="design-shared-preview"] {
-  font-size: 11.5px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-warning, #b7791f);
 }
 
@@ -663,7 +663,7 @@
 [data-slot="variant-choose"][data-on="true"] {
   background: var(--ade-text);
   border-color: var(--ade-text);
-  color: var(--ade-surface);
+  color: var(--ade-on-ink);
 }
 
 [data-slot="variant-choose"]:disabled {

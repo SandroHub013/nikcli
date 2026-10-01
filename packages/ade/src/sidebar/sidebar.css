@@ -592,7 +592,7 @@
 [data-slot="preview-content"] {
   margin: 0;
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-md);
+  font-size: var(--ade-font-body);
   line-height: var(--ade-leading);
 }
 
@@ -1128,7 +1128,7 @@
 
 [data-slot="session-title"],
 [data-slot="active-agent-title"] {
-  font-size: 12.5px;
+  font-size: var(--ade-font-body);
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text);
   white-space: nowrap;
@@ -1287,7 +1287,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   min-width: 0;
   line-height: 1.2;
@@ -1310,7 +1310,7 @@
   display: block;
   color: var(--ade-text-soft);
   font-weight: var(--ade-weight-medium);
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1325,7 +1325,7 @@
 [data-slot="agent-card-sep"] {
   color: var(--ade-border);
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--ade-font-xs);
   margin-inline: 1px;
   opacity: 0.7;
 }
@@ -1336,7 +1336,7 @@
   display: block;
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
-  font-size: 10.5px;
+  font-size: var(--ade-font-xs);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1355,7 +1355,7 @@
 [data-slot="agent-card-time"] {
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-family: var(--ade-mono);
   color: var(--ade-text-weak);
   font-variant-numeric: tabular-nums;
@@ -1475,7 +1475,7 @@ aside[data-component="ade-sidebar"] {
 }
 
 [data-slot="project-name-text"] {
-  font-size: 14px;
+  font-size: var(--ade-font-lg);
 }
 
 /* ── i gruppi: nessun divisore, solo due pixel d'aria ── */
@@ -1521,7 +1521,7 @@ aside[data-component="ade-sidebar"] {
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
   color: var(--ade-text-soft);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   line-height: 16px;
 }
 
@@ -1643,7 +1643,7 @@ aside[data-component="ade-sidebar"] {
   border-radius: var(--ade-radius-full);
   background: transparent;
   color: var(--ade-text-weak);
-  font-size: 14px;
+  font-size: var(--ade-font-lg);
   line-height: 1;
   cursor: pointer;
   transition: var(--ade-btn-transition);
@@ -1791,7 +1791,7 @@ aside[data-component="ade-sidebar"] {
   overflow: hidden;
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: 10px;
+  font-size: var(--ade-font-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ade-text-soft);
   white-space: nowrap;
