@@ -403,6 +403,8 @@ export const en: Messages = {
   "boot.restore": "restoring sessions",
   "boot.project": "opening the project",
   "pane.closeRunning": (agent) => `${agent}\n\nThe agent is still running. Closing the pane stops it.\n\nClose anyway?`,
+  "pane.closeWorktree": (reason) => `${reason}\n\nClosing leaves the folder on disk, with its branch.\n\nClose anyway?`,
+  "pane.worktreeKept": (reason) => `The worktree stays on disk: ${reason}`,
   "editor.closeDirty": (path) => `${path}\n\nYou have unsaved changes. Closing will discard them.\n\nClose anyway?`,
   "editor.saveUnreadable": (path, problem) =>
     `${path}\n\nCouldn't re-read the file to check whether it changed (${problem}).\n\nSave anyway and replace what's on disk?`,

@@ -412,6 +412,9 @@ export const it = {
   "boot.project": "apro il progetto",
   "pane.closeRunning": (agent: string) =>
     `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
+  "pane.closeWorktree": (reason: string) =>
+    `${reason}\n\nChiudendo, la cartella resta su disco con il suo branch.\n\nChiudere comunque?`,
+  "pane.worktreeKept": (reason: string) => `La worktree resta su disco: ${reason}`,
   "editor.closeDirty": (path: string) =>
     `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
   "editor.saveUnreadable": (path: string, problem: string) =>

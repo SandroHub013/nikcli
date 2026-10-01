@@ -144,3 +144,122 @@ describe("chiudere un pannello con un file non salvato", () => {
     expect(s.closed).toEqual(["a", "g", "b"])
   })
 })
+
+/*
+ * C1 (ADE e i file sul computer dell'utente). Una sessione con la sua worktree: chiuderla dalla ✕ non butta il lavoro che non è stato
+ * integrato. La cartella resta comunque su disco (`session/worktree-close.ts`), ma l'utente lo sa prima.
+ */
+describe("chiudere una sessione con una worktree", () => {
+  function tree(work: Record<string, string | undefined>, options: { unsaved?: Record<string, string>; workFails?: boolean } = {}) {
+    const panes = new Set(["a", ...Object.keys(work)])
+    const closed: string[] = []
+    const checked: string[] = []
+    const asks: { reason: string; answer: (yes: boolean) => void }[] = []
+    const closer = createCloser({
+      unsaved: (id) => options.unsaved?.[id],
+      ask: () => Promise.resolve(true),
+      closeNow: (id) => {
+        closed.push(id)
+        panes.delete(id)
+      },
+      exists: (id) => panes.has(id),
+      hasWorktree: (id) => id in work,
+      worktreeWork: async (id) => {
+        checked.push(id)
+        if (options.workFails) throw new Error("git")
+        return work[id]
+      },
+      askWorktree: (reason) => new Promise<boolean>((resolve) => asks.push({ reason, answer: resolve })),
+    })
+    return { closer, closed, checked, asks }
+  }
+
+  test("integrata e pulita: si chiude senza domande (dopo il controllo di git, quindi non nello stesso istante)", async () => {
+    const s = tree({ w: undefined })
+    expect(s.closer.close("w")).toBe(false)
+    await tick()
+    expect(s.checked).toEqual(["w"])
+    expect(s.asks).toEqual([])
+    expect(s.closed).toEqual(["w"])
+  })
+
+  test("con lavoro non integrato chiede, dicendo cosa c'è, e al no la sessione resta aperta", async () => {
+    const s = tree({ w: "ha modifiche non committate in C:/work/app-worktrees/w" })
+    s.closer.close("w")
+    await tick()
+    expect(s.asks.map((q) => q.reason)).toEqual(["ha modifiche non committate in C:/work/app-worktrees/w"])
+    s.asks[0]!.answer(false)
+    await tick()
+    expect(s.closed).toEqual([])
+  })
+
+  test("al sì si chiude (la cartella e il suo branch restano, lo decide la bonifica, non la domanda)", async () => {
+    const s = tree({ w: "ha commit non integrati" })
+    s.closer.close("w")
+    await tick()
+    s.asks[0]!.answer(true)
+    await tick()
+    expect(s.closed).toEqual(["w"])
+  })
+
+  test("una chiusura già decisa (ade-msg close, che rifiuta da sé il lavoro non integrato) non chiede una seconda volta", () => {
+    const s = tree({ w: "ha commit non integrati" })
+    expect(s.closer.close("w", { decided: true })).toBe(true)
+    expect(s.closed).toEqual(["w"])
+    expect(s.checked).toEqual([])
+  })
+
+  test("un pannello senza worktree si chiude subito, come prima", () => {
+    const s = tree({})
+    expect(s.closer.close("a")).toBe(true)
+    expect(s.checked).toEqual([])
+  })
+
+  test("un controllo di git che fallisce non tiene la sessione aperta: la bonifica poi non toglie nulla che non sia pulito", async () => {
+    const s = tree({ w: "ha commit non integrati" }, { workFails: true })
+    s.closer.close("w")
+    await tick()
+    expect(s.asks).toEqual([])
+    expect(s.closed).toEqual(["w"])
+  })
+
+  test("con un file non salvato la domanda è una sola, e è quella del file", async () => {
+    const s = tree({ w: "ha commit non integrati" }, { unsaved: { w: "C:/p/a.ts" } })
+    s.closer.close("w")
+    await tick()
+    expect(s.checked).toEqual([])
+    expect(s.asks).toEqual([])
+  })
+
+  test("senza le funzioni della worktree il closer si comporta come prima", () => {
+    const closed: string[] = []
+    const closer = createCloser({ unsaved: () => undefined, ask: () => Promise.resolve(true), closeNow: (id) => void closed.push(id), exists: () => true })
+    expect(closer.close("w")).toBe(true)
+    expect(closed).toEqual(["w"])
+  })
+})
+
+describe("la worktree torna indietro da qualunque strada si chiuda la sessione (lint sul workbench)", () => {
+  const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+
+  test("closeNow, dove passano ✕, scorciatoia, progetto e ade-msg close, restituisce la worktree", () => {
+    const closeNow = source.slice(source.indexOf("const closeNow = (id: string)"), source.indexOf("const finish = "))
+    expect(closeNow).toContain("giveBackWorktree(closing, closing.worktree)")
+    // Before the pane is removed: the pane is what says where the worktree and the project are.
+    expect(closeNow.indexOf("giveBackWorktree(")).toBeLessThan(closeNow.indexOf("setWb((w) => closePane(w, id))"))
+  })
+
+  test("ade-msg close non decide da sé: non ripete la domanda e non toglie la worktree a mano", () => {
+    const tree = source.slice(source.indexOf("const closeTree = async"), source.indexOf("const excludeAdeResults"))
+    expect(tree).toContain("closer.close(id, { decided: true })")
+    expect(tree).not.toContain('"worktree", "remove"')
+  })
+
+  test("l'unico git worktree remove del workbench è quello di session/worktree-close.ts", () => {
+    expect(source.includes('"worktree", "remove"')).toBe(false)
+    const module = readFileSync(join(import.meta.dir, "../session/worktree-close.ts"), "utf8")
+    expect(module).toContain('["worktree", "remove", facts.worktree]')
+    expect(module).toContain('["branch", "-d", facts.branch]')
+    expect(module.includes('"-D"')).toBe(false)
+  })
+})

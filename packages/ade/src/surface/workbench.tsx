@@ -206,6 +206,7 @@ function askCloseConfirmation(message: string): Promise<boolean> {
 
 import { askYesNo } from "../host/ask"
 import { createCloser } from "../editor/closer"
+import { reclaimWorktree, worktreeWork, type Reclaimed, type Retry } from "../session/worktree-close"
 import {
   createWorkbench,
   type Pane,
@@ -3201,17 +3202,8 @@ export function Workbench() {
   ): Promise<string | undefined> => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane?.worktree || !host.run) return undefined
-    const status = await host.run("git", ["status", "--porcelain"], pane.worktree)
-    if (status.code === 0 && status.stdout.trim())
-      return `"${pane.title}" ha modifiche non committate in ${pane.worktree}`
-    const branch = pane.tree?.branch
     const root = (await projectOfPane(host, paneId))?.root
-    if (branch && root) {
-      const merged = await host.run("git", ["branch", "--list", branch, "--merged"], root)
-      if (merged.code === 0 && !merged.stdout.trim())
-        return `"${pane.title}" ha commit sul branch ${branch} non ancora integrati`
-    }
-    return undefined
+    return worktreeWork(host.run, { title: pane.title, worktree: pane.worktree, branch: pane.tree?.branch, root })
   }
 
   /**
@@ -3258,17 +3250,15 @@ export function Workbench() {
           )
       }
       spawnedBy.delete(id)
-      close(id)
+      // Already weighed against the work in the worktree above: not asked again. `closeNow` gives the worktree back (or keeps it).
+      treeClosing.add(id)
+      closer.close(id, { decided: true })
       closed.push(pane.title)
       if (pane.worktree) {
-        const root = (await projectOfPane(host, id))?.root
-        if (!blocked.has(id) && root && host.run) {
-          const removed = await host.run("git", ["worktree", "remove", pane.worktree], root)
-          if (removed.code !== 0) kept.push(pane.worktree)
-        } else {
-          kept.push(pane.worktree)
-        }
+        const outcome = await reclaims.get(id)
+        if (outcome?.kind !== "removed") kept.push(pane.worktree)
       }
+      treeClosing.delete(id)
     }
     saveSpawned()
     return { closed, kept, asking }
@@ -6819,10 +6809,44 @@ export function Workbench() {
       return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
     },
     askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
+    hasWorktree: (id) => Boolean(wb().panes.find((candidate) => candidate.id === id)?.worktree),
+    worktreeWork: async (id) => {
+      const host = await getHost()
+      return host ? unintegrated(host, id) : undefined
+    },
+    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason)),
   })
   const close = (id: string): boolean => closer.close(id)
 
+  /*
+   * A session's worktree, given back when the session closes, whichever way it closes.
+   *
+   * Removed (and its `ade/*` branch with it) when the work has landed and the folder is clean; kept, with the branch, when not. What was
+   * decided is read now, from the pane, because the pane is gone by the time git runs. `closeTree` awaits it to report what stayed.
+   */
+  const reclaims = new Map<string, Promise<Reclaimed>>()
+  const treeClosing = new Set<string>()
+  const WORKTREE_RETRY: Retry = { times: 3, ms: 1500, wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)) }
+  const giveBackWorktree = (pane: Pane, worktree: string) => {
+    const open = project()
+    const found = paneProject(pane, open, recents())
+    const branch = pane.tree?.branch
+    const done = (async (): Promise<Reclaimed> => {
+      const host = await getHost()
+      if (!host?.run) return { kind: "kept", reason: `"${pane.title}": ${worktree}` }
+      const owner = found.kind === "open" ? open : await discoverProject(host, found.root).catch(() => open)
+      return reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, WORKTREE_RETRY)
+    })().catch((error): Reclaimed => ({ kind: "kept", reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}` }))
+    reclaims.set(pane.id, done)
+    void done.then((outcome) => {
+      if (reclaims.get(pane.id) === done) reclaims.delete(pane.id)
+      if (outcome.kind === "kept" && !treeClosing.has(pane.id)) toast.show(t("pane.worktreeKept", outcome.reason))
+    })
+  }
+
   const closeNow = (id: string) => {
+    const closing = wb().panes.find((candidate) => candidate.id === id)
+    if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
