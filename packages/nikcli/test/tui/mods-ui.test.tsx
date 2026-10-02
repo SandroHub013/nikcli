@@ -4,6 +4,7 @@ import { ThemeContext, createStandaloneTheme } from "@tui/context/theme"
 import { loadBuiltInTheme } from "@tui/context/theme-catalog"
 import { SDKProvider } from "@tui/context/sdk"
 import { Site } from "@tui/feature-plugins/mods"
+import { Replace } from "@tui/feature-plugins/mods/render"
 import { Tree } from "@tui/feature-plugins/mods/tree"
 
 const theme = createStandaloneTheme({ document: await loadBuiltInTheme("nikcli"), mode: "dark" })
@@ -155,6 +156,120 @@ describe("the element tree renderer", () => {
     expect(frame).toContain("const x = 1")
     expect(frame).toContain("● Alpha")
     expect(frame).toContain("○ b")
+    screen.renderer.destroy()
+  })
+})
+
+/** A site nikcli draws itself: `Replace` draws its children unless a mod answers with a tree. */
+async function mountReplace(input: { mods: unknown[]; render: () => unknown }) {
+  const requests: string[] = []
+  let push!: (type: string, properties: Record<string, unknown>) => void
+  const transport = (async (request: RequestInfo | URL, init?: RequestInit) => {
+    const req = new Request(request, init)
+    const path = new URL(req.url).pathname
+    requests.push(path)
+    if (path === "/mod") return Response.json(input.mods)
+    if (path === "/mod/ui/render") return Response.json(input.render())
+    throw new Error(`Unexpected request: ${req.method} ${path}`)
+  }) as typeof fetch
+  const screen = await testRender(
+    () => (
+      <ThemeContext.Provider value={theme as never}>
+        <SDKProvider
+          url="http://mods.test"
+          fetch={transport}
+          events={{
+            subscribe: async (_directory, handler) => {
+              push = (type, properties) => handler({ directory: "/test", payload: { type, properties } as never })
+              return () => {}
+            },
+          }}
+        >
+          <Replace component="ToolUse" requestId="call_1" sessionID="ses_test" props={{ tool: "bash" }}>
+            {(site) => <text>{`default row for ${String(site.tool)}`}</text>}
+          </Replace>
+        </SDKProvider>
+      </ThemeContext.Provider>
+    ),
+    { width: 60, height: 6 },
+  )
+  return {
+    ...screen,
+    requests,
+    push: (type: string, properties: Record<string, unknown> = {}) => push(type, properties),
+  }
+}
+
+const modInfo = (events: string[]) => [{ id: "m", name: "m", tier: "user", rank: 100, events, tools: [], commands: [] }]
+
+describe("sites nikcli draws itself", () => {
+  test("with no mod that draws, the default is drawn and no render request is made", async () => {
+    const screen = await mountReplace({ mods: modInfo(["tool.call"]), render: () => ({ kind: "default" }) })
+    await shows(screen, "default row for bash")
+    await Bun.sleep(80)
+    expect(screen.requests.filter((path) => path === "/mod/ui/render")).toEqual([])
+    screen.renderer.destroy()
+  })
+
+  test("a mod that draws replaces the default with its tree", async () => {
+    const screen = await mountReplace({
+      mods: modInfo(["ui.render"]),
+      render: () => ({
+        kind: "tree",
+        tree: JSON.stringify({ type: "Text", props: { color: "success" }, children: ["drawn by a mod"] }),
+      }),
+    })
+    await shows(screen, "drawn by a mod")
+    expect(screen.captureCharFrame()).not.toContain("default row")
+    screen.renderer.destroy()
+  })
+
+  test("a mod that only rewrites props changes what the default shows; one answering null hides the row", async () => {
+    let answer: unknown = { kind: "default", props: JSON.stringify({ tool: "renamed" }) }
+    const screen = await mountReplace({ mods: modInfo(["ui.render"]), render: () => answer })
+    await shows(screen, "default row for renamed")
+
+    answer = { kind: "tree" }
+    screen.push("mod.ui.invalidate", { component: "ToolUse" })
+    for (let attempt = 0; attempt < 60 && screen.captureCharFrame().includes("default row"); attempt++) {
+      await screen.flush()
+      await Bun.sleep(25)
+    }
+    expect(screen.captureCharFrame()).not.toContain("default row")
+    screen.renderer.destroy()
+  })
+
+  test("a mod loading later turns the site on: an untargeted invalidation re-reads the mod list", async () => {
+    let mods: unknown[] = modInfo(["tool.call"])
+    const requests: string[] = []
+    const screen = await mountReplace({
+      get mods() {
+        return mods
+      },
+      render: () => ({ kind: "tree", tree: JSON.stringify({ type: "Text", props: {}, children: ["now drawn"] }) }),
+    } as never)
+    await shows(screen, "default row for bash")
+    mods = modInfo(["ui.render"])
+    screen.push("mod.ui.invalidate", {})
+    await shows(screen, "now drawn")
+    void requests
+    screen.renderer.destroy()
+  })
+})
+
+describe("Replace without a client", () => {
+  test("is its children: a story or a component test has nobody to ask", async () => {
+    const screen = await testRender(
+      () => (
+        <ThemeContext.Provider value={theme as never}>
+          <Replace component="ToolUse" requestId="x">
+            <text>plain default</text>
+          </Replace>
+        </ThemeContext.Provider>
+      ),
+      { width: 40, height: 4 },
+    )
+    await shows(screen, "plain default")
     screen.renderer.destroy()
   })
 })

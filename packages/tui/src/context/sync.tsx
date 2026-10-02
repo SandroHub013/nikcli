@@ -170,6 +170,8 @@ export const {
       workspaceList: Workspace[]
     }>({
       status: "loading",
+      // No bootstrap has completed yet: the barrier comes up when the first one does.
+      barrier: false,
       degraded: [],
       provider: [],
       provider_default: {},

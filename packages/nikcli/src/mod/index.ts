@@ -280,6 +280,7 @@ export namespace Mod {
         const ctx0 = yield* InstanceState.context
         const live = s.live.get(id)
         if (!live) return
+        const drew = s.registry.events(id).includes("ui.render")
         // Revoke before disposing: the chain stops seeing the mod first, so a
         // late hook of the old generation cannot run beside the new one.
         s.registry.remove(id)
@@ -292,6 +293,7 @@ export namespace Mod {
           closed = true
         }
         if (closed) yield* Effect.promise(() => publishUi(ctx0, UiEvent.Panes, {}))
+        if (drew) yield* Effect.promise(() => publishUi(ctx0, UiEvent.Invalidate, {})).pipe(Effect.ignore)
         yield* Scope.close(live.scope, Exit.void)
       })
 
@@ -402,6 +404,10 @@ export namespace Mod {
 
         const live: Live = { mod, scope, tools }
         s.live.set(input.id, live)
+        // Clients decide whether to ask mods what to draw by whether any mod hooks `ui.render`: tell them it changed.
+        if (s.registry.events(input.id).includes("ui.render")) {
+          yield* Effect.promise(() => publishUi(ctx, UiEvent.Invalidate, {})).pipe(Effect.ignore)
+        }
         log.info("mod loaded", { mod: input.name, tier, rank, hooks: registered })
 
         // Once per mod, before the first prompt, and again after a reload of that mod.
@@ -884,5 +890,29 @@ export namespace Mod {
           : "needs { deny } or { model }",
     })
     return { deny: typeof out.deny === "string" ? out.deny : undefined, model: out.model }
+  }
+
+  // ---------------------------------------------------------------------------
+  // skills, compaction, command descriptions
+
+  /** A skill's text as the model reads it, once, when the skill is loaded. A mod can rewrite it. */
+  export async function skillPrompt(name: string, text: string): Promise<string> {
+    if (!(await handles("skill.prompt"))) return text
+    const out: any = await emitPromise("skill.prompt", { name, text }, async (e) => ({ text: e.text as string }), {
+      validate: (r) => (isRecord(r) && typeof r.text === "string" ? undefined : "needs { text }"),
+    })
+    return out.text as string
+  }
+
+  /**
+   * The conversation is about to be compacted. A mod answers `{ skip: reason }` to leave it as it is;
+   * the caller then drops the pending compaction and stops the loop, so the next prompt starts clean.
+   */
+  export async function sessionCompact(event: { sessionID: string; auto: boolean }): Promise<{ skip?: string }> {
+    if (!(await handles("session.compact"))) return {}
+    const out: any = await emitPromise("session.compact", event, async () => ({}), {
+      validate: (r) => (isRecord(r) ? undefined : "needs { skip } or the event"),
+    })
+    return typeof out.skip === "string" ? { skip: out.skip } : {}
   }
 }

@@ -1,11 +1,11 @@
 import { Plugin } from "@nikcli-ai/plugin/v2/tui"
-import { useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from "solid-js"
+import { createSignal, For, onCleanup, Show, type JSX } from "solid-js"
 import type { ModNode } from "@nikcli-ai/plugin/mod"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
-import { Tree, type TreeEvents } from "./tree"
+import { useAnswer } from "./render"
+import { Tree } from "./tree"
 
 /**
  * Where mods draw: the band above the prompt and panes.
@@ -21,7 +21,7 @@ import { Tree, type TreeEvents } from "./tree"
 
 type Pane = { id: string; plugin: string; title: string; placement: "dock" | "inline"; rows?: number }
 
-/** A render site: asks the mods what to draw and draws it, again whenever a mod invalidates it. */
+/** A render site the mods draw alone (nikcli draws nothing there): the band above the prompt, a pane. */
 export function Site(props: {
   component: "AbovePrompt" | "Pane"
   requestId: string
@@ -29,91 +29,20 @@ export function Site(props: {
   extra?: Record<string, unknown>
   empty?: JSX.Element
 }) {
-  const sdk = useSDK()
-  const dimensions = useTerminalDimensions()
-  const [tree, setTree] = createSignal<ModNode | undefined>(undefined)
-  let sequence = 0
-  let settle: ReturnType<typeof setTimeout> | undefined
-
-  const refresh = async () => {
-    const mine = ++sequence
-    const out = await sdk.client.mod
-      .render({
-        component: props.component,
-        requestId: props.requestId,
-        sessionID: props.sessionID,
-        props: JSON.stringify({ bodyColumns: dimensions().width, ...props.extra }),
-        columns: dimensions().width,
-        rows: dimensions().height,
-      })
-      .catch(() => undefined)
-    // A newer request is in flight: this answer is already out of date.
-    if (mine !== sequence || !out?.data) return
-    if (out.data.kind === "tree") setTree(out.data.tree ? (JSON.parse(out.data.tree) as ModNode) : undefined)
-    else setTree(undefined)
-  }
-
-  const schedule = () => {
-    if (settle) return
-    // Mods invalidate in bursts; draw once.
-    settle = setTimeout(() => {
-      settle = undefined
-      void refresh()
-    }, 30)
-  }
-
-  const off = sdk.event.on("mod.ui.invalidate", (event) => {
-    const target = event.properties
-    if (target.component && target.component !== props.component) return
-    if (target.requestID && target.requestID !== props.requestId) return
-    schedule()
+  const { answer, events } = useAnswer({
+    component: props.component,
+    requestId: () => props.requestId,
+    sessionID: () => props.sessionID,
+    props: () => props.extra ?? {},
+    always: true,
   })
-  onCleanup(() => {
-    off()
-    if (settle) clearTimeout(settle)
-    sequence++
-  })
-
-  createEffect(
-    on(
-      () => props.sessionID,
-      () => void refresh(),
-    ),
-  )
-
-  const events: TreeEvents = {
-    press: (key) =>
-      void sdk.client.mod.event({
-        kind: "press",
-        key,
-        component: props.component,
-        requestId: props.requestId,
-        sessionID: props.sessionID,
-      }),
-    input: (key, value, submit) =>
-      void sdk.client.mod.event({
-        kind: "input",
-        key,
-        value,
-        submit,
-        component: props.component,
-        requestId: props.requestId,
-        sessionID: props.sessionID,
-      }),
-    select: (key, value) =>
-      void sdk.client.mod.event({
-        kind: "select",
-        key,
-        value,
-        component: props.component,
-        requestId: props.requestId,
-        sessionID: props.sessionID,
-      }),
+  const tree = () => {
+    const value = answer()
+    return value && "tree" in value ? (value.tree ?? undefined) : undefined
   }
-
   return (
-    <Show when={tree() !== undefined && tree() !== null ? tree() : undefined} fallback={props.empty}>
-      {(node) => <Tree node={node()} events={events} />}
+    <Show when={tree()} fallback={props.empty}>
+      {(node) => <Tree node={node()} events={events()} />}
     </Show>
   )
 }

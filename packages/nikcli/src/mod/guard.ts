@@ -207,44 +207,82 @@ export namespace ModGuard {
     "plugin.register",
     "session.start",
     "session.end",
+    "session.compact",
     "prompt.submit",
     "prompt.section",
     "prompt.compose",
+    "skill.prompt",
     "tool.call",
     "tool.check",
     "tool.describe",
     "command.run",
+    "command.describe",
     "turn.start",
     "turn.step",
     "turn.complete",
     "agent.offer",
     "agent.spawn",
+    "ui.render",
+    "ui.press",
+    "ui.input",
+    "ui.select",
   ] as const
 
-  /** Events the Claude Code mods API has and nikcli does not fire yet. A mod hooking one is told, not silently ignored. */
+  /** The `$` calls nikcli has: each is also an event a hook can intercept. */
+  export const API_CALLS = [
+    "fs.read",
+    "fs.write",
+    "fs.list",
+    "fs.exists",
+    "fs.stat",
+    "fs.ancestors",
+    "process.run",
+    "process.spawn",
+    "http.fetch",
+    "env.get",
+    "env.set",
+    "store.get",
+    "store.set",
+    "store.delete",
+    "store.keys",
+    "ui.log",
+    "ui.toast",
+    "ui.ask",
+    "ui.copy",
+    "command.run",
+    "session.messages",
+    "session.model",
+    "session.turns",
+    "session.repo",
+    "session.version",
+    "session.usage",
+    "prompt.submit",
+    "prompt.fill",
+    "turn.abort",
+    "model.complete",
+    "model.classify",
+    "settings.read",
+    "mcp.call",
+    "mcp.connect",
+    "agent.list",
+  ] as const
+
+  /** Events the Claude Code mods API has and nikcli does not fire. A mod hooking one is told, not silently ignored. */
   export const PLANNED_EVENTS = [
-    "session.compact",
     "session.receive",
     "session.send",
     "session.append",
     "session.attach",
     "session.detach",
     "session.measure",
-    "prompt.fill",
     "prompt.suggest",
     "prompt.edit",
     "prompt.context",
     "prompt.attachment",
-    "skill.prompt",
     "attribution.text",
-    "command.describe",
     "config.set",
     "config.describe",
-    "ui.render",
     "ui.resolve",
-    "ui.press",
-    "ui.input",
-    "ui.select",
     "ui.focus",
     "ui.scroll",
     "ui.close",
@@ -279,13 +317,13 @@ export namespace ModGuard {
     for (const reason of uses.unreadable)
       errors.push(`it uses the mods API in a way that cannot be reviewed: ${reason}`)
 
-    const apiEvent = /^(fs|process|http|env|store|ui|command|clock)\./
+    const apiEvent = { test: (name: string) => (API_CALLS as readonly string[]).includes(name) }
     for (const event of uses.hooks) {
       if ((EVENTS as readonly string[]).includes(event)) continue
-      if (event === "*" || event.endsWith(".*") || apiEvent.test(event)) continue
+      if (event === "*" || event.endsWith(".*")) continue
       if ((PLANNED_EVENTS as readonly string[]).includes(event)) {
         warnings.push(`${event} is not fired by nikcli yet, so this hook never runs`)
-      } else {
+      } else if (!apiEvent.test(event)) {
         warnings.push(`${event} is not an event nikcli knows`)
       }
     }

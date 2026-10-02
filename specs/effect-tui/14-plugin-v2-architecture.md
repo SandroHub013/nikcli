@@ -293,8 +293,10 @@ Order, outermost first: `sec-default` → the organization's mods (`prependPlugi
 in config order → `appendPlugins` → built-in mods. `PermissionNext.layer` and `Plugin.layer` now require `Mod.Service`;
 both `defaultLayer`s provide the one memoized `Mod.defaultLayer`.
 
-Events fired: `plugin.register`, `session.start`, `prompt.submit`, `tool.call`, `tool.check`, `tool.describe`, and every
-`$` call. `tool.call` wraps all four execution paths (registry tools, MCP tools, connector tools, model subtasks) and
+Events fired: `plugin.register`, `session.start`, `session.end` (instance shutdown, 1.5 s for all hooks), `prompt.submit`,
+`prompt.section`, `prompt.compose`, `tool.call`, `tool.check`, `tool.describe`, `command.run`, `turn.start`, `turn.step`,
+`turn.complete`, `agent.offer`, `agent.spawn`, `skill.prompt`, `session.compact`, `command.describe`, `ui.render`, `ui.press`,
+`ui.input`, `ui.select`, and every `$` call. `tool.call` wraps all four execution paths (registry tools, MCP tools, connector tools, model subtasks) and
 rethrows nikcli's own error unchanged when no hook replaced the result, so callers keep catching what they always did.
 `tool.check` fires inside `PermissionNext.ask` before anyone is asked and carries `rule`, what the rules decided.
 Fail-open/fail-closed follows the doc: a hook that throws, times out (10 s of its own time) or returns the wrong shape is
@@ -318,17 +320,40 @@ Deliberate differences from Claude Code, each a nikcli fact rather than a taste:
   and continues), not a turn-ending rejection.
 - One process serves many sessions, so `$.session.*` reads the session of the hook that is running (async-local), and
   `$.ui.ask` rejects when there is none.
-- Mods run in the server process. The UI half (render sites, panes, `ui.press`) must therefore cross the event stream as
-  data, the way Claude Code crosses its worker thread; that is the next slice and is **not** implemented.
+- Mods run in the server process, so the UI crosses the wire as data, the way Claude Code crosses its worker thread:
+  `POST /mod/ui/render` (the terminal asks what to draw at a site), `POST /mod/ui/event` (a press or typed text goes back as
+  `ui.press`/`ui.input`/`ui.select`), `GET /mod/ui/panes`, `GET /mod`; and the public events `mod.ui.invalidate` and
+  `mod.ui.panes` (snapshot class). Trees are element data (`src/mod/ui.ts`: `Box`, `Text`, `Button`, `Link`, `Code`,
+  `Markdown`, `Input`, `Select`), validated before they leave the server (depth 16, 2000 nodes, 10 000 characters), and travel
+  as JSON strings so the contract has no open payload. The terminal draws them from the internal TUI plugin
+  `internal:mods-ui` (`packages/tui/src/feature-plugins/mods/`), through the existing slots: `AbovePrompt` is
+  `session.prompt.top`, a `dock` pane is `sidebar.content`, an `inline` pane sits under the band.
+- `turn.step` fires before the request is built and can choose the model; it is not a stream, and it cannot answer without
+  calling the model. `turn.complete` is observed only.
+- `$.ui.log` publishes the public `mod.log` event; `$.settings.read()` redacts values under keys that name a secret.
+- `/mod` and `/mods` are aliases of `/plugins`. The build agent's prompt carries a short pointer and tells it to load the
+  `plugin` tool (deferred, so its full instructions load only on demand) before writing a mod.
 
-**Not implemented, and said so rather than stubbed:** `turn.*`, `session.end/compact/receive/send/append/…`, `command.run`
-and `command.describe` (and running a mod's `$.command.register` command from the slash menu), `agent.*`, `config.*`,
-`prompt.compose/section/context/attachment`, `skill.prompt`, all of `ui.render`/`ui.press`/…, `telemetry.*`, and the `$`
-namespaces `model`, `prompt`, `turn`, `mcp`, `settings`, `audio`, most of `session`, and `ui.open/panes/…`. Hooking one is a
-`nikcli mod validate` warning; calling one throws `$.<name> is not available in nikcli yet`. The v1 hooks `permission.ask`,
-`chat.headers` and `chat.request` remain declared but never invoked (found 2026-10-02); the `plugin` tool no longer tells
-the model they work.
+Sites nikcli draws itself are `Replace` wrappers (`packages/tui/src/feature-plugins/mods/render.tsx`): `ToolUse` (a tool
+call's row), `UserMessage`, `AssistantMessage`, and `Spinner` (the reasoning line, `props.word`). A `Replace` draws its
+children exactly as before unless a mod answered with a tree; it does not even ask the server unless some loaded mod hooks
+`ui.render` (read once from `GET /mod`, kept current by an untargeted `mod.ui.invalidate` when such a mod loads or
+unloads), and with no client at all (a story, a component test) it is its children. `session.compact` can be skipped: the
+pending compaction part is removed and the loop stops, so the next prompt starts from the conversation as it stands.
+`skill.prompt` rewrites a skill's text as it is loaded; `command.describe` renames or hides a command in the list.
+`nikcli` composes no commit or PR attribution text, so `attribution.text` has nothing to hook.
+
+**Not implemented, and said so rather than stubbed:** replacing `AskUserQuestion` (a replaced dialog would need a way to answer
+the question, which `$` does not have, and a user must never be trapped behind a mod's drawing), `Button` hotkeys and
+`ui.focus/scroll/close/message`, `session.receive/send/append/attach/detach/measure`, `prompt.suggest/edit/context/attachment`,
+`config.*` (nikcli has no `/config` rows), `engine.create`, and the `$` calls `ui.status/blit`, `prompt.read/suggest/compose`,
+`model.fork`, `agent.register/spawn`, `session.surfaces/compact/send/append/authorize`, `tool.call/check`, `audio.*`.
+`telemetry.*` is accepted and ignored for an installed mod, as in Claude Code. Hooking one is a `nikcli mod validate`
+warning; calling one throws `$.<name> is not available in nikcli yet`. The v1 hooks `permission.ask`, `chat.headers` and
+`chat.request` remain declared but never invoked (found 2026-10-02); the `plugin` tool no longer tells the model they work.
 
 Verification: `bun test test/mod` (chain semantics incl. typed-failure preservation and interruption, loader, `tool.call`
-rewrite/answer/retry, `tool.check`, guard and managed policy, hot reload, `prompt.submit`, `tool.describe`, static analysis,
-author types). Regression: `test/permission`, `test/plugin`, `test/effect`, `test/tool` unchanged and green.
+rewrite/answer/retry, `tool.check`, guard and managed policy, hot reload, `prompt.submit`, `tool.describe`, turns, prompt
+sections, subagents, mod commands, the `$` API, the UI pipeline over the HTTP handlers, static analysis, author types), a real
+`resolveTools`/`read` end-to-end, and `test/tui/mods-ui.test.tsx` for the terminal side. A real TUI boot with a mod installed
+reaches the prompt in about 7 s and the mod's timer publishes to the TUI event stream. Regression: `test/permission`, `test/plugin`, `test/effect`, `test/tool` unchanged and green.

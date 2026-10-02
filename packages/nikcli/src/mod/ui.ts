@@ -61,8 +61,15 @@ export namespace ModUi {
   export type SelectProps = { label?: string; options: { value: string; label?: string }[]; value?: string }
 
   /** Where a mod can draw. `props` are what nikcli passes the `ui.render` hook. */
-  export type Site = "AbovePrompt" | "Pane"
-  export const SITES: readonly Site[] = ["AbovePrompt", "Pane"]
+  export type Site =
+    | "AbovePrompt"
+    | "Pane"
+    // Sites nikcli draws itself: a mod's tree replaces them, and with none that draws, nothing changes.
+    | "ToolUse"
+    | "UserMessage"
+    | "AssistantMessage"
+    | "Spinner"
+  export const SITES: readonly Site[] = ["AbovePrompt", "Pane", "ToolUse", "UserMessage", "AssistantMessage", "Spinner"]
 
   export type Placement = "dock" | "inline"
 

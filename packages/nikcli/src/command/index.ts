@@ -311,7 +311,33 @@ export namespace Command {
       const list: Interface["list"] = Effect.fn("Command.list")(function* () {
         const configured = yield* InstanceState.get(state)
         const registered = (yield* mods.commands()).filter((command) => !configured[command.name]).map(modInfo)
-        return [...Object.values(configured), ...registered]
+        const all = [...Object.values(configured), ...registered]
+        if (!(yield* mods.handles("command.describe"))) return all
+        // `command.describe` mods rewrite how each command is listed, or hide it from the menu.
+        const described: Info[] = []
+        for (const command of all) {
+          const out: { description?: string; argumentHint?: string; isHidden?: boolean } = yield* mods.emit(
+            "command.describe",
+            {
+              name: command.name,
+              description: command.description ?? "",
+              argumentHint: command.hints.join(" "),
+              isHidden: false,
+            },
+            (e) => Effect.succeed({ description: e.description, argumentHint: e.argumentHint, isHidden: e.isHidden }),
+            {
+              validate: (r) =>
+                r && typeof r === "object" ? undefined : "needs { description, argumentHint, isHidden }",
+            },
+          )
+          if (out.isHidden === true) continue
+          described.push({
+            ...command,
+            description: out.description || command.description,
+            hints: out.argumentHint ? out.argumentHint.split(" ") : command.hints,
+          })
+        }
+        return described
       })
 
       return Service.of({

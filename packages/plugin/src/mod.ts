@@ -256,8 +256,13 @@ export type AgentSpawnResult = { model?: string } | { deny: string }
 
 /** A render site. `AbovePrompt` is the band above the prompt; `Pane` is a pane opened with `$.ui.open`. */
 export type UiRenderEvent = {
-  readonly component: "AbovePrompt" | "Pane"
-  /** `band` for `AbovePrompt`; the pane's id for `Pane`. */
+  /**
+   * `AbovePrompt` and `Pane` are drawn by mods alone. `ToolUse` (a tool call's row), `UserMessage`,
+   * `AssistantMessage` and `Spinner` (the reasoning line) are drawn by nikcli: answer `{ tree }` to
+   * replace one, or pass a changed `props` (`Spinner` takes `props.word`) to adjust it.
+   */
+  readonly component: "AbovePrompt" | "Pane" | "ToolUse" | "UserMessage" | "AssistantMessage" | "Spinner"
+  /** `band` for `AbovePrompt`; the pane's id for `Pane`; the call id for `ToolUse`; the message id for a message. */
   readonly requestId: string
   readonly surface: "terminal"
   readonly sessionID?: string
@@ -277,6 +282,18 @@ export type UiControlEvent = {
 }
 export type UiControlResult = { handled: boolean }
 
+export type SkillPromptEvent = { readonly name: string; readonly text: string }
+export type SessionCompactEvent = { readonly sessionID: string; readonly auto: boolean }
+/** `{ skip: reason }` leaves the conversation as it is; the pending compaction is dropped and the loop stops. */
+export type SessionCompactResult = { skip: string } | Record<string, unknown>
+export type CommandDescribeEvent = {
+  readonly name: string
+  readonly description: string
+  readonly argumentHint: string
+  readonly isHidden: boolean
+}
+export type CommandDescribeResult = { description?: string; argumentHint?: string; isHidden?: boolean }
+
 export interface ModEvents {
   "tool.call": { event: ToolCallEvent; result: ToolCallResult }
   "tool.check": { event: ToolCheckEvent; result: ToolCheckResult }
@@ -284,6 +301,9 @@ export interface ModEvents {
   "prompt.submit": { event: PromptSubmitEvent; result: PromptSubmitResult }
   "session.start": { event: SessionStartEvent; result: Record<string, never> }
   "session.end": { event: SessionEndEvent; result: Record<string, never> }
+  "skill.prompt": { event: SkillPromptEvent; result: { text: string } }
+  "session.compact": { event: SessionCompactEvent; result: SessionCompactResult }
+  "command.describe": { event: CommandDescribeEvent; result: CommandDescribeResult }
   "prompt.section": { event: PromptSectionEvent; result: PromptSectionResult }
   "prompt.compose": { event: PromptComposeEvent; result: PromptComposeResult }
   "command.run": { event: CommandRunEvent; result: CommandRunResult }
@@ -351,6 +371,8 @@ export interface ModApi {
     notice(text: string): Promise<void>
     /** Ask the user. Resolves to the label picked or the text typed; rejects when dismissed or when there is no session. */
     ask(question: string, options: string[]): Promise<string>
+    /** Put text on the system clipboard. */
+    copy(text: string): Promise<void>
     /** The constructors for a drawing: `const { Box, Text, Button } = $.ui.resolve(e)`. */
     resolve(event?: unknown): ModElements
     /** Ask clients to draw again. Many calls close together become one. */
@@ -405,6 +427,8 @@ export interface ModApi {
      * `asUser: true` sends it as the user's own words. It queues behind a turn already running and returns at once.
      */
     submit(input: { text: string; asUser?: boolean }): Promise<void>
+    /** Add text to the user's prompt box as a draft. */
+    fill(text: string): Promise<void>
   }
   readonly turn: {
     /** Stop the running turn of this session. */
@@ -429,6 +453,8 @@ export interface ModApi {
   readonly mcp: {
     /** Call a tool of a connected MCP server. It asks permission like the model's own call does. */
     call(server: string, tool: string, args?: Record<string, unknown>): Promise<unknown>
+    /** Connect an MCP server your nikcli config lists. */
+    connect(server: string): Promise<void>
   }
   readonly agent: {
     list(): Promise<{ name: string; description?: string; mode?: string }[]>

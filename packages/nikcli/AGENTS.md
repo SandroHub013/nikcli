@@ -167,7 +167,7 @@ Adding or changing an endpoint:
 ### Mods
 
 - A plugin module that exports `register(on, options)` is a **mod** (`src/mod/`, `Mod.Service`). It hooks events
-  (`tool.call`, `tool.check`, `tool.describe`, `prompt.submit`, `session.start`, and every `$` call) and each hook can
+  (`tool.*`, `prompt.*`, `command.run`, `turn.*`, `agent.*`, `session.start/end`, `ui.render/press/input/select`, and every `$` call) and each hook can
   observe, rewrite, answer or wrap the event. Author types: `@nikcli-ai/plugin/mod`. Review one with
   `nikcli mod validate <dir>`. Design and the list of what is not implemented: `specs/effect-tui/14-plugin-v2-architecture.md`
   ("Mods").

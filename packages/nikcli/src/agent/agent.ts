@@ -45,6 +45,11 @@ For typecheck, builds, test suites, dev servers, and any long-running or potenti
 The monitor tool only streams a short preview of the output. The full results are written to a log file on disk (the "Log file:" path returned when the job starts). To read the complete output of a background job — for example to inspect typecheck or build errors — read that log file from the filesystem with the read tool once the job has produced output or finished, rather than relying on the streamed preview alone.
 `
 
+const MOD_TOOL_AWARENESS = `
+
+When the user wants something enforced or changed in how nikcli itself behaves, not done once (block or rewrite tool calls, approve or refuse permission checks, rewrite prompts or tool descriptions, steer subagents and models, add a tool, slash command or UI), write a mod with the plugin tool: a hot-reloaded TypeScript module. The plugin tool is not loaded by default. Load it with search_tools (query "plugin") when you need it: its description holds the events, the \`$\` API and the rules, so do not guess them. Do not write a mod for a one-off task you can simply do now, and never one that hides what it does from the user.
+`
+
 const PRIMARY_AGENT_RESEARCH_AWARENESS = `
 
 When you identify a knowledge gap, outdated external dependency question, missing docs context, or a decision that needs evidence, proactively launch a background research run with the task tool using subagent_type: "researcher".
@@ -205,7 +210,7 @@ You have access to subagents that can be launched as background tasks.${PRIMARY_
         prompt: `You are a build agent focused on creating and implementing features.
 
 You are aware of the project context (directory, worktree) and can use all available tools.
-You have access to subagents that can be launched as background tasks.${MONITOR_TOOL_AWARENESS}${PRIMARY_AGENT_DELEGATION_AWARENESS}${PRIMARY_AGENT_RESEARCH_AWARENESS}`,
+You have access to subagents that can be launched as background tasks.${MONITOR_TOOL_AWARENESS}${MOD_TOOL_AWARENESS}${PRIMARY_AGENT_DELEGATION_AWARENESS}${PRIMARY_AGENT_RESEARCH_AWARENESS}`,
         options: {},
         permission: PermissionNext.merge(
           defaults,

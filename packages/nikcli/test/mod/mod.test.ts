@@ -791,6 +791,75 @@ describe("what a mod draws", () => {
   })
 })
 
+describe("skills, compaction, command descriptions, prompt fill", () => {
+  it("skill.prompt rewrites a skill's text; session.compact can skip a compaction", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      expect(await Mod.skillPrompt("review", "BODY")).toBe("BODY")
+      expect(await Mod.sessionCompact({ sessionID: SESSION, auto: true })).toEqual({})
+      await install(
+        "skill-compact",
+        `export function register(on) {
+  on("skill.prompt", { name: "review" }, async ($, e, next) => ({ text: e.text + "\\nBe terse." }))
+  on("session.compact", async ($, e, next) => (e.auto ? { skip: "never auto-compact here" } : next(e)))
+}`,
+      )
+      expect(await Mod.skillPrompt("review", "BODY")).toBe("BODY\nBe terse.")
+      expect(await Mod.skillPrompt("other", "BODY")).toBe("BODY")
+      expect(await Mod.sessionCompact({ sessionID: SESSION, auto: true })).toEqual({ skip: "never auto-compact here" })
+      expect(await Mod.sessionCompact({ sessionID: SESSION, auto: false })).toEqual({})
+    })
+  })
+
+  it("command.describe renames or hides a command in the list", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await install(
+        "describe-cmds",
+        `export function register(on) {
+  on("session.start", async ($, e, next) => {
+    $.command.register({ name: "keep-me", description: "old", run: async () => "x" })
+    $.command.register({ name: "hide-me", description: "secret", run: async () => "x" })
+    return next(e)
+  })
+  on("command.describe", { name: "keep-me" }, async ($, e, next) => next({ ...e, description: "renamed" }))
+  on("command.describe", { name: "hide-me" }, async ($, e, next) => next({ ...e, isHidden: true }))
+}`,
+      )
+      const listed = await runPromiseWithLayer(
+        commandModule.Command.defaultLayer,
+        withCurrentInstance(
+          Effect.gen(function* () {
+            return yield* (yield* commandModule.Command.Service).list()
+          }),
+        ),
+      )
+      expect(listed.find((command) => command.name === "keep-me")?.description).toBe("renamed")
+      expect(listed.find((command) => command.name === "hide-me")).toBeUndefined()
+    })
+  })
+
+  it("$.prompt.fill adds a draft to the prompt box", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      const { TuiEvent } = await import("@/bus/tui-event")
+      const seen: string[] = []
+      const unsubscribe = Bus.subscribe(TuiEvent.PromptAppend, (event: any) => seen.push(event.properties.text))
+      await install(
+        "filler",
+        `export function register(on) {
+  on("tool.call", { tool: "fill_it" }, async ($, e, next) => { await $.prompt.fill("draft from a mod"); return { result: "ok" } })
+}`,
+      )
+      await Mod.toolCall(
+        { tool: "fill_it", sessionID: SESSION, agent: "build", messageID: "m", callID: "c", args: {} },
+        async () => ({ title: "x", output: "no", metadata: {} }),
+        (text) => ({ title: "mod", output: text, metadata: {} }),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      unsubscribe()
+      expect(seen).toEqual(["draft from a mod"])
+    })
+  })
+})
+
 describe("managed policy", () => {
   const policyProject = async () => {
     const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-mod-policy-project-")))

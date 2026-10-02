@@ -33,6 +33,7 @@ describe.serial("mods in the session pipeline", () => {
   async function withSession(
     fn: (input: {
       directory: string
+      sessionID: string
       resolve: () => Promise<import("@/session/tools").ResolvedTools>
       install: (name: string, source: string) => Promise<void>
     }) => Promise<void>,
@@ -93,7 +94,7 @@ describe.serial("mods in the session pipeline", () => {
               const result = await def.executeAsync({ action: "create", name, source }, ctx)
               if (!result.metadata.loaded) throw new Error(result.output)
             }
-            await fn({ directory, resolve, install })
+            await fn({ directory, sessionID: created.id, resolve, install })
           },
         })
       } finally {
@@ -141,6 +142,60 @@ describe.serial("mods in the session pipeline", () => {
 
       // The tool's own error is exactly what it threw without mods.
       await expect(run(after.tools, { filePath: path.join(directory, "missing.txt") })).rejects.toThrow()
+    })
+  })
+
+  it("session.compact can skip a compaction: the pending compaction is dropped and the loop stops", async () => {
+    await withSession(async ({ sessionID, install }) => {
+      const [{ Effect }, { SessionCompaction }, { MessageV2 }, effect] = await Promise.all([
+        import("effect"),
+        import("@/session/compaction"),
+        import("@/session/message-v2"),
+        import("@/effect"),
+      ])
+      const run = <A, E>(value: EffectNs.Effect<A, E, any>) =>
+        effect.runPromiseWithLayer(SessionCompaction.defaultLayer, effect.withCurrentInstance(value))
+      const request = () =>
+        run(
+          Effect.gen(function* () {
+            const compaction = yield* SessionCompaction.Service
+            yield* compaction.create({
+              sessionID,
+              agent: "build",
+              model: { providerID: "anthropic", modelID: "claude-opus-5" },
+              auto: true,
+            })
+          }),
+        )
+      const messages = () => MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      const pending = async () =>
+        (await messages()).flatMap((message) => message.parts).filter((part) => part.type === "compaction").length
+
+      await request()
+      expect(await pending()).toBe(1)
+
+      await install(
+        "no-compact",
+        `export function register(on) {
+  on("session.compact", async () => ({ skip: "this session is never compacted" }))
+}`,
+      )
+      const current = await messages()
+      const parent = current.findLast((message) => message.info.role === "user")!
+      const outcome = await run(
+        Effect.gen(function* () {
+          const compaction = yield* SessionCompaction.Service
+          return yield* compaction.process({
+            messages: current,
+            parentID: parent.info.id,
+            abort: new AbortController().signal,
+            sessionID,
+            auto: true,
+          })
+        }),
+      )
+      expect(outcome).toBe("stop")
+      expect(await pending()).toBe(0)
     })
   })
 })

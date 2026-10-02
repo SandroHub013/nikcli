@@ -10,6 +10,7 @@ import { SessionProcessor } from "./processor"
 import { InstructionRepo } from "./instruction-repo"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
+import { Mod } from "@/mod"
 import { Config } from "@/config/config"
 import { zodObject } from "@nikcli-ai/util/effect-zod"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -277,6 +278,24 @@ export namespace SessionCompaction {
     if (!userMessageInfo) {
       log.error("parent message info not found", { parentID: input.parentID })
       throw new Error(`Parent message info not found: ${input.parentID}`)
+    }
+
+    // `session.compact` mods can leave the conversation as it is. The pending compaction is dropped
+    // with the answer, or the loop would find it again and ask again; the loop stops, and the next
+    // prompt starts from the conversation as it stands.
+    const skipped = await Mod.sessionCompact({ sessionID: input.sessionID, auto: Boolean(input.auto) })
+    if (skipped.skip !== undefined) {
+      log.info("compaction skipped by a mod", { sessionID: input.sessionID, reason: skipped.skip })
+      for (const part of userMessage.parts.filter((part) => part.type === "compaction")) {
+        await runSession(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            yield* session.removePart({ sessionID: input.sessionID, messageID: userMessage.info.id, partID: part.id })
+          }),
+          input.ctx,
+        )
+      }
+      return "stop"
     }
     const agent = await agentRequired("compaction", input.ctx)
     const model = await runProvider(

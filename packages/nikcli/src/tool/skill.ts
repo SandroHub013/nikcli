@@ -2,6 +2,7 @@ import z from "zod"
 import { Effect, Schema } from "effect"
 import { zod } from "@nikcli-ai/util/effect-zod"
 import { Tool } from "./tool"
+import { Mod } from "../mod"
 import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { Session } from "../session"
@@ -165,7 +166,14 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           loaded.version ? `**Version**: ${loaded.version}` : null,
         ].filter(Boolean)
 
-        const output = [`## Skill: ${loaded.name}`, "", meta.join("\n"), "", loaded.content].join("\n")
+        const output = [
+          `## Skill: ${loaded.name}`,
+          "",
+          meta.join("\n"),
+          "",
+          // `skill.prompt` mods can rewrite the skill's text.
+          await Mod.skillPrompt(loaded.name, loaded.content),
+        ].join("\n")
 
         return {
           title: `Loaded skill: ${loaded.name}`,

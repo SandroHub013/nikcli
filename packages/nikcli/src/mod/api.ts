@@ -36,13 +36,11 @@ export namespace ModApi {
     "ui.focus",
     "ui.scroll",
     "ui.status",
-    "ui.copy",
     "ui.blit",
     "agent.register",
     "agent.spawn",
     "model.fork",
     "prompt.read",
-    "prompt.fill",
     "prompt.suggest",
     "prompt.compose",
     "session.surfaces",
@@ -52,7 +50,6 @@ export namespace ModApi {
     "session.authorize",
     "config.list",
     "config.set",
-    "mcp.connect",
     "tool.call",
     "tool.check",
     "audio.play",
@@ -453,7 +450,24 @@ export namespace ModApi {
       focus: unsupported("ui.focus"),
       scroll: unsupported("ui.scroll"),
       status: unsupported("ui.status"),
-      copy: unsupported("ui.copy"),
+      /** Put text on the system clipboard. */
+      copy: (text: string) =>
+        call("ui.copy", { text }, async (e) => {
+          const command =
+            process.platform === "darwin"
+              ? ["pbcopy"]
+              : process.platform === "win32"
+                ? ["clip"]
+                : Bun.which("wl-copy")
+                  ? ["wl-copy"]
+                  : ["xclip", "-selection", "clipboard"]
+          const proc = Bun.spawn(command, {
+            stdin: new TextEncoder().encode(String(e.text)),
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          if ((await proc.exited) !== 0) throw new Error(`${command[0]} failed`)
+        }),
       blit: unsupported("ui.blit"),
     }
 
@@ -611,7 +625,15 @@ export namespace ModApi {
           ).catch((error) => log.warn("$.prompt.submit failed", { mod: mod.name, error: String(error) }))
         }),
       read: unsupported("prompt.read"),
-      fill: unsupported("prompt.fill"),
+      /** Add text to the user's prompt box as a draft. */
+      fill: (text: string) =>
+        call("prompt.fill", { text }, async (e) => {
+          await host.inInstance(async () => {
+            const { Bus } = await import("@/bus")
+            const { TuiEvent } = await import("@/bus/tui-event")
+            await Bus.publish(TuiEvent.PromptAppend, { text: String(e.text) })
+          })
+        }),
       suggest: unsupported("prompt.suggest"),
       compose: unsupported("prompt.compose"),
     }
@@ -765,7 +787,21 @@ export namespace ModApi {
             ),
           )
         }),
-      connect: unsupported("mcp.connect"),
+      /** Connect an MCP server your nikcli config lists. */
+      connect: (server: string) =>
+        call("mcp.connect", { server }, async (e) => {
+          const { MCP } = await import("@/mcp")
+          const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+          await runPromiseWithLayer(
+            MCP.defaultLayer,
+            locallyInstance(
+              ctx,
+              Effect.gen(function* () {
+                yield* (yield* MCP.Service).connect(String(e.server))
+              }),
+            ),
+          )
+        }),
     }
 
     const agentApi = {
