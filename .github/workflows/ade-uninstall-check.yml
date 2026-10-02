@@ -1,0 +1,91 @@
+name: ade-uninstall-check
+
+# Proves ADE's uninstaller on a clean Windows runner, by hand only. It is never run on a person's computer: the setup closes every
+# ade-desktop.exe by name, and the uninstall takes ADE's hooks out of the real ~/.claude, ~/.codex and nikcli.
+#
+# The installer built here is the TEST identity (`tauri.test.conf.json`: ai.nikcli.ade.test, ade-test.exe, "ADE Test"), so nothing in it has the
+# released app's names. The hooks are global and only the released identity removes them, so the phases that need them removed give the process
+# ADE_UNLINK_AGENTS_FOR_TEST=1, and the phase `identity` shows that without it nothing is touched. The checks are in
+# `packages/ade/scripts/uninstall-check.ps1`, one phase per step; each leaves the runner clean.
+#
+# What it does not reach: the Cancel button of "ADE is open, close it?" (interactive; the question is the hook's first line, which
+# `src-tauri/src/uninstall.rs` pins), and the box "delete the data" (not reachable in a silent run: `--delete-secrets` is proved by calling the flag).
+#
+# Costs minutes of CI on a public repository, no money. Run it from the Actions tab: ade-uninstall-check › Run workflow.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ade-uninstall-check
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  uninstall:
+    if: github.repository == 'SandroHub013/nikcli'
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        timeout-minutes: 10
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        timeout-minutes: 10
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/ade/src-tauri -> target
+          key: uninstall-check
+
+      # Outside Tauri's beforeBuildCommand, as the release does (a broken bun shim on Windows).
+      - name: Build frontend
+        timeout-minutes: 15
+        working-directory: packages/ade
+        run: bun x vite build
+
+      # The test identity's config with a version of its own and no frontend step, in one file beside the others: the icons in it are relative to
+      # src-tauri. `--features test-exe` builds the `ade-test` binary the installer ships.
+      - name: Build the test installer
+        timeout-minutes: 45
+        working-directory: packages/ade
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq '. + {version: "0.0.1", build: {beforeBuildCommand: ""}}' src-tauri/tauri.test.conf.json > src-tauri/tauri.uninstall-check.conf.json
+          bun x tauri build --config src-tauri/tauri.uninstall-check.conf.json --features test-exe --bundles nsis -- --bin ade-test
+          ls -l src-tauri/target/release/bundle/nsis
+
+      - name: Silent install and uninstall
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./packages/ade/scripts/uninstall-check.ps1 -Phase silent
+
+      - name: A build that is not the released identity leaves the hooks alone
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./packages/ade/scripts/uninstall-check.ps1 -Phase identity
+
+      - name: ADE open, silent uninstall closes it before the removals
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./packages/ade/scripts/uninstall-check.ps1 -Phase running
+
+      - name: An update removes nothing
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./packages/ade/scripts/uninstall-check.ps1 -Phase update
+
+      - name: --delete-secrets takes the keychain entries
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./packages/ade/scripts/uninstall-check.ps1 -Phase secrets
