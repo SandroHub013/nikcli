@@ -175,12 +175,12 @@ directly, so migrating the command surface alone would leave the palette title a
 
 **Fixed 2026-10-03, and the premise behind it was wrong.** The `api.kv` equivalent already existed on the v1 surface —
 `TuiKV` (`packages/plugin/src/tui.ts:329-333`), handed to every plugin at `runtime.ts:830`. What was missing was only the v2
-*forwarding*, and the v2 contract had no `kv` member to forward into. `Context` is now `{options, client, data, storage, kv,
+_forwarding_, and the v2 contract had no `kv` member to forward into. `Context` is now `{options, client, data, storage, kv,
 ui}` and `adaptV2TuiPlugin` passes `kv: api.kv`.
 
 Two details make this safe rather than merely compiling. The v2 `KV` is an alias of `TuiKV`, not a lookalike
 (`packages/plugin/src/v2/tui/context.ts`), so the two cannot drift into two similar shapes that both typecheck. And the host
-hands over the *same object* the component tree holds rather than a wrapper: a wrapper would be free to redirect reads to
+hands over the _same object_ the component tree holds rather than a wrapper: a wrapper would be free to redirect reads to
 `storage`, which is exactly the `state/tui/plugin/<id>.<key>.json` relocation this was meant to prevent. The test asserts
 identity, `expect(context.kv).toBe(runtime.api.kv)`, because a structural clone satisfies an equality check and still
 reintroduces the desync.

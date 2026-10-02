@@ -3,6 +3,19 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.422.0 (October 2026)
+
+## Core
+
+- Introduce mod functionality and validation (@nikomatt69)
+- Add aggregate filtering to /sync/outbox endpoint (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(sync): add aggregate filtering to /sync/outbox endpoint
+  - feat(mods): introduce mod functionality and validation
+
 ## v1.421.0 (October 2026)
 
 - No notable changes

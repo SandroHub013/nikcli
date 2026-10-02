@@ -169,7 +169,10 @@ export interface ModApi {
   readonly ui: {
     /** A dim line for the transcript. `{ to: "debug" }` writes the debug log only. */
     log(text: string, options?: { to?: "transcript" | "debug" }): Promise<void>
-    toast(text: string, options?: { variant?: "info" | "success" | "warning" | "error"; timeoutMs?: number }): Promise<void>
+    toast(
+      text: string,
+      options?: { variant?: "info" | "success" | "warning" | "error"; timeoutMs?: number },
+    ): Promise<void>
     notice(text: string): Promise<void>
     /** Ask the user. Resolves to the label picked or the text typed; rejects when dismissed or when there is no session. */
     ask(question: string, options: string[]): Promise<string>

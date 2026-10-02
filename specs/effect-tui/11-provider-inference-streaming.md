@@ -289,7 +289,7 @@ later EOT-15 outbox slice added its test; the four failures did not change.
 and expectation problems, not product defects, and both are now gone rather than tolerated.
 
 The three PKCE failures were a test defect, not a missing dependency. `test/auth/pkce-no-downgrade.test.ts` shelled out to
-`rg`, which this repository treats as an *optional* accelerator: production resolves it with `Bun.which("rg")` and disables the
+`rg`, which this repository treats as an _optional_ accelerator: production resolves it with `Bun.which("rg")` and disables the
 tier when it is absent (`packages/nikcli/src/file/ripgrep.ts:41-49`). Requiring the binary in a test made an optional tool
 mandatory and pushed the fix toward "install ripgrep in CI" instead of "the test needs no external tool". The helper is now a
 native `readdirSync` walk, matching the existing precedent in `test/plugin/autoload-safety.test.ts`. That also closed a silent

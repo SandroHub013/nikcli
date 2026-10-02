@@ -21599,6 +21599,22 @@
             "required": false
           },
           {
+            "name": "aggregate",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict the page to one aggregate. Optional and additive: without it the endpoint behaves exactly as before. It exists because `seq` counts per aggregate, so a project-wide `since` addresses every aggregate's own numbering at once — the mismatch behind the silent cross-aggregate loss in specs/effect-tui/15-sync-snapshots-watermarks.md. A consumer holding per-aggregate cursors can ask for one aggregate at a time instead of over-fetching everything above the lowest cursor and discarding the rest."
+            },
+            "required": false
+          },
+          {
             "name": "directory",
             "in": "query",
             "required": false,
@@ -32021,6 +32037,75 @@
               }
             ]
           },
+          "mod": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "prependPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "appendPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowManagedModsOnly": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowModsToOverrideDenyRules": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "disableAllMods": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "snapshot": {
             "anyOf": [
               {
@@ -41631,6 +41716,75 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mod": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "prependPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "appendPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowManagedModsOnly": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowModsToOverrideDenyRules": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "disableAllMods": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
               },
               {
                 "type": "null"
