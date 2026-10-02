@@ -166,6 +166,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let outputEmitted = false
     // Ring buffer for doom-loop detection - avoids repeated storage I/O
     const doomLoopBuffer: Array<{ tool: string; input: unknown }> = []
 
@@ -182,13 +183,15 @@ export namespace SessionProcessor {
         }),
       )
 
-    const updatePart = (part: MessageV2.Part) =>
-      runSession(
+    const updatePart = (part: MessageV2.Part) => {
+      if (part.type !== "step-start") outputEmitted = true
+      return runSession(
         Effect.gen(function* () {
           const session = yield* Session.Service
           return yield* session.updatePart(part)
         }),
       )
+    }
 
     const removePart = (input: { sessionID: string; messageID: string; partID: string }) =>
       runSession(
@@ -215,6 +218,7 @@ export namespace SessionProcessor {
     // projector (with `publish: false`, since the bus already heard every
     // delta) so the row is written in exactly one place.
     async function updatePartCoalesced(part: MessageV2.TextPart | MessageV2.ReasoningPart, delta: string) {
+      outputEmitted = true
       Bus.publish(MessageV2.Event.PartUpdated, { part, delta })
       const key = ["part", part.messageID, part.id]
       coalescer.schedule(key, part, async (_k, content) => {
@@ -254,6 +258,7 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
+        outputEmitted = false
         const shouldBreak = (await configGet()).experimental?.continue_loop_on_deny !== true
         while (true) {
           const attemptPartIDs = new Set<string>()
@@ -667,6 +672,7 @@ export namespace SessionProcessor {
                       }),
                     )
                     textPart.text = textOutput.text
+                    if (textPart.text) outputEmitted = true
                     textPart.time = {
                       start: textPart.time?.start ?? Date.now(),
                       end: Date.now(),
@@ -704,8 +710,8 @@ export namespace SessionProcessor {
                 stack: JSON.stringify(e.stack),
               })
             }
-            // Context overflow is handled through retryable provider error classification below.
-            const retry = interrupted ? undefined : SessionRetry.retryable(error)
+            // Removing a part cannot retract streamed output or undo a tool call.
+            const retry = interrupted || outputEmitted ? undefined : SessionRetry.retryable(error)
             if (retry !== undefined) {
               const nextAttempt = attempt + 1
               if (nextAttempt <= SessionRetry.RETRY_MAX_ATTEMPTS) {

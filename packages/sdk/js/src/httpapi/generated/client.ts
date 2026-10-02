@@ -3967,6 +3967,7 @@ export function make(options: ClientOptions) {
               since: input["since"],
               afterAggregate: input["afterAggregate"],
               afterID: input["afterID"],
+              aggregate: input["aggregate"],
             },
             successStatus: 200,
             declaredStatuses: [],

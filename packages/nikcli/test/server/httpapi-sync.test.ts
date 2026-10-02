@@ -124,6 +124,51 @@ describe("Sync HttpApi contract (realigned to Hono routes)", () => {
     expect(invalid.status).toBe(400)
   })
 
+  it("GET /sync/outbox restricts to one aggregate, which is the per-aggregate cursor's missing half", async () => {
+    // The loss table in `specs/effect-tui/15-sync-snapshots-watermarks.md`: `seq`
+    // counts per aggregate, and the endpoint filtered only on `projectID AND seq
+    // > since`, so one `since` addressed every aggregate's own numbering at once.
+    // A consumer holding per-aggregate cursors had to ask with the *lowest* cursor
+    // and discard whatever came back for aggregates it already had.
+    const { Sync } = await import("@/sync")
+    const directory = await makeProjectDir()
+    const projectID = `aggfilter_${Date.now()}`
+    const quiet = "session:quiet"
+    // The busy aggregate runs its sequence far past the quiet one's, exactly the
+    // imbalance the table describes: the quieter the aggregate, the more certain
+    // it was to be skipped.
+    for (let n = 1; n <= 60; n++) await Sync.emitRaw(projectID, "session:busy", { n })
+    for (let n = 1; n <= 5; n++) await Sync.emitRaw(projectID, quiet, { n })
+
+    type Page = {
+      events: { id: string; aggregate: string; seq: number }[]
+      hasMore: boolean
+    }
+    const read = async (query: string) => (await (await request("GET", query, directory)).json()) as Page
+
+    // Project-wide, from the quiet aggregate's cursor: the busy aggregate's 55
+    // remaining events are all returned and all discarded by the client.
+    const wide = await read(`/sync/outbox?projectID=${projectID}&since=5`)
+    expect(wide.events).toHaveLength(55)
+    expect(wide.events.every((e) => e.aggregate === "session:busy")).toBe(true)
+
+    // The same cursor, scoped to the aggregate that actually owns it: the quiet
+    // aggregate's own tail, and nothing else.
+    const scoped = await read(`/sync/outbox?projectID=${projectID}&since=5&aggregate=${encodeURIComponent(quiet)}`)
+    expect(scoped.events).toHaveLength(0)
+    expect(scoped.hasMore).toBe(false)
+
+    const quietTail = await read(`/sync/outbox?projectID=${projectID}&since=3&aggregate=${encodeURIComponent(quiet)}`)
+    expect(quietTail.events.map((e) => e.seq)).toEqual([4, 5])
+
+    // Additive, in both directions: omitting the parameter is the old page, and
+    // an unknown aggregate is an empty page rather than an error.
+    const omitted = await read(`/sync/outbox?projectID=${projectID}`)
+    expect(omitted.events).toHaveLength(65)
+    const unknown = await read(`/sync/outbox?projectID=${projectID}&aggregate=session%3Anothing`)
+    expect(unknown.events).toHaveLength(0)
+  })
+
   it("GET /sync/snapshot/:aggregateID preserves the legacy 400 text response", async () => {
     const directory = await makeProjectDir()
     const response = await request("GET", "/sync/snapshot/unknown_1?projectID=proj_1", directory)

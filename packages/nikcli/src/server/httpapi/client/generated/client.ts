@@ -2622,6 +2622,7 @@ type Endpoint25_1Input = {
   readonly since?: Endpoint25_1Request["query"]["since"]
   readonly afterAggregate?: Endpoint25_1Request["query"]["afterAggregate"]
   readonly afterID?: Endpoint25_1Request["query"]["afterID"]
+  readonly aggregate?: Endpoint25_1Request["query"]["aggregate"]
 }
 const Endpoint25_1 = (raw: RawClient["sync"]) => (input: Endpoint25_1Input) =>
   raw["outbox"]({
@@ -2630,6 +2631,7 @@ const Endpoint25_1 = (raw: RawClient["sync"]) => (input: Endpoint25_1Input) =>
       since: input["since"],
       afterAggregate: input["afterAggregate"],
       afterID: input["afterID"],
+      aggregate: input["aggregate"],
     },
   }).pipe(Effect.mapError(mapClientError))
 

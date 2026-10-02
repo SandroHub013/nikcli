@@ -77,20 +77,45 @@ session; every "open" line is a gate that still needs work, not a claim that a c
 
 ### Review the evidence
 
-EOT-11 tests pin partial text/reasoning published to Bus then removed on legacy processor retry: a requirement 6 gap,
-not compliance. Missing usage fields default to zero, but Anthropic/Bedrock recompute a zero total while OpenAI/Google
-leave an absent total undefined.
+2026-10-02: the EOT-11 partial-output safety slice stops processor retries after published text, reasoning, tool or
+billed step output, preserving content and the terminal `APIError` rather than removing parts and replaying the request.
 
-Native finish usage stays undefined when absent, and the adapter drops `Retry-After` metadata at the API error boundary.
-See [EOT-11](effect-tui/11-provider-inference-streaming.md) for the inspected tests and remaining gaps.
+Native midstream failures are lazy iteration errors, outside the setup fallback catch; they are not actual midstream
+fallback to the AI SDK. `packages/nikcli/test/session/processor-retry.test.ts` and
+`packages/nikcli/test/session/native-runtime.test.ts` pin content preservation, no replay and no synthetic finish.
 
-User-supplied verified result from `packages/nikcli`: **120 pass, 0 fail, exit 0** across
-`test/session/{session,llm-event-adapter,retry,retry-precise}.test.ts`; not a new run here.
-Processor tests were inspected without a confirmed run count.
+Baseline before changes, from `packages/nikcli`:
+`bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts`
+reported **49 pass, 0 fail, exit 0**. After the slice, the wider targeted run
+`bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts test/session/processor-effect-service.test.ts test/session/retry.test.ts test/session/retry-precise.test.ts`
+reported **108 pass, 0 fail, exit 0**, `bun run format:check` and `bun run lint` reported 0 errors, and
+`bun run typecheck` in `packages/nikcli` exits 0. (An earlier typecheck in this session reported twelve errors in
+`src/provider/sdk/copilot/chat/openai-compatible-chat-language-model.ts` from a duplicated `@ai-sdk/provider` in the
+installed tree; `bun install --frozen-lockfile` cleared them, so that was install drift rather than a repo defect.)
 
-Next: a narrow partial-output retry/fallback guard across processor and native paths with matching tests, then
-missing-usage and header handling. EOT-11 stays proposed at Tier 1/P2 with unchanged dependencies; EOT-00's real
-Ghostty/tmux matrix remains open, so this evidence does not permit promotion.
+`bun run script/test-ci.ts` over the whole suite (487 files, 20 batches), run with nothing else on the machine, reported
+**5376 pass, 4 fail**. Both surviving failures reproduce with the slice stashed at pristine `live-main`: three need
+ripgrep, which is not installed on this machine, and one is a release-workflow expectation still spelling
+`macos/ADE.app.tar.gz` against a workflow that uses `$NAME`. No session suite failed. Three earlier runs of the same suite
+reported 13, 5 and 4 failures with the extras landing in a different file each time — all 30s timeouts from work running
+alongside, each passing standalone (`test/codemode/parity.test.ts` alone: **54 pass, 0 fail**). Only the uncontended
+number is evidence.
+
+Next: full adapter convergence, then the `CachePolicy.Service` and `Usage.Service` the spec still records as absent. The
+missing-usage and header items are closed — see below. EOT-11 stays proposed at Tier 1/P2 with unchanged dependencies;
+EOT-00's real Ghostty/tmux gate remains open, so this slice does not permit promotion.
+
+Later the same day, a second EOT-11 slice closed both items this one left open, and the measurement changed the work:
+a real 429 carrying `retry-after: 7` proved the native runtime already honours the header on its own retries, and that
+when it gave up it threw a fully populated `LLMError` — which crossed into `MessageV2.fromError` as a non-retryable
+`UnknownError`, so `SessionRetry` never saw the header at all. `packages/nikcli/src/session/llm/llm-event-adapter.ts`
+now maps that error to a status- and header-carrying `APICallError` at the single seam native failures cross, and
+counts finish events that arrive without usage instead of leaving a zero-billed turn looking free.
+`packages/nikcli/test/session/native-retry-after.test.ts` serves real 429 and 400 responses and pins it; deleting the
+mapping turns it red with `Received: "UnknownError"`. Nine session suites then reported **175 pass, 0 fail, exit 0**.
+
+Rollback must not restore retries over published content. See [EOT-11](effect-tui/11-provider-inference-streaming.md)
+for the inspected behavior and remaining convergence work.
 
 ---
 
@@ -278,10 +303,18 @@ to P0. Leave any unpassed spec proposed/in-progress rather than claiming the arc
 7. EOT-03: carry abort plus generation checks through one complete dialog request/resource/close flow.
 8. EOT-04: classify event types and test overload before introducing admission caps; retain server encode-once behavior.
 9. EOT-09: extend monitor or one background job family with capacity/queue/terminal-state guards.
-10. EOT-11: use the test-only characterization to guard partial-output retry/fallback across processor and native paths
-    with matching tests; follow with missing-usage and header handling before full adapter convergence.
-11. EOT-14: migrate one internal plugin (`background`) to v2; verify hot reload with late disposer and incompatible manifest.
-12. EOT-15: land the snapshot barrier on `session` first, then extend to `project` and `workspace`.
+10. EOT-11: done through the 2026-10-02 slices — partial-output retry safety, then rate-limit typing with `Retry-After`
+    preserved and a missing-usage gap flag. What remains is full adapter convergence and the `CachePolicy.Service` /
+    `Usage.Service` the spec still records as absent.
+11. EOT-14: **two slices landed 2026-10-02** — internal definitions now share the manifest/host/capability validation
+    that only file plugins went through, and v2 command presentation fields are re-read instead of captured at
+    registration. Also **corrected a stale claim**: the spec said v2 had no command surface at all, which was wrong —
+    `ui.command` and the `commands` capability have existed for some time; the gap was one argument. The `background`
+    migration itself stays blocked on an `api.kv` equivalent, because v2 `storage` writes a different file than the
+    `kv.json` its dialog and view read directly.
+12. EOT-15: **producer-side half landed 2026-10-02** — `/sync/outbox` takes an optional `aggregate` filter, so a
+    consumer holding per-aggregate cursors can page one aggregate at a time instead of replaying every aggregate above
+    the lowest cursor. The consumer-side barrier is still open: the TUI resumes by blind refetch.
 13. EOT-16: tighten workspace scope semantics on one operation; verify concurrent isolation.
 14. EOT-17: migrate one permission group (start with file system) to the typed evaluator.
 15. EOT-05: extract one resource family's pure reducer and coordinator; verify replay equivalence.
@@ -385,6 +418,17 @@ appears more than once.
 | EOT-04 | Reconnect waits after a clean stream end too; jittered, abortable backoff                                        | `5b7777ba2b`               |
 | EOT-08 | One shutdown budget shared by every plugin instead of five seconds each                                          | `b0ab388457`               |
 | EOT-13 | Effect's built-in server span off on the bridge; `x-forwarded-for`/`referer` forbidden at the choke point        | `4fe8d73926`               |
+| EOT-11 | Partial-output retry safety: no retry once text, reasoning, tool or billed step output is published              | uncommitted                |
+| EOT-11 | A real 429 keeps its status and `Retry-After`; native failures stop arriving as non-retryable `UnknownError`     | uncommitted                |
+| EOT-11 | A finish event without `usage` is counted and warned, so a zero-billed turn is not silently free                 | uncommitted                |
+| EOT-14 | Internal definitions share the manifest, host and capability validation that only file plugins went through      | uncommitted                |
+| EOT-14 | v2 command title/enabled re-read per palette open instead of frozen at registration                              | uncommitted                |
+| EOT-14 | `storage` supplied as a host capability, matching the store the runtime already hands out                        | uncommitted                |
+| EOT-15 | `/sync/outbox` takes an optional `aggregate` filter; the per-aggregate cursor stops forcing an over-fetch        | uncommitted                |
+
+The last seven rows are **uncommitted**. They are listed with an explicit marker rather than a hash because no commit
+exists yet, and the table's contract is that a landed row names the commit that landed it. Once committed, the marker
+is what gets replaced — not the description.
 
 Every spec has been opened and every spec now has at least one landed slice,
 EOT-00, EOT-14 and EOT-19 included.

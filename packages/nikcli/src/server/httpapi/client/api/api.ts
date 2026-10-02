@@ -2385,6 +2385,7 @@ export type Endpoint25_1Input = {
   readonly since?: Endpoint25_1Request["query"]["since"]
   readonly afterAggregate?: Endpoint25_1Request["query"]["afterAggregate"]
   readonly afterID?: Endpoint25_1Request["query"]["afterID"]
+  readonly aggregate?: Endpoint25_1Request["query"]["aggregate"]
 }
 export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["sync"]["outbox"]>>
 export type SyncOutboxOperation<E = never> = (input: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>

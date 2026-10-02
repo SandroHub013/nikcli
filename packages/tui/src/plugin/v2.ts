@@ -24,6 +24,18 @@ import { satisfiesRange } from "@nikcli-ai/util/plugin-shared"
 
 const ROUTE_PREFIX = "__nikcli_v2_tui__:"
 
+/**
+ * Resolve a presentation field that may be a thunk.
+ *
+ * The function form is the whole point of the dynamic command surface: the
+ * palette calls this inside its memo, so a plugin reading a reactive store in
+ * one of these getters gets the current value on every open. A plain value is
+ * returned as-is, which is what every command written before this existed does.
+ */
+function read<T>(value: T | (() => T)): T {
+  return typeof value === "function" ? (value as () => T)() : value
+}
+
 function routeName(id: string, name: string) {
   return `${ROUTE_PREFIX}${encodeURIComponent(id)}:${encodeURIComponent(name)}`
 }
@@ -91,8 +103,20 @@ export interface Host {
   readonly capabilities?: readonly Capability[]
 }
 
-/** What the TUI runtime can supply today. The rest of the vocabulary has no surface yet. */
-export const TUI_HOST_CAPABILITIES: readonly Capability[] = ["routes", "commands"]
+/**
+ * What the TUI runtime can supply today.
+ *
+ * `storage` is here because the host has it, not because it was on the list:
+ * `pluginStorage(base)` is a real per-plugin store — namespaced by plugin id,
+ * quota-bounded, watched for changes and evicted on unload
+ * (`packages/tui/src/plugin/storage.ts`), and the runtime hands it to every
+ * plugin as `api.storage` (`runtime.ts`). Leaving it out meant a manifest
+ * declaring `commands` *and* `storage` was refused as `CapabilityDenied` for a
+ * capability the host demonstrably had, so no v2 TUI plugin could ask for
+ * persistence at all. `scheduler`, `tools`, `keymap` and `http` stay absent
+ * because no surface in this host implements them.
+ */
+export const TUI_HOST_CAPABILITIES: readonly Capability[] = ["routes", "commands", "storage"]
 
 function defaultHost(): Host {
   return {
@@ -119,7 +143,12 @@ function checkHost(manifest: Manifest, host: Host) {
     const actual = host[key]
     if (!actual) continue
     if (satisfiesRange(actual, required)) continue
-    throw new Incompatible({ pluginID: manifest.id, requirement: key, required, actual })
+    throw new Incompatible({
+      pluginID: manifest.id,
+      requirement: key,
+      required,
+      actual,
+    })
   }
 }
 
@@ -215,23 +244,31 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
           if (!command.name) throw new TypeError(`V2 TUI plugin ${definition.id} registered an empty command name`)
           if (commands.has(command.name)) throw new Error(`Command already registered: ${command.name}`)
           commands.add(command.name)
-          const dispose = api.keymap.registerLayer({
+          // A thunk layer, not an object literal. The palette re-reads a
+          // registration on every open (`createMemo` in the command dialog), but
+          // that only re-reads what the callback reads — and a captured value is
+          // read exactly once. Passing a function defers every presentation field
+          // into the memo, so a title or enabled state derived from settings is
+          // current when the palette opens instead of frozen at registration.
+          // `keymap.resolveLayer` already accepts this form, so v1 and v2 share
+          // one reactive seam rather than growing a second.
+          const dispose = api.keymap.registerLayer(() => ({
             commands: [
               {
                 name: command.name,
-                title: command.title,
-                description: command.description,
-                namespace: command.namespace,
+                title: read(command.title),
+                description: read(command.description),
+                namespace: read(command.namespace),
                 slashName: command.slash?.name,
                 slashAliases: command.slash?.aliases ? [...command.slash.aliases] : undefined,
                 slashArguments: command.slash?.arguments,
-                suggested: command.suggested,
-                hidden: command.hidden,
-                enabled: command.enabled,
+                suggested: read(command.suggested),
+                hidden: read(command.hidden),
+                enabled: read(command.enabled),
                 run: command.run,
               },
             ],
-          })
+          }))
           let active = true
           return () => {
             if (!active) return
@@ -274,9 +311,23 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
   }
 }
 
-export function readV2TuiPlugin(raw: Record<string, unknown>, spec: string, host?: Host): TuiPluginModule | undefined {
-  const value = raw.default
-  if (!isRecord(value) || !("setup" in value)) return
+/**
+ * Validate a v2 definition and adapt it, throwing on anything the contract
+ * rejects.
+ *
+ * Extracted from `readV2TuiPlugin` so internal plugins go through the same
+ * checks as file plugins. They used to call `adaptV2TuiPlugin` directly, which
+ * meant an internal plugin's manifest was read but never parsed, the host was
+ * never checked and capabilities were never granted — so "the runtime refuses a
+ * plugin whose manifest is incompatible with the host" (requirement 2) did not
+ * hold for exactly the plugins shipped in the box. Duplicating the checks in the
+ * runtime instead would guarantee the two paths drift again, which is the failure
+ * this extraction exists to prevent.
+ *
+ * No internal plugin carries a manifest today, so this changes nothing until one
+ * does — which is the point: the day someone adds one, it is checked.
+ */
+export function adaptValidatedV2TuiPlugin(value: Record<string, unknown>, spec: string, host?: Host): TuiPlugin {
   if (typeof value.id !== "string" || !value.id.trim()) {
     throw new TypeError(`V2 TUI plugin ${spec} must define a non-empty id`)
   }
@@ -292,13 +343,19 @@ export function readV2TuiPlugin(raw: Record<string, unknown>, spec: string, host
     checkCapabilities(manifest, resolved)
   }
 
-  const definition = { ...(value as unknown as Definition), manifest }
+  return adaptV2TuiPlugin({ ...(value as unknown as Definition), manifest })
+}
+
+export function readV2TuiPlugin(raw: Record<string, unknown>, spec: string, host?: Host): TuiPluginModule | undefined {
+  const value = raw.default
+  if (!isRecord(value) || !("setup" in value)) return
+
   return {
     // The id stays the plugin's own, manifest or not. The runtime keys slots,
     // routes and enable state on it, so renaming one for diagnostics would be a
     // behaviour change dressed as a label. `manifest.id` is the declared
     // identity and is available on the definition for anything that wants it.
-    id: definition.id,
-    tui: adaptV2TuiPlugin(definition),
+    id: value.id as string,
+    tui: adaptValidatedV2TuiPlugin(value, spec, host),
   }
 }

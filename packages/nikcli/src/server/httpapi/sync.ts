@@ -45,6 +45,10 @@ export namespace SyncHttpApi {
     }),
     afterAggregate: Schema.optional(Schema.String),
     afterID: Schema.optional(Schema.String),
+    aggregate: Schema.optional(Schema.String).annotate({
+      description:
+        "Restrict the page to one aggregate. Optional and additive: without it the endpoint behaves exactly as before. It exists because `seq` counts per aggregate, so a project-wide `since` addresses every aggregate's own numbering at once — the mismatch behind the silent cross-aggregate loss in specs/effect-tui/15-sync-snapshots-watermarks.md. A consumer holding per-aggregate cursors can ask for one aggregate at a time instead of over-fetching everything above the lowest cursor and discarding the rest.",
+    }),
   })
 
   const OutboxResponse = Schema.Struct({
@@ -312,6 +316,12 @@ export namespace SyncHttpApi {
     const aggregate = url.searchParams.get("afterAggregate")
     const id = url.searchParams.get("afterID")
     if ((aggregate === null) !== (id === null)) return new Response("Invalid cursor", { status: 400 })
+    // Additive: absent means no aggregate predicate, so every existing caller
+    // keeps the project-wide page it had. Present restricts the page, which is
+    // what lets a consumer holding per-aggregate cursors page one aggregate at a
+    // time instead of replaying every aggregate above the lowest cursor and
+    // discarding what it already had.
+    const onlyAggregate = url.searchParams.get("aggregate")
     const position =
       aggregate !== null && id !== null
         ? or(
@@ -325,7 +335,13 @@ export namespace SyncHttpApi {
         db
           .select()
           .from(syncEvent)
-          .where(and(eq(syncEvent.projectId, projectID), position))
+          .where(
+            and(
+              eq(syncEvent.projectId, projectID),
+              onlyAggregate === null ? undefined : eq(syncEvent.aggregate, onlyAggregate),
+              position,
+            ),
+          )
           .orderBy(syncEvent.seq, syncEvent.aggregate, syncEvent.id)
           .limit(501)
           .all(),

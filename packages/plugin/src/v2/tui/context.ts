@@ -31,14 +31,20 @@ export type SessionInfo = Session
 export type SessionPendingInfo = SessionEntry
 /** A persisted v2 entry: the whole conversation, flat. */
 export type SessionEntryInfo = SessionEntry
-export type SessionMessageInfo = { readonly info: Message; readonly parts: Part[] }
+export type SessionMessageInfo = {
+  readonly info: Message
+  readonly parts: Part[]
+}
 export type PermissionV2Request = PermissionRequest
 export type FormInfo = QuestionRequest
 export type PermissionSavedInfo = PermissionRule
 export type ShellInfo = Pty
 export type AgentInfo = Agent
 export type CommandInfo = Command
-export type IntegrationInfo = { readonly name: string; readonly status: ConnectorStatus }
+export type IntegrationInfo = {
+  readonly name: string
+  readonly status: ConnectorStatus
+}
 export type McpServer = { readonly name: string; readonly status: McpStatus }
 export type ModelInfo = Model
 export type ProviderV2Info = Provider
@@ -148,6 +154,23 @@ export interface Page {
 export type Slot = (props: Record<string, unknown>) => JSX.Element
 
 /**
+ * A presentation field that may be derived at read time.
+ *
+ * The palette re-reads a registered command on every open — `createMemo` in the
+ * command dialog wraps the registration callback — but only if the callback
+ * actually reads something reactive. A plain value is captured once, at
+ * registration, so a command whose title or enabled state depends on settings
+ * would show a snapshot from whenever the plugin was loaded. v1 plugins escape
+ * this because `keymap.registerLayer` accepts a thunk; v2 passed an array
+ * literal, so the reactive seam downstream was never reached.
+ *
+ * Only presentation fields accept this. `name` stays static on purpose: it is
+ * the dedupe key and the dispatch key, and a command whose identity changes
+ * between reads is two commands wearing one name.
+ */
+export type UICommandValue<Value> = Value | (() => Value)
+
+/**
  * A command a plugin adds to the command palette and, optionally, to the `/`
  * slash menu. Mirrors what a v1 plugin registers with `keymap.registerLayer`, so
  * migrating a plugin to v2 does not change which commands the user sees.
@@ -155,10 +178,10 @@ export type Slot = (props: Record<string, unknown>) => JSX.Element
 export interface UICommand {
   /** Unique command id, e.g. `browser.sessions`. */
   readonly name: string
-  readonly title: string
-  readonly description?: string
+  readonly title: UICommandValue<string>
+  readonly description?: UICommandValue<string | undefined>
   /** Command palette category. */
-  readonly namespace?: string
+  readonly namespace?: UICommandValue<string | undefined>
   /** Registers the command as `/<slash.name>`. */
   readonly slash?: {
     readonly name: string
@@ -166,9 +189,9 @@ export interface UICommand {
     /** `/name <text>` runs the command with `<text>` as `input` instead of selecting it. */
     readonly arguments?: boolean
   }
-  readonly suggested?: boolean
-  readonly hidden?: boolean
-  readonly enabled?: boolean
+  readonly suggested?: UICommandValue<boolean | undefined>
+  readonly hidden?: UICommandValue<boolean | undefined>
+  readonly enabled?: UICommandValue<boolean | undefined>
   readonly run: (input?: string) => void
 }
 

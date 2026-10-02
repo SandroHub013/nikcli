@@ -245,6 +245,38 @@ re-fetch of everything above the minimum cursor. Adding an optional
 `aggregate` filter to the endpoint is the producer-side half of requirement 7
 and is additive; it is not done here.
 
+### `/sync/outbox` can now be asked for one aggregate — 2026-10-02
+
+**Landed.** `OutboxQuery` gained an optional `aggregate` parameter
+(`packages/nikcli/src/server/httpapi/sync.ts:48`) and the handler adds
+`eq(syncEvent.aggregate, onlyAggregate)` to the `where` clause only when it is
+present (`sync.ts:338`). Absent means no predicate at all, so every existing
+caller keeps the exact project-wide page it had — which is what "additive" has to
+mean here, because the client already derives a correct `since` from its
+per-aggregate cursors and this only removes the over-fetch those cursors force.
+
+The test is the spec's own loss table, run against the real endpoint: a busy
+aggregate at `seq` 1..60 and a quiet one at 1..5, then a read at `since=5`. The
+project-wide read returns the busy aggregate's 55 remaining events and nothing of
+the quiet one — the over-return the client had to discard. The same read scoped to
+`aggregate=session:quiet` returns that aggregate's own tail (`seq` 4, 5) and
+nothing else. Omitting the parameter still returns all 65; an unknown aggregate is
+an empty page, not an error.
+
+This closes the producer-side half of requirement 7. It does **not** close the
+spec: the consumer barrier is still open — `packages/tui/src/context/sync.tsx`
+resumes by blind refetch, and the snapshot/watermark barrier the "Snapshot
+Topology" section describes does not exist.
+
+Verified in this session: `bun test test/sync/ test/server/httpapi-sync.test.ts
+test/server/event-feed.test.ts` reported **143 pass, 0 fail**, `bun run
+check:routes --strict` and `check:account-required` exited 0, `bun run typecheck`
+exited 0, and the regenerated client trees carry the new parameter
+(`api.ts`: `readonly aggregate?: Endpoint25_1Request["query"]["aggregate"]`). The
+whole suite, run with nothing else on the machine, reported **5377 pass, 4 fail**
+— the same four pre-existing failures recorded under EOT-11, one more passing test
+than the 5376 measured before this slice, which is the one this slice adds.
+
 ### Coverage
 
 `test/sync/remote-client-cursor.test.ts` drives the real class end to end with

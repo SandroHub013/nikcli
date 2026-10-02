@@ -8,7 +8,9 @@ import { readV2TuiPlugin } from "@tui/plugin/v2"
  * the seventeen v1 internal plugins and a migration that keeps their slash commands.
  */
 function host() {
-  const layers: TuiKeymapLayer[] = []
+  // Both forms, because `registerLayer` takes both: this harness has to hold what
+  // it is handed, not only the shape it used to receive.
+  const layers: (TuiKeymapLayer | (() => TuiKeymapLayer))[] = []
   const dialogs: unknown[] = []
   let layerDisposals = 0
   const api = {
@@ -16,7 +18,7 @@ function host() {
     data: {},
     storage: {},
     keymap: {
-      registerLayer(layer: TuiKeymapLayer) {
+      registerLayer(layer: TuiKeymapLayer | (() => TuiKeymapLayer)) {
         layers.push(layer)
         return () => {
           layerDisposals++
@@ -33,8 +35,15 @@ function host() {
     },
     lifecycle: { onDispose: () => () => {} },
   } as unknown as TuiPluginApi
+  // Mirrors `resolveLayer` and `resolveList` in `packages/tui/src/plugin/keymap.ts`:
+  // both the layer and its command list may be a thunk, which is how the palette
+  // re-reads a registration on every open. Resolving only the inner list would
+  // have silently hidden the dynamic path this file exists to cover.
   const commands = () =>
-    layers.flatMap((layer) => (typeof layer.commands === "function" ? layer.commands() : (layer.commands ?? [])))
+    layers.flatMap((layer) => {
+      const resolved = typeof layer === "function" ? layer() : layer
+      return typeof resolved.commands === "function" ? resolved.commands() : (resolved.commands ?? [])
+    })
   return { api, layers, dialogs, commands, disposals: () => layerDisposals }
 }
 
@@ -124,7 +133,11 @@ describe("v2 tui plugin commands", () => {
       Plugin.define({
         id: "internal:dup",
         setup(ctx) {
-          unregister = ctx.ui.command({ name: "dup.one", title: "One", run() {} })
+          unregister = ctx.ui.command({
+            name: "dup.one",
+            title: "One",
+            run() {},
+          })
           try {
             ctx.ui.command({ name: "dup.one", title: "Again", run() {} })
           } catch (error) {
@@ -189,4 +202,100 @@ describe("internal:browser as a v2 plugin", () => {
     all[0].run()
     expect(dialogs).toHaveLength(1)
   }, 60_000)
+})
+
+describe("v2 command presentation is re-read, not captured", () => {
+  /**
+   * The property this pins, and the reason it needs two reads rather than one.
+   *
+   * The command palette re-runs a registration's callback on every open
+   * (`createMemo` in the command dialog). That only re-reads what the callback
+   * reads — a value captured into an object literal is read once, at
+   * registration, and the palette then shows a snapshot from load time. A test
+   * that registers and asserts once passes against the old static array and
+   * proves nothing, which is why every case here reads twice with the store
+   * changed in between.
+   *
+   * `name` stays static by design: it is the dedupe and dispatch key, so a
+   * command whose identity changes between reads would be two commands sharing
+   * one name.
+   */
+  async function readTwice(setup: (ctx: never, read: () => { on: boolean; label: string }) => void) {
+    const { api, commands } = host()
+    const store = { on: false, label: "Off" }
+    const read = () => store
+    const module = load(
+      Plugin.define({
+        id: "internal:example",
+        setup: (ctx) => setup(ctx as never, read),
+      }),
+    )
+    await module.tui(api, undefined, {
+      id: "internal:example",
+      state: "first",
+    } as never)
+
+    const before = (commands() as TuiKeymapCommand[]).map((c) => ({
+      name: c.name,
+      title: c.title,
+      enabled: c.enabled,
+    }))
+    store.on = true
+    store.label = "On"
+    const after = (commands() as TuiKeymapCommand[]).map((c) => ({
+      name: c.name,
+      title: c.title,
+      enabled: c.enabled,
+    }))
+    return { before, after }
+  }
+
+  it("picks up a title and enabled state that change between palette opens", async () => {
+    const { before, after } = await readTwice((ctx, read) => {
+      ;(ctx as { ui: { command: (c: unknown) => void } }).ui.command({
+        name: "example.toggle",
+        title: () => `Example: ${read().label}`,
+        enabled: () => read().on,
+        run() {},
+      })
+    })
+
+    expect(before).toEqual([{ name: "example.toggle", title: "Example: Off", enabled: false }])
+    expect(after).toEqual([{ name: "example.toggle", title: "Example: On", enabled: true }])
+  })
+
+  it("keeps a static command byte-identical across reads", async () => {
+    // The change must not cost a command written in the old style: a plain value
+    // still resolves, and resolving twice gives the same answer.
+    const { before, after } = await readTwice((ctx, read) => {
+      ;(ctx as { ui: { command: (c: unknown) => void } }).ui.command({
+        name: "example.static",
+        title: "Example",
+        description: "A static command",
+        namespace: "Tool",
+        run() {},
+      })
+    })
+
+    expect(before).toEqual(after)
+    expect(after).toEqual([{ name: "example.static", title: "Example", enabled: undefined }])
+  })
+
+  it("leaves the name static even when everything else is dynamic", async () => {
+    const { before, after } = await readTwice((ctx, read) => {
+      ;(ctx as { ui: { command: (c: unknown) => void } }).ui.command({
+        name: "example.fixed",
+        title: () => `Label ${read().label}`,
+        hidden: () => read().on,
+        suggested: () => read().on,
+        run() {},
+      })
+    })
+
+    // One command, one identity, both reads — a name that moved with the store
+    // would register twice and dedupe would reject it.
+    expect(before.map((c) => c.name)).toEqual(["example.fixed"])
+    expect(after.map((c) => c.name)).toEqual(["example.fixed"])
+    expect(after[0]?.title).toBe("Label On")
+  })
 })

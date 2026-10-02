@@ -8836,25 +8836,36 @@ export type SyncOutboxInput = {
     readonly since?: number | undefined
     readonly afterAggregate?: string | undefined
     readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
   }["projectID"]
   readonly since?: {
     readonly projectID: string
     readonly since?: number | undefined
     readonly afterAggregate?: string | undefined
     readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
   }["since"]
   readonly afterAggregate?: {
     readonly projectID: string
     readonly since?: number | undefined
     readonly afterAggregate?: string | undefined
     readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
   }["afterAggregate"]
   readonly afterID?: {
     readonly projectID: string
     readonly since?: number | undefined
     readonly afterAggregate?: string | undefined
     readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
   }["afterID"]
+  readonly aggregate?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["aggregate"]
 }
 
 export type SyncOutboxOutput = SyncOutboxResponse

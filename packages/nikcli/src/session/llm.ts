@@ -563,6 +563,7 @@ export namespace LLM {
             return nativeResult
           }
         } catch (e) {
+          if (input.abort.aborted || (e instanceof Error && e.name === "AbortError")) throw e
           l.warn("native llm stream failed, falling back to ai-sdk", {
             error: String(e),
           })

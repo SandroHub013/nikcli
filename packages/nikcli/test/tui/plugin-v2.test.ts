@@ -8,7 +8,7 @@ import { clearPluginStorage, evictPluginStorage, pluginStorage } from "@tui/plug
 import { Plugin } from "@nikcli-ai/plugin/v2/tui"
 import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
 import type { TuiDispose, TuiPluginApi, TuiRouteCurrent, TuiRouteDefinition } from "@nikcli-ai/plugin/tui"
-import { readV2TuiPlugin } from "@tui/plugin/v2"
+import { readV2TuiPlugin, adaptValidatedV2TuiPlugin } from "@tui/plugin/v2"
 
 describe("tui plugin storage quota", () => {
   const budget = 32 * 1024 * 1024
@@ -465,6 +465,16 @@ describe("v2 tui plugin manifest", () => {
     )
   })
 
+  it("accepts storage, which this host really supplies", () => {
+    // `pluginStorage(base)` is a real per-plugin store — namespaced, quota-bounded,
+    // watched and evicted on unload — so the host supplying `storage` is a fact
+    // about `pluginStorage`, not a claim. It was missing from
+    // `TUI_HOST_CAPABILITIES`, which refused every manifest asking for it.
+    expect(() =>
+      readV2TuiPlugin(withManifest({ capabilities: ["routes", "commands", "storage"] }), "x.ts"),
+    ).not.toThrow()
+  })
+
   it("refuses a capability this host has no surface for", () => {
     expect(() => readV2TuiPlugin(withManifest({ capabilities: ["scheduler"] }), "file:///x.ts")).toThrow(
       /does not supply "scheduler"/,
@@ -502,6 +512,94 @@ describe("v2 tui plugin manifest", () => {
 
     expect(module?.id).toBe("internal.example")
     await module!.tui(runtime.api, {}, {} as never)
+    expect(runtime.routes).toHaveLength(1)
+  })
+})
+
+describe("internal v2 definitions are validated too", () => {
+  const manifest = {
+    id: "acme:internal",
+    version: "1.2.3",
+    kind: "internal",
+    capabilities: ["routes"],
+  }
+
+  /**
+   * The change under test: `loadInternalPlugin` used to call
+   * `adaptV2TuiPlugin` directly, which reads `definition.manifest` but never
+   * parses it. So requirement 2 — "the runtime refuses to load a plugin whose
+   * manifest is incompatible with the host" — did not hold for exactly the
+   * plugins shipped in the box, and an internal plugin could declare anything.
+   *
+   * Driven through `adaptValidatedV2TuiPlugin`, the function the runtime now
+   * calls for internal definitions, because `loadInternalPlugin` itself is not
+   * exported. What is pinned is the validation being shared, not the call site.
+   */
+  it("refuses an internal definition whose host requirement is incompatible", () => {
+    expect(() =>
+      adaptValidatedV2TuiPlugin(
+        {
+          manifest: {
+            ...manifest,
+            hostRequirements: { node: ">=99.0.0" },
+          },
+          id: "internal.example",
+          setup: () => {},
+        },
+        "internal.example",
+      ),
+    ).toThrow(/host/)
+  })
+
+  it("refuses an internal definition that declares nothing", () => {
+    expect(() =>
+      adaptValidatedV2TuiPlugin(
+        {
+          manifest: { ...manifest, capabilities: [] },
+          id: "internal.example",
+          setup: () => {},
+        },
+        "internal.example",
+      ),
+    ).toThrow(/at least one capability/)
+  })
+
+  it("accepts a valid internal manifest", async () => {
+    const runtime = host()
+    const tui = adaptValidatedV2TuiPlugin(
+      {
+        manifest,
+        id: "internal.example",
+        setup: (input: Context) => {
+          input.ui.router.register({ name: "page", render: () => "ok" })
+        },
+      },
+      "internal.example",
+    )
+
+    await tui(runtime.api, {}, {} as never)
+    expect(runtime.routes).toHaveLength(1)
+  })
+
+  it("leaves a manifest-less internal definition ungated", async () => {
+    // Every internal plugin is written this way today. If this changed, adding
+    // validation to the internal path would have been a behaviour change rather
+    // than a new check.
+    const runtime = host()
+    const tui = adaptValidatedV2TuiPlugin(
+      // Cast exactly as `loadInternalPlugin` does: the validator takes the raw
+      // record a module boundary hands it, before it is known to be a
+      // `Definition`.
+      Plugin.define({
+        id: "internal.example",
+        setup(input) {
+          input.ui.router.register({ name: "page", render: () => "ok" })
+        },
+      }) as unknown as Record<string, unknown>,
+      "internal.example",
+    )
+
+    await tui(runtime.api, {}, {} as never)
     expect(runtime.routes).toHaveLength(1)
   })
 })

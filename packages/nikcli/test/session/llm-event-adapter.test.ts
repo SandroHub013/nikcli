@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it, spyOn } from "bun:test"
 import { APICallError } from "@ai-sdk/provider"
+import { Log } from "@nikcli-ai/util/log"
 import type { LLMEvent } from "@nikcli-ai/llm"
 import {
   mapLLMEvent,
@@ -7,6 +8,8 @@ import {
   toProcessorStream,
   providerErrorToAPICallError,
   suppressEmptyTextResult,
+  usageGap,
+  resetUsageGap,
 } from "@/session/llm/llm-event-adapter"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionRetry } from "@/session/retry"
@@ -267,7 +270,10 @@ describe("llm-event-adapter", () => {
       providerID: "test-provider",
     })
 
-    expect(classified).toMatchObject({ name: "APIError", data: { statusCode: 429 } })
+    expect(classified).toMatchObject({
+      name: "APIError",
+      data: { statusCode: 429 },
+    })
     expect((classified.data as { responseHeaders?: unknown }).responseHeaders).toBeUndefined()
   })
 
@@ -402,15 +408,57 @@ describe("native turn equivalence", () => {
     })
   })
 
-  it("currently leaves missing finish usage undefined rather than reporting a gap", () => {
-    const events = mapLLMEvent(adapterState(), {
+  it("flags absent native finish usage instead of interpolating it", () => {
+    resetUsageGap()
+    const warn = spyOn(Log.create({ service: "llm-event-adapter" }), "warn")
+    try {
+      const events = mapLLMEvent(adapterState(), {
+        type: "request-finish",
+        reason: "stop",
+      } as LLMEvent)
+      const step = events.find((event) => event.type === "finish-step")
+
+      // Still no usage: reconstructing one from prior deltas needs the
+      // accumulator the spec says is absent. What changes is that the gap is
+      // counted and announced instead of reading as a free request.
+      expect(step).toBeDefined()
+      expect(step?.usage).toBeUndefined()
+      expect(usageGap()).toEqual({ finishes: 1, gaps: 1 })
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain("no usage")
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("counts a finish that reported usage as no gap", () => {
+    resetUsageGap()
+    mapLLMEvent(adapterState(), {
       type: "request-finish",
       reason: "stop",
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
     } as LLMEvent)
-    const step = events.find((event) => event.type === "finish-step")
 
-    expect(step).toBeDefined()
-    expect(step?.usage).toBeUndefined()
+    expect(usageGap()).toEqual({ finishes: 1, gaps: 0 })
+  })
+
+  it("counts every finish event once even when a turn finishes twice", () => {
+    resetUsageGap()
+    const state = adapterState()
+    mapLLMEvent(state, {
+      type: "step-finish",
+      index: 0,
+      reason: "stop",
+    } as LLMEvent)
+    mapLLMEvent(state, {
+      type: "request-finish",
+      reason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    } as LLMEvent)
+
+    // The second finish is dropped as a duplicate step, so it is not observed
+    // twice: a gap count that disagreed with the turns would be its own lie.
+    expect(usageGap()).toEqual({ finishes: 1, gaps: 1 })
   })
 
   it("propagates a mid-stream provider failure without synthesizing finish events", async () => {

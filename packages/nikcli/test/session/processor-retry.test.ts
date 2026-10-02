@@ -9,6 +9,8 @@ import { APICallError } from "ai"
 import type { MessageV2 as MessageTypes } from "@/session/message-v2"
 import type { LLM as LLMTypes } from "@/session/llm"
 import type { Provider } from "@/provider/provider"
+import type { LLMEvent } from "@nikcli-ai/llm"
+import { toProcessorStream } from "@/session/llm/llm-event-adapter"
 
 const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-processor-retry-home-"))
 process.env.NIKCLI_TEST_HOME = testHome
@@ -234,16 +236,26 @@ async function runProcessor(
   }
 }
 
-describe("SessionProcessor retry characterization", () => {
-  it("does not republish or flush interrupted reasoning removed for retry", async () => {
+describe("SessionProcessor retry safety", () => {
+  it("does not replay a completed text part when the next stream event fails", async () => {
+    const result = await runProcessor(async function* () {
+      yield* success()
+      throw apiFailure()
+    })
+    expect(result.calls).toBe(1)
+    expect(result.waits).toEqual([])
+    expect(result.events.some((event) => event.type === "removed")).toBe(false)
+    expect(result.parts).toMatchObject([{ type: "text", text: "recovered output" }])
+    expect(result.info.error).toMatchObject({
+      name: "APIError",
+      data: { statusCode: 503 },
+    })
+  })
+
+  it("retries after an empty reasoning start without publishing the discarded part", async () => {
     const result = await runProcessor(async function* (attempt) {
       if (attempt === 1) {
         yield { type: "reasoning-start", id: "reasoning-1" }
-        yield {
-          type: "reasoning-delta",
-          id: "reasoning-1",
-          text: "partial reasoning",
-        }
         throw apiFailure()
       }
       throw new DOMException("Interrupted", "AbortError")
@@ -354,7 +366,7 @@ describe("SessionProcessor retry characterization", () => {
   })
 
   for (const kind of ["reasoning", "text"] as const) {
-    it(`currently retries after partial ${kind} published to Bus (known EOT-11 req6 gap, not compliance)`, async () => {
+    it(`preserves partial ${kind} published to Bus and stops without retry`, async () => {
       const result = await runProcessor(async function* (attempt) {
         if (attempt === 1) {
           if (kind === "reasoning") {
@@ -372,17 +384,92 @@ describe("SessionProcessor retry characterization", () => {
         }
         yield* success()
       })
-      expect(result.calls).toBe(2)
-      expect(result.waits).toEqual([0])
+      expect(result.calls).toBe(1)
+      expect(result.waits).toEqual([])
       const partial = result.events.findIndex((event) => event.type === "updated" && event.text === "partial output")
       expect(partial).toBeGreaterThanOrEqual(0)
       const removed = result.events.findIndex(
         (event) => event.type === "removed" && event.partID === result.events[partial]?.partID,
       )
-      expect(removed).toBeGreaterThan(partial)
-      expect(result.events.findIndex((event) => event.text === "recovered output")).toBeGreaterThan(removed)
-      expect(result.parts).toMatchObject([{ type: "text", text: "recovered output" }])
-      expect(result.info.error).toBeUndefined()
+      expect(removed).toBe(-1)
+      expect(result.events.some((event) => event.text === "recovered output")).toBe(false)
+      expect(result.parts).toMatchObject([{ type: kind, text: "partial output" }])
+      expect(result.info.error).toMatchObject({
+        name: "APIError",
+        data: { statusCode: 503 },
+      })
+      expect(result.errors).toEqual([result.info.error] as typeof result.errors)
+      expect(result.info.time.completed).toBeNumber()
+    })
+  }
+
+  it("does not retry after publishing a pending tool, and persists its interruption", async () => {
+    const result = await runProcessor(async function* () {
+      yield { type: "tool-input-start", id: "tool-1", toolName: "read" }
+      throw apiFailure()
+    })
+    expect(result.calls).toBe(1)
+    expect(result.waits).toEqual([])
+    expect(result.events.some((event) => event.type === "removed")).toBe(false)
+    expect(result.parts).toMatchObject([
+      {
+        type: "tool",
+        callID: "tool-1",
+        state: {
+          status: "error",
+          error: "Tool execution interrupted before completion",
+        },
+      },
+    ])
+    expect(result.info.error).toMatchObject({
+      name: "APIError",
+      data: { statusCode: 503 },
+    })
+    expect(result.errors).toEqual([result.info.error] as typeof result.errors)
+  })
+
+  it("retries after empty text deltas that have not been published", async () => {
+    const result = await runProcessor(async function* (attempt) {
+      if (attempt === 1) {
+        yield { type: "text-start", id: "empty" }
+        yield { type: "text-delta", id: "empty", text: "" }
+        throw apiFailure()
+      }
+      yield* success()
+    })
+    expect(result.calls).toBe(2)
+    expect(result.waits).toEqual([0])
+    expect(result.parts).toMatchObject([{ type: "text", text: "recovered output" }])
+    expect(result.info.error).toBeUndefined()
+  })
+
+  for (const kind of ["text", "reasoning"] as const) {
+    it(`stops a native provider failure after partial ${kind} without retrying`, async () => {
+      async function* native(): AsyncGenerator<LLMEvent> {
+        yield {
+          type: `${kind}-delta`,
+          id: "native-part",
+          text: "native partial output",
+        }
+        yield {
+          type: "provider-error",
+          message: "overloaded",
+          retryable: true,
+          providerMetadata: { provider: { statusCode: 503 } },
+        }
+      }
+      const result = await runProcessor(() => toProcessorStream(native()))
+      expect(result.calls).toBe(1)
+      expect(result.waits).toEqual([])
+      expect(result.events.some((event) => event.type === "removed")).toBe(false)
+      expect(result.parts).toMatchObject([{ type: kind, text: "native partial output" }])
+      expect(result.parts.some((part) => part.type === "step-finish")).toBe(false)
+      expect(result.info.finish).toBeUndefined()
+      expect(result.info.error).toMatchObject({
+        name: "APIError",
+        data: { statusCode: 503 },
+      })
+      expect(result.errors).toEqual([result.info.error] as typeof result.errors)
     })
   }
 })

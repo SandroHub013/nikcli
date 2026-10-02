@@ -123,7 +123,7 @@ that has not been migrated sees its data, a v2 plugin sees only its scoped store
 
 `test/plugin/v2-manifest.test.ts` and `test/plugin/autoload-safety.test.ts` cover the behaviour the gate can only assert structurally.
 
-## What Blocks the Next Migration — 2026-09-30
+## What Blocked the Next Migration — 2026-09-30
 
 Inventory of `packages/tui/src/feature-plugins/`, by grep, no code changed. Seven internal plugins are already v2
 `Plugin.define` definitions (`home/tips` and the six `sidebar/*`). The other seventeen — browser, computer, island, brain,
@@ -131,14 +131,119 @@ chatbot, connectors, devtools, herdr, math, observability, discord, session-stud
 background, loops, mission — all register their commands through `api.keymap.registerLayer` (a `name`, `slashName`, the
 `namespace`, `run`), and two of them (loops, mission) also register a slot.
 
-The v2 `Context` (`packages/plugin/src/v2/tui/context.ts`) is `options`, `client`, `data`, `storage` and `ui`, where `ui`
-is `router` and `slot` only. **There is no command or slash-command surface.** A v2 `browser` would render nothing and
-lose `/browser`; migrating any of the seventeen today would drop user-visible behaviour, which this spec forbids
-("Migration from v1 to v2 must preserve existing user-visible behavior").
+> **Corrected 2026-10-02.** The claim below that v2 had "no command or slash-command surface" was **stale when written
+> and is wrong**. `UI.ui.command` exists (`packages/plugin/src/v2/tui/context.ts:183`), the `commands` capability is in
+> the manifest vocabulary and in `TUI_HOST_CAPABILITIES` (`packages/tui/src/plugin/v2.ts:95`), and
+> `adaptV2TuiPlugin.command` maps it onto `keymap.registerLayer`
+> (`packages/tui/test`/`packages/nikcli/test/tui/plugin-v2-commands.test.ts` covers the parity). The comment at
+> `packages/plugin/src/v2/manifest.ts:22-27` naming "routes, storage, http" is stale in the same way — the TUI host
+> supplies `routes` and `commands`.
+>
+> What is actually missing is narrower and was found by running the code rather than reading the type: presentation
+> fields were captured, not re-read. That is the "Dynamic command presentation" section below. A stale claim about a
+> missing surface is worse than no claim, because the next reader scopes the work from it — this is the second time in
+> this catalogue that following a spec's own path turned up a defect, the first being `check-spec-paths`.
 
-So the order in "Migration and Rollback" (`background` first) is not the next step. The next step is a contract
-decision on the published plugin package: what a v2 command registration looks like (`name`, `title`, `namespace`,
-`slashName`/`slashAliases`, `run`, keybinding), how it is scoped and revoked per generation like `ui.slot`, and how
-`adaptV2TuiPlugin` maps it onto `keymap.registerLayer` so the two paths keep one dispatcher. Once it exists, the
-smallest plugins (`browser`, `computer`, 37 and 55 lines, one command each) are the safe first migrations, with a test
-that the registered command set is identical before and after.
+So the order in "Migration and Rollback" (`background` first) is still not the next step, but for a different reason than
+the one recorded here: not a missing command surface, a captured one. Once presentation is re-read, the smallest plugins
+(`browser`, `computer`, 37 and 55 lines, one command each) are the safe first migrations, with a test that the registered
+command set is identical before and after.
+
+## Dynamic Command Presentation — 2026-10-02
+
+**Landed.** `UICommand`'s presentation fields became `UICommandValue<Value> = Value | (() => Value)`
+(`packages/plugin/src/v2/tui/context.ts`), and `adaptV2TuiPlugin.command` now passes `keymap.registerLayer` a thunk
+layer so those reads land inside the palette's `createMemo` (`packages/tui/src/component/dialog-command.tsx:188`).
+
+The gap was one argument, not a missing surface. The palette re-runs a registration's callback on every open, but it can
+only re-read what the callback reads — and `adaptV2TuiPlugin` passed an object literal, so `title`, `enabled`, `hidden`,
+`suggested`, `description` and `namespace` were read once, at registration. A v1 plugin escapes this because
+`keymap.registerLayer` accepts a thunk; v2 did not offer the same seam, so a command whose title or enabled state depends
+on settings showed a snapshot from load time. `name` stays static on purpose: it is the dedupe and dispatch key, and a
+command whose identity changes between reads would be two commands sharing one name.
+
+Three cases in `packages/nikcli/test/tui/plugin-v2-commands.test.ts` pin it, and each reads **twice with the store
+changed in between** — a single snapshot passes against the old static array and proves nothing. Reverting the adapter
+to a static layer turns the two dynamic cases red and leaves the static one green, which is how they were confirmed to be
+load-bearing. The shared harness also had to learn the layer-thunk form: it mirrored `resolveList` but not
+`resolveLayer`, and resolving only the inner list would have hidden the dynamic path from every case in the file.
+
+**This is necessary but not sufficient for a `background` migration.** Its three settings-derived commands now read
+correctly, but it also needs an `api.kv` equivalent — v2 `storage` writes `state/tui/plugin/<id>.<key>.json`
+(`packages/tui/src/plugin/storage.ts:64-70`), not `kv.json` — and `dialog.tsx:41` / `view.tsx:31` read `useKV()`
+directly, so migrating the command surface alone would leave the palette title and the rendered image disagreeing.
+
+Two further drifts found while scoping this, independent of the migration:
+
+- `storage` is in the manifest vocabulary but **not** in `TUI_HOST_CAPABILITIES` (`v2.ts:95`), so a manifest wanting
+  both `commands` and `storage` is refused as `CapabilityDenied` today — a capability the host demonstrably has.
+  **Fixed 2026-10-02.** `pluginStorage(base)` is a real per-plugin store — namespaced by id, quota-bounded, watched for
+  changes, evicted on unload (`packages/tui/src/plugin/storage.ts`) — and the runtime hands it to every plugin as
+  `api.storage` (`runtime.ts`). So the list now reads `["routes", "commands", "storage"]`, and a case in
+  `plugin-v2.test.ts` asserts a manifest declaring all three loads while `scheduler` is still refused. The omission meant
+  no v2 TUI plugin could ask for persistence at all.
+- `DialogAlert` and `toast` are absent from the v2 `UI` surface, which blocks `computer` independently of everything above.
+  Still open: unlike `storage`, no surface implements them, so adding them would be a grant the host cannot honour.
+
+## Roadmap Line 11 Is Blocked — 2026-10-02
+
+The roadmap's next slice reads "migrate one internal plugin (`background`) to v2; verify hot reload with late disposer and
+incompatible manifest". Scoped against the tree before writing code, three of its four halves are blocked or already done,
+so the line as written cannot be executed as a slice. Status unchanged: proposed, Tier 1/P2.
+
+**The late-disposer half already exists.** `createPluginScope` revokes host registrations _before_ awaiting plugin
+cleanup (`packages/tui/src/plugin/runtime.ts:503`), and the `disposed` latch plus the `live()` guard block a late
+registration into the newer generation (`runtime.ts:439`, `runtime.ts:744-759`). `test/tui/plugin-dispose.test.ts` covers
+it across 318 lines. This half is re-verification, not work.
+
+**"Incompatible manifest" is unreachable for any internal plugin.** `loadInternalPlugin` calls `adaptV2TuiPlugin`
+directly (`runtime.ts:402`), skipping `readV2TuiPlugin` (`packages/plugin/src/v2/tui/v2.ts:289-292`) — the only path that
+runs `parseManifest`, `checkHost` and `checkCapabilities`. `Definition.manifest` is optional and read unparsed
+(`v2.ts:166`), so a manifest added to `background` would be validated by nobody. Separately, `defaultHost()` supplies only
+a `node` version (`v2.ts:97-102`), so a `hostRequirements.nikcli` constraint would be skipped even on the external path.
+
+**`background` cannot hot-reload.** `reloadLocalPlugins` filters `source === "file"` (`runtime.ts:1153`), while internal
+entries are `source: "internal"` with no `item` (`runtime.ts:413`, `runtime.ts:406-424`). Note that `source`
+(`"file" | "npm" | "internal"`, `runtime.ts:75`) and `origin` (`"config" | "runtime" | "internal"`, `runtime.ts:73`) are
+different unions, and the filter keys on `source`. Hot reload has to be verified with a file-based v2 plugin.
+
+**The v2 contract cannot hold `background` unchanged.** `Context` is `{options, client, data, storage, ui}`
+(`context.ts:218-224`) and `adaptV2TuiPlugin` forwards neither the v1 `api.kv` (`tui.ts:566`) nor `api.state`
+(`tui.ts:568`); v2 `storage` writes `state/tui/plugin/<id>.<key>.json` (`storage.ts:64-70`), not `kv.json`. Three of
+`background`'s four commands derive `title`, `enabled` and `hidden` from settings at layer-build time
+(`feature-plugins/background/index.tsx:30`, `:37`, `:57`, `:60`, `:70-71`), while `adaptV2TuiPlugin.command` registers a
+static array (`v2.ts:218-234`). A naive migration therefore relocates persisted user data and desyncs those commands from
+`dialog.tsx:41` and `view.tsx:31` — a user-visible change this spec forbids at "Failure and Cancellation".
+
+### The prerequisite that unblocks all four
+
+Route internal `Definition`s through the same validation the file path already uses, so a manifest on an internal plugin
+is actually checked. That is the single change that makes "incompatible manifest" reachable for internal plugins, and it
+is independent of the migration itself.
+
+**Landed 2026-10-02.** `packages/tui/src/plugin/v2.ts` gained `adaptValidatedV2TuiPlugin`, which holds the id, `setup`,
+`parseManifest`, `checkHost` and `checkCapabilities` checks that used to live inline in `readV2TuiPlugin`; the reader
+now calls it, and `loadInternalPlugin` (`packages/tui/src/plugin/runtime.ts:399`) calls the same function instead of
+`adaptV2TuiPlugin`. Extracting rather than duplicating is the point: two copies of these checks would drift, which is the
+failure the extraction exists to prevent. No internal plugin carries a manifest today, so nothing changes until one does —
+which is exactly when the check starts earning its keep.
+
+Four cases in `packages/nikcli/test/tui/plugin-v2.test.ts` pin it: an internal definition with an incompatible
+`hostRequirements` is refused, one declaring no capability is refused, a valid internal manifest loads and registers its
+route, and a manifest-less internal definition stays ungated. Neuter the validation in `adaptValidatedV2TuiPlugin` and
+all the refusing cases go red, so they are not vacuous. The check is driven through the exported validator rather than
+`loadInternalPlugin`, which is not exported — what is pinned is that the internal path shares the validation, not the call
+site, which is the part a refactor may legitimately move.
+
+Two drift items found while scoping, worth fixing regardless of the migration order:
+
+- The inventory above counts seven v2 internal plugins and names `browser` as a candidate; there are nine, and `browser`
+  is already migrated with parity coverage in `test/tui/plugin-v2-commands.test.ts:165-192`. The recommendation to take
+  `computer` next would hit the missing `api.ui.DialogAlert` / `toast` surface, since v2 `UI` has neither.
+- `web/src/pages/docs/tui-plugins.astro:62`, `:65-66`, `:84-107` documents `browser` as v1 and counts 14 built-ins against
+  24 registered. `script/check-plugin-v2.ts:34-41` also omits `ManifestSchema`, which this spec's own addendum names at
+  item 1.
+
+A per-plugin v1/v2 flag is feasible with the existing `Flag` idioms (precedent `packages/tui/src/plugin/internal.ts:69`),
+but the registry is evaluated at import time, so a `const` flag is frozen at startup and unreachable by the reload watcher
+— it would have to be a runtime-read value, and that is a separate decision.

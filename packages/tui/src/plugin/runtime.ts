@@ -47,7 +47,7 @@ import { VERSION } from "@nikcli-ai/util/version"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { clearSlotErrors, setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
-import { adaptV2TuiPlugin, readV2TuiPlugin } from "./v2"
+import { adaptValidatedV2TuiPlugin, readV2TuiPlugin } from "./v2"
 import { evictPluginStorage, pluginStorage } from "./storage"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, type SourceWatcher } from "./reload"
 import { dbg } from "../feature-plugins/background/__debug"
@@ -399,7 +399,12 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
     "setup" in item
       ? {
           id: item.id,
-          tui: adaptV2TuiPlugin(item),
+          // Validated like a file plugin: an internal definition's manifest is
+          // parsed, the host is checked and capabilities are granted. This used
+          // to call `adaptV2TuiPlugin` directly, so an internal plugin could
+          // carry an incompatible manifest and load anyway, which is requirement 2
+          // not holding for the plugins shipped in the box.
+          tui: adaptValidatedV2TuiPlugin(item as unknown as Record<string, unknown>, spec),
         }
       : item
 
