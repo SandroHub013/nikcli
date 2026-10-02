@@ -74,7 +74,8 @@ function Uninstall([string[]]$Arguments = @('/S')) {
 # saved document and a file in the data folder.
 function Plant {
   Write-Text $HookScript '# ade'
-  $settings = [ordered]@{
+  # Not `$settings`: PowerShell names are case-insensitive, and that would hide the script's `$Settings` (the path) in here.
+  $document = [ordered]@{
     theme = 'dark'
     hooks = [ordered]@{
       SessionStart = @(
@@ -88,7 +89,7 @@ function Plant {
       )
     }
   }
-  Write-Text $Settings (($settings | ConvertTo-Json -Depth 10) + "`n")
+  Write-Text $Settings (($document | ConvertTo-Json -Depth 10) + "`n")
   foreach ($file in @('tts\piper\piper.exe', 'tts\voices\ugo.onnx', 'nikverse-assets\world\city.glb', 'plugins\alpha\1.0.0\index.html', 'plugins\alpha\current', 'EBWebView\Default\Local Storage\leveldb\000003.log')) {
     Write-Text (Join-Path $Local $file) ('x' * 64)
   }
@@ -99,6 +100,13 @@ function Plant {
 
 function Clear-Planted {
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Local, $Roaming, (Join-Path $Claude 'hooks'), $Settings
+}
+
+# Whether the Credential Manager holds `$Target`. `cmdkey /list:<target>` prints the target in its header even when there is nothing ("Currently
+# stored credentials for <target>:" and "* NONE *"), so the header does not count: the entry is the indented "<label>: <target>" line, whatever
+# the language of the label.
+function Credential-Present([string]$Target) {
+  return ((cmdkey /list:$Target | Out-String) -match ('(?m)^\s+[^:\r\n]+:\s*' + [regex]::Escape($Target) + '\s*$'))
 }
 
 function Entry-Present { return ((Get-Content $Settings -Raw) -match 'ade-agent-session') }
@@ -218,12 +226,10 @@ switch ($Phase) {
     $target = "$name.$Id.secrets"
     Write-Text (Join-Path $Roaming 'secrets-index.json') ('{"keys":[{"name":"' + $name + '","env":"TEST_API_KEY","agents":[],"createdMs":1}]}')
     cmdkey /generic:$target /user:$name /pass:not-a-real-secret | Out-Null
-    $before = (cmdkey /list:$target | Out-String)
-    Check ($before -match [regex]::Escape($target)) 'planted: the entry is in the Credential Manager'
+    Check (Credential-Present $target) 'planted: the entry is in the Credential Manager'
     $run = Start-Process -FilePath (Join-Path $InstallDir $Exe) -ArgumentList '--delete-secrets' -Wait -PassThru
     Check ($run.ExitCode -eq 0) "--delete-secrets exited 0 (was $($run.ExitCode))"
-    $after = (cmdkey /list:$target | Out-String)
-    Check (-not ($after -match [regex]::Escape($target))) 'the entry is gone from the Credential Manager'
+    Check (-not (Credential-Present $target)) 'the entry is gone from the Credential Manager'
     Check (Test-Path (Join-Path $Roaming 'secrets-index.json')) 'the index is left to the folder removal'
     cmdkey /delete:$target 2>$null | Out-Null
     Uninstall @('/S') | Out-Null
