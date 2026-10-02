@@ -306,6 +306,12 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
     patchConfigMcpName: result(raw["config-management"]["mcpUpdate"]),
     patchUserId: result(raw["users"]["update"]),
     path: { get: result0(raw["top-level"]["path"]) },
+    mod: {
+      event: result(raw["mod"]["event"]),
+      list: result0(raw["mod"]["list"]),
+      panes: result0(raw["mod"]["panes"]),
+      render: result(raw["mod"]["render"]),
+    },
     permission: {
       list: result0(raw["permission"]["list"]),
       blocked: result0(raw["permission"]["blocked"]),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { stripComments, tuiSource } from "./tui-source"
 import { testRender } from "@opentui/solid"
 import { createComponent } from "solid-js"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -229,5 +230,41 @@ describe("SDKProvider event batch", () => {
     } finally {
       renderer.destroy()
     }
+  })
+})
+
+/**
+ * The recovery barrier, EOT-15 requirement 8.
+ *
+ * Asserted against the source text rather than mounted, the trade
+ * `dialog-lifecycle.test.ts` documents: `SyncProvider` bootstraps against a live
+ * server, so mounting it here would drag in the whole TUI. The invariants pinned
+ * below are the ones that are easy to break and invisible when broken.
+ */
+describe("tui sync recovery barrier", () => {
+  it("is separate from ready, and a failed refetch leaves it down", async () => {
+    const code = stripComments(await tuiSource("context/sync.tsx"))
+
+    // Requirement 8's first clause, and the part that is real for a snapshot
+    // consumer: the barrier completes. The cursor half of the requirement has no
+    // subject here — this context recovers through typed REST endpoints and
+    // never reads `/sync/outbox`, so there is no cursor to validate.
+    expect(code).toContain('setStore("barrier", false)')
+    expect(code).toContain('setStore("barrier", true)')
+
+    // `ready` is data-availability and gates the analytics and command-center
+    // pollers. Reusing it would pin those polling forever whenever a provider
+    // is down, which is the bug the `status` docblock records as already fixed.
+    expect(code).toContain("get ready()")
+    expect(code).toContain("get barrier()")
+    const ready = code.slice(code.indexOf("get ready()"), code.indexOf("get barrier()"))
+    expect(ready).not.toContain("barrier")
+
+    // The load-bearing asymmetry: a non-fatal refetch failure must NOT raise the
+    // barrier. It returns early before the settle path, so a naive
+    // `barrier = status !== "loading"` would report a stale snapshot as a
+    // trustworthy one — the exact class of bug the spec keeps having to correct.
+    const nonFatal = code.slice(code.indexOf("if (!fatal) {"))
+    expect(nonFatal.slice(0, 400)).not.toContain('setStore("barrier", true)')
   })
 })

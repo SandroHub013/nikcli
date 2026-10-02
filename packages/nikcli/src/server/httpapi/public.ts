@@ -22,6 +22,8 @@ import { GlobalHttpApi } from "./global"
 import { McpHttpApi } from "./mcp"
 import { MissionHttpApi } from "./mission"
 import { PermissionHttpApi } from "./permission"
+import { ModHttpApi } from "./mod"
+import { Mod } from "@/mod"
 import { ProjectHttpApi } from "./project"
 import { ProviderHttpApi } from "./provider"
 import { PtyHttpApi } from "./pty"
@@ -73,6 +75,7 @@ export namespace PublicHttpApi {
     .add(ProviderHttpApi.Group.middleware(HttpApiAuth.Middleware))
     .add(QuestionHttpApi.Group.middleware(HttpApiAuth.Middleware))
     .add(PermissionHttpApi.Group.middleware(HttpApiAuth.Middleware))
+    .add(ModHttpApi.Group.middleware(HttpApiAuth.Middleware))
     .add(PtyHttpApi.Group.middleware(HttpApiAuth.Middleware))
     .add(LoopHttpApi.Group.middleware(HttpApiAuth.Middleware))
     .add(SessionHttpApi.Group.middleware(HttpApiAuth.Middleware))
@@ -88,6 +91,14 @@ export namespace PublicHttpApi {
       .handle("list", () => QuestionHttpApi.handlers.list())
       .handle("reply", (request) => QuestionHttpApi.handlers.reply(request))
       .handle("reject", (request) => QuestionHttpApi.handlers.reject(request)),
+  )
+
+  const ModHandlersLive = HttpApiBuilder.group(Api, "mod", (handlers) =>
+    handlers
+      .handle("list", () => ModHttpApi.handlers.list())
+      .handle("panes", () => ModHttpApi.handlers.panes())
+      .handle("render", (request) => ModHttpApi.handlers.render(request))
+      .handle("event", (request) => ModHttpApi.handlers.event(request)),
   )
 
   const PermissionHandlersLive = HttpApiBuilder.group(Api, "permission", (handlers) =>
@@ -426,6 +437,7 @@ export namespace PublicHttpApi {
         PtyHandlersLive.pipe(Layer.provide(PtyHttpApi.DependenciesLive)),
         QuestionHandlersLive.pipe(Layer.provide(Question.defaultLayer)),
         PermissionHandlersLive.pipe(Layer.provide(PermissionNext.defaultLayer)),
+        ModHandlersLive.pipe(Layer.provide(Mod.defaultLayer)),
         LoopHandlersLive,
         MissionHandlersLive,
         MobileHandlersLive,

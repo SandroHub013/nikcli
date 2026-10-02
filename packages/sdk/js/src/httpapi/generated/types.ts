@@ -1876,6 +1876,22 @@ export type PermissionBlocked = {
   tool?: { messageID: string; callID: string } | undefined
 }
 
+export type ModInfo = {
+  id: string
+  name: string
+  tier: "prepend" | "user" | "append" | "builtin"
+  rank: number
+  events: Array<string>
+  tools: Array<string>
+  commands: Array<string>
+}
+
+export type ModPanePlacement = "dock" | "inline"
+
+export type ModRenderOutput2 = { kind: "default" | "tree"; tree?: string | undefined; props?: string | undefined }
+
+export type ModEventOutput2 = { handled: boolean }
+
 export type Pty1 = {
   id: string
   title: string
@@ -2183,6 +2199,18 @@ export type EventTelemetryRecord = {
 }
 
 export type EventServerInstanceDisposed = { type: "server.instance.disposed"; properties: { directory: string } }
+
+export type EventModLog = {
+  type: "mod.log"
+  properties: { plugin: string; sessionID?: string | undefined; text: string }
+}
+
+export type EventModUiInvalidate = {
+  type: "mod.ui.invalidate"
+  properties: { component?: string | undefined; requestID?: string | undefined }
+}
+
+export type EventModUiPanes = { type: "mod.ui.panes"; properties: {} }
 
 export type PermissionRequest2 = {
   id: string
@@ -3084,6 +3112,14 @@ export type QuestionInfo1 = {
   options: Array<QuestionOption1>
   multiple?: boolean | undefined
   custom?: boolean | undefined
+}
+
+export type ModPane = {
+  id: string
+  plugin: string
+  title: string
+  placement: ModPanePlacement
+  rows?: number | undefined
 }
 
 export type PtyList = Array<Pty1>
@@ -4475,6 +4511,9 @@ export type Event =
   | EventProjectUpdated
   | EventTelemetryRecord
   | EventServerInstanceDisposed
+  | EventModLog
+  | EventModUiInvalidate
+  | EventModUiPanes
   | EventPermissionAsked
   | EventPermissionReplied
   | EventPermissionBlocked
@@ -4544,6 +4583,9 @@ export type Event1 =
   | EventProjectUpdated
   | EventTelemetryRecord
   | EventServerInstanceDisposed
+  | EventModLog
+  | EventModUiInvalidate
+  | EventModUiPanes
   | EventPermissionAsked
   | EventPermissionReplied
   | EventPermissionBlocked
@@ -5630,6 +5672,25 @@ export type QuestionReplyPayload = { readonly answers: ReadonlyArray<ReadonlyArr
 export type PermissionReplyPayload = {
   readonly reply: "once" | "always" | "reject"
   readonly message?: string | undefined
+}
+
+export type ModRenderPayload = {
+  readonly component: string
+  readonly requestId?: string | undefined
+  readonly sessionID?: string | undefined
+  readonly props: string
+  readonly columns?: number | undefined
+  readonly rows?: number | undefined
+}
+
+export type ModEventPayload = {
+  readonly kind: "press" | "input" | "select" | "close" | "message"
+  readonly key?: string | undefined
+  readonly value?: string | undefined
+  readonly submit?: boolean | undefined
+  readonly component?: string | undefined
+  readonly requestId?: string | undefined
+  readonly sessionID?: string | undefined
 }
 
 export type PtyCreatePayload = {
@@ -8214,6 +8275,33 @@ export type PermissionReplyInput = {
 }
 
 export type PermissionReplyOutput = boolean
+
+export type ModListOutput = Array<ModInfo>
+
+export type ModPanesOutput = Array<ModPane>
+
+export type ModRenderInput = {
+  readonly component: ModRenderPayload["component"]
+  readonly requestId?: ModRenderPayload["requestId"]
+  readonly sessionID?: ModRenderPayload["sessionID"]
+  readonly props: ModRenderPayload["props"]
+  readonly columns?: ModRenderPayload["columns"]
+  readonly rows?: ModRenderPayload["rows"]
+}
+
+export type ModRenderOutput = ModRenderOutput2
+
+export type ModEventInput = {
+  readonly kind: ModEventPayload["kind"]
+  readonly key?: ModEventPayload["key"]
+  readonly value?: ModEventPayload["value"]
+  readonly submit?: ModEventPayload["submit"]
+  readonly component?: ModEventPayload["component"]
+  readonly requestId?: ModEventPayload["requestId"]
+  readonly sessionID?: ModEventPayload["sessionID"]
+}
+
+export type ModEventOutput = ModEventOutput2
 
 export type PtyListOutput = PtyList
 

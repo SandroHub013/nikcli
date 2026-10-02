@@ -7,6 +7,7 @@ import { Log } from "@nikcli-ai/util/log"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import type { InstanceContext } from "@/effect"
 import { ModChain } from "./chain"
+import { ModUi } from "./ui"
 
 /**
  * The `$` a hook receives: the only way a mod reaches files, processes, the
@@ -32,11 +33,6 @@ export namespace ModApi {
 
   /** Calls that exist in the Claude Code mods API and not yet in nikcli. */
   export const UNSUPPORTED = [
-    "ui.resolve",
-    "ui.invalidate",
-    "ui.open",
-    "ui.close",
-    "ui.panes",
     "ui.focus",
     "ui.scroll",
     "ui.status",
@@ -44,38 +40,23 @@ export namespace ModApi {
     "ui.blit",
     "agent.register",
     "agent.spawn",
-    "agent.list",
-    "model.complete",
     "model.fork",
-    "model.classify",
-    "prompt.submit",
     "prompt.read",
     "prompt.fill",
     "prompt.suggest",
     "prompt.compose",
-    "turn.abort",
-    "session.messages",
-    "session.model",
-    "session.turns",
-    "session.repo",
     "session.surfaces",
-    "session.usage",
-    "session.version",
     "session.compact",
     "session.send",
     "session.append",
     "session.authorize",
     "config.list",
     "config.set",
-    "settings.read",
-    "mcp.call",
     "mcp.connect",
     "tool.call",
     "tool.check",
     "audio.play",
     "audio.speak",
-    "telemetry.log",
-    "telemetry.mark",
   ] as const
 
   export class Unsupported extends Error {
@@ -110,7 +91,12 @@ export namespace ModApi {
       event: unknown,
       impl: (event: any) => Promise<unknown>,
     ) => Promise<{ value?: unknown; deny?: string }>
-    publish: (run: () => Promise<unknown>) => Promise<unknown>
+    /** Panes mods have open; this mod's are closed with its scope. */
+    panes: Map<string, ModUi.PaneInfo & { owner: string }>
+    /** Tell clients the panes changed, or that a site should be drawn again. */
+    changed: (kind: "panes" | "invalidate", detail?: { component?: string; requestID?: string }) => void
+    /** Run `fn` with this mod's instance as the ambient one: timers and callbacks are outside any. */
+    inInstance: <A>(fn: () => Promise<A>) => Promise<A>
   }
 
   const unsupported = (api: string) => () => {
@@ -350,12 +336,35 @@ export namespace ModApi {
     }
 
     // ---------------------------------------------------------------- ui
+    // A hook may invalidate on every event; clients should hear about it at most 10 times a second.
+    let pending: { component?: string; requestID?: string } | undefined
+    let invalidateTimer: ReturnType<typeof setTimeout> | undefined
+    const invalidate = (detail: { component?: string; requestID?: string }) => {
+      // Calls close together widen the target: a different component or request means "everything".
+      pending =
+        pending === undefined
+          ? detail
+          : {
+              component: pending.component === detail.component ? detail.component : undefined,
+              requestID: pending.requestID === detail.requestID ? detail.requestID : undefined,
+            }
+      if (invalidateTimer) return
+      const timer = setTimeout(() => {
+        invalidateTimer = undefined
+        owned.timers.delete(timer)
+        const send = pending
+        pending = undefined
+        host.changed("invalidate", send)
+      }, 100)
+      invalidateTimer = timer
+      owned.timers.add(timer)
+    }
     const ui = {
       log: (text: string, options?: { to?: "transcript" | "debug" }) =>
         call("ui.log", { text, ...options }, async (e) => {
           log.info("mod log", { mod: mod.name, text: e.text })
           if (e.to === "debug") return
-          await host.publish(async () => {
+          await host.inInstance(async () => {
             const { Bus } = await import("@/bus")
             const { Mod } = await import("./index")
             await Bus.publish(Mod.Event.Log, { plugin: mod.name, sessionID: sessionID(), text: String(e.text) })
@@ -363,7 +372,7 @@ export namespace ModApi {
         }),
       toast: (text: string, options?: { variant?: "info" | "success" | "warning" | "error"; timeoutMs?: number }) =>
         call("ui.toast", { text, ...options }, async (e) => {
-          await host.publish(async () => {
+          await host.inInstance(async () => {
             const { Bus } = await import("@/bus")
             const { TuiEvent } = await import("@/bus/tui-event")
             await Bus.publish(TuiEvent.ToastShow, {
@@ -410,11 +419,37 @@ export namespace ModApi {
           )
           return answers[0]?.[0] ?? ""
         }),
-      resolve: unsupported("ui.resolve"),
-      invalidate: unsupported("ui.invalidate"),
-      open: unsupported("ui.open"),
-      close: unsupported("ui.close"),
-      panes: unsupported("ui.panes"),
+      /** The constructors for a drawing: `const { Box, Text, Button } = $.ui.resolve(e)`. */
+      resolve: (_event?: unknown) => ModUi.builders(),
+      /** Ask clients to draw again. Many calls close together become one. */
+      invalidate: (component?: string, requestID?: string) => invalidate({ component, requestID }),
+      /**
+       * Open a pane. `dock` puts it in the sidebar, `inline` above the prompt. Its content is whatever
+       * your `ui.render` hook answers for `{ component: "Pane", requestId: id }`.
+       */
+      open: (input: { id: string; title?: string; placement?: ModUi.Placement; rows?: number }) => {
+        if (!NAME.test(input.id)) throw new Error(`pane id must match ${NAME}`)
+        const existing = host.panes.get(input.id)
+        if (existing && existing.owner !== mod.id) throw new Error(`pane ${input.id} is open by ${existing.plugin}`)
+        host.panes.set(input.id, {
+          id: input.id,
+          plugin: mod.name,
+          owner: mod.id,
+          title: input.title ?? input.id,
+          placement: input.placement ?? "dock",
+          rows: input.rows,
+        })
+        host.changed("panes")
+        return { close: () => ui.close(input.id) }
+      },
+      close: (id: string) => {
+        const pane = host.panes.get(id)
+        if (!pane || pane.owner !== mod.id) return
+        host.panes.delete(id)
+        host.changed("panes")
+      },
+      panes: () =>
+        [...host.panes.values()].filter((pane) => pane.owner === mod.id).map(({ owner: _owner, ...pane }) => pane),
       focus: unsupported("ui.focus"),
       scroll: unsupported("ui.scroll"),
       status: unsupported("ui.status"),
@@ -461,49 +496,315 @@ export namespace ModApi {
     }
 
     // ----------------------------------------------------------- session
+    const need = (what: string) => {
+      const id = sessionID()
+      if (!id) throw new Error(`$.${what} needs a session, and no session is running this hook`)
+      return id
+    }
+
+    /** The newest messages of the running session, oldest first, as plain data. */
+    const readMessages = async (id: string, limit: number) => {
+      const { MessageV2 } = await import("@/session/message-v2")
+      const found: any[] = []
+      for await (const item of MessageV2.stream(id)) {
+        found.push(item)
+        if (found.length >= limit) break
+      }
+      return found.reverse()
+    }
+
     const session = {
       id: () => sessionID(),
       cwd: () => ctx.directory,
       root: () => ctx.worktree,
-      messages: unsupported("session.messages"),
-      model: unsupported("session.model"),
-      turns: unsupported("session.turns"),
-      repo: unsupported("session.repo"),
+      /** The newest messages (4096 at most), oldest first. */
+      messages: (options?: { limit?: number }) =>
+        call("session.messages", { limit: options?.limit }, (e) =>
+          host.inInstance(async () => {
+            const limit = Math.min(Math.max(1, e.limit ?? 4096), 4096)
+            const found = await readMessages(need("session.messages"), limit)
+            return found.map((item) => ({
+              id: item.info.id as string,
+              role: item.info.role as string,
+              agent: (item.info as { agent?: string }).agent,
+              text: (item.parts as any[])
+                .filter((part) => part.type === "text" && !part.synthetic)
+                .map((part) => part.text as string)
+                .join("\n"),
+              tools: (item.parts as any[]).filter((part) => part.type === "tool").map((part) => part.tool as string),
+            }))
+          }),
+        ),
+      model: () =>
+        call("session.model", {}, (_e) =>
+          host.inInstance(async () => {
+            const { SessionRepo } = await import("@/session/repo")
+            const last = Effect.runSync(SessionRepo.get(need("session.model")))?.lastModel
+            return last ? `${last.providerID}/${last.modelID}` : undefined
+          }),
+        ),
+      turns: () =>
+        call("session.turns", {}, (_e) =>
+          host.inInstance(
+            async () =>
+              (await readMessages(need("session.turns"), 4096)).filter((item) => item.info.role === "user").length,
+          ),
+        ),
+      repo: () =>
+        call("session.repo", {}, async () => ({ root: ctx.worktree, vcs: ctx.project.vcs, projectID: ctx.project.id })),
+      version: () =>
+        call("session.version", {}, async () => (await import("@/installation")).Installation.VERSION as string),
+      usage: () =>
+        call("session.usage", {}, (_e) =>
+          host.inInstance(async () => {
+            const id = need("session.usage")
+            const total = { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } }
+            let startedAt: number | undefined
+            for (const item of await readMessages(id, 4096)) {
+              startedAt ??= item.info.time?.created
+              if (item.info.role !== "assistant") continue
+              total.cost += item.info.cost ?? 0
+              total.tokens.input += item.info.tokens?.input ?? 0
+              total.tokens.output += item.info.tokens?.output ?? 0
+              total.tokens.reasoning += item.info.tokens?.reasoning ?? 0
+              total.tokens.cacheRead += item.info.tokens?.cache?.read ?? 0
+              total.tokens.cacheWrite += item.info.tokens?.cache?.write ?? 0
+            }
+            return { startedAt, ...total }
+          }),
+        ),
       surfaces: unsupported("session.surfaces"),
-      usage: unsupported("session.usage"),
-      version: unsupported("session.version"),
       compact: unsupported("session.compact"),
       send: unsupported("session.send"),
       append: unsupported("session.append"),
       authorize: unsupported("session.authorize"),
     }
 
+    // ------------------------------------------------------------ prompt, turn
+    const sessionPrompt = async <A>(use: (prompt: any) => Promise<A>) => {
+      const { SessionPrompt } = await import("@/session/prompt")
+      const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+      return runPromiseWithLayer(
+        SessionPrompt.defaultLayer,
+        locallyInstance(
+          ctx,
+          Effect.gen(function* () {
+            const service = yield* SessionPrompt.Service
+            return yield* Effect.tryPromise(() => use(service))
+          }),
+        ),
+      )
+    }
+
+    const promptApi = {
+      /**
+       * Start a turn from a hook or a timer. Claude reads the text after a sentence that names this mod as
+       * the sender; `asUser: true` sends it as the user's own words. It queues behind a turn already running
+       * and returns at once: a hook waiting for the turn it runs inside would wait forever.
+       */
+      submit: (input: { text: string; asUser?: boolean }) =>
+        call("prompt.submit", { text: input.text, asUser: input.asUser === true }, async (e) => {
+          const id = need("prompt.submit")
+          const text = e.asUser ? String(e.text) : `[Message from the mod "${mod.name}"]\n${String(e.text)}`
+          void sessionPrompt((service) =>
+            Effect.runPromise(service.prompt({ sessionID: id, parts: [{ type: "text", text }], delivery: "queue" })),
+          ).catch((error) => log.warn("$.prompt.submit failed", { mod: mod.name, error: String(error) }))
+        }),
+      read: unsupported("prompt.read"),
+      fill: unsupported("prompt.fill"),
+      suggest: unsupported("prompt.suggest"),
+      compose: unsupported("prompt.compose"),
+    }
+
+    const turn = {
+      /** Stop the running turn of this session. */
+      abort: () =>
+        call("turn.abort", {}, async () => {
+          const id = need("turn.abort")
+          await sessionPrompt((service) => Effect.runPromise(service.cancel(id)))
+        }),
+    }
+
+    // ------------------------------------------------------------------- model
+    const language = async (choice?: string) => {
+      const { Provider } = await import("@/provider/provider")
+      const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+      return runPromiseWithLayer(
+        Provider.defaultLayer,
+        locallyInstance(
+          ctx,
+          Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            const ref = choice ? Provider.parseModel(choice) : yield* provider.defaultModel()
+            const model = yield* provider.getModel(ref.providerID, ref.modelID)
+            return yield* provider.getLanguage(model)
+          }),
+        ),
+      )
+    }
+
+    const complete = async (e: {
+      prompt: string
+      system?: string
+      maxTokens?: number
+      model?: string
+      temperature?: number
+    }) => {
+      const { generateText } = await import("ai")
+      const result = await generateText({
+        model: await language(e.model),
+        system: e.system,
+        prompt: String(e.prompt),
+        temperature: e.temperature ?? 0,
+        maxOutputTokens: Math.min(Math.max(1, e.maxTokens ?? 1024), 64_000),
+        abortSignal: ModChain.current()?.signal,
+      })
+      return {
+        text: result.text,
+        usage: { inputTokens: result.usage?.inputTokens, outputTokens: result.usage?.outputTokens },
+      }
+    }
+
+    const modelApi = {
+      /** One completion on the user's own model and plan: `{ prompt, system?, maxTokens? (1024, 64000 at most), model? }`. */
+      complete: (input: {
+        prompt: string
+        system?: string
+        maxTokens?: number
+        model?: string
+        temperature?: number
+      }) => call("model.complete", { ...input }, (e) => host.inInstance(() => complete(e as any))),
+      /** Pick one of `labels` for `text`. Resolves to the label, or `undefined` when none fits. */
+      classify: (text: string, labels: string[], options?: { model?: string }) =>
+        call("model.classify", { text, labels, ...options }, (e) =>
+          host.inInstance(async () => {
+            const result = await complete({
+              prompt: `Classify the text into exactly one of these labels: ${(e.labels as string[]).join(", ")}.\nAnswer with the label only, or NONE if none fits.\n\nText:\n${e.text}`,
+              maxTokens: 32,
+              model: e.model,
+            })
+            const answer = result.text.trim()
+            return (e.labels as string[]).find((label) => label.toLowerCase() === answer.toLowerCase())
+          }),
+        ),
+      fork: unsupported("model.fork"),
+    }
+
+    // ---------------------------------------------------------------- settings
+    const SECRET = /key|token|secret|password|authorization|credential/i
+    const redact = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(redact)
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, inner]) => [
+            key,
+            SECRET.test(key) && typeof inner === "string" ? "[redacted]" : redact(inner),
+          ]),
+        )
+      }
+      return value
+    }
+    const settings = {
+      /** The resolved nikcli config. Values under keys that name a secret (key, token, password, ...) are redacted. */
+      read: () =>
+        call("settings.read", {}, async () => {
+          const { Config } = await import("@/config/config")
+          const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+          const config = await runPromiseWithLayer(
+            Config.defaultLayer,
+            locallyInstance(
+              ctx,
+              Effect.gen(function* () {
+                return yield* (yield* Config.Service).get()
+              }),
+            ),
+          )
+          return redact(config)
+        }),
+    }
+
+    // --------------------------------------------------------------- mcp, agent
+    const mcp = {
+      /** Call a tool of a connected MCP server. It asks permission like the model's own call does. */
+      call: (server: string, name: string, args?: Record<string, unknown>) =>
+        call("mcp.call", { server, name, args }, async (e) => {
+          const id = need("mcp.call")
+          const { MCP } = await import("@/mcp")
+          const { PermissionNext } = await import("@/permission/next")
+          const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+          const permission = `${String(e.server).replace(/[^a-zA-Z0-9_-]/g, "_")}_${String(e.name).replace(/[^a-zA-Z0-9_-]/g, "_")}`
+          await runPromiseWithLayer(
+            PermissionNext.defaultLayer,
+            locallyInstance(
+              ctx,
+              Effect.gen(function* () {
+                const service = yield* PermissionNext.Service
+                return yield* service.ask({
+                  sessionID: id,
+                  permission,
+                  patterns: ["*"],
+                  always: ["*"],
+                  metadata: {},
+                  ruleset: [],
+                })
+              }),
+            ),
+          )
+          return runPromiseWithLayer(
+            MCP.defaultLayer,
+            locallyInstance(
+              ctx,
+              Effect.gen(function* () {
+                const clients = yield* (yield* MCP.Service).clients()
+                const client = clients[e.server as string]
+                if (!client) throw new Error(`no connected MCP server named ${e.server}`)
+                return yield* Effect.tryPromise(() =>
+                  client.callTool({ name: e.name as string, arguments: (e.args ?? {}) as Record<string, unknown> }),
+                )
+              }),
+            ),
+          )
+        }),
+      connect: unsupported("mcp.connect"),
+    }
+
+    const agentApi = {
+      /** The subagent types, by name. */
+      list: () =>
+        call("agent.list", {}, async () => {
+          const { Agent } = await import("@/agent/agent")
+          const { runPromiseWithLayer, locallyInstance } = await import("@/effect")
+          const agents = await runPromiseWithLayer(
+            Agent.defaultLayer,
+            locallyInstance(
+              ctx,
+              Effect.gen(function* () {
+                return yield* (yield* Agent.Service).list()
+              }),
+            ),
+          )
+          return agents.map((agent) => ({ name: agent.name, description: agent.description, mode: agent.mode }))
+        }),
+      register: unsupported("agent.register"),
+      spawn: unsupported("agent.spawn"),
+    }
+
+    // ---------------------------------------------------------------- telemetry
+    // Only nikcli and its built-in mods ever send a record: for a mod you install these do nothing.
+    const telemetry = { log: (_record?: unknown) => undefined, mark: (_feature?: string) => undefined }
+
     return Object.freeze({
       plugin: Object.freeze({ name: mod.name, root: host.root }),
       ui,
       command,
       tool: toolApi,
-      agent: {
-        register: unsupported("agent.register"),
-        spawn: unsupported("agent.spawn"),
-        list: unsupported("agent.list"),
-      },
-      model: {
-        complete: unsupported("model.complete"),
-        fork: unsupported("model.fork"),
-        classify: unsupported("model.classify"),
-      },
-      prompt: {
-        submit: unsupported("prompt.submit"),
-        read: unsupported("prompt.read"),
-        fill: unsupported("prompt.fill"),
-        suggest: unsupported("prompt.suggest"),
-        compose: unsupported("prompt.compose"),
-      },
-      turn: { abort: unsupported("turn.abort") },
+      agent: agentApi,
+      model: modelApi,
+      prompt: promptApi,
+      turn,
       session,
       config: { list: unsupported("config.list"), set: unsupported("config.set") },
-      settings: { read: unsupported("settings.read") },
+      settings,
       env,
       fs: filesystem,
       store,
@@ -511,9 +812,9 @@ export namespace ModApi {
       clock,
       http,
       process: processApi,
-      mcp: { call: unsupported("mcp.call"), connect: unsupported("mcp.connect") },
+      mcp,
       audio: { play: unsupported("audio.play"), speak: unsupported("audio.speak") },
-      telemetry: { log: unsupported("telemetry.log"), mark: unsupported("telemetry.mark") },
+      telemetry,
     })
   }
 

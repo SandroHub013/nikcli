@@ -406,15 +406,15 @@ describe("ModChain", () => {
   })
 
   describe("scope", () => {
-    it("`after` limits a mods API event to the mods that run after the caller", async () => {
+    it("`from` limits a mods API event to the mods that run before the caller", async () => {
       const bus = new ModChain.Registry()
       const seen: string[] = []
       const a = mod("a", 1, "prepend")
       const b = mod("b", 2)
       const c = mod("c", 3, "append")
       for (const m of [a, b, c]) load(bus, m, (on) => on("fs.read", async ($, e, next) => (seen.push(m.name), next(e))))
-      await emit(bus, "fs.read", { path: "x" }, () => "data", { after: b, origin: { plugin: "b", tier: "user" } })
-      expect(seen).toEqual(["c"])
+      await emit(bus, "fs.read", { path: "x" }, () => "data", { from: b, origin: { plugin: "b", tier: "user" } })
+      expect(seen).toEqual(["a"])
     })
 
     it("`only` limits an event to one mod (session.start)", async () => {

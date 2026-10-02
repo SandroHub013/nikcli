@@ -283,8 +283,8 @@ Where it lives:
 - `src/mod/index.ts` — `Mod.Service` (`Context.Service`, `layer`, `defaultLayer`), state in `InstanceState`, one `Scope`
   per mod closed on unload and reload (timers and processes a mod started die with it). Typed failures are
   `Schema.TaggedError`: `ModLoadRefused`, `ModRegisterFailed`, `ModPromptDropped`, `ModPolicyInvalid`.
-- `src/mod/api.ts` — the `$` API. Every call is also an event (`fs.read`, `process.run`, …) among the mods that run after
-  the caller, answerable with `{ value }` or `{ deny }`; a call pauses the hook's clock, `$.clock.sleep` does not.
+- `src/mod/api.ts` — the `$` API. Every call is also an event (`fs.read`, `process.run`, …) seen by the mods that run
+  _before_ the caller (a policy mod at the front audits the mods after it), answerable with `{ value }` or `{ deny }`; a call pauses the hook's clock, `$.clock.sleep` does not.
 - `src/mod/guard.ts` — managed policy, static analysis of a module's source, and `sec-default`, itself a mod.
 - `packages/plugin/src/mod.ts` — the author-facing types (`@nikcli-ai/plugin/mod`), checked by `test/mod/types.test.ts`.
 - `nikcli mod validate <dir> [--strict] [--json]` — what a mod hooks and calls, read without running it.

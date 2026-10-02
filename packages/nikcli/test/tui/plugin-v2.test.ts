@@ -297,10 +297,31 @@ function host() {
     ready: true,
   }
 
+  const uiCalls: Array<{ kind: string; payload: unknown }> = []
+  const replaced: Array<() => unknown> = []
+
   const api = {
     client: { marker: "client" },
     data: { marker: "data" },
     kv,
+    ui: {
+      dialog: {
+        replace(render: () => unknown) {
+          replaced.push(render)
+          uiCalls.push({ kind: "dialog.replace", payload: render })
+        },
+        clear() {
+          uiCalls.push({ kind: "dialog.clear", payload: undefined })
+        },
+      },
+      DialogAlert(props: unknown) {
+        uiCalls.push({ kind: "DialogAlert", payload: props })
+        return `alert:${String((props as { title?: string })?.title)}`
+      },
+      toast(input: unknown) {
+        uiCalls.push({ kind: "toast", payload: input })
+      },
+    },
     state: {
       ready: true,
       config: {},
@@ -363,6 +384,7 @@ function host() {
     api,
     kv,
     kvStore,
+    uiCalls,
     routes,
     slots,
     cleanups,
@@ -468,6 +490,47 @@ describe("v2 tui plugin kv", () => {
     // `get` must still fall back, and `ready` must reach the plugin.
     expect(context!.kv.get("missing", "fallback")).toBe("fallback")
     expect(context!.kv.ready).toBe(true)
+  })
+})
+
+describe("v2 tui plugin user prompts", () => {
+  it("reaches DialogAlert and toast, so a v2 plugin can ask the user something", async () => {
+    const runtime = host()
+    let context: Context | undefined
+    let alertRender: unknown
+    const definition = Plugin.define({
+      id: "example.prompts",
+      setup(input) {
+        context = input
+        return () => {}
+      },
+    })
+
+    const module = readV2TuiPlugin({ default: definition }, "file:///prompts.ts")
+    await module!.tui(runtime.api, {}, {} as never)
+
+    // `computer` was blocked by exactly this: no way to ask the user anything
+    // without seizing the whole dialog stack.
+    alertRender = context!.ui.DialogAlert({
+      title: "Confirm",
+      message: "Run it?",
+      onConfirm: () => {},
+    })
+    expect(alertRender).toBe("alert:Confirm")
+    expect(runtime.uiCalls).toContainEqual({
+      kind: "DialogAlert",
+      payload: { title: "Confirm", message: "Run it?", onConfirm: expect.any(Function) },
+    })
+
+    context!.ui.toast({ message: "done", variant: "success", duration: 1200 })
+    expect(runtime.uiCalls).toContainEqual({
+      kind: "toast",
+      payload: { message: "done", variant: "success", duration: 1200 },
+    })
+
+    // The dialog stack is still a separate seam, not folded into the alert.
+    context!.ui.dialog.replace(() => "dialog-body")
+    expect(runtime.uiCalls.map((c) => c.kind)).toEqual(["DialogAlert", "toast", "dialog.replace"])
   })
 })
 

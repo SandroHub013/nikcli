@@ -222,8 +222,11 @@ export namespace ModChain {
   export interface EmitOptions {
     /** Who fired the event. Defaults to the engine. */
     origin?: Origin
-    /** Only mods that run after this one see the event (a mods API call from it). */
-    after?: Mod
+    /**
+     * The mod that made a mods API call. Only mods that run **before** it see the call: a policy
+     * mod at the front audits or refuses what the mods after it ask for.
+     */
+    from?: Mod
     /** Only this mod sees the event (`session.start`). */
     only?: string
     /** Aborts `next.signal` for every hook when the caller abandons the event. */
@@ -311,12 +314,12 @@ export namespace ModChain {
       return mod.rank * 1_000_000 + (this.order.get(mod.id) ?? 0)
     }
 
-    select(name: string, options: Pick<EmitOptions, "after" | "only">) {
-      const after = options.after ? this.position(options.after) : undefined
+    select(name: string, options: Pick<EmitOptions, "from" | "only">) {
+      const from = options.from ? this.position(options.from) : undefined
       return this.entries
         .filter((entry) => nameMatches(entry.event, name))
         .filter((entry) => (options.only ? entry.mod.id === options.only : true))
-        .filter((entry) => (after === undefined ? true : this.position(entry.mod) > after))
+        .filter((entry) => (from === undefined ? true : this.position(entry.mod) < from))
         .sort((a, b) => this.position(a.mod) - this.position(b.mod))
     }
   }
@@ -359,7 +362,8 @@ export namespace ModChain {
       if (outer?.aborted) abort.abort()
       else outer?.addEventListener("abort", () => abort.abort(), { once: true })
       const origin = options.origin ?? ENGINE
-      const session = scope.getStore()?.sessionID
+      // The session a hook belongs to: the event names it, or the hook that fired this event does.
+      const session = typeof event?.sessionID === "string" ? (event.sessionID as string) : scope.getStore()?.sessionID
 
       const run = (index: number, current: any, floor: number): Effect.Effect<any, E, R> => {
         let at = index

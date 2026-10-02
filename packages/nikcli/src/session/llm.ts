@@ -36,6 +36,7 @@ import { features } from "@nikcli-ai/util/features"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
+import { Mod } from "../mod"
 import { SystemPrompt } from "./system"
 import { Flag } from "@nikcli-ai/util/flag"
 import { PermissionNext } from "@/permission/next"
@@ -338,16 +339,29 @@ export namespace LLM {
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = SystemPrompt.header(input.model.providerID)
+    // The body of the system prompt as named sections, so `prompt.section` and `prompt.compose`
+    // mods can see and change each. With no such mod this joins to exactly what it always did.
+    const sections: Mod.PromptSection[] = [
+      // use agent prompt otherwise provider prompt
+      // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
+      input.agent.prompt
+        ? { id: "agent", text: input.agent.prompt }
+        : {
+            id: "provider",
+            text: isCodex
+              ? ""
+              : SystemPrompt.provider(input.model)
+                  .filter((x) => x)
+                  .join("\n"),
+          },
+      // any custom prompt passed into this call
+      { id: "system", text: input.system.filter((x) => x).join("\n") },
+      // any custom prompt from last user message
+      { id: "user", text: input.user.system ?? "" },
+    ].filter((section) => section.text)
     system.push(
-      [
-        // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
-        ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
-      ]
+      (await Mod.promptSections(sections))
+        .map((section) => section.text)
         .filter((x) => x)
         .join("\n"),
     )

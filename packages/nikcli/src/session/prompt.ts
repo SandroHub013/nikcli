@@ -732,7 +732,54 @@ export namespace SessionPrompt {
     return result
   }
 
+  /**
+   * A turn: everything done in answer to one prompt, from the first model request to the
+   * final answer. `turn.start` and `turn.complete` mods see its edges; `runLoopTurn` is the
+   * loop itself, which re-enters itself when a steered or queued prompt follows.
+   */
   async function runLoop(sessionID: string, controller: AbortController) {
+    const turnId = `turn_${ulid()}`
+    const started = Date.now()
+    turnIds.set(sessionID, turnId)
+    await Mod.turnStart({ sessionID, turnId })
+    try {
+      const item = await runLoopTurn(sessionID, controller)
+      await completeTurn(sessionID, turnId, started, controller.signal.aborted, item)
+      return item
+    } catch (error) {
+      await completeTurn(sessionID, turnId, started, true)
+      throw error
+    }
+  }
+
+  /** The turn each session is running, so a step can name it. */
+  const turnIds = new Map<string, string>()
+
+  async function completeTurn(
+    sessionID: string,
+    turnId: string,
+    started: number,
+    isAborted: boolean,
+    item?: MessageV2.WithParts,
+  ) {
+    if (turnIds.get(sessionID) === turnId) turnIds.delete(sessionID)
+    if (!(await Mod.handles("turn.complete"))) return
+    const answer = (item?.parts ?? [])
+      .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
+      .map((part) => part.text)
+      .join("\n")
+    const tokens = item?.info.role === "assistant" ? item.info.tokens : undefined
+    await Mod.turnComplete({
+      sessionID,
+      turnId,
+      answer,
+      durationMs: Date.now() - started,
+      isAborted,
+      usage: tokens ? { ...tokens } : undefined,
+    }).catch((error) => log.warn("turn.complete failed", { error: String(error) }))
+  }
+
+  async function runLoopTurn(sessionID: string, controller: AbortController): Promise<MessageV2.WithParts> {
     const abort = controller.signal
 
     await using _ = defer(() => PromptState.finish(sessionID, controller))
@@ -873,8 +920,30 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      const model = await providerGetModel(lastUser.model.providerID, lastUser.model.modelID)
+      let model = await providerGetModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
+
+      // `turn.step` mods see each request before it is built, and can send it to another model.
+      if (!task && (await Mod.handles("turn.step"))) {
+        const stepped = await Mod.turnStep({
+          sessionID,
+          turnId: turnIds.get(sessionID) ?? "",
+          step,
+          agent: lastUser.agent,
+          model: `${model.providerID}/${model.id}`,
+          variant: lastUser.variant,
+        })
+        const chosen = Provider.parseModel(stepped.model)
+        if (chosen.providerID !== model.providerID || chosen.modelID !== model.id) {
+          model = await providerGetModel(chosen.providerID, chosen.modelID).catch((error) => {
+            log.warn("turn.step chose a model that is not available; keeping the configured one", {
+              model: stepped.model,
+              error: String(error),
+            })
+            return model
+          })
+        }
+      }
 
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
@@ -1409,9 +1478,9 @@ export namespace SessionPrompt {
       PromptState.resolve(sessionID, item)
       if (!abort.aborted) {
         const steered = await promote(sessionID, "steer")
-        if (steered.length > 0) return runLoop(sessionID, controller)
+        if (steered.length > 0) return runLoopTurn(sessionID, controller)
         const queued = await promote(sessionID, "queue")
-        if (queued.length > 0) return runLoop(sessionID, controller)
+        if (queued.length > 0) return runLoopTurn(sessionID, controller)
       }
       void runCompaction(
         Effect.gen(function* () {

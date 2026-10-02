@@ -324,3 +324,36 @@ this session failed for reasons that had nothing to do with this work — twelve
 `src/provider/sdk/copilot/chat/openai-compatible-chat-language-model.ts` from a duplicated `@ai-sdk/provider` in the
 installed tree, and `@nikcli-ai/identity`'s `wrangler types --check`. `bun install --frozen-lockfile` cleared both, which
 is worth recording because the two look like code faults and are install drift.
+
+### A `Usage` accumulator cannot reconstruct the native gap — 2026-10-03
+
+Requirement 10 allows the aggregator to "reconstruct from prior deltas **or** flag
+the gap explicitly". The flag half is what landed. The reconstruct half is not
+merely unwritten, it is **impossible without a protocol change**, and the reason
+is in the event schema rather than in the adapter.
+
+Only `StepFinish` and `RequestFinish` carry `usage` — both declared
+`usage: Schema.optional(Usage)` at `packages/llm/src/schema/events.ts:106` and
+`:117`, and no other variant in the union has the field. (The third hit, `:213`,
+is `LLMResponse.usage`, not an event.) A native turn that streams is therefore a
+single usage reading at the end and nothing before it, so a finish that omits
+`usage` leaves no prior delta in the same turn to fold. `responseUsage`
+(`events.ts:205-210`) does not contradict this: it reduces over a collected
+`events` array picking the last usage-bearing event, and for a native stream that
+last event is the same finish event that already had nothing.
+
+So the options are: keep flagging (current), have `packages/llm` emit
+usage-bearing deltas mid-stream, or estimate. Estimation is out — it would invent
+a billable number, which is the failure requirement 10 was written against. That
+leaves a protocol change.
+
+The spec's naming is also a category error for this tree: there is no
+`Effect.Service` anywhere in `packages/nikcli/src`. The house idiom is
+`export namespace X` with `defaultLayer` and `runPromiseWithLayer`
+(`src/effect/runtime.ts`), as in `background/run.ts:16-18`.
+
+An accumulator is still worth having for a different reason — `Session.getUsage`
+folds every message on read, so a running total would be O(1) — but that is a
+performance refactor, not the correctness fix requirement 10 asks for, and it
+would not close the gap. Recorded so the next attempt does not build a fold with
+nothing to fold.

@@ -101,6 +101,27 @@ export const {
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       /**
+       * The barrier: the state on screen is the product of a bootstrap that
+       * completed, and no newer one is in flight.
+       *
+       * EOT-15 requirement 8, adapted to what this consumer actually is. The
+       * spec describes a journal consumer holding per-aggregate cursors and
+       * validating them against a snapshot; this context is not that — it
+       * recovers through typed REST endpoints (`bootstrap` below), never
+       * `/sync/outbox` — so there is no cursor and no replay, and "validate
+       * cursors against the snapshot" has nothing to operate on. What remains
+       * of requirement 8 is its first clause: the barrier completes.
+       *
+       * It is deliberately **not** `ready`. `ready` is data-availability, read
+       * by `dialog-analytics` and `dialog-command-center` to decide they can
+       * stop polling, and a provider that is down must not pin them polling
+       * forever (see the `status` docblock). This one goes *false* when a
+       * reconnect refetch fails, which `ready` cannot do: the TUI stays usable
+       * on stale state, and a consumer that needs a trustworthy snapshot can
+       * wait here instead.
+       */
+      barrier: boolean
+      /**
        * Best-effort resources that failed to load, by request name.
        *
        * `status` answers "has bootstrap finished", not "did everything
@@ -770,6 +791,9 @@ export const {
       const current = () => version === bootstrapVersion
       syncedSessions.clear()
       sessionLru.clear()
+      // A refetch in flight means the state on screen is mid-replacement, so
+      // the barrier is down for the whole duration, not only at the start.
+      setStore("barrier", false)
       setStore(
         produce((draft) => {
           draft.message = {}
@@ -938,6 +962,7 @@ export const {
               batch(() => {
                 setStore("degraded", reconcile(failed))
                 setStore("status", "complete")
+                setStore("barrier", true)
               })
             })
             .catch((error) => {
@@ -954,6 +979,10 @@ export const {
             Log.Default.warn("tui refetch failed; keeping the terminal up", {
               error: e instanceof Error ? e.message : String(e),
             })
+            // `barrier` stays false. The terminal is fine and `ready` is
+            // unchanged, so nothing the user is doing breaks — but the state on
+            // screen is the pre-reconnect snapshot, and a consumer asking
+            // "is this a complete barrier?" is owed the truth.
             return e
           }
           Log.Default.error("tui bootstrap failed", {
@@ -1142,6 +1171,9 @@ export const {
       },
       get ready() {
         return store.status !== "loading"
+      },
+      get barrier() {
+        return store.barrier
       },
       session: {
         get(sessionID: string) {

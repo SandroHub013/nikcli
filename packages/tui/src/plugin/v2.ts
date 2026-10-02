@@ -247,6 +247,12 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
           replace: (render, onClose) => api.ui.dialog.replace(render, onClose),
           clear: () => api.ui.dialog.clear(),
         },
+        // Straight delegation. Both are implemented host-side already
+        // (`api.ui.DialogAlert` / `api.ui.toast` in `plugin/api.tsx`); v2 just
+        // could not reach them, which is why a v2 plugin had no way to ask the
+        // user a question without seizing the dialog stack.
+        DialogAlert: (props) => api.ui.DialogAlert(props),
+        toast: (input) => api.ui.toast(input),
         command(command) {
           requireCapability(manifest, "commands", definition.id)
           if (!command.name) throw new TypeError(`V2 TUI plugin ${definition.id} registered an empty command name`)

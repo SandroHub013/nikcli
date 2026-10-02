@@ -5,11 +5,12 @@ import type { ToolDefinition } from "@nikcli-ai/plugin/tool"
 import { Flag } from "@nikcli-ai/util/flag"
 import { Log } from "@nikcli-ai/util/log"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
+import { InstanceState, type InstanceContext } from "@/effect"
 import { Instance } from "@/project/instance"
 import { ModApi } from "./api"
 import { ModChain } from "./chain"
 import { ModGuard } from "./guard"
+import { ModUi } from "./ui"
 
 /**
  * Mods: TypeScript functions that change how nikcli works.
@@ -29,7 +30,7 @@ export namespace Mod {
   const log = Log.create({ service: "mod" })
 
   export const Event = {
-    /** `$.ui.log`: a dim line a mod wants in the transcript. Not yet part of the public event union. */
+    /** `$.ui.log`: a dim line a mod wants in the transcript. */
     Log: BusEvent.schema(
       "mod.log",
       Schema.Struct({
@@ -37,8 +38,18 @@ export namespace Mod {
         sessionID: Schema.optional(Schema.String),
         text: Schema.String,
       }),
-      { visibility: "internal" },
     ),
+  }
+
+  export const UiEvent = {
+    /** A mod asked to be drawn again. A newer one says everything an older one did. */
+    Invalidate: BusEvent.schema(
+      "mod.ui.invalidate",
+      Schema.Struct({ component: Schema.optional(Schema.String), requestID: Schema.optional(Schema.String) }),
+      { delivery: "snapshot" },
+    ),
+    /** The set of panes mods have open changed; read it again. */
+    Panes: BusEvent.schema("mod.ui.panes", Schema.Struct({}), { delivery: "snapshot" }),
   }
 
   export class LoadRefused extends Schema.TaggedError<LoadRefused>()("ModLoadRefused", {
@@ -116,6 +127,28 @@ export namespace Mod {
     readonly toolsOf: (id: string) => Effect.Effect<Record<string, ToolDefinition>>
     /** Specifiers of the organization's own mods, from the managed directories. */
     readonly orgSpecs: () => Effect.Effect<string[]>
+    /**
+     * Ask the mods what to draw at a render site. `tree` is a drawing (`null` for nothing), absent
+     * means "draw the default"; `props` are the site's props as the chain left them.
+     */
+    readonly render: (input: {
+      component: string
+      requestId?: string
+      sessionID?: string
+      props: Record<string, unknown>
+      viewport?: { columns: number; rows: number }
+    }) => Effect.Effect<{ tree?: ModUi.Node; props?: Record<string, unknown> }>
+    /** A control a mod drew was used: `ui.press`, `ui.input`, `ui.select` or `ui.close` among the mods. */
+    readonly uiEvent: (input: {
+      kind: "press" | "input" | "select" | "close" | "message"
+      key?: string
+      value?: unknown
+      submit?: boolean
+      component?: string
+      requestId?: string
+      sessionID?: string
+    }) => Effect.Effect<{ handled: boolean }>
+    readonly panes: () => Effect.Effect<ModUi.PaneInfo[]>
     /** A command a mod registered with `$.command.register`. */
     readonly command: (name: string) => Effect.Effect<ModApi.Command | undefined>
     readonly commands: () => Effect.Effect<Array<{ name: string; description?: string }>>
@@ -134,6 +167,8 @@ export namespace Mod {
     resolved: ModGuard.Resolved
     live: Map<string, Live>
     commands: Map<string, ModApi.Command & { owner: string }>
+    /** Panes mods have open, by id. */
+    panes: Map<string, ModUi.PaneInfo & { owner: string }>
     /** Per-mod values that survive a reload; gone with the process. */
     memory: Map<string, Map<string, unknown>>
     /** Mods that have loaded before, to tell a reload from a start. */
@@ -160,6 +195,17 @@ export namespace Mod {
       ? undefined
       : "needs { value } or { deny }"
 
+  /** Publish a UI event from outside any instance scope (a timer, a hook that outlived its turn). */
+  async function publishUi(ctx: InstanceContext, def: any, properties: unknown) {
+    await Instance.provide({
+      directory: ctx.directory,
+      fn: async () => {
+        const { Bus } = await import("@/bus")
+        await Bus.publish(def, properties as never)
+      },
+    })
+  }
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -171,6 +217,7 @@ export namespace Mod {
             resolved,
             live: new Map(),
             commands: new Map(),
+            panes: new Map(),
             memory: new Map(),
             seen: new Set(),
           }
@@ -194,7 +241,19 @@ export namespace Mod {
           }
 
           yield* Effect.addFinalizer(() =>
-            Effect.forEach([...s.live.values()], (live) => Scope.close(live.scope, Exit.void), { discard: true }),
+            Effect.gen(function* () {
+              // The instance is going away: every hook on `session.end` gets 1.5 s between them,
+              // then each mod's scope is closed. A hook that hangs cannot hold shutdown.
+              yield* Effect.exit(
+                ModChain.emit(s.registry, "session.end", { reason: "other" }, () => Effect.succeed({}), {
+                  limitMs: 1_500,
+                  validate: () => undefined,
+                }),
+              )
+              yield* Effect.forEach([...s.live.values()], (live) => Scope.close(live.scope, Exit.void), {
+                discard: true,
+              })
+            }),
           )
           return s
         }),
@@ -218,6 +277,7 @@ export namespace Mod {
 
       const unload = Effect.fn("Mod.unload")(function* (id: string) {
         const s = yield* getState()
+        const ctx0 = yield* InstanceState.context
         const live = s.live.get(id)
         if (!live) return
         // Revoke before disposing: the chain stops seeing the mod first, so a
@@ -225,6 +285,13 @@ export namespace Mod {
         s.registry.remove(id)
         s.live.delete(id)
         for (const [name, command] of s.commands) if (command.owner === id) s.commands.delete(name)
+        let closed = false
+        for (const [paneId, pane] of s.panes) {
+          if (pane.owner !== id) continue
+          s.panes.delete(paneId)
+          closed = true
+        }
+        if (closed) yield* Effect.promise(() => publishUi(ctx0, UiEvent.Panes, {}))
         yield* Scope.close(live.scope, Exit.void)
       })
 
@@ -315,10 +382,15 @@ export namespace Mod {
                     try: async () => ({ value: await impl(e) }) as { value?: unknown; deny?: string },
                     catch: (error) => error,
                   }),
-                { after: mod, origin: { plugin: mod.name, tier: mod.tier }, validate: apiResult },
+                { from: mod, origin: { plugin: mod.name, tier: mod.tier }, validate: apiResult },
               ).pipe(Effect.map((result) => result as { value?: unknown; deny?: string })),
             ),
-          publish: (run) => Instance.provide({ directory: ctx.directory, fn: run }),
+          inInstance: async (fn) => await Instance.provide({ directory: ctx.directory, fn }),
+          panes: s.panes,
+          changed: (kind, detail) =>
+            void (
+              kind === "panes" ? publishUi(ctx, UiEvent.Panes, {}) : publishUi(ctx, UiEvent.Invalidate, detail ?? {})
+            ).catch((error) => log.warn("mod ui event failed", { error: String(error) })),
         })
         mod.api = () => api
 
@@ -349,6 +421,42 @@ export namespace Mod {
         return info(s, live)
       })
 
+      const render: Interface["render"] = Effect.fn("Mod.render")(function* (input) {
+        const s = yield* getState()
+        if (!s.registry.handles("ui.render")) return {}
+        const event = {
+          component: input.component,
+          requestId: input.requestId ?? "",
+          surface: "terminal",
+          sessionID: input.sessionID,
+          props: input.props,
+          viewport: input.viewport,
+        }
+        const result: any = yield* ModChain.emit(s.registry, "ui.render", event, (e) => Effect.succeed(e), {
+          validate: (r) =>
+            r && typeof r === "object" ? undefined : "needs an object: a drawing ({ tree }) or the event",
+        })
+        if ("tree" in result && result.tree !== undefined) {
+          const bad = result.tree === null ? undefined : ModUi.validate(result.tree)
+          if (bad) {
+            log.warn("a mod drew a tree a client cannot draw", { component: input.component, problem: bad })
+            return {}
+          }
+          return { tree: result.tree as ModUi.Node }
+        }
+        return { props: (result.props ?? input.props) as Record<string, unknown> }
+      })
+
+      const uiEvent: Interface["uiEvent"] = Effect.fn("Mod.uiEvent")(function* (input) {
+        const s = yield* getState()
+        const name = `ui.${input.kind}`
+        if (!s.registry.handles(name)) return { handled: false }
+        const result: any = yield* ModChain.emit(s.registry, name, input, () => Effect.succeed({ handled: false }), {
+          validate: (r) => (r && typeof r === "object" ? undefined : "needs an object"),
+        })
+        return { handled: result.handled === true }
+      })
+
       return Service.of({
         emit,
         handles: (name) => getState().pipe(Effect.map((s) => s.registry.handles(name))),
@@ -362,6 +470,10 @@ export namespace Mod {
                 Object.assign({}, ...[...s.live.values()].map((live) => live.tools)) as Record<string, ToolDefinition>,
             ),
           ),
+        render,
+        uiEvent,
+        panes: () =>
+          getState().pipe(Effect.map((s) => [...s.panes.values()].map(({ owner: _owner, ...pane }) => pane))),
         toolsOf: (id) => getState().pipe(Effect.map((s) => s.live.get(id)?.tools ?? {})),
         orgSpecs: () => getState().pipe(Effect.flatMap((s) => ModGuard.orgSpecs(s.resolved.orgDirs))),
         command: (name) => getState().pipe(Effect.map((s) => s.commands.get(name))),
@@ -636,5 +748,141 @@ export namespace Mod {
     return emitPromise("command.run", event, final, {
       validate: (result) => (isRecord(result) ? undefined : "needs { text }, {} or the command's own result"),
     })
+  }
+
+  // ---------------------------------------------------------------------------
+  // turns
+
+  const object = (what: string) => (result: unknown) => (isRecord(result) ? undefined : `needs ${what}`)
+
+  /** A turn is everything nikcli does in answer to one prompt. */
+  export async function turnStart(event: { sessionID: string; turnId: string; agent?: string }) {
+    if (!(await handles("turn.start"))) return
+    await emitPromise("turn.start", event, async (e) => e, { validate: object("the event") })
+  }
+
+  /**
+   * One request is about to go to the model. A mod can send it to a different model
+   * (`next({ ...e, model: "provider/model" })`). Fires before the
+   * request is built, so the step runs on whatever the chain settles on. The model is
+   * what a hook can change; `variant` is there to read.
+   */
+  export async function turnStep(event: {
+    sessionID: string
+    turnId: string
+    step: number
+    agent: string
+    model: string
+    variant?: string
+  }) {
+    if (!(await handles("turn.step"))) return event
+    const out: any = await emitPromise("turn.step", event, async (e) => e, {
+      validate: (result) =>
+        isRecord(result) && typeof result.model === "string" ? undefined : "needs the event with a model string",
+    })
+    return { ...event, model: out.model as string, variant: out.variant as string | undefined }
+  }
+
+  /** The turn ended, answered or interrupted. `answer` is the final text. */
+  export async function turnComplete(event: {
+    sessionID: string
+    turnId: string
+    answer: string
+    durationMs: number
+    isAborted: boolean
+    usage?: Record<string, unknown>
+  }) {
+    if (!(await handles("turn.complete"))) return
+    await emitPromise("turn.complete", event, async (e) => e, { validate: object("the event or { text }") })
+  }
+
+  // ---------------------------------------------------------------------------
+  // the system prompt
+
+  export type PromptSection = { id: string; text: string }
+
+  /**
+   * The system prompt as named sections: `agent` or `provider` (the base prompt), `system`
+   * (what the caller added) and `user` (the last message's own). `prompt.section` fires once for
+   * each and may rewrite its `text`, or answer `{ text: null }` to leave it out; `prompt.compose`
+   * then sees the list and may return `{ sections }` to reorder, add or remove. The provider's
+   * header is not a section: some providers reject a request without it.
+   *
+   * With no hook on either event the sections come back as they went in. Text that changes
+   * between requests invalidates the prompt cache, so a mod should keep it stable.
+   */
+  export async function promptSections(sections: PromptSection[]): Promise<PromptSection[]> {
+    let out = sections
+    if (await handles("prompt.section")) {
+      const next: PromptSection[] = []
+      for (const section of out) {
+        const result: any = await emitPromise(
+          "prompt.section",
+          { name: section.id, text: section.text },
+          async (e) => ({ text: e.text as string | null }),
+          {
+            validate: (r) =>
+              isRecord(r) && (r.text === null || typeof r.text === "string")
+                ? undefined
+                : "needs { text: string | null }",
+          },
+        )
+        if (result.text !== null) next.push({ id: section.id, text: result.text })
+      }
+      out = next
+    }
+    if (await handles("prompt.compose")) {
+      const result: any = await emitPromise(
+        "prompt.compose",
+        { sections: out.map((section) => ({ id: section.id, text: section.text, scope: "system" })) },
+        async (e) => ({ sections: e.sections as Array<{ id: string; text: string }> }),
+        {
+          validate: (r) =>
+            isRecord(r) &&
+            Array.isArray(r.sections) &&
+            r.sections.every(
+              (section) => isRecord(section) && typeof section.id === "string" && typeof section.text === "string",
+            )
+              ? undefined
+              : "needs { sections: [{ id, text }] }",
+        },
+      )
+      out = (result.sections as Array<{ id: string; text: string }>).map(({ id, text }) => ({ id, text }))
+    }
+    return out
+  }
+
+  // ---------------------------------------------------------------------------
+  // subagents
+
+  /** Whether a subagent type is offered to the model. A mod answers `{ isOffered: false }` to withhold one. */
+  export async function agentOffered(agent: { name: string; description?: string }): Promise<boolean> {
+    const out: any = await emitPromise(
+      "agent.offer",
+      { agent: agent.name, description: agent.description ?? "" },
+      async () => ({ isOffered: true }),
+      { validate: (r) => (isRecord(r) && typeof r.isOffered === "boolean" ? undefined : "needs { isOffered }") },
+    )
+    return out.isOffered
+  }
+
+  /**
+   * A subagent is about to start. A mod can refuse it (`{ deny: reason }`, which the model reads
+   * as the tool's result) or choose its model (`next({ ...e, model: "provider/model" })`).
+   */
+  export async function agentSpawn(event: {
+    sessionID: string
+    agent: string
+    description: string
+    prompt: string
+    model?: string
+  }): Promise<{ deny?: string; model?: string }> {
+    const out: any = await emitPromise("agent.spawn", event, async (e) => ({ model: e.model as string | undefined }), {
+      validate: (r) =>
+        isRecord(r) && (typeof r.deny === "string" || r.model === undefined || typeof r.model === "string")
+          ? undefined
+          : "needs { deny } or { model }",
+    })
+    return { deny: typeof out.deny === "string" ? out.deny : undefined, model: out.model }
   }
 }

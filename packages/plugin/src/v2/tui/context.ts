@@ -20,7 +20,7 @@ import type {
 } from "@nikcli-ai/sdk/httpapi"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
-import type { TuiKV } from "../../tui"
+import type { TuiDialogAlertProps, TuiKV, TuiToast } from "../../tui"
 
 export type LocationRef = {
   readonly directory: string
@@ -213,6 +213,18 @@ export interface UI {
     replace(render: () => JSX.Element, onClose?: () => void): void
     clear(): void
   }
+  /**
+   * A modal confirmation, and a transient notification.
+   *
+   * Both were missing here and both cost a real plugin its only way to ask the
+   * user anything: `computer` had no way to say "this needs you" without taking
+   * over the dialog stack. They are v1's own prop types, aliased rather than
+   * restated — the host already implements both (`plugin/api.tsx`), so a
+   * lookalike would be a second contract with nothing enforcing that the two
+   * agree.
+   */
+  readonly DialogAlert: (props: TuiDialogAlertProps) => JSX.Element
+  readonly toast: (input: TuiToast) => void
 }
 
 /**

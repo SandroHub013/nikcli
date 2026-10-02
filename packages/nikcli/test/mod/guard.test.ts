@@ -81,15 +81,15 @@ describe("ModGuard.validate", () => {
 
   it("warns about an event nikcli does not fire yet, an unknown one, and an API nikcli lacks", () => {
     const report = ModGuard.validate(`export function register(on) {
-      on("turn.step", async ($, e, next) => next(e))
+      on("session.compact", async ($, e, next) => next(e))
       on("tool.cal", async ($, e, next) => next(e))
-      on("tool.call", async ($, e, next) => { await $.model.complete({ prompt: "x" }); return next(e) })
+      on("tool.call", async ($, e, next) => { await $.ui.copy("x"); return next(e) })
     }`)
     expect(report.ok).toBe(true)
     expect(report.warnings).toEqual([
-      "turn.step is not fired by nikcli yet, so this hook never runs",
+      "session.compact is not fired by nikcli yet, so this hook never runs",
       "tool.cal is not an event nikcli knows",
-      "$.model.complete is not available in nikcli yet",
+      "$.ui.copy is not available in nikcli yet",
     ])
   })
 

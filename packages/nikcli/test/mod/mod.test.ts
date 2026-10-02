@@ -28,6 +28,10 @@ const { Mod } = await import("@/mod")
 const { PermissionNext } = await import("@/permission/next")
 const { PluginTool } = await import("@/tool/plugin")
 const commandModule = await import("@/command")
+const httpModule = await import("@/server/httpapi/mod")
+const { Bus } = await import("@/bus")
+// `session/prompt` first: entering through `prompt-commands` is a pre-existing import cycle.
+await import("@/session/prompt")
 const { PromptCommands } = await import("@/session/prompt-commands")
 const { Instance } = await import("@/project/instance")
 const { Global } = await import("@nikcli-ai/util/global")
@@ -464,6 +468,325 @@ describe("mod commands and command.run", () => {
   it("an unknown command still fails exactly as before", async () => {
     await withProjectDirectory(projectDir, async () => {
       await expect(slash("no-such-command")).rejects.toThrow('Command "no-such-command" not found')
+    })
+  })
+})
+
+describe("turns, prompt sections, subagents and the mods API", () => {
+  it("turn.step sends a request to another model; turn.start and turn.complete see the edges", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      probe.calls.length = 0
+      await install(
+        "turn-mod",
+        `export function register(on) {
+  on("turn.start", async ($, e, next) => (globalThis.__modProbe.calls.push("start:" + e.turnId), next(e)))
+  on("turn.step", async ($, e, next) => next({ ...e, model: "openai/gpt-fast" }))
+  on("turn.complete", async ($, e, next) => (globalThis.__modProbe.calls.push("complete:" + e.answer + ":" + e.isAborted), next(e)))
+}`,
+      )
+      await Mod.turnStart({ sessionID: SESSION, turnId: "turn_1" })
+      const step = await Mod.turnStep({
+        sessionID: SESSION,
+        turnId: "turn_1",
+        step: 1,
+        agent: "build",
+        model: "anthropic/claude-opus-5",
+      })
+      expect(step.model).toBe("openai/gpt-fast")
+      await Mod.turnComplete({ sessionID: SESSION, turnId: "turn_1", answer: "done", durationMs: 5, isAborted: false })
+      expect(probe.calls).toEqual(["start:turn_1", "complete:done:false"])
+    })
+  })
+
+  it("prompt.section rewrites or omits a section; prompt.compose reorders", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      const sections = [
+        { id: "provider", text: "BASE" },
+        { id: "system", text: "SYS" },
+        { id: "user", text: "USER" },
+      ]
+      expect(await Mod.promptSections(sections)).toEqual(sections)
+
+      await install(
+        "prompt-sections",
+        `export function register(on) {
+  on("prompt.section", { name: "user" }, async ($, e, next) => ({ text: e.text + "!" }))
+  on("prompt.section", { name: "system" }, async () => ({ text: null }))
+  on("prompt.compose", async ($, e, next) => ({ sections: [...e.sections].reverse() }))
+}`,
+      )
+      expect(await Mod.promptSections(sections)).toEqual([
+        { id: "user", text: "USER!" },
+        { id: "provider", text: "BASE" },
+      ])
+    })
+  })
+
+  it("agent.offer withholds a subagent type; agent.spawn refuses one or picks its model", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await install(
+        "agent-mod",
+        `export function register(on) {
+  on("agent.offer", { agent: "secret" }, async () => ({ isOffered: false }))
+  on("agent.spawn", { agent: "reviewer" }, async ($, e, next) => next({ ...e, model: "anthropic/claude-haiku" }))
+  on("agent.spawn", { agent: "blocked" }, async () => ({ deny: "That agent is off this week." }))
+}`,
+      )
+      expect(await Mod.agentOffered({ name: "secret" })).toBe(false)
+      expect(await Mod.agentOffered({ name: "explore" })).toBe(true)
+      expect(await Mod.agentSpawn({ sessionID: SESSION, agent: "reviewer", description: "d", prompt: "p" })).toEqual({
+        deny: undefined,
+        model: "anthropic/claude-haiku",
+      })
+      expect((await Mod.agentSpawn({ sessionID: SESSION, agent: "blocked", description: "d", prompt: "p" })).deny).toBe(
+        "That agent is off this week.",
+      )
+    })
+  })
+
+  it("a hook can use fs, process, env, store, clock and settings, and see which session it is in", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await Bun.write(path.join(projectDir, "note.txt"), "from disk")
+      await install(
+        "api-tour",
+        `export function register(on) {
+  on("tool.call", { tool: "tour" }, async ($, e, next) => {
+    await $.store.set("seen", (await $.store.get("seen") ?? 0) + 1)
+    $.env.set("MOD_TOUR", "yes")
+    const ran = await $.process.run(["echo", "hi"])
+    const settings = await $.settings.read()
+    $.telemetry.mark("x")
+    return { result: JSON.stringify({
+      file: await $.fs.read("note.txt"),
+      exists: await $.fs.exists("nope.txt"),
+      echo: ran.stdout.trim(),
+      env: await $.env.get("MOD_TOUR"),
+      seen: await $.store.get("seen"),
+      session: $.session.id(),
+      cwd: $.session.cwd(),
+      version: typeof (await $.session.version()),
+      slept: await $.clock.sleep(1) === undefined,
+      settings: typeof settings,
+    }) }
+  })
+}`,
+      )
+      const run = async () =>
+        JSON.parse(
+          (
+            await Mod.toolCall(
+              { tool: "tour", sessionID: SESSION, agent: "build", messageID: "m", callID: "c", args: {} },
+              async () => ({ title: "x", output: "should not run", metadata: {} }),
+              (text) => ({ title: "mod", output: text, metadata: {} }),
+            )
+          ).output,
+        )
+      const first = await run()
+      expect(first).toMatchObject({
+        file: "from disk",
+        exists: false,
+        echo: "hi",
+        env: "yes",
+        session: SESSION,
+        cwd: projectDir,
+        version: "string",
+        slept: true,
+        settings: "object",
+      })
+      expect((await run()).seen).toBe(first.seen + 1)
+    })
+  })
+
+  it("an API call is an event: a policy mod denies what another mod asks for", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await install(
+        "audit-first",
+        `export function register(on) {
+  on("process.run", async ($, e, next) => (e.command[0] === "rm" ? { deny: "rm is not allowed" } : next(e)))
+}`,
+      )
+      await install(
+        "wants-rm",
+        `export function register(on) {
+  on("tool.call", { tool: "wants_rm" }, async ($, e, next) => {
+    try { await $.process.run(["rm", "-rf", "x"]) } catch (error) { return { result: error.message } }
+    return { result: "ran" }
+  })
+}`,
+      )
+      const out = await Mod.toolCall(
+        { tool: "wants_rm", sessionID: SESSION, agent: "build", messageID: "m", callID: "c", args: {} },
+        async () => ({ title: "x", output: "no", metadata: {} }),
+        (text) => ({ title: "mod", output: text, metadata: {} }),
+      )
+      expect(out.output).toContain("rm is not allowed")
+    })
+  })
+
+  it("a mod's tool, timers and processes stop when it unloads", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      probe.calls.length = 0
+      await install(
+        "ticker",
+        `export function register(on) {
+  on("session.start", async ($, e, next) => {
+    $.clock.every(20, () => globalThis.__modProbe.calls.push("tick"))
+    $.tool.register({ name: "ticker_tool", description: "d", args: {}, execute: async () => "ok" })
+    return next(e)
+  })
+}`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      expect(probe.calls.filter((call) => call === "tick").length).toBeGreaterThan(0)
+      expect(Object.keys(await mods((m) => m.tools()))).toContain("ticker_tool")
+
+      const def = await PluginTool.init()
+      await def.executeAsync({ action: "remove", name: "ticker" }, makeToolContext().ctx)
+      probe.calls.length = 0
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      expect(probe.calls).toEqual([])
+      expect(Object.keys(await mods((m) => m.tools()))).not.toContain("ticker_tool")
+    })
+  })
+})
+
+describe("what a mod draws", () => {
+  const { ModHttpApi } = httpModule
+
+  const render = (input: { component: string; requestId?: string; props?: Record<string, unknown> }): Promise<any> =>
+    runPromiseWithLayer(
+      Mod.defaultLayer,
+      withCurrentInstance(
+        ModHttpApi.handlers.render({
+          payload: {
+            component: input.component,
+            requestId: input.requestId,
+            sessionID: SESSION,
+            props: JSON.stringify(input.props ?? {}),
+            columns: 100,
+            rows: 30,
+          },
+        }),
+      ),
+    )
+
+  const press = (key: string) =>
+    runPromiseWithLayer(
+      Mod.defaultLayer,
+      withCurrentInstance(
+        ModHttpApi.handlers.event({
+          payload: { kind: "press", key, component: "AbovePrompt", requestId: "band", sessionID: SESSION },
+        }),
+      ),
+    )
+
+  it("with no mod on ui.render a site is the default: nothing is asked and nothing is drawn", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      expect(await render({ component: "AbovePrompt", requestId: "band" })).toEqual({ kind: "default" })
+    })
+  })
+
+  it("a mod draws a tree for a site; a press comes back to it and it can invalidate", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      probe.calls.length = 0
+      await install(
+        "band-mod",
+        `export function register(on) {
+  let pressed = 0
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    return { tree: Box({ gap: 1 }, Text({ color: "success" }, "pressed " + pressed + " " + (e.props.isWorking ? "busy" : "idle")), Button({ key: "go", label: "Go" })) }
+  })
+  on("ui.press", { key: "go" }, async ($, e, next) => {
+    pressed++
+    globalThis.__modProbe.calls.push("press:" + e.component + ":" + e.requestId)
+    $.ui.invalidate("AbovePrompt")
+    return { handled: true }
+  })
+}`,
+      )
+      const seen: any[] = []
+      const unsubscribe = Bus.subscribe(Mod.UiEvent.Invalidate, (event: any) => seen.push(event.properties))
+
+      const first = await render({ component: "AbovePrompt", requestId: "band", props: { isWorking: true } })
+      expect(first.kind).toBe("tree")
+      expect(JSON.parse(first.tree!)).toMatchObject({
+        type: "Box",
+        children: [
+          { type: "Text", props: { color: "success" }, children: ["pressed 0 busy"] },
+          { type: "Button", key: "go", props: { label: "Go" } },
+        ],
+      })
+
+      expect(await press("go")).toEqual({ handled: true })
+      expect(probe.calls).toEqual(["press:AbovePrompt:band"])
+      expect(
+        JSON.parse((await render({ component: "AbovePrompt", requestId: "band" })).tree!).children[0].children,
+      ).toEqual(["pressed 1 idle"])
+
+      // An unknown key is not handled; a hook for another site does not see this one.
+      expect(await press("nope")).toEqual({ handled: false })
+      expect(await render({ component: "Pane", requestId: "p" })).toMatchObject({ kind: "default" })
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      unsubscribe()
+      expect(seen).toEqual([{ component: "AbovePrompt" }])
+    })
+  })
+
+  it("a tree a client could not draw is dropped, and a mod can rewrite a site's props or draw nothing", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await install(
+        "bad-tree",
+        `export function register(on) {
+  on("ui.render", { component: "Pane", requestId: "bad" }, async () => ({ tree: { type: "Script", props: {} } }))
+  on("ui.render", { component: "Pane", requestId: "props" }, async ($, e, next) => next({ ...e, props: { ...e.props, title: "Renamed" } }))
+  on("ui.render", { component: "Pane", requestId: "hidden" }, async () => ({ tree: null }))
+}`,
+      )
+      expect(await render({ component: "Pane", requestId: "bad" })).toMatchObject({ kind: "default" })
+      const rewritten = await render({
+        component: "Pane",
+        requestId: "props",
+        props: { title: "Old", placement: "dock" },
+      })
+      expect(rewritten.kind).toBe("default")
+      expect(JSON.parse(rewritten.props!)).toEqual({ title: "Renamed", placement: "dock" })
+      expect(await render({ component: "Pane", requestId: "hidden" })).toEqual({ kind: "tree" })
+    })
+  })
+
+  it("opens and closes panes with $.ui.open, tells clients, and closes them when the mod unloads", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      const changes: number[] = []
+      const unsubscribe = Bus.subscribe(Mod.UiEvent.Panes, () => changes.push(Date.now()))
+      await install(
+        "pane-mod",
+        `export function register(on) {
+  on("session.start", async ($, e, next) => {
+    $.ui.open({ id: "build", title: "Build", placement: "dock" })
+    $.ui.open({ id: "log", title: "Log", placement: "inline", rows: 4 })
+    $.ui.close("log")
+    return next(e)
+  })
+}`,
+      )
+      const listed = await runPromiseWithLayer(Mod.defaultLayer, withCurrentInstance(ModHttpApi.handlers.panes()))
+      expect(listed).toEqual([{ id: "build", plugin: "pane-mod", title: "Build", placement: "dock" }])
+      expect(changes.length).toBeGreaterThanOrEqual(3)
+
+      const def = await PluginTool.init()
+      await def.executeAsync({ action: "remove", name: "pane-mod" }, makeToolContext().ctx)
+      expect(await runPromiseWithLayer(Mod.defaultLayer, withCurrentInstance(ModHttpApi.handlers.panes()))).toEqual([])
+      unsubscribe()
+    })
+  })
+
+  it("lists loaded mods with their tier and hooks", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      const list = await runPromiseWithLayer(Mod.defaultLayer, withCurrentInstance(ModHttpApi.handlers.list()))
+      const band = list.find((mod) => mod.name === "band-mod")
+      expect(band).toMatchObject({ tier: "user", events: ["ui.render", "ui.press"] })
     })
   })
 })

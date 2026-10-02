@@ -52,6 +52,97 @@ export interface ModNext<Event, Result> {
 }
 
 // -----------------------------------------------------------------------------
+// Drawing
+
+export type ModNode = ModElement | string | number | false | null | undefined
+
+/** What a mod draws. Plain data: a `Button` carries a `key`, and pressing it sends `ui.press { key }` to the mods. */
+export type ModElement =
+  | {
+      type: "Box"
+      key?: string
+      props: {
+        direction?: "row" | "column"
+        gap?: number
+        padding?: number
+        margin?: number
+        width?: number | string
+        height?: number
+        borderStyle?: "single" | "double" | "round" | "bold"
+        backgroundColor?: string
+        justifyContent?: "flex-start" | "center" | "flex-end" | "space-between"
+        alignItems?: "flex-start" | "center" | "flex-end"
+      }
+      children: ModNode[]
+    }
+  | {
+      type: "Text"
+      key?: string
+      props: {
+        color?: string
+        backgroundColor?: string
+        bold?: boolean
+        italic?: boolean
+        underline?: boolean
+        dimColor?: boolean
+        inverse?: boolean
+        wrap?: "wrap" | "none"
+      }
+      children: ModNode[]
+    }
+  | {
+      type: "Button"
+      key: string
+      props: { label: string; hotkey?: string; plain?: boolean; dimColor?: boolean; autoFocus?: boolean }
+    }
+  | { type: "Link"; props: { href: string; label?: string } }
+  | { type: "Code"; props: { text: string; language?: string } }
+  | { type: "Markdown"; key?: string; props: { text: string; dimColor?: boolean } }
+  | {
+      type: "Input"
+      key: string
+      props: { label?: string; placeholder?: string; value?: string; submitLabel?: string; autoFocus?: boolean }
+    }
+  | {
+      type: "Select"
+      key: string
+      props: { label?: string; options: { value: string; label?: string }[]; value?: string }
+    }
+
+/** The constructors `$.ui.resolve(e)` returns. `Box(props, ...children)`, `Text("hi")`, `Button({ key, label })`. */
+export interface ModElements {
+  Box(props?: Record<string, unknown>, ...children: ModNode[]): ModElement
+  Box(...children: ModNode[]): ModElement
+  Text(props?: Record<string, unknown>, ...children: ModNode[]): ModElement
+  Text(...children: ModNode[]): ModElement
+  Button(props: {
+    key: string
+    label: string
+    hotkey?: string
+    plain?: boolean
+    dimColor?: boolean
+    autoFocus?: boolean
+  }): ModElement
+  Link(props: { href: string; label?: string }): ModElement
+  Code(props: { text: string; language?: string }): ModElement
+  Markdown(props: { text: string; key?: string; dimColor?: boolean }): ModElement
+  Input(props: {
+    key: string
+    label?: string
+    placeholder?: string
+    value?: string
+    submitLabel?: string
+    autoFocus?: boolean
+  }): ModElement
+  Select(props: {
+    key: string
+    label?: string
+    options: { value: string; label?: string }[]
+    value?: string
+  }): ModElement
+}
+
+// -----------------------------------------------------------------------------
 // Events
 
 /** What a `tool.call` hook sees. The tool's arguments are top-level fields (`e.command` for `bash`). */
@@ -115,12 +206,96 @@ export type PluginRegisterResult = Record<string, never> | { refuse: string }
 /** The result of a `$` call seen as an event: `{ value }` to answer it, `{ deny }` to refuse it. */
 export type ApiCallResult = { value: unknown } | { deny: string }
 
+export type SessionEndEvent = { readonly reason: "other" }
+
+export type PromptSectionEvent = { readonly name: string; readonly text: string }
+export type PromptSectionResult = { text: string | null }
+export type PromptComposeEvent = {
+  readonly sections: readonly { readonly id: string; readonly text: string; readonly scope: string }[]
+}
+export type PromptComposeResult = { sections: { id: string; text: string }[] }
+
+export type CommandRunEvent = {
+  readonly name: string
+  readonly arguments: string
+  readonly sessionID: string
+  /** `mod` for a command a mod registered, `template` for one nikcli expands into a prompt. */
+  readonly kind: "template" | "mod"
+}
+export type CommandRunResult = { text?: string } | Record<string, unknown>
+
+export type TurnStartEvent = { readonly sessionID: string; readonly turnId: string }
+export type TurnStepEvent = {
+  readonly sessionID: string
+  readonly turnId: string
+  readonly step: number
+  readonly agent: string
+  /** `provider/model`. A hook that passes a changed copy sends this request to that model. */
+  readonly model: string
+  readonly variant?: string
+}
+export type TurnCompleteEvent = {
+  readonly sessionID: string
+  readonly turnId: string
+  readonly answer: string
+  readonly durationMs: number
+  readonly isAborted: boolean
+  readonly usage?: Record<string, unknown>
+}
+
+export type AgentOfferEvent = { readonly agent: string; readonly description: string }
+export type AgentOfferResult = { isOffered: boolean }
+export type AgentSpawnEvent = {
+  readonly sessionID: string
+  readonly agent: string
+  readonly description: string
+  readonly prompt: string
+  readonly model?: string
+}
+export type AgentSpawnResult = { model?: string } | { deny: string }
+
+/** A render site. `AbovePrompt` is the band above the prompt; `Pane` is a pane opened with `$.ui.open`. */
+export type UiRenderEvent = {
+  readonly component: "AbovePrompt" | "Pane"
+  /** `band` for `AbovePrompt`; the pane's id for `Pane`. */
+  readonly requestId: string
+  readonly surface: "terminal"
+  readonly sessionID?: string
+  readonly props: Readonly<Record<string, unknown>>
+  readonly viewport?: { readonly columns: number; readonly rows: number }
+}
+/** Answer `{ tree }` to draw it (`null` for nothing), or pass the event on to draw nothing of your own. */
+export type UiRenderResult = { tree: ModNode } | UiRenderEvent
+
+export type UiControlEvent = {
+  readonly key?: string
+  readonly value?: string
+  readonly submit?: boolean
+  readonly component?: string
+  readonly requestId?: string
+  readonly sessionID?: string
+}
+export type UiControlResult = { handled: boolean }
+
 export interface ModEvents {
   "tool.call": { event: ToolCallEvent; result: ToolCallResult }
   "tool.check": { event: ToolCheckEvent; result: ToolCheckResult }
   "tool.describe": { event: ToolDescribeEvent; result: ToolDescribeResult }
   "prompt.submit": { event: PromptSubmitEvent; result: PromptSubmitResult }
   "session.start": { event: SessionStartEvent; result: Record<string, never> }
+  "session.end": { event: SessionEndEvent; result: Record<string, never> }
+  "prompt.section": { event: PromptSectionEvent; result: PromptSectionResult }
+  "prompt.compose": { event: PromptComposeEvent; result: PromptComposeResult }
+  "command.run": { event: CommandRunEvent; result: CommandRunResult }
+  "turn.start": { event: TurnStartEvent; result: Record<string, unknown> }
+  "turn.step": { event: TurnStepEvent; result: TurnStepEvent }
+  "turn.complete": { event: TurnCompleteEvent; result: Record<string, unknown> }
+  "agent.offer": { event: AgentOfferEvent; result: AgentOfferResult }
+  "agent.spawn": { event: AgentSpawnEvent; result: AgentSpawnResult }
+  "ui.render": { event: UiRenderEvent; result: UiRenderResult }
+  "ui.press": { event: UiControlEvent; result: UiControlResult }
+  "ui.input": { event: UiControlEvent; result: UiControlResult }
+  "ui.select": { event: UiControlEvent; result: UiControlResult }
   "plugin.register": { event: PluginRegisterEvent; result: PluginRegisterResult }
 }
 
@@ -176,6 +351,17 @@ export interface ModApi {
     notice(text: string): Promise<void>
     /** Ask the user. Resolves to the label picked or the text typed; rejects when dismissed or when there is no session. */
     ask(question: string, options: string[]): Promise<string>
+    /** The constructors for a drawing: `const { Box, Text, Button } = $.ui.resolve(e)`. */
+    resolve(event?: unknown): ModElements
+    /** Ask clients to draw again. Many calls close together become one. */
+    invalidate(component?: "AbovePrompt" | "Pane", requestId?: string): void
+    /**
+     * Open a pane: `dock` in the sidebar, `inline` above the prompt. Draw it by answering `ui.render`
+     * for `{ component: "Pane", requestId: id }`. Closed when the mod unloads.
+     */
+    open(input: { id: string; title?: string; placement?: "dock" | "inline"; rows?: number }): { close(): void }
+    close(id: string): void
+    panes(): { id: string; plugin: string; title: string; placement: "dock" | "inline"; rows?: number }[]
   }
   readonly command: {
     register(input: { name: string; description?: string; run: (args: string) => unknown }): { dispose(): void }
@@ -197,7 +383,58 @@ export interface ModApi {
     id(): string | undefined
     cwd(): string
     root(): string
+    /** The newest messages (4096 at most), oldest first. */
+    messages(options?: {
+      limit?: number
+    }): Promise<{ id: string; role: string; agent?: string; text: string; tools: string[] }[]>
+    /** `provider/model` the session last used. */
+    model(): Promise<string | undefined>
+    /** How many prompts the session has had. */
+    turns(): Promise<number>
+    repo(): Promise<{ root: string; vcs?: string; projectID: string }>
+    version(): Promise<string>
+    usage(): Promise<{
+      startedAt?: number
+      cost: number
+      tokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
+    }>
   }
+  readonly prompt: {
+    /**
+     * Start a turn from a hook or a timer. The model reads the text after a line naming this mod as the sender;
+     * `asUser: true` sends it as the user's own words. It queues behind a turn already running and returns at once.
+     */
+    submit(input: { text: string; asUser?: boolean }): Promise<void>
+  }
+  readonly turn: {
+    /** Stop the running turn of this session. */
+    abort(): Promise<void>
+  }
+  readonly model: {
+    /** One completion on the user's own model and plan. `maxTokens` defaults to 1024, 64000 at most. */
+    complete(input: {
+      prompt: string
+      system?: string
+      maxTokens?: number
+      model?: string
+      temperature?: number
+    }): Promise<{ text: string; usage: { inputTokens?: number; outputTokens?: number } }>
+    /** Pick one of `labels` for `text`; `undefined` when none fits. */
+    classify(text: string, labels: string[], options?: { model?: string }): Promise<string | undefined>
+  }
+  readonly settings: {
+    /** The resolved nikcli config. Values under keys that name a secret (key, token, password, ...) are redacted. */
+    read(): Promise<Record<string, unknown>>
+  }
+  readonly mcp: {
+    /** Call a tool of a connected MCP server. It asks permission like the model's own call does. */
+    call(server: string, tool: string, args?: Record<string, unknown>): Promise<unknown>
+  }
+  readonly agent: {
+    list(): Promise<{ name: string; description?: string; mode?: string }[]>
+  }
+  /** Only nikcli and its built-in mods ever send a record: for an installed mod these do nothing. */
+  readonly telemetry: { log(record?: unknown): void; mark(feature?: string): void }
   readonly env: { get(name: string): Promise<string | undefined>; set(name: string, value: string): Promise<void> }
   readonly fs: {
     read(path: string, options?: { encoding?: "utf8" | "base64" }): Promise<string>

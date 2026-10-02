@@ -277,6 +277,40 @@ whole suite, run with nothing else on the machine, reported **5377 pass, 4 fail*
 — the same four pre-existing failures recorded under EOT-11, one more passing test
 than the 5376 measured before this slice, which is the one this slice adds.
 
+### The readiness gate and the watermark are one slice, not two — 2026-10-03
+
+The two open items were tracked separately here (a "readiness gate" and a
+"barrier"). They are not separable, and the spec text is why. Requirement 8
+reads: "a consumer may only mark itself `ready` after the barrier completes and
+after **the per-aggregate cursors are validated against the snapshot**". The
+gate is _defined_ by the cursors the barrier produces, so there is no version of
+it that can land first. A `barrierReady` flag set from anything the TUI has today
+— bootstrap settled, a stream opened, `status !== "loading"` — would be a field
+whose name promises a validation that never happened, and the next author would
+reasonably read it as requirement 8 satisfied.
+
+So the slice is: extend the snapshot with a per-aggregate `watermark` and
+`aggregateVersion` (requirements 1 and 2), regenerate both client trees, have
+the consumer validate its cursors against it, and only then expose the gate.
+The spec's own "Migration and Rollback" already sequences it that way —
+"Snapshot barrier lands on `session` first, then `project`, then `workspace`,
+then `loop`/`mission`", each phase flipping a per-aggregate flag with the legacy
+path retained — which is a further sign this is one piece of work with four
+stages, not two independent tickets.
+
+The producer that already exists and should be reused is
+`/sync/stream?readiness=1`: the greeting is an explicit `ready` event emitted
+before the feed subscribes, so no event can fall between subscribe and ready
+(`packages/nikcli/src/server/httpapi/sync.ts:550-573`), and `RemoteSync` already
+consumes it via `lifecycle.ready()` (`packages/nikcli/src/sync/transport.ts:186`).
+The TUI does not: it reads `/global/event` unfenced. That gap is part of this
+slice, not a separate one.
+
+Note for whoever picks it up: `test/restart-reload-command.test.ts:97` pins
+`bootstrap()` appearing exactly once in `sync.tsx`, so any reconnect rework
+breaks that test by design and the pin must be updated deliberately, not
+quietly.
+
 ### Requirement 8's readiness gate must not reuse `ready` — 2026-10-03
 
 **Not attempted, on purpose, after checking the call sites.** The obvious
@@ -322,3 +356,36 @@ validated.
 This file is the client's first test. `RemoteSyncClient` had no test at all
 before it, which is consistent with EOT-14's audit finding about abstractions
 whose docblocks claim a guarantee nothing checks.
+
+### The TUI is not a journal consumer, so the barrier does not map onto it — 2026-10-03
+
+The previous section proposes the two open items as one slice, and assumes the
+TUI is the consumer that would validate cursors against a snapshot. It is not,
+and that assumption is what makes the slice look arbitrarily large.
+
+`bootstrap()` in `packages/tui/src/context/sync.tsx:767` recovers by calling
+typed REST endpoints — `client.session.list({start})` and one request per
+resource — and the reconnect path (`refetchAfterReconnect`, `sync.tsx:1015`)
+calls the same function. Nothing on that path reads `/sync/outbox`: the TUI's
+only mentions of "outbox" are a help-dialog string (`ui/dialog-help.tsx:26`) and
+`context/remote-sync.tsx`, which reads the **local DB** outbox for a status
+widget. The endpoint with the `aggregate` filter serves `RemoteSyncClient`
+(`src/sync/remote-client.ts`), which is a different consumer with actual
+per-aggregate cursors.
+
+So the TUI is a snapshot consumer, not a journal consumer. Its recovery is
+already "the snapshot is authoritative", which is requirement 2's model, minus
+the watermark. The cursor, gap-detection and replay machinery in requirements 3,
+4, 7 and 8 has nothing to attach to: there is no cursor and no replay, so there
+is no sequence gap to detect and no late event to order.
+
+That reframes the cost honestly. Making requirement 8 true for the TUI means
+either (a) converting it to a journal consumer first — a rewrite of its recovery
+path, with all the losslessness risk that carries — or (b) putting a per-aggregate
+`watermark` on the REST responses and having requirement 9's read-after-write
+(`watermark >= newWatermark`) applied to every mutating endpoint. (b) is
+cross-cutting: it touches the write path of every resource, not one endpoint.
+
+Neither is a slice. Until one is chosen, the TUI consumer barrier is not
+schedulable work, and the aggregate filter stays correctly used by the one
+consumer that has cursors.
