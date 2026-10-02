@@ -41,8 +41,27 @@ Every exported function is initialised as a plugin, so export only plugin functi
 - `tool` — tools the agent can call, keyed by tool id.
 - `"tool.execute.before"(input, output)` / `"tool.execute.after"(input, output)` — observe or rewrite tool calls (`output.args` before, `output.output` after).
 - `"shell.env"(input, output)` — add env vars to shells (`output.env`).
-- `"chat.params"`, `"chat.headers"`, `"chat.message"`, `"permission.ask"` (set `output.status` to allow|deny|ask), `"command.execute.before"`, `"experimental.chat.system.transform"` (push to `output.system`), `"experimental.session.compacting"`.
+- `"chat.params"`, `"chat.message"`, `"command.execute.before"`, `"experimental.chat.system.transform"` (push to `output.system`), `"experimental.session.compacting"`.
+- To approve, refuse or block tool calls and permission checks, write a mod (below), not a hook: v1 hooks can only rewrite arguments and results, they cannot stop a call.
 - `dispose()` — called before the plugin is reloaded or removed. Anything long-lived you start (setInterval, servers, watchers, child processes) MUST be released here, or a reload will leave duplicates running.
+
+Mods — the way to intercept and change how nikcli works. A mod is a plugin whose module exports `register(on, options)` instead of a plugin function. Use a mod when the user wants to block, rewrite, approve or replace something: refuse risky commands, rewrite prompts, redact secrets from tool output, ask before a dangerous call, change a tool's description.
+
+```ts
+export function register(on) {
+  // Refuse force pushes. The matcher limits the hook to bash calls, so e.command is the shell command.
+  on("tool.call", { tool: "bash" }, async ($, e, next) => {
+    if (/git push .*--force/.test(e.command)) return { deny: "Force pushes are not allowed here. Push to a new branch." }
+    return next(e) // pass the event on unchanged
+  })
+}
+```
+
+Each hook is `async ($, e, next)`: `$` is the mods API, `e` the event (deeply frozen: pass a changed copy to `next`), `next` the rest of the chain. A hook can observe (`return next(e)`), rewrite (`return next({ ...e, text: e.text.trim() })`), answer without calling `next` (return a result), or wrap (`const result = await next(e)`, then return a changed result). A hook that throws, or runs over 10 s of its own time, is skipped; add `.catch(async ($, e, next) => ({ deny: "guard failed" }))` after `on(...)` to fail closed.
+
+Events: `tool.call` (e.tool plus the tool's arguments as fields, `e.command` for bash; answer `{ deny: reason }` or `{ result }`, or `next(e)`; retry by calling `next(e)` again when `result.isError`), `tool.check` (e.rule is what the permission rules decided; answer `{ decision: "allow" | "ask" | "deny", reason }` before the user is asked — a deny rule always stays a deny), `tool.describe` (answer `{ description }`), `prompt.submit` (rewrite `text`, add `context` lines only the model reads, or answer `{ drop: reason }`), `session.start`. Matchers: `on("tool.call", { tool: ["edit", "write"] }, hook)` or a RegExp.
+
+`$` offers `$.fs`, `$.process.run([cmd, ...args])`, `$.http.fetch`, `$.env`, `$.store`, `$.clock`, `$.ui.log/toast/ask`, `$.command.register`, `$.tool.register`, `$.session.id()`. Write each call in full, `$.fs.read(...)`: a module that reaches `$` through an alias, a destructuring or a computed key is refused, because it cannot be reviewed. Calls nikcli does not have yet (`$.model`, `$.ui.open`, `$.session.messages`, ...) throw "is not available in nikcli yet". Mods run with the user's permissions and are not sandboxed; organization policy (`mod` in managed settings) can refuse them and `sec-default` keeps deny rules in force.
 
 Rules:
 - `name` is kebab-case and becomes the folder name; tool ids should be snake_case and prefixed with the plugin's purpose to avoid collisions.

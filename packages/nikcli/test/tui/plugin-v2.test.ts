@@ -284,9 +284,23 @@ function host() {
   let routeDisposals = 0
   let slotDisposals = 0
 
+  // One backing object stands in for the single `state/kv.json` instance. A
+  // plugin reaching it through `context.kv` and a component reaching it through
+  // `useKV()` must see the same value, so the harness models them as two readers
+  // over one store rather than two stores that happen to be named the same.
+  const kvStore: Record<string, unknown> = {}
+  const kv = {
+    get: <Value = unknown>(key: string, fallback?: Value) => (kvStore[key] ?? fallback) as Value,
+    set: (key: string, value: unknown) => {
+      kvStore[key] = value
+    },
+    ready: true,
+  }
+
   const api = {
     client: { marker: "client" },
     data: { marker: "data" },
+    kv,
     state: {
       ready: true,
       config: {},
@@ -347,6 +361,8 @@ function host() {
 
   return {
     api,
+    kv,
+    kvStore,
     routes,
     slots,
     cleanups,
@@ -416,6 +432,42 @@ describe("v2 tui plugin compatibility", () => {
   it("rejects malformed v2 definitions", () => {
     expect(() => readV2TuiPlugin({ default: { id: "", setup() {} } }, "broken")).toThrow("non-empty id")
     expect(() => readV2TuiPlugin({ default: { id: "broken", setup: true } }, "broken")).toThrow("invalid setup export")
+  })
+})
+
+describe("v2 tui plugin kv", () => {
+  it("hands the plugin the same store the view reads, so a command and a dialog row cannot disagree", async () => {
+    const runtime = host()
+    let context: Context | undefined
+    const definition = Plugin.define({
+      id: "example.kv",
+      setup(input) {
+        context = input
+        return () => {}
+      },
+    })
+
+    const module = readV2TuiPlugin({ default: definition }, "file:///kv.ts")
+    await module!.tui(runtime.api, {}, {} as never)
+
+    // Identity, not equality: the host hands over the same object the component
+    // tree holds, so there is no second copy to fall out of step. A structural
+    // clone would satisfy the next assertion and still reintroduce the bug.
+    expect(context!.kv).toBe(runtime.api.kv)
+
+    // A command writing settings, and a view reading them back.
+    context!.kv.set("background", { enabled: false })
+    expect(runtime.kvStore["background"]).toEqual({ enabled: false })
+    // The type argument is load-bearing: `TuiKV.get` is generic, so a bare call
+    // infers `Value` as `undefined` and asserts nothing. The backing store is
+    // `any` at runtime (`context/kv.tsx`), and this is the narrowing a real
+    // consumer writes.
+    expect(runtime.kv.get<{ enabled: boolean }>("background")).toEqual({ enabled: false })
+    expect(context!.kv.get<{ enabled: boolean }>("background")).toEqual({ enabled: false })
+
+    // `get` must still fall back, and `ready` must reach the plugin.
+    expect(context!.kv.get("missing", "fallback")).toBe("fallback")
+    expect(context!.kv.ready).toBe(true)
   })
 })
 

@@ -207,6 +207,14 @@ export function adaptV2TuiPlugin(definition: Definition): TuiPlugin {
       client: api.client,
       data: api.data,
       storage: api.storage,
+      // Delegated, not adapted. `api.kv` *is* the store `useKV()` hands the
+      // component tree, so a v2 plugin reading `context.kv` and a dialog row
+      // reading `useKV()` observe one value. Wrapping it in a new object over
+      // `storage` instead would put the plugin's settings in
+      // `state/tui/plugin/<id>.<key>.json` while the view still reads
+      // `kv.json` — the palette would show one title and the view another
+      // image, with nothing to indicate why.
+      kv: api.kv,
       ui: {
         router: {
           register(page) {

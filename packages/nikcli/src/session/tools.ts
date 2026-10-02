@@ -14,6 +14,7 @@ import { Truncate } from "@/tool/truncation"
 import { Tool } from "@/tool/tool"
 import { loadTools, withDeferredIndex } from "@/tool/search_tools"
 import { Config } from "@/config/config"
+import { Mod } from "@/mod"
 import { Effect } from "effect"
 import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Session } from "."
@@ -313,6 +314,9 @@ export async function resolveTools(input: {
       return [] as string[]
     })
 
+  // `tool.describe` mods rewrite what the model reads about a tool. Asked once per step, not per tool.
+  const describeTools = await Mod.handles("tool.describe")
+
   for (const { item, exposure } of registryTools) {
     if (exposure === "hidden") continue
     const schema = ProviderTransform.schema(
@@ -321,76 +325,100 @@ export async function resolveTools(input: {
     )
     tools[item.id] = tool({
       id: String(item.id) as `${string}.${string}`,
-      description: item.id === "search_tools" ? withDeferredIndex(item.description, deferredIndex) : item.description,
+      description: describeTools
+        ? await Mod.describe(
+            item.id,
+            item.id === "search_tools" ? withDeferredIndex(item.description, deferredIndex) : item.description,
+          )
+        : item.id === "search_tools"
+          ? withDeferredIndex(item.description, deferredIndex)
+          : item.description,
       inputSchema: jsonSchema(schema),
-      async execute(args, options) {
-        const ctx = context(args, options)
+      async execute(initialArgs, options) {
+        const ctx = context(initialArgs, options)
         if (exposure === "deferred") await load(item.id)
-        // Before hook - errors are non-fatal, log and continue
-        await runPlugin(
-          Effect.gen(function* () {
-            const plugin = yield* Plugin.Service
-            yield* plugin.trigger(
-              "tool.execute.before",
-              {
-                tool: item.id,
-                sessionID: ctx.sessionID,
-                agent: ctx.agent,
-                messageID: ctx.messageID,
-                callID: ctx.callID,
-              },
-              {
-                args,
-              },
-            )
-          }),
-        ).catch((err) => {
-          log.debug("plugin trigger failed", {
-            error: String(err),
-            tool: item.id,
+        // The body below is nikcli's own behaviour for a tool call. `tool.call`
+        // mods wrap it: they can change `args`, retry, or answer instead of it.
+        const runTool = async (args: typeof initialArgs) => {
+          // Before hook - errors are non-fatal, log and continue
+          await runPlugin(
+            Effect.gen(function* () {
+              const plugin = yield* Plugin.Service
+              yield* plugin.trigger(
+                "tool.execute.before",
+                {
+                  tool: item.id,
+                  sessionID: ctx.sessionID,
+                  agent: ctx.agent,
+                  messageID: ctx.messageID,
+                  callID: ctx.callID,
+                },
+                {
+                  args,
+                },
+              )
+            }),
+          ).catch((err) => {
+            log.debug("plugin trigger failed", {
+              error: String(err),
+              tool: item.id,
+            })
           })
-        })
-        const timeoutMs = await resolveToolTimeoutMs(item.id, "registry")
-        const executed = await executeWithTimeout(
-          item.id,
-          (linkedCtx) => item.executeAsync(args, linkedCtx),
-          ctx,
-          timeoutMs,
+          const timeoutMs = await resolveToolTimeoutMs(item.id, "registry")
+          const executed = await executeWithTimeout(
+            item.id,
+            (linkedCtx) => item.executeAsync(args, linkedCtx),
+            ctx,
+            timeoutMs,
+          )
+          // A deferred tool called by name with arguments its schema rejects is
+          // repaired into an `invalid` call (see `LLM.stream`). The model never
+          // saw that schema, so load it and say the retry will have it.
+          const missed = item.id === "invalid" ? deferredTarget(args, deferred) : undefined
+          if (missed) await load(missed)
+          const result = missed
+            ? {
+                ...executed,
+                output: `${executed.output}\n\n\`${missed}\` was not loaded yet, so you called it without seeing its parameters. It is loaded now: its schema is in your toolset from your next step — call it again.`,
+              }
+            : executed
+          // After hook - errors are non-fatal, log and continue
+          await runPlugin(
+            Effect.gen(function* () {
+              const plugin = yield* Plugin.Service
+              yield* plugin.trigger(
+                "tool.execute.after",
+                {
+                  tool: item.id,
+                  sessionID: ctx.sessionID,
+                  agent: ctx.agent,
+                  messageID: ctx.messageID,
+                  callID: ctx.callID,
+                },
+                result,
+              )
+            }),
+          ).catch((err) => {
+            log.debug("plugin trigger failed", {
+              error: String(err),
+              tool: item.id,
+            })
+          })
+          return result
+        }
+        return Mod.toolCall(
+          {
+            tool: item.id,
+            sessionID: ctx.sessionID,
+            agent: ctx.agent,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+            args: initialArgs as Record<string, unknown>,
+          },
+          (callArgs) => runTool(callArgs as typeof initialArgs),
+          (text) => ({ title: item.id, output: text, metadata: {} }) as Awaited<ReturnType<typeof runTool>>,
+          ctx.abort,
         )
-        // A deferred tool called by name with arguments its schema rejects is
-        // repaired into an `invalid` call (see `LLM.stream`). The model never
-        // saw that schema, so load it and say the retry will have it.
-        const missed = item.id === "invalid" ? deferredTarget(args, deferred) : undefined
-        if (missed) await load(missed)
-        const result = missed
-          ? {
-              ...executed,
-              output: `${executed.output}\n\n\`${missed}\` was not loaded yet, so you called it without seeing its parameters. It is loaded now: its schema is in your toolset from your next step — call it again.`,
-            }
-          : executed
-        // After hook - errors are non-fatal, log and continue
-        await runPlugin(
-          Effect.gen(function* () {
-            const plugin = yield* Plugin.Service
-            yield* plugin.trigger(
-              "tool.execute.after",
-              {
-                tool: item.id,
-                sessionID: ctx.sessionID,
-                agent: ctx.agent,
-                messageID: ctx.messageID,
-                callID: ctx.callID,
-              },
-              result,
-            )
-          }),
-        ).catch((err) => {
-          log.debug("plugin trigger failed", {
-            error: String(err),
-            tool: item.id,
-          })
-        })
-        return result
       },
       toModelOutput(result) {
         return {
@@ -412,7 +440,7 @@ export async function resolveTools(input: {
     const execute = item.execute
     if (!execute) continue
 
-    item.execute = async (args, opts) => {
+    const raw = async (args: Parameters<typeof execute>[0], opts: Parameters<typeof execute>[1]) => {
       const ctx = context(args, opts)
 
       await runPlugin(
@@ -521,6 +549,25 @@ export async function resolveTools(input: {
         content: result.content,
       }
     }
+    item.execute = async (initialArgs, opts) => {
+      const ctx = context(initialArgs, opts)
+      return Mod.toolCall(
+        {
+          tool: key,
+          sessionID: ctx.sessionID,
+          agent: ctx.agent,
+          messageID: ctx.messageID,
+          callID: opts.toolCallId,
+          args: initialArgs as Record<string, unknown>,
+        },
+        (callArgs) => raw(callArgs as typeof initialArgs, opts),
+        (text) =>
+          ({ title: "", metadata: {}, output: text, attachments: [], content: [{ type: "text", text }] }) as Awaited<
+            ReturnType<typeof raw>
+          >,
+        ctx.abort,
+      )
+    }
     item.toModelOutput = (result) => {
       return {
         type: "text",
@@ -539,7 +586,7 @@ export async function resolveTools(input: {
     const execute = item.execute
     if (!execute) continue
 
-    item.execute = async (args, opts) => {
+    const raw = async (args: Parameters<typeof execute>[0], opts: Parameters<typeof execute>[1]) => {
       const ctx = context(args, opts)
 
       await runPlugin(
@@ -600,6 +647,25 @@ export async function resolveTools(input: {
         output: truncated.content,
         content: [{ type: "text", text: truncated.content }],
       }
+    }
+    item.execute = async (initialArgs, opts) => {
+      const ctx = context(initialArgs, opts)
+      return Mod.toolCall(
+        {
+          tool: key,
+          sessionID: ctx.sessionID,
+          agent: ctx.agent,
+          messageID: ctx.messageID,
+          callID: opts.toolCallId,
+          args: initialArgs as Record<string, unknown>,
+        },
+        (callArgs) => raw(callArgs as typeof initialArgs, opts),
+        (text) =>
+          ({ title: "", metadata: { truncated: false }, output: text, content: [{ type: "text", text }] }) as Awaited<
+            ReturnType<typeof raw>
+          >,
+        ctx.abort,
+      )
     }
     item.toModelOutput = (result) => {
       return {

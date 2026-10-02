@@ -285,6 +285,26 @@ slice stashed, at pristine `live-main`, so neither is a regression: three in `te
 `ade-release.yml` uses `macos/$NAME.app.tar.gz`. Every session suite passed. The count moved from 5376 to 5377 when the
 later EOT-15 outbox slice added its test; the four failures did not change.
 
+**All four fixed 2026-10-03**, so this baseline is no longer the whole story — the suite's only failures were two environment
+and expectation problems, not product defects, and both are now gone rather than tolerated.
+
+The three PKCE failures were a test defect, not a missing dependency. `test/auth/pkce-no-downgrade.test.ts` shelled out to
+`rg`, which this repository treats as an *optional* accelerator: production resolves it with `Bun.which("rg")` and disables the
+tier when it is absent (`packages/nikcli/src/file/ripgrep.ts:41-49`). Requiring the binary in a test made an optional tool
+mandatory and pushed the fix toward "install ripgrep in CI" instead of "the test needs no external tool". The helper is now a
+native `readdirSync` walk, matching the existing precedent in `test/plugin/autoload-safety.test.ts`. That also closed a silent
+hole: the old helper mapped **both** exit 1 (no match) and exit 2 (bad pattern) to "no offenders", so a pattern that failed to
+compile turned a security assertion into a vacuous pass. It now throws instead. Revert-verified: planting
+`code_challenge_method="plain"` under `packages/nikcli/src` turns the file red (2 fail, 2 pass) and removing it returns
+4 pass.
+
+The `automation.test.ts` failure was stale expectation, not a broken workflow. Commit `0384786e75` (ADE 0.9.0) migrated
+`ade-release.yml` to derive every bundle name from `brand.json` via `NAME="$(jq -r .name packages/ade/brand.json)"` and never
+touched the test, which still spelled the old literal `macos/ADE.app.tar.gz`. The test was the wrong side. Its two assertions
+now follow `$NAME`. The second one was masked: line 300 threw first, so the `entry windows-aarch64 "ADE_..."` expectation at
+line 301 never ran — it was stale too, and the workflow at line 451 already read `"${NAME}_${VERSION}_arm64-setup.exe"`.
+Signal preserved: the indentation, the `ATTACH_ONLY` guard and the manifest key are all still asserted.
+
 Worth recording as a method note, because the numbers look alarming and are not. Three runs of the same suite in one
 session reported 13 fail, 5 fail, and 4 fail with the extra failures landing in a _different_ file each time —
 `check-spec-paths`, `docker-versions`, then `Session HttpApi bridge`, and a codemode failure that disappeared again when

@@ -1633,6 +1633,29 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      mod: z
+        .object({
+          prependPlugins: z
+            .string()
+            .array()
+            .optional()
+            .describe("Mods that run before every mod a user installs, in this order"),
+          appendPlugins: z
+            .string()
+            .array()
+            .optional()
+            .describe("Mods that run after every mod a user installs, in this order"),
+          allowManagedModsOnly: z.boolean().optional().describe("Only the organization's mods and built-in ones load"),
+          allowModsToOverrideDenyRules: z
+            .boolean()
+            .optional()
+            .describe("Let a mod approve a tool call that a deny rule refuses"),
+          disableAllMods: z.boolean().optional().describe("Turn every mod off"),
+        })
+        .optional()
+        .describe(
+          "Mod policy. Only managed settings count: the same block in a user or project config changes nothing.",
+        ),
       snapshot: z.boolean().optional(),
       sync: z
         .object({

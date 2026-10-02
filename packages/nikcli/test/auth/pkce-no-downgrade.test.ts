@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
 
 /**
  * EOT-12 PKCE no-downgrade regression.
@@ -34,12 +33,41 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..")
 const NIKCLI_SRC = path.join(REPO_ROOT, "packages", "nikcli", "src")
 const IDENTITY_AUTH_PATH = path.join(REPO_ROOT, "packages", "identity", "src", "index.ts")
 
+/**
+ * `rg -l` semantics over the source tree, done natively.
+ *
+ * This deliberately does not shell out to ripgrep. Production treats it as an
+ * optional accelerator (`Ripgrep.filepath` in `src/file/ripgrep.ts` returns
+ * undefined and the tier is disabled when `rg` is not on PATH), so a suite
+ * that requires the binary fails on a perfectly good install and would push
+ * the fix into "make CI install rg" rather than "the test needs no external
+ * tool".
+ *
+ * It also removes a silent hole: the `rg` version mapped both exit 1 (no
+ * match) and exit 2 (bad pattern / unreadable path) to "no offenders", so a
+ * pattern that failed to compile turned this security check into a vacuous
+ * pass. Here a bad pattern throws instead.
+ */
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`^${escaped.replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")}$`)
+}
+
 function grep(pattern: RegExp, dir: string, include = "*.ts"): string[] {
-  const result = spawnSync("rg", ["-l", "--no-messages", pattern.source, dir, "-g", include], {
-    encoding: "utf8",
-  })
-  if (result.status === 1 || result.status === 2) return []
-  return result.stdout.trim().split("\n").filter(Boolean)
+  const matchesInclude = globToRegExp(include)
+  const offenders: string[] = []
+
+  const walk = (current: string) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue
+      const full = path.join(current, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (matchesInclude.test(entry.name) && pattern.test(readFileSync(full, "utf8"))) offenders.push(full)
+    }
+  }
+
+  walk(dir)
+  return offenders
 }
 
 describe("EOT-12 PKCE no-downgrade", () => {

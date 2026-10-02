@@ -22,8 +22,9 @@
  *   - `seq` is handed out **per aggregate** — `Sync.reserveSeqAndAppend` reads
  *     its counter with `and(eq(projectId), eq(aggregate))`, so each aggregate
  *     counts from 1 and two aggregates' `seq` values are not comparable.
- *   - `/sync/outbox` filters `projectId = ? AND seq > since` with **no
- *     aggregate predicate**, so one `since` addresses every aggregate at once.
+ *   - `/sync/outbox` answers `projectId = ? AND seq > since`. It grew an
+ *     optional `aggregate` predicate (2026-10-02), but the replay below does
+ *     not use it — see `catchUp` for why, and for what that costs.
  *
  * A single cursor — the maximum `seq` seen anywhere — is therefore a cursor for
  * a stream that does not exist. A merely *less active* aggregate has its events
@@ -52,8 +53,9 @@ export class RemoteSyncClient {
    * Per-aggregate resume positions, keyed by `aggregate`.
    *
    * EOT-15 requirement 7. A single shared `lastSeq` silently dropped every
-   * event of any aggregate that was less active than the busiest one, because
-   * `/sync/outbox` has no aggregate predicate to correct it.
+   * event of any aggregate that was less active than the busiest one. The
+   * aggregate predicate that could correct it exists now; see `catchUp` for
+   * why a consumer still cannot lean on it.
    */
   private readonly cursors = new Map<string, number>()
   private stopped = false
@@ -138,6 +140,19 @@ export class RemoteSyncClient {
    *
    * Public because it is the seam the regression test drives: the reconnect path
    * also resubscribes, and an `EventSource` cannot be exercised headlessly.
+   *
+   * This deliberately does **not** send the `aggregate` predicate the endpoint
+   * accepts. The set of aggregates is not knowable in advance — that is the
+   * whole reason the replay starts at zero — so scoping a page to one of them
+   * can only ever return the aggregates already held in `cursors`, and an
+   * aggregate that first spoke while this client was disconnected would be
+   * missing from the list and therefore from the replay. That is the original
+   * silent loss, reintroduced by the obvious-looking optimisation.
+   *
+   * So the predicate has no consumer here yet, and the over-return it was meant
+   * to remove is still paid on every reconnect. The real consumer is the TUI
+   * barrier, which knows the aggregates it must resume: that is
+   * `packages/tui/src/context/sync.tsx`, still open under EOT-15.
    */
   async catchUp(): Promise<void> {
     await this.ingestQueue.catch(() => {})

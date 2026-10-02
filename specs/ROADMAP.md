@@ -101,6 +101,13 @@ reported 13, 5 and 4 failures with the extras landing in a different file each t
 alongside, each passing standalone (`test/codemode/parity.test.ts` alone: **54 pass, 0 fail**). Only the uncontended
 number is evidence.
 
+**All four fixed 2026-10-03** — the suite's only remaining failures were two environment/expectation problems, not product
+defects. The three PKCE failures shelled out to `rg`, which this repo deliberately treats as optional (production disables
+the tier when `Bun.which("rg")` misses, `src/file/ripgrep.ts:41-49`); the helper is now a native walk, which also removed a
+hole where an uncompilable pattern silently reported "no offenders" and made a security assertion pass vacuously. The
+`automation.test.ts` failure was a stale literal: `0384786e75` moved the workflow to `$NAME` from `brand.json` and left the
+test spelling `macos/ADE.app.tar.gz`; the test now follows `$NAME` and a second, previously masked assertion was stale too.
+
 Next: full adapter convergence, then the `CachePolicy.Service` and `Usage.Service` the spec still records as absent. The
 missing-usage and header items are closed — see below. EOT-11 stays proposed at Tier 1/P2 with unchanged dependencies;
 EOT-00's real Ghostty/tmux gate remains open, so this slice does not permit promotion.

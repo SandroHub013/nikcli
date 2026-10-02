@@ -277,6 +277,37 @@ whole suite, run with nothing else on the machine, reported **5377 pass, 4 fail*
 — the same four pre-existing failures recorded under EOT-11, one more passing test
 than the 5376 measured before this slice, which is the one this slice adds.
 
+### Requirement 8's readiness gate must not reuse `ready` — 2026-10-03
+
+**Not attempted, on purpose, after checking the call sites.** The obvious
+one-line move is to tighten `get ready()` (`packages/tui/src/context/sync.tsx`)
+from "bootstrap left `loading`" into requirement 8's "the barrier completed and
+the per-aggregate cursors validated against the snapshot". Doing that regresses
+a bug this file already records.
+
+`ready` is consumed as a **data-availability** signal, not a bootstrap one:
+`dialog-analytics.tsx:212` and `dialog-command-center.tsx:65` both read
+`sync.ready && sync.data.session.length > 0` to decide they can stop polling.
+Requirement 8's gate is a **bootstrap-completeness** signal. A session list that
+cannot load because a provider is down leaves the TUI permanently not-ready
+under the new definition, so those dialogs poll forever — the exact failure the
+`status` docblock at `sync.tsx:105-112` describes being fixed, where folding one
+optional endpoint's failure into the status pinned a machine at `partial`
+forever and gated the empty-provider prompt, which needs none of it.
+
+So the two signals have to be separate. The honest shape is a new barrier
+readiness alongside `ready`, fed by the cursors the snapshot delivers — which
+does not exist yet, and whose absence is the previous section's point. A second
+field with no producer would be a placeholder, so nothing was added.
+
+This is also why the gap cannot be closed by wiring: the TUI holds no cursor
+today, so there is nothing to validate. Requirement 8 is downstream of
+requirements 1 and 2, which need the snapshot to carry a `watermark` per
+aggregate. `SnapshotResponse` is `{lastSeq, state}` (`httpapi/sync.ts:66-69`),
+and `SyncProjection.session` (`projection.ts:39-44`) projects only
+`{id, projectID, title, lastTouchedAt}` — there is no per-aggregate boundary to
+report even if a field were added to the envelope.
+
 ### Coverage
 
 `test/sync/remote-client-cursor.test.ts` drives the real class end to end with

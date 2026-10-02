@@ -20,6 +20,7 @@ import type {
 } from "@nikcli-ai/sdk/httpapi"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
+import type { TuiKV } from "../../tui"
 
 export type LocationRef = {
   readonly directory: string
@@ -214,6 +215,23 @@ export interface UI {
   }
 }
 
+/**
+ * The v2 name for the TUI's shared key-value store.
+ *
+ * This is v1's `TuiKV` itself, not a copy of it, and that is the whole point.
+ * Both names resolve to the *same* `state/kv.json` instance that `useKV()` hands
+ * the component tree, so a plugin that moves from `api.kv` to `kv` reads and
+ * writes the bytes the user's existing install already wrote. A lookalike type
+ * would typecheck the same and then let the two drift — the plugin would appear
+ * to work while a dialog row and the `/` command were reading different stores.
+ *
+ * `storage.store` is the per-plugin alternative
+ * (`state/tui/plugin/<id>.<key>.json`). Prefer it for a plugin's own state; reach
+ * for `kv` only when migrating state that predates the v2 plugin API and is
+ * therefore already in `kv.json`.
+ */
+export type KV = TuiKV
+
 export interface Storage {
   /**
    * Durable JSON state: persisted to disk, survives hot reloads and TUI
@@ -243,5 +261,6 @@ export interface Context {
   readonly client: NikcliClient
   readonly data: Data
   readonly storage: Storage
+  readonly kv: KV
   readonly ui: UI
 }

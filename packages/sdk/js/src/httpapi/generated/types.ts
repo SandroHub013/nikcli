@@ -3858,6 +3858,15 @@ export type Config = {
   reference?: { [x: string]: ReferenceConfig } | undefined
   watcher?: { ignore?: Array<string> | undefined } | undefined
   plugin?: Array<string> | undefined
+  mod?:
+    | {
+        prependPlugins?: Array<string> | undefined
+        appendPlugins?: Array<string> | undefined
+        allowManagedModsOnly?: boolean | undefined
+        allowModsToOverrideDenyRules?: boolean | undefined
+        disableAllMods?: boolean | undefined
+      }
+    | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
@@ -4111,6 +4120,15 @@ export type MobileConfigInfo = {
   reference?: { [x: string]: ReferenceConfig1 } | undefined
   watcher?: { ignore?: Array<string> | undefined } | undefined
   plugin?: Array<string> | undefined
+  mod?:
+    | {
+        prependPlugins?: Array<string> | undefined
+        appendPlugins?: Array<string> | undefined
+        allowManagedModsOnly?: boolean | undefined
+        allowModsToOverrideDenyRules?: boolean | undefined
+        disableAllMods?: boolean | undefined
+      }
+    | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
@@ -6330,6 +6348,15 @@ export type ConfigUpdateInput = {
       | undefined
     readonly watcher?: { readonly ignore?: ReadonlyArray<string> | undefined } | undefined
     readonly plugin?: ReadonlyArray<string> | undefined
+    readonly mod?:
+      | {
+          readonly prependPlugins?: ReadonlyArray<string> | undefined
+          readonly appendPlugins?: ReadonlyArray<string> | undefined
+          readonly allowManagedModsOnly?: boolean | undefined
+          readonly allowModsToOverrideDenyRules?: boolean | undefined
+          readonly disableAllMods?: boolean | undefined
+        }
+      | undefined
     readonly snapshot?: boolean | undefined
     readonly sync?:
       | {

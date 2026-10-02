@@ -1430,6 +1430,22 @@ const SpecPlugin = Spec.make("plugin", {
   },
 })
 
+const SpecModValidate = Spec.make("validate", {
+  description: "review a mod without running it: the events it hooks and the mods API calls it makes",
+  params: {
+    directory: Argument.string("directory").pipe(
+      Argument.withDescription("the mod's plugin directory, or its entry file"),
+    ),
+    json: Flag.boolean("json").pipe(Flag.withDescription("print a machine-readable report"), Flag.withDefault(false)),
+    strict: Flag.boolean("strict").pipe(Flag.withDescription("treat warnings as errors"), Flag.withDefault(false)),
+  },
+})
+
+const SpecMod = Spec.make("mod", {
+  description: "work with mods: TypeScript functions that change how nikcli works",
+  commands: [SpecModValidate],
+})
+
 const SpecSyncStatus = Spec.make("status", {
   description: "show outbox state and last-seen sequence",
 })
@@ -1600,6 +1616,7 @@ export const Commands = Spec.make("nikcli", {
     SpecMission,
     SpecUsage,
     SpecPlugin,
+    SpecMod,
     SpecSync,
     SpecConnectors,
     SpecBot,

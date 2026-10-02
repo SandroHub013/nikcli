@@ -297,8 +297,10 @@ describe("ADE release integration", () => {
       'if [ "$ATTACH_ONLY" = "true" ]; then\n            # These are downloadable installers, not an ADE updater release.\n            UPDATER=false',
     )
     expect(ade).toContain('elif [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then')
-    expect(ade).toContain('if [ "$ATTACH_ONLY" != "true" ]; then\n                cp "$BUNDLE/macos/ADE.app.tar.gz"')
-    expect(ade).toContain('entry windows-aarch64 "ADE_${VERSION}_arm64-setup.exe"')
+    // Every bundle name derives from brand.json, so the assertions follow $NAME
+    // instead of a literal: a brand rename must move the workflow, not break here.
+    expect(ade).toContain('if [ "$ATTACH_ONLY" != "true" ]; then\n                cp "$BUNDLE/macos/$NAME.app.tar.gz"')
+    expect(ade).toContain('entry windows-aarch64 "${NAME}_${VERSION}_arm64-setup.exe"')
     expect(ade).toContain('gh release upload "$TAG" --clobber --repo "$GITHUB_REPOSITORY"')
   })
 

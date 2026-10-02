@@ -12,6 +12,8 @@ import { BunProc } from "../bun"
 import { Config } from "../config/config"
 import { resolveCredential } from "../connectors/credentials"
 import { Flag } from "@nikcli-ai/util/flag"
+import { Filesystem } from "@nikcli-ai/util/filesystem"
+import { Mod } from "../mod"
 import { Installation } from "../installation"
 import { Instance } from "../project/instance"
 import { Session } from "../session"
@@ -33,7 +35,7 @@ import {
 import type { PluginModule } from "@nikcli-ai/plugin"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { HerdrPlugin } from "./herdr"
-import { Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 
 type NotifyChannel = "macos" | "slack" | "discord"
@@ -692,6 +694,8 @@ export namespace Plugin {
     tools: string[]
     /** Why the plugin failed to load, when it did. */
     error?: string
+    /** Set when the plugin is a mod: where it runs in the chain and what it hooks. */
+    mod?: Pick<Mod.Info, "tier" | "rank" | "events" | "commands">
   }
 
   export type ReloadResult = {
@@ -717,6 +721,32 @@ export namespace Plugin {
     fingerprint: string
     hooks: Hooks[]
     error?: string
+    /** Set when the module is a mod rather than a v1/v2 plugin. */
+    mod?: Mod.Info
+  }
+
+  /** What the loader needs to hand a mod to `Mod.Service`: the service and the instance it runs in. */
+  type ModHost = { service: Mod.Interface; ctx: InstanceContext }
+
+  /**
+   * Run a `Mod.Service` effect from the loader, which is Promise-side. A typed
+   * failure is rethrown as the error it is, so the loader reports "was not
+   * loaded: <reason>" rather than a wrapped fiber failure.
+   */
+  async function runMod<A, E>(host: ModHost, effect: Effect.Effect<A, E>): Promise<A> {
+    const exit = await Effect.runPromiseExit(locallyInstance(host.ctx, effect))
+    if (Exit.isSuccess(exit)) return exit.value
+    throw Cause.squash(exit.cause)
+  }
+
+  /** The source text of a plugin module, for the mod guard's review. Absent when it cannot be resolved. */
+  async function moduleSource(plugin: string): Promise<string | undefined> {
+    try {
+      const file = plugin.startsWith("file://") ? fileURLToPath(plugin) : Bun.resolveSync(plugin, process.cwd())
+      return await Filesystem.readText(file)
+    } catch {
+      return undefined
+    }
   }
 
   type State = {
@@ -736,6 +766,7 @@ export namespace Plugin {
     disposed: boolean
     /** Reloads run one at a time; each chains behind the previous one. */
     reloading: Promise<unknown>
+    mods: ModHost
   }
 
   async function disposeEach(hooks: readonly Hooks[]) {
@@ -850,7 +881,7 @@ export namespace Plugin {
    * own initialisation — is reported and skipped; it never takes the other
    * plugins down with it.
    */
-  async function loadExternal(spec: string, input: PluginInput): Promise<External> {
+  async function loadExternal(spec: string, input: PluginInput, mods: ModHost): Promise<External> {
     const name = Config.getPluginName(spec)
     const print = await fingerprint(spec)
     let plugin = spec
@@ -864,6 +895,25 @@ export namespace Plugin {
       }
       evictModules(spec)
       const mod = await importPlugin<Record<string, PluginInstance>>(importSpecifier(plugin), plugin)
+      if (Mod.isMod(mod)) {
+        // A module that exports `register(on, options)` is a mod. It joins the
+        // same hot reload and the same `plugin` tool as any plugin; what it
+        // contributes lives in `Mod.Service`, and `dispose` here unloads it.
+        const info = await runMod(
+          mods,
+          mods.service.load({
+            id: spec,
+            name,
+            module: mod as Record<string, unknown>,
+            options: Config.pluginOptions(spec),
+            source: await moduleSource(plugin),
+            root: Mod.rootOf(spec),
+          }),
+        )
+        const live = await runMod(mods, mods.service.toolsOf(spec))
+        const hooks: Hooks[] = [{ tool: live, dispose: () => runMod(mods, mods.service.unload(spec)) }]
+        return { spec, name, fingerprint: print, hooks, mod: info }
+      }
       const hooks: Hooks[] = []
       const v1 = readV1Plugin(mod, spec, "server", "detect")
       if (v1) {
@@ -894,9 +944,9 @@ export namespace Plugin {
     }
   }
 
-  function pluginSpecs(config: Config.Info) {
+  function pluginSpecs(config: Config.Info, org: string[] = []) {
     // ignore old codex plugin since it is supported first party now
-    const specs = [...(config.plugin ?? [])].filter((spec) => !isDeprecatedPlugin(spec))
+    const specs = [...org, ...(config.plugin ?? [])].filter((spec) => !isDeprecatedPlugin(spec))
     if (!Flag.NIKCLI_DISABLE_DEFAULT_PLUGINS) specs.push(...BUILTIN)
     return specs
   }
@@ -930,7 +980,8 @@ export namespace Plugin {
     const next: External[] = []
     const fresh: Hooks[] = []
 
-    for (const spec of pluginSpecs(config)) {
+    const org = await runMod(state.mods, state.mods.service.orgSpecs())
+    for (const spec of pluginSpecs(config, org)) {
       const current = previous.get(spec)
       previous.delete(spec)
       // A local plugin that failed is retried even when its own files are
@@ -946,7 +997,7 @@ export namespace Plugin {
       // Dispose before loading the new version, so a plugin holding a port,
       // a timer or a file handle releases it before its successor wants it.
       if (current) await disposeEach(current.hooks)
-      const loaded = await loadExternal(spec, state.input)
+      const loaded = await loadExternal(spec, state.input, state.mods)
       next.push(loaded)
       fresh.push(...loaded.hooks)
       if (loaded.error) result.failed.push({ name: loaded.name, error: loaded.error })
@@ -974,13 +1025,20 @@ export namespace Plugin {
       name: entry.name,
       spec: entry.spec,
       source: pluginSource(entry.spec),
-      hooks: [...new Set(entry.hooks.flatMap((hook) => Object.keys(hook).filter((key) => key !== "tool")))],
+      hooks: entry.mod
+        ? entry.mod.events
+        : [...new Set(entry.hooks.flatMap((hook) => Object.keys(hook).filter((key) => key !== "tool")))],
       tools: entry.hooks.flatMap((hook) => Object.keys(hook.tool ?? {})),
       ...(entry.error ? { error: entry.error } : {}),
+      ...(entry.mod
+        ? {
+            mod: { tier: entry.mod.tier, rank: entry.mod.rank, events: entry.mod.events, commands: entry.mod.commands },
+          }
+        : {}),
     }))
   }
 
-  async function buildState(ctx: InstanceContext): Promise<State> {
+  async function buildState(ctx: InstanceContext, service: Mod.Interface): Promise<State> {
     const { Server } = await import("../server/server")
     const client = createNikcliClient({
       baseUrl: "http://localhost:4096",
@@ -1025,8 +1083,10 @@ export namespace Plugin {
       hooks.push(init)
     }
 
+    const mods: ModHost = { service, ctx }
     const external: External[] = []
-    for (const spec of pluginSpecs(config)) external.push(await loadExternal(spec, input))
+    const org = await runMod(mods, service.orgSpecs())
+    for (const spec of pluginSpecs(config, org)) external.push(await loadExternal(spec, input, mods))
 
     const state: State = {
       hooks: [],
@@ -1037,6 +1097,7 @@ export namespace Plugin {
       subscribed: false,
       disposed: false,
       reloading: Promise.resolve(),
+      mods,
     }
     flatten(state)
     Instance.registerDisposer(() => disposeHooks(state))
@@ -1134,8 +1195,9 @@ export namespace Plugin {
   const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const mod = yield* Mod.Service
       const state = yield* InstanceState.make<State>((ctx) =>
-        Effect.tryPromise(() => buildState(ctx)).pipe(Effect.orDie),
+        Effect.tryPromise(() => buildState(ctx, mod)).pipe(Effect.orDie),
       )
       const getState = () => InstanceState.get(state)
 
@@ -1159,5 +1221,5 @@ export namespace Plugin {
     }),
   )
 
-  export const defaultLayer = layer
+  export const defaultLayer = layer.pipe(Layer.provide(Mod.defaultLayer))
 }

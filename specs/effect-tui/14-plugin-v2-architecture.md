@@ -173,6 +173,23 @@ correctly, but it also needs an `api.kv` equivalent — v2 `storage` writes `sta
 (`packages/tui/src/plugin/storage.ts:64-70`), not `kv.json` — and `dialog.tsx:41` / `view.tsx:31` read `useKV()`
 directly, so migrating the command surface alone would leave the palette title and the rendered image disagreeing.
 
+**Fixed 2026-10-03, and the premise behind it was wrong.** The `api.kv` equivalent already existed on the v1 surface —
+`TuiKV` (`packages/plugin/src/tui.ts:329-333`), handed to every plugin at `runtime.ts:830`. What was missing was only the v2
+*forwarding*, and the v2 contract had no `kv` member to forward into. `Context` is now `{options, client, data, storage, kv,
+ui}` and `adaptV2TuiPlugin` passes `kv: api.kv`.
+
+Two details make this safe rather than merely compiling. The v2 `KV` is an alias of `TuiKV`, not a lookalike
+(`packages/plugin/src/v2/tui/context.ts`), so the two cannot drift into two similar shapes that both typecheck. And the host
+hands over the *same object* the component tree holds rather than a wrapper: a wrapper would be free to redirect reads to
+`storage`, which is exactly the `state/tui/plugin/<id>.<key>.json` relocation this was meant to prevent. The test asserts
+identity, `expect(context.kv).toBe(runtime.api.kv)`, because a structural clone satisfies an equality check and still
+reintroduces the desync.
+
+`KVLike` in `feature-plugins/background/store.ts` was already the right shape for this — `{get, set}` — and the plugin already
+threads `api.kv` through it, so the desync the paragraph above warned about never applied to `background` specifically: its
+command layer and its components both resolved to one `state/kv.json`. What the migration actually needs is the UI surface,
+below. The `DialogAlert`/`toast` item on this list is likewise still open and still a grant the host cannot honour.
+
 Two further drifts found while scoping this, independent of the migration:
 
 - `storage` is in the manifest vocabulary but **not** in `TUI_HOST_CAPABILITIES` (`v2.ts:95`), so a manifest wanting
@@ -247,3 +264,71 @@ Two drift items found while scoping, worth fixing regardless of the migration or
 A per-plugin v1/v2 flag is feasible with the existing `Flag` idioms (precedent `packages/tui/src/plugin/internal.ts:69`),
 but the registry is evaluated at import time, so a `const` flag is frozen at startup and unreachable by the reload watcher
 — it would have to be a runtime-read value, and that is a separate decision.
+
+## Mods — 2026-10-03
+
+**Landed (server side).** A mod is a plugin module that exports `register(on, options)`; it hooks named events with
+`on(event, [matcher], hook)` and each hook receives `($, e, next)` and can observe, rewrite, answer or wrap the event.
+This is the Claude Code mods contract, kept identical in logic and fitted to nikcli's structure: one Effect service,
+the existing plugin loader, the existing hot reload, the existing `plugin` tool. Status of the spec is unchanged
+(proposed): the UI half below has no acceptance tests yet.
+
+Where it lives:
+
+- `packages/nikcli/src/mod/chain.ts` — the chain as an `Effect<T, E, R>`. `E` and `R` are the engine behaviour's own: a
+  hook never adds to them, and a failure of the engine always arrives on the typed channel as itself, whichever hook was
+  waiting on `next` (the `Cause` crosses the Promise boundary, not a message). Hooks are Promise functions — third-party
+  code — so `next` re-enters Effect with `runPromiseWith`; interrupting the event aborts `next.signal` and the engine's own
+  fiber. No hook on an event means `final(event)` exactly: not copied, frozen or timed.
+- `src/mod/index.ts` — `Mod.Service` (`Context.Service`, `layer`, `defaultLayer`), state in `InstanceState`, one `Scope`
+  per mod closed on unload and reload (timers and processes a mod started die with it). Typed failures are
+  `Schema.TaggedError`: `ModLoadRefused`, `ModRegisterFailed`, `ModPromptDropped`, `ModPolicyInvalid`.
+- `src/mod/api.ts` — the `$` API. Every call is also an event (`fs.read`, `process.run`, …) among the mods that run after
+  the caller, answerable with `{ value }` or `{ deny }`; a call pauses the hook's clock, `$.clock.sleep` does not.
+- `src/mod/guard.ts` — managed policy, static analysis of a module's source, and `sec-default`, itself a mod.
+- `packages/plugin/src/mod.ts` — the author-facing types (`@nikcli-ai/plugin/mod`), checked by `test/mod/types.test.ts`.
+- `nikcli mod validate <dir> [--strict] [--json]` — what a mod hooks and calls, read without running it.
+
+Order, outermost first: `sec-default` → the organization's mods (`prependPlugins`, then unlisted) → mods a user installed,
+in config order → `appendPlugins` → built-in mods. `PermissionNext.layer` and `Plugin.layer` now require `Mod.Service`;
+both `defaultLayer`s provide the one memoized `Mod.defaultLayer`.
+
+Events fired: `plugin.register`, `session.start`, `prompt.submit`, `tool.call`, `tool.check`, `tool.describe`, and every
+`$` call. `tool.call` wraps all four execution paths (registry tools, MCP tools, connector tools, model subtasks) and
+rethrows nikcli's own error unchanged when no hook replaced the result, so callers keep catching what they always did.
+`tool.check` fires inside `PermissionNext.ask` before anyone is asked and carries `rule`, what the rules decided.
+Fail-open/fail-closed follows the doc: a hook that throws, times out (10 s of its own time) or returns the wrong shape is
+skipped, `.catch` makes it fail closed (1 s).
+
+Policy is read from managed settings only — `mod` in `nikcli.json` under `NIKCLI_MANAGED_CONFIG_DIR`, the system
+directory (`/Library/Application Support/nikcli/managed`, `/etc/nikcli/managed`, `%ProgramData%\nikcli\managed`) or the
+legacy `~/.config/nikcli/managed` (policy only: the user owns it). Keys: `prependPlugins`, `appendPlugins`,
+`allowManagedModsOnly`, `allowModsToOverrideDenyRules`, `disableAllMods`; `NIKCLI_DISABLE_MODS=1` is safe mode. A managed
+file that cannot be read fails closed: no user mod loads. An organization's own mods live in `<managed>/plugins/`.
+A module whose use of `$` cannot be read statically (alias, destructuring, computed key) is refused, as is one whose
+source cannot be read.
+
+Deliberate differences from Claude Code, each a nikcli fact rather than a taste:
+
+- `sec-default` always loads. nikcli has no Team plan to key it on, and the guard only tightens (a deny rule stays a deny).
+  A managed `prependPlugins` that omits it leaves it out, as in Claude Code.
+- Tool names are nikcli's (`bash`, `edit`, `write`), lower case. A tool's arguments are top-level fields of `tool.call`; an
+  argument named like one of nikcli's fields is reachable through `e.input`, which always holds them untouched.
+- `tool.check` carries `rule` and `patterns`; a mod refusal surfaces as `PermissionBlockedError` (the agent reads the reason
+  and continues), not a turn-ending rejection.
+- One process serves many sessions, so `$.session.*` reads the session of the hook that is running (async-local), and
+  `$.ui.ask` rejects when there is none.
+- Mods run in the server process. The UI half (render sites, panes, `ui.press`) must therefore cross the event stream as
+  data, the way Claude Code crosses its worker thread; that is the next slice and is **not** implemented.
+
+**Not implemented, and said so rather than stubbed:** `turn.*`, `session.end/compact/receive/send/append/…`, `command.run`
+and `command.describe` (and running a mod's `$.command.register` command from the slash menu), `agent.*`, `config.*`,
+`prompt.compose/section/context/attachment`, `skill.prompt`, all of `ui.render`/`ui.press`/…, `telemetry.*`, and the `$`
+namespaces `model`, `prompt`, `turn`, `mcp`, `settings`, `audio`, most of `session`, and `ui.open/panes/…`. Hooking one is a
+`nikcli mod validate` warning; calling one throws `$.<name> is not available in nikcli yet`. The v1 hooks `permission.ask`,
+`chat.headers` and `chat.request` remain declared but never invoked (found 2026-10-02); the `plugin` tool no longer tells
+the model they work.
+
+Verification: `bun test test/mod` (chain semantics incl. typed-failure preservation and interruption, loader, `tool.call`
+rewrite/answer/retry, `tool.check`, guard and managed policy, hot reload, `prompt.submit`, `tool.describe`, static analysis,
+author types). Regression: `test/permission`, `test/plugin`, `test/effect`, `test/tool` unchanged and green.

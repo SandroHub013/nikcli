@@ -9,6 +9,7 @@ import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { SessionCompaction } from "./compaction"
+import { Mod } from "../mod"
 import { Bus } from "../bus"
 import { InstructionSync } from "./instruction-sync"
 import { Plugin } from "../plugin"
@@ -999,7 +1000,22 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.executeAsync(taskArgs, taskCtx).catch((error: unknown) => {
+        const result = await Mod.toolCall(
+          {
+            tool: "task",
+            sessionID,
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            callID: part.callID,
+            args: taskArgs,
+          },
+          (callArgs) => taskTool.executeAsync(callArgs as typeof taskArgs, taskCtx),
+          (text) =>
+            ({ title: task.description, output: text, metadata: {} }) as Awaited<
+              ReturnType<typeof taskTool.executeAsync>
+            >,
+          abort,
+        ).catch((error: unknown) => {
           executionError = error instanceof Error ? error : new Error(String(error))
           log.error("subtask execution failed", {
             error,
@@ -1484,8 +1500,22 @@ export namespace SessionPrompt {
     // indexed column write, skipped when the value is unchanged.
     Effect.runSync(SessionRepo.setLastModel(input.sessionID, model))
 
+    // `prompt.submit` mods see the text the user typed before the turn starts: they can
+    // rewrite it, add text only the model reads, or drop the prompt.
+    let sourceParts = input.parts
+    const typed = sourceParts.findIndex((part) => part.type === "text" && !part.synthetic)
+    if (typed >= 0 && (await Mod.handles("prompt.submit"))) {
+      const original = sourceParts[typed] as MessageV2.TextPart
+      const submitted = await Mod.promptSubmit({ sessionID: input.sessionID, agent: agent.name, text: original.text })
+      sourceParts = sourceParts.map((part, index) => (index === typed ? { ...part, text: submitted.text } : part))
+      sourceParts = [
+        ...sourceParts,
+        ...submitted.context.map((text) => ({ type: "text" as const, text, synthetic: true })),
+      ]
+    }
+
     const parts = await Promise.all(
-      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
+      sourceParts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
