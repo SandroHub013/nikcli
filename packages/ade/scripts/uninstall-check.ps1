@@ -140,6 +140,9 @@ function Finish {
     exit 1
   }
   Write-Host "phase '$Phase': every check held"
+  # Explicit: without it the script ends with the exit code of the last native command it ran (`cmdkey /delete` of an entry that is already
+  # gone says 1), and pwsh gives that to the step.
+  exit 0
 }
 
 # The proving job says so: a build that is not the released identity takes the hooks only then.
