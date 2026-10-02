@@ -12,7 +12,7 @@
     silent    silent install and uninstall: ADE's entry, script and plugin go, someone else's entry stays, the caches go, what a plugin saved and
               the data folder stay (the box "delete the data" is off in a silent run)
     identity  the flag of a build that is not the released identity touches nothing
-    running   ADE open, passive uninstall: the app is closed BEFORE the removals (a WebView2 cache can only go if nothing holds it)
+    running   ADE open, silent uninstall: the app is closed BEFORE the removals (a WebView2 cache can only go if nothing holds it)
     update    nothing is removed on an update: the new setup over the old, and the old uninstaller with /UPDATE
     secrets   --delete-secrets takes a planted Credential Manager entry (the box is not reachable in a silent run)
 
@@ -57,17 +57,28 @@ function Setup-Path {
   return $found.FullName
 }
 
+# Runs a program and waits for it, but not for ever: a window nobody can answer (a MessageBox of the installer on a runner with no one at it)
+# would otherwise hold the step until the job's own limit. After `$Seconds` the program and what it started are killed, what windows are
+# open is printed (a hidden dialog shows there by its title), and the exit code is -1.
+function Run-Bounded([string]$File, [string[]]$Arguments, [int]$Seconds = 180) {
+  $run = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
+  if ($run.WaitForExit($Seconds * 1000)) { return $run.ExitCode }
+  Write-Host "TIMEOUT: $(Split-Path $File -Leaf) $($Arguments -join ' ') did not end in $Seconds s. Windows open:"
+  Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { Write-Host "  $($_.ProcessName) [$($_.Id)]: $($_.MainWindowTitle)" }
+  & taskkill /F /T /PID $run.Id | Out-Null
+  return -1
+}
+
 function Install([string[]]$Arguments = @('/S')) {
-  $run = Start-Process -FilePath (Setup-Path) -ArgumentList $Arguments -Wait -PassThru
-  Check ($run.ExitCode -eq 0) "setup $($Arguments -join ' ') exited 0 (was $($run.ExitCode))"
+  $code = Run-Bounded (Setup-Path) $Arguments
+  Check ($code -eq 0) "setup $($Arguments -join ' ') exited 0 (was $code)"
   Check (Test-Path (Join-Path $InstallDir $Exe)) "$Exe is installed"
 }
 
 # `_?=<dir>` makes the uninstaller run in place and wait: without it NSIS copies itself to %TEMP% and this returns at once. It has to be last,
 # and its path is not quoted.
 function Uninstall([string[]]$Arguments = @('/S')) {
-  $run = Start-Process -FilePath $Uninstaller -ArgumentList ($Arguments + "_?=$InstallDir") -Wait -PassThru
-  return $run.ExitCode
+  return (Run-Bounded $Uninstaller ($Arguments + "_?=$InstallDir"))
 }
 
 # What the uninstaller has to treat: ADE's hook beside somebody else's in Claude Code's file, the script, downloads and caches, a plugin's
@@ -160,8 +171,8 @@ switch ($Phase) {
   'identity' {
     Install
     Plant
-    $run = Start-Process -FilePath (Join-Path $InstallDir $Exe) -ArgumentList '--unlink-agents' -Wait -PassThru
-    Check ($run.ExitCode -eq 0) "--unlink-agents without the proving variable exits 0 (was $($run.ExitCode))"
+    $code = Run-Bounded (Join-Path $InstallDir $Exe) @('--unlink-agents') 60
+    Check ($code -eq 0) "--unlink-agents without the proving variable exits 0 (was $code)"
     Check-Untouched 'a build that is not the released identity'
     # And the uninstall of it, without the variable, leaves the hooks too.
     $code = Uninstall @('/S')
@@ -183,9 +194,11 @@ switch ($Phase) {
     Check ([bool](Get-Process -Name 'ade-test' -ErrorAction SilentlyContinue)) 'the app is open before the uninstall'
     Check (Test-Path $cache) 'its WebView2 cache exists before the uninstall (without it this phase proves nothing)'
     $env:ADE_UNLINK_AGENTS_FOR_TEST = '1'
-    # Passive: the template closes the app without asking (interactively it asks, and Cancel stops before the hook; the question is the hook's
-    # first line, which uninstall.rs pins).
-    $code = Uninstall @('/P')
+    # Silent, not passive: the template's CheckIfAppIsRunning closes the app without asking in both (`IfSilent` goes straight to the kill, and
+    # `/P` skips the question), but `/P` still shows the uninstaller's window, and a runner has no one to answer one. Interactively, with neither
+    # flag, it is a box "ADE is open, close it?" and Cancel stops the uninstall before the hook has removed anything (the question is the hook's
+    # first line, which uninstall.rs pins); that box is the part this job does not reach.
+    $code = Uninstall @('/S')
     $env:ADE_UNLINK_AGENTS_FOR_TEST = $null
     Check ($code -eq 0) "the uninstaller exited 0 (was $code)"
     Check (-not (Get-Process -Name 'ade-test' -ErrorAction SilentlyContinue)) 'the app is closed'
@@ -227,8 +240,8 @@ switch ($Phase) {
     Write-Text (Join-Path $Roaming 'secrets-index.json') ('{"keys":[{"name":"' + $name + '","env":"TEST_API_KEY","agents":[],"createdMs":1}]}')
     cmdkey /generic:$target /user:$name /pass:not-a-real-secret | Out-Null
     Check (Credential-Present $target) 'planted: the entry is in the Credential Manager'
-    $run = Start-Process -FilePath (Join-Path $InstallDir $Exe) -ArgumentList '--delete-secrets' -Wait -PassThru
-    Check ($run.ExitCode -eq 0) "--delete-secrets exited 0 (was $($run.ExitCode))"
+    $code = Run-Bounded (Join-Path $InstallDir $Exe) @('--delete-secrets') 60
+    Check ($code -eq 0) "--delete-secrets exited 0 (was $code)"
     Check (-not (Credential-Present $target)) 'the entry is gone from the Credential Manager'
     Check (Test-Path (Join-Path $Roaming 'secrets-index.json')) 'the index is left to the folder removal'
     cmdkey /delete:$target 2>$null | Out-Null

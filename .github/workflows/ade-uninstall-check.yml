@@ -36,9 +36,11 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Setup Rust
+        timeout-minutes: 10
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
+        timeout-minutes: 10
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/ade/src-tauri -> target
@@ -46,12 +48,14 @@ jobs:
 
       # Outside Tauri's beforeBuildCommand, as the release does (a broken bun shim on Windows).
       - name: Build frontend
+        timeout-minutes: 15
         working-directory: packages/ade
         run: bun x vite build
 
       # The test identity's config with a version of its own and no frontend step, in one file beside the others: the icons in it are relative to
       # src-tauri. `--features test-exe` builds the `ade-test` binary the installer ships.
       - name: Build the test installer
+        timeout-minutes: 45
         working-directory: packages/ade
         shell: bash
         run: |
@@ -61,25 +65,30 @@ jobs:
           ls -l src-tauri/target/release/bundle/nsis
 
       - name: Silent install and uninstall
+        timeout-minutes: 10
         shell: pwsh
         run: ./packages/ade/scripts/uninstall-check.ps1 -Phase silent
 
       - name: A build that is not the released identity leaves the hooks alone
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         shell: pwsh
         run: ./packages/ade/scripts/uninstall-check.ps1 -Phase identity
 
-      - name: ADE open, passive uninstall closes it before the removals
+      - name: ADE open, silent uninstall closes it before the removals
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         shell: pwsh
         run: ./packages/ade/scripts/uninstall-check.ps1 -Phase running
 
       - name: An update removes nothing
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         shell: pwsh
         run: ./packages/ade/scripts/uninstall-check.ps1 -Phase update
 
       - name: --delete-secrets takes the keychain entries
         if: ${{ !cancelled() }}
+        timeout-minutes: 10
         shell: pwsh
         run: ./packages/ade/scripts/uninstall-check.ps1 -Phase secrets
