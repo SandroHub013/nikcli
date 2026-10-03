@@ -30,6 +30,53 @@ describe("a chord the system refuses", () => {
   })
 })
 
+/*
+ * The key table that keeps punctuation out of the system-wide hotkeys is the Windows crate's: on macOS the crate takes physical key codes, so
+ * `mod+shift+,` registers there and must not be refused before it is tried.
+ */
+describe("a chord on punctuation", () => {
+  const settings = { agentChord: "mod+shift+,", transcriptionChord: "mod+shift+;" }
+
+  test("is registered off Windows", async () => {
+    const windows = false
+    const claimed: string[] = []
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => {},
+      register: async (chord) => void claimed.push(chord),
+      windows,
+    })
+    expect(result.failed).toEqual([])
+    expect(result.registered.sort()).toEqual(["agent", "transcription"])
+    expect(claimed.sort()).toEqual(["CommandOrControl+Shift+,", "CommandOrControl+Shift+;"])
+    expect(refusalsOf(result.failed, windows)).toEqual({})
+  })
+
+  test("is refused on Windows, and never handed to the system", async () => {
+    const claimed: string[] = []
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => {},
+      register: async (chord) => void claimed.push(chord),
+      windows: true,
+    })
+    expect(claimed).toEqual([])
+    expect(result.registered).toEqual([])
+    expect(result.failed.map((failure) => failure.problem)).toEqual(["not a system-wide key", "not a system-wide key"])
+    expect(refusalsOf(result.failed, true).agent).toContain("solo con ADE in primo piano")
+  })
+
+  test("a refusal from the system off Windows is the busy one, not the key-table one", async () => {
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => {},
+      register: async () => {
+        throw new Error("HotKey already registered")
+      },
+      windows: false,
+    })
+    expect(result.failed).toHaveLength(2)
+    expect(refusalsOf(result.failed, false).agent).not.toContain("solo con ADE in primo piano")
+  })
+})
+
 describe("lint: the refusal reaches the voice settings", () => {
   const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
   const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/voice-settings-panel.tsx", import.meta.url), "utf8"))

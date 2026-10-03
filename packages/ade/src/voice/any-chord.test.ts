@@ -36,15 +36,16 @@ describe("any chord the recorder accepts works outside the window", () => {
     },
   )
 
-  test("a punctuation key is not claimed from the system, and the refusal says why", async () => {
+  // On Windows only: the table that leaves punctuation out is the Windows crate's (see `isSystemChord`).
+  test("on Windows a punctuation key is not claimed from the system, and the refusal says why", async () => {
     const claimed: string[] = []
     const result = await registerVoiceShortcuts(
       { agentChord: "mod+shift+k", transcriptionChord: "mod+shift+," },
-      { unregisterAll: async () => {}, register: async (chord) => void claimed.push(chord) },
+      { unregisterAll: async () => {}, register: async (chord) => void claimed.push(chord), windows: true },
     )
     expect(claimed).toEqual(["CommandOrControl+Shift+K"])
     expect(result.failed.map((f) => f.mode)).toEqual(["transcription"])
-    expect(refusalsOf(result.failed).transcription).toContain("solo con ADE in primo piano")
+    expect(refusalsOf(result.failed, true).transcription).toContain("solo con ADE in primo piano")
   })
 })
 
