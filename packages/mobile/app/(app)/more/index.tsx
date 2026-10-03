@@ -57,6 +57,14 @@ export default function MoreScreen() {
           />
         </Link>
         <Divider inset={20} />
+        <Link href={"/more/mods" as Href} asChild>
+          <SettingsNavCard
+            title="Mods"
+            description="Plugins that run on the host and draw panes and bands here."
+            badges={["Live reload"]}
+          />
+        </Link>
+        <Divider inset={20} />
         <Link href={"/more/brain" as Href} asChild>
           <SettingsNavCard
             title="Brain"

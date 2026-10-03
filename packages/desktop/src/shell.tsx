@@ -1,11 +1,13 @@
 import { useNavigate, useParams } from "@solidjs/router"
-import { base64Encode } from "@nikcli-ai/util/encode"
+import { base64Decode, base64Encode } from "@nikcli-ai/util/encode"
 import { getFilename } from "@nikcli-ai/util/path"
 import { Icon } from "@nikcli-ai/ui/icon"
 import { Avatar } from "@nikcli-ai/ui/avatar"
 import { Button } from "@nikcli-ai/ui/button"
 import { DropdownMenu } from "@nikcli-ai/ui/dropdown-menu"
 import { Popover } from "@nikcli-ai/ui/popover"
+import { Markdown } from "@nikcli-ai/ui/markdown"
+import { ModSite, type ModInfo, type ModPane } from "@nikcli-ai/ui/mod-tree"
 import { TextField } from "@nikcli-ai/ui/text-field"
 import { Logo, Splash } from "@nikcli-ai/ui/logo"
 import {
@@ -14,6 +16,7 @@ import {
   useGlobalSDK,
   useGlobalSync,
   useLayout,
+  useModSource,
   usePlatform,
   useServer,
   BrowserVisualEditor,
@@ -656,6 +659,89 @@ function DesktopAccount() {
   )
 }
 
+/**
+ * The mods of the project that is open: what they draw, and which are loaded.
+ *
+ * A mod is a plugin that runs in the nikcli server. The terminal draws it with cells and this window
+ * with DOM, from the same mod: it is told it is drawing for the `desktop` surface and can answer with a
+ * layout made for it. Edit the mod on disk and the server reloads it; the invalidation that follows
+ * redraws it here without a restart.
+ */
+function DesktopMods(props: { directory: string | undefined }) {
+  const source = useModSource(() => props.directory, "desktop")
+  const [mods, setMods] = createSignal<ModInfo[]>([])
+  const [panes, setPanes] = createSignal<ModPane[]>([])
+
+  const load = async () => {
+    const current = source()
+    if (!current) {
+      batch(() => {
+        setMods([])
+        setPanes([])
+      })
+      return
+    }
+    const [nextMods, nextPanes] = await Promise.all([
+      current.list().catch(() => undefined),
+      current.panes().catch(() => undefined),
+    ])
+    // The project changed while this was in flight: it is another project's answer.
+    if (current !== source()) return
+    batch(() => {
+      setMods(nextMods ?? [])
+      setPanes(nextPanes ?? [])
+    })
+  }
+
+  createEffect(on(source, () => void load()))
+  createEffect(() => {
+    const current = source()
+    if (!current) return
+    const off = current.subscribe((event) => {
+      if (event.type === "mod.ui.panes") return void load()
+      // An untargeted invalidation is a mod loading, reloading or unloading.
+      if (event.type === "mod.ui.invalidate" && !event.properties?.component && !event.properties?.requestID) {
+        void load()
+      }
+    })
+    onCleanup(off)
+  })
+
+  const markdown = (text: string) => <Markdown text={text} />
+
+  return (
+    <>
+      <div class="desktop-sidebar__section-heading desktop-sidebar__section-heading--nested">
+        <span>{t("desktop.sidebar.mods")}</span>
+      </div>
+      <ModSite source={source()} component="AbovePrompt" requestId="band" markdown={markdown} />
+      <For each={panes()}>
+        {(pane) => (
+          <ModSite
+            source={source()}
+            component="Pane"
+            requestId={pane.id}
+            title={pane.title}
+            extra={{ title: pane.title, placement: pane.placement }}
+            markdown={markdown}
+          />
+        )}
+      </For>
+      <For each={mods()}>
+        {(mod) => (
+          <div class="desktop-sidebar__list-item">
+            <Icon name="mcp" size="small" />
+            <span>{mod.name}</span>
+          </div>
+        )}
+      </For>
+      <Show when={mods().length === 0}>
+        <div class="desktop-sidebar__notice">{t("desktop.sidebar.noMods")}</div>
+      </Show>
+    </>
+  )
+}
+
 function DesktopSidebar() {
   const command = useCommand()
   const sync = useGlobalSync()
@@ -668,6 +754,8 @@ function DesktopSidebar() {
   const [now, setNow] = createSignal(Date.now())
 
   const projects = createMemo(() => layout.projects.list())
+  // The project in the address bar, else the first one open: mods are per project.
+  const activeDirectory = createMemo(() => (params.dir ? base64Decode(params.dir) : projects()[0]?.worktree))
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
   const commandMap = createMemo(
     () =>
@@ -841,6 +929,7 @@ function DesktopSidebar() {
             <Show when={plugins().length === 0}>
               <div class="desktop-sidebar__notice">{t("desktop.sidebar.noPlugins")}</div>
             </Show>
+            <DesktopMods directory={activeDirectory()} />
           </div>
         </Show>
 

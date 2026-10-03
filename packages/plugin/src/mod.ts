@@ -254,6 +254,9 @@ export type AgentSpawnEvent = {
 }
 export type AgentSpawnResult = { model?: string } | { deny: string }
 
+/** The clients that draw a mod's trees. */
+export type ModSurface = "terminal" | "mobile" | "desktop" | "ade"
+
 /** A render site. `AbovePrompt` is the band above the prompt; `Pane` is a pane opened with `$.ui.open`. */
 export type UiRenderEvent = {
   /**
@@ -264,7 +267,11 @@ export type UiRenderEvent = {
   readonly component: "AbovePrompt" | "Pane" | "ToolUse" | "UserMessage" | "AssistantMessage" | "Spinner"
   /** `band` for `AbovePrompt`; the pane's id for `Pane`; the call id for `ToolUse`; the message id for a message. */
   readonly requestId: string
-  readonly surface: "terminal"
+  /**
+   * Which client asked. One mod draws for every client: branch on this to give the terminal a dense
+   * row, the phone a card and the desktop a sidebar block. `viewport` is only set by the terminal.
+   */
+  readonly surface: ModSurface
   readonly sessionID?: string
   readonly props: Readonly<Record<string, unknown>>
   readonly viewport?: { readonly columns: number; readonly rows: number }

@@ -269,6 +269,7 @@ import {
 } from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
+import { createModsPlugin } from "../plugin/built-in/mods"
 import { FILE_PLUGINS_DISABLED, importPluginModule } from "../plugin/loader"
 import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
@@ -5549,7 +5550,7 @@ export function Workbench() {
   const pluginRuntime = createAdePluginRuntime({
     io: pluginIO,
     load: importPluginModule,
-    internal: ({ status, registry }) => [createManagerPlugin(status, registry)],
+    internal: ({ status, registry }) => [createManagerPlugin(status, registry), createModsPlugin()],
     async trust(root, plugins) {
       /*
        * Consent is a question about code that is about to run. The loader

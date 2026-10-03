@@ -136,6 +136,8 @@ export namespace Mod {
       requestId?: string
       sessionID?: string
       props: Record<string, unknown>
+      /** The client drawing; absent is the terminal. */
+      surface?: ModUi.Surface
       viewport?: { columns: number; rows: number }
     }) => Effect.Effect<{ tree?: ModUi.Node; props?: Record<string, unknown> }>
     /** A control a mod drew was used: `ui.press`, `ui.input`, `ui.select` or `ui.close` among the mods. */
@@ -433,7 +435,7 @@ export namespace Mod {
         const event = {
           component: input.component,
           requestId: input.requestId ?? "",
-          surface: "terminal",
+          surface: input.surface ?? "terminal",
           sessionID: input.sessionID,
           props: input.props,
           viewport: input.viewport,

@@ -1965,6 +1965,7 @@ type Endpoint21_2Input = {
   readonly requestId?: Endpoint21_2Request["payload"]["requestId"]
   readonly sessionID?: Endpoint21_2Request["payload"]["sessionID"]
   readonly props: Endpoint21_2Request["payload"]["props"]
+  readonly surface?: Endpoint21_2Request["payload"]["surface"]
   readonly columns?: Endpoint21_2Request["payload"]["columns"]
   readonly rows?: Endpoint21_2Request["payload"]["rows"]
 }
@@ -1975,6 +1976,7 @@ const Endpoint21_2 = (raw: RawClient["mod"]) => (input: Endpoint21_2Input) =>
       requestId: input["requestId"],
       sessionID: input["sessionID"],
       props: input["props"],
+      surface: input["surface"],
       columns: input["columns"],
       rows: input["rows"],
     },

@@ -5679,6 +5679,7 @@ export type ModRenderPayload = {
   readonly requestId?: string | undefined
   readonly sessionID?: string | undefined
   readonly props: string
+  readonly surface?: "terminal" | "mobile" | "desktop" | "ade" | undefined
   readonly columns?: number | undefined
   readonly rows?: number | undefined
 }
@@ -8285,6 +8286,7 @@ export type ModRenderInput = {
   readonly requestId?: ModRenderPayload["requestId"]
   readonly sessionID?: ModRenderPayload["sessionID"]
   readonly props: ModRenderPayload["props"]
+  readonly surface?: ModRenderPayload["surface"]
   readonly columns?: ModRenderPayload["columns"]
   readonly rows?: ModRenderPayload["rows"]
 }

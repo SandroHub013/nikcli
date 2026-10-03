@@ -3212,6 +3212,7 @@ export function make(options: ClientOptions) {
               requestId: input["requestId"],
               sessionID: input["sessionID"],
               props: input["props"],
+              surface: input["surface"],
               columns: input["columns"],
               rows: input["rows"],
             },

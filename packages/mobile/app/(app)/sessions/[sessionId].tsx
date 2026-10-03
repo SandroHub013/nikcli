@@ -33,6 +33,7 @@ import { SessionComposer } from "@/components/session/SessionComposer"
 import { JumpToLatestPill } from "@/components/session/JumpToLatestPill"
 import { BackgroundActivitySheet } from "@/components/session/BackgroundActivitySheet"
 import { ScaffoldingRow } from "@/components/session/ScaffoldingRow"
+import { ModBand } from "@/components/mods/ModBand"
 import { SessionStatusLine } from "@/components/session/SessionStatusLine"
 import { TimeDivider } from "@/components/ui/TimeDivider"
 import { buildTranscriptRows, type TranscriptRow } from "@/lib/transcript-rows"
@@ -1773,6 +1774,8 @@ export default function SessionScreen() {
           onOpenActivity={() => setActivityOpen(true)}
         />
       </View>
+
+      {sessionId ? <ModBand sessionID={sessionId} working={sessionBlocked} /> : null}
 
       <ComposerApprovalBar
         approvals={[...(detail?.permissions ?? []), ...(detail?.questions ?? [])]}

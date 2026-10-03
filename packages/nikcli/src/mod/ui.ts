@@ -71,6 +71,10 @@ export namespace ModUi {
     | "Spinner"
   export const SITES: readonly Site[] = ["AbovePrompt", "Pane", "ToolUse", "UserMessage", "AssistantMessage", "Spinner"]
 
+  /** The clients that draw trees. `terminal` is the default for a client that does not say. */
+  export type Surface = "terminal" | "mobile" | "desktop" | "ade"
+  export const SURFACES: readonly Surface[] = ["terminal", "mobile", "desktop", "ade"]
+
   export type Placement = "dock" | "inline"
 
   export interface PaneInfo {

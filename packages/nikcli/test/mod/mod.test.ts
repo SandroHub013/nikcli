@@ -653,7 +653,12 @@ describe("turns, prompt sections, subagents and the mods API", () => {
 describe("what a mod draws", () => {
   const { ModHttpApi } = httpModule
 
-  const render = (input: { component: string; requestId?: string; props?: Record<string, unknown> }): Promise<any> =>
+  const render = (input: {
+    component: string
+    requestId?: string
+    props?: Record<string, unknown>
+    surface?: "terminal" | "mobile" | "desktop" | "ade"
+  }): Promise<any> =>
     runPromiseWithLayer(
       Mod.defaultLayer,
       withCurrentInstance(
@@ -663,6 +668,7 @@ describe("what a mod draws", () => {
             requestId: input.requestId,
             sessionID: SESSION,
             props: JSON.stringify(input.props ?? {}),
+            surface: input.surface,
             columns: 100,
             rows: 30,
           },
@@ -779,6 +785,98 @@ describe("what a mod draws", () => {
       await def.executeAsync({ action: "remove", name: "pane-mod" }, makeToolContext().ctx)
       expect(await runPromiseWithLayer(Mod.defaultLayer, withCurrentInstance(ModHttpApi.handlers.panes()))).toEqual([])
       unsubscribe()
+    })
+  })
+
+  it("one mod draws for every client: it is told the surface and can answer with a layout made for it", async () => {
+    await withProjectDirectory(projectDir, async () => {
+      await install(
+        "surface-mod",
+        `export function register(on) {
+  on("ui.render", { component: "Pane", requestId: "surface" }, async ($, e, next) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    if (e.surface === "mobile") return { tree: Box({ padding: 1 }, Text({ bold: true }, "phone"), Button({ key: "open", label: "Open" })) }
+    if (e.surface === "desktop") return { tree: Box(Text("desk")) }
+    if (e.surface === "ade") return { tree: null }
+    return { tree: Text("terminal " + (e.viewport ? e.viewport.columns : "none")) }
+  })
+}`,
+      )
+      const drawn = async (surface?: "terminal" | "mobile" | "desktop" | "ade") => {
+        const out = await render({ component: "Pane", requestId: "surface", surface })
+        return out.tree === undefined ? out : JSON.parse(out.tree)
+      }
+
+      // A client that predates the field is the terminal.
+      expect(await drawn()).toMatchObject({ type: "Text", children: ["terminal 100"] })
+      expect(await drawn("terminal")).toMatchObject({ type: "Text", children: ["terminal 100"] })
+      expect(await drawn("mobile")).toMatchObject({
+        type: "Box",
+        children: [
+          { type: "Text", props: { bold: true }, children: ["phone"] },
+          { type: "Button", key: "open", props: { label: "Open" } },
+        ],
+      })
+      expect(await drawn("desktop")).toMatchObject({ type: "Box", children: [{ type: "Text", children: ["desk"] }] })
+      // A mod that has nothing for a surface draws nothing there: `{ kind: "tree" }`, no tree.
+      expect(await render({ component: "Pane", requestId: "surface", surface: "ade" })).toEqual({ kind: "tree" })
+    })
+  })
+
+  it("the mod `nikcli mod create` writes loads, opens its pane, and draws a layout per client", async () => {
+    const { ModTemplate } = await import("@/mod/template")
+    const { ModGuard } = await import("@/mod/guard")
+    expect(ModTemplate.valid("hello-mod")).toBe(true)
+    for (const bad of ["", "Hello", "-x", "a b", "../x", "a/b", "x".repeat(65)])
+      expect(ModTemplate.valid(bad)).toBe(false)
+    expect(ModGuard.validate(ModTemplate.source("hello-mod")).ok).toBe(true)
+
+    await withProjectDirectory(projectDir, async () => {
+      await install("hello-mod", ModTemplate.source("hello-mod"))
+      const panes = await runPromiseWithLayer(Mod.defaultLayer, withCurrentInstance(ModHttpApi.handlers.panes()))
+      expect(panes).toContainEqual({ id: "hello-mod", plugin: "hello-mod", title: "hello-mod", placement: "dock" })
+
+      const drawn = async (surface: "terminal" | "mobile" | "desktop" | "ade") => {
+        const out = await render({ component: "Pane", requestId: "hello-mod", surface })
+        expect(out.kind).toBe("tree")
+        return JSON.parse(out.tree!)
+      }
+      const click = { type: "Button", key: "hello-mod:click", props: { label: "Click me" } }
+      expect(await drawn("terminal")).toMatchObject({
+        type: "Box",
+        props: { direction: "row" },
+        children: [{ type: "Text" }, click],
+      })
+      expect(await drawn("mobile")).toMatchObject({
+        type: "Box",
+        children: [{ type: "Text", props: { bold: true } }, { type: "Text" }, click],
+      })
+      expect(await drawn("desktop")).toMatchObject({
+        type: "Box",
+        children: [{ type: "Text", props: { bold: true } }, { type: "Text" }, click],
+      })
+      expect(await drawn("ade")).toEqual(await drawn("desktop"))
+
+      // A press from any client counts, and the next drawing says so.
+      const press = () =>
+        runPromiseWithLayer(
+          Mod.defaultLayer,
+          withCurrentInstance(
+            ModHttpApi.handlers.event({
+              payload: {
+                kind: "press",
+                key: "hello-mod:click",
+                component: "Pane",
+                requestId: "hello-mod",
+                sessionID: SESSION,
+              },
+            }),
+          ),
+        )
+      expect(await press()).toEqual({ handled: true })
+      expect((await drawn("mobile")).children[1].children).toEqual(["clicked 1 time"])
+      expect(await press()).toEqual({ handled: true })
+      expect((await drawn("mobile")).children[1].children).toEqual(["clicked 2 times"])
     })
   })
 

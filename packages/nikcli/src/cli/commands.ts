@@ -1441,9 +1441,26 @@ const SpecModValidate = Spec.make("validate", {
   },
 })
 
+const SpecModCreate = Spec.make("create", {
+  description: "create a mod that draws on every client: terminal, mobile, desktop and ADE",
+  params: {
+    name: Argument.string("name").pipe(Argument.withDescription("lowercase letters, digits and dashes")),
+    global: Flag.boolean("global").pipe(
+      Flag.withAlias("g"),
+      Flag.withDescription("create it in the user's config instead of this project"),
+      Flag.withDefault(false),
+    ),
+    force: Flag.boolean("force").pipe(
+      Flag.withAlias("f"),
+      Flag.withDescription("replace an existing mod of that name"),
+      Flag.withDefault(false),
+    ),
+  },
+})
+
 const SpecMod = Spec.make("mod", {
   description: "work with mods: TypeScript functions that change how nikcli works",
-  commands: [SpecModValidate],
+  commands: [SpecModCreate, SpecModValidate],
 })
 
 const SpecSyncStatus = Spec.make("status", {

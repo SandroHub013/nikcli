@@ -37,6 +37,8 @@ export namespace ModHttpApi {
     sessionID: Schema.optional(Schema.String),
     /** The site's props, as JSON. */
     props: Schema.String,
+    /** The client drawing. Absent is the terminal, which is every client that predates this field. */
+    surface: Schema.optional(Schema.Literals(["terminal", "mobile", "desktop", "ade"])),
     columns: Schema.optional(Schema.Number),
     rows: Schema.optional(Schema.Number),
   }).annotate({ identifier: "ModRenderInput" })
@@ -90,6 +92,7 @@ export namespace ModHttpApi {
           requestId: payload.requestId,
           sessionID: payload.sessionID,
           props: JSON.parse(payload.props || "{}") as Record<string, unknown>,
+          surface: payload.surface,
           viewport:
             payload.columns !== undefined && payload.rows !== undefined
               ? { columns: payload.columns, rows: payload.rows }

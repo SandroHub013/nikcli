@@ -4,6 +4,8 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    "./mod-tree-model": "./src/components/mod-tree-model.ts",
+    "./mod-tree.css": "./src/components/mod-tree.css",
     "./*": "./src/components/*.tsx",
     "./i18n/*": "./src/i18n/*.ts",
     "./pierre": "./src/pierre/index.ts",
