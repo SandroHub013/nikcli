@@ -3,6 +3,25 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.423.0 (October 2026)
+
+## Core
+
+- Apply prettier to files failing ci-pipeline format:check (@nikomatt69)
+- Clean up test files and enhance plugin error handling (@nikomatt69)
+- Improve code formatting and consistency in test and plugin files (@nikomatt69)
+- Enhance mod functionality with new event handling and UI integration (@nikomatt69)
+- Enhance mod API with UI rendering and event handling (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mods): enhance mod API with UI rendering and event handling
+  - feat(mods): enhance mod functionality with new event handling and UI integration
+  - refactor(tui): improve code formatting and consistency in test and plugin files
+  - refactor(tui): clean up test files and enhance plugin error handling
+  - style(test): apply prettier to files failing ci-pipeline format:check
+
 ## v1.422.0 (October 2026)
 
 ## Core

@@ -25,49 +25,46 @@ import {
   type CliRenderer,
   type KeyEvent,
   type TextChunk,
-} from "@opentui/core";
-import { logo as productionLogo } from "@/cli/logo";
+} from "@opentui/core"
+import { logo as productionLogo } from "@/cli/logo"
 
 // ---------------------------------------------------------------------------
 // palette
 // ---------------------------------------------------------------------------
 
-const BG = "#0b0d10";
-const MUTED = "#6b7684";
-const DEFAULT = "#e6edf3";
-const ACCENT = "#7ee787";
-const INFO = "#79c0ff";
-const WARN = "#e3b341";
+const BG = "#0b0d10"
+const MUTED = "#6b7684"
+const DEFAULT = "#e6edf3"
+const ACCENT = "#7ee787"
+const INFO = "#79c0ff"
+const WARN = "#e3b341"
 
 /** The production logo's ramp, copied from `packages/tui/src/component/logo.tsx`. */
-const PRODUCTION_RAMP = [0.48, 0.62, 0.82, 1, 0.72, 0.5];
+const PRODUCTION_RAMP = [0.48, 0.62, 0.82, 1, 0.72, 0.5]
 
 function mix(from: string, to: string, amount: number): string {
-  const channel = (hex: string, offset: number) =>
-    parseInt(hex.slice(offset, offset + 2), 16);
-  const blend = (a: number, b: number) => Math.round(a + (b - a) * amount);
+  const channel = (hex: string, offset: number) => parseInt(hex.slice(offset, offset + 2), 16)
+  const blend = (a: number, b: number) => Math.round(a + (b - a) * amount)
   const parts = [1, 3, 5].map((offset) =>
-    blend(channel(from, offset), channel(to, offset))
-      .toString(16)
-      .padStart(2, "0"),
-  );
-  return `#${parts.join("")}`;
+    blend(channel(from, offset), channel(to, offset)).toString(16).padStart(2, "0"),
+  )
+  return `#${parts.join("")}`
 }
 
 /** Bell curve: the middle rows read brightest, exactly like the shipped logo. */
 export function rowRamp(height: number): number[] {
-  if (height === PRODUCTION_RAMP.length) return PRODUCTION_RAMP;
+  if (height === PRODUCTION_RAMP.length) return PRODUCTION_RAMP
   return Array.from({ length: height }, (_, row) => {
-    const position = height === 1 ? 0.5 : row / (height - 1);
-    return 0.45 + 0.55 * Math.sin(Math.PI * position);
-  });
+    const position = height === 1 ? 0.5 : row / (height - 1)
+    return 0.45 + 0.55 * Math.sin(Math.PI * position)
+  })
 }
 
 // ---------------------------------------------------------------------------
 // letterforms
 // ---------------------------------------------------------------------------
 
-type Glyph = readonly string[];
+type Glyph = readonly string[]
 
 /** 5x7 solid grid — the source every generated style rasterises. */
 const BIG: Record<string, Glyph> = {
@@ -76,7 +73,7 @@ const BIG: Record<string, Glyph> = {
   K: ["█   █", "█  █ ", "█ █  ", "███  ", "█ █  ", "█  █ ", "█   █"],
   C: [" ████", "█    ", "█    ", "█    ", "█    ", "█    ", " ████"],
   L: ["█    ", "█    ", "█    ", "█    ", "█    ", "█    ", "█████"],
-};
+}
 
 /** Half blocks: four rows tall, for narrow terminals and busy headers. */
 const CHUNKY: Record<string, Glyph> = {
@@ -85,7 +82,7 @@ const CHUNKY: Record<string, Glyph> = {
   K: ["█▀▀▀▀", "█ ██ ", "█▄▄▄▄", "▀   ▀▀"],
   C: [" ▄▀▀▀", "█    ", "█    ", " ▀▀▀▀"],
   L: ["█    ", "█    ", "█    ", "▀▀▀▀▀"],
-};
+}
 
 /** Box drawing: hairline strokes that hold up at 1x on any terminal font. */
 const LINE: Record<string, Glyph> = {
@@ -94,21 +91,17 @@ const LINE: Record<string, Glyph> = {
   K: ["┌─┐┬", "│ ├┤", "│ ││", "└─┘┘"],
   C: ["╭───", "│   ", "│   ", "╰───"],
   L: ["│   ", "│   ", "│   ", "╰───"],
-};
+}
 
-const WORD = "NIKCLI";
+const WORD = "NIKCLI"
 
 function compose(set: Record<string, Glyph>, gap = " "): string[] {
-  const glyphs = [...WORD].map((char) => set[char]!);
-  const widths = glyphs.map((glyph) =>
-    Math.max(...glyph.map((row) => row.length)),
-  );
-  const height = Math.max(...glyphs.map((glyph) => glyph.length));
+  const glyphs = [...WORD].map((char) => set[char]!)
+  const widths = glyphs.map((glyph) => Math.max(...glyph.map((row) => row.length)))
+  const height = Math.max(...glyphs.map((glyph) => glyph.length))
   return Array.from({ length: height }, (_, row) =>
-    glyphs
-      .map((glyph, index) => (glyph[row] ?? "").padEnd(widths[index]!, " "))
-      .join(gap),
-  );
+    glyphs.map((glyph, index) => (glyph[row] ?? "").padEnd(widths[index]!, " ")).join(gap),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -116,33 +109,26 @@ function compose(set: Record<string, Glyph>, gap = " "): string[] {
 // ---------------------------------------------------------------------------
 
 function filledCells(lines: readonly string[]): [row: number, col: number][] {
-  const out: [number, number][] = [];
+  const out: [number, number][] = []
   lines.forEach((line, row) => {
-    for (let col = 0; col < line.length; col++)
-      if (line[col] === "█") out.push([row, col]);
-  });
-  return out;
+    for (let col = 0; col < line.length; col++) if (line[col] === "█") out.push([row, col])
+  })
+  return out
 }
 
 function emptyGrid(height: number, width: number): string[][] {
-  return Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => " "),
-  );
+  return Array.from({ length: height }, () => Array.from({ length: width }, () => " "))
 }
 
 /** Filled cells get a soft ramp, so the wordmark has weight without more glyphs. */
 function halftone(lines: readonly string[]): string[] {
-  const shades = ["░", "░", "▒", "▒", "▓", "▓", "█"];
-  const ramp = rowRamp(lines.length);
-  const grid = emptyGrid(
-    lines.length,
-    Math.max(...lines.map((line) => line.length)),
-  );
+  const shades = ["░", "░", "▒", "▒", "▓", "▓", "█"]
+  const ramp = rowRamp(lines.length)
+  const grid = emptyGrid(lines.length, Math.max(...lines.map((line) => line.length)))
   for (const [row, col] of filledCells(lines)) {
-    grid[row]![col] =
-      shades[Math.min(shades.length - 1, Math.round(ramp[row]! * 6))]!;
+    grid[row]![col] = shades[Math.min(shades.length - 1, Math.round(ramp[row]! * 6))]!
   }
-  return grid.map((row) => row.join(""));
+  return grid.map((row) => row.join(""))
 }
 
 /**
@@ -152,22 +138,22 @@ function halftone(lines: readonly string[]): string[] {
  * neighbours are filled", which is what a stroke two cells thick actually is.
  */
 function outline(lines: readonly string[]): string[] {
-  const at = (row: number, col: number) => lines[row]?.[col] === "█";
-  const width = Math.max(...lines.map((line) => line.length));
+  const at = (row: number, col: number) => lines[row]?.[col] === "█"
+  const width = Math.max(...lines.map((line) => line.length))
   return lines.map((_, row) =>
     Array.from({ length: width }, (_, col) => {
-      if (!at(row, col)) return " ";
-      return at(row, col - 1) && at(row, col + 1) ? "░" : "█";
+      if (!at(row, col)) return " "
+      return at(row, col - 1) && at(row, col + 1) ? "░" : "█"
     }).join(""),
-  );
+  )
 }
 
 /**
  * Italic shear: every row one column further right than the row above it.
  */
 function slant(lines: readonly string[]): string[] {
-  const last = lines.length - 1;
-  return lines.map((line, row) => " ".repeat(Math.max(0, last - row)) + line);
+  const last = lines.length - 1
+  return lines.map((line, row) => " ".repeat(Math.max(0, last - row)) + line)
 }
 
 /**
@@ -177,9 +163,7 @@ function slant(lines: readonly string[]): string[] {
  * the shipped logo gets its lift from colour instead.
  */
 function banner(lines: readonly string[]): string[] {
-  return lines.map((line) =>
-    [...line].map((char) => (char === "█" ? "██" : "  ")).join(""),
-  );
+  return lines.map((line) => [...line].map((char) => (char === "█" ? "██" : "  ")).join(""))
 }
 
 /**
@@ -187,36 +171,24 @@ function banner(lines: readonly string[]): string[] {
  * this: `#` against `.` still reads as depth, where `█` against `░` on a dark
  * terminal just muddies the stroke.
  */
-function dropShadow(
-  lines: readonly string[],
-  fill: string,
-  shade: string,
-  drop = 1,
-): string[] {
-  const grid = emptyGrid(
-    lines.length + drop,
-    Math.max(...lines.map((line) => line.length)) + 1,
-  );
-  for (const [row, col] of filledCells(lines))
-    grid[row + drop]![col + 1] = shade;
-  for (const [row, col] of filledCells(lines)) grid[row]![col] = fill;
-  return grid.map((row) => row.join("").trimEnd());
+function dropShadow(lines: readonly string[], fill: string, shade: string, drop = 1): string[] {
+  const grid = emptyGrid(lines.length + drop, Math.max(...lines.map((line) => line.length)) + 1)
+  for (const [row, col] of filledCells(lines)) grid[row + drop]![col + 1] = shade
+  for (const [row, col] of filledCells(lines)) grid[row]![col] = fill
+  return grid.map((row) => row.join("").trimEnd())
 }
 
-const CREDIT_TEXT = "◇ by @nikomatt69";
-const HINT = "   ←/→ switch · r replay · q quit";
+const CREDIT_TEXT = "◇ by @nikomatt69"
+const HINT = "   ←/→ switch · r replay · q quit"
 
 /** Frame the wordmark and its credit, for headers that need a hard edge. */
 function badge(lines: readonly string[]): string[] {
-  const inner = Math.max(...lines.map((line) => line.length));
-  const pad = 2;
-  const width = inner + pad * 2 + 2;
-  const frame = (body: string) =>
-    `│${" ".repeat(pad)}${body.padEnd(inner + pad, " ")}${" ".repeat(pad)}│`;
-  const blank = frame("");
-  const lead = " ".repeat(
-    Math.max(0, Math.floor((inner - CREDIT_TEXT.length) / 2)),
-  );
+  const inner = Math.max(...lines.map((line) => line.length))
+  const pad = 2
+  const width = inner + pad * 2 + 2
+  const frame = (body: string) => `│${" ".repeat(pad)}${body.padEnd(inner + pad, " ")}${" ".repeat(pad)}│`
+  const blank = frame("")
+  const lead = " ".repeat(Math.max(0, Math.floor((inner - CREDIT_TEXT.length) / 2)))
   return [
     `╭${"─".repeat(width - 2)}╮`,
     blank,
@@ -225,7 +197,7 @@ function badge(lines: readonly string[]): string[] {
     frame(`${lead}${CREDIT_TEXT}`),
     blank,
     `╰${"─".repeat(width - 2)}╯`,
-  ];
+  ]
 }
 
 // ---------------------------------------------------------------------------
@@ -233,13 +205,13 @@ function badge(lines: readonly string[]): string[] {
 // ---------------------------------------------------------------------------
 
 export type LogoStyle = {
-  id: string;
-  label: string;
-  note: string;
-  lines: readonly string[];
-};
+  id: string
+  label: string
+  note: string
+  lines: readonly string[]
+}
 
-const BIG_LINES = compose(BIG);
+const BIG_LINES = compose(BIG)
 
 export const STYLES: readonly LogoStyle[] = [
   {
@@ -309,20 +281,20 @@ export const STYLES: readonly LogoStyle[] = [
     note: "block framed, credit inside — for a splash header",
     lines: badge(BIG_LINES),
   },
-];
+]
 
-export const DEFAULT_STYLE_ID = "shadow";
+export const DEFAULT_STYLE_ID = "shadow"
 
 export function styleById(id: string): LogoStyle {
-  return STYLES.find((style) => style.id === id) ?? STYLES[0]!;
+  return STYLES.find((style) => style.id === id) ?? STYLES[0]!
 }
 
 export function logoWidth(style: LogoStyle): number {
-  return Math.max(...style.lines.map((line) => line.length));
+  return Math.max(...style.lines.map((line) => line.length))
 }
 
 export function logoHeight(style: LogoStyle): number {
-  return style.lines.length;
+  return style.lines.length
 }
 
 export function plainFrame(style: LogoStyle): string {
@@ -332,14 +304,10 @@ export function plainFrame(style: LogoStyle): string {
     ...style.lines,
     "",
     "◇ by @nikomatt69",
-  ].join("\n");
+  ].join("\n")
 }
 
-const escapeHtml = (raw: string) =>
-  raw.replace(
-    /[&<>]/g,
-    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[char]!,
-  );
+const escapeHtml = (raw: string) => raw.replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[char]!)
 
 /**
  * A self-contained contact sheet of every style, coloured exactly the way the
@@ -349,19 +317,16 @@ const escapeHtml = (raw: string) =>
  */
 export function htmlSheet(): string {
   const cards = STYLES.map((style) => {
-    const ramp = rowRamp(style.lines.length);
+    const ramp = rowRamp(style.lines.length)
     const rows = style.lines
-      .map(
-        (line, row) =>
-          `<span style="color:${mix(MUTED, DEFAULT, ramp[row]!)}">${escapeHtml(line)}</span>`,
-      )
-      .join("\n");
+      .map((line, row) => `<span style="color:${mix(MUTED, DEFAULT, ramp[row]!)}">${escapeHtml(line)}</span>`)
+      .join("\n")
     return `<section>
   <header><b>${escapeHtml(style.label)}</b><span>${logoWidth(style)}&times;${style.lines.length}</span><em>${escapeHtml(style.note)}</em></header>
   <pre>${rows}</pre>
   <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
-</section>`;
-  }).join("\n");
+</section>`
+  }).join("\n")
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -391,15 +356,15 @@ export function htmlSheet(): string {
 <div class="grid">
 ${cards}
 </div>
-</body></html>`;
+</body></html>`
 }
 
 // ---------------------------------------------------------------------------
 // reveal — the shine sweep from the TUI home logo
 // ---------------------------------------------------------------------------
 
-const SHINE_WIDTH = 5;
-const REVEAL_MS = 900;
+const SHINE_WIDTH = 5
+const REVEAL_MS = 900
 
 /**
  * `fg(color)(text)` returns a bare chunk, and `TextRenderable` wants a
@@ -407,24 +372,18 @@ const REVEAL_MS = 900;
  * chunks — joining them stringifies to `"[object Object]"`, which paints as
  * literal text — so compose the chunk array through the real constructor.
  */
-const styled = (...chunks: TextChunk[]): StyledText => new StyledText(chunks);
+const styled = (...chunks: TextChunk[]): StyledText => new StyledText(chunks)
 
-function revealRow(
-  line: string,
-  rampValue: number,
-  width: number,
-  progress: number,
-): StyledText {
-  const cursor = Math.floor(progress * (width + SHINE_WIDTH));
-  const edge = Math.min(width, cursor);
-  const shineStart = Math.min(width, Math.max(0, cursor - SHINE_WIDTH));
-  const base = mix(MUTED, DEFAULT, rampValue);
-  const parts: TextChunk[] = [];
-  if (shineStart > 0) parts.push(fg(base)(line.slice(0, shineStart)));
-  if (edge > shineStart)
-    parts.push(fg(mix(base, DEFAULT, 0.9))(line.slice(shineStart, edge)));
-  if (edge < width) parts.push(fg(BG)(" ".repeat(width - edge)));
-  return styled(...parts);
+function revealRow(line: string, rampValue: number, width: number, progress: number): StyledText {
+  const cursor = Math.floor(progress * (width + SHINE_WIDTH))
+  const edge = Math.min(width, cursor)
+  const shineStart = Math.min(width, Math.max(0, cursor - SHINE_WIDTH))
+  const base = mix(MUTED, DEFAULT, rampValue)
+  const parts: TextChunk[] = []
+  if (shineStart > 0) parts.push(fg(base)(line.slice(0, shineStart)))
+  if (edge > shineStart) parts.push(fg(mix(base, DEFAULT, 0.9))(line.slice(shineStart, edge)))
+  if (edge < width) parts.push(fg(BG)(" ".repeat(width - edge)))
+  return styled(...parts)
 }
 
 // ---------------------------------------------------------------------------
@@ -432,119 +391,96 @@ function revealRow(
 // ---------------------------------------------------------------------------
 
 export type LogoLabView = {
-  setStyle: (id: string) => void;
+  setStyle: (id: string) => void
   /** 0 hides everything, 1 is the finished wordmark. */
-  setProgress: (progress: number) => void;
-  current: () => LogoStyle;
-  destroy: () => void;
-};
+  setProgress: (progress: number) => void
+  current: () => LogoStyle
+  destroy: () => void
+}
 
-export function mountLab(
-  renderer: CliRenderer,
-  startId: string = DEFAULT_STYLE_ID,
-): LogoLabView {
+export function mountLab(renderer: CliRenderer, startId: string = DEFAULT_STYLE_ID): LogoLabView {
   let index = Math.max(
     0,
     STYLES.findIndex((style) => style.id === startId),
-  );
+  )
 
   // Everything here is a real renderable, not a `Box()`/`Text()` construct.
   // Both constructs return vnode descriptors, and that breaks this view two ways:
   // assigning `.content` to a vnode writes a dead property on the wrapper, and a
   // container built that way silently ignores any child added after it is mounted
   // — which is exactly what a style switch does.
-  const label = () =>
-    new TextRenderable(renderer as never, { content: "", selectable: false });
-  const header = label();
+  const label = () => new TextRenderable(renderer as never, { content: "", selectable: false })
+  const header = label()
   const stage = new BoxRenderable(renderer as never, {
     flexDirection: "column",
     alignItems: "center",
     flexShrink: 0,
-  });
-  const credit = label();
-  const meta = label();
-  const tabs = label();
+  })
+  const credit = label()
+  const meta = label()
+  const tabs = label()
   const body = new BoxRenderable(renderer as never, {
     flexDirection: "column",
     flexGrow: 1,
     backgroundColor: BG,
     paddingLeft: 1,
     paddingRight: 1,
-  });
-  const topSpacer = new BoxRenderable(renderer as never, { flexGrow: 1 });
-  const bottomSpacer = new BoxRenderable(renderer as never, { flexGrow: 1 });
+  })
+  const topSpacer = new BoxRenderable(renderer as never, { flexGrow: 1 })
+  const bottomSpacer = new BoxRenderable(renderer as never, { flexGrow: 1 })
   // `add` takes a single child (only the `Box()` factory spreads children), and
   // a renderable may only appear once in the tree — two distinct spacers, never
   // the same instance added twice, which silently drops the whole subtree.
-  for (const child of [
-    header,
-    topSpacer,
-    stage,
-    credit,
-    meta,
-    bottomSpacer,
-    tabs,
-  ])
-    body.add(child);
-  renderer.root.add(body);
+  for (const child of [header, topSpacer, stage, credit, meta, bottomSpacer, tabs]) body.add(child)
+  renderer.root.add(body)
 
-  let rows: TextRenderable[] = [];
-  let progress = 0;
+  let rows: TextRenderable[] = []
+  let progress = 0
 
   function paint() {
-    const style = STYLES[index]!;
-    const width = logoWidth(style);
-    const ramp = rowRamp(style.lines.length);
+    const style = STYLES[index]!
+    const width = logoWidth(style)
+    const ramp = rowRamp(style.lines.length)
 
-    const position = `· ${style.label} ${index + 1}/${STYLES.length}`;
-    header.content = styled(
-      fg(ACCENT)("◆ "),
-      fg(DEFAULT)("nikcli "),
-      fg(MUTED)("logo lab "),
-      fg(MUTED)(position),
-    );
+    const position = `· ${style.label} ${index + 1}/${STYLES.length}`
+    header.content = styled(fg(ACCENT)("◆ "), fg(DEFAULT)("nikcli "), fg(MUTED)("logo lab "), fg(MUTED)(position))
 
-    for (const row of rows) stage.remove(row);
+    for (const row of rows) stage.remove(row)
     rows = style.lines.map((line, row) => {
       const text = new TextRenderable(renderer as never, {
         content: revealRow(line, ramp[row]!, width, progress),
         selectable: false,
-      });
-      stage.add(text);
-      return text;
-    });
+      })
+      stage.add(text)
+      return text
+    })
 
-    credit.content = styled(fg(DEFAULT)("◇ "), fg(INFO)("by @nikomatt69"));
-    meta.content = styled(
-      fg(WARN)(`${width}x${style.lines.length}`),
-      fg(MUTED)(` ${style.note}`),
-    );
+    credit.content = styled(fg(DEFAULT)("◇ "), fg(INFO)("by @nikomatt69"))
+    meta.content = styled(fg(WARN)(`${width}x${style.lines.length}`), fg(MUTED)(` ${style.note}`))
     tabs.content = styled(
-      ...STYLES.map((candidate, i) =>
-        fg(i === index ? ACCENT : MUTED)(` ${candidate.label} `),
-      ),
+      ...STYLES.map((candidate, i) => fg(i === index ? ACCENT : MUTED)(` ${candidate.label} `)),
       fg(MUTED)(HINT),
-    );
+    )
   }
 
   function setProgress(next: number) {
-    progress = Math.max(0, Math.min(1, next));
-    const style = STYLES[index]!;
-    const width = logoWidth(style);
-    const ramp = rowRamp(style.lines.length);
+    progress = Math.max(0, Math.min(1, next))
+    const style = STYLES[index]!
+    const width = logoWidth(style)
+    const ramp = rowRamp(style.lines.length)
     style.lines.forEach((line, row) => {
-      const target = rows[row];
-      if (target) target.content = revealRow(line, ramp[row]!, width, progress);
-    });
+      const target = rows[row]
+      if (target) target.content = revealRow(line, ramp[row]!, width, progress)
+    })
   }
 
-  paint();
+  paint()
 
   return {
     setStyle(id) {
-      const next = STYLES.findIndex((style) => style.id === id);
-      if (next >= 0) index = next;
-      paint();
+      const next = STYLES.findIndex((style) => style.id === id)
+      if (next >= 0) index = next
+      paint()
     },
     setProgress,
     current: () => STYLES[index]!,
@@ -555,10 +491,10 @@ export function mountLab(
      * right after this in both callers.
      */
     destroy() {
-      for (const row of rows) stage.remove(row);
-      rows = [];
+      for (const row of rows) stage.remove(row)
+      rows = []
     },
-  };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -566,86 +502,82 @@ export function mountLab(
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2)
   if (args.includes("--capture")) {
-    for (const style of STYLES) console.log(plainFrame(style) + "\n");
-    return;
+    for (const style of STYLES) console.log(plainFrame(style) + "\n")
+    return
   }
   if (args.includes("--production")) {
-    console.log(productionLogo(""));
-    return;
+    console.log(productionLogo(""))
+    return
   }
-  const sheet = args
-    .find((arg) => arg.startsWith("--html="))
-    ?.slice("--html=".length);
+  const sheet = args.find((arg) => arg.startsWith("--html="))?.slice("--html=".length)
   if (sheet) {
-    await Bun.write(sheet, htmlSheet());
-    console.log(`wrote ${STYLES.length} styles to ${sheet}`);
-    return;
+    await Bun.write(sheet, htmlSheet())
+    console.log(`wrote ${STYLES.length} styles to ${sheet}`)
+    return
   }
 
-  const requested = args
-    .find((arg) => arg.startsWith("--style="))
-    ?.slice("--style=".length);
+  const requested = args.find((arg) => arg.startsWith("--style="))?.slice("--style=".length)
 
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
     useMouse: false,
     backgroundColor: BG,
-  });
-  renderer.setTerminalTitle("nikcli logo lab");
+  })
+  renderer.setTerminalTitle("nikcli logo lab")
 
-  const view = mountLab(renderer, requested ?? DEFAULT_STYLE_ID);
-  let timer: ReturnType<typeof setInterval> | undefined;
+  const view = mountLab(renderer, requested ?? DEFAULT_STYLE_ID)
+  let timer: ReturnType<typeof setInterval> | undefined
 
   function animate() {
-    if (timer) clearInterval(timer);
-    const started = Date.now();
+    if (timer) clearInterval(timer)
+    const started = Date.now()
     timer = setInterval(() => {
-      const progress = Math.min(1, (Date.now() - started) / REVEAL_MS);
-      view.setProgress(progress);
+      const progress = Math.min(1, (Date.now() - started) / REVEAL_MS)
+      view.setProgress(progress)
       if (progress >= 1 && timer) {
-        clearInterval(timer);
-        timer = undefined;
+        clearInterval(timer)
+        timer = undefined
       }
-    }, 1000 / 60);
+    }, 1000 / 60)
   }
 
   function cycle(delta: number) {
-    const index = STYLES.findIndex((style) => style.id === view.current().id);
-    const next = (index + delta + STYLES.length) % STYLES.length;
-    view.setStyle(STYLES[next]!.id);
-    animate();
+    const index = STYLES.findIndex((style) => style.id === view.current().id)
+    const next = (index + delta + STYLES.length) % STYLES.length
+    view.setStyle(STYLES[next]!.id)
+    animate()
   }
 
   renderer.keyInput.on("keypress", (event: KeyEvent) => {
     switch (event.name) {
       case "q":
       case "escape":
-        return renderer.destroy();
+        return renderer.destroy()
       case "right":
       case "l":
       case "tab":
-        return cycle(1);
+        return cycle(1)
       case "left":
       case "h":
-        return cycle(-1);
+        return cycle(-1)
       case "r":
-        return animate();
+        return animate()
     }
-    const digit = Number(event.name);
+    const digit = Number(event.name)
     if (Number.isInteger(digit) && digit >= 1 && digit <= STYLES.length) {
-      view.setStyle(STYLES[digit - 1]!.id);
-      animate();
+      view.setStyle(STYLES[digit - 1]!.id)
+      animate()
     }
-  });
+  })
 
   renderer.on("destroy", () => {
-    if (timer) clearInterval(timer);
-  });
+    if (timer) clearInterval(timer)
+  })
 
-  view.setProgress(0);
-  animate();
+  view.setProgress(0)
+  animate()
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) await main()
