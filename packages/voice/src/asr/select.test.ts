@@ -44,10 +44,12 @@ describe("asr/select", () => {
     // The test runner has no OpenRouter key configured
     const status = describeBackends({})
 
-    // OpenRouter, the only engine
-    expect(Object.keys(status)).toEqual(["openrouter"])
+    // Both backends, both without the key their fallback needs
+    expect(Object.keys(status)).toEqual(["openrouter", "grokStream"])
     expect(status.openrouter.usable).toBe(false)
     expect(status.openrouter.reason).toContain("Chiave API OpenRouter mancante")
+    expect(status.grokStream.usable).toBe(false)
+    expect(status.grokStream.reason).toContain("Chiave API OpenRouter mancante")
   })
 
   test("describeBackends reports usable when requirements are met", () => {
@@ -56,6 +58,7 @@ describe("asr/select", () => {
     })
 
     expect(status.openrouter.usable).toBe(true)
+    expect(status.grokStream.usable).toBe(true)
   })
 
   test("describeBackends NEVER throws an exception even under malformed input", () => {
@@ -84,6 +87,34 @@ describe("asr/select", () => {
 
     // Unknown backend
     expect(() => createTranscriberFor("invalid-engine" as any)).toThrow(/Backend di trascrizione non riconosciuto/i)
+  })
+
+  test("createTranscriberFor builds the streaming backend over an injected transport", () => {
+    const transcriber = createTranscriberFor("grok-stream", {
+      apiKey: "test-key",
+      grokStreamOptions: {
+        transport: {
+          open: async () => {},
+          send: async () => {},
+          end: async () => {},
+          cancel: () => {},
+        },
+        keyterms: ["nik"],
+      },
+      openRouterOptions: {
+        captureOptions: {
+          mediaStream: { getTracks: () => [] } as any,
+          isTypeSupported: () => true,
+        },
+      },
+    })
+    expect(transcriber).toBeDefined()
+    expect(typeof transcriber.start).toBe("function")
+    expect(typeof transcriber.finish).toBe("function")
+  })
+
+  test("the streaming backend refuses to be built without its transport", () => {
+    expect(() => createTranscriberFor("grok-stream", { apiKey: "test-key" })).toThrow(/transport/i)
   })
 
   test("createVoiceEngine automatically constructs transcriber when backend option is provided", () => {

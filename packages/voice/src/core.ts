@@ -182,9 +182,23 @@ export {
   describeBackends,
   type BackendDescriptions,
   type BackendStatus,
+  type GrokStreamSelectOptions,
   type SelectTranscriberOptions,
   type TranscriberBackend,
 } from "./asr/select"
+
+// The streaming backend: the socket over ADE's Rust host, and its fallback
+export {
+  createGrokStreamTranscriber,
+  type GrokBatch,
+  type GrokBatchRequest,
+  type GrokStreamTranscriber,
+  type GrokStreamTranscriberOptions,
+  type SttStreamEvent,
+  type SttStreamOpenOptions,
+  type SttStreamReason,
+  type SttStreamTransport,
+} from "./asr/grok-stream"
 
 // Effect-TS backend architecture
 export {

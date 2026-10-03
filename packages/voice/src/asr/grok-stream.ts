@@ -80,7 +80,14 @@ export interface SttStreamOpenOptions {
  *
  * Implemented in ADE over `stt_stream_open`/`_send`/`_end`/`_cancel`, and in
  * tests over an object literal. `open` resolves once the session exists;
- * everything queued before it — frames, the end — goes out in order after it.
+ * everything queued before it - frames, the end - goes out in order after it.
+ *
+ * One session at a time, and this is why: `send` and `cancel` name no
+ * session, so two sockets alive at once could not be told apart — a frame or
+ * a cancellation would reach the wrong one. The factory keeps a chain that
+ * opens the next socket only after the previous session has closed, so
+ * whatever this transport is asked to do belongs to the single session it
+ * holds.
  */
 export interface SttStreamTransport {
   /** Opens the session for the segment that just started. */
@@ -199,6 +206,16 @@ interface Flow {
   gated: boolean
   /** The socket may open for this one: not gated, not latched, under the cap. */
   streamable: boolean
+  /** `transport.open` has been called for this one: the session is its own. */
+  opened: boolean
+  /** The open settled — resolved, rejected, or skipped after an abandonment. */
+  openSettled: boolean
+  /** Its socket is gone: done, failed, cancelled, or never opened at all. */
+  socketGone: boolean
+  /** The one-session chain has been let through for this flow. */
+  released: boolean
+  /** Hands the one-session chain to the next flow; streamable flows only. */
+  release?: () => void
   /** `audio.done` has been sent; the answer is on its way. */
   ended: boolean
   /** The stream gave up (or never was): the batch path owns this sentence. */
@@ -295,6 +312,30 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
 
   const flows = new Map<number, Flow>()
 
+  /*
+   * The one-session chain: the next flow's socket opens only after the
+   * previous session has closed. `send` and `cancel` name no session, so two
+   * sockets alive at once could not be told apart — see `SttStreamTransport`.
+   */
+  let sessionTail: Promise<void> = Promise.resolve()
+
+  /**
+   * Hands the chain on when both ends of this flow's session are accounted
+   * for: the open settled (so no ghost of it is still being established) and
+   * the socket is gone (so no frame of it is still welcome).
+   */
+  function maybeRelease(flow: Flow): void {
+    if (flow.released || !flow.openSettled || !flow.socketGone) return
+    flow.released = true
+    flow.release?.()
+  }
+
+  /** The session of this flow is over; the next one may open. */
+  function noteSocketGone(flow: Flow): void {
+    flow.socketGone = true
+    maybeRelease(flow)
+  }
+
   const micCapture: MicCapture =
     options.capture ?? createMicCapture({ preferredFormat: "wav", ...options.captureOptions })
 
@@ -321,6 +362,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
     if (flow.settled) return
     flow.settled = true
     if (flow.doneTimer) clearTimeout(flow.doneTimer)
+    noteSocketGone(flow)
     flows.delete(flow.sequence)
   }
 
@@ -398,7 +440,10 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
     applyFailure(reason)
     flow.fallback = true
     if (flow.doneTimer) clearTimeout(flow.doneTimer)
-    transport.cancel()
+    // Only a flow whose open actually ran owns the session to cancel; one
+    // still waiting its turn behind the previous socket has nothing to drop.
+    if (flow.opened) transport.cancel()
+    noteSocketGone(flow)
     if (flow.ended) {
       if (flow.wav) void runBatch(flow, flow.wav)
       else settle(flow)
@@ -416,8 +461,16 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       return
     }
     void open
-      .then(() => transport.send(bytes))
-      .then(() => spend.addSeconds(bytes.length / STREAM_BYTES_PER_SECOND))
+      .then(() => {
+        // Abandoned while its turn in the chain was still coming up: the
+        // frames belong to no session, and the next one must not hear them.
+        if (flow.settled || flow.fallback) return false
+        return transport.send(bytes).then(() => true)
+      })
+      .then((sent) => {
+        if (sent !== true) return
+        spend.addSeconds(bytes.length / STREAM_BYTES_PER_SECOND)
+      })
       .catch((err: unknown) => failFlow(flow, reasonOf(String((err as Error)?.message ?? err))))
   }
 
@@ -484,6 +537,10 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       spokenAt,
       gated,
       streamable,
+      opened: false,
+      openSettled: !streamable,
+      socketGone: !streamable,
+      released: !streamable,
       ended: false,
       fallback: false,
       settled: false,
@@ -497,16 +554,37 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
     }
     flows.set(event.sequence, flow)
     if (!streamable) return
-    try {
-      flow.openPromise = transport.open({
-        ...(language ? { language } : {}),
-        keyterms,
-        onEvent: (streamEvent) => handleEvent(flow, streamEvent),
+    /*
+     * Its turn in the one-session chain: behind the previous session's close,
+     * and only then does `transport.open` run. An abandonment before its turn
+     * releases the chain without ever opening anything.
+     */
+    const previous = sessionTail
+    let release!: () => void
+    const closed = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    flow.release = release
+    sessionTail = closed
+    flow.openPromise = previous
+      .then(() => {
+        if (flow.settled || flow.fallback) {
+          flow.openSettled = true
+          noteSocketGone(flow)
+          return
+        }
+        flow.opened = true
+        return transport.open({
+          ...(language ? { language } : {}),
+          keyterms,
+          onEvent: (streamEvent) => handleEvent(flow, streamEvent),
+        })
       })
-      flow.openPromise.catch((err: unknown) => failFlow(flow, reasonOf(String((err as Error)?.message ?? err))))
-    } catch (err: unknown) {
-      failFlow(flow, reasonOf(String((err as Error)?.message ?? err)))
-    }
+      .finally(() => {
+        flow.openSettled = true
+        maybeRelease(flow)
+      })
+    flow.openPromise.catch((err: unknown) => failFlow(flow, reasonOf(String((err as Error)?.message ?? err))))
   }
 
   function onSegmentFrame(event: SegmentAudio): void {
@@ -535,7 +613,13 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       return
     }
     if (flow.pendingSamples > 0) send(flow, pcm16le(take(flow, flow.pendingSamples)))
-    void flow.openPromise!.then(() => transport.end()).catch((err: unknown) => failFlow(flow, reasonOf(String((err as Error)?.message ?? err))))
+    void flow.openPromise!
+      .then(() => {
+        // Dropped before its turn or after: there is no session to end.
+        if (flow.settled || flow.fallback) return
+        return transport.end()
+      })
+      .catch((err: unknown) => failFlow(flow, reasonOf(String((err as Error)?.message ?? err))))
     flow.doneTimer = setTimeout(() => {
       if (flow.settled || flow.fallback || !flow.ended) return
       // No `transcript.done` after `audio.done`: this sentence goes to batch,
@@ -548,7 +632,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
   function onSegmentCancel(event: SegmentAudio): void {
     const flow = flows.get(event.sequence)
     if (!flow) return
-    if (flow.streamable && !flow.settled) transport.cancel()
+    if (flow.opened && !flow.settled) transport.cancel()
     settle(flow)
   }
 
@@ -739,7 +823,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
        * other half of `finish`, which lets those sentences come back.
        */
       for (const flow of flows.values()) {
-        if (flow.streamable && !flow.settled) transport.cancel()
+        if (flow.opened && !flow.settled) transport.cancel()
         settle(flow)
       }
       micCapture.stop()

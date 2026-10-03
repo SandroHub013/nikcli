@@ -904,6 +904,26 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     return (request) => plan.call(host, { ...request, engine, ...(speed ? { speed } : {}) })
   }
 
+  /**
+   * What the streaming socket asks the model to hear as written: the user's
+   * custom words and the wake word, deduped and bounded the way the local
+   * runtime bounds them (at most 100 words of at most 50 characters each).
+   */
+  function streamKeyterms(s: VoiceSettings): string[] {
+    const seen = new Set<string>()
+    const keyterms: string[] = []
+    for (const word of [...(s.customWords ?? []), s.wakeWord]) {
+      const clean = word.trim()
+      if (!clean || clean.length > 50) continue
+      const key = clean.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      keyterms.push(clean)
+      if (keyterms.length >= 100) break
+    }
+    return keyterms
+  }
+
   function resolveTranscriber(s: VoiceSettings): Transcriber {
     if (hasOverriddenTranscriber && options.transcriber) {
       return options.transcriber
@@ -973,6 +993,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           },
         },
       },
+      grokStreamOptions: options.backendOptions?.grokStreamOptions
+        ? { ...options.backendOptions.grokStreamOptions, keyterms: streamKeyterms(s) }
+        : undefined,
     })
   }
 

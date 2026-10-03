@@ -157,11 +157,34 @@ describe("asr/grok-stream streaming", () => {
     expect(h.transcriber.hasInFlight).toBe(false)
   })
 
+  test("one session at a time: the next socket opens only after the previous one closed", async () => {
+    const h = setup()
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    expect(h.opens).toHaveLength(1)
+
+    h.endSeg(1)
+    h.close(1, 1_000)
+    h.startSeg(2)
+    await h.tick()
+    // Session 1 has not closed yet: segment 2 waits its turn in the chain.
+    expect(h.opens).toHaveLength(1)
+
+    h.emit({ kind: "done", text: "prima frase" })
+    await h.tick()
+    expect(h.opens).toHaveLength(2)
+    expect(h.finals.map((event) => event.text)).toEqual(["prima frase"])
+  })
+
   test("composes the sentence from the pieces when the service settles on no text", async () => {
     const h = setup()
     await h.transcriber.start()
 
     h.startSeg(1)
+    // The socket opens behind the one-session chain: a microtask, then it hears.
+    await h.tick()
     h.emit({ kind: "partial", text: "prima frase", isFinal: true, speechFinal: true })
     h.emit({ kind: "partial", text: "seconda", isFinal: true, speechFinal: false })
     h.endSeg(1)
@@ -177,6 +200,7 @@ describe("asr/grok-stream streaming", () => {
     await h.transcriber.start()
 
     h.startSeg(1)
+    await h.tick()
     h.emit({ kind: "partial", text: "forse questo", isFinal: false, speechFinal: false })
     h.endSeg(1)
     h.close(1, 1_000)
@@ -184,6 +208,7 @@ describe("asr/grok-stream streaming", () => {
     expect(h.finals.map((event) => event.text)).toEqual(["forse questo"])
 
     h.startSeg(2)
+    await h.tick()
     h.endSeg(2)
     h.close(2, 1_000)
     h.emit({ kind: "done", text: "" })

@@ -39,6 +39,7 @@ import { belongsTo, goneFolder, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
+import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -5319,6 +5320,9 @@ export function Workbench() {
   const voiceEngine = createVoiceEngine({
     host: voiceHost,
     settings: voiceSettings(),
+    // The socket the streaming backend speaks over: built here, over the Rust
+    // host, and handed to whichever backend the settings chose.
+    backendOptions: { grokStreamOptions: { transport: createSttStreamTransport() } },
     // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
     onDictationTap: () =>
       report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
