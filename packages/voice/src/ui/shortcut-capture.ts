@@ -8,6 +8,7 @@
 import {
   describeChordRisk,
   isSystemChord,
+  isWindowsRuntime,
   describeCommandId,
   findVoiceShortcutConflicts,
   describeShortcut,
@@ -173,6 +174,7 @@ export function checkShortcutConflict(
   currentSettings: VoiceSettings,
   existingBindings: readonly Binding[] = [],
   platform: Platform = "other",
+  windows: boolean = isWindowsRuntime(),
 ): ConflictCheckResult {
   const risk = describeChordRisk(proposedChord, platform)
   if (risk.level === "refuse") {
@@ -181,8 +183,8 @@ export function checkShortcutConflict(
       message: risk.message ?? t("vui.shortcut.invalid"),
     }
   }
-  // Refused here rather than accepted and then refused by the system, or registered on another key.
-  if (!isSystemChord(proposedChord, platform)) {
+  // Refused here rather than accepted and then refused by the system, or registered on another key: only where the system has that limit.
+  if (!isSystemChord(proposedChord, windows)) {
     return { hasConflict: true, message: t("vui.shortcut.notSystem") }
   }
 
