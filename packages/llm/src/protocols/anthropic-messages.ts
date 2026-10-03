@@ -96,7 +96,11 @@ const AnthropicImageBlock = Schema.Struct({
 
 const AnthropicDocumentBlock = Schema.Struct({
   type: Schema.tag("document"),
-  source: Schema.Struct({ type: Schema.tag("base64"), media_type: Schema.Literal("application/pdf"), data: Schema.String }),
+  source: Schema.Struct({
+    type: Schema.tag("base64"),
+    media_type: Schema.Literal("application/pdf"),
+    data: Schema.String,
+  }),
   title: Schema.optional(Schema.String),
   cache_control: Schema.optional(AnthropicCacheControl),
 })

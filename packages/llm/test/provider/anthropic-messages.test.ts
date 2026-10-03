@@ -400,7 +400,9 @@ describe("Anthropic Messages route", () => {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
             const beta = (web.headers.get("anthropic-beta") ?? "").split(",").sort()
             expect(beta).toEqual(["effort-2025-11-24", "interleaved-thinking-2025-05-14"])
-            return input.respond(sseEvents({ type: "message_stop" }), { headers: { "content-type": "text/event-stream" } })
+            return input.respond(sseEvents({ type: "message_stop" }), {
+              headers: { "content-type": "text/event-stream" },
+            })
           }),
         ),
       ),
@@ -408,15 +410,15 @@ describe("Anthropic Messages route", () => {
   )
 
   it.effect("adds only the effort beta when the deployment sets none", () =>
-    LLMClient.generate(
-      LLM.request({ model, prompt: "think", providerOptions: { anthropic: { effort: "low" } } }),
-    ).pipe(
+    LLMClient.generate(LLM.request({ model, prompt: "think", providerOptions: { anthropic: { effort: "low" } } })).pipe(
       Effect.provide(
         dynamicResponse((input) =>
           Effect.gen(function* () {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
             expect(web.headers.get("anthropic-beta")).toBe("effort-2025-11-24")
-            return input.respond(sseEvents({ type: "message_stop" }), { headers: { "content-type": "text/event-stream" } })
+            return input.respond(sseEvents({ type: "message_stop" }), {
+              headers: { "content-type": "text/event-stream" },
+            })
           }),
         ),
       ),
@@ -443,7 +445,11 @@ describe("Anthropic Messages route", () => {
           role: "user",
           content: [
             { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
-            { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AQID" }, title: "a.pdf" },
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: "AQID" },
+              title: "a.pdf",
+            },
           ],
         },
       ])

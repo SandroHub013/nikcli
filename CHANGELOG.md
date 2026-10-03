@@ -3,6 +3,19 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.425.0 (October 2026)
+
+## Core
+
+- Make native @nikcli-ai/llm streaming the default; isolate the AI SDK (@nikomatt69)
+- Media input, adaptive thinking, fetch override; drop the ai dependency (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(llm): media input, adaptive thinking, fetch override; drop the ai dependency
+  - feat(session): make native @nikcli-ai/llm streaming the default; isolate the AI SDK
+
 ## v1.424.0 (October 2026)
 
 ## Core

@@ -552,7 +552,9 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model,
           prompt: "hi",
-          providerOptions: { openai: { instructions: "Be brief.", reasoningEffort: "low", reasoningSummary: "detailed" } },
+          providerOptions: {
+            openai: { instructions: "Be brief.", reasoningEffort: "low", reasoningSummary: "detailed" },
+          },
         }),
       )
 

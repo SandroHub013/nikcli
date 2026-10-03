@@ -230,7 +230,12 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           id: "req_reasoning",
           model,
-          messages: [LLM.assistant([{ type: "reasoning", text: "hidden" }, { type: "text", text: "visible" }])],
+          messages: [
+            LLM.assistant([
+              { type: "reasoning", text: "hidden" },
+              { type: "text", text: "visible" },
+            ]),
+          ],
         }),
       )
 
