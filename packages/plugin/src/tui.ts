@@ -12,139 +12,139 @@ import type {
   SessionStatus,
   Workspace,
   Config as SdkConfig,
-} from "@nikcli-ai/sdk/httpapi"
-import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
-import type { JSX, SolidPlugin } from "@opentui/solid"
-import type { Store } from "solid-js/store"
-import type { Config as PluginConfig, PluginOptions } from "./index.js"
-import type { Data as TuiV2Data } from "./v2/tui/context.js"
+} from "@nikcli-ai/sdk/httpapi";
+import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core";
+import type { JSX, SolidPlugin } from "@opentui/solid";
+import type { Store } from "solid-js/store";
+import type { Config as PluginConfig, PluginOptions } from "./index.js";
+import type { Data as TuiV2Data } from "./v2/tui/context.js";
 
-export type { CliRenderer, SlotMode } from "@opentui/core"
+export type { CliRenderer, RGBA, SlotMode } from "@opentui/core";
 
 export type TuiRouteCurrent =
   | {
-      name: "home"
+      name: "home";
     }
   | {
-      name: "session"
+      name: "session";
       params: {
-        sessionID: string
-        initialPrompt?: unknown
+        sessionID: string;
+        initialPrompt?: unknown;
         /** The workspace the session route was opened in, when it names one. */
-        workspaceID?: string
-      }
+        workspaceID?: string;
+      };
     }
   | {
-      name: string
-      params?: Record<string, unknown>
-    }
+      name: string;
+      params?: Record<string, unknown>;
+    };
 
 export type TuiRouteDefinition = {
-  name: string
-  render: (input: { params?: Record<string, unknown> }) => JSX.Element
-}
+  name: string;
+  render: (input: { params?: Record<string, unknown> }) => JSX.Element;
+};
 
 export type TuiCommand = {
-  title: string
-  value: string
-  description?: string
-  category?: string
-  keybind?: string
-  suggested?: boolean
-  hidden?: boolean
-  enabled?: boolean
+  title: string;
+  value: string;
+  description?: string;
+  category?: string;
+  keybind?: string;
+  suggested?: boolean;
+  hidden?: boolean;
+  enabled?: boolean;
   slash?: {
-    name: string
-    aliases?: string[]
+    name: string;
+    aliases?: string[];
     /** `/name <text>` passes `<text>` to `onArguments` instead of selecting. */
-    arguments?: boolean
-  }
-  onSelect?: () => void
-  onArguments?: (input: string) => void
-}
+    arguments?: boolean;
+  };
+  onSelect?: () => void;
+  onArguments?: (input: string) => void;
+};
 
 export type TuiKeymapCommand = {
   /** Unique command id, e.g. "plugin.command". Dispatchable via keymap.dispatchCommand. */
-  name: string
-  title: string
-  description?: string
+  name: string;
+  title: string;
+  description?: string;
   /** Command palette category. */
-  namespace?: string
+  namespace?: string;
   /** Registers the command as /<slashName>. */
-  slashName?: string
-  slashAliases?: string[]
+  slashName?: string;
+  slashAliases?: string[];
   /**
    * `/<slashName> <text>` runs the command with `<text>` as `input`, and
    * autocomplete completes the name instead of running it. The palette and
    * key bindings still call `run()` with no input.
    */
-  slashArguments?: boolean
-  suggested?: boolean
-  hidden?: boolean
-  enabled?: boolean
-  run: (input?: string) => void
-}
+  slashArguments?: boolean;
+  suggested?: boolean;
+  hidden?: boolean;
+  enabled?: boolean;
+  run: (input?: string) => void;
+};
 
 export type TuiKeymapBinding = {
   /** Key syntax, including layered sequences like "<leader>x". */
-  key: string
+  key: string;
   /** Command name to dispatch, or an inline handler. */
-  cmd: string | (() => void)
-  description?: string
-}
+  cmd: string | (() => void);
+  description?: string;
+};
 
 export type TuiKeymapLayer = {
-  commands?: TuiKeymapCommand[] | (() => TuiKeymapCommand[])
-  bindings?: TuiKeymapBinding[] | (() => TuiKeymapBinding[])
-}
+  commands?: TuiKeymapCommand[] | (() => TuiKeymapCommand[]);
+  bindings?: TuiKeymapBinding[] | (() => TuiKeymapBinding[]);
+};
 
 export type TuiKeymapApi = {
   /** Registers commands and key bindings as one disposable layer. Returns unregister. */
-  registerLayer: (layer: TuiKeymapLayer | (() => TuiKeymapLayer)) => () => void
+  registerLayer: (layer: TuiKeymapLayer | (() => TuiKeymapLayer)) => () => void;
   /** Runs a command by name. "command.palette.show" opens the host command palette. */
-  dispatchCommand: (name: string) => void
-}
+  dispatchCommand: (name: string) => void;
+};
 
 export type TuiKeybind = {
-  name: string
-  ctrl: boolean
-  meta: boolean
-  shift: boolean
-  super?: boolean
-  leader: boolean
-}
+  name: string;
+  ctrl: boolean;
+  meta: boolean;
+  shift: boolean;
+  super?: boolean;
+  leader: boolean;
+};
 
-export type TuiKeybindMap = Record<string, string>
+export type TuiKeybindMap = Record<string, string>;
 
 export type TuiKeybindSet = {
-  readonly all: TuiKeybindMap
-  get: (name: string) => string
-  match: (name: string, evt: ParsedKey) => boolean
-  print: (name: string) => string
-}
+  readonly all: TuiKeybindMap;
+  get: (name: string) => string;
+  match: (name: string, evt: ParsedKey) => boolean;
+  print: (name: string) => string;
+};
 
 /** Mirrors the host's `DialogSize` in `@nikcli-ai/tui/ui/dialog`. */
-export type TuiDialogSize = "small" | "medium" | "large" | "xlarge" | "full"
+export type TuiDialogSize = "small" | "medium" | "large" | "xlarge" | "full";
 
 export type TuiDialogProps = {
-  size?: TuiDialogSize
-  onClose: () => void
-  children?: JSX.Element
-}
+  size?: TuiDialogSize;
+  onClose: () => void;
+  children?: JSX.Element;
+};
 
 /** One open session tab, as reported to plugins. */
 export type TuiTab = {
-  sessionID: string
-  title: string
+  sessionID: string;
+  title: string;
   /** The tab currently shown. */
-  active: boolean
+  active: boolean;
   /** A turn is running in this tab. */
-  busy: boolean
+  busy: boolean;
   /** Blocked on the user: a permission request or a question is waiting. */
-  attention: boolean
+  attention: boolean;
   /** Finished work this tab has not been looked at since. */
-  unread: boolean
-}
+  unread: boolean;
+};
 
 /**
  * Observe and control the session tab strip.
@@ -154,190 +154,193 @@ export type TuiTab = {
  */
 export type TuiTabsApi = {
   /** Whether the tab strip is available in this TUI. */
-  enabled: () => boolean
-  list: () => ReadonlyArray<TuiTab>
+  enabled: () => boolean;
+  list: () => ReadonlyArray<TuiTab>;
   /** Open a tab for any session, or focus it when already open. */
-  open: (sessionID: string) => void
+  open: (sessionID: string) => void;
   /** Focus an already-open tab. Returns false when that session has no tab. */
-  focus: (sessionID: string) => boolean
+  focus: (sessionID: string) => boolean;
   /** Close a tab. Returns false when that session has no tab. */
-  close: (sessionID: string) => boolean
-}
+  close: (sessionID: string) => boolean;
+};
 
 export type TuiDialogStack = {
-  replace: (render: () => JSX.Element, onClose?: () => void) => void
-  clear: () => void
-  setSize: (size: TuiDialogSize) => void
-  readonly size: TuiDialogSize
-  readonly depth: number
-  readonly open: boolean
-}
+  replace: (render: () => JSX.Element, onClose?: () => void) => void;
+  clear: () => void;
+  setSize: (size: TuiDialogSize) => void;
+  readonly size: TuiDialogSize;
+  readonly depth: number;
+  readonly open: boolean;
+};
 
 export type TuiDialogAlertProps = {
-  title: string
-  message: string
-  onConfirm?: () => void
-}
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+};
 
 export type TuiDialogConfirmProps = {
-  title: string
-  message: string
-  onConfirm?: () => void
-  onCancel?: () => void
-}
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+};
 
 export type TuiDialogPromptProps = {
-  title: string
-  description?: () => JSX.Element
-  placeholder?: string
-  value?: string
-  busy?: boolean
-  busyText?: string
-  onConfirm?: (value: string) => void
-  onCancel?: () => void
-}
+  title: string;
+  description?: () => JSX.Element;
+  placeholder?: string;
+  value?: string;
+  busy?: boolean;
+  busyText?: string;
+  onConfirm?: (value: string) => void;
+  onCancel?: () => void;
+};
 
 export type TuiDialogSelectOption<Value = unknown> = {
-  title: string
-  value: Value
-  description?: string
-  footer?: JSX.Element | string
-  category?: string
-  disabled?: boolean
-  onSelect?: () => void
-}
+  title: string;
+  value: Value;
+  description?: string;
+  footer?: JSX.Element | string;
+  category?: string;
+  disabled?: boolean;
+  onSelect?: () => void;
+};
 
 export type TuiDialogSelectProps<Value = unknown> = {
-  title: string
-  placeholder?: string
-  options: TuiDialogSelectOption<Value>[]
-  flat?: boolean
-  onMove?: (option: TuiDialogSelectOption<Value>) => void
-  onFilter?: (query: string) => void
-  onSelect?: (option: TuiDialogSelectOption<Value>) => void
-  skipFilter?: boolean
-  current?: Value
-}
+  title: string;
+  placeholder?: string;
+  options: TuiDialogSelectOption<Value>[];
+  flat?: boolean;
+  onMove?: (option: TuiDialogSelectOption<Value>) => void;
+  onFilter?: (query: string) => void;
+  onSelect?: (option: TuiDialogSelectOption<Value>) => void;
+  skipFilter?: boolean;
+  current?: Value;
+};
 
 export type TuiToast = {
-  variant?: "info" | "success" | "warning" | "error"
-  title?: string
-  message: string
-  duration?: number
-}
+  variant?: "info" | "success" | "warning" | "error";
+  title?: string;
+  message: string;
+  duration?: number;
+};
 
 export type TuiThemeStatusPair = {
-  readonly fg: RGBA
-  readonly bg: RGBA
-}
+  readonly fg: RGBA;
+  readonly bg: RGBA;
+};
 
 export type TuiThemeCurrent = {
-  readonly primary: RGBA
-  readonly secondary: RGBA
+  readonly primary: RGBA;
+  readonly secondary: RGBA;
   readonly accent: {
-    readonly fg: RGBA
-    readonly bg: RGBA
-    readonly border: RGBA
-    readonly alt: RGBA
-    readonly secondary: RGBA
-  }
-  readonly error: RGBA
-  readonly warning: RGBA
-  readonly success: RGBA
-  readonly info: RGBA
-  readonly text: RGBA
-  readonly textMuted: RGBA
-  readonly selectedListItemText: RGBA
-  readonly background: RGBA
-  readonly backgroundPanel: RGBA
-  readonly backgroundElement: RGBA
-  readonly backgroundMenu: RGBA
+    readonly fg: RGBA;
+    readonly bg: RGBA;
+    readonly border: RGBA;
+    readonly alt: RGBA;
+    readonly secondary: RGBA;
+  };
+  readonly error: RGBA;
+  readonly warning: RGBA;
+  readonly success: RGBA;
+  readonly info: RGBA;
+  readonly text: RGBA;
+  readonly textMuted: RGBA;
+  readonly selectedListItemText: RGBA;
+  readonly background: RGBA;
+  readonly backgroundPanel: RGBA;
+  readonly backgroundElement: RGBA;
+  readonly backgroundMenu: RGBA;
   readonly border: {
-    readonly default: RGBA
-    readonly subtle: RGBA
-    readonly active: RGBA
-    readonly focus: RGBA
-  }
-  readonly borderActive: RGBA
-  readonly borderSubtle: RGBA
-  readonly diffAdded: RGBA
-  readonly diffRemoved: RGBA
-  readonly diffContext: RGBA
-  readonly diffHunkHeader: RGBA
-  readonly diffHighlightAdded: RGBA
-  readonly diffHighlightRemoved: RGBA
-  readonly diffAddedBg: RGBA
-  readonly diffRemovedBg: RGBA
-  readonly diffContextBg: RGBA
-  readonly diffLineNumber: RGBA
-  readonly diffAddedLineNumberBg: RGBA
-  readonly diffRemovedLineNumberBg: RGBA
-  readonly markdownText: RGBA
-  readonly markdownHeading: RGBA
-  readonly markdownLink: RGBA
-  readonly markdownLinkText: RGBA
-  readonly markdownCode: RGBA
-  readonly markdownBlockQuote: RGBA
-  readonly markdownEmph: RGBA
-  readonly markdownStrong: RGBA
-  readonly markdownHorizontalRule: RGBA
-  readonly markdownListItem: RGBA
-  readonly markdownListEnumeration: RGBA
-  readonly markdownImage: RGBA
-  readonly markdownImageText: RGBA
-  readonly markdownCodeBlock: RGBA
-  readonly syntaxComment: RGBA
-  readonly syntaxKeyword: RGBA
-  readonly syntaxFunction: RGBA
-  readonly syntaxVariable: RGBA
-  readonly syntaxString: RGBA
-  readonly syntaxNumber: RGBA
-  readonly syntaxType: RGBA
-  readonly syntaxOperator: RGBA
-  readonly syntaxPunctuation: RGBA
-  readonly thinkingOpacity: number
+    readonly default: RGBA;
+    readonly subtle: RGBA;
+    readonly active: RGBA;
+    readonly focus: RGBA;
+  };
+  readonly borderActive: RGBA;
+  readonly borderSubtle: RGBA;
+  readonly diffAdded: RGBA;
+  readonly diffRemoved: RGBA;
+  readonly diffContext: RGBA;
+  readonly diffHunkHeader: RGBA;
+  readonly diffHighlightAdded: RGBA;
+  readonly diffHighlightRemoved: RGBA;
+  readonly diffAddedBg: RGBA;
+  readonly diffRemovedBg: RGBA;
+  readonly diffContextBg: RGBA;
+  readonly diffLineNumber: RGBA;
+  readonly diffAddedLineNumberBg: RGBA;
+  readonly diffRemovedLineNumberBg: RGBA;
+  readonly markdownText: RGBA;
+  readonly markdownHeading: RGBA;
+  readonly markdownLink: RGBA;
+  readonly markdownLinkText: RGBA;
+  readonly markdownCode: RGBA;
+  readonly markdownBlockQuote: RGBA;
+  readonly markdownEmph: RGBA;
+  readonly markdownStrong: RGBA;
+  readonly markdownHorizontalRule: RGBA;
+  readonly markdownListItem: RGBA;
+  readonly markdownListEnumeration: RGBA;
+  readonly markdownImage: RGBA;
+  readonly markdownImageText: RGBA;
+  readonly markdownCodeBlock: RGBA;
+  readonly syntaxComment: RGBA;
+  readonly syntaxKeyword: RGBA;
+  readonly syntaxFunction: RGBA;
+  readonly syntaxVariable: RGBA;
+  readonly syntaxString: RGBA;
+  readonly syntaxNumber: RGBA;
+  readonly syntaxType: RGBA;
+  readonly syntaxOperator: RGBA;
+  readonly syntaxPunctuation: RGBA;
+  readonly thinkingOpacity: number;
   readonly surface: {
-    readonly base: RGBA
-    readonly panel: RGBA
-    readonly offset: RGBA
-    readonly overlay: RGBA
-  }
+    readonly base: RGBA;
+    readonly panel: RGBA;
+    readonly offset: RGBA;
+    readonly overlay: RGBA;
+  };
   readonly foreground: {
-    readonly default: RGBA
-    readonly muted: RGBA
-    readonly subtle: RGBA
-  }
+    readonly default: RGBA;
+    readonly muted: RGBA;
+    readonly subtle: RGBA;
+  };
   readonly status: {
-    readonly error: TuiThemeStatusPair
-    readonly warning: TuiThemeStatusPair
-    readonly success: TuiThemeStatusPair
-    readonly info: TuiThemeStatusPair
-  }
-  readonly badge: TuiThemeStatusPair
-}
+    readonly error: TuiThemeStatusPair;
+    readonly warning: TuiThemeStatusPair;
+    readonly success: TuiThemeStatusPair;
+    readonly info: TuiThemeStatusPair;
+  };
+  readonly badge: TuiThemeStatusPair;
+};
 
 export type TuiTheme = {
-  readonly current: TuiThemeCurrent
-  readonly selected: string
-  has: (name: string) => boolean
-  set: (name: string) => void
-  install: (jsonPath: string) => Promise<void>
-  mode: () => "dark" | "light"
-  readonly ready: boolean
-}
+  readonly current: TuiThemeCurrent;
+  readonly selected: string;
+  has: (name: string) => boolean;
+  set: (name: string) => void;
+  install: (jsonPath: string) => Promise<void>;
+  mode: () => "dark" | "light";
+  readonly ready: boolean;
+};
 
 export type TuiKV = {
-  get: <Value = unknown>(key: string, fallback?: Value) => Value
-  set: (key: string, value: unknown) => void
-  readonly ready: boolean
-}
+  get: <Value = unknown>(key: string, fallback?: Value) => Value;
+  set: (key: string, value: unknown) => void;
+  readonly ready: boolean;
+};
 
-export type TuiMemoryEntry<Value extends object> = readonly [Store<Value>, (mutation: (draft: Value) => void) => void]
+export type TuiMemoryEntry<Value extends object> = readonly [
+  Store<Value>,
+  (mutation: (draft: Value) => void) => void,
+];
 
 export type TuiStoreEntry<Value extends object> = readonly [
   Store<Value>,
   (mutation: (draft: Value) => void) => Promise<void>,
-]
+];
 
 export type TuiStorage = {
   /**
@@ -345,7 +348,10 @@ export type TuiStorage = {
    * reloads and TUI restarts, and stays in sync across running TUI instances.
    * Values must be JSON-serializable; updates resolve once written.
    */
-  store: <Value extends object>(key: string, options: { readonly initial: Value }) => TuiStoreEntry<Value>
+  store: <Value extends object>(
+    key: string,
+    options: { readonly initial: Value },
+  ) => TuiStoreEntry<Value>;
   /**
    * Ephemeral in-process state, keyed per plugin. Entries live above the plugin
    * lifecycle, so a hot reload hands the same live store to the new generation
@@ -353,46 +359,52 @@ export type TuiStorage = {
    * synchronous, values need not be JSON-serializable, and everything is gone
    * when the TUI exits. Use `api.kv` for state that must outlive the process.
    */
-  memory: <Value extends object>(key: string, options: { readonly initial: Value }) => TuiMemoryEntry<Value>
-}
+  memory: <Value extends object>(
+    key: string,
+    options: { readonly initial: Value },
+  ) => TuiMemoryEntry<Value>;
+};
 
 export type TuiState = {
-  readonly ready: boolean
-  readonly config: SdkConfig
-  readonly provider: ReadonlyArray<Provider>
+  readonly ready: boolean;
+  readonly config: SdkConfig;
+  readonly provider: ReadonlyArray<Provider>;
   readonly path: {
-    state: string
-    config: string
-    worktree: string
-    directory: string
-  }
-  readonly vcs: { branch?: string } | undefined
+    state: string;
+    config: string;
+    worktree: string;
+    directory: string;
+  };
+  readonly vcs: { branch?: string } | undefined;
   readonly workspace: {
-    list: () => ReadonlyArray<Workspace>
-    get: (workspaceID: string) => Workspace | undefined
-  }
+    list: () => ReadonlyArray<Workspace>;
+    get: (workspaceID: string) => Workspace | undefined;
+  };
   session: {
-    count: () => number
-    diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
-    todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
-    messages: (sessionID: string) => ReadonlyArray<Message>
-    status: (sessionID: string) => SessionStatus | undefined
-    permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
-    question: (sessionID: string) => ReadonlyArray<QuestionRequest>
-  }
-  part: (messageID: string) => ReadonlyArray<Part>
-  lsp: () => ReadonlyArray<TuiSidebarLspItem>
-  mcp: () => ReadonlyArray<TuiSidebarMcpItem>
-}
+    count: () => number;
+    diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>;
+    todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>;
+    messages: (sessionID: string) => ReadonlyArray<Message>;
+    status: (sessionID: string) => SessionStatus | undefined;
+    permission: (sessionID: string) => ReadonlyArray<PermissionRequest>;
+    question: (sessionID: string) => ReadonlyArray<QuestionRequest>;
+  };
+  part: (messageID: string) => ReadonlyArray<Part>;
+  lsp: () => ReadonlyArray<TuiSidebarLspItem>;
+  mcp: () => ReadonlyArray<TuiSidebarMcpItem>;
+};
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
+type TuiConfigView = Pick<
+  PluginConfig,
+  "$schema" | "theme" | "keybinds" | "plugin"
+> &
   NonNullable<PluginConfig["tui"]> & {
-    plugin_enabled?: Record<string, boolean>
-  }
+    plugin_enabled?: Record<string, boolean>;
+  };
 
 export type TuiApp = {
-  readonly version: string
-}
+  readonly version: string;
+};
 
 type Frozen<Value> = Value extends (...args: never[]) => unknown
   ? Value
@@ -400,193 +412,280 @@ type Frozen<Value> = Value extends (...args: never[]) => unknown
     ? ReadonlyArray<Frozen<Item>>
     : Value extends object
       ? { readonly [Key in keyof Value]: Frozen<Value[Key]> }
-      : Value
+      : Value;
 
 export type TuiSidebarMcpItem = {
-  name: string
-  status: McpStatus["status"]
-  error?: string
-}
+  name: string;
+  status: McpStatus["status"];
+  error?: string;
+};
 
-export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
+export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">;
 
-export type TuiSidebarTodoItem = Pick<Todo, "content" | "status">
+export type TuiSidebarTodoItem = Pick<Todo, "content" | "status">;
 
 export type TuiSidebarFileItem = {
-  file: string
-  additions: number
-  deletions: number
-}
+  file: string;
+  additions: number;
+  deletions: number;
+};
 
 export type TuiSlotMap = {
-  app: {}
-  home_logo: {}
-  home_bottom: {}
+  app: {};
+  /**
+   * Behind the whole interface, inside the app box.
+   *
+   * The host mounts it inside a zero-size absolute box, as the app box's first
+   * child: a plugin's node is positioned against the app box's top-left corner
+   * and paints after the app's own background but before every UI sibling. It
+   * is the only place a plugin can draw something the interface does not cover
+   * — a node added to `renderer.root` instead sits behind the opaque app box
+   * and is never seen.
+   */
+  backdrop: {};
+  home_logo: {};
+  home_bottom: {};
   sidebar_title: {
-    session_id: string
-    title: string
-    share_url?: string
-  }
+    session_id: string;
+    title: string;
+    share_url?: string;
+  };
   sidebar_content: {
-    session_id: string
-  }
+    session_id: string;
+  };
   sidebar_footer: {
-    session_id: string
-  }
+    session_id: string;
+  };
   /** V2 plugin slots. Dotted names intentionally do not collide with v1 slots. */
-  "app.bottom": {}
-  "home.bottom": {}
-  "home.footer": {}
+  "app.bottom": {};
+  "home.bottom": {};
+  "home.footer": {};
   "session.prompt.top": {
-    sessionID: string
-  }
+    sessionID: string;
+  };
   /**
    * The prompt's footer row (voice/web chips, shortcut hints, editor context).
    * Rendered in `replace` mode: a plugin that registers it owns the whole row,
    * and the built-in footer is what renders when none does.
    */
   "prompt.footer": {
-    sessionID?: string
+    sessionID?: string;
     /** Named `promptMode` because `mode` is the slot's own render mode. */
-    promptMode: "normal" | "shell"
-    busy: boolean
-  }
+    promptMode: "normal" | "shell";
+    busy: boolean;
+  };
   "sidebar.content": {
-    sessionID: string
-  }
+    sessionID: string;
+  };
   "sidebar.footer": {
-    sessionID: string
-  }
-}
+    sessionID: string;
+  };
+};
 
 export type TuiSlotContext = {
-  theme: TuiTheme
-}
+  theme: TuiTheme;
+};
 
-type SlotCore = SolidPlugin<TuiSlotMap, TuiSlotContext>
+type SlotCore = SolidPlugin<TuiSlotMap, TuiSlotContext>;
 
 export type TuiSlotPlugin = Omit<SlotCore, "id"> & {
-  id?: never
-}
+  id?: never;
+};
 
 export type TuiSlots = {
-  register: (plugin: TuiSlotPlugin) => string
+  register: (plugin: TuiSlotPlugin) => string;
   /** Host-backed disposable registration used by the v2 compatibility runtime. */
-  registerDisposable: (plugin: TuiSlotPlugin) => () => void
-}
+  registerDisposable: (plugin: TuiSlotPlugin) => () => void;
+};
+
+/**
+ * A Kitty image the terminal now holds, and the cells that composite it.
+ *
+ * The rows are the Kitty Unicode placeholder form: each cell is U+10EEEE plus
+ * the row and column diacritics that address its slice of the image, and every
+ * cell has to be painted with {@link fg} for the terminal to resolve the id.
+ */
+export type TuiKittyPlacement = {
+  readonly id: number;
+  readonly columns: number;
+  readonly rows: number;
+  /** One string per row, to be rendered as a text cell run with {@link fg}. */
+  readonly lines: readonly string[];
+  /**
+   * The 24-bit foreground that addresses {@link id}.
+   *
+   * A real `RGBA`, not a colour triple: the renderer packs the same four
+   * channels the terminal reads back, and the channels are the id.
+   */
+  readonly fg: RGBA;
+  /** Drops the image from the terminal. Idempotent — call it on dispose. */
+  readonly dispose: () => void;
+};
+
+export type TuiGraphicsApi = {
+  /**
+   * Whether the terminal composites Kitty Unicode placeholder placements.
+   *
+   * Narrower than "speaks the Kitty graphics protocol": WezTerm and Warp
+   * implement the classic protocol but not virtual placements, and a placement
+   * is the only grid-safe way to show an image inside a TUI.
+   */
+  readonly kittyPlaceholders: boolean;
+  /**
+   * Transmit a PNG and describe the cells that composite it.
+   *
+   * Nothing is drawn by the transmission itself (`U=1`), so this is safe to
+   * call mid-session, and the terminal scales the image into the
+   * `columns × rows` placement. `path` hands the terminal the file instead of
+   * the bytes — a ~100-byte write whatever the image weighs, at the cost of
+   * the terminal having to be able to read that file.
+   */
+  placeKittyImage(input: {
+    bytes?: Uint8Array;
+    path?: string;
+    columns: number;
+    rows: number;
+  }): TuiKittyPlacement;
+};
 
 export type TuiEventBus = {
-  on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => () => void
-  listen: (handler: (event: { details: Event }) => void) => () => void
-}
+  on: <Type extends Event["type"]>(
+    type: Type,
+    handler: (event: Extract<Event, { type: Type }>) => void,
+  ) => () => void;
+  listen: (handler: (event: { details: Event }) => void) => () => void;
+};
 
-export type TuiDispose = () => void | Promise<void>
+export type TuiDispose = () => void | Promise<void>;
 
 export type TuiLifecycle = {
-  readonly signal: AbortSignal
-  onDispose: (fn: TuiDispose) => () => void
-}
+  readonly signal: AbortSignal;
+  onDispose: (fn: TuiDispose) => () => void;
+};
 
-export type TuiPluginState = "first" | "updated" | "same"
+export type TuiPluginState = "first" | "updated" | "same";
 
 export type TuiPluginEntry = {
-  id: string
-  source: "file" | "npm" | "internal"
-  spec: string
-  target: string
-  requested?: string
-  version?: string
-  modified?: number
-  first_time: number
-  last_time: number
-  time_changed: number
-  load_count: number
-  fingerprint: string
-}
+  id: string;
+  source: "file" | "npm" | "internal";
+  spec: string;
+  target: string;
+  requested?: string;
+  version?: string;
+  modified?: number;
+  first_time: number;
+  last_time: number;
+  time_changed: number;
+  load_count: number;
+  fingerprint: string;
+};
 
 export type TuiPluginMeta = TuiPluginEntry & {
-  state: TuiPluginState
-}
+  state: TuiPluginState;
+};
 
 export type TuiPluginStatus = {
-  id: string
-  source: TuiPluginEntry["source"]
-  spec: string
-  target: string
-  enabled: boolean
-  active: boolean
-}
+  id: string;
+  source: TuiPluginEntry["source"];
+  spec: string;
+  target: string;
+  enabled: boolean;
+  active: boolean;
+};
 
 export type TuiPluginInstallOptions = {
-  global?: boolean
-}
+  global?: boolean;
+};
 
 export type TuiPluginInstallResult =
   | {
-      ok: true
-      dir: string
-      tui: boolean
+      ok: true;
+      dir: string;
+      tui: boolean;
     }
   | {
-      ok: false
-      message: string
-      missing?: boolean
-    }
+      ok: false;
+      message: string;
+      missing?: boolean;
+    };
 
 export type TuiPluginApi = {
-  app: TuiApp
+  app: TuiApp;
   /** @deprecated Use `keymap.registerLayer` / `keymap.dispatchCommand` instead. */
   command: {
-    register: (cb: () => TuiCommand[]) => () => void
-    trigger: (value: string) => void
-    show: () => void
-  }
-  keymap: TuiKeymapApi
+    register: (cb: () => TuiCommand[]) => () => void;
+    trigger: (value: string) => void;
+    show: () => void;
+  };
+  keymap: TuiKeymapApi;
   route: {
-    register: (routes: TuiRouteDefinition[]) => () => void
-    navigate: (name: string, params?: Record<string, unknown>) => void
-    readonly current: TuiRouteCurrent
-  }
+    register: (routes: TuiRouteDefinition[]) => () => void;
+    navigate: (name: string, params?: Record<string, unknown>) => void;
+    readonly current: TuiRouteCurrent;
+  };
   ui: {
-    Dialog: (props: TuiDialogProps) => JSX.Element
-    DialogAlert: (props: TuiDialogAlertProps) => JSX.Element
-    DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
-    DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
-    DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
-    toast: (input: TuiToast) => void
-    dialog: TuiDialogStack
-    tabs: TuiTabsApi
-  }
+    Dialog: (props: TuiDialogProps) => JSX.Element;
+    DialogAlert: (props: TuiDialogAlertProps) => JSX.Element;
+    DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element;
+    DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element;
+    DialogSelect: <Value = unknown>(
+      props: TuiDialogSelectProps<Value>,
+    ) => JSX.Element;
+    toast: (input: TuiToast) => void;
+    dialog: TuiDialogStack;
+    tabs: TuiTabsApi;
+  };
   keybind: {
-    match: (key: string, evt: ParsedKey) => boolean
-    print: (key: string) => string
-    create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
-  }
-  readonly tuiConfig: Frozen<TuiConfigView>
-  kv: TuiKV
-  storage: TuiStorage
-  state: TuiState
+    match: (key: string, evt: ParsedKey) => boolean;
+    print: (key: string) => string;
+    create: (
+      defaults: TuiKeybindMap,
+      overrides?: Record<string, unknown>,
+    ) => TuiKeybindSet;
+  };
+  readonly tuiConfig: Frozen<TuiConfigView>;
+  kv: TuiKV;
+  storage: TuiStorage;
+  state: TuiState;
   /** Full reactive data contract used by v2 TUI plugins. */
-  data: TuiV2Data
-  theme: TuiTheme
-  client: NikcliClient
-  event: TuiEventBus
-  renderer: CliRenderer
-  slots: TuiSlots
+  data: TuiV2Data;
+  theme: TuiTheme;
+  client: NikcliClient;
+  event: TuiEventBus;
+  renderer: CliRenderer;
+  /**
+   * The terminal's own graphics protocols.
+   *
+   * The host owns this because it is the host's business: the terminal's
+   * capabilities were negotiated at startup, the id space of the terminal's
+   * image table belongs to whoever else is placing images, and the encoding is
+   * a 297-entry diacritic table a plugin would have to embed and could not
+   * check. A plugin decides *what* to show and where; the host says how to
+   * reach the terminal.
+   */
+  graphics: TuiGraphicsApi;
+  slots: TuiSlots;
   plugins: {
-    list: () => ReadonlyArray<TuiPluginStatus>
-    activate: (id: string) => Promise<boolean>
-    deactivate: (id: string) => Promise<boolean>
-    add: (spec: string) => Promise<boolean>
-    install: (spec: string, options?: TuiPluginInstallOptions) => Promise<TuiPluginInstallResult>
-  }
-  lifecycle: TuiLifecycle
-}
+    list: () => ReadonlyArray<TuiPluginStatus>;
+    activate: (id: string) => Promise<boolean>;
+    deactivate: (id: string) => Promise<boolean>;
+    add: (spec: string) => Promise<boolean>;
+    install: (
+      spec: string,
+      options?: TuiPluginInstallOptions,
+    ) => Promise<TuiPluginInstallResult>;
+  };
+  lifecycle: TuiLifecycle;
+};
 
-export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
+export type TuiPlugin = (
+  api: TuiPluginApi,
+  options: PluginOptions | undefined,
+  meta: TuiPluginMeta,
+) => Promise<void>;
 
 export type TuiPluginModule = {
-  id?: string
-  tui: TuiPlugin
-  server?: never
-}
+  id?: string;
+  tui: TuiPlugin;
+  server?: never;
+};

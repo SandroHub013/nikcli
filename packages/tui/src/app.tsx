@@ -1,9 +1,14 @@
-import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { CliRenderEvents, createCliRenderer, type CliRenderer, type CliRendererConfig } from "@opentui/core"
-import { Clipboard } from "@tui/util/clipboard"
-import * as Sound from "@tui/util/sound"
-import { UserApi } from "@tui/util/user-api"
-import { RouteProvider, useRoute } from "@tui/context/route"
+import { render, useRenderer, useTerminalDimensions } from "@opentui/solid";
+import {
+  CliRenderEvents,
+  createCliRenderer,
+  type CliRenderer,
+  type CliRendererConfig,
+} from "@opentui/core";
+import { Clipboard } from "@tui/util/clipboard";
+import * as Sound from "@tui/util/sound";
+import { UserApi } from "@tui/util/user-api";
+import { RouteProvider, useRoute } from "@tui/context/route";
 import {
   Switch,
   Match,
@@ -16,89 +21,104 @@ import {
   onCleanup,
   batch,
   on,
-} from "solid-js"
-import { VERSION, type InstallMethod } from "@nikcli-ai/util/version"
-import { Flag } from "@nikcli-ai/util/flag"
-import { DialogProvider, useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
-import { checkUpgradeWhenSubscriptionReady, SDKProvider, useSDK } from "@tui/context/sdk"
-import { ProjectProvider } from "@tui/context/project"
-import { ServerProvider } from "@tui/context/server"
-import { SyncProvider, useSync } from "@tui/context/sync"
-import { RemoteSyncProvider, useRemoteSync } from "@tui/context/remote-sync"
-import { AnalyticsProvider } from "@tui/context/analytics"
-import { TelemetryProvider } from "@tui/context/telemetry"
-import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel, useConnected } from "@tui/component/dialog-model"
-import { DialogStatus } from "@tui/component/dialog-status"
-import { DialogSync } from "@tui/component/dialog-sync"
-import { DialogUsage } from "@tui/component/dialog-usage"
-import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogSettings } from "@tui/component/dialog-settings"
-import { DialogHelp } from "./ui/dialog-help"
-import { DialogTour } from "@tui/component/dialog-tour"
-import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport, openExternal } from "@tui/component/dialog-support"
-import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
-import { DialogPermissionMode } from "@tui/component/dialog-permission-mode"
-import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model"
-import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogSessionWarp } from "@tui/component/dialog-session-warp"
-import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
-import { DialogVariant } from "@tui/component/dialog-variant"
-import { KeybindProvider, useKeybind } from "@tui/context/keybind"
-import { ThemeProvider, useTheme } from "@tui/context/theme"
-import { Home } from "@tui/routes/home"
-import { Session } from "@tui/routes/session"
-import { Workspace } from "@tui/routes/workspace"
-import { PromptHistoryProvider } from "./component/prompt/history"
-import { FrecencyProvider } from "./component/prompt/frecency"
-import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { DialogConfirm } from "./ui/dialog-confirm"
-import { UpgradeProvider, useUpgrade } from "./context/upgrade"
-import { AttentionProvider, useAttention } from "./context/attention"
-import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
-import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
-import { Usage } from "./util/usage"
-import { SessionPrimitives } from "@nikcli-ai/util/session-primitives"
-import { TuiEventName } from "@nikcli-ai/util/tui-event-schema"
-import { KVProvider, useKV } from "./context/kv"
-import { LanguageProvider } from "./context/language"
-import { parseModel } from "@nikcli-ai/util/model"
-import { ArgsProvider, useArgs, type Args } from "./context/args"
-import open from "open"
-import { writeHeapSnapshot } from "v8"
-import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { EditorContextProvider } from "./context/editor"
-import type { TuiConfig } from "@nikcli-ai/sdk/httpapi"
-import { TuiPluginRuntime, createTuiApi, type RouteMap } from "./plugin"
-import { setPluginHost, type TuiPluginHost } from "./plugin/host"
-import { dbg as dbgApp } from "./feature-plugins/background/__debug"
-import { BackgroundImage } from "./feature-plugins/background/view"
-import { DevToolsBar } from "./feature-plugins/devtools/bar"
-import { ErrorComponent } from "./component/error-component"
-import { PluginRouteMissing } from "./component/plugin-route-missing"
-import { PluginRouteBoundary } from "./component/plugin-route-boundary"
-import { Reconnecting } from "./component/reconnecting"
-import { StartupLoading } from "./component/startup-loading"
-import { DialogRestart } from "./component/dialog-restart"
-import { SessionTabs } from "./component/session-tabs"
-import { DialogOnboarding } from "@tui/component/dialog-onboarding"
-import { DialogLogin } from "@tui/component/dialog-login"
-import { DialogAccountLogin } from "@tui/component/dialog-account-login"
-import { DialogProfile } from "@tui/component/dialog-profile"
-import { DialogAuthManage } from "@tui/component/dialog-auth-manage"
-import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants"
-import { DialogWebPreview } from "@tui/component/dialog-web-preview"
-import { SupportSessionProvider } from "@tui/context/support-session"
-import type { StartServerOptions } from "@tui/context/server"
+} from "solid-js";
+import { VERSION, type InstallMethod } from "@nikcli-ai/util/version";
+import { Flag } from "@nikcli-ai/util/flag";
+import { DialogProvider, useDialog } from "@tui/ui/dialog";
+import {
+  DialogProvider as DialogProviderList,
+  DialogProviderDisconnect,
+} from "@tui/component/dialog-provider";
+import {
+  checkUpgradeWhenSubscriptionReady,
+  SDKProvider,
+  useSDK,
+} from "@tui/context/sdk";
+import { ProjectProvider } from "@tui/context/project";
+import { ServerProvider } from "@tui/context/server";
+import { SyncProvider, useSync } from "@tui/context/sync";
+import { RemoteSyncProvider, useRemoteSync } from "@tui/context/remote-sync";
+import { AnalyticsProvider } from "@tui/context/analytics";
+import { TelemetryProvider } from "@tui/context/telemetry";
+import { LocalProvider, useLocal } from "@tui/context/local";
+import { DialogModel, useConnected } from "@tui/component/dialog-model";
+import { DialogStatus } from "@tui/component/dialog-status";
+import { DialogSync } from "@tui/component/dialog-sync";
+import { DialogUsage } from "@tui/component/dialog-usage";
+import { DialogThemeList } from "@tui/component/dialog-theme-list";
+import { DialogSettings } from "@tui/component/dialog-settings";
+import { DialogHelp } from "./ui/dialog-help";
+import { DialogTour } from "@tui/component/dialog-tour";
+import {
+  DialogQuickstartInfo,
+  DialogDoctorInfo,
+  DialogSupport,
+  openExternal,
+} from "@tui/component/dialog-support";
+import {
+  CommandProvider,
+  useCommandDialog,
+} from "@tui/component/dialog-command";
+import { DialogPermissionMode } from "@tui/component/dialog-permission-mode";
+import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model";
+import { DialogSessionList } from "@tui/component/dialog-session-list";
+import { DialogSessionWarp } from "@tui/component/dialog-session-warp";
+import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list";
+import { DialogVariant } from "@tui/component/dialog-variant";
+import { KeybindProvider, useKeybind } from "@tui/context/keybind";
+import { ThemeProvider, useTheme } from "@tui/context/theme";
+import { Home } from "@tui/routes/home";
+import { Session } from "@tui/routes/session";
+import { Workspace } from "@tui/routes/workspace";
+import { PromptHistoryProvider } from "./component/prompt/history";
+import { FrecencyProvider } from "./component/prompt/frecency";
+import { PromptStashProvider } from "./component/prompt/stash";
+import { DialogAlert } from "./ui/dialog-alert";
+import { DialogConfirm } from "./ui/dialog-confirm";
+import { UpgradeProvider, useUpgrade } from "./context/upgrade";
+import { AttentionProvider, useAttention } from "./context/attention";
+import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs";
+import { ToastProvider, useToast } from "./ui/toast";
+import { ExitProvider, useExit } from "./context/exit";
+import { Usage } from "./util/usage";
+import { SessionPrimitives } from "@nikcli-ai/util/session-primitives";
+import { TuiEventName } from "@nikcli-ai/util/tui-event-schema";
+import { KVProvider, useKV } from "./context/kv";
+import { LanguageProvider } from "./context/language";
+import { parseModel } from "@nikcli-ai/util/model";
+import { ArgsProvider, useArgs, type Args } from "./context/args";
+import open from "open";
+import { writeHeapSnapshot } from "v8";
+import { PromptRefProvider, usePromptRef } from "./context/prompt";
+import { EditorContextProvider } from "./context/editor";
+import type { TuiConfig } from "@nikcli-ai/sdk/httpapi";
+import { TuiPluginRuntime, createTuiApi, type RouteMap } from "./plugin";
+import { setPluginHost, type TuiPluginHost } from "./plugin/host";
+import { dbg as dbgApp } from "./feature-plugins/background/__debug";
+import { BackgroundImage } from "./feature-plugins/background/view";
+import { DevToolsBar } from "./feature-plugins/devtools/bar";
+import { ErrorComponent } from "./component/error-component";
+import { PluginRouteMissing } from "./component/plugin-route-missing";
+import { PluginRouteBoundary } from "./component/plugin-route-boundary";
+import { Reconnecting } from "./component/reconnecting";
+import { StartupLoading } from "./component/startup-loading";
+import { DialogRestart } from "./component/dialog-restart";
+import { SessionTabs } from "./component/session-tabs";
+import { DialogOnboarding } from "@tui/component/dialog-onboarding";
+import { DialogLogin } from "@tui/component/dialog-login";
+import { DialogAccountLogin } from "@tui/component/dialog-account-login";
+import { DialogProfile } from "@tui/component/dialog-profile";
+import { DialogAuthManage } from "@tui/component/dialog-auth-manage";
+import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants";
+import { DialogWebPreview } from "@tui/component/dialog-web-preview";
+import { SupportSessionProvider } from "@tui/context/support-session";
+import type { StartServerOptions } from "@tui/context/server";
 import {
   shouldUseRendererThread,
   win32DisableProcessedInput,
   win32InstallCtrlCGuard,
   restoreTerminalState,
-} from "@nikcli-ai/util/win32"
+} from "@nikcli-ai/util/win32";
 
 function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
   return {
@@ -115,18 +135,20 @@ function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
         Clipboard.copy(text).catch((error) => {
-          console.error(`Failed to copy console selection to clipboard: ${error}`)
-        })
+          console.error(
+            `Failed to copy console selection to clipboard: ${error}`,
+          );
+        });
       },
     },
-  }
+  };
 }
 
-import type { EventSource, Transport } from "./context/sdk"
-import { Log } from "@nikcli-ai/util/log"
-import { errorMessage } from "@nikcli-ai/util/error-format"
-import { classifyConfigFailure } from "@tui/util/config-failure"
-import { ensureOnboarded } from "@tui/util/onboarding"
+import type { EventSource, Transport } from "./context/sdk";
+import { Log } from "@nikcli-ai/util/log";
+import { errorMessage } from "@nikcli-ai/util/error-format";
+import { classifyConfigFailure } from "@tui/util/config-failure";
+import { ensureOnboarded } from "@tui/util/onboarding";
 
 /**
  * What an update check found.
@@ -137,22 +159,54 @@ import { ensureOnboarded } from "@tui/util/onboarding"
  * service) while the event stream comes from that service, and the Bus does not cross processes.
  */
 export type UpdateAvailable = {
-  version: string
-  method?: InstallMethod
-  current: string
+  version: string;
+  method?: InstallMethod;
+  current: string;
   /** Install without asking: the user chose "Auto-update" (`autoupdate: true`). */
-  auto?: boolean
+  auto?: boolean;
+};
+
+const log = Log.create({ service: "tui.app" });
+
+/**
+ * Keep a console overlay that cannot be built from ending the session.
+ *
+ * The renderer registers its own error handler as a *process-level*
+ * `uncaughtException` / `unhandledRejection` listener, and that handler opens
+ * the console overlay so the error is readable. The overlay allocates a native
+ * framebuffer, and the native allocator has a fixed budget of 65,536 live
+ * allocations — every buffer, text buffer and node draws from the same pool.
+ * When that budget is spent, `createOptimizedBuffer` returns null and opentui
+ * throws `Failed to create optimized buffer: WxH`: from the renderables, which
+ * catch it (`Renderable.createFrameBuffer`), and from the console, which does
+ * not. A throw inside an uncaught-exception handler is not recoverable, so the
+ * terminal died with `script "dev" exited with code 7` and the whole session
+ * was lost — the overlay, of all things, is what took it down.
+ *
+ * So the cost of a full pool is the overlay and a line in the log. The wrap is
+ * on the instance, not the prototype, and it keeps `show()`'s behaviour for
+ * every caller that can afford it — including the error handler's own.
+ */
+function guardConsoleOverlay(renderer: CliRenderer) {
+  const overlay = renderer.console as { show?: () => void } | undefined;
+  if (!overlay || typeof overlay.show !== "function") return;
+  const open = overlay.show.bind(overlay);
+  overlay.show = () => {
+    try {
+      open();
+    } catch (error) {
+      log.error("failed to open the console overlay", { error });
+    }
+  };
 }
 
-const log = Log.create({ service: "tui.app" })
-
 export function tui(input: {
-  url: string
-  args: Args
-  directory?: string
-  fetch?: typeof fetch
-  events?: EventSource
-  onExit?: () => Promise<void>
+  url: string;
+  args: Args;
+  directory?: string;
+  fetch?: typeof fetch;
+  events?: EventSource;
+  onExit?: () => Promise<void>;
   /**
    * What `/restart` asks of the host: replace the backend, and say where the
    * replacement is.
@@ -164,20 +218,20 @@ export function tui(input: {
    * port, and a new worker is a different RPC peer. Undefined for a client
    * attached to somebody else's server, which has nothing it may restart.
    */
-  onRestart?: () => Promise<Transport>
+  onRestart?: () => Promise<Transport>;
   /**
    * What this host calls the process `/restart` replaces — "background service"
    * for the shared daemon, "server" for the in-process worker. It is the word
    * the restart dialog uses, so a client that has no backend says neither.
    */
-  restartTarget?: string
-  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
-  upgradeNow?: (method: string, version: string) => Promise<void>
+  restartTarget?: string;
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>;
+  upgradeNow?: (method: string, version: string) => Promise<void>;
   /** Persist "Auto-update" (`autoupdate: true` in the global config). */
-  enableAutoUpdate?: () => Promise<void>
+  enableAutoUpdate?: () => Promise<void>;
   /** See `UpgradeProvider`'s `onUpgraded`. */
-  onUpgraded?: () => Promise<Transport | undefined>
-  startServer?: (options?: StartServerOptions) => Promise<string>
+  onUpgraded?: () => Promise<Transport | undefined>;
+  startServer?: (options?: StartServerOptions) => Promise<string>;
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
    *
@@ -185,7 +239,7 @@ export function tui(input: {
    * cannot watch the config surface or install a plugin, and every entry point
    * that starts a TUI is a host file that can supply it.
    */
-  pluginHost: TuiPluginHost
+  pluginHost: TuiPluginHost;
   /**
    * The merged TUI config, already read.
    *
@@ -196,14 +250,14 @@ export function tui(input: {
    * `Rpc.call` posts and waits with no timeout. The host reads it locally and
    * hands it over. Everything after the first frame uses `sdk.client.tui.config()`.
    */
-  tuiConfig?: TuiConfig
+  tuiConfig?: TuiConfig;
 }) {
   // promise to prevent immediate exit
   return new Promise<void>((resolve, reject) => {
     void (async () => {
       try {
-        const unguard = win32InstallCtrlCGuard()
-        win32DisableProcessedInput()
+        const unguard = win32InstallCtrlCGuard();
+        win32DisableProcessedInput();
         // Read locally, and only here.
         //
         // This is the one config read that cannot go over the wire: it feeds `rendererConfig`,
@@ -213,11 +267,12 @@ export function tui(input: {
         // or, over worker RPC, never settles at all: `Rpc.call` posts and waits forever.
         // Everything after the first frame uses `sdk.client.tui.config()`.
         // Installed before anything can reach the plugin runtime.
-        setPluginHost(input.pluginHost)
+        setPluginHost(input.pluginHost);
 
-        const tuiCfg = input.tuiConfig ?? ({} as TuiConfig)
-        const drive = Boolean(process.env.NIKCLI_DRIVE)
-        const headless = drive && process.env.NIKCLI_DRIVE_RENDERER === "headless"
+        const tuiCfg = input.tuiConfig ?? ({} as TuiConfig);
+        const drive = Boolean(process.env.NIKCLI_DRIVE);
+        const headless =
+          drive && process.env.NIKCLI_DRIVE_RENDERER === "headless";
         // In drive mode the renderer must still be built from *this* package's
         // `@opentui/core`, so hand the simulation package our constructors: the
         // renderer's class identity is what `render(node, renderer)` below checks
@@ -227,31 +282,46 @@ export function tui(input: {
               await import("@nikcli-ai/simulation/frontend")
             ).Drive.create(rendererConfig(tuiCfg), {
               createCliRenderer,
-              createTestRenderer: (await import("@opentui/core/testing")).createTestRenderer,
+              createTestRenderer: (await import("@opentui/core/testing"))
+                .createTestRenderer,
             })
-          : await createCliRenderer(rendererConfig(tuiCfg))
+          : await createCliRenderer(rendererConfig(tuiCfg));
         // Dozens of components subscribe to renderer events (`useTerminalDimensions`
         // alone is used in 32 files) and to key events (`useKeyboard`), all of which
         // unsubscribe on cleanup. That is well past EventEmitter's default cap of 10,
         // so without this bun prints a MaxListenersExceededWarning straight over the
         // first frame — once for the renderer, once for its key handler.
-        renderer.setMaxListeners(200)
-        renderer.keyInput.setMaxListeners(200)
-        if (!headless) void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = headless ? "dark" : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark")
+        renderer.setMaxListeners(200);
+        renderer.keyInput.setMaxListeners(200);
+        guardConsoleOverlay(renderer);
+        if (!headless)
+          void renderer.getPalette({ size: 16 }).catch(() => undefined);
+        const mode = headless
+          ? "dark"
+          : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark");
         const onExit = async () => {
-          unguard?.()
-          await input.onExit?.()
-          resolve()
-        }
+          unguard?.();
+          await input.onExit?.();
+          resolve();
+        };
 
         await render(() => {
           return (
             <ErrorBoundary
-              fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+              fallback={(error, reset) => (
+                <ErrorComponent
+                  error={error}
+                  reset={reset}
+                  onExit={onExit}
+                  mode={mode}
+                />
+              )}
             >
               <ArgsProvider {...input.args}>
-                <ExitProvider onExit={onExit} onBeforeExit={() => TuiPluginRuntime.dispose()}>
+                <ExitProvider
+                  onExit={onExit}
+                  onBeforeExit={() => TuiPluginRuntime.dispose()}
+                >
                   <ServerProvider startServer={input.startServer}>
                     <KVProvider>
                       <ToastProvider>
@@ -280,16 +350,32 @@ export function tui(input: {
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
                                                               <UpgradeProvider
-                                                                upgradeNow={input.upgradeNow}
-                                                                enableAutoUpdate={input.enableAutoUpdate}
-                                                                onUpgraded={input.onUpgraded}
+                                                                upgradeNow={
+                                                                  input.upgradeNow
+                                                                }
+                                                                enableAutoUpdate={
+                                                                  input.enableAutoUpdate
+                                                                }
+                                                                onUpgraded={
+                                                                  input.onUpgraded
+                                                                }
                                                               >
-                                                                <AttentionProvider renderer={renderer}>
+                                                                <AttentionProvider
+                                                                  renderer={
+                                                                    renderer
+                                                                  }
+                                                                >
                                                                   <SessionTabsProvider>
                                                                     <App
-                                                                      checkUpgrade={input.checkUpgrade}
-                                                                      onRestart={input.onRestart}
-                                                                      restartTarget={input.restartTarget}
+                                                                      checkUpgrade={
+                                                                        input.checkUpgrade
+                                                                      }
+                                                                      onRestart={
+                                                                        input.onRestart
+                                                                      }
+                                                                      restartTarget={
+                                                                        input.restartTarget
+                                                                      }
                                                                     />
                                                                   </SessionTabsProvider>
                                                                 </AttentionProvider>
@@ -319,49 +405,49 @@ export function tui(input: {
                 </ExitProvider>
               </ArgsProvider>
             </ErrorBoundary>
-          )
-        }, renderer)
+          );
+        }, renderer);
       } catch (err) {
-        reject(err)
+        reject(err);
       }
-    })()
-  })
+    })();
+  });
 }
 
 function LegacyRedirect(props: {
-  tab: "tree" | "changes" | "graph" | "github" | "actions"
-  sessionID?: string
-  workspaceID?: string
+  tab: "tree" | "changes" | "graph" | "github" | "actions";
+  sessionID?: string;
+  workspaceID?: string;
 }) {
-  const route = useRoute()
+  const route = useRoute();
   onMount(() => {
     route.navigate({
       type: "workspace",
       tab: props.tab,
       sessionID: props.sessionID,
       workspaceID: props.workspaceID,
-    })
-  })
-  return null
+    });
+  });
+  return null;
 }
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-})
+});
 
 function formatDuration(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-  if (hours > 0) return `${hours}h ${minutes}m`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
-  return "sessionID" in route ? route.sessionID : undefined
+  return "sessionID" in route ? route.sessionID : undefined;
 }
 
 /**
@@ -377,15 +463,15 @@ function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
 function afterPaint(renderer: CliRenderer, timeoutMs = 250) {
   return new Promise<void>((resolve) => {
     const done = () => {
-      clearTimeout(timer)
-      renderer.off(CliRenderEvents.FRAME, done)
-      resolve()
-    }
-    const timer = setTimeout(done, timeoutMs)
-    timer.unref?.()
-    renderer.on(CliRenderEvents.FRAME, done)
-    renderer.requestRender()
-  })
+      clearTimeout(timer);
+      renderer.off(CliRenderEvents.FRAME, done);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    timer.unref?.();
+    renderer.on(CliRenderEvents.FRAME, done);
+    renderer.requestRender();
+  });
 }
 
 /**
@@ -393,21 +479,24 @@ function afterPaint(renderer: CliRenderer, timeoutMs = 250) {
  * closing its dialog anyway. The stream keeps retrying past it; this only keeps
  * a slow stream from holding the terminal behind a modal.
  */
-const RESTART_CONNECT_TIMEOUT_MS = 15_000
+const RESTART_CONNECT_TIMEOUT_MS = 15_000;
 
 function waitAtMost(promise: Promise<void>, timeoutMs: number) {
-  let timer: ReturnType<typeof setTimeout> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`no event stream after ${timeoutMs}ms`)), timeoutMs)
-      timer.unref?.()
+      timer = setTimeout(
+        () => reject(new Error(`no event stream after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+      timer.unref?.();
     }),
-  ]).finally(() => clearTimeout(timer))
+  ]).finally(() => clearTimeout(timer));
 }
 
 function App(props: {
-  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>;
   /**
    * What "restart" means for the host this terminal is attached to.
    *
@@ -416,28 +505,28 @@ function App(props: {
    * claim it can restart it. Undefined is surfaced by `/restart` rather than
    * quietly doing nothing.
    */
-  onRestart?: () => Promise<Transport>
-  restartTarget?: string
+  onRestart?: () => Promise<Transport>;
+  restartTarget?: string;
 }) {
-  const route = useRoute()
-  const dimensions = useTerminalDimensions()
-  const renderer = useRenderer()
-  renderer.externalOutputMode = "passthrough"
-  const dialog = useDialog()
-  const local = useLocal()
-  const kv = useKV()
-  const command = useCommandDialog()
-  const sdk = useSDK()
-  const toast = useToast()
-  const themeCtx = useTheme()
-  const upgradeCtx = useUpgrade()
-  const { theme, mode, setMode } = themeCtx
-  const sync = useSync()
-  const tabs = useSessionTabs()
-  const { exit, beginRestart, endRestart, setSummary } = useExit()
-  const promptRef = usePromptRef()
-  const attention = useAttention()
-  const keybind = useKeybind()
+  const route = useRoute();
+  const dimensions = useTerminalDimensions();
+  const renderer = useRenderer();
+  renderer.externalOutputMode = "passthrough";
+  const dialog = useDialog();
+  const local = useLocal();
+  const kv = useKV();
+  const command = useCommandDialog();
+  const sdk = useSDK();
+  const toast = useToast();
+  const themeCtx = useTheme();
+  const upgradeCtx = useUpgrade();
+  const { theme, mode, setMode } = themeCtx;
+  const sync = useSync();
+  const tabs = useSessionTabs();
+  const { exit, beginRestart, endRestart, setSummary } = useExit();
+  const promptRef = usePromptRef();
+  const attention = useAttention();
+  const keybind = useKeybind();
 
   /**
    * Offer the update the check found, and install it if the user agrees — or
@@ -453,33 +542,35 @@ function App(props: {
    * started with; the new interface loads on the next launch.
    */
   async function offerUpdate(available: UpdateAvailable) {
-    const { version, method } = available
-    const currentVersion = available.current || VERSION
+    const { version, method } = available;
+    const currentVersion = available.current || VERSION;
 
     if (!available.auto) {
       // Skip version already dismissed by the user
-      const skipped = kv.get("skipped_version")
-      if (skipped && version === skipped) return
+      const skipped = kv.get("skipped_version");
+      if (skipped && version === skipped) return;
 
-      const hint = method ? ` via ${method}` : ""
+      const hint = method ? ` via ${method}` : "";
       const choice = await DialogConfirm.choose(dialog, {
         title: "Update Available",
         message: `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now? Auto-update installs this and every later release without asking.`,
         labels: { cancel: "Skip", extra: "Auto-update", confirm: "Update" },
         defaultFocus: "confirm",
-      })
+      });
 
       if (choice === "cancel") {
-        kv.set("skipped_version", version)
-        return
+        kv.set("skipped_version", version);
+        return;
       }
 
       if (choice === "extra") {
         // Saved before installing: the preference stands even if this install fails.
         await upgradeCtx.enableAutoUpdate?.().catch((error) => {
-          log.error("enabling auto-update failed", { error: errorMessage(error) })
-          toast.error(error)
-        })
+          log.error("enabling auto-update failed", {
+            error: errorMessage(error),
+          });
+          toast.error(error);
+        });
       }
     }
 
@@ -491,18 +582,18 @@ function App(props: {
         dialog,
         "Update Available",
         `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
-      )
-      return
+      );
+      return;
     }
 
     toast.show({
       variant: "info",
       message: `Updating to v${version}...`,
       duration: 30_000,
-    })
+    });
 
     try {
-      await upgradeCtx.upgradeNow?.(method, version)
+      await upgradeCtx.upgradeNow?.(method, version);
     } catch (error) {
       // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
       // is what made this toast show a blank body for every failed update.
@@ -510,54 +601,59 @@ function App(props: {
       // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
       // comes back over RPC as a plain `Error`, so the class check was always false and this
       // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
-      const stderr = (error as { stderr?: unknown }).stderr
+      const stderr = (error as { stderr?: unknown }).stderr;
       const message =
-        error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
+        error instanceof Error &&
+        error.name === "UpgradeFailedError" &&
+        typeof stderr === "string"
           ? stderr
           : error instanceof Error
-            ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
-            : "Update failed"
+            ? error.message ||
+              (error.cause instanceof Error
+                ? error.cause.message
+                : "Update failed")
+            : "Update failed";
       toast.show({
         variant: "error",
         title: "Update Failed",
         message,
         duration: 10_000,
-      })
-      return
+      });
+      return;
     }
 
-    const onUpgraded = upgradeCtx.onUpgraded
+    const onUpgraded = upgradeCtx.onUpgraded;
     const restarted = onUpgraded
       ? await runRestart(onUpgraded, { success: `Updated to v${version}` })
-      : ("skipped" as const)
-    if (restarted === "failed") return
+      : ("skipped" as const);
+    if (restarted === "failed") return;
     if (restarted === "skipped") {
       toast.show({
         variant: "success",
         title: `Updated to v${version}`,
         message: "Restart nikcli to use the new version.",
         duration: 10_000,
-      })
+      });
     }
   }
 
   // Plugin routes — mutable map + reactive stamp for re-renders
-  const routes: RouteMap = new Map()
-  const [pluginRouteKey, setPluginRouteKey] = createSignal(0)
-  const bump = () => setPluginRouteKey((k) => k + 1)
-  const [pluginsReady, setPluginsReady] = createSignal(false)
+  const routes: RouteMap = new Map();
+  const [pluginRouteKey, setPluginRouteKey] = createSignal(0);
+  const bump = () => setPluginRouteKey((k) => k + 1);
+  const [pluginsReady, setPluginsReady] = createSignal(false);
 
-  const [onboardingActive, setOnboardingActive] = createSignal(false)
+  const [onboardingActive, setOnboardingActive] = createSignal(false);
 
   setSummary(() => {
-    const sessionID = sessionIDFromRoute(route.data)
-    if (!sessionID) return
-    const session = sync.session.get(sessionID)
-    const messages = sync.data.message[sessionID] ?? []
-    const usage = Usage.fromMessages(messages, sync.data.provider)
+    const sessionID = sessionIDFromRoute(route.data);
+    if (!sessionID) return;
+    const session = sync.session.get(sessionID);
+    const messages = sync.data.message[sessionID] ?? [];
+    const usage = Usage.fromMessages(messages, sync.data.provider);
     const totals = messages.reduce(
       (acc, message) => {
-        if (message.role !== "assistant") return acc
+        if (message.role !== "assistant") return acc;
         const tokens =
           message.tokens.total && message.tokens.total > 0
             ? message.tokens.total
@@ -565,24 +661,30 @@ function App(props: {
               message.tokens.output +
               message.tokens.reasoning +
               message.tokens.cache.read +
-              message.tokens.cache.write
-        acc.tokens += tokens
-        acc.input += message.tokens.input
-        acc.output += message.tokens.output
-        acc.reasoning += message.tokens.reasoning
-        acc.cost += message.cost
-        return acc
+              message.tokens.cache.write;
+        acc.tokens += tokens;
+        acc.input += message.tokens.input;
+        acc.output += message.tokens.output;
+        acc.reasoning += message.tokens.reasoning;
+        acc.cost += message.cost;
+        return acc;
       },
       { tokens: 0, input: 0, output: 0, reasoning: 0, cost: 0 },
-    )
+    );
     const title =
-      session?.title && !SessionPrimitives.isDefaultTitle(session.title) ? session.title : "Untitled session"
-    const duration = session ? formatDuration(Date.now() - session.time.created) : undefined
+      session?.title && !SessionPrimitives.isDefaultTitle(session.title)
+        ? session.title
+        : "Untitled session";
+    const duration = session
+      ? formatDuration(Date.now() - session.time.created)
+      : undefined;
     const context = usage.model?.contextLimit
       ? `${Usage.formatTokens(usage.tokens)} / ${Usage.formatTokens(usage.model.contextLimit)} (${Usage.formatPct(usage.tokens, usage.model.contextLimit)})`
-      : Usage.formatTokens(usage.tokens)
-    const model = usage.model ? `${usage.model.providerID}/${usage.model.modelID}` : "—"
-    const resume = `nikcli --session ${sessionID}`
+      : Usage.formatTokens(usage.tokens);
+    const model = usage.model
+      ? `${usage.model.providerID}/${usage.model.modelID}`
+      : "—";
+    const resume = `nikcli --session ${sessionID}`;
 
     const asciiLogo = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
@@ -590,7 +692,7 @@ function App(props: {
 ██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║
 ██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║
 ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
-╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝`
+╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝`;
 
     return [
       `${asciiLogo}`,
@@ -607,8 +709,8 @@ function App(props: {
       "\n",
     ]
       .filter(Boolean)
-      .join("\n")
-  })
+      .join("\n");
+  });
 
   onMount(() => {
     void (async () => {
@@ -621,22 +723,24 @@ function App(props: {
       // second or more on every launch after the token's quarter hour — and a
       // returning user's plugins, config and prompt have no use for the answer.
       // What it decides (the sign-in dialog) is applied once they are up.
-      let returningAccount: Promise<Awaited<ReturnType<typeof UserApi.session>>> | undefined
+      let returningAccount:
+        | Promise<Awaited<ReturnType<typeof UserApi.session>>>
+        | undefined;
       if (!process.env.NIKCLI_DRIVE) {
         // Account state comes from `/user/*` — the transport is up by now, as
         // the `sdk.client.tui.config` call a few lines below has always relied on.
-        const accountRequest = UserApi.session(sdk)
+        const accountRequest = UserApi.session(sdk);
         // A first run never awaits it; a returning one does, below, and sees any failure there.
-        accountRequest.catch(() => {})
+        accountRequest.catch(() => {});
 
         // `null` means the question could not be asked. Treating that as "no
         // users" would restart onboarding for someone who already has an
         // account, so only an explicit `false` counts as first run.
-        const isFirstRun = (await UserApi.hasUsers(sdk)) === false
+        const isFirstRun = (await UserApi.hasUsers(sdk)) === false;
 
         if (isFirstRun && !kv.get("onboarding_complete", false)) {
           // First-time user: unified onboarding handles account creation + provider setup
-          setOnboardingActive(true)
+          setOnboardingActive(true);
           const outcome = await ensureOnboarded({
             runOnboarding: () => DialogOnboarding.run(dialog),
             currentUser: () => UserApi.me(sdk),
@@ -645,13 +749,16 @@ function App(props: {
                 attempt,
                 service: "tui.onboarding",
               }),
-          })
-          setOnboardingActive(false)
+          });
+          setOnboardingActive(false);
           if (outcome.status === "complete") {
-            kv.set("onboarding_complete", true)
-            const needsProvider = untrack(() => sync.status === "complete" && sync.data.provider.length === 0)
+            kv.set("onboarding_complete", true);
+            const needsProvider = untrack(
+              () =>
+                sync.status === "complete" && sync.data.provider.length === 0,
+            );
             if (needsProvider && dialog.stack.length === 0) {
-              dialog.replace(() => <DialogProviderList />)
+              dialog.replace(() => <DialogProviderList />);
             }
           } else {
             // Not signed in, and startup must not pretend otherwise: the flag
@@ -661,29 +768,33 @@ function App(props: {
             // reason for it. Say what happened and let startup finish.
             log.error("onboarding did not produce an account", {
               attempts: outcome.attempts,
-            })
+            });
             toast.show({
-              message: "Account setup didn't complete — run /signin to finish signing in.",
+              message:
+                "Account setup didn't complete — run /signin to finish signing in.",
               variant: "error",
-            })
+            });
           }
         } else {
-          returningAccount = accountRequest
+          returningAccount = accountRequest;
         }
       }
 
       // The renderer already owns the terminal here, so a config failure must
       // not take the TUI down the way it does in the standalone host. It must
       // still not pass for an empty config: say which of the three it was.
-      const configResult = await sdk.client.tui.config().catch((error: unknown) => ({ data: undefined, error }))
+      const configResult = await sdk.client.tui
+        .config()
+        .catch((error: unknown) => ({ data: undefined, error }));
       if (configResult.error !== undefined) {
-        const status = (configResult as { response?: { status: number } }).response?.status
+        const status = (configResult as { response?: { status: number } })
+          .response?.status;
         log.error("tui config unavailable; starting on defaults", {
           reason: classifyConfigFailure(configResult.error, status),
           status,
-        })
+        });
       }
-      const tuiConfig = (configResult.data ?? {}) as TuiConfig
+      const tuiConfig = (configResult.data ?? {}) as TuiConfig;
       const api = createTuiApi({
         command,
         tuiConfig,
@@ -700,10 +811,10 @@ function App(props: {
         tabs,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         renderer: renderer as any,
-      })
-      dbgApp("before init")
-      await TuiPluginRuntime.init(api)
-      dbgApp("after init")
+      });
+      dbgApp("before init");
+      await TuiPluginRuntime.init(api);
+      dbgApp("after init");
       // Register the global sync dialog keybind (default: <leader>y).
       // Uses the same command-dialog plumbing as the slash command
       // /sync so a single source of truth drives both entry points.
@@ -714,51 +825,58 @@ function App(props: {
             title: "Sync status",
             namespace: "System",
             run() {
-              dialog.replace(() => <DialogSync />)
+              dialog.replace(() => <DialogSync />);
             },
           },
         ],
         bindings: [{ key: "sync_view", cmd: "sync.open" }],
-      })
-      setPluginsReady(true)
+      });
+      setPluginsReady(true);
 
       // Three answers, and only one of them is a reason to interrupt. The
       // server is asked whether this machine holds a session; while it is
       // still booting — or being restarted by an auto-update — it cannot
       // answer, and reading that silence as "signed out" is what put the
       // sign-in dialog in front of someone who had never signed out.
-      const account = await returningAccount
+      const account = await returningAccount;
       if (account?.status === "signed-out") {
         // Returning user with no active session: standard login
-        await DialogLogin.run(dialog, sdk)
+        await DialogLogin.run(dialog, sdk);
       } else if (account?.status === "unknown") {
-        log.warn("could not read the account session at startup; not prompting", {
-          service: "tui.account",
-        })
+        log.warn(
+          "could not read the account session at startup; not prompting",
+          {
+            service: "tui.account",
+          },
+        );
       }
     })().catch((error) => {
-      dbgApp("init chain error", String(error))
-      setOnboardingActive(false)
-      setPluginsReady(true)
-      toast.error(error)
-    })
-  })
+      dbgApp("init chain error", String(error));
+      setOnboardingActive(false);
+      setPluginsReady(true);
+      toast.error(error);
+    });
+  });
 
   onCleanup(() => {
-    void TuiPluginRuntime.dispose()
-    restoreTerminalState()
-  })
+    void TuiPluginRuntime.dispose();
+    restoreTerminalState();
+  });
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
-    if (!text || text.length === 0) return
+    if (!text || text.length === 0) return;
 
     await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-      .catch(toast.error)
-    renderer.clearSelection()
-  }
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+      .then(() =>
+        toast.show({ message: "Copied to clipboard", variant: "info" }),
+      )
+      .catch(toast.error);
+    renderer.clearSelection();
+  };
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(
+    kv.get("terminal_title_enabled", true),
+  );
 
   // Update terminal window title based on current route and session
   createEffect(
@@ -767,110 +885,118 @@ function App(props: {
         enabled: terminalTitleEnabled(),
         type: route.data.type,
         sessionID:
-          route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+          route.data.type === "session" ||
+          route.data.type === "changes" ||
+          route.data.type === "tree"
             ? ((route.data as any).sessionID ?? null)
             : null,
         title:
           route.data.type === "github"
             ? "GitHub"
-            : route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+            : route.data.type === "session" ||
+                route.data.type === "changes" ||
+                route.data.type === "tree"
               ? (route.data as any).sessionID
-                ? (sync.session.get((route.data as any).sessionID)?.title ?? null)
+                ? (sync.session.get((route.data as any).sessionID)?.title ??
+                  null)
                 : null
               : null,
       }),
       (state) => {
         if (!state.enabled || Flag.NIKCLI_DISABLE_TERMINAL_TITLE) {
-          renderer.setTerminalTitle("")
-          return
+          renderer.setTerminalTitle("");
+          return;
         }
 
         if (state.type === "home") {
-          renderer.setTerminalTitle("Nikcli")
-          return
+          renderer.setTerminalTitle("Nikcli");
+          return;
         }
 
         if (state.type === "session" && state.sessionID) {
           if (!state.title || SessionPrimitives.isDefaultTitle(state.title)) {
-            renderer.setTerminalTitle("Nikcli")
-            return
+            renderer.setTerminalTitle("Nikcli");
+            return;
           }
-          const title = state.title.length > 40 ? state.title.slice(0, 37) + "..." : state.title
-          renderer.setTerminalTitle(`Nikcli | ${title}`)
-          return
+          const title =
+            state.title.length > 40
+              ? state.title.slice(0, 37) + "..."
+              : state.title;
+          renderer.setTerminalTitle(`Nikcli | ${title}`);
+          return;
         }
 
         if (state.type === "git-graph" || state.type === "github") {
-          renderer.setTerminalTitle("Nikcli | GitHub")
-          return
+          renderer.setTerminalTitle("Nikcli | GitHub");
+          return;
         }
 
         if (state.type === "workspace") {
-          renderer.setTerminalTitle("Nikcli | Workspace")
-          return
+          renderer.setTerminalTitle("Nikcli | Workspace");
+          return;
         }
       },
       { defer: true },
     ),
-  )
+  );
 
-  const args = useArgs()
+  const args = useArgs();
   onMount(() => {
     batch(() => {
-      if (args.agent) local.agent.set(args.agent)
+      if (args.agent) local.agent.set(args.agent);
       if (args.model) {
-        const { providerID, modelID } = parseModel(args.model)
+        const { providerID, modelID } = parseModel(args.model);
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
+          });
+        local.model.set({ providerID, modelID }, { recent: true });
       }
       if (args.sessionID) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
           workspaceID: sync.session.get(args.sessionID)?.workspaceID,
-        })
+        });
       }
-    })
-  })
+    });
+  });
 
-  let continued = false
+  let continued = false;
   createEffect(
     on(
       () => [continued, sync.status, args.continue],
       () => {
-        if (continued || sync.status === "loading" || !args.continue) return
+        if (continued || sync.status === "loading" || !args.continue) return;
         const match = sync.data.session
           .toSorted((a, b) => b.time.updated - a.time.updated)
-          .find((x) => x.parentID === undefined)?.id
+          .find((x) => x.parentID === undefined)?.id;
         if (match) {
-          continued = true
+          continued = true;
           route.navigate({
             type: "session",
             sessionID: match,
             workspaceID: sync.session.get(match)?.workspaceID,
-          })
+          });
         }
       },
       { defer: true },
     ),
-  )
+  );
 
   createEffect(
     on(
       () => sync.status === "complete" && sync.data.provider.length === 0,
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
-        if (onboardingActive()) return
-        dialog.replace(() => <DialogProviderList />)
+        if (!isEmpty || wasEmpty) return;
+        if (onboardingActive()) return;
+        dialog.replace(() => <DialogProviderList />);
       },
     ),
-  )
+  );
 
   /**
    * `/reload`: re-read configuration in place, on both sides of the wire.
@@ -891,14 +1017,14 @@ function App(props: {
       variant: "info",
       message: "Reloading configuration…",
       duration: 2000,
-    })
+    });
     try {
-      await sdk.client.config.reload({ throwOnError: true })
-      await TuiPluginRuntime.reload()
-      toast.show({ variant: "success", message: "Configuration reloaded" })
+      await sdk.client.config.reload({ throwOnError: true });
+      await TuiPluginRuntime.reload();
+      toast.show({ variant: "success", message: "Configuration reloaded" });
     } catch (error) {
-      log.error("reload failed", { error: errorMessage(error) })
-      toast.error(error)
+      log.error("reload failed", { error: errorMessage(error) });
+      toast.error(error);
     }
   }
 
@@ -916,42 +1042,49 @@ function App(props: {
     restartBackend: () => Promise<Transport | undefined>,
     options: { success?: string } = {},
   ): Promise<"restarted" | "skipped" | "failed"> {
-    const target = props.restartTarget ?? "nikcli server"
-    dialog.replace(() => <DialogRestart target={target} />)
-    await afterPaint(renderer)
+    const target = props.restartTarget ?? "nikcli server";
+    dialog.replace(() => <DialogRestart target={target} />);
+    await afterPaint(renderer);
     // The event stream drops while the backend is down, and the refetch its
     // reconnect triggers can land on a server that is shutting down. Marked
     // first so neither is mistaken for a fatal bootstrap.
-    beginRestart()
+    beginRestart();
     try {
-      const next = await restartBackend()
+      const next = await restartBackend();
       // The host had nothing to restart onto (see `onUpgraded`).
-      if (!next) return "skipped"
-      await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch((error) => {
-        // The backend registered but its stream has not answered yet. Requests
-        // already go to it; the stream keeps retrying on its own.
-        log.warn("restarted backend has not streamed events yet", { error: errorMessage(error) })
-      })
-      const failure = await sync.bootstrap({ fatal: false })
-      if (failure) throw failure
-      await TuiPluginRuntime.reload()
-      toast.show({ variant: "success", message: options.success ?? `Restarted the ${target}` })
-      return "restarted"
+      if (!next) return "skipped";
+      await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch(
+        (error) => {
+          // The backend registered but its stream has not answered yet. Requests
+          // already go to it; the stream keeps retrying on its own.
+          log.warn("restarted backend has not streamed events yet", {
+            error: errorMessage(error),
+          });
+        },
+      );
+      const failure = await sync.bootstrap({ fatal: false });
+      if (failure) throw failure;
+      await TuiPluginRuntime.reload();
+      toast.show({
+        variant: "success",
+        message: options.success ?? `Restarted the ${target}`,
+      });
+      return "restarted";
     } catch (error) {
-      log.error("restart failed", { error: errorMessage(error) })
-      toast.error(error)
+      log.error("restart failed", { error: errorMessage(error) });
+      toast.error(error);
       // The stream may have dropped events meanwhile. Not fatal: a backend that
       // is down must not turn this refetch into an exit, and the stream's own
       // reconnect refetches again once it is back.
-      await sync.bootstrap({ fatal: false })
-      return "failed"
+      await sync.bootstrap({ fatal: false });
+      return "failed";
     } finally {
-      endRestart()
-      dialog.clear()
+      endRestart();
+      dialog.clear();
     }
   }
 
-  const connected = useConnected()
+  const connected = useConnected();
   command.register(() => [
     {
       title: "Take the 6-step tour",
@@ -960,7 +1093,7 @@ function App(props: {
       suggested: sync.data.session.length < 3,
       slash: { name: "tour" },
       onSelect: () => {
-        dialog.replace(() => <DialogTour />)
+        dialog.replace(() => <DialogTour />);
       },
     },
     {
@@ -969,7 +1102,7 @@ function App(props: {
       category: "Support",
       slash: { name: "help" },
       onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
+        dialog.replace(() => <DialogHelp />);
       },
     },
     {
@@ -978,7 +1111,7 @@ function App(props: {
       category: "Support",
       slash: { name: "quickstart", aliases: ["get-started"] },
       onSelect: () => {
-        dialog.replace(() => <DialogQuickstartInfo />)
+        dialog.replace(() => <DialogQuickstartInfo />);
       },
     },
     {
@@ -987,7 +1120,7 @@ function App(props: {
       category: "Support",
       slash: { name: "doctor" },
       onSelect: () => {
-        dialog.replace(() => <DialogDoctorInfo />)
+        dialog.replace(() => <DialogDoctorInfo />);
       },
     },
     {
@@ -996,7 +1129,7 @@ function App(props: {
       category: "Support",
       slash: { name: "docs" },
       onSelect: () => {
-        openExternal("https://nikcli-ai.dev/docs")
+        openExternal("https://nikcli-ai.dev/docs");
       },
     },
     {
@@ -1007,7 +1140,7 @@ function App(props: {
       keybind: "app_support",
       slash: { name: "support", aliases: ["ask", "help-me"] },
       onSelect: () => {
-        dialog.replace(() => <DialogSupport />)
+        dialog.replace(() => <DialogSupport />);
       },
     },
     {
@@ -1021,7 +1154,7 @@ function App(props: {
         aliases: ["resume", "continue"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogSessionList />)
+        dialog.replace(() => <DialogSessionList />);
       },
     },
     {
@@ -1033,22 +1166,24 @@ function App(props: {
         name: "workspaces",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogWorkspaceList />)
+        dialog.replace(() => <DialogWorkspaceList />);
       },
     },
     {
       title: "Warp session",
       value: "workspace.warp",
       category: "Workspace",
-      enabled: route.data.type === "session" && Flag.NIKCLI_EXPERIMENTAL_WORKSPACES_TUI,
+      enabled:
+        route.data.type === "session" &&
+        Flag.NIKCLI_EXPERIMENTAL_WORKSPACES_TUI,
       slash: {
         name: "warp",
       },
       onSelect: () => {
-        const data = route.data
-        if (data.type !== "session") return
-        const sessionID = data.sessionID
-        dialog.replace(() => <DialogSessionWarp sessionID={sessionID} />)
+        const data = route.data;
+        if (data.type !== "session") return;
+        const sessionID = data.sessionID;
+        dialog.replace(() => <DialogSessionWarp sessionID={sessionID} />);
       },
     },
     {
@@ -1062,19 +1197,22 @@ function App(props: {
         aliases: ["clear"],
       },
       onSelect: () => {
-        const current = promptRef.current
+        const current = promptRef.current;
         // Don't require focus - if there's any text, preserve it
-        const currentPrompt = current?.current?.input ? current.current : undefined
+        const currentPrompt = current?.current?.input
+          ? current.current
+          : undefined;
         const workspaceID =
           route.data.type === "session"
-            ? (route.data.workspaceID ?? sync.session.get(route.data.sessionID)?.workspaceID)
-            : route.data.workspaceID
+            ? (route.data.workspaceID ??
+              sync.session.get(route.data.sessionID)?.workspaceID)
+            : route.data.workspaceID;
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
           workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1087,17 +1225,21 @@ function App(props: {
         aliases: ["ws", "panel"],
       },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
-        const hasDiff = route.data.type === "session" && (sync.data.session_diff[route.data.sessionID]?.length ?? 0) > 0
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
+        const hasDiff =
+          route.data.type === "session" &&
+          (sync.data.session_diff[route.data.sessionID]?.length ?? 0) > 0;
         route.navigate({
           type: "workspace",
           tab: hasDiff ? "changes" : "tree",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     // Hidden helpers so existing /changes /tree /graph /github slash commands still work
@@ -1109,16 +1251,18 @@ function App(props: {
       hidden: true,
       slash: { name: "changes" },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "changes",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1128,16 +1272,18 @@ function App(props: {
       hidden: true,
       slash: { name: "tree" },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "tree",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1147,16 +1293,18 @@ function App(props: {
       hidden: true,
       slash: { name: "graph", aliases: ["gitgraph", "commits"] },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "graph",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1166,16 +1314,18 @@ function App(props: {
       hidden: true,
       slash: { name: "github", aliases: ["gh"] },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "github",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1185,16 +1335,18 @@ function App(props: {
       hidden: true,
       slash: { name: "actions", aliases: ["ci", "workflows"] },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "actions",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1207,7 +1359,7 @@ function App(props: {
         name: "models",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogModel />);
       },
     },
     {
@@ -1217,7 +1369,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycle(1)
+        local.model.cycle(1);
       },
     },
     {
@@ -1227,7 +1379,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycle(-1)
+        local.model.cycle(-1);
       },
     },
     {
@@ -1237,7 +1389,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycleFavorite(1)
+        local.model.cycleFavorite(1);
       },
     },
     {
@@ -1247,7 +1399,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycleFavorite(-1)
+        local.model.cycleFavorite(-1);
       },
     },
     {
@@ -1263,8 +1415,8 @@ function App(props: {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-agent").then(({ DialogAgent }) => {
-          dialog.replace(() => <DialogAgent />)
-        })
+          dialog.replace(() => <DialogAgent />);
+        });
       },
     },
     {
@@ -1277,7 +1429,7 @@ function App(props: {
         aliases: ["permission"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogPermissionMode />)
+        dialog.replace(() => <DialogPermissionMode />);
       },
     },
     {
@@ -1288,9 +1440,9 @@ function App(props: {
         name: "advisor",
       },
       onSelect: () => {
-        const name = local.agent.current()?.name
-        if (!name) return
-        dialog.replace(() => <DialogAdvisorModel agentName={name} />)
+        const name = local.agent.current()?.name;
+        if (!name) return;
+        dialog.replace(() => <DialogAdvisorModel agentName={name} />);
       },
     },
     {
@@ -1301,7 +1453,9 @@ function App(props: {
         name: "skills",
       },
       onSelect: () => {
-        void import("@tui/component/dialog-skills").then(({ DialogSkills }) => dialog.replace(() => <DialogSkills />))
+        void import("@tui/component/dialog-skills").then(({ DialogSkills }) =>
+          dialog.replace(() => <DialogSkills />),
+        );
       },
     },
     {
@@ -1316,8 +1470,8 @@ function App(props: {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-mcp").then(({ DialogMcp }) => {
-          dialog.replace(() => <DialogMcp />)
-        })
+          dialog.replace(() => <DialogMcp />);
+        });
       },
     },
     {
@@ -1332,9 +1486,11 @@ function App(props: {
         // Lazy: managing routines is not on the path to the first frame, and this
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
-        void import("@tui/component/dialog-routine").then(({ DialogRoutine }) => {
-          dialog.replace(() => <DialogRoutine />)
-        })
+        void import("@tui/component/dialog-routine").then(
+          ({ DialogRoutine }) => {
+            dialog.replace(() => <DialogRoutine />);
+          },
+        );
       },
     },
     {
@@ -1344,7 +1500,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(1)
+        local.agent.move(1);
       },
     },
     {
@@ -1354,7 +1510,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.variant.cycle()
+        local.model.variant.cycle();
       },
     },
     {
@@ -1362,7 +1518,7 @@ function App(props: {
       value: "variant.select",
       category: "Agent",
       onSelect: () => {
-        dialog.replace(() => <DialogVariant />)
+        dialog.replace(() => <DialogVariant />);
       },
     },
     {
@@ -1372,7 +1528,7 @@ function App(props: {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(-1)
+        local.agent.move(-1);
       },
     },
     {
@@ -1383,7 +1539,7 @@ function App(props: {
         name: "connect",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
+        dialog.replace(() => <DialogProviderList />);
       },
       category: "Provider",
     },
@@ -1396,7 +1552,7 @@ function App(props: {
         name: "disconnect",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProviderDisconnect />)
+        dialog.replace(() => <DialogProviderDisconnect />);
       },
       category: "Provider",
     },
@@ -1409,7 +1565,7 @@ function App(props: {
         aliases: ["account-login"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogAccountLogin />)
+        dialog.replace(() => <DialogAccountLogin />);
       },
     },
     {
@@ -1421,7 +1577,7 @@ function App(props: {
         aliases: ["me", "personalize"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProfile />)
+        dialog.replace(() => <DialogProfile />);
       },
     },
     {
@@ -1433,7 +1589,7 @@ function App(props: {
         aliases: ["account"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogAuthManage />)
+        dialog.replace(() => <DialogAuthManage />);
       },
     },
     {
@@ -1441,7 +1597,7 @@ function App(props: {
       value: "settings.open",
       slash: { name: "settings" },
       onSelect: () => {
-        dialog.replace(() => <DialogSettings />)
+        dialog.replace(() => <DialogSettings />);
       },
       category: "System",
     },
@@ -1454,8 +1610,8 @@ function App(props: {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-config").then(({ DialogConfig }) => {
-          dialog.replace(() => <DialogConfig />)
-        })
+          dialog.replace(() => <DialogConfig />);
+        });
       },
       category: "System",
     },
@@ -1468,7 +1624,7 @@ function App(props: {
         aliases: ["browse", "web"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogWebPreview />)
+        dialog.replace(() => <DialogWebPreview />);
       },
     },
     {
@@ -1479,7 +1635,7 @@ function App(props: {
         name: "status",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogStatus />)
+        dialog.replace(() => <DialogStatus />);
       },
       category: "System",
     },
@@ -1496,10 +1652,12 @@ function App(props: {
         // Lazy: pairing a phone is not on the path to the first frame, and this
         // dialog's chain is the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
-        const sessionID = sessionIDFromRoute(route.data)
-        void import("@tui/component/dialog-mobile-connect").then(({ DialogMobileConnect }) => {
-          dialog.replace(() => <DialogMobileConnect sessionID={sessionID} />)
-        })
+        const sessionID = sessionIDFromRoute(route.data);
+        void import("@tui/component/dialog-mobile-connect").then(
+          ({ DialogMobileConnect }) => {
+            dialog.replace(() => <DialogMobileConnect sessionID={sessionID} />);
+          },
+        );
       },
     },
     {
@@ -1511,7 +1669,7 @@ function App(props: {
         aliases: ["hub", "remote"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogSync />)
+        dialog.replace(() => <DialogSync />);
       },
       category: "System",
     },
@@ -1523,7 +1681,7 @@ function App(props: {
         aliases: ["context"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogUsage />)
+        dialog.replace(() => <DialogUsage />);
       },
       category: "Session",
     },
@@ -1535,9 +1693,12 @@ function App(props: {
         aliases: ["stats"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-analytics").then(({ DialogAnalytics }) =>
-          dialog.replace(() => <DialogAnalytics onClose={() => dialog.clear()} />),
-        )
+        void import("@tui/component/dialog-analytics").then(
+          ({ DialogAnalytics }) =>
+            dialog.replace(() => (
+              <DialogAnalytics onClose={() => dialog.clear()} />
+            )),
+        );
       },
       category: "Session",
     },
@@ -1549,9 +1710,10 @@ function App(props: {
         aliases: ["ops", "command-center"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-command-center").then(({ DialogCommandCenter }) =>
-          dialog.replace(() => <DialogCommandCenter />),
-        )
+        void import("@tui/component/dialog-command-center").then(
+          ({ DialogCommandCenter }) =>
+            dialog.replace(() => <DialogCommandCenter />),
+        );
       },
       category: "Session",
     },
@@ -1563,7 +1725,7 @@ function App(props: {
         name: "themes",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogThemeList />)
+        dialog.replace(() => <DialogThemeList />);
       },
       category: "System",
     },
@@ -1571,8 +1733,8 @@ function App(props: {
       title: "Toggle appearance",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
-        setMode(mode() === "dark" ? "light" : "dark")
-        dialog.clear()
+        setMode(mode() === "dark" ? "light" : "dark");
+        dialog.clear();
       },
       category: "System",
     },
@@ -1583,7 +1745,7 @@ function App(props: {
         name: "help",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
+        dialog.replace(() => <DialogHelp />);
       },
       category: "System",
     },
@@ -1591,8 +1753,8 @@ function App(props: {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://nikcli-ai.dev/docs").catch(() => {})
-        dialog.clear()
+        open("https://nikcli-ai.dev/docs").catch(() => {});
+        dialog.clear();
       },
       category: "System",
     },
@@ -1600,8 +1762,8 @@ function App(props: {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
+        open(sdk.url).catch(() => {});
+        dialog.clear();
       },
       category: "System",
     },
@@ -1615,8 +1777,8 @@ function App(props: {
       onSelect: (dialog) => {
         // No dialog: the work is a request, and a modal that reported nothing
         // would be a second thing to keep in sync with the toasts.
-        dialog.clear()
-        void reloadAll()
+        dialog.clear();
+        void reloadAll();
       },
     },
     {
@@ -1629,16 +1791,16 @@ function App(props: {
       onSelect: () => {
         // The host is the only layer that knows what there is to restart: the
         // background service, the embedded worker, or nothing at all.
-        const restartBackend = props.onRestart
+        const restartBackend = props.onRestart;
         if (!restartBackend) {
           toast.show({
             variant: "warning",
             message: "This host cannot restart the server it is attached to.",
             duration: 5000,
-          })
-          return
+          });
+          return;
         }
-        void runRestart(restartBackend)
+        void runRestart(restartBackend);
       },
     },
     {
@@ -1656,8 +1818,8 @@ function App(props: {
       category: "System",
       value: "app.debug",
       onSelect: (dialog) => {
-        renderer.toggleDebugOverlay()
-        dialog.clear()
+        renderer.toggleDebugOverlay();
+        dialog.clear();
       },
     },
     {
@@ -1665,8 +1827,8 @@ function App(props: {
       category: "System",
       value: "app.console",
       onSelect: (dialog) => {
-        renderer.console.toggle()
-        dialog.clear()
+        renderer.console.toggle();
+        dialog.clear();
       },
     },
     {
@@ -1674,13 +1836,13 @@ function App(props: {
       category: "System",
       value: "app.heap_snapshot",
       onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+        const path = writeHeapSnapshot();
         toast.show({
           variant: "info",
           message: `Heap snapshot written to ${path}`,
           duration: 5000,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1691,61 +1853,66 @@ function App(props: {
       hidden: true,
       onSelect: () => {
         const handler = () => {
-          renderer.resume()
-        }
-        process.once("SIGCONT", handler)
+          renderer.resume();
+        };
+        process.once("SIGCONT", handler);
 
-        renderer.suspend()
-        process.kill(0, "SIGTSTP")
+        renderer.suspend();
+        process.kill(0, "SIGTSTP");
       },
     },
     {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      title: terminalTitleEnabled()
+        ? "Disable terminal title"
+        : "Enable terminal title",
       value: "terminal.title.toggle",
       keybind: "terminal_title_toggle",
       category: "System",
       onSelect: (dialog) => {
         setTerminalTitleEnabled((prev) => {
-          const next = !prev
-          kv.set("terminal_title_enabled", next)
-          if (!next) renderer.setTerminalTitle("")
-          return next
-        })
-        dialog.clear()
+          const next = !prev;
+          kv.set("terminal_title_enabled", next);
+          if (!next) renderer.setTerminalTitle("");
+          return next;
+        });
+        dialog.clear();
       },
     },
-  ])
+  ]);
 
   createEffect(
     on(
       () => local.model.current(),
       (currentModel) => {
-        if (!currentModel) return
-        if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+        if (!currentModel) return;
+        if (
+          currentModel.providerID === "openrouter" &&
+          !kv.get("openrouter_warning", false)
+        ) {
           untrack(() => {
             DialogAlert.show(
               dialog,
               "Warning",
               "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Nikcli Zen\nhttps://nikcli-ai.dev/zen",
-            ).then(() => kv.set("openrouter_warning", true))
-          })
+            ).then(() => kv.set("openrouter_warning", true));
+          });
         }
       },
       { defer: true },
     ),
-  )
+  );
 
   onMount(() => {
     const refocusPrompt = () => {
-      if (route.data.type !== "session" && route.data.type !== "home") return
-      const ref = promptRef.current
-      if (ref && !ref.focused) ref.focus()
-    }
-    renderer.on("focus", refocusPrompt)
+      if (route.data.type !== "session" && route.data.type !== "home") return;
+      const ref = promptRef.current;
+      if (ref && !ref.focused) ref.focus();
+    };
+    renderer.on("focus", refocusPrompt);
 
     const unsubs = [
       sdk.event.on(TuiEventName.commandExecute, (evt) => {
-        command.trigger(evt.properties.command)
+        command.trigger(evt.properties.command);
       }),
       sdk.event.on(TuiEventName.toastShow, (evt) => {
         toast.show({
@@ -1753,99 +1920,118 @@ function App(props: {
           message: evt.properties.message,
           variant: evt.properties.variant,
           duration: evt.properties.duration,
-        })
+        });
       }),
       sdk.event.on("monitor.completed", (evt) => {
         const variant =
-          evt.properties.status === "complete" ? "success" : evt.properties.status === "cancelled" ? "info" : "error"
-        const exit = evt.properties.exitCode
-        const suffix = exit === null ? "" : ` (exit ${exit})`
+          evt.properties.status === "complete"
+            ? "success"
+            : evt.properties.status === "cancelled"
+              ? "info"
+              : "error";
+        const exit = evt.properties.exitCode;
+        const suffix = exit === null ? "" : ` (exit ${exit})`;
         toast.show({
           message: `${evt.properties.title} ${evt.properties.status}${suffix}`,
           variant,
           duration: evt.properties.status === "complete" ? 3500 : 5000,
-        })
+        });
       }),
       sdk.event.on(TuiEventName.sessionSelect, (evt) => {
         route.navigate({
           type: "session",
           sessionID: evt.properties.sessionID,
           workspaceID: sync.session.get(evt.properties.sessionID)?.workspaceID,
-        })
+        });
       }),
       sdk.event.on(SessionPrimitives.EventName.deleted, (evt) => {
-        const deletedSessionID = evt.properties.info.id
+        const deletedSessionID = evt.properties.info.id;
         const currentSessionID =
-          route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+          route.data.type === "session" ||
+          route.data.type === "changes" ||
+          route.data.type === "tree"
             ? route.data.sessionID
-            : undefined
+            : undefined;
         if (currentSessionID === deletedSessionID) {
           route.navigate({
             type: "home",
             workspaceID: evt.properties.info.workspaceID,
-          })
+          });
           toast.show({
             variant: "info",
             message: "The current session was deleted",
-          })
+          });
         }
       }),
       sdk.event.on(SessionPrimitives.EventName.error, (evt) => {
-        const error = evt.properties.error
-        if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-        const sessionID = evt.properties.sessionID
-        const currentSession = route.data.type === "session" ? route.data.sessionID : undefined
-        const session = sessionID ? sync.session.get(sessionID) : undefined
-        if (session?.title === BRAIN_SESSION_TITLE && currentSession !== sessionID) return
+        const error = evt.properties.error;
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "MessageAbortedError"
+        )
+          return;
+        const sessionID = evt.properties.sessionID;
+        const currentSession =
+          route.data.type === "session" ? route.data.sessionID : undefined;
+        const session = sessionID ? sync.session.get(sessionID) : undefined;
+        if (
+          session?.title === BRAIN_SESSION_TITLE &&
+          currentSession !== sessionID
+        )
+          return;
         const message = (() => {
-          if (!error) return "An error occurred"
+          if (!error) return "An error occurred";
 
           if (typeof error === "object") {
-            const data = error.data
+            const data = error.data;
             if ("message" in data && typeof data.message === "string") {
-              return data.message
+              return data.message;
             }
           }
-          return String(error)
-        })()
+          return String(error);
+        })();
 
         toast.show({
           variant: "error",
           message,
           duration: 5000,
-        })
+        });
       }),
       sdk.event.on("permission.blocked", (evt) => {
         toast.show({
           message: `${evt.properties.permission} denied by auto mode · [${evt.properties.rule}] · ${keybind.print("permission_mode")} to review`,
           variant: "warning",
           duration: 5000,
-        })
+        });
       }),
       sdk.event.on("permission.asked", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(1.3)
+        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined;
+        if (tuiCfg?.sound === false) return;
+        if (attention.focus() === "focused") return;
+        Sound.pulse(1.3);
       }),
       sdk.event.on("session.idle", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(0.8)
+        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined;
+        if (tuiCfg?.sound === false) return;
+        if (attention.focus() === "focused") return;
+        Sound.pulse(0.8);
       }),
-    ]
+    ];
 
-    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade)
+    void checkUpgradeWhenSubscriptionReady(
+      sdk.subscriptionReady,
+      props.checkUpgrade,
+    )
       .then((available) => (available ? offerUpdate(available) : undefined))
-      .catch(() => undefined)
+      .catch(() => undefined);
 
     onCleanup(() => {
-      renderer.off("focus", refocusPrompt)
-      unsubs.forEach((fn) => fn())
-      Sound.dispose()
-    })
-  })
+      renderer.off("focus", refocusPrompt);
+      unsubs.forEach((fn) => fn());
+      Sound.dispose();
+    });
+  });
 
   return (
     <box
@@ -1855,18 +2041,34 @@ function App(props: {
       backgroundColor={theme.surface.base}
       onMouseUp={async () => {
         if (Flag.NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
-          return
+          renderer.clearSelection();
+          return;
         }
-        const text = renderer.getSelection()?.getSelectedText()
+        const text = renderer.getSelection()?.getSelectedText();
         if (text && text.length > 0) {
           await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
+            .then(() =>
+              toast.show({ message: "Copied to clipboard", variant: "info" }),
+            )
+            .catch(toast.error);
+          renderer.clearSelection();
         }
       }}
     >
+      {/*
+        Plugin backdrops, ahead of the built-in wallpaper.
+
+        A zero-size absolute box, so the slot takes no room in the column and a
+        plugin's own `position: absolute` node is positioned against the app
+        box's top-left corner instead of wherever the column happens to place
+        it. First in child order, so whatever a plugin draws here paints after
+        the app's own background and before every UI sibling. A node added to
+        `renderer.root` cannot do this: it sits behind the opaque app box and is
+        never seen, which is why this mount point exists.
+      */}
+      <box position="absolute" left={0} top={0} width={0} height={0}>
+        <TuiPluginRuntime.Slot name="backdrop" />
+      </box>
       {/*
         Keep the wallpaper first in logical child order as well as at z-index
         -1. The image appears asynchronously; this gives Solid an anchor before
@@ -1885,19 +2087,49 @@ function App(props: {
             <Session />
           </Match>
           <Match when={route.data.type === "changes" && route.data}>
-            {(data) => <LegacyRedirect tab="changes" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="changes"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "tree" && route.data}>
-            {(data) => <LegacyRedirect tab="tree" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="tree"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "git-graph" && route.data}>
-            {(data) => <LegacyRedirect tab="graph" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="graph"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "github" && route.data}>
-            {(data) => <LegacyRedirect tab="github" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="github"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "actions" && route.data}>
-            {(data) => <LegacyRedirect tab="actions" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="actions"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "workspace"}>
             <Workspace />
@@ -1907,16 +2139,22 @@ function App(props: {
               // Keyed so navigating to another plugin route, or a hot reload of
               // the plugin, recreates the boundary; otherwise one crash would
               // latch every future plugin route into the fallback.
-              <Show keyed when={{ id: data().id, generation: pluginRouteKey() }}>
+              <Show
+                keyed
+                when={{ id: data().id, generation: pluginRouteKey() }}
+              >
                 {(current) => (
                   <PluginRouteBoundary id={current.id}>
                     {(() => {
-                      const last = routes.get(current.id)?.at(-1)
+                      const last = routes.get(current.id)?.at(-1);
                       return last ? (
                         last.render({ params: data().data })
                       ) : (
-                        <PluginRouteMissing id={current.id} onHome={() => route.navigate({ type: "home" })} />
-                      )
+                        <PluginRouteMissing
+                          id={current.id}
+                          onHome={() => route.navigate({ type: "home" })}
+                        />
+                      );
                     })()}
                   </PluginRouteBoundary>
                 )}
@@ -1938,8 +2176,11 @@ function App(props: {
       <TuiPluginRuntime.Slot name="app" />
       <StartupLoading ready={pluginsReady} />
       <Show when={sdk.connection.status() === "reconnecting"}>
-        <Reconnecting attempt={sdk.connection.attempt()} error={sdk.connection.error()} />
+        <Reconnecting
+          attempt={sdk.connection.attempt()}
+          error={sdk.connection.error()}
+        />
       </Show>
     </box>
-  )
+  );
 }
