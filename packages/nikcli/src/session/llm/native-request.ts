@@ -9,7 +9,7 @@
  * a silent drop would instead surface as a provider 400 mid-stream, where no
  * fallback can catch it.
  */
-import { asSchema, type ModelMessage, type Tool } from "@/provider/legacy/ai-sdk"
+import { asSchema, type ModelMessage, type Tool } from "@/session/llm/types"
 import {
   Message as LLMMessage,
   ToolChoice,

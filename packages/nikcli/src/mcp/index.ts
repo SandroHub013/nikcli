@@ -1,4 +1,4 @@
-import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "@/provider/legacy/ai-sdk"
+import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "@/session/llm/types"
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"

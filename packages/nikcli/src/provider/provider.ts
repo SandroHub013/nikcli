@@ -3,14 +3,7 @@ import { parseModel as parseModelLight } from "@nikcli-ai/util/model"
 import * as ProviderSchema from "./schema"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import {
-  BUNDLED_PROVIDERS,
-  NoSuchModelError,
-  type AmazonBedrockProviderSettings,
-  type createGitLab,
-  type LanguageModelV2,
-  type SDK,
-} from "@/provider/legacy/ai-sdk"
+import { BUNDLED_PROVIDERS, NoSuchModelError, type AmazonBedrockProviderSettings, type createGitLab, type LanguageModelV2, type SDK } from "@/provider/legacy/ai-sdk"
 import { Log } from "@nikcli-ai/util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"

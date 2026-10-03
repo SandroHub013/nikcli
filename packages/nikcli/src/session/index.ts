@@ -3,8 +3,7 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type LanguageModelV2Usage } from "@/provider/legacy/ai-sdk"
-import type { ProviderMetadata } from "@/provider/legacy/ai-sdk"
+import type { LanguageModelUsage, ProviderMetadata } from "@/session/llm/types"
 import { iife } from "@nikcli-ai/util/iife"
 import { Config } from "../config/config"
 import { Flag } from "@nikcli-ai/util/flag"
@@ -287,7 +286,7 @@ export namespace Session {
 
   const UsageInput = z.object({
     model: z.custom<Provider.Model>(),
-    usage: z.custom<LanguageModelV2Usage>(),
+    usage: z.custom<LanguageModelUsage>(),
     metadata: z.custom<ProviderMetadata>().optional(),
   })
   type UsageInput = z.infer<typeof UsageInput>

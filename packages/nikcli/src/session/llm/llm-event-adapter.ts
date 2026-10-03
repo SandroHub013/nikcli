@@ -1,10 +1,9 @@
 import type { LLMEvent } from "@nikcli-ai/llm"
-import { APICallError } from "@/provider/legacy/ai-sdk"
-import { asSchema, type ModelMessage, type streamText, type Tool } from "@/provider/legacy/ai-sdk"
+import { APICallError } from "@/provider/error"
+import { asSchema, type ModelMessage, type StreamEvent, type Tool } from "@/session/llm/types"
 import { Log } from "@nikcli-ai/util/log"
 
-type Result = Awaited<ReturnType<typeof streamText>>
-export type ProcessorStreamEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
+export type ProcessorStreamEvent = StreamEvent
 
 const log = Log.create({ service: "llm-event-adapter" })
 
@@ -752,7 +751,7 @@ async function runTool(
  * Run the session's client tools for a native stream.
  *
  * The native route only *streams the model*: it surfaces `tool-call` events and
- * stops. The AI SDK's `streamText` is what ran each tool's `execute` and emitted
+ * stops. Something has to run each tool's `execute` and emit
  * `tool-result`/`tool-error`, and the processor only completes a tool part on
  * those. This puts that back: each call starts executing as soon as it arrives
  * (so tools overlap with the rest of the stream, as under the AI SDK) and every

@@ -1,4 +1,4 @@
-import { type Tool } from "@/provider/legacy/ai-sdk"
+import { type Tool } from "@/session/llm/types"
 import z from "zod"
 import { Config } from "../config/config"
 import { Log } from "@nikcli-ai/util/log"

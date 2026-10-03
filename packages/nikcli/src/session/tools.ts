@@ -3,7 +3,7 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "@nikcli-ai/util/log"
 import { Agent } from "@/agent/agent"
 import { Provider } from "@/provider/provider"
-import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "@/provider/legacy/ai-sdk"
+import { type JSONSchema7, type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "@/session/llm/types"
 import { ProviderTransform } from "@/provider/transform"
 import { Plugin } from "@/plugin"
 import { ToolRegistry } from "@/tool/registry"
@@ -321,7 +321,7 @@ export async function resolveTools(input: {
     if (exposure === "hidden") continue
     const schema = ProviderTransform.schema(
       input.model,
-      z.toJSONSchema(item.parameters) as import("@/provider/legacy/ai-sdk").JSONSchema7,
+      z.toJSONSchema(item.parameters) as JSONSchema7,
     )
     tools[item.id] = tool({
       id: String(item.id) as `${string}.${string}`,

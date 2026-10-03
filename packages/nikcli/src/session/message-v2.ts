@@ -5,15 +5,9 @@ import { zod, zodObject, zodObjectMode, zodOverride, type DeepMutable } from "@n
 import z from "zod"
 import { EventError } from "./event-error"
 import { Effect, Schema } from "effect"
-import {
-  APICallError,
-  convertToModelMessages,
-  JSONParseError,
-  LoadAPIKeyError,
-  type ModelMessage,
-  type ToolSet,
-  type UIMessage,
-} from "@/provider/legacy/ai-sdk"
+import { APICallError, LoadAPIKeyError } from "@/provider/error"
+import { convertToModelMessages } from "@/session/llm/ui-messages"
+import { type ModelMessage, type ToolSet, type UIMessage } from "@/session/llm/types"
 import { Identifier } from "@nikcli-ai/util/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -1119,10 +1113,9 @@ export namespace MessageV2 {
           },
         }
       }
-      // ai-sdk throws JSONParseError on malformed SSE chunks; classify as retryable
-      // so the existing backoff path recovers (previously fell through to UnknownError).
-      // See opencode upstream #38041.
-      case JSONParseError.isInstance(e):
+      // A malformed SSE chunk (the AI SDK's JSONParseError, or a native decode failure) is retryable, so
+      // the backoff path recovers instead of the turn ending as UnknownError. See opencode upstream #38041.
+      case e instanceof Error && e.name === "AI_JSONParseError":
         return {
           name: "APIError" as const,
           data: {

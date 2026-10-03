@@ -1,6 +1,6 @@
-import type { ModelMessage, ToolResultPart } from "@/provider/legacy/ai-sdk"
+import type { ModelMessage, ToolResultPart } from "@/session/llm/types"
 import { mergeDeep } from "remeda"
-import type { JSONSchema7 } from "@/provider/legacy/ai-sdk"
+import type { JSONSchema7 } from "@/session/llm/types"
 import { Provider } from "./provider"
 import * as CachePolicy from "./cache-policy"
 import type { ModelsDev } from "./models"
@@ -1583,7 +1583,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
 
     const sanitized = sanitizeMoonshot(schema)
     if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
-      schema = sanitized
+      schema = sanitized as JSONSchema7
     }
   }
 

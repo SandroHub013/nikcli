@@ -2,19 +2,18 @@ import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@nikcli-ai/util/log"
+import { wrapLanguageModel, extractReasoningMiddleware } from "@/provider/legacy/ai-sdk"
+import { convertToModelMessages } from "@/session/llm/ui-messages"
 import {
-  convertToModelMessages,
-  modelMessageSchema,
-  wrapLanguageModel,
+  isModelMessage as isModelMessageShape,
   type ModelMessage,
-  type StreamTextResult,
+  type StreamOutput as TurnOutput,
   type Tool,
   type ToolSet,
   type UIMessage,
-  extractReasoningMiddleware,
   tool,
   jsonSchema,
-} from "@/provider/legacy/ai-sdk"
+} from "@/session/llm/types"
 import type { ProviderOptions } from "@nikcli-ai/llm"
 import * as LegacyAISDK from "@/provider/legacy/ai-sdk"
 import type { JsonValue } from "@/util/json"
@@ -138,7 +137,7 @@ export namespace LLM {
     toolChoice?: "auto" | "required" | "none"
   }
 
-  export type StreamOutput = StreamTextResult<ToolSet, unknown>
+  export type StreamOutput = TurnOutput
 
   type StreamMessageInput = ModelMessage | UIMessage | JsonValue
 
@@ -170,7 +169,7 @@ export namespace LLM {
   })
 
   function isModelMessage(message: StreamMessageInput): message is ModelMessage {
-    return modelMessageSchema.safeParse(message).success
+    return isModelMessageShape(message)
   }
 
   function isUIMessage(message: StreamMessageInput): message is UIMessage {

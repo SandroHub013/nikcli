@@ -7,7 +7,7 @@
  */
 import type { Auth } from "@/auth"
 import { Provider } from "@/provider/provider"
-import type { ModelMessage } from "@/provider/legacy/ai-sdk"
+import type { ModelMessage } from "@/session/llm/types"
 import type { LLMEvent, LLMRequest, ModelRef } from "@nikcli-ai/llm"
 import { streamRequest as llmStreamRequest } from "@nikcli-ai/llm/runtime"
 

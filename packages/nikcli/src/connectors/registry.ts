@@ -1,4 +1,4 @@
-import { dynamicTool, type Tool, jsonSchema } from "@/provider/legacy/ai-sdk"
+import { dynamicTool, type Tool, jsonSchema } from "@/session/llm/types"
 import { Config } from "../config/config"
 import { resolveCredential } from "./credentials"
 import { FigmaApi } from "./api/figma"

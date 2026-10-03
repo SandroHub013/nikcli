@@ -182,6 +182,35 @@ export function guardConsoleOverlay(renderer: CliRenderer) {
   }
 }
 
+/**
+ * Let an emitter's listener cap follow what is actually subscribed instead of a
+ * hardcoded number.
+ *
+ * Components subscribe to renderer and key events and unsubscribe on cleanup, so
+ * the legitimate count scales with how many are mounted — `EventEmitter`'s default
+ * of 10 is far too low, and any fixed replacement is just a guess that goes stale.
+ * `newListener` fires *before* the listener is added, so raising the cap there
+ * means the warning never prints, and the cap never sits above what is in use by
+ * more than `headroom`. Each raise is logged, so a runaway event still leaves a trail.
+ */
+export function followListenerCount(
+  emitter: {
+    on: (event: any, listener: (...args: any[]) => void) => unknown
+    listenerCount: (event: any) => number
+    getMaxListeners: () => number
+    setMaxListeners: (n: number) => unknown
+  },
+  name: string,
+  headroom = 10,
+) {
+  emitter.on("newListener", (event: unknown) => {
+    const count = emitter.listenerCount(event)
+    if (count < emitter.getMaxListeners()) return
+    emitter.setMaxListeners(count + 1 + headroom)
+    log.debug("raised listener cap", { emitter: name, event: String(event), count: count + 1 })
+  })
+}
+
 export function tui(input: {
   url: string
   args: Args
@@ -270,9 +299,10 @@ export function tui(input: {
         // alone is used in 32 files) and to key events (`useKeyboard`), all of which
         // unsubscribe on cleanup. That is well past EventEmitter's default cap of 10,
         // so without this bun prints a MaxListenersExceededWarning straight over the
-        // first frame — once for the renderer, once for its key handler.
-        renderer.setMaxListeners(200)
-        renderer.keyInput.setMaxListeners(200)
+        // first frame — once for the renderer, once for its key handler. The cap
+        // follows the real subscriber count rather than a fixed number.
+        followListenerCount(renderer, "renderer")
+        followListenerCount(renderer.keyInput, "keyInput")
         guardConsoleOverlay(renderer)
         if (!headless) void renderer.getPalette({ size: 16 }).catch(() => undefined)
         const mode = headless ? "dark" : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark")
