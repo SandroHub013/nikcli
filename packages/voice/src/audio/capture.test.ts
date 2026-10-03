@@ -8,6 +8,7 @@ import {
   MIN_SEGMENT_DURATION_MS,
   resamplePcm,
   type CapturedSegment,
+  type SegmentAudio,
 } from "./capture"
 
 // Fake MediaStreamTrack counting stop() invocations
@@ -445,5 +446,138 @@ describe("audio/capture pre-roll", () => {
     capture.processAudioFrame(new Float32Array(320).fill(0.5))
     expect(levels).toEqual([0.5])
     capture.stop()
+  })
+})
+
+describe("audio/capture segment audio", () => {
+  test("a detector-started segment reports start, the pre-roll frames, the new frames, end", async () => {
+    let simulatedTime = 10_000
+    const events: SegmentAudio[] = []
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      preferredFormat: "wav",
+      onSegmentAudio: (event) => {
+        events.push(event)
+      },
+      speechDetectorConfig: { speechThreshold: 0.05, minSpeechDurationMs: 200, silenceDurationMs: 300 },
+    })
+    await capture.start()
+
+    const frame = 4096
+    const quiet = new Float32Array(frame).fill(0)
+    const loud = new Float32Array(frame).fill(0.5)
+
+    capture.processAudioFrame(quiet)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    simulatedTime += 256
+    capture.processAudioFrame(quiet)
+    simulatedTime += 400
+    capture.processAudioFrame(quiet)
+    capture.stop()
+
+    expect(events.length).toBeGreaterThanOrEqual(4)
+    expect(events[0].phase).toBe("start")
+    expect(events[0].sequence).toBe(1)
+    expect(events.at(-1)!.phase).toBe("end")
+    expect(events.at(-1)!.sequence).toBe(1)
+    // Everything between is a frame of the same segment.
+    const frames = events.slice(1, -1)
+    expect(frames.length).toBeGreaterThanOrEqual(3)
+    for (const event of frames) {
+      expect(event.phase).toBe("frame")
+      expect(event.sequence).toBe(1)
+      expect(event.pcm).toBeInstanceOf(Float32Array)
+    }
+    // The first frame is the room tone heard before the detector confirmed the
+    // speech: it can only have arrived as pre-roll.
+    expect(frames[0].pcm!.every((sample) => sample === 0)).toBe(true)
+    // The closing frame never goes out after the end.
+    expect(events.filter((event) => event.phase === "end")).toHaveLength(1)
+    expect(events.filter((event) => event.phase === "cancel")).toHaveLength(0)
+  })
+
+  test("a segment started by a key press reports no pre-roll frames", async () => {
+    const events: SegmentAudio[] = []
+    let simulatedTime = 10_000
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      preferredFormat: "wav",
+      speechDetectorConfig: { speechThreshold: 0.9 },
+    })
+    await capture.start()
+    capture.onSegmentAudio((event) => {
+      events.push(event)
+    })
+
+    const frame = new Float32Array(1600).fill(0.1)
+    capture.processAudioFrame(frame)
+    capture.processAudioFrame(frame)
+    capture.startSegment?.()
+    simulatedTime += 200
+    capture.processAudioFrame(frame)
+    capture.commitSegment?.()
+    capture.stop()
+
+    // Two frames went into the pre-roll before the key press: none of them is
+    // reported, only the frame recorded after the press.
+    expect(events.map((event) => event.phase)).toEqual(["start", "frame", "end"])
+    expect(events[1].pcm!.length).toBe(1600)
+    expect(events.every((event) => event.sequence === 1)).toBe(true)
+  })
+
+  test("a cancelled segment reports cancel instead of end, and a later segment gets its own sequence", async () => {
+    const events: SegmentAudio[] = []
+    const segments: CapturedSegment[] = []
+    let simulatedTime = 10_000
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      preferredFormat: "wav",
+      speechDetectorConfig: { speechThreshold: 0.9 },
+      onSegment: (seg) => {
+        segments.push(seg)
+      },
+      onSegmentAudio: (event) => {
+        events.push(event)
+      },
+    })
+    await capture.start()
+
+    capture.startSegment?.()
+    capture.processAudioFrame(new Float32Array(1600).fill(0.1))
+    capture.cancelSegment?.()
+    // Cancelling what is not being recorded reports nothing at all.
+    capture.cancelSegment?.()
+
+    capture.startSegment?.()
+    simulatedTime += 200
+    capture.processAudioFrame(new Float32Array(1600).fill(0.1))
+    capture.commitSegment?.()
+    capture.stop()
+
+    expect(events.map((event) => `${event.phase}:${event.sequence}`)).toEqual([
+      "start:1",
+      "frame:1",
+      "cancel:1",
+      "start:2",
+      "frame:2",
+      "end:2",
+    ])
+    // The cancelled segment produced no audio: only the committed one.
+    expect(segments).toHaveLength(1)
+    expect(segments[0].sequence).toBe(2)
   })
 })
