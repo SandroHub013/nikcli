@@ -33,6 +33,7 @@ mod secrets;
 mod serve;
 mod serve_proxy;
 mod shots;
+mod stt_stream;
 mod mailbox;
 mod stats;
 mod tray;
@@ -2197,6 +2198,7 @@ pub fn run() {
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
         .manage(secrets::SecretsLock::default())
+        .manage(stt_stream::Sessions::default())
         .manage(gateway::Gateway::default())
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
@@ -2387,6 +2389,10 @@ pub fn run() {
             secrets::secret_delete,
             secrets::secret_copy,
             secrets::secret_assigned,
+            stt_stream::stt_stream_open,
+            stt_stream::stt_stream_send,
+            stt_stream::stt_stream_end,
+            stt_stream::stt_stream_cancel,
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
             session_locked,
@@ -2408,6 +2414,8 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 use tauri::Manager;
                 app.state::<gateway::Gateway>().shutdown();
+                // Open transcription sockets end with the app, not at the server's timeout.
+                app.state::<stt_stream::Sessions>().close_all();
                 app.state::<serve::Server>().shutdown();
                 app.state::<frontend::DevServer>().shutdown();
                 app.state::<pty::Registry>().end_all();
