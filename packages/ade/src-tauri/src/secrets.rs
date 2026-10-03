@@ -134,6 +134,19 @@ pub fn forget_all(identifier: &str, config: &std::path::Path, data: &std::path::
     i32::from(!gone.failed.is_empty())
 }
 
+/// The value of the key whose variable is `env`, for Rust code that needs it itself (`stt_stream` speaks to xAI with it). `None` when the index
+/// has no such key, the keychain has no value, or the value is blank. Not a command: the page can list and save keys, never read one.
+pub(crate) fn value_for_env(vault: &dyn Vault, service: &str, path: &std::path::Path, env: &str) -> Result<Option<String>, String> {
+    let index = read_index(path);
+    let Some(key) = index.keys.iter().find(|key| key.env == env) else { return Ok(None) };
+    Ok(vault.get(service, &key.name)?.filter(|value| !value.trim().is_empty()))
+}
+
+/// `value_for_env` against the system keychain and this app's index.
+pub(crate) fn value_of_env(app: &AppHandle, env: &str) -> Result<Option<String>, String> {
+    value_for_env(&SystemVault, &service(app), &index_path(app)?, env)
+}
+
 /// Serialises index writes: two saves at once would each drop the other's key.
 #[derive(Default)]
 pub struct SecretsLock(Mutex<()>);
@@ -501,6 +514,21 @@ mod tests {
             self.0.lock().unwrap().remove(&(service.into(), name.into()));
             Ok(())
         }
+    }
+
+    #[test]
+    fn rust_can_read_the_key_of_a_variable_and_only_that_one() {
+        let vault = MemoryVault::default();
+        let path = temp_index("value-for-env");
+        save_in(&vault, "svc", &path, "xai", "XAI_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "openai", "OPENAI_API_KEY", vec![], Some("other-value"), 1).unwrap();
+        assert_eq!(value_for_env(&vault, "svc", &path, "XAI_API_KEY"), Ok(Some(FAKE.to_string())));
+        assert_eq!(value_for_env(&vault, "svc", &path, "NOPE_API_KEY"), Ok(None));
+        // An index entry whose value the keychain lost, and a blank value, are no key.
+        vault.delete("svc", "xai").unwrap();
+        assert_eq!(value_for_env(&vault, "svc", &path, "XAI_API_KEY"), Ok(None));
+        vault.set("svc", "xai", "   ").unwrap();
+        assert_eq!(value_for_env(&vault, "svc", &path, "XAI_API_KEY"), Ok(None));
     }
 
     #[test]
