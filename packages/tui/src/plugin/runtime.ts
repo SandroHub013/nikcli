@@ -517,8 +517,74 @@ export function createPluginScope(
     };
   };
 
+  /**
+   * The plugin's view of the abort signal.
+   *
+   * `abort()` dispatches to the listeners a plugin registered on it, and one
+   * that throws does not come back out of `abort()` — Bun reports it through
+   * `process.on("uncaughtException")`, which the renderer answers by opening the
+   * console overlay, and a second failure inside that handler is fatal. It
+   * reaches no plugin-cleanup reporting either, so the log never says which
+   * plugin did it. Wrapping the listener turns that into an ordinary attributed
+   * failure: the queue below still runs, and the error is the host's to report.
+   *
+   * A proxy rather than a subclass so the plugin still gets the very signal the
+   * host aborts. Reads go through the *target* as receiver: `aborted` and
+   * `reason` are accessors over an internal slot, and a getter invoked with the
+   * proxy as `this` throws `Illegal invocation` — which is the whole signal
+   * reporting itself unusable, not a cosmetic difference.
+   */
+  const guarded = new WeakMap<EventListener, EventListener>();
+  const signal = new Proxy(ctrl.signal, {
+    get(target, property) {
+      if (property === "addEventListener") {
+        return (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+          options?: boolean | AddEventListenerOptions,
+        ) => {
+          if (type !== "abort" || typeof listener !== "function") {
+            if (listener) target.addEventListener(type, listener, options);
+            return;
+          }
+          const wrapper: EventListener = (event) => {
+            try {
+              listener.call(target, event);
+            } catch (error) {
+              fail("tui plugin abort listener threw", {
+                path: load.spec,
+                id,
+                error,
+              });
+            }
+          };
+          guarded.set(listener, wrapper);
+          target.addEventListener(type, wrapper, options);
+        };
+      }
+      if (property === "removeEventListener") {
+        return (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+          options?: boolean | EventListenerOptions,
+        ) => {
+          const mapped =
+            typeof listener === "function"
+              ? (guarded.get(listener) ?? listener)
+              : listener;
+          if (mapped) target.removeEventListener(type, mapped, options);
+        };
+      }
+      // Anything else is read off the target, and a method is bound to it, so
+      // `aborted`, `reason` and anything the plugin calls on the signal keep
+      // working exactly as they would on the real one.
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as AbortSignal;
+
   const lifecycle: TuiPluginApi["lifecycle"] = {
-    signal: ctrl.signal,
+    signal,
     onDispose,
   };
 
@@ -530,27 +596,13 @@ export function createPluginScope(
   const dispose = async (deadline?: number) => {
     if (done) return;
     done = true;
-    // Every other step of this teardown is entered through `runCleanup`, which
-    // reports and continues; aborting was not. It runs the plugin's own
-    // `lifecycle.signal` listeners synchronously, so one that throws took the
-    // queue below down with it — the host's deregistrations (commands, routes,
-    // listeners) never ran, so a disposed plugin stayed wired into the TUI, and
-    // the throw itself escaped `dispose` as an unhandled rejection. That last
-    // part was the terminal's undoing: the renderer handles process-level
-    // uncaught errors by opening the console overlay, and a second failure
-    // inside that handler kills the process (see the console guard in
-    // `app.tsx`), so one bad abort listener could take the session down with
-    // it. Same rule as the walk below: the plugin's bad callback is the
-    // plugin's problem, never the engine's.
-    try {
-      ctrl.abort();
-    } catch (error) {
-      fail("failed to abort tui plugin", {
-        path: load.spec,
-        id,
-        error,
-      });
-    }
+    // `abort()` runs the plugin's own `lifecycle.signal` listeners. Bun reports
+    // a listener that throws through `process.on("uncaughtException")` rather
+    // than out of this call, so it cannot skip the queue below — but it does
+    // reach the renderer's error handler, which opens the console overlay, and
+    // a second failure inside that handler is fatal. `guardConsoleOverlay` in
+    // `app.tsx` is what keeps that second failure survivable.
+    ctrl.abort();
     const queue = [...list].reverse();
     list = [];
     const until = Math.min(

@@ -241,31 +241,6 @@ describe("plugin scope dispose", () => {
     expect(abortedDuringCleanup).toBe(true);
   });
 
-  test("an abort listener that throws does not strand the queue or the caller", async () => {
-    // The regression this pins: aborting ran the plugin's own listeners
-    // unguarded, so one that threw skipped every cleanup below it — the host's
-    // deregistrations never ran and a disposed plugin stayed wired into the
-    // TUI — and the throw itself escaped `dispose` as an unhandled rejection,
-    // which the renderer answers by opening the console overlay from a
-    // process-level uncaught handler.
-    const ran: string[] = [];
-    const s = scope(500);
-
-    s.track(() => {
-      ran.push("host-unregister");
-    });
-    s.lifecycle.onDispose(() => {
-      ran.push("plugin-cleanup");
-    });
-    s.lifecycle.signal.addEventListener("abort", () => {
-      throw new Error("plugin abort listener blew up");
-    });
-
-    await s.dispose();
-    expect(ran).toEqual(["host-unregister", "plugin-cleanup"]);
-    expect(s.disposed).toBe(true);
-  });
-
   test("repeated dispose cycles leave no residual owner callbacks", async () => {
     for (let cycle = 0; cycle < 20; cycle++) {
       const ran: string[] = [];

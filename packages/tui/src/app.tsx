@@ -186,9 +186,13 @@ const log = Log.create({ service: "tui.app" });
  * So the cost of a full pool is the overlay and a line in the log. The wrap is
  * on the instance, not the prototype, and it keeps `show()`'s behaviour for
  * every caller that can afford it — including the error handler's own.
+ *
+ * Exported for `test/tui/console-overlay.test.ts`: this is the difference
+ * between a lost session and a log line, and the one way to reach it is to ask
+ * the module that installs it.
  */
-function guardConsoleOverlay(renderer: CliRenderer) {
-  const overlay = renderer.console as { show?: () => void } | undefined;
+export function guardConsoleOverlay(renderer: CliRenderer) {
+  const overlay = renderer?.console as { show?: () => void } | undefined;
   if (!overlay || typeof overlay.show !== "function") return;
   const open = overlay.show.bind(overlay);
   overlay.show = () => {
@@ -2058,15 +2062,22 @@ function App(props: {
       {/*
         Plugin backdrops, ahead of the built-in wallpaper.
 
-        A zero-size absolute box, so the slot takes no room in the column and a
-        plugin's own `position: absolute` node is positioned against the app
-        box's top-left corner instead of wherever the column happens to place
-        it. First in child order, so whatever a plugin draws here paints after
-        the app's own background and before every UI sibling. A node added to
-        `renderer.root` cannot do this: it sits behind the opaque app box and is
-        never seen, which is why this mount point exists.
+        Absolute and sized to the frame, so the slot takes no room in the column
+        while a plugin's node still gets a real box to lay out in — a zero-size
+        wrapper lays its children out at width 0, and a full-screen node inside
+        one renders nothing at all. First in child order, so whatever a plugin
+        draws here paints after the app's own background and before every UI
+        sibling. A node added to `renderer.root` cannot do this: it sits behind
+        the opaque app box and is never seen, which is why this mount point
+        exists.
       */}
-      <box position="absolute" left={0} top={0} width={0} height={0}>
+      <box
+        position="absolute"
+        left={0}
+        top={0}
+        width={dimensions().width}
+        height={dimensions().height}
+      >
         <TuiPluginRuntime.Slot name="backdrop" />
       </box>
       {/*
