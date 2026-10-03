@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.424.0 (October 2026)
+
+## Core
+
+- Expand mod functionality with UI integration and localization (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mods): expand mod functionality with UI integration and localization
+
 ## v1.423.0 (October 2026)
 
 ## Core

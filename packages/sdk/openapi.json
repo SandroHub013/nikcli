@@ -59361,6 +59361,17 @@
           "props": {
             "type": "string"
           },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["terminal", "mobile", "desktop", "ade"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "columns": {
             "anyOf": [
               {

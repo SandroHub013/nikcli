@@ -905,12 +905,7 @@ export class MobileClient {
   }
 
   /** Asks the mods what to draw at one site. Always as the `mobile` surface, so a mod can tailor for a phone. */
-  modRender(input: {
-    component: string
-    requestId?: string
-    sessionID?: string
-    props?: Record<string, unknown>
-  }) {
+  modRender(input: { component: string; requestId?: string; sessionID?: string; props?: Record<string, unknown> }) {
     return this.request<import("@/lib/mod-tree").ModRenderOutput>("/mod/ui/render", {
       method: "POST",
       body: JSON.stringify({
