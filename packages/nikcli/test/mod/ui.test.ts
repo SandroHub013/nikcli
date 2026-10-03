@@ -22,7 +22,9 @@ describe("ModUi.builders", () => {
     })
     expect(Button({ key: "go", label: "Go" })).toEqual({ type: "Button", key: "go", props: { label: "Go" } })
     // An element as the first argument is a child, not props.
-    expect((Box(Text("only")) as { children: unknown[] }).children).toEqual([{ type: "Text", props: {}, children: ["only"] }])
+    expect((Box(Text("only")) as { children: unknown[] }).children).toEqual([
+      { type: "Text", props: {}, children: ["only"] },
+    ])
   })
 
   it("flattens arrays of children, so a map result can be passed directly", () => {

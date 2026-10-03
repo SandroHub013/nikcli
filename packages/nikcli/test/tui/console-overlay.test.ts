@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import type { CliRenderer } from "@opentui/core";
-import { guardConsoleOverlay } from "@tui/app";
+import { describe, expect, test } from "bun:test"
+import type { CliRenderer } from "@opentui/core"
+import { guardConsoleOverlay } from "@tui/app"
 
 /**
  * A console overlay that cannot be built must not end the session.
@@ -21,51 +21,49 @@ import { guardConsoleOverlay } from "@tui/app";
  * is that a failing overlay reports instead of propagating into the renderer.
  */
 function rendererWhoseOverlayThrows(error: Error) {
-  let opened = 0;
+  let opened = 0
   const renderer = {
     console: {
       show() {
-        opened++;
-        throw error;
+        opened++
+        throw error
       },
     },
-  } as unknown as CliRenderer;
-  return { renderer, opened: () => opened };
+  } as unknown as CliRenderer
+  return { renderer, opened: () => opened }
 }
 
 describe("console overlay", () => {
   test("a framebuffer allocation failure is reported, not thrown at the caller", () => {
-    const boom = new Error("Failed to create optimized buffer: 184x14");
-    const h = rendererWhoseOverlayThrows(boom);
+    const boom = new Error("Failed to create optimized buffer: 184x14")
+    const h = rendererWhoseOverlayThrows(boom)
 
-    guardConsoleOverlay(h.renderer);
+    guardConsoleOverlay(h.renderer)
 
-    expect(() => h.renderer.console.show()).not.toThrow();
+    expect(() => h.renderer.console.show()).not.toThrow()
     // The attempt is still made: a working overlay must keep opening.
-    expect(h.opened()).toBe(1);
-  });
+    expect(h.opened()).toBe(1)
+  })
 
   test("a healthy overlay is untouched", () => {
-    let opened = 0;
+    let opened = 0
     const renderer = {
       console: {
         show() {
-          opened++;
+          opened++
         },
       },
-    } as unknown as CliRenderer;
+    } as unknown as CliRenderer
 
-    guardConsoleOverlay(renderer);
-    renderer.console.show();
-    renderer.console.show();
+    guardConsoleOverlay(renderer)
+    renderer.console.show()
+    renderer.console.show()
 
-    expect(opened).toBe(2);
-  });
+    expect(opened).toBe(2)
+  })
 
   test("a renderer without an overlay is not a reason to fail startup", () => {
-    expect(() => guardConsoleOverlay({} as CliRenderer)).not.toThrow();
-    expect(() =>
-      guardConsoleOverlay(undefined as unknown as CliRenderer),
-    ).not.toThrow();
-  });
-});
+    expect(() => guardConsoleOverlay({} as CliRenderer)).not.toThrow()
+    expect(() => guardConsoleOverlay(undefined as unknown as CliRenderer)).not.toThrow()
+  })
+})
