@@ -1,6 +1,6 @@
 import { Chat, type Thread, type Message } from "chat"
 import { ChatBot } from "./index"
-import { streamText, type ModelMessage, wrapLanguageModel } from "ai"
+import { streamText, type ModelMessage, wrapLanguageModel } from "@/provider/legacy/ai-sdk"
 import { Provider } from "../provider/provider"
 import { Config } from "../config/config"
 import { Log } from "@nikcli-ai/util/log"

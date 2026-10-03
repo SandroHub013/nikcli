@@ -2,11 +2,16 @@ import { describe, expect, it, spyOn } from "bun:test"
 import { APICallError } from "@ai-sdk/provider"
 import { Log } from "@nikcli-ai/util/log"
 import type { LLMEvent } from "@nikcli-ai/llm"
+import { jsonSchema, tool, type Tool } from "ai"
+import z from "zod"
 import {
+  executeTools,
+  extractThinkTags,
   mapLLMEvent,
   adapterState,
   toProcessorStream,
   providerErrorToAPICallError,
+  streamResult,
   suppressEmptyTextResult,
   usageGap,
   resetUsageGap,
@@ -494,7 +499,8 @@ describe("native turn equivalence", () => {
     }
 
     for await (const event of toProcessorStream(source())) {
-      expect(event.type).toBe("text-start")
+      // The step opens before content, so the first thing a consumer can stop on is `start`.
+      expect(event.type).toBe("start")
       break
     }
     expect(released).toBe(true)
@@ -595,5 +601,339 @@ describe("native turn equivalence", () => {
 
     expect(emitted.indexOf("text-end")).toBeGreaterThan(-1)
     expect(emitted.indexOf("text-end")).toBeLessThan(emitted.indexOf("finish-step"))
+  })
+})
+
+describe("executeTools", () => {
+  type Event = Parameters<typeof executeTools>[0] extends AsyncIterable<infer T> ? T : never
+
+  async function* source(events: object[]): AsyncGenerator<Event> {
+    for (const event of events) yield event as Event
+  }
+
+  async function run(events: object[], tools: Record<string, Tool>, abort = new AbortController().signal) {
+    const out: Event[] = []
+    for await (const event of executeTools(source(events), { tools, messages: [], abort })) out.push(event)
+    return out
+  }
+
+  const call = (toolName: string, input: unknown, extra: object = {}) => ({
+    type: "tool-call",
+    toolCallId: "call_1",
+    toolName,
+    input,
+    ...extra,
+  })
+
+  const finish = { type: "finish-step" }
+
+  const bash = tool({
+    description: "run",
+    inputSchema: z.object({ command: z.string(), timeout: z.number().default(5) }),
+    execute: async (input) => ({ title: "bash", output: `ran ${input.command} ${input.timeout}`, metadata: {} }),
+  })
+
+  it("runs a client tool and emits its result before the step closes", async () => {
+    const events = await run([call("bash", { command: "pwd" }), finish], { bash })
+    expect(events.map((event) => event.type)).toEqual(["tool-call", "tool-result", "finish-step"])
+    // The validated input is what runs, so schema defaults apply.
+    expect(events[1]).toMatchObject({
+      toolCallId: "call_1",
+      toolName: "bash",
+      input: { command: "pwd", timeout: 5 },
+      output: { output: "ran pwd 5" },
+    })
+  })
+
+  it("runs a tool whose schema is plain JSON schema", async () => {
+    const seen: unknown[] = []
+    const plain = tool({
+      description: "mcp",
+      inputSchema: jsonSchema<{ q: string }>({
+        type: "object",
+        properties: { q: { type: "string" } },
+        required: ["q"],
+      }),
+      execute: async (input) => {
+        seen.push(input)
+        return { output: "ok", title: "", metadata: {} }
+      },
+    })
+    const events = await run([call("plain", { q: "x" }), finish], { plain })
+    expect(events[1]).toMatchObject({ type: "tool-result" })
+    expect(seen).toEqual([{ q: "x" }])
+  })
+
+  it("repairs a wrong-cased tool name", async () => {
+    const events = await run([call("BASH", { command: "pwd" }), finish], { bash })
+    expect(events[0]).toMatchObject({ type: "tool-call", toolName: "bash" })
+    expect(events[1]).toMatchObject({ type: "tool-result", toolName: "bash" })
+  })
+
+  it("routes an unknown tool to the invalid tool with the reason", async () => {
+    const invalid = tool({
+      description: "invalid",
+      inputSchema: z.object({ tool: z.string(), error: z.string() }),
+      execute: async (input) => ({ output: `${input.tool}: ${input.error}`, title: "", metadata: {} }),
+    })
+    const events = await run([call("nope", {}), finish], { invalid })
+    expect(events[0]).toMatchObject({ type: "tool-call", toolName: "invalid" })
+    expect(events[1]).toMatchObject({
+      type: "tool-result",
+      toolName: "invalid",
+      output: { output: expect.stringContaining("nope") },
+    })
+  })
+
+  it("routes input the schema rejects to the invalid tool", async () => {
+    const invalid = tool({
+      description: "invalid",
+      inputSchema: z.object({ tool: z.string(), error: z.string() }),
+      execute: async (input) => ({ output: input.error, title: "", metadata: {} }),
+    })
+    const events = await run([call("bash", { command: 7 }), finish], { bash, invalid })
+    expect(events[0]).toMatchObject({ type: "tool-call", toolName: "invalid" })
+    expect(events[1]).toMatchObject({
+      type: "tool-result",
+      output: { output: expect.stringContaining("Invalid input for tool bash") },
+    })
+  })
+
+  it("reports a throwing tool as tool-error and still closes the step", async () => {
+    const boom = tool({
+      description: "boom",
+      inputSchema: z.object({}),
+      execute: async (): Promise<{ output: string }> => {
+        throw new Error("exploded")
+      },
+    })
+    const events = await run([call("boom", {}), finish], { boom })
+    expect(events.map((event) => event.type)).toEqual(["tool-call", "tool-error", "finish-step"])
+    expect(String((events[1] as { error: unknown }).error)).toContain("exploded")
+  })
+
+  it("passes provider-executed calls through without running them", async () => {
+    const events = await run([call("web_search", { q: "x" }, { providerExecuted: true }), finish], {})
+    expect(events.map((event) => event.type)).toEqual(["tool-call", "finish-step"])
+  })
+
+  it("starts a tool while the model stream is still open", async () => {
+    let started = false
+    const slow = tool({
+      description: "slow",
+      inputSchema: z.object({}),
+      execute: async () => {
+        started = true
+        return { output: "done", title: "", metadata: {} }
+      },
+    })
+    let startedBeforeNext = false
+    async function* events(): AsyncGenerator<Event> {
+      yield call("slow", {}) as Event
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      startedBeforeNext = started
+      yield finish as Event
+    }
+    const out: string[] = []
+    for await (const event of executeTools(events(), {
+      tools: { slow },
+      messages: [],
+      abort: new AbortController().signal,
+    }))
+      out.push(event.type)
+    expect(startedBeforeNext).toBe(true)
+    expect(out).toEqual(["tool-call", "tool-result", "finish-step"])
+  })
+
+  it("hands the tool its call id and abort signal", async () => {
+    const controller = new AbortController()
+    let received: { toolCallId?: string; abortSignal?: AbortSignal } = {}
+    const probe = tool({
+      description: "probe",
+      inputSchema: z.object({}),
+      execute: async (_input, options) => {
+        received = options
+        return { output: "", title: "", metadata: {} }
+      },
+    })
+    await run([call("probe", {}), finish], { probe }, controller.signal)
+    expect(received.toolCallId).toBe("call_1")
+    expect(received.abortSignal).toBe(controller.signal)
+  })
+})
+
+describe("extractThinkTags", () => {
+  async function* source(events: LLMEvent[]): AsyncGenerator<LLMEvent> {
+    for (const event of events) yield event
+  }
+
+  const delta = (text: string) => ({ type: "text-delta", id: "t", text }) as LLMEvent
+
+  async function run(...deltas: string[]) {
+    const events: LLMEvent[] = [...deltas.map(delta), { type: "request-finish", reason: "stop" } as LLMEvent]
+    const text: string[] = []
+    const reasoning: string[] = []
+    for await (const event of extractThinkTags(source(events))) {
+      if (event.type === "text-delta") text.push(event.text)
+      if (event.type === "reasoning-delta") reasoning.push(event.text)
+    }
+    return { text: text.join(""), reasoning: reasoning.join("") }
+  }
+
+  it("moves a think block out of text", async () => {
+    expect(await run("<think>plan</think>answer")).toEqual({ text: "answer", reasoning: "plan" })
+  })
+
+  it("leaves untagged text alone", async () => {
+    expect(await run("just ", "text")).toEqual({ text: "just text", reasoning: "" })
+  })
+
+  it("handles tags split across deltas at every boundary", async () => {
+    const whole = "<think>plan</think>answer"
+    for (let cut = 1; cut < whole.length; cut++) {
+      expect(await run(whole.slice(0, cut), whole.slice(cut))).toEqual({ text: "answer", reasoning: "plan" })
+    }
+  })
+
+  it("does not swallow a '<' that is not a tag", async () => {
+    expect(await run("a < b and <thing>", " done")).toEqual({ text: "a < b and <thing> done", reasoning: "" })
+  })
+
+  it("flushes a held fragment when the request ends", async () => {
+    expect(await run("ends with <thi")).toEqual({ text: "ends with <thi", reasoning: "" })
+  })
+
+  it("treats an unclosed think block as reasoning to the end", async () => {
+    expect(await run("<think>never closed")).toEqual({ text: "", reasoning: "never closed" })
+  })
+
+  it("gives separate think blocks separate reasoning ids", async () => {
+    const ids = new Set<string>()
+    for await (const event of extractThinkTags(
+      source([delta("<think>a</think>x<think>b</think>y"), { type: "request-finish", reason: "stop" } as LLMEvent]),
+    )) {
+      if (event.type === "reasoning-delta") ids.add(event.id as string)
+    }
+    expect(ids.size).toBe(2)
+  })
+})
+
+describe("toProcessorStream step opening", () => {
+  async function* source(events: LLMEvent[]): AsyncGenerator<LLMEvent> {
+    for (const event of events) yield event
+  }
+  const types = async (events: LLMEvent[]) => {
+    const out: string[] = []
+    for await (const event of toProcessorStream(source(events))) out.push(event.type)
+    return out
+  }
+
+  it("opens the step on the first event when the provider never sends request-start", async () => {
+    const out = await types([
+      { type: "text-delta", id: "t", text: "hi" } as LLMEvent,
+      { type: "request-finish", reason: "stop" } as LLMEvent,
+    ])
+    expect(out.slice(0, 2)).toEqual(["start", "start-step"])
+    expect(out.filter((type) => type === "start-step")).toHaveLength(1)
+    expect(out.indexOf("start-step")).toBeLessThan(out.indexOf("finish-step"))
+  })
+
+  it("does not open a second step when request-start is sent", async () => {
+    const out = await types([
+      { type: "request-start" } as LLMEvent,
+      { type: "text-delta", id: "t", text: "hi" } as LLMEvent,
+      { type: "request-finish", reason: "stop" } as LLMEvent,
+    ])
+    expect(out.filter((type) => type === "start")).toHaveLength(1)
+    expect(out.filter((type) => type === "start-step")).toHaveLength(1)
+  })
+})
+
+describe("streamResult", () => {
+  type Event = Parameters<typeof streamResult>[0] extends AsyncIterable<infer T> ? T : never
+  const delta = (text: string) => ({ type: "text-delta", id: "t", text }) as Event
+
+  function source(events: Event[], failure?: Error) {
+    const state = { started: false, released: false }
+    const iterable: AsyncIterable<Event> = {
+      [Symbol.asyncIterator]() {
+        state.started = true
+        let index = 0
+        return {
+          async next() {
+            if (index < events.length) return { value: events[index++]!, done: false }
+            if (failure) throw failure
+            return { value: undefined, done: true }
+          },
+          async return() {
+            state.released = true
+            return { value: undefined, done: true }
+          },
+        }
+      },
+    }
+    return { state, iterable }
+  }
+
+  it("does not touch the source until a consumer asks", () => {
+    const { state, iterable } = source([delta("a")])
+    streamResult(iterable)
+    expect(state.started).toBe(false)
+  })
+
+  it("resolves text from the stream without anyone iterating it", async () => {
+    const { iterable } = source([delta("hel"), delta("lo")])
+    expect(await streamResult(iterable).text).toBe("hello")
+  })
+
+  it("still replays the whole turn to fullStream after text was read", async () => {
+    const { iterable } = source([delta("a"), delta("b")])
+    const result = streamResult(iterable)
+    await result.text
+    const seen: string[] = []
+    for await (const event of result.fullStream) seen.push((event as { text: string }).text)
+    expect(seen).toEqual(["a", "b"])
+  })
+
+  it("serves text and fullStream consumers from one pass", async () => {
+    let pulls = 0
+    async function* counted(): AsyncGenerator<Event> {
+      pulls++
+      yield delta("x")
+      yield delta("y")
+    }
+    const result = streamResult(counted())
+    const [text, events] = await Promise.all([
+      result.text,
+      (async () => {
+        const out: Event[] = []
+        for await (const event of result.fullStream) out.push(event)
+        return out
+      })(),
+    ])
+    expect(text).toBe("xy")
+    expect(events).toHaveLength(2)
+    expect(pulls).toBe(1)
+  })
+
+  it("releases the source when the stream consumer stops early and text was not requested", async () => {
+    const { state, iterable } = source([delta("a"), delta("b"), delta("c")])
+    for await (const _ of streamResult(iterable).fullStream) break
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(state.released).toBe(true)
+  })
+
+  it("surfaces a failure to both consumers", async () => {
+    const boom = new Error("provider exploded")
+    const first = streamResult(source([delta("a")], boom).iterable)
+    await expect(first.text).rejects.toBe(boom)
+    const second = streamResult(source([delta("a")], boom).iterable)
+    const seen: Event[] = []
+    await expect(
+      (async () => {
+        for await (const event of second.fullStream) seen.push(event)
+      })(),
+    ).rejects.toBe(boom)
+    expect(seen).toHaveLength(1)
   })
 })

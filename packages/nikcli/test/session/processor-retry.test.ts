@@ -462,7 +462,10 @@ describe("SessionProcessor retry safety", () => {
       expect(result.calls).toBe(1)
       expect(result.waits).toEqual([])
       expect(result.events.some((event) => event.type === "removed")).toBe(false)
-      expect(result.parts).toMatchObject([{ type: kind, text: "native partial output" }])
+      // The native stream opens its step like any other, so a step-start part leads the content.
+      expect(result.parts.filter((part) => part.type !== "step-start")).toMatchObject([
+        { type: kind, text: "native partial output" },
+      ])
       expect(result.parts.some((part) => part.type === "step-finish")).toBe(false)
       expect(result.info.finish).toBeUndefined()
       expect(result.info.error).toMatchObject({

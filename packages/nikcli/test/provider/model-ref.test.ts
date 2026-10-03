@@ -1,0 +1,169 @@
+import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
+import path from "path"
+import { withFixture } from "../helpers/fixture"
+
+type ProviderConfig = Record<string, unknown>
+
+/** Resolve `getModelRef` for a model of a config-defined provider, in an isolated instance. */
+async function resolve(providers: Record<string, ProviderConfig>, providerID: string, modelID = "m") {
+  return withFixture(async ({ home }) => {
+    const previous = process.env.NIKCLI_DISABLE_PROJECT_CONFIG
+    const previousModelsFetch = process.env.NIKCLI_DISABLE_MODELS_FETCH
+    process.env.NIKCLI_DISABLE_PROJECT_CONFIG = "0"
+    process.env.NIKCLI_DISABLE_MODELS_FETCH = "1"
+    const { Instance } = await import("@/project/instance")
+    const { Provider } = await import("@/provider/provider")
+    const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
+    try {
+      await Bun.write(
+        path.join(home, "nikcli.json"),
+        JSON.stringify({ enabled_providers: Object.keys(providers), provider: providers }),
+      )
+      return await Instance.provide({
+        directory: home,
+        fn: () =>
+          runPromiseWithLayer(
+            Provider.defaultLayer,
+            withCurrentInstance(
+              Effect.gen(function* () {
+                const service = yield* Provider.Service
+                const model = yield* service.getModel(providerID, modelID)
+                return yield* service.getModelRef(model)
+              }),
+            ),
+          ),
+      })
+    } finally {
+      await Instance.disposeAll()
+      if (previous === undefined) delete process.env.NIKCLI_DISABLE_PROJECT_CONFIG
+      else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previous
+      if (previousModelsFetch === undefined) delete process.env.NIKCLI_DISABLE_MODELS_FETCH
+      else process.env.NIKCLI_DISABLE_MODELS_FETCH = previousModelsFetch
+    }
+  })
+}
+
+const models = { m: { name: "M", limit: { context: 8192, output: 1024 } } }
+
+describe("Provider.getModelRef", () => {
+  it("maps an OpenAI-compatible provider and carries its configured headers", async () => {
+    const ref = await resolve(
+      {
+        gateway: {
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://gw.example/v1",
+          options: { apiKey: "k", headers: { "x-team": "core", "x-skip": 7 } },
+          models: { m: { ...models.m, headers: { "x-model": "m1" } } },
+        },
+      },
+      "gateway",
+    )
+    expect(ref?.baseURL).toBe("https://gw.example/v1")
+    expect(ref?.headers).toEqual({ "x-team": "core", "x-model": "m1" })
+  })
+
+  it("does not guess OpenAI-compatible for an SDK it cannot map", async () => {
+    const ref = await resolve(
+      {
+        custom: {
+          npm: "merge-gateway-ai-sdk-provider",
+          api: "https://merge.example/v1",
+          options: { apiKey: "k" },
+          models,
+        },
+      },
+      "custom",
+    )
+    expect(ref).toBeUndefined()
+  })
+
+  it("maps SDKs that wrap an OpenAI-compatible endpoint onto the family host", async () => {
+    for (const [npm, host] of [
+      ["@ai-sdk/mistral", "https://api.mistral.ai/v1"],
+      ["@ai-sdk/perplexity", "https://api.perplexity.ai"],
+      ["@ai-sdk/cohere", "https://api.cohere.ai/compatibility/v1"],
+    ] as const) {
+      const id = npm.split("/")[1]!
+      const ref = await resolve({ [id]: { npm, options: { apiKey: "k" }, models } }, id)
+      expect(ref?.baseURL).toBe(host)
+      expect(ref?.route).toBe("openai-compatible-chat")
+    }
+  })
+
+  it("maps azure only when the resource host is known", async () => {
+    const known = await resolve(
+      {
+        azure: { npm: "@ai-sdk/azure", options: { apiKey: "k", resourceName: "contoso" }, models },
+      },
+      "azure",
+    )
+    expect(known?.baseURL).toBe("https://contoso.openai.azure.com/openai/v1")
+
+    const unknown = await resolve({ azure: { npm: "@ai-sdk/azure", options: { apiKey: "k" }, models } }, "azure")
+    expect(unknown).toBeUndefined()
+  })
+
+  it("gives a provider whose auth lives in its fetch a placeholder key", async () => {
+    const { Provider } = await import("@/provider/provider")
+    const model = {
+      id: "m",
+      providerID: "gateway",
+      api: { id: "m", url: "https://gw.example/v1", npm: "@ai-sdk/openai-compatible" },
+    }
+    const fetch = async () => new Response()
+    const withFetch = Provider.mapToModelRef(model as any, { id: "gateway", options: { fetch } } as any)
+    expect(withFetch?.apiKey).toBe(Provider.FETCH_MANAGED_KEY)
+    // A real key is never replaced by the placeholder.
+    const withKey = Provider.mapToModelRef(model as any, { id: "gateway", options: { fetch, apiKey: "real" } } as any)
+    expect(withKey?.apiKey).toBe("real")
+    // No key and no fetch: nothing carries a credential, so there is none to invent.
+    const bare = Provider.mapToModelRef(model as any, { id: "gateway", options: {} } as any)
+    expect(bare?.apiKey).toBeUndefined()
+  })
+})
+
+describe("Provider.nativeFetch", () => {
+  const info = (options: Record<string, unknown>) => ({ id: "p", options }) as any
+
+  it("is undefined when the provider carries no fetch and no timeouts", async () => {
+    const { Provider } = await import("@/provider/provider")
+    expect(Provider.nativeFetch(info({ apiKey: "k" }))).toBeUndefined()
+  })
+
+  it("calls the provider's fetch with the body restored to text, so plugins can inspect and replay it", async () => {
+    const { Provider } = await import("@/provider/provider")
+    const seen: Array<{ url: string; body: unknown }> = []
+    const fetch = async (url: unknown, init?: RequestInit) => {
+      seen.push({ url: String(url), body: init?.body })
+      return new Response("ok")
+    }
+    const wrapped = Provider.nativeFetch(info({ fetch }))!
+    await wrapped("https://api.example/v1/responses", {
+      method: "POST",
+      body: new TextEncoder().encode('{"model":"m"}'),
+    })
+    expect(seen).toEqual([{ url: "https://api.example/v1/responses", body: '{"model":"m"}' }])
+  })
+
+  it("aborts a request that outlives the configured timeout", async () => {
+    const { Provider } = await import("@/provider/provider")
+    const fetch = (_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))
+    const wrapped = Provider.nativeFetch(info({ fetch, timeout: 20 }))!
+    await expect(wrapped("https://api.example/v1/responses", { method: "POST" })).rejects.toBeDefined()
+  })
+
+  it("keeps the caller's abort signal", async () => {
+    const { Provider } = await import("@/provider/provider")
+    const controller = new AbortController()
+    let signal: AbortSignal | null | undefined
+    const fetch = async (_url: unknown, init?: RequestInit) => {
+      signal = init?.signal
+      return new Response("ok")
+    }
+    await Provider.nativeFetch(info({ fetch }))!("https://api.example", { signal: controller.signal })
+    controller.abort()
+    expect(signal?.aborted).toBe(true)
+  })
+})

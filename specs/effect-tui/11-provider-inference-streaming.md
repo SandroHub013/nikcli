@@ -321,7 +321,7 @@ Existing cache, usage and error helper modules are not these services, and passi
 
 Typecheck note: `bun run typecheck` from the repository root exits 0 (`Tasks: 39 successful, 39 total`). Two runs earlier in
 this session failed for reasons that had nothing to do with this work — twelve errors in
-`src/provider/sdk/copilot/chat/openai-compatible-chat-language-model.ts` from a duplicated `@ai-sdk/provider` in the
+`src/provider/legacy/copilot/chat/openai-compatible-chat-language-model.ts` from a duplicated `@ai-sdk/provider` in the
 installed tree, and `@nikcli-ai/identity`'s `wrangler types --check`. `bun install --frozen-lockfile` cleared both, which
 is worth recording because the two look like code faults and are install drift.
 

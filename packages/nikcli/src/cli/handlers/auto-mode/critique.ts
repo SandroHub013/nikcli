@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { generateText } from "ai"
+import { generateText } from "@/provider/legacy/ai-sdk"
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
 import { bootstrap } from "@/cli/bootstrap"

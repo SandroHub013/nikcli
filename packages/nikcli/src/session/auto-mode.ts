@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { ModelMessage } from "ai"
+import type { ModelMessage } from "@/provider/legacy/ai-sdk"
 import { Log } from "@nikcli-ai/util/log"
 import { Flag } from "@nikcli-ai/util/flag"
 import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effect"

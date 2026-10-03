@@ -2,7 +2,7 @@
  * Request utilities for @nikcli-ai/llm integration.
  * These helpers convert between AI SDK data shapes and @nikcli-ai/llm's canonical forms.
  */
-import type { ModelMessage } from "ai"
+import type { ModelMessage } from "@/provider/legacy/ai-sdk"
 
 // Check if messages contain any tool-call content
 export function hasToolCalls(messages: readonly ModelMessage[]): boolean {

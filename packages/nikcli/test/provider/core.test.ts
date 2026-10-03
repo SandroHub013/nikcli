@@ -6,8 +6,8 @@ import { ProviderError } from "@/provider/error"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@/provider/models"
 import { ProviderAuth } from "@/provider/auth"
-import { openaiCompatibleErrorDataSchema } from "@/provider/sdk/copilot/openai-compatible-error"
-import { openaiErrorDataSchema } from "@/provider/sdk/copilot/responses/openai-error"
+import { openaiCompatibleErrorDataSchema } from "@/provider/legacy/copilot/openai-compatible-error"
+import { openaiErrorDataSchema } from "@/provider/legacy/copilot/responses/openai-error"
 
 function makeModel(overrides: Partial<Provider.Model> = {}): Provider.Model {
   return {

@@ -13,7 +13,7 @@ import {
   type ModelMessage,
   type ToolSet,
   type UIMessage,
-} from "ai"
+} from "@/provider/legacy/ai-sdk"
 import { Identifier } from "@nikcli-ai/util/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"

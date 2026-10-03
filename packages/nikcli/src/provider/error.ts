@@ -1,4 +1,4 @@
-import { APICallError } from "ai"
+import { APICallError } from "@/provider/legacy/ai-sdk"
 import { Schema } from "effect"
 
 export namespace ProviderError {

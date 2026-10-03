@@ -1,6 +1,6 @@
 import type { LLMEvent } from "@nikcli-ai/llm"
-import { APICallError } from "@ai-sdk/provider"
-import type { streamText } from "ai"
+import { APICallError } from "@/provider/legacy/ai-sdk"
+import { asSchema, type ModelMessage, type streamText, type Tool } from "@/provider/legacy/ai-sdk"
 import { Log } from "@nikcli-ai/util/log"
 
 type Result = Awaited<ReturnType<typeof streamText>>
@@ -593,6 +593,13 @@ export async function* toProcessorStream(llmEvents: AsyncIterable<LLMEvent>): As
   const state = adapterState()
   try {
     for await (const event of llmEvents) {
+      // No native protocol emits `request-start`, so without this the processor would get content and a
+      // `finish-step` with no `start`/`start-step` before them: no step-start part, and no snapshot taken
+      // for the step, which is what file-change tracking (diffs, undo) is built from. The first event of
+      // any kind opens the step; a provider that does send `request-start` is deduplicated by the state.
+      if (!state.emittedStart && event.type !== "provider-error") {
+        for (const mapped of mapLLMEvent(state, { type: "request-start" } as LLMEvent)) yield mapped
+      }
       for (const mapped of mapLLMEvent(state, event)) {
         yield mapped
       }
@@ -615,6 +622,190 @@ export async function* toProcessorStream(llmEvents: AsyncIterable<LLMEvent>): As
   }
 }
 
+const THINK_OPEN = "<think>"
+const THINK_CLOSE = "</think>"
+
+/** Length of the longest suffix of `text` that is a proper prefix of `tag`: a tag possibly split across deltas. */
+function partialTag(text: string, tag: string) {
+  for (let length = Math.min(tag.length - 1, text.length); length > 0; length--) {
+    if (tag.startsWith(text.slice(text.length - length))) return length
+  }
+  return 0
+}
+
+/**
+ * Move inline `<think>…</think>` out of text into reasoning, as the AI SDK path's
+ * `extractReasoningMiddleware({ tagName: "think" })` does for models that stream their reasoning
+ * as tagged text (DeepSeek-R1 and Qwen behind OpenAI-compatible endpoints, local runtimes).
+ * Tags may be split across deltas, so a trailing fragment that could still become a tag is held
+ * back until the next delta decides it, and flushed when the request ends.
+ */
+export async function* extractThinkTags(events: AsyncIterable<LLMEvent>): AsyncGenerator<LLMEvent> {
+  let inThink = false
+  let held = ""
+  let block = 0
+  let last: Extract<LLMEvent, { type: "text-delta" }> | undefined
+
+  const emit = (text: string): LLMEvent[] => {
+    if (text.length === 0) return []
+    if (inThink) return [{ type: "reasoning-delta", id: `think-${block}`, text } as LLMEvent]
+    return last ? [{ ...last, text }] : []
+  }
+
+  const drain = (final: boolean): LLMEvent[] => {
+    const out: LLMEvent[] = []
+    while (held.length > 0) {
+      const tag = inThink ? THINK_CLOSE : THINK_OPEN
+      const at = held.indexOf(tag)
+      if (at >= 0) {
+        out.push(...emit(held.slice(0, at)))
+        held = held.slice(at + tag.length)
+        inThink = !inThink
+        if (inThink) block++
+        continue
+      }
+      const keep = final ? 0 : partialTag(held, tag)
+      out.push(...emit(held.slice(0, held.length - keep)))
+      held = held.slice(held.length - keep)
+      break
+    }
+    return out
+  }
+
+  for await (const event of events) {
+    if (event.type === "text-delta") {
+      last = event
+      held += event.text
+      yield* drain(false)
+      continue
+    }
+    if (event.type === "text-end" || event.type === "step-finish" || event.type === "request-finish") {
+      yield* drain(true)
+    }
+    yield event
+  }
+  yield* drain(true)
+}
+
+type ToolRunContext = {
+  readonly tools: Record<string, Tool>
+  readonly messages: readonly ModelMessage[]
+  readonly abort: AbortSignal
+}
+
+type ToolRunResult =
+  | { readonly ok: true; readonly input: unknown; readonly output: unknown }
+  | { readonly ok: false; readonly input: unknown; readonly error: unknown }
+
+/** The tool a call lands on when its name or input cannot be used (`ToolRegistry`'s `invalid`). */
+const INVALID_TOOL = "invalid"
+
+/**
+ * Resolve a model-issued call to something runnable, mirroring the AI SDK's
+ * `experimental_repairToolCall` in `LLM.stream`: a wrong-cased name is fixed, and
+ * an unknown name or an input the schema rejects is routed to the `invalid` tool
+ * with the reason, so the model sees what it got wrong rather than a dead call.
+ * Returns the (possibly rewritten) name and the validated input.
+ */
+async function resolveToolCall(tools: Record<string, Tool>, name: string, input: unknown) {
+  const lower = name.toLowerCase()
+  const resolved = tools[name] ? name : Object.keys(tools).find((key) => key.toLowerCase() === lower)
+  const tool = resolved ? tools[resolved] : undefined
+  const invalid = (error: string) => ({
+    name: INVALID_TOOL,
+    input: { tool: name, error },
+  })
+  if (!resolved || !tool) return invalid(`Model tried to call unavailable tool '${name}'.`)
+  if (!tool.inputSchema) return { name: resolved, input }
+  const validated = await asSchema(tool.inputSchema).validate?.(input)
+  if (!validated) return { name: resolved, input }
+  if (!validated.success) return invalid(`Invalid input for tool ${name}: ${validated.error.message}`)
+  return { name: resolved, input: validated.value }
+}
+
+async function runTool(
+  ctx: ToolRunContext,
+  call: { toolCallId: string; toolName: string; input: unknown },
+): Promise<ToolRunResult> {
+  try {
+    const tool = ctx.tools[call.toolName]
+    if (!tool?.execute) throw new Error(`Tool ${call.toolName} has no execute handler`)
+    const executed = tool.execute(call.input as never, {
+      toolCallId: call.toolCallId,
+      messages: ctx.messages as ModelMessage[],
+      abortSignal: ctx.abort,
+    })
+    // `execute` may stream (an async iterable of partial results); the last value is the result.
+    let output: unknown
+    if (executed && typeof executed === "object" && Symbol.asyncIterator in executed) {
+      for await (const value of executed as AsyncIterable<unknown>) output = value
+    } else {
+      output = await executed
+    }
+    return { ok: true, input: call.input, output }
+  } catch (error) {
+    return { ok: false, input: call.input, error }
+  }
+}
+
+/**
+ * Run the session's client tools for a native stream.
+ *
+ * The native route only *streams the model*: it surfaces `tool-call` events and
+ * stops. The AI SDK's `streamText` is what ran each tool's `execute` and emitted
+ * `tool-result`/`tool-error`, and the processor only completes a tool part on
+ * those. This puts that back: each call starts executing as soon as it arrives
+ * (so tools overlap with the rest of the stream, as under the AI SDK) and every
+ * outcome is emitted ahead of `finish-step`, which is what closes the step.
+ *
+ * Provider-executed calls pass through untouched; the provider already ran them.
+ */
+export async function* executeTools(
+  events: AsyncIterable<ProcessorStreamEvent>,
+  ctx: ToolRunContext,
+): AsyncGenerator<ProcessorStreamEvent> {
+  const pending: Array<{ toolCallId: string; toolName: string; result: Promise<ToolRunResult> }> = []
+
+  const flush = async function* () {
+    // Settled in call order. A tool still running when the turn is aborted
+    // settles with the abort error, so this never waits on a cancelled turn.
+    for (const call of pending.splice(0)) {
+      const result = await call.result
+      yield (
+        result.ok
+          ? {
+              type: "tool-result",
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              input: result.input,
+              output: result.output,
+            }
+          : {
+              type: "tool-error",
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              input: result.input,
+              error: result.error,
+            }
+      ) as ProcessorStreamEvent
+    }
+  }
+
+  for await (const event of events) {
+    if (event.type === "tool-call" && !event.providerExecuted) {
+      const resolved = await resolveToolCall(ctx.tools, event.toolName, event.input)
+      const call = { toolCallId: event.toolCallId, toolName: resolved.name, input: resolved.input }
+      pending.push({ ...call, result: runTool(ctx, call) })
+      yield { ...event, toolName: resolved.name, input: resolved.input } as ProcessorStreamEvent
+      continue
+    }
+    if (event.type === "finish-step") yield* flush()
+    yield event
+  }
+  // A stream that ended without a finish-step (cut off) still owes its tool outcomes.
+  yield* flush()
+}
+
 export function suppressEmptyTextResult<
   T extends {
     fullStream: AsyncIterable<ProcessorStreamEvent>
@@ -623,6 +814,76 @@ export function suppressEmptyTextResult<
 >(result: T): T {
   result.text.catch(() => {})
   return result
+}
+
+/**
+ * The result a native turn hands back: the processor's `fullStream`, and `text`.
+ *
+ * Several callers (titles, summaries, auto-mode) read `result.text` without ever iterating the stream,
+ * as `streamText` allowed. The native route only yields events, so something has to consume them and
+ * add the text up. Both are served from one pass over the source, started on first use of either (never
+ * at construction: nothing is requested until a consumer asks), with every event buffered so a consumer
+ * that iterates `fullStream` after reading `text` still sees the whole turn.
+ *
+ * `text` is created on first access, so a turn nobody asks the text of cannot leave an unhandled
+ * rejection behind; one that does ask owns handling it, as with the AI SDK.
+ */
+export function streamResult(source: AsyncIterable<ProcessorStreamEvent>) {
+  const buffer: ProcessorStreamEvent[] = []
+  let done = false
+  let failure: { readonly error: unknown } | undefined
+  let iterator: AsyncIterator<ProcessorStreamEvent> | undefined
+  let pulling: Promise<void> | undefined
+  let textRequested = false
+
+  // One source read at a time, shared by every consumer that has caught up with the buffer: the source is
+  // only advanced when someone is waiting for the next event, so it is not read ahead of its consumers.
+  const pull = () =>
+    (pulling ??= (async () => {
+      try {
+        iterator ??= source[Symbol.asyncIterator]()
+        const next = await iterator.next()
+        if (next.done) done = true
+        else buffer.push(next.value)
+      } catch (error) {
+        failure = { error }
+        done = true
+      } finally {
+        pulling = undefined
+      }
+    })())
+
+  async function* fullStream(): AsyncGenerator<ProcessorStreamEvent> {
+    try {
+      for (let index = 0; ; ) {
+        if (index < buffer.length) {
+          yield buffer[index++]!
+          continue
+        }
+        if (done) break
+        await pull()
+      }
+      if (failure) throw failure.error
+    } finally {
+      // A consumer that walks away mid-turn releases the source, as iterating it directly would; one that
+      // also asked for `text` needs the rest of the turn.
+      if (!done && !textRequested) void iterator?.return?.()
+    }
+  }
+
+  let text: Promise<string> | undefined
+  return {
+    fullStream: fullStream(),
+    get text(): Promise<string> {
+      text ??= (async () => {
+        textRequested = true
+        let out = ""
+        for await (const event of fullStream()) if (event.type === "text-delta") out += event.text
+        return out
+      })()
+      return text
+    },
+  }
 }
 
 export * as LLMEventAdapter from "./llm-event-adapter"

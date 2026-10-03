@@ -1,7 +1,7 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import { generateObject, streamObject, type ModelMessage } from "@/provider/legacy/ai-sdk"
 import { SystemPrompt } from "../session/system"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth"

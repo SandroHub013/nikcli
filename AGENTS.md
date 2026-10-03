@@ -57,8 +57,13 @@ the contract and emits `dist`, so running it is safe.
 2. **Minimize new files**: Prefer modifying existing files over creating new ones
 3. **Parallel execution**: Use background tasks for independent work
 4. **Client regeneration**: After changing an HTTP contract in `packages/nikcli/src/server/httpapi/`, run `bun run generate:httpapi-clients` and commit the generated output
-5. **Custom tool autoload**: config-dir `tool/*.ts` requires `NIKCLI_ALLOW_PLUGIN_AUTOLOAD=1` or `tool.allow`/`tool.pin` — see `packages/nikcli/AGENTS.md`
-6. **CI must never be left failing — no exceptions.** `ci-pipeline` going red is
+5. **The AI SDK lives in one directory.** `ai`, `@ai-sdk/*` and the other provider SDKs are imported only under
+   `packages/nikcli/src/provider/legacy/`; everything else imports from `@/provider/legacy/ai-sdk`
+   (`test/provider/legacy-isolation.test.ts` enforces it). Native `@nikcli-ai/llm` streaming is the default
+   (`experimental.nativeLlm`, opt out with `false`); the AI SDK is the fallback for models without a native route.
+   `@nikcli-ai/llm` must not depend on `ai`.
+6. **Custom tool autoload**: config-dir `tool/*.ts` requires `NIKCLI_ALLOW_PLUGIN_AUTOLOAD=1` or `tool.allow`/`tool.pin` — see `packages/nikcli/AGENTS.md`
+7. **CI must never be left failing — no exceptions.** `ci-pipeline` going red is
    never acceptable and is never "someone else's problem". If a change of yours
    turns it red, fixing it comes before any other work, and a red pipeline is
    never a reason to stop and wait for review. Never get to green by weakening

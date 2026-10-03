@@ -2,10 +2,13 @@
  * Typed experimental feature flags.
  *
  * Central place for opencode-parity / native-LLM gates so callers don't
- * cast `config.experimental` ad hoc. Flags default **off** until soak.
+ * cast `config.experimental` ad hoc. Flags default **off** until soak, except
+ * `nativeLlm`, which defaults **on** and is opted out with `false`.
  * (A 2026-07-08 flip-all attempt was rolled back 2026-07-09: with the flags
- * on, the TUI stopped rendering streamed assistant parts. Re-flip one flag
- * at a time after verifying the session stream end-to-end.)
+ * on, the TUI stopped rendering streamed assistant parts. The native stream
+ * never opened its step, so no `start`/`start-step` reached the processor;
+ * fixed in `toProcessorStream`, and `nativeLlm` was re-flipped on its own
+ * after verifying the session stream end-to-end.)
  */
 
 export type Features = {
@@ -47,7 +50,8 @@ type Experimental = {
 export function features(cfg: { experimental?: unknown } | undefined | null): Features {
   const e = cfg?.experimental as Experimental | undefined
   return {
-    nativeLlm: e?.nativeLlm === true,
+    // Opt-out, not opt-in: only an explicit `false` turns the native runtime off.
+    nativeLlm: e?.nativeLlm !== false,
     tui: {
       cacheEviction: e?.tui?.cacheEviction === true,
       // Stays opt-in until the windowing heuristic is finished: it assumes a flat 6-row height for

@@ -4,8 +4,8 @@ import { recordBenchmark } from "../benchmarks/runner"
 import { Provider } from "@/provider/provider"
 import { ProviderError } from "@/provider/error"
 import { ProviderTransform, sanitizeSurrogates } from "@/provider/transform"
-import { mapOpenAICompatibleFinishReason } from "@/provider/sdk/copilot/chat/map-openai-compatible-finish-reason"
-import { mapOpenAIResponseFinishReason } from "@/provider/sdk/copilot/responses/map-openai-responses-finish-reason"
+import { mapOpenAICompatibleFinishReason } from "@/provider/legacy/copilot/chat/map-openai-compatible-finish-reason"
+import { mapOpenAIResponseFinishReason } from "@/provider/legacy/copilot/responses/map-openai-responses-finish-reason"
 
 function benchModel(): Provider.Model {
   return {
@@ -228,7 +228,7 @@ describe("Provider hot paths (benchmark)", () => {
     const elapsed = performance.now() - start
     recordBenchmark({
       suite: "provider",
-      module: "provider/sdk/copilot/chat",
+      module: "provider/legacy/copilot/chat",
       scenario: "map finish reasons",
       iterations,
       value: elapsed,

@@ -1956,7 +1956,7 @@ export namespace Config {
             .boolean()
             .optional()
             .describe(
-              "Enable native @nikcli-ai/llm route streaming (requires resolvable ModelRef; falls back to AI SDK). Default off.",
+              "Native @nikcli-ai/llm route streaming (requires a resolvable ModelRef; falls back to the AI SDK when a model or request is not supported). Default on; set false to always use the AI SDK.",
             ),
           tui: z
             .object({

@@ -1,7 +1,8 @@
 import { describe, expect, it, spyOn } from "bun:test"
 import { abortableIterable, status } from "@/session/llm/native-runtime"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
-import { LLMCore, type LLMEvent } from "@nikcli-ai/llm"
+import type { LLMEvent } from "@nikcli-ai/llm"
+import * as LegacyAISDK from "@/provider/legacy/ai-sdk"
 import { Effect } from "effect"
 import path from "path"
 import { withFixture } from "../helpers/fixture"
@@ -94,21 +95,26 @@ describe("LLMNativeRuntime.abortableIterable", () => {
 })
 
 describe("LLMNativeRuntime.status OAuth", () => {
-  it("returns unsupported for oauth (ADR: AI SDK path)", () => {
-    const result = status({
+  const status_ = (provider: object, auth: object | undefined) =>
+    status({
       model: { id: "gpt-4o" } as any,
-      provider: {
-        id: "openai",
-        key: undefined,
-        options: { fetch: async () => new Response() },
-      } as any,
-      auth: { type: "oauth" } as any,
+      provider: { id: "openai", ...provider } as any,
+      auth: auth as any,
       modelRef: { providerID: "openai", modelID: "gpt-4o" } as any,
     })
-    expect(result.type).toBe("unsupported")
-    if (result.type === "unsupported") {
-      expect(result.reason).toContain("AI SDK")
-    }
+
+  it("supports an oauth session whose credential lives in the provider's fetch", () => {
+    const result = status_({ key: undefined, options: { fetch: async () => new Response() } }, { type: "oauth" })
+    expect(result.type).toBe("supported")
+  })
+
+  it("still requires a key when nothing else carries the credential", () => {
+    const result = status_({ key: undefined, options: {} }, { type: "oauth" })
+    expect(result).toEqual({ type: "unsupported", reason: "API key is not configured" })
+  })
+
+  it("supports an API key with no custom fetch", () => {
+    expect(status_({ key: "sk-test", options: {} }, { type: "api" }).type).toBe("supported")
   })
 })
 
@@ -118,7 +124,7 @@ describe("LLM.stream native fallback safety", () => {
       input: import("@/session/llm").LLM.StreamInput
       stream: typeof import("@/session/llm").LLM.stream
       controller: AbortController
-      fallback: ReturnType<typeof spyOn<typeof LLMCore, "stream">>
+      fallback: ReturnType<typeof spyOn<typeof LegacyAISDK, "stream">>
       fallbackError: Error
     }) => Promise<void>,
   ) {
@@ -132,7 +138,7 @@ describe("LLM.stream native fallback safety", () => {
       const { LLM } = await import("@/session/llm")
       const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
       const fallbackError = new Error("AI SDK fallback reached")
-      const fallback = spyOn(LLMCore, "stream").mockImplementation(() => {
+      const fallback = spyOn(LegacyAISDK, "stream").mockImplementation(() => {
         throw fallbackError
       })
       try {
@@ -272,6 +278,8 @@ describe("LLM.stream native fallback safety", () => {
           const result = await stream(input)
           const iterator = result.fullStream[Symbol.asyncIterator]()
           if (timing === "after partial output") {
+            expect((await iterator.next()).value?.type).toBe("start")
+            expect((await iterator.next()).value?.type).toBe("start-step")
             expect((await iterator.next()).value?.type).toBe("text-start")
             expect((await iterator.next()).value?.type).toBe("text-delta")
           }

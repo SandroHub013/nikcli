@@ -4,7 +4,7 @@ import DESCRIPTION from "./generate_image.txt"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
-import { experimental_generateImage } from "ai"
+import { generateImage } from "@/provider/legacy/ai-sdk"
 import { Identifier } from "@nikcli-ai/util/id"
 import type { MessageV2 } from "@/session/message-v2"
 import { Installation } from "@/installation"
@@ -252,7 +252,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       ? ProviderTransform.providerOptions(model, params.providerOptions)
       : undefined
 
-    const result = await experimental_generateImage({
+    const result = await generateImage({
       model: imageModel,
       prompt: params.prompt,
       n: params.n ?? 1,

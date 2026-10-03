@@ -14,15 +14,13 @@ import {
   extractReasoningMiddleware,
   tool,
   jsonSchema,
-} from "ai"
-import { LLMCore, Runtime as LLMRuntime, ToolChoice, type ProviderOptions } from "@nikcli-ai/llm"
+} from "@/provider/legacy/ai-sdk"
+import type { ProviderOptions } from "@nikcli-ai/llm"
+import * as LegacyAISDK from "@/provider/legacy/ai-sdk"
 import type { JsonValue } from "@/util/json"
 import z from "zod"
 import {
-  Message as LLMMessage,
   type ModelRef,
-  type ContentPart,
-  type ToolDefinition,
   LLMRequest as LLMRequestClass,
   SystemPart,
   GenerationOptions,
@@ -44,7 +42,14 @@ import { Auth } from "@/auth"
 import { Effect } from "effect"
 import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { LLMNativeRuntime } from "./llm/native-runtime"
-import { suppressEmptyTextResult, toProcessorStream } from "./llm/llm-event-adapter"
+import { executeTools, extractThinkTags, streamResult, toProcessorStream } from "./llm/llm-event-adapter"
+import {
+  NativeRequestUnsupported,
+  toLLMMessages,
+  toLLMProviderOptions,
+  toLLMToolChoice,
+  toLLMToolDefinitions,
+} from "./llm/native-request"
 import * as LLMCoverage from "./llm/coverage"
 
 export namespace LLM {
@@ -424,7 +429,6 @@ export namespace LLM {
 
     const nativeLlmEnabled = features(cfg).nativeLlm
 
-    // Debug-only route compile when native runtime is off (AI SDK still handles HTTP).
     if (modelRef && !nativeLlmEnabled) {
       // A ModelRef exists and the flag is down, so this turn would have gone
       // native. Counting it is how the soak in EOT-11 runs without flipping
@@ -434,37 +438,6 @@ export namespace LLM {
         providerID: modelRef.provider,
         modelID: modelRef.id,
       })
-      try {
-        const llmRequest = buildLLMRequest(
-          input,
-          modelRef,
-          {
-            temperature: params.temperature,
-            topP: params.topP,
-            topK: params.topK,
-            options: params.options,
-          },
-          buildRequestHeaders(
-            projectID,
-            input.model.providerID,
-            input.sessionID,
-            input.user.id,
-            isCodex,
-            input.model.headers,
-          ),
-        )
-        const prepared = await LLMRuntime.prepareRequest(llmRequest)
-        l.debug("LLM request prepared via @nikcli-ai/llm route", {
-          modelID: modelRef.id,
-          providerID: modelRef.provider,
-          route: prepared.route,
-          protocol: prepared.protocol,
-          msgCount: llmRequest.messages.length,
-          toolCount: llmRequest.tools.length,
-        })
-      } catch (e) {
-        l.warn("LLM request prepare failed (non-fatal)", { error: String(e) })
-      }
     }
 
     const maxOutputTokens =
@@ -557,8 +530,10 @@ export namespace LLM {
             provider,
             auth,
             params,
+            options,
             providerOptions,
             maxOutputTokens,
+            system,
             messages,
             tools,
             headers: requestHeaders,
@@ -602,7 +577,7 @@ export namespace LLM {
 
     l.debug("llm.runtime", { runtime: "ai-sdk" })
 
-    const result = LLMCore.stream({
+    const result = LegacyAISDK.stream({
       onError(error) {
         l.error("stream error", {
           error,
@@ -698,7 +673,7 @@ export namespace LLM {
     })
     // Suppress unhandled NoContentGeneratedError when model produces only tool calls (no text).
     // processor.ts consumes fullStream only; stream.text rejects if no text is generated.
-    return LLMCore.suppressNoContentText(result)
+    return LegacyAISDK.suppressNoContentText(result)
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
@@ -724,171 +699,26 @@ export namespace LLM {
     return false
   }
 
-  // ── @nikcli-ai/llm converters ──────────────────────────────────────────
+  // ── @nikcli-ai/llm request ─────────────────────────────────────────────
+  // Message/tool conversion lives in `./llm/native-request`.
 
   /**
-   * Convert an AI SDK TextPart / ImagePart / FilePart into a @nikcli-ai/llm ContentPart.
-   */
-  const TextValue = z.string()
-
-  function toLLMContentPart(part: ModelMessage["content"][number]): ContentPart | undefined {
-    if (typeof part === "string") {
-      return { type: "text" as const, text: part }
-    }
-    switch (part.type) {
-      case "text":
-        return { type: "text" as const, text: (part as any).text }
-      case "image": {
-        const p = part as any
-        const image = TextValue.safeParse(p.image)
-        if (image.success) {
-          return {
-            type: "media" as const,
-            mediaType: p.mimeType ?? "image/png",
-            data: image.data,
-          }
-        }
-        return p.image instanceof Uint8Array
-          ? {
-              type: "media" as const,
-              mediaType: p.mimeType ?? "image/png",
-              data: p.image,
-            }
-          : undefined
-      }
-      case "file": {
-        const p = part as any
-        const inline = TextValue.safeParse(p.data)
-        if (inline.success) {
-          const match = /^data:([^;]+);/.exec(inline.data)
-          return {
-            type: "media" as const,
-            mediaType: match?.[1] ?? p.mimeType ?? "application/octet-stream",
-            data: inline.data,
-          }
-        }
-        return p.data instanceof Uint8Array
-          ? {
-              type: "media" as const,
-              mediaType: p.mimeType ?? "application/octet-stream",
-              data: p.data,
-            }
-          : undefined
-      }
-      default:
-        return undefined
-    }
-  }
-
-  /**
-   * Convert an AI SDK ModelMessage[] into @nikcli-ai/llm Message[].
-   */
-  function modelMessagesToLLMMessages(
-    msgs: ModelMessage[],
-  ): typeof LLMMessage extends new (...args: any[]) => infer I ? I[] : any[] {
-    const result: any[] = []
-    for (const msg of msgs) {
-      switch (msg.role) {
-        case "user": {
-          const userText = TextValue.safeParse(msg.content)
-          const parts: ContentPart[] = userText.success
-            ? userText.data
-              ? [{ type: "text" as const, text: userText.data }]
-              : []
-            : Array.isArray(msg.content)
-              ? msg.content.map(toLLMContentPart).filter((p): p is ContentPart => p !== undefined)
-              : []
-          if (parts.length > 0) result.push(LLMMessage.user(parts))
-          break
-        }
-        case "assistant": {
-          const parts: ContentPart[] = []
-          const assistantText = TextValue.safeParse(msg.content)
-          if (assistantText.success) {
-            if (assistantText.data) parts.push({ type: "text" as const, text: assistantText.data })
-          } else if (Array.isArray(msg.content)) {
-            for (const part of msg.content) {
-              const p = part as any
-              if (p.type === "text") {
-                parts.push({ type: "text" as const, text: p.text })
-              } else if (p.type === "reasoning") {
-                parts.push({ type: "reasoning" as const, text: p.text })
-              }
-            }
-          }
-          // Map tool calls from the assistant message (AI SDK format varies by version)
-          const toolCalls = (msg as any).tool_calls ?? (msg as any).parts?.filter((p: any) => p.type === "tool-call")
-          if (toolCalls) {
-            for (const tc of toolCalls) {
-              try {
-                parts.push({
-                  type: "tool-call" as const,
-                  id: tc.id ?? tc.toolCallId ?? `tc-${parts.length}`,
-                  name: tc.function?.name ?? tc.toolName ?? "unknown",
-                  input: tc.function?.arguments
-                    ? TextValue.safeParse(tc.function.arguments).success
-                      ? JSON.parse(tc.function.arguments)
-                      : tc.function.arguments
-                    : (tc.input ?? {}),
-                } as ContentPart)
-              } catch {
-                parts.push({
-                  type: "tool-call" as const,
-                  id: tc.id ?? tc.toolCallId ?? `tc-${parts.length}`,
-                  name: tc.function?.name ?? tc.toolName ?? "unknown",
-                  input: {},
-                } as ContentPart)
-              }
-            }
-          }
-          if (parts.length > 0) result.push(LLMMessage.assistant(parts))
-          break
-        }
-        case "tool": {
-          const toolText = TextValue.safeParse(msg.content)
-          const text = toolText.success
-            ? toolText.data
-            : Array.isArray(msg.content)
-              ? msg.content
-                  .map((p: any) => {
-                    const part = TextValue.safeParse(p)
-                    return part.success ? part.data : (p.text ?? "")
-                  })
-                  .join("\n")
-              : String((msg as any).content ?? "")
-          result.push(
-            LLMMessage.tool({
-              type: "tool-result" as const,
-              id: (msg as any).tool_call_id ?? `tr-${result.length}`,
-              name: (msg as any).tool_call_name ?? "unknown",
-              result: { type: "text" as const, value: text },
-            }),
-          )
-          break
-        }
-      }
-    }
-    return result
-  }
-
-  /**
-   * Convert an AI SDK Tool map into @nikcli-ai/llm ToolDefinition[].
-   */
-  function toLLMToolDefinitions(tools: Record<string, Tool>, deferred?: ReadonlySet<string>): ToolDefinition[] {
-    return Object.entries(tools)
-      .filter(([name, t]) => !!t.description && !deferred?.has(name))
-      .map(([name, t]) => ({
-        name,
-        description: t.description ?? "",
-        inputSchema: (t as any).parameters ?? (t as any).inputSchema ?? {},
-      })) as ToolDefinition[]
-  }
-
-  /**
-   * Build an @nikcli-ai/llm LLMRequest from the stream input and resolved ModelRef.
+   * Build an @nikcli-ai/llm LLMRequest.
+   *
+   * `system` and `messages` are passed in rather than read off the stream input:
+   * the input carries only the caller's custom system strings and the raw message
+   * history, while what the model must see is the assembled system prompt (header,
+   * agent/provider prompt, plugin transforms) and the history after
+   * `ProviderTransform.message`.
    */
   export function buildLLMRequest(
-    input: StreamInput,
+    input: {
+      system: readonly string[]
+      messages: readonly ModelMessage[]
+      tools: Record<string, Tool>
+      deferred?: ReadonlySet<string>
+      toolChoice?: StreamInput["toolChoice"]
+    },
     modelRef: ModelRef,
     genParams: {
       temperature?: number
@@ -899,15 +729,10 @@ export namespace LLM {
       options?: ProviderCallOptions
     },
     headers?: Record<string, string>,
-    messagesOverride?: ModelMessage[],
   ): LLMRequestClass {
-    // System parts
-    const system = SystemPart.content(input.system.join("\n\n"))
+    // One part per system string: the cache policy marks the first and last, which a joined string would collapse.
+    const system = input.system.filter((x) => x).flatMap((x) => SystemPart.content(x))
 
-    // Messages
-    const messages = modelMessagesToLLMMessages(messagesOverride ?? input.messages)
-
-    // Generation options
     const maxTokens = genParams.maxOutputTokens ?? (genParams.options?.["maxOutputTokens"] as number | undefined)
     const generation = new GenerationOptions({
       maxTokens,
@@ -917,38 +742,16 @@ export namespace LLM {
     })
     const hasGen = Object.values(generation).some((v) => v !== undefined)
 
-    // HTTP options
-    const httpOptions = headers && Object.keys(headers).length > 0 ? new HttpOptions({ headers }) : undefined
-
-    // Tool definitions
-    const tools = toLLMToolDefinitions(input.tools, input.deferred)
-
     return new LLMRequestClass({
       model: modelRef,
       system,
-      messages,
-      tools,
+      messages: toLLMMessages(input.messages),
+      tools: toLLMToolDefinitions(input.tools, input.deferred),
       generation: hasGen ? generation : undefined,
       providerOptions: genParams.providerOptions,
-      http: httpOptions,
-      toolChoice:
-        input.toolChoice === "required"
-          ? ToolChoice.make("any")
-          : input.toolChoice === "none"
-            ? ToolChoice.make("none")
-            : undefined,
+      http: headers && Object.keys(headers).length > 0 ? new HttpOptions({ headers }) : undefined,
+      toolChoice: toLLMToolChoice(input.toolChoice),
     })
-  }
-
-  const ProviderOptionBag = z.record(z.string(), z.unknown())
-
-  function providerOptionsForLLM(providerOptions: ProviderCallOptions): ProviderOptions {
-    const out = new Map<string, ProviderOptions[string]>()
-    for (const [key, value] of Object.entries(providerOptions)) {
-      const parsed = ProviderOptionBag.safeParse(value)
-      if (parsed.success) out.set(key, parsed.data)
-    }
-    return Object.fromEntries(out)
   }
 
   async function streamNative(input: {
@@ -962,28 +765,59 @@ export namespace LLM {
       topK?: number
       options?: ProviderCallOptions
     }
+    options: ProviderCallOptions
     providerOptions: ProviderCallOptions
     maxOutputTokens: number | undefined
+    system: string[]
     messages: ModelMessage[]
     tools: Record<string, Tool>
     headers: Record<string, string> | undefined
     isCodex: boolean
     l: ReturnType<typeof log.clone>
   }) {
-    const llmRequest = buildLLMRequest(
-      { ...input.streamInput, tools: input.tools },
-      input.modelRef,
-      {
-        temperature: input.params.temperature,
-        topP: input.params.topP,
-        topK: input.params.topK,
-        maxOutputTokens: input.maxOutputTokens,
-        providerOptions: providerOptionsForLLM(input.providerOptions),
-        options: input.params.options,
-      },
-      input.headers,
-      input.messages,
+    // Same prompt the AI SDK path sends (its middleware applies this to the wire prompt), minus cache
+    // markers: the native route places its own breakpoints from the request's cache policy.
+    // `message` rewrites messages in place, and a refused turn replays the originals through the AI SDK
+    // path, so it gets copies down to the part level.
+    const messages = ProviderTransform.message(
+      input.messages.map((m) =>
+        Array.isArray(m.content)
+          ? ({ ...m, content: m.content.map((part) => ({ ...part })) } as ModelMessage)
+          : { ...m },
+      ),
+      input.streamInput.model,
+      input.options,
+      { cache: false },
     )
+
+    let llmRequest: LLMRequestClass
+    try {
+      llmRequest = buildLLMRequest(
+        {
+          // Codex carries the system prompt as the first user message and `instructions`.
+          system: input.isCodex ? [] : input.system,
+          messages,
+          tools: input.tools,
+          deferred: input.streamInput.deferred,
+          toolChoice: input.streamInput.toolChoice,
+        },
+        input.modelRef,
+        {
+          temperature: input.params.temperature,
+          topP: input.params.topP,
+          topK: input.params.topK,
+          maxOutputTokens: input.maxOutputTokens,
+          providerOptions: toLLMProviderOptions(input.modelRef.route, input.providerOptions) as ProviderOptions,
+          options: input.params.options,
+        },
+        input.headers,
+      )
+    } catch (e) {
+      // Content the canonical schema cannot carry. Refused before anything is sent so the AI SDK takes the
+      // turn; discovered mid-stream it would be a provider error no fallback can intercept.
+      if (!(e instanceof NativeRequestUnsupported)) throw e
+      return refuse(input, e.reason)
+    }
 
     const native = LLMNativeRuntime.streamRequestOnly({
       model: input.streamInput.model,
@@ -991,30 +825,31 @@ export namespace LLM {
       auth: input.auth,
       modelRef: input.modelRef,
       llmRequest,
-      messages: input.messages,
+      messages,
       abort: input.streamInput.abort,
     })
 
-    if (native.type === "unsupported") {
-      input.l.debug("native llm unsupported, falling back to ai-sdk", {
-        reason: native.reason,
-      })
-      // Distinct from the pre-flight `ineligible`: that one is a configuration
-      // verdict, this one is the route refusing once it has been compiled. Same
-      // user-visible outcome, different thing to fix.
-      LLMCoverage.record({
-        outcome: "ineligible-late",
-        providerID: input.modelRef.provider,
-        modelID: input.modelRef.id,
-        reason: native.reason,
-      })
-      return undefined
-    }
+    if (native.type === "unsupported") return refuse(input, native.reason)
 
-    const fullStream = toProcessorStream(native.events)
-    return suppressEmptyTextResult({
-      fullStream,
-      text: Promise.resolve(""),
-    }) as unknown as StreamOutput
+    const fullStream = executeTools(toProcessorStream(extractThinkTags(native.events)), {
+      tools: input.tools,
+      messages: input.messages,
+      abort: input.streamInput.abort,
+    })
+    return streamResult(fullStream) as unknown as StreamOutput
+  }
+
+  function refuse(input: { modelRef: ModelRef; l: ReturnType<typeof log.clone> }, reason: string) {
+    input.l.debug("native llm unsupported, falling back to ai-sdk", { reason })
+    // Distinct from the pre-flight `ineligible`: that one is a configuration
+    // verdict, this one is the route refusing once it has been compiled. Same
+    // user-visible outcome, different thing to fix.
+    LLMCoverage.record({
+      outcome: "ineligible-late",
+      providerID: input.modelRef.provider,
+      modelID: input.modelRef.id,
+      reason,
+    })
+    return undefined
   }
 }

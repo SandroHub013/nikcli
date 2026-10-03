@@ -560,7 +560,6 @@
       "dependencies": {
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
-        "ai": "catalog:",
         "aws4fetch": "1.0.20",
         "effect": "4.0.0-rc.112",
         "zod": "catalog:",

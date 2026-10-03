@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { Provider } from "@/provider/provider"
-import { generateText } from "ai"
+import { generateText } from "@/provider/legacy/ai-sdk"
 import DESCRIPTION from "./advisor.txt"
 import { Delegation } from "@/delegation/manager"
 import { Effect } from "effect"

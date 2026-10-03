@@ -672,7 +672,7 @@ export namespace ModApi {
       model?: string
       temperature?: number
     }) => {
-      const { generateText } = await import("ai")
+      const { generateText } = await import("@/provider/legacy/ai-sdk")
       const result = await generateText({
         model: await language(e.model),
         system: e.system,

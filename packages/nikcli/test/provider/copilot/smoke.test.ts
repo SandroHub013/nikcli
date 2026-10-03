@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { convertToOpenAICompatibleChatMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
-import { getResponseMetadata } from "@/provider/sdk/copilot/chat/get-response-metadata"
-import { mapOpenAICompatibleFinishReason } from "@/provider/sdk/copilot/chat/map-openai-compatible-finish-reason"
-import { mapOpenAIResponseFinishReason } from "@/provider/sdk/copilot/responses/map-openai-responses-finish-reason"
+import { convertToOpenAICompatibleChatMessages } from "@/provider/legacy/copilot/chat/convert-to-openai-compatible-chat-messages"
+import { getResponseMetadata } from "@/provider/legacy/copilot/chat/get-response-metadata"
+import { mapOpenAICompatibleFinishReason } from "@/provider/legacy/copilot/chat/map-openai-compatible-finish-reason"
+import { mapOpenAIResponseFinishReason } from "@/provider/legacy/copilot/responses/map-openai-responses-finish-reason"
 
 describe("copilot SDK smoke", () => {
   it("converts a simple text user message", () => {

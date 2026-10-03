@@ -72,8 +72,8 @@ each an independent decision:
 
 ## Native LLM Routing
 
-`experimental.nativeLlm` gates native `@nikcli-ai/llm` route streaming and is **off by default**
-(`packages/util/src/features.ts` — every flag there defaults off and is compared with `=== true`).
+`experimental.nativeLlm` gates native `@nikcli-ai/llm` route streaming and is **on by default** since
+2026-10-03 (`packages/util/src/features.ts` — only an explicit `false` turns it off; every other flag there still defaults off).
 
 The gate is binary and global today. Two things have to be true before it flips on:
 

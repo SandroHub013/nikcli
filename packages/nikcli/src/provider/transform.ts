@@ -1,6 +1,6 @@
-import type { ModelMessage, ToolResultPart } from "ai"
+import type { ModelMessage, ToolResultPart } from "@/provider/legacy/ai-sdk"
 import { mergeDeep } from "remeda"
-import type { JSONSchema7 } from "@ai-sdk/provider"
+import type { JSONSchema7 } from "@/provider/legacy/ai-sdk"
 import { Provider } from "./provider"
 import * as CachePolicy from "./cache-policy"
 import type { ModelsDev } from "./models"
@@ -503,10 +503,18 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  // `cache: false` leaves breakpoint placement to the caller: the native route places its own from the
+  // request's cache policy, and markers set here as `providerOptions` would be a second, unbudgeted set.
+  settings: { cache?: boolean } = {},
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
+    settings.cache !== false &&
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
       model.api.id.includes("anthropic") ||

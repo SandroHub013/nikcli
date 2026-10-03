@@ -8,7 +8,7 @@
 // hierarchy is tools → system → messages, so the slots are spent in that order of
 // static-ness: the tool array is the largest byte-stable prefix, the last system part
 // carries the agent and project prompt, and the conversation tail rolls forward.
-import type { ModelMessage } from "ai"
+import type { ModelMessage } from "@/provider/legacy/ai-sdk"
 import { Flag } from "@nikcli-ai/util/flag"
 
 /** Anthropic/Bedrock hard limit on `cache_control` markers in a single request. */

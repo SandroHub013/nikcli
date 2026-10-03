@@ -3,7 +3,14 @@ import { parseModel as parseModelLight } from "@nikcli-ai/util/model"
 import * as ProviderSchema from "./schema"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { NoSuchModelError, type Provider as SDK } from "ai"
+import {
+  BUNDLED_PROVIDERS,
+  NoSuchModelError,
+  type AmazonBedrockProviderSettings,
+  type createGitLab,
+  type LanguageModelV2,
+  type SDK,
+} from "@/provider/legacy/ai-sdk"
 import { Log } from "@nikcli-ai/util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -19,12 +26,6 @@ import { iife } from "@nikcli-ai/util/iife"
 import { Context, Effect, Exit, Layer, Schema, ScopedCache } from "effect"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 
-// Bundled provider SDKs are loaded lazily (see BUNDLED_PROVIDERS): evaluating
-// all twenty packages eagerly costs ~2s at process start, while a session only
-// ever touches the ones it actually uses.
-import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
-import type { LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import type { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import * as CachePolicy from "./cache-policy"
 import { ProviderError } from "./error"
@@ -51,7 +52,7 @@ import {
   OpenAICompatible,
 } from "@nikcli-ai/llm/providers"
 import { byProvider as providerProfiles } from "@nikcli-ai/llm/providers/openai-compatible-profile"
-import type { ModelRef } from "@nikcli-ai/llm"
+import { ModelRef } from "@nikcli-ai/llm"
 import z from "zod"
 
 function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service | Config.Service>) {
@@ -451,35 +452,6 @@ export namespace Provider {
   }
 
   type ProviderSdkOptions = ProviderSchema.Info["options"]
-  type BundledFactory = (options: ProviderSdkOptions) => SDK
-
-  const BUNDLED_PROVIDERS: Record<string, () => Promise<BundledFactory>> = {
-    "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
-    "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
-    "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
-    "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
-    "@ai-sdk/google-vertex": () => import("@ai-sdk/google-vertex").then((m) => m.createVertex),
-    "@ai-sdk/google-vertex/anthropic": () =>
-      import("@ai-sdk/google-vertex/anthropic").then((m) => m.createVertexAnthropic),
-    "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
-    "@ai-sdk/openai-compatible": () =>
-      import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible as unknown as BundledFactory),
-    "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
-    "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
-    "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),
-    "@ai-sdk/groq": () => import("@ai-sdk/groq").then((m) => m.createGroq),
-    "@ai-sdk/deepinfra": () => import("@ai-sdk/deepinfra").then((m) => m.createDeepInfra),
-    "@ai-sdk/cerebras": () => import("@ai-sdk/cerebras").then((m) => m.createCerebras),
-    "@ai-sdk/cohere": () => import("@ai-sdk/cohere").then((m) => m.createCohere),
-    "@ai-sdk/gateway": () => import("@ai-sdk/gateway").then((m) => m.createGateway),
-    "@ai-sdk/togetherai": () => import("@ai-sdk/togetherai").then((m) => m.createTogetherAI),
-    "@ai-sdk/perplexity": () => import("@ai-sdk/perplexity").then((m) => m.createPerplexity),
-    "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
-    "@gitlab/gitlab-ai-provider": () => import("@gitlab/gitlab-ai-provider").then((m) => m.createGitLab),
-    "@ai-sdk/github-copilot": () =>
-      import("./sdk/copilot").then((m) => m.createOpenaiCompatible as unknown as BundledFactory),
-  }
-
   type CustomModelLoader = (sdk: SDK, modelID: string, options?: ProviderSdkOptions) => Promise<LanguageModelV2>
   // Loaders receive the converted Provider.Info entry held in `database` — nikcli's
   // own model shape with nested `capabilities` — not the raw ModelsDev catalog.
@@ -2051,9 +2023,59 @@ export namespace Provider {
     return info
   }
 
+  /**
+   * Stands in for an API key on a provider whose auth lives in its `fetch` (OAuth bearer renewal, account
+   * tokens). The route still wants a key to build its static `Authorization` header; the fetch replaces it.
+   */
+  export const FETCH_MANAGED_KEY = "fetch-managed"
+
+  /**
+   * The fetch a native stream sends through, or undefined to use the global one.
+   *
+   * It is the provider's own `fetch` (what the plugins install for OAuth renewal, endpoint rewrites and
+   * account tokens) with the configured timeouts, i.e. what `getSDK` hands the AI SDK minus that path's
+   * body rewrites, which the native route has no use for (it places its own cache breakpoints and sends no
+   * item ids). Bodies arrive as bytes from the HTTP client; plugins inspect and replay string bodies, so
+   * the JSON text is restored before the call.
+   */
+  export function nativeFetch(info: Info): typeof globalThis.fetch | undefined {
+    const options = info.options ?? {}
+    const custom = options["fetch"] as typeof globalThis.fetch | undefined
+    const chunkTimeout = options["chunkTimeout"]
+    const headerTimeout = options["headerTimeout"]
+    const timeout = options["timeout"]
+    const timed = (typeof chunkTimeout === "number" && chunkTimeout > 0) || typeof headerTimeout === "number"
+    const totalTimeout = timeout !== undefined && timeout !== null && timeout !== false
+    if (typeof custom !== "function" && !timed && !totalTimeout) return undefined
+
+    return (async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      const next: RequestInit = { ...init }
+      if (next.body instanceof Uint8Array) next.body = new TextDecoder().decode(next.body)
+
+      const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+      const headerTimeoutCtl = typeof headerTimeout === "number" ? timeoutController(headerTimeout) : undefined
+      const signals: AbortSignal[] = []
+      if (next.signal) signals.push(next.signal)
+      if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+      if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
+      if (totalTimeout) signals.push(AbortSignal.timeout(timeout as number))
+      if (signals.length > 0) next.signal = signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+
+      const res = await (custom ?? globalThis.fetch)(input, {
+        ...next,
+        // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+        timeout: false,
+      }).finally(() => headerTimeoutCtl?.clear())
+      return chunkAbortCtl ? wrapSSE(res, chunkTimeout as number, chunkAbortCtl) : res
+    }) as typeof globalThis.fetch
+  }
+
   /** Resolve a @nikcli-ai/llm ModelRef from a Provider.Model + Provider.Info pair. */
-  function mapToModelRef(model: Model, providerInfo: Info): ModelRef | undefined {
-    const apiKey = (providerInfo.options?.["apiKey"] as string | undefined) ?? providerInfo.key
+  export function mapToModelRef(model: Model, providerInfo: Info): ModelRef | undefined {
+    const apiKey =
+      (providerInfo.options?.["apiKey"] as string | undefined) ||
+      providerInfo.key ||
+      (typeof providerInfo.options?.["fetch"] === "function" ? FETCH_MANAGED_KEY : undefined)
     const baseURL = model.api.url || (providerInfo.options?.["baseURL"] as string | undefined)
     const providerID = model.providerID
     const npm = model.api.npm
@@ -2074,16 +2096,11 @@ export namespace Provider {
               headers: model.headers,
             } as any)
           }
-          if (providerID.includes("azure")) {
-            const resourceName =
-              (providerInfo.options?.["resourceName"] as string | undefined) ?? extractAzureResource(baseURL ?? "")
-            return Azure.model(id, {
-              ...(resourceName ? { resourceName } : undefined),
-              baseURL,
-              apiKey,
-            } as any)
-          }
+          if (providerID.includes("azure")) return azureModelRef(id, providerInfo, baseURL, apiKey)
           return OpenAI.responses(id, { baseURL, apiKey } as any)
+
+        case "@ai-sdk/azure":
+          return azureModelRef(id, providerInfo, baseURL, apiKey)
 
         case "@ai-sdk/anthropic":
           return Anthropic.model(id, { baseURL, apiKey } as any)
@@ -2123,8 +2140,17 @@ export namespace Provider {
         case "@ai-sdk/github-copilot-enterprise":
           return GitHubCopilot.model(id, { baseURL, apiKey } as any)
 
-        case "@ai-sdk/openai-compatible":
-        default: {
+        // These SDKs only wrap an OpenAI-compatible chat endpoint, so the provider's
+        // family profile carries the canonical host.
+        case "@ai-sdk/mistral":
+        case "@ai-sdk/perplexity":
+        case "@ai-sdk/cohere":
+        case "@ai-sdk/vercel": {
+          const profile = providerProfiles[OPENAI_COMPATIBLE_NPM_PROFILE[npm]]
+          return profile ? OpenAICompatible.profileModel(profile, id, { apiKey, baseURL } as any) : undefined
+        }
+
+        case "@ai-sdk/openai-compatible": {
           // Try to match against known OpenAI-compatible profiles
           const profile = providerProfiles[providerID]
           if (profile) {
@@ -2144,6 +2170,12 @@ export namespace Provider {
           // No baseURL — can't construct a valid route without an endpoint
           return undefined
         }
+
+        // Any other SDK (gateway, vertex, gitlab, merge-gateway, bedrock/mantle, ...) speaks a
+        // protocol this mapper cannot express. Guessing OpenAI-compatible here would send those
+        // models the wrong wire format, so they stay unmapped and take the AI SDK path.
+        default:
+          return undefined
       }
     } catch (e) {
       log.warn("mapToModelRef failed", {
@@ -2154,6 +2186,30 @@ export namespace Provider {
       })
       return undefined
     }
+  }
+
+  /** npm package -> OpenAI-compatible profile id (`@nikcli-ai/llm/providers/openai-compatible-profile`). */
+  const OPENAI_COMPATIBLE_NPM_PROFILE: Record<string, string> = {
+    "@ai-sdk/mistral": "mistral",
+    "@ai-sdk/perplexity": "perplexity",
+    "@ai-sdk/cohere": "cohere",
+    "@ai-sdk/vercel": "v0",
+  }
+
+  /**
+   * Azure OpenAI needs the customer's resource host. A baseURL that is not an
+   * `*.openai.azure.com` resource (cognitive-services, custom gateways) has no
+   * native mapping and returns undefined so the AI SDK keeps handling it.
+   */
+  function azureModelRef(id: string, providerInfo: Info, baseURL: string | undefined, apiKey: string | undefined) {
+    const resourceName =
+      (providerInfo.options?.["resourceName"] as string | undefined) ?? extractAzureResource(baseURL ?? "")
+    if (!resourceName) return undefined
+    return Azure.model(id, {
+      resourceName,
+      apiKey,
+      ...spreadIf("useCompletionUrls", providerInfo.options?.["useCompletionUrls"] === true ? true : undefined),
+    } as any)
   }
 
   /** Extract the Azure resource name from an azure.com baseURL. */
@@ -2224,7 +2280,7 @@ export namespace Provider {
               apiNpm.includes("openrouter") ||
               apiNpm.includes("openai-compatible")
             ) {
-              const { createOpenAI } = await import("@ai-sdk/openai")
+              const createOpenAI = await BUNDLED_PROVIDERS["@ai-sdk/openai"]()
               const provider = s.providers[providerID] || s.providers["openrouter"]
               const openrouterApi = "https://openrouter.ai/api/v1"
               const baseURL = model.api?.url || (providerID.includes("openrouter") ? openrouterApi : undefined)
@@ -2346,7 +2402,18 @@ export namespace Provider {
         const s = yield* getState()
         const providerInfo = s.providers[model.providerID]
         if (!providerInfo) return undefined
-        return mapToModelRef(model, providerInfo)
+        const ref = mapToModelRef(model, providerInfo)
+        if (!ref) return ref
+        // The AI SDK path sends `options.headers` then `model.headers` on every request; the ref has to
+        // carry the same, or a gateway that needs a custom header only works on the fallback path.
+        const headers = Object.fromEntries(
+          Object.entries({
+            ...ref.headers,
+            ...(providerInfo.options?.["headers"] as Record<string, unknown> | undefined),
+            ...model.headers,
+          }).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        )
+        return Object.keys(headers).length > 0 ? ModelRef.update(ref, { headers }) : ref
       })
 
       const refresh: Interface["refresh"] = Effect.fn("Provider.refresh")(function* () {

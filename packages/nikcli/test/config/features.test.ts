@@ -2,15 +2,15 @@ import { describe, expect, it } from "bun:test"
 import { features } from "@nikcli-ai/util/features"
 
 describe("features()", () => {
-  it("defaults every flag off", () => {
+  it("defaults every flag off except nativeLlm", () => {
     expect(features(undefined)).toEqual({
-      nativeLlm: false,
+      nativeLlm: true,
       tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
       requests: { latestOnlyLspRefresh: false },
       events: { schemaEncoding: false },
     })
     expect(features({})).toEqual({
-      nativeLlm: false,
+      nativeLlm: true,
       tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
       requests: { latestOnlyLspRefresh: false },
       events: { schemaEncoding: false },
@@ -51,14 +51,14 @@ describe("features()", () => {
     expect(f.events.schemaEncoding).toBe(false)
   })
 
-  it("treats truthy non-boolean as off", () => {
+  it("treats truthy non-boolean as off, and leaves nativeLlm on unless explicitly false", () => {
     const f = features({
       experimental: {
         nativeLlm: 1 as any,
         tui: { cacheEviction: "yes" as any },
       },
     } as any)
-    expect(f.nativeLlm).toBe(false)
+    expect(f.nativeLlm).toBe(true)
     expect(f.tui.cacheEviction).toBe(false)
   })
 })
