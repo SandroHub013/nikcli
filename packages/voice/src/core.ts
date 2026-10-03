@@ -324,6 +324,7 @@ export {
   describeShortcut,
   findVoiceShortcutConflicts,
   isSystemChord,
+  isWindowsRuntime,
   isChordUsable,
   summarizeVoiceShortcutConflicts,
   type ChordRisk,

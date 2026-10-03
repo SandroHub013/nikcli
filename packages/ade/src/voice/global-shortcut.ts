@@ -20,7 +20,7 @@
  */
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
-import { isSystemChord, type VoiceMode, type VoiceSettings } from "@nikcli-ai/voice/core"
+import { isSystemChord, isWindowsRuntime, type VoiceMode, type VoiceSettings } from "@nikcli-ai/voice/core"
 import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */
@@ -222,9 +222,9 @@ export function unknownChordMessage(chord: string): string {
  * `isSystemChord`), which no other application has anything to do with, and a
  * chord someone else already holds.
  */
-export function busyMessage(mode: VoiceMode, chord: string): string {
+export function busyMessage(mode: VoiceMode, chord: string, windows: boolean = isWindowsRuntime()): string {
   const feature = t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription")
-  return isSystemChord(chord) ? t("voice.shortcut.busy", chord, feature) : t("voice.shortcut.notSystem", chord, feature)
+  return isSystemChord(chord, windows) ? t("voice.shortcut.busy", chord, feature) : t("voice.shortcut.notSystem", chord, feature)
 }
 
 /**
@@ -234,9 +234,12 @@ export function busyMessage(mode: VoiceMode, chord: string): string {
  * later to find out why the chord does nothing looks in the voice settings,
  * and a refused chord there looked exactly like one that works.
  */
-export function refusalsOf(failed: readonly { mode: VoiceMode; chord: string }[]): Partial<Record<VoiceMode, string>> {
+export function refusalsOf(
+  failed: readonly { mode: VoiceMode; chord: string }[],
+  windows: boolean = isWindowsRuntime(),
+): Partial<Record<VoiceMode, string>> {
   const refusals: Partial<Record<VoiceMode, string>> = {}
-  for (const { mode, chord } of failed) refusals[mode] = busyMessage(mode, chord)
+  for (const { mode, chord } of failed) refusals[mode] = busyMessage(mode, chord, windows)
   return refusals
 }
 
@@ -247,6 +250,8 @@ export interface RegisterVoiceShortcutsDeps {
   register: (chord: string) => Promise<void>
   /** Says what could not be claimed, in the interface rather than the console. */
   report?: (message: string) => void
+  /** Whether the Windows key table limits the chords (see `isSystemChord`); the running system when left out. */
+  windows?: boolean
 }
 
 /**
@@ -268,6 +273,7 @@ export async function registerVoiceShortcuts(
     // Nothing held, or the plugin is gone: the registrations below say so themselves.
   }
 
+  const windows = deps.windows ?? isWindowsRuntime()
   const registered: VoiceMode[] = []
   const failed: { mode: VoiceMode; chord: string; problem: string }[] = []
   const wanted: { mode: VoiceMode; chord: string }[] = [
@@ -276,12 +282,13 @@ export async function registerVoiceShortcuts(
   ]
 
   for (const { mode, chord } of wanted) {
-    /* Not claimed at all: on a layout other than the American one the system
-       would give ADE a different key, taken from whatever else uses it. It
-       still works in ADE's window, where the keydown listener sees it. */
-    if (!isSystemChord(chord)) {
+    /* Not claimed at all, on Windows: on a layout other than the American one
+       the system would give ADE a different key, taken from whatever else
+       uses it. It still works in ADE's window, where the keydown listener
+       sees it. Elsewhere the key is registered as it was recorded. */
+    if (!isSystemChord(chord, windows)) {
       failed.push({ mode, chord, problem: "not a system-wide key" })
-      deps.report?.(busyMessage(mode, chord))
+      deps.report?.(busyMessage(mode, chord, windows))
       continue
     }
     try {
@@ -290,7 +297,7 @@ export async function registerVoiceShortcuts(
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err)
       failed.push({ mode, chord, problem })
-      deps.report?.(busyMessage(mode, chord))
+      deps.report?.(busyMessage(mode, chord, windows))
     }
   }
 

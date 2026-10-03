@@ -43,10 +43,10 @@ describe("the recorder writes the key, not the character", () => {
   })
 })
 
-describe("a key the system cannot hold is refused when it is recorded", () => {
+describe("on Windows, a key the system cannot hold is refused when it is recorded", () => {
   test.each(["mod+shift+ò", "mod+shift+,", "mod+shift+;", "mod+alt+€"])("%s", (chord) => {
-    expect(isSystemChord(chord)).toBe(false)
-    const check = checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS)
+    expect(isSystemChord(chord, true)).toBe(false)
+    const check = checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], "other", true)
     expect(check.hasConflict).toBe(true)
     expect(check.message).toContain("fuori da ADE")
   })
@@ -54,10 +54,34 @@ describe("a key the system cannot hold is refused when it is recorded", () => {
   test.each(["mod+shift+j", "mod+shift+1", "mod+alt+numpad1", "mod+shift+f5", "mod+shift+space", "mod+shift+arrowup"])(
     "%s is accepted",
     (chord) => {
-      expect(isSystemChord(chord)).toBe(true)
-      expect(checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS).hasConflict).toBe(false)
+      expect(isSystemChord(chord, true)).toBe(true)
+      expect(
+        checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], "other", true).hasConflict,
+      ).toBe(false)
     },
   )
+})
+
+/*
+ * The table is the Windows crate's. On macOS the crate takes physical key codes, so a chord on punctuation registers on the key it was
+ * recorded on, and refusing it there took a working global shortcut away.
+ */
+describe("off Windows, the key table does not limit the chord", () => {
+  test.each([
+    ["mac", "mod+shift+,"],
+    ["mac", "mod+shift+;"],
+    ["other", "mod+shift+,"],
+    ["other", "mod+alt+ò"],
+  ] as const)("%s: %s is accepted", (platform, chord) => {
+    expect(isSystemChord(chord, false)).toBe(true)
+    expect(
+      checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], platform, false).hasConflict,
+    ).toBe(false)
+  })
+
+  test("a chord the keymap cannot read is still refused", () => {
+    expect(isSystemChord("", false)).toBe(false)
+  })
 })
 
 test("lint: the settings hand the recorder the physical key too", () => {
