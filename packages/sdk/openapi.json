@@ -30981,6 +30981,17 @@
                       }
                     ]
                   },
+                  "protocol": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["openai-compatible", "openai-responses", "anthropic", "gemini"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "timeout": {
                     "anyOf": [
                       {
@@ -40660,6 +40671,17 @@
                     "anyOf": [
                       {
                         "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "protocol": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["openai-compatible", "openai-responses", "anthropic", "gemini"]
                       },
                       {
                         "type": "null"

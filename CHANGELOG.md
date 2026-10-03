@@ -3,6 +3,21 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.426.0 (October 2026)
+
+## Core
+
+- Custom providers by protocol; drop ai from the workspace (@nikomatt69)
+- Add Google Vertex and Vercel Gateway providers; enhance runtime functionality (@nikomatt69)
+- Migrate from legacy AI SDK to new session LLM types (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor: migrate from legacy AI SDK to new session LLM types
+  - feat(llm): add Google Vertex and Vercel Gateway providers; enhance runtime functionality
+  - feat(provider): custom providers by protocol; drop ai from the workspace
+
 ## v1.425.0 (October 2026)
 
 ## Core
