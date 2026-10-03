@@ -517,17 +517,61 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("lowers image and PDF user media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [
+            LLM.user([
+              { type: "text", text: "look" },
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "application/pdf", data: "AQID", filename: "a.pdf" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "look" },
+            { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+            { type: "input_file", filename: "a.pdf", file_data: "data:application/pdf;base64,AQID" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("sends instructions and detailed reasoning summaries", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: { openai: { instructions: "Be brief.", reasoningEffort: "low", reasoningSummary: "detailed" } },
+        }),
+      )
+
+      expect(prepared.body.instructions).toBe("Be brief.")
+      expect(prepared.body.reasoning).toEqual({ effort: "low", summary: "detailed" })
+    }),
+  )
+
+  it.effect("rejects user media Responses cannot carry", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [LLM.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user messages only support text content for now")
+      expect(error.message).toContain("OpenAI Responses does not support audio/mpeg user media")
     }),
   )
 

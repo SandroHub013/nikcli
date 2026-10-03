@@ -5,6 +5,7 @@ export interface OpenAIOptionsInput {
   readonly [key: string]: unknown
   readonly store?: boolean
   readonly promptCacheKey?: string
+  readonly instructions?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto" | "concise" | "detailed"
   readonly includeEncryptedReasoning?: boolean
@@ -23,6 +24,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
     definedEntries({
       store: options?.store,
       promptCacheKey: options?.promptCacheKey,
+      instructions: options?.instructions,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       includeEncryptedReasoning: options?.includeEncryptedReasoning,

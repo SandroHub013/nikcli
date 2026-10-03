@@ -28,6 +28,25 @@ export interface HttpPrepared<Frame> {
   readonly framing: Framing<Frame>
 }
 
+// Headers whose value is a comma-separated set of feature flags. A deployment sets the flags it always needs
+// (on the model) while a protocol adds the ones a particular request needs; letting the later layer replace the
+// earlier would drop one or the other, so these are unioned across layers instead.
+const LIST_HEADERS = ["anthropic-beta"] as const
+
+const unionedListHeaders = (layers: ReadonlyArray<Record<string, string> | undefined>) => {
+  const out: Record<string, string> = {}
+  for (const name of LIST_HEADERS) {
+    const values = layers.flatMap((layer) =>
+      Object.entries(layer ?? {})
+        .filter(([key]) => key.toLowerCase() === name)
+        .flatMap(([, value]) => value.split(",")),
+    )
+    const unique = [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))]
+    if (unique.length > 0) out[name] = unique.join(",")
+  }
+  return out
+}
+
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
   const next = new URL(url)
@@ -52,6 +71,11 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       input.request.http?.query,
     )
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
+    const layers = [
+      input.headers?.({ request: input.request }),
+      input.request.model.headers,
+      input.request.http?.headers,
+    ]
     const headers = yield* Auth.toEffect(Auth.isAuth(input.request.model.auth) ? input.request.model.auth : input.auth)(
       {
         request: input.request,
@@ -59,9 +83,10 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
         url,
         body: body.bodyText,
         headers: Headers.fromInput({
-          ...(input.headers?.({ request: input.request }) ?? {}),
-          ...input.request.model.headers,
-          ...input.request.http?.headers,
+          ...layers[0],
+          ...layers[1],
+          ...layers[2],
+          ...unionedListHeaders(layers),
         }),
       },
     )

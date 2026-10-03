@@ -13,7 +13,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing.ts",
-    "./core": "./src/core.ts",
     "./runtime": "./src/runtime.ts",
     "./route": "./src/route/index.ts",
     "./provider": "./src/provider.ts",
@@ -50,7 +49,6 @@
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "aws4fetch": "1.0.20",
-    "ai": "catalog:",
     "effect": "4.0.0-rc.112",
     "zod": "catalog:"
   }

@@ -1,4 +1,5 @@
 import { Layer, ManagedRuntime, Stream } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { LLMClient, Service as LLMClientService } from "./route/client"
 import { RequestExecutor } from "./route/executor"
 import type { LLMEvent, LLMRequest, PreparedRequest } from "./schema"
@@ -16,9 +17,19 @@ const getRuntime = (): Runtime => {
 export const prepareRequest = (request: LLMRequest): Promise<PreparedRequest> =>
   getRuntime().runPromise(LLMClient.prepare(request))
 
-export const streamRequest = (request: LLMRequest, options?: StreamOptions): AsyncIterable<LLMEvent> => {
-  const provided = LLMClient.stream(request, options).pipe(Stream.provide(llmLayer))
-  return Stream.toAsyncIterable(provided)
+export interface RuntimeStreamOptions extends StreamOptions {
+  /**
+   * Fetch the request is sent through, in place of `globalThis.fetch`. Provider auth that is not a static
+   * key (OAuth bearer renewal, an account token resolved per request, a rewritten endpoint) lives in a
+   * wrapped fetch, so a stream that cannot take one cannot serve those providers.
+   */
+  readonly fetch?: typeof globalThis.fetch
+}
+
+export const streamRequest = (request: LLMRequest, options?: RuntimeStreamOptions): AsyncIterable<LLMEvent> => {
+  const { fetch, ...streamOptions } = options ?? {}
+  const events = LLMClient.stream(request, streamOptions).pipe(Stream.provide(llmLayer))
+  return Stream.toAsyncIterable(fetch ? events.pipe(Stream.provideService(FetchHttpClient.Fetch, fetch)) : events)
 }
 
 export const dispose = async (): Promise<void> => {

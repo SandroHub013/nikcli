@@ -1,7 +1,6 @@
 export { LLMClient, modelLimits, modelRef } from "./route/client"
 export { Auth } from "./route/auth"
 export { Provider } from "./provider"
-export * as LLMCore from "./core"
 export type {
   RouteModelInput,
   RouteRoutedModelInput,

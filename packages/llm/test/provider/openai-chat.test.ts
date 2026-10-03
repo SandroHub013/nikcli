@@ -181,31 +181,61 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("lowers image and PDF user media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [
+            LLM.user([
+              { type: "text", text: "look" },
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "application/pdf", data: new Uint8Array([1, 2, 3]), filename: "a.pdf" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "look" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+            { type: "file", file: { filename: "a.pdf", file_data: "data:application/pdf;base64,AQID" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects user media Chat Completions cannot carry", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [LLM.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Chat user messages only support text content for now")
+      expect(error.message).toContain("OpenAI Chat does not support audio/mpeg user media")
     }),
   )
 
-  it.effect("rejects unsupported assistant reasoning content", () =>
+  it.effect("omits assistant reasoning content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           id: "req_reasoning",
           model,
-          messages: [LLM.assistant({ type: "reasoning", text: "hidden" })],
+          messages: [LLM.assistant([{ type: "reasoning", text: "hidden" }, { type: "text", text: "visible" }])],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Chat assistant messages only support text and tool-call content for now")
+      expect(prepared.body.messages).toEqual([expect.objectContaining({ role: "assistant", content: "visible" })])
+      expect(JSON.stringify(prepared.body)).not.toContain("hidden")
     }),
   )
 

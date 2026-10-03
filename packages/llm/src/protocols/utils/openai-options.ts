@@ -35,8 +35,14 @@ export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefine
   return isAnyReasoningEffort(value) ? value : undefined
 }
 
-export const reasoningSummary = (request: LLMRequest): "auto" | undefined => {
-  return options(request)?.reasoningSummary === "auto" ? "auto" : undefined
+export const reasoningSummary = (request: LLMRequest): "auto" | "concise" | "detailed" | undefined => {
+  const value = options(request)?.reasoningSummary
+  return value === "auto" || value === "concise" || value === "detailed" ? value : undefined
+}
+
+export const instructions = (request: LLMRequest) => {
+  const value = options(request)?.instructions
+  return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 export const encryptedReasoning = (request: LLMRequest) =>

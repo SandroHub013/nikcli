@@ -4,7 +4,8 @@ import { CacheHint, LLM, LLMError } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
+import { HttpClientRequest } from "effect/unstable/http"
 import { sseEvents } from "../lib/sse"
 
 const model = AnthropicMessages.model({
@@ -366,17 +367,100 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("lowers adaptive thinking and effort, flagging the effort beta", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" } },
+        }),
+      )
+
+      expect(prepared.body.thinking).toEqual({ type: "adaptive", display: "summarized" })
+      expect(prepared.body.output_config).toEqual({ effort: "high" })
+    }),
+  )
+
+  it.effect("unions the effort beta with the deployment's anthropic-beta flags", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: AnthropicMessages.model({
+          id: "claude-opus-4-7",
+          baseURL: "https://api.anthropic.test/v1/",
+          headers: { "x-api-key": "test", "anthropic-beta": "interleaved-thinking-2025-05-14,effort-2025-11-24" },
+        }),
+        prompt: "think",
+        providerOptions: { anthropic: { effort: "low" } },
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            const beta = (web.headers.get("anthropic-beta") ?? "").split(",").sort()
+            expect(beta).toEqual(["effort-2025-11-24", "interleaved-thinking-2025-05-14"])
+            return input.respond(sseEvents({ type: "message_stop" }), { headers: { "content-type": "text/event-stream" } })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("adds only the effort beta when the deployment sets none", () =>
+    LLMClient.generate(
+      LLM.request({ model, prompt: "think", providerOptions: { anthropic: { effort: "low" } } }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.headers.get("anthropic-beta")).toBe("effort-2025-11-24")
+            return input.respond(sseEvents({ type: "message_stop" }), { headers: { "content-type": "text/event-stream" } })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("lowers image and PDF user media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [
+            LLM.user([
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "application/pdf", data: "AQID", filename: "a.pdf" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AQID" }, title: "a.pdf" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects user media Messages cannot carry", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [LLM.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Anthropic Messages user messages only support text content for now")
+      expect(error.message).toContain("Anthropic Messages does not support audio/mpeg user media")
     }),
   )
 })
