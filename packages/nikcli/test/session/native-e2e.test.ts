@@ -115,11 +115,10 @@ describe("native LLM stream end to end", () => {
             }
             LLMCoverage.reset()
             await body({ stream: LLM.stream, input })
-            // Guards the whole file: a request that quietly fell back to the AI SDK would produce the same
-            // wire shape, so what makes these tests about the native route is that it took every turn.
+            // Guards the whole file: every turn must stream natively (none refused, none unmapped); a refused turn would fail,
+            // so this also guards the coverage bookkeeping.
             expect(LLMCoverage.summary()).toMatchObject({
               native: 1,
-              fallback: 0,
               ineligible: 0,
               "ineligible-late": 0,
               unmapped: 0,

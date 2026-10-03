@@ -59,8 +59,10 @@ export class NoNativeRouteError extends Error {
     super(
       input.reason
         ? `${input.providerID}/${input.modelID} cannot take this request: ${input.reason}`
-        : `${input.providerID}/${input.modelID} has no native route. Configure the provider as ` +
-            `@ai-sdk/openai-compatible with a baseURL, or choose another model.`,
+        : `${input.providerID}/${input.modelID} has no native route. If the service speaks the OpenAI, ` +
+            `Anthropic or Gemini API, set provider.${input.providerID}.options.protocol ` +
+            `(openai-compatible | openai-responses | anthropic | gemini) and a baseURL; if it needs its own ` +
+            `authentication, a plugin's auth loader can supply a fetch. Otherwise choose another model.`,
     )
     this.name = "NoNativeRouteError"
     this.providerID = input.providerID

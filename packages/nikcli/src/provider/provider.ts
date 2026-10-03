@@ -1653,6 +1653,26 @@ export namespace Provider {
     const opt = <T>(key: string): T | undefined => providerInfo.options?.[key] as T | undefined
 
     try {
+      // A custom provider names its wire protocol instead of an SDK. `options.protocol` comes from config or
+      // from a plugin's auth loader, which can also supply the `fetch` that signs or renews credentials
+      // (`nativeFetch` runs it), so a provider with an unusual host or auth needs no SDK at all.
+      const protocol = opt<string>("protocol")
+      if (protocol !== undefined) {
+        if (!baseURL) return undefined
+        switch (protocol) {
+          case "openai-compatible":
+            return OpenAICompatible.model(id, { provider: providerID, baseURL, apiKey } as any)
+          case "openai-responses":
+            return OpenAI.responses(id, { baseURL, apiKey } as any)
+          case "anthropic":
+            return Anthropic.model(id, { baseURL, apiKey } as any)
+          case "gemini":
+            return Google.model(id, { baseURL, apiKey } as any)
+          default:
+            return undefined
+        }
+      }
+
       switch (npm) {
         case "@ai-sdk/openai":
           // OpenAI SDK is shared by OpenAI, Azure, and GitHub Copilot — disambiguate by providerID.

@@ -208,6 +208,48 @@ describe("Provider.mapToModelRef: gateways and clouds", () => {
   })
 })
 
+describe("Provider.mapToModelRef: custom providers by protocol", () => {
+  const map = async (
+    options: Record<string, unknown>,
+    npm = "some-ai-sdk-provider",
+    url = "https://llm.example/v1",
+  ) => {
+    const { Provider } = await import("@/provider/provider")
+    const model = { id: "m", providerID: "acme", api: { id: "m", npm, url }, headers: {} }
+    return Provider.mapToModelRef(model as any, { id: "acme", options } as any)
+  }
+
+  it("routes an unknown SDK by the protocol the provider names", async () => {
+    const cases = [
+      ["openai-compatible", "openai-compatible-chat"],
+      ["openai-responses", "openai-responses"],
+      ["anthropic", "anthropic-messages"],
+      ["gemini", "gemini"],
+    ] as const
+    for (const [protocol, route] of cases) {
+      const ref = await map({ protocol, apiKey: "k" })
+      expect(ref?.route).toBe(route)
+      expect(ref?.baseURL).toBe("https://llm.example/v1")
+    }
+  })
+
+  it("lets the protocol win over a known SDK name", async () => {
+    const ref = await map({ protocol: "anthropic", apiKey: "k" }, "@ai-sdk/openai-compatible")
+    expect(ref?.route).toBe("anthropic-messages")
+  })
+
+  it("needs a baseURL, and refuses a protocol it does not know", async () => {
+    expect(await map({ protocol: "anthropic", apiKey: "k" }, "x", "")).toBeUndefined()
+    expect(await map({ protocol: "smoke-signals", apiKey: "k" })).toBeUndefined()
+  })
+
+  it("serves a plugin-supplied fetch: no key needed, the placeholder stands in for it", async () => {
+    const { Provider } = await import("@/provider/provider")
+    const ref = await map({ protocol: "openai-compatible", fetch: async () => new Response() })
+    expect(ref?.apiKey).toBe(Provider.FETCH_MANAGED_KEY)
+  })
+})
+
 describe("Provider.nativeFetch", () => {
   const info = (options: Record<string, unknown>) => ({ id: "p", options }) as any
 

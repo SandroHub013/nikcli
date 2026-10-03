@@ -1467,6 +1467,12 @@ export namespace Config {
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          protocol: z
+            .enum(["openai-compatible", "openai-responses", "anthropic", "gemini"])
+            .optional()
+            .describe(
+              "Wire protocol for a custom provider, used with baseURL: openai-compatible (Chat Completions), openai-responses, anthropic (Messages) or gemini. Takes precedence over npm. Auth that is not a static key (OAuth, signed requests) belongs in a plugin's auth loader, which supplies a fetch.",
+            ),
           timeout: z
             .union([
               z

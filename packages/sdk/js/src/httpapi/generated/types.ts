@@ -397,6 +397,7 @@ export type ProviderConfig = {
         baseURL?: string | undefined
         enterpriseUrl?: string | undefined
         setCacheKey?: boolean | undefined
+        protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
         timeout?: number | false | undefined
         headerTimeout?: number | false | undefined
         chunkTimeout?: number | undefined
@@ -968,6 +969,7 @@ export type ProviderConfig1 = {
         baseURL?: string | undefined
         enterpriseUrl?: string | undefined
         setCacheKey?: boolean | undefined
+        protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
         timeout?: number | false | undefined
         headerTimeout?: number | false | undefined
         chunkTimeout?: number | undefined
@@ -6879,6 +6881,7 @@ export type ConfigUpdateInput = {
                   readonly baseURL?: string | undefined
                   readonly enterpriseUrl?: string | undefined
                   readonly setCacheKey?: boolean | undefined
+                  readonly protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
                   readonly timeout?: number | false | undefined
                   readonly headerTimeout?: number | false | undefined
                   readonly chunkTimeout?: number | undefined

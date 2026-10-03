@@ -11,7 +11,7 @@
 import { Effect } from "effect"
 import { Runtime as LLMRuntime, type ProviderOptions } from "@nikcli-ai/llm"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
-import { LoadAPIKeyError } from "@/provider/error"
+import { LoadAPIKeyError, NoNativeRouteError } from "@/provider/error"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { LLM } from "../llm"
@@ -47,10 +47,7 @@ async function prepare(input: CallInput) {
     ),
   )
   if (!provider || !modelRef) {
-    throw new Error(
-      `${input.model.providerID}/${input.model.id} has no native route, so it cannot be called. ` +
-        `Configure the provider as @ai-sdk/openai-compatible with a baseURL, or pick another model.`,
-    )
+    throw new NoNativeRouteError({ providerID: input.model.providerID, modelID: input.model.id })
   }
   const apiKey = typeof provider.options.apiKey === "string" ? provider.options.apiKey : provider.key
   if (!apiKey && typeof provider.options.fetch !== "function") {

@@ -90,7 +90,7 @@ reported **49 pass, 0 fail, exit 0**. After the slice, the wider targeted run
 `bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts test/session/processor-effect-service.test.ts test/session/retry.test.ts test/session/retry-precise.test.ts`
 reported **108 pass, 0 fail, exit 0**, `bun run format:check` and `bun run lint` reported 0 errors, and
 `bun run typecheck` in `packages/nikcli` exits 0. (An earlier typecheck in this session reported twelve errors in
-`src/provider/legacy/copilot/chat/openai-compatible-chat-language-model.ts` from a duplicated `@ai-sdk/provider` in the
+the vendored Copilot chat language model (since removed with the AI SDK) from a duplicated `@ai-sdk/provider` in the
 installed tree; `bun install --frozen-lockfile` cleared them, so that was install drift rather than a repo defect.)
 
 `bun run script/test-ci.ts` over the whole suite (487 files, 20 batches), run with nothing else on the machine, reported

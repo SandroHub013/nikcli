@@ -193,6 +193,59 @@ describe("one-shot native calls", () => {
     })
   })
 
+  it("serves a custom-SDK provider that names its protocol in config", async () => {
+    captured.length = 0
+    replies.push({
+      body: sse(chunk({ role: "assistant", content: "from acme" }), chunk({}, "stop")),
+      type: "text/event-stream",
+    })
+    await withFixture(async ({ home }) => {
+      const previous = process.env.NIKCLI_DISABLE_PROJECT_CONFIG
+      process.env.NIKCLI_DISABLE_PROJECT_CONFIG = "0"
+      process.env.NIKCLI_DISABLE_MODELS_FETCH = "1"
+      const { Instance } = await import("@/project/instance")
+      const { Provider } = await import("@/provider/provider")
+      const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
+      const call = await import("@/session/llm/call")
+      try {
+        await Bun.write(
+          path.join(home, "nikcli.json"),
+          JSON.stringify({
+            enabled_providers: ["acme"],
+            provider: {
+              acme: {
+                npm: "@acme/ai-sdk-provider",
+                api: `http://127.0.0.1:${server.port}/v1`,
+                options: { apiKey: "acme-key", protocol: "openai-compatible" },
+                models: { m: { name: "M", limit: { context: 8192, output: 1024 } } },
+              },
+            },
+          }),
+        )
+        await Instance.provide({
+          directory: home,
+          fn: async () => {
+            const model = await runPromiseWithLayer(
+              Provider.defaultLayer,
+              withCurrentInstance(
+                Effect.gen(function* () {
+                  return yield* (yield* Provider.Service).getModel("acme", "m")
+                }),
+              ),
+            )
+            expect((await call.generateText({ model, prompt: "hi" })).text).toBe("from acme")
+          },
+        })
+      } finally {
+        await Instance.disposeAll()
+        if (previous === undefined) delete process.env.NIKCLI_DISABLE_PROJECT_CONFIG
+        else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previous
+      }
+    })
+    expect(captured[0]!.path).toBe("/v1/chat/completions")
+    expect(captured[0]!.headers.get("authorization")).toBe("Bearer acme-key")
+  })
+
   it("generateImage posts to /images/generations and decodes base64 images", async () => {
     captured.length = 0
     replies.push({ body: JSON.stringify({ data: [{ b64_json: PNG }] }), type: "application/json" })
