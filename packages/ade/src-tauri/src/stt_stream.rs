@@ -82,6 +82,8 @@ pub enum Reason {
     Timeout,
     Protocol,
     Backpressure,
+    /// Two sessions are open already: a local limit, not the server's, so the page is not to pause the streaming for it.
+    Busy,
 }
 
 impl Reason {
@@ -96,6 +98,7 @@ impl Reason {
             Reason::Timeout => "timeout",
             Reason::Protocol => "protocol",
             Reason::Backpressure => "backpressure",
+            Reason::Busy => "busy",
         }
     }
 }
@@ -160,8 +163,8 @@ pub struct Sessions {
 }
 
 impl Sessions {
-    /// Opens a session. The connection is made by a task; this returns at once with the id. With no key, or two sessions already, nothing is
-    /// opened: the reason comes back and `emit` hears it too, as a `failed` event.
+    /// Opens a session. The connection is made by a task; this returns at once with the id. With no key (`NoKey`), or two sessions already
+    /// (`Busy`), nothing is opened: the reason comes back and `emit` hears it too, as a `failed` event.
     pub fn start(&self, key: Option<String>, url: String, limits: Limits, emit: Emit) -> Result<u64, Reason> {
         let Some(key) = key.filter(|key| !key.trim().is_empty()) else {
             emit(SttEvent::Failed { reason: Reason::NoKey, status: None });
@@ -170,8 +173,8 @@ impl Sessions {
         let mut live = lock(&self.live);
         if live.len() >= MAX_SESSIONS {
             drop(live);
-            emit(SttEvent::Failed { reason: Reason::Unavailable, status: None });
-            return Err(Reason::Unavailable);
+            emit(SttEvent::Failed { reason: Reason::Busy, status: None });
+            return Err(Reason::Busy);
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let (commands, receiver) = mpsc::channel(QUEUE_FRAMES);
@@ -434,8 +437,11 @@ async fn run(
                 }
             }
             // Nothing is read from the page before the server is ready: what it queued waits in order.
-            command = commands.recv(), if ready && !ended => {
+            command = commands.recv(), if ready => {
                 match command {
+                    // The audio has ended (the page said so, or a limit did): a late frame is read and dropped, so it cannot fill the queue and
+                    // turn the wait for `done` into `backpressure`.
+                    Some(_) if ended => {}
                     Some(Command::Audio(frame)) => {
                         sent_bytes += frame.len();
                         if sink.send(Message::Binary(frame)).await.is_err() {
@@ -574,7 +580,8 @@ mod tests {
         reject: Option<(u16, &'static str)>,
         /// Send `transcript.created` after this long; never when `None`.
         created_after: Option<Duration>,
-        /// What to send on `audio.done`: these partials, then `done` with this text; no `done` when `None`.
+        /// What to send on `audio.done`, after `done_delay`: these partials, then `done` with this text; no `done` when `None`.
+        done_delay: Duration,
         partials: Vec<(&'static str, bool, bool)>,
         done_text: Option<&'static str>,
         /// Send an `error` message after this many frames, with this text.
@@ -651,6 +658,7 @@ mod tests {
                     Some(Ok(Message::Text(text))) => {
                         seen.lock().unwrap().texts.push(text.to_string());
                         if text.contains("audio.done") {
+                            tokio::time::sleep(script.done_delay).await;
                             for (partial, is_final, speech_final) in &script.partials {
                                 let message = serde_json::json!({ "type": "transcript.partial", "text": partial, "is_final": is_final, "speech_final": speech_final });
                                 let _ = sink.send(Message::Text(message.to_string().into())).await;
@@ -990,6 +998,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn frames_sent_after_the_audio_ended_do_not_turn_the_wait_for_done_into_backpressure() {
+        // The server takes 3 s to answer `audio.done` (the sleeps below last longer than they say on Windows); the idle limit ends the audio after 100 ms, and the page, which did not notice, goes
+        // on sending: 80 frames, more than the queue holds.
+        let (port, _seen) = serve(Script { done_delay: Duration::from_secs(3), ..Script::talking() }).await;
+        let sessions = Sessions::default();
+        let events = Events::default();
+        let limits = Limits { idle: Duration::from_millis(100), done: Duration::from_secs(5), ..quick() };
+        let id = open(&sessions, port, &events, limits);
+        events.until("ready", |e| e.contains(&SttEvent::Ready)).await;
+        sessions.send(id, frame(1)).unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        for _ in 0..80 {
+            // An error here would be the queue filling up.
+            assert_eq!(sessions.send(id, frame(2)), Ok(()));
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+        let all = events.until("done", |e| e.iter().any(|event| matches!(event, SttEvent::Done { .. })) || has_failed(e)).await;
+        assert!(matches!(all.last(), Some(SttEvent::Done { .. })), "{all:?}");
+        assert_eq!(failed(&all), None);
+    }
+
+    #[tokio::test]
     async fn a_session_that_never_stops_is_ended_at_the_total_limit() {
         let (port, seen) = serve(Script::talking()).await;
         let sessions = Sessions::default();
@@ -1018,8 +1048,10 @@ mod tests {
         let limits = Limits { idle: Duration::from_secs(30), ..quick() };
         open(&sessions, port, &first, limits);
         open(&sessions, port, &second, limits);
-        assert_eq!(sessions.start(Some(KEY.into()), url(port), limits, third.emit()), Err(Reason::Unavailable));
-        assert_eq!(failed(&third.all()), Some((Reason::Unavailable, None)));
+        // A local limit, not the server's: `busy`, which is not `unavailable` (a 503, after which the page pauses the streaming).
+        assert_eq!(sessions.start(Some(KEY.into()), url(port), limits, third.emit()), Err(Reason::Busy));
+        assert_eq!(failed(&third.all()), Some((Reason::Busy, None)));
+        assert_eq!(serde_json::to_string(&third.all()[0]).unwrap(), r#"{"kind":"failed","reason":"busy"}"#);
         first.until("ready", |e| e.contains(&SttEvent::Ready)).await;
         second.until("ready", |e| e.contains(&SttEvent::Ready)).await;
         sessions.close_all();
@@ -1100,6 +1132,7 @@ mod tests {
             assert!(!reason.code().is_empty());
         }
         assert_eq!(Reason::NoKey.code(), "no-key");
+        assert_eq!(Reason::Busy.code(), "busy");
     }
 
     /// The key is read by Rust and goes to one place. The page can ask for a session, never for a key: nothing that reads it is a command, and
