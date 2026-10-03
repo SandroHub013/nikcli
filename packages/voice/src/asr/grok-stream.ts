@@ -47,7 +47,12 @@ import {
 // Transport contract
 // ---------------------------------------------------------------------------
 
-/** Why the stream ended without a transcript; the codes the local runtime reports. */
+/**
+ * Why the stream ended without a transcript; the codes the local runtime reports.
+ *
+ * `busy` is the local refusal: the transport already holds a session, so
+ * nothing reached the network and no pause is owed — see `applyFailure`.
+ */
 export type SttStreamReason =
   | "noKey"
   | "auth"
@@ -58,6 +63,7 @@ export type SttStreamReason =
   | "timeout"
   | "protocol"
   | "backpressure"
+  | "busy"
 
 /** What the local runtime reports while a segment streams. */
 export type SttStreamEvent =
@@ -264,6 +270,8 @@ function reasonOf(message: string): SttStreamReason {
   if (m.includes("unavailable") || m.includes("503")) return "unavailable"
   if (m.includes("timeout")) return "timeout"
   if (m.includes("protocol")) return "protocol"
+  // The transport's own refusal: "una sessione è già aperta", or Rust's code.
+  if (m.includes("busy") || m.includes("già aperta") || m.includes("gia aperta")) return "busy"
   return "network"
 }
 
@@ -425,6 +433,11 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       case "protocol":
         // Mid-sentence, on this one segment only: the batch takes it over and
         // the socket stays open for the next one.
+        break
+      case "busy":
+        // The transport already holds a session: this segment never reached
+        // the network, so no pause is owed — the batch takes it at once and
+        // the next segment tries the socket again.
         break
     }
   }

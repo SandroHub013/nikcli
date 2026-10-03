@@ -371,6 +371,27 @@ describe("asr/grok-stream refusals", () => {
     expect(h.batches).toHaveLength(2)
   })
 
+  test("a session already open: batch at once, and the socket owes no silence", async () => {
+    const h = setup({ openError: "Una sessione stt_stream è già aperta: una alla volta." })
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    // Local refusal: nothing reached the network, nothing is said aloud.
+    expect(h.errors).toHaveLength(0)
+    h.endSeg(1)
+    h.close(1, 1_000)
+    expect(h.batches).toHaveLength(1)
+
+    // No pause follows: a rate or network failure would keep the socket
+    // silence for tens of seconds, and segment 2 would not even try to open.
+    h.startSeg(2)
+    await h.tick()
+    expect(h.counts.open).toBe(2)
+    h.close(2, 1_000)
+    expect(h.batches).toHaveLength(2)
+  })
+
   test("no transcript.done after audio.done: the sentence goes to batch, with no pause", async () => {
     const h = setup({ doneTimeoutMs: 15 })
     await h.transcriber.start()
