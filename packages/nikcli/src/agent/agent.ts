@@ -1,8 +1,8 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject } from "@/provider/legacy/ai-sdk"
-import { type ModelMessage } from "@/session/llm/types"
+import type { JSONSchema7 } from "@/session/llm/types"
+import { generateObject } from "@/session/llm/call"
 import { SystemPrompt } from "../session/system"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth"
@@ -60,6 +60,12 @@ When you identify a knowledge gap, outdated external dependency question, missin
 - While research runs, continue any independent work instead of blocking.
 - When the research becomes relevant, use delegator or delegation to read and incorporate the result.
 `
+
+const GeneratedAgent = z.object({
+  identifier: z.string(),
+  whenToUse: z.string(),
+  systemPrompt: z.string(),
+})
 
 export namespace Agent {
   /**
@@ -992,15 +998,13 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
         generate: (input) =>
           Effect.gen(function* () {
             const ctx = yield* InstanceState.context
-            const cfg = yield* Effect.promise(() => configGet(ctx))
-            const { defaultModel, model, language } = yield* Effect.promise(() =>
+            const { defaultModel, model } = yield* Effect.promise(() =>
               runProvider(
                 Effect.gen(function* () {
                   const provider = yield* Provider.Service
                   const defaultModel = input.model ?? (yield* provider.defaultModel())
                   const model = yield* provider.getModel(defaultModel.providerID, defaultModel.modelID)
-                  const language = yield* provider.getLanguage(model)
-                  return { defaultModel, model, language }
+                  return { defaultModel, model }
                 }),
                 ctx,
               ),
@@ -1009,34 +1013,7 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
             const system = SystemPrompt.header(defaultModel.providerID)
             system.push(PROMPT_GENERATE)
             const existing = yield* list()
-
-            const params = {
-              experimental_telemetry: {
-                isEnabled: cfg.experimental?.openTelemetry ?? true,
-                metadata: {
-                  userId: cfg.username ?? "unknown",
-                },
-              },
-              temperature: 0.3,
-              messages: [
-                ...system.map(
-                  (item): ModelMessage => ({
-                    role: "system",
-                    content: item,
-                  }),
-                ),
-                {
-                  role: "user",
-                  content: `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i: Info) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
-                },
-              ],
-              model: language,
-              schema: z.object({
-                identifier: z.string(),
-                whenToUse: z.string(),
-                systemPrompt: z.string(),
-              }),
-            } satisfies Parameters<typeof generateObject>[0]
+            const prompt = `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i: Info) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`
 
             const auth = yield* Effect.promise(() =>
               runAuth(
@@ -1046,25 +1023,25 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
                 }),
               ),
             )
-            if (defaultModel.providerID === "openai" && auth?.type === "oauth") {
-              return yield* Effect.promise(async () => {
-                const result = streamObject({
-                  ...params,
-                  providerOptions: ProviderTransform.providerOptions(model, {
-                    instructions: SystemPrompt.instructions(),
-                    store: false,
-                  }),
-                  onError: () => {},
-                })
-                for await (const part of result.fullStream) {
-                  if (part.type === "error") throw part.error
-                }
-                return result.object
-              })
-            }
+            // A ChatGPT-plan (Codex) session takes its system prompt as `instructions` plus a leading user
+            // message, and does not store the response, as in `LLM.stream`.
+            const codex = defaultModel.providerID === "openai" && auth?.type === "oauth"
 
-            const result = yield* Effect.promise(() => generateObject(params))
-            return result.object
+            const result = yield* Effect.promise(() =>
+              generateObject({
+                model,
+                temperature: 0.3,
+                schema: z.toJSONSchema(GeneratedAgent) as JSONSchema7,
+                ...(codex
+                  ? {
+                      messages: [{ role: "user", content: system.join("\n\n") }],
+                      providerOptions: { instructions: SystemPrompt.instructions(), store: false },
+                    }
+                  : { system }),
+                prompt,
+              }),
+            )
+            return GeneratedAgent.parse(result.object)
           }),
       })
     }),

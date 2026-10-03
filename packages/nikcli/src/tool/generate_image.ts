@@ -4,7 +4,7 @@ import DESCRIPTION from "./generate_image.txt"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
-import { generateImage } from "@/provider/legacy/ai-sdk"
+import { generateImage } from "@/session/llm/call"
 import { Identifier } from "@nikcli-ai/util/id"
 import type { MessageV2 } from "@/session/message-v2"
 import { Installation } from "@/installation"
@@ -239,28 +239,22 @@ export const GenerateImageTool = Tool.define("generate_image", {
       },
     })
 
-    const { model, imageModel } = await runProvider(
+    const model = await runProvider(
       Effect.gen(function* () {
         const provider = yield* Provider.Service
-        const model = yield* provider.getModel(providerID, modelID)
-        const imageModel = yield* provider.getImageModel(model)
-        return { model, imageModel }
+        return yield* provider.getModel(providerID, modelID)
       }),
     )
 
-    const providerOptions = params.providerOptions
-      ? ProviderTransform.providerOptions(model, params.providerOptions)
-      : undefined
-
     const result = await generateImage({
-      model: imageModel,
+      model,
       prompt: params.prompt,
       n: params.n ?? 1,
-      size: params.size as any,
-      aspectRatio: params.aspectRatio as any,
+      size: params.size,
+      aspectRatio: params.aspectRatio,
       seed: params.seed,
-      providerOptions,
-      abortSignal: ctx.abort,
+      providerOptions: params.providerOptions,
+      abort: ctx.abort,
       headers: buildRequestHeaders({
         model,
         projectID: ctx.instance.project.id,
@@ -291,7 +285,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       params.size ? `Size: ${params.size}` : undefined,
       params.aspectRatio ? `Aspect ratio: ${params.aspectRatio}` : undefined,
       params.seed !== undefined ? `Seed: ${params.seed}` : undefined,
-      warnings ? `Warnings: ${warnings.map((w) => w.type).join(", ")}` : undefined,
+      warnings ? `Warnings: ${warnings.join("; ")}` : undefined,
     ].filter(Boolean)
 
     return {

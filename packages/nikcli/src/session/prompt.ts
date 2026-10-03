@@ -56,8 +56,6 @@ import { SessionV2Write } from "./v2/write"
 import { LLM } from "./llm"
 import { stripDanglingXmlArtifacts } from "@/util/dangling-xml"
 
-globalThis.AI_SDK_LOG_WARNINGS = false
-
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 export namespace SessionPrompt {

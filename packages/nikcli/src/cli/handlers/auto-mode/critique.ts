@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { generateText } from "@/provider/legacy/ai-sdk"
+import { generateText } from "@/session/llm/call"
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
 import { bootstrap } from "@/cli/bootstrap"
@@ -30,21 +30,20 @@ export default Runtime.handler(Commands.commands["auto-mode"].commands["critique
       return
     }
 
-    const language = await runPromiseWithLayer(
+    const model = await runPromiseWithLayer(
       Provider.defaultLayer,
       withCurrentInstance(
         Effect.gen(function* () {
           const provider = yield* Provider.Service
           const configuredModel = global.auto_mode?.model ? Provider.parseModel(global.auto_mode.model) : undefined
           const ref = configuredModel ?? (yield* provider.defaultModel())
-          const model = yield* provider.getModel(ref.providerID, ref.modelID)
-          return yield* provider.getLanguage(model)
+          return yield* provider.getModel(ref.providerID, ref.modelID)
         }),
       ),
     )
 
     const result = await generateText({
-      model: language,
+      model,
       temperature: 0,
       system: INSTRUCTION,
       prompt: [

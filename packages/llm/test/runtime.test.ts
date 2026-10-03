@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { LLM } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { streamRequest } from "../src/runtime"
+import { generateObjectRequest, generateRequest, streamRequest } from "../src/runtime"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
@@ -56,5 +56,35 @@ describe("runtime.streamRequest fetch override", () => {
     }) as unknown as typeof globalThis.fetch
 
     await expect(collect(streamRequest(request("k"), { fetch }))).rejects.toBeDefined()
+  })
+})
+
+describe("runtime.generateRequest / generateObjectRequest", () => {
+  const okFetch = (reply: string) =>
+    (async () =>
+      new Response(reply, { headers: { "content-type": "text/event-stream" } })) as unknown as typeof globalThis.fetch
+
+  test("collects a response through the supplied fetch", async () => {
+    const response = await generateRequest(request("k"), { fetch: okFetch(body) })
+    expect(response.text).toBe("hi")
+  })
+
+  test("returns the object the model was forced to produce", async () => {
+    const reply = sseEvents(
+      deltaChunk({
+        role: "assistant",
+        tool_calls: [{ index: 0, id: "call_1", function: { name: "generate_object", arguments: '{"title":"x"}' } }],
+      }),
+      finishChunk("tool_calls"),
+    )
+    const result = await generateObjectRequest(
+      {
+        model: OpenAIChat.model({ id: "gpt-4o-mini", baseURL: "https://api.openai.test/v1", apiKey: "k" }),
+        prompt: "name it",
+        jsonSchema: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
+      },
+      { fetch: okFetch(reply) },
+    )
+    expect(result.object).toEqual({ title: "x" })
   })
 })

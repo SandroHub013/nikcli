@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { Provider } from "@/provider/provider"
-import { generateText } from "@/provider/legacy/ai-sdk"
+import { generateText } from "@/session/llm/call"
 import DESCRIPTION from "./advisor.txt"
 import { Delegation } from "@/delegation/manager"
 import { Effect } from "effect"
@@ -31,12 +31,10 @@ export const AdvisorTool = Tool.define<typeof parameters, AdvisorMetadata>("advi
   const advisor = initCtx?.agent?.advisor
   if (!advisor) throw new Error("No advisor configured for this agent")
 
-  const { advisorFullModel, advisorLanguage } = await runProvider(
+  const advisorFullModel = await runProvider(
     Effect.gen(function* () {
       const provider = yield* Provider.Service
-      const advisorFullModel = yield* provider.getModel(advisor.model.providerID, advisor.model.modelID)
-      const advisorLanguage = yield* provider.getLanguage(advisorFullModel)
-      return { advisorFullModel, advisorLanguage }
+      return yield* provider.getModel(advisor.model.providerID, advisor.model.modelID)
     }),
   )
   const maxUses = advisor.maxUses ?? 3
@@ -80,17 +78,12 @@ export const AdvisorTool = Tool.define<typeof parameters, AdvisorMetadata>("advi
       })
 
       void generateText({
-        model: advisorLanguage,
+        model: advisorFullModel,
         maxOutputTokens: 2048,
-        abortSignal: ctx.abort,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a strategic advisor to an AI coding assistant. Provide concise, actionable guidance. Do not execute tools or produce user-facing output — return only a clear plan or recommendation.",
-          },
-          { role: "user", content: context },
-        ],
+        abort: ctx.abort,
+        system:
+          "You are a strategic advisor to an AI coding assistant. Provide concise, actionable guidance. Do not execute tools or produce user-facing output — return only a clear plan or recommendation.",
+        prompt: context,
       })
         .then(async (result) => {
           // If the parent session cancelled us, the delegation has likely been

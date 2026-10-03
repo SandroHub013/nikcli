@@ -1,13 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { APICallError } from "ai"
-import type { ModelMessage } from "ai"
+import { APICallError } from "@/provider/error"
+import type { ModelMessage } from "@/session/llm/types"
 import { Provider } from "@/provider/provider"
 import { ProviderError } from "@/provider/error"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@/provider/models"
 import { ProviderAuth } from "@/provider/auth"
-import { openaiCompatibleErrorDataSchema } from "@/provider/legacy/copilot/openai-compatible-error"
-import { openaiErrorDataSchema } from "@/provider/legacy/copilot/responses/openai-error"
 
 function makeModel(overrides: Partial<Provider.Model> = {}): Provider.Model {
   return {
@@ -667,18 +665,6 @@ describe("Requesty model discovery", () => {
       output: 0,
       cache: { read: 0, write: 0 },
     })
-  })
-})
-
-describe("OpenAI error schemas (copilot)", () => {
-  it("openaiErrorDataSchema and compatible schema parse error payloads", () => {
-    const body = { error: { message: "bad", code: "invalid" } }
-    expect(openaiErrorDataSchema.parse(body).error.message).toBe("bad")
-    expect(openaiCompatibleErrorDataSchema.parse(body).error.message).toBe("bad")
-  })
-
-  it("rejects non-object at root", () => {
-    expect(() => openaiErrorDataSchema.parse("x")).toThrow()
   })
 })
 

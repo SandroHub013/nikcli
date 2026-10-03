@@ -67,7 +67,7 @@ describe("Provider.getModelRef", () => {
     const ref = await resolve(
       {
         custom: {
-          npm: "merge-gateway-ai-sdk-provider",
+          npm: "gitlab-ai-provider",
           api: "https://merge.example/v1",
           options: { apiKey: "k" },
           models,
@@ -120,6 +120,91 @@ describe("Provider.getModelRef", () => {
     // No key and no fetch: nothing carries a credential, so there is none to invent.
     const bare = Provider.mapToModelRef(model as any, { id: "gateway", options: {} } as any)
     expect(bare?.apiKey).toBeUndefined()
+  })
+})
+
+describe("Provider.mapToModelRef: gateways and clouds", () => {
+  const map = async (npm: string, info: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+    const { Provider } = await import("@/provider/provider")
+    const providerID = (info.id as string) ?? "p"
+    const model = { id: "m", providerID, api: { id: "m", npm, url: "", ...extra }, headers: {} }
+    return Provider.mapToModelRef(model as any, { options: {}, ...info } as any)
+  }
+
+  it("maps the Vercel gateway to its own route on the gateway host", async () => {
+    const ref = await map("@ai-sdk/gateway", { id: "vercel", options: { apiKey: "k" } })
+    expect(ref?.route).toBe("vercel-gateway")
+    expect(ref?.baseURL).toBe("https://ai-gateway.vercel.sh/v1")
+  })
+
+  it("maps aihubmix, venice and merge onto their OpenAI-compatible hosts", async () => {
+    const cases = [
+      ["@aihubmix/ai-sdk-provider", "aihubmix", "https://aihubmix.com/v1"],
+      ["venice-ai-sdk-provider", "venice", "https://api.venice.ai/api/v1"],
+      ["merge-gateway-ai-sdk-provider", "merge-gateway", "https://api-gateway.merge.dev/v1/openai"],
+    ] as const
+    for (const [npm, id, host] of cases) {
+      const ref = await map(npm, { id, options: { apiKey: "k" } })
+      expect(ref?.baseURL).toBe(host)
+      expect(ref?.route).toBe("openai-compatible-chat")
+    }
+  })
+
+  it("does not send Merge's SDK-specific catalog URL to the OpenAI-compatible route", async () => {
+    const ref = await map(
+      "merge-gateway-ai-sdk-provider",
+      { id: "merge-gateway", options: { apiKey: "k" } },
+      { url: "https://api-gateway.merge.dev/v1/ai-sdk" },
+    )
+    expect(ref?.baseURL).toBe("https://api-gateway.merge.dev/v1/openai")
+  })
+
+  it("maps Cloudflare AI Gateway through the URL its loader built", async () => {
+    const ref = await map(
+      "ai-gateway-provider",
+      { id: "cloudflare-ai-gateway", options: { apiKey: "k" } },
+      { url: "https://gateway.ai.cloudflare.com/v1/acct/gw/compat" },
+    )
+    expect(ref?.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/acct/gw/compat")
+    expect(ref?.route).toBe("openai-compatible-chat")
+  })
+
+  it("maps Vertex Gemini and Claude when the project and location are known", async () => {
+    const gemini = await map("@ai-sdk/google-vertex", {
+      id: "google-vertex",
+      options: { project: "proj", location: "us-east5", fetch: async () => new Response() },
+    })
+    expect(gemini?.route).toBe("vertex-gemini")
+    expect(gemini?.baseURL).toBe(
+      "https://us-east5-aiplatform.googleapis.com/v1/projects/proj/locations/us-east5/publishers/google",
+    )
+    const claude = await map("@ai-sdk/google-vertex/anthropic", {
+      id: "google-vertex-anthropic",
+      options: { project: "proj", location: "global", fetch: async () => new Response() },
+    })
+    expect(claude?.route).toBe("vertex-anthropic")
+    expect(claude?.baseURL).toBe(
+      "https://aiplatform.googleapis.com/v1/projects/proj/locations/global/publishers/anthropic",
+    )
+  })
+
+  it("leaves Vertex unmapped without a project", async () => {
+    expect(await map("@ai-sdk/google-vertex", { id: "google-vertex", options: {} })).toBeUndefined()
+  })
+
+  it("maps an Azure Cognitive Services resource through its own host", async () => {
+    const ref = await map(
+      "@ai-sdk/azure",
+      { id: "azure-cognitive-services", options: { apiKey: "k" } },
+      { url: "https://res.cognitiveservices.azure.com/openai" },
+    )
+    expect(ref?.baseURL).toBe("https://res.cognitiveservices.azure.com/openai/v1")
+  })
+
+  it("leaves SDKs with no native protocol unmapped", async () => {
+    for (const npm of ["gitlab-ai-provider", "@jerome-benoit/sap-ai-provider-v2", "watsonx-ai-provider"]) {
+      expect(await map(npm, { id: "x", options: { apiKey: "k" } }, { url: "https://x.example/v1" })).toBeUndefined()
+    }
   })
 })
 

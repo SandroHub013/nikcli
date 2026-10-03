@@ -73,7 +73,9 @@ export function convertToModelMessages(
   for (const message of messages) {
     switch (message.role) {
       case "system": {
-        const text = message.parts.filter((part): part is Extract<UIMessagePart, { type: "text" }> => part.type === "text")
+        const text = message.parts.filter(
+          (part): part is Extract<UIMessagePart, { type: "text" }> => part.type === "text",
+        )
         const providerOptions = text.reduce<Record<string, Record<string, JsonValue>>>(
           (acc, part) => (part.providerMetadata ? { ...acc, ...part.providerMetadata } : acc),
           {},
@@ -148,7 +150,10 @@ export function convertToModelMessages(
                   providerExecuted: part.providerExecuted,
                   ...(part.callProviderMetadata ? { providerOptions: part.callProviderMetadata } : {}),
                 })
-                if (part.providerExecuted === true && (part.state === "output-available" || part.state === "output-error")) {
+                if (
+                  part.providerExecuted === true &&
+                  (part.state === "output-available" || part.state === "output-error")
+                ) {
                   content.push({
                     type: "tool-result",
                     toolCallId: part.toolCallId,
@@ -208,4 +213,3 @@ export function convertToModelMessages(
 
   return out
 }
-

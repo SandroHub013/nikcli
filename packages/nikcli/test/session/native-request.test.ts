@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { jsonSchema, tool, type ModelMessage } from "ai"
-import z from "zod"
+import { jsonSchema, tool, type ModelMessage } from "@/session/llm/types"
 import {
   NativeRequestUnsupported,
   toLLMMessages,
@@ -168,22 +167,26 @@ describe("toLLMMessages", () => {
 })
 
 describe("toLLMToolDefinitions", () => {
-  it("resolves zod and plain JSON schemas to JSON schema", () => {
+  it("passes a tool's JSON schema through", () => {
     const definitions = toLLMToolDefinitions({
-      zod: tool({ description: "z", inputSchema: z.object({ a: z.string() }), execute: async () => "" }),
       plain: tool({
         description: "p",
         inputSchema: jsonSchema({ type: "object", properties: { b: { type: "number" } } }),
         execute: async () => "",
       }),
     })
-    expect(definitions.map((d) => d.name)).toEqual(["zod", "plain"])
-    expect(definitions[0]!.inputSchema).toMatchObject({ type: "object", properties: { a: { type: "string" } } })
-    expect(definitions[1]!.inputSchema).toMatchObject({ type: "object", properties: { b: { type: "number" } } })
+    expect(definitions.map((d) => d.name)).toEqual(["plain"])
+    expect(definitions[0]!.inputSchema).toMatchObject({ type: "object", properties: { b: { type: "number" } } })
+  })
+
+  it("gives a tool with no schema an empty object schema", () => {
+    const definitions = toLLMToolDefinitions({ bare: tool({ description: "b", execute: async () => "" }) })
+    expect(definitions[0]!.inputSchema).toEqual({ type: "object", properties: {} })
   })
 
   it("leaves out deferred tools and tools with no description", () => {
-    const t = (description?: string) => tool({ description, inputSchema: z.object({}), execute: async () => "" })
+    const t = (description?: string) =>
+      tool({ description, inputSchema: jsonSchema({ type: "object", properties: {} }), execute: async () => "" })
     const definitions = toLLMToolDefinitions({ a: t("a"), b: t("b"), c: t() }, new Set(["b"]))
     expect(definitions.map((d) => d.name)).toEqual(["a"])
   })

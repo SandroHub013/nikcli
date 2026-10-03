@@ -2,7 +2,7 @@ import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@nikcli-ai/util/log"
-import { wrapLanguageModel, extractReasoningMiddleware } from "@/provider/legacy/ai-sdk"
+import { LoadAPIKeyError, NoNativeRouteError } from "@/provider/error"
 import { convertToModelMessages } from "@/session/llm/ui-messages"
 import {
   isModelMessage as isModelMessageShape,
@@ -15,7 +15,6 @@ import {
   jsonSchema,
 } from "@/session/llm/types"
 import type { ProviderOptions } from "@nikcli-ai/llm"
-import * as LegacyAISDK from "@/provider/legacy/ai-sdk"
 import type { JsonValue } from "@/util/json"
 import z from "zod"
 import {
@@ -28,8 +27,6 @@ import {
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { CacheDiagnostics } from "@/provider/cache-diagnostics"
-import { Config } from "@/config/config"
-import { features } from "@nikcli-ai/util/features"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
@@ -68,18 +65,6 @@ export namespace LLM {
 
   function runProvider<A, E>(effect: Effect.Effect<A, E, Provider.Service>) {
     return runPromiseWithLayer(Provider.defaultLayer, withCurrentInstance(effect))
-  }
-
-  function configGet() {
-    return runPromiseWithLayer(
-      Config.defaultLayer,
-      withCurrentInstance(
-        Effect.gen(function* () {
-          const config = yield* Config.Service
-          return yield* config.get()
-        }),
-      ),
-    )
   }
 
   // Build request headers based on provider and model configuration
@@ -299,17 +284,15 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [{ language, provider, modelRef }, cfg, auth] = await Promise.all([
+    const [{ provider, modelRef }, auth] = await Promise.all([
       runProvider(
         Effect.gen(function* () {
           const service = yield* Provider.Service
-          const language = yield* service.getLanguage(input.model)
           const provider = yield* service.getProvider(input.model.providerID)
           const modelRef = yield* service.getModelRef(input.model)
-          return { language, provider, modelRef }
+          return { provider, modelRef }
         }),
       ),
-      configGet(),
       runAuth(
         Effect.gen(function* () {
           const auth = yield* Auth.Service
@@ -331,14 +314,13 @@ export namespace LLM {
         providerID: modelRef.provider,
       })
     } else {
-      // `mapToModelRef` returned undefined. Safe — the AI SDK takes the turn —
-      // and invisible until now: this is the branch `specs/v2/todo.md` calls
-      // "coverage is invisible". See `session/llm/coverage.ts`.
+      // `mapToModelRef` returned undefined: no native route can carry this model. See `session/llm/coverage.ts`.
       LLMCoverage.record({
         outcome: "unmapped",
         providerID: input.model.providerID,
         modelID: input.model.id,
       })
+      throw new NoNativeRouteError({ providerID: input.model.providerID, modelID: input.model.id })
     }
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
@@ -426,19 +408,6 @@ export namespace LLM {
       }),
     )
 
-    const nativeLlmEnabled = features(cfg).nativeLlm
-
-    if (modelRef && !nativeLlmEnabled) {
-      // A ModelRef exists and the flag is down, so this turn would have gone
-      // native. Counting it is how the soak in EOT-11 runs without flipping
-      // anything on.
-      LLMCoverage.record({
-        outcome: "disabled",
-        providerID: modelRef.provider,
-        modelID: modelRef.id,
-      })
-    }
-
     const maxOutputTokens =
       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
@@ -513,166 +482,45 @@ export namespace LLM {
       input.model.headers,
     )
 
-    if (nativeLlmEnabled && modelRef) {
-      const nativeStatus = LLMNativeRuntime.status({
-        model: input.model,
-        provider,
-        auth,
-        modelRef,
+    const nativeStatus = LLMNativeRuntime.status({
+      model: input.model,
+      provider,
+      auth,
+      modelRef,
+    })
+    if (nativeStatus.type !== "supported") {
+      LLMCoverage.record({
+        outcome: "ineligible",
+        providerID: modelRef.provider,
+        modelID: modelRef.id,
+        reason: nativeStatus.reason,
       })
-      if (nativeStatus.type === "supported") {
-        l.debug("llm.runtime", { runtime: "native", route: modelRef.route })
-        try {
-          const nativeResult = await streamNative({
-            streamInput: input,
-            modelRef,
-            provider,
-            auth,
-            params,
-            options,
-            providerOptions,
-            maxOutputTokens,
-            system,
-            messages,
-            tools,
-            headers: requestHeaders,
-            isCodex,
-            l,
-          })
-          // A falsy result is the late refusal inside `streamNative`, which
-          // records `ineligible-late` itself — it is the only place the reason
-          // exists.
-          if (nativeResult) {
-            LLMCoverage.record({
-              outcome: "native",
-              providerID: modelRef.provider,
-              modelID: modelRef.id,
-            })
-            return nativeResult
-          }
-        } catch (e) {
-          if (input.abort.aborted || (e instanceof Error && e.name === "AbortError")) throw e
-          l.warn("native llm stream failed, falling back to ai-sdk", {
-            error: String(e),
-          })
-          LLMCoverage.record({
-            outcome: "fallback",
-            providerID: modelRef.provider,
-            modelID: modelRef.id,
-          })
-        }
-      } else {
-        l.debug("native llm ineligible, using ai-sdk", {
-          reason: nativeStatus.reason,
-        })
-        LLMCoverage.record({
-          outcome: "ineligible",
-          providerID: modelRef.provider,
-          modelID: modelRef.id,
-          reason: nativeStatus.reason,
-        })
-      }
+      throw new LoadAPIKeyError(`${nativeStatus.reason} (provider ${provider.id})`)
     }
 
-    l.debug("llm.runtime", { runtime: "ai-sdk" })
-
-    const result = LegacyAISDK.stream({
-      onError(error) {
-        l.error("stream error", {
-          error,
-        })
-      },
-      async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        const repaired = Object.keys(tools).find((toolName) => toolName.toLowerCase() === lower)
-        if (repaired && repaired !== failed.toolCall.toolName) {
-          l.info("repairing tool call", {
-            tool: failed.toolCall.toolName,
-            repaired,
-          })
-          return {
-            ...failed.toolCall,
-            toolName: repaired,
-          }
-        }
-        return {
-          ...failed.toolCall,
-          input: JSON.stringify({
-            tool: failed.toolCall.toolName,
-            error: failed.error.message,
-          }),
-          toolName: "invalid",
-        }
-      },
-      temperature: params.temperature,
-      topP: params.topP,
-      topK: params.topK,
+    l.debug("llm.runtime", { runtime: "native", route: modelRef.route })
+    const result = await streamNative({
+      streamInput: input,
+      modelRef,
+      provider,
+      auth,
+      params,
+      options,
       providerOptions,
-      // Offered to the model. Everything in `tools` stays callable: `invalid`
-      // is where a repaired call lands, and a deferred tool called by name runs
-      // and is loaded for the next step.
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop" && !input.deferred?.has(x)),
-      tools,
-      toolChoice: input.toolChoice,
       maxOutputTokens,
-      abortSignal: input.abort,
-      maxRetries: input.retries ?? 0,
-      headers: requestHeaders,
+      system,
       messages,
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                args.params.prompt = ProviderTransform.message(
-                  args.params.prompt as unknown as ModelMessage[],
-                  input.model,
-                  options,
-                ) as unknown as typeof args.params.prompt
-              }
-              // Snapshot after the transform: this is the wire-level request,
-              // cache markers included, so the diff reflects what the provider
-              // actually matches against.
-              if (cacheDiagnostics) {
-                const { comparison, snapshot } = cacheDiagnostics.record(input.sessionID, {
-                  prompt: args.params.prompt as unknown as CacheDiagnostics.RequestLike["prompt"],
-                  tools: args.params.tools as unknown as CacheDiagnostics.RequestLike["tools"],
-                  settings: {
-                    model: input.model.id,
-                    providerID: input.model.providerID,
-                    temperature: args.params.temperature,
-                    topP: args.params.topP,
-                    topK: args.params.topK,
-                    maxOutputTokens: args.params.maxOutputTokens,
-                    toolChoice: args.params.toolChoice,
-                    providerOptions: args.params.providerOptions,
-                  },
-                })
-                log.info("prompt cache prefix", {
-                  sessionID: input.sessionID,
-                  toolCount: snapshot.tools.length,
-                  systemParts: snapshot.system.length,
-                  messageCount: snapshot.messages.length,
-                  ...comparison,
-                })
-              }
-              return args.params
-            },
-          },
-          extractReasoningMiddleware({
-            tagName: "think",
-            startWithReasoning: false,
-          }),
-        ],
-      }),
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry ?? true,
-      },
+      tools,
+      headers: requestHeaders,
+      isCodex,
+      l,
     })
-    // Suppress unhandled NoContentGeneratedError when model produces only tool calls (no text).
-    // processor.ts consumes fullStream only; stream.text rejects if no text is generated.
-    return LegacyAISDK.suppressNoContentText(result)
+    LLMCoverage.record({
+      outcome: "native",
+      providerID: modelRef.provider,
+      modelID: modelRef.id,
+    })
+    return result
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
@@ -774,10 +622,9 @@ export namespace LLM {
     isCodex: boolean
     l: ReturnType<typeof log.clone>
   }) {
-    // Same prompt the AI SDK path sends (its middleware applies this to the wire prompt), minus cache
-    // markers: the native route places its own breakpoints from the request's cache policy.
-    // `message` rewrites messages in place, and a refused turn replays the originals through the AI SDK
-    // path, so it gets copies down to the part level.
+    // The session's prompt, normalised for this provider but without cache markers: the native route places
+    // its own breakpoints from the request's cache policy. `message` rewrites messages in place and the
+    // originals are still the tool context's `messages`, so it gets copies down to the part level.
     const messages = ProviderTransform.message(
       input.messages.map((m) =>
         Array.isArray(m.content)
@@ -812,10 +659,35 @@ export namespace LLM {
         input.headers,
       )
     } catch (e) {
-      // Content the canonical schema cannot carry. Refused before anything is sent so the AI SDK takes the
-      // turn; discovered mid-stream it would be a provider error no fallback can intercept.
+      // Content the canonical schema cannot carry. Refused before anything is sent; discovered mid-stream
+      // it would be an opaque provider error.
       if (!(e instanceof NativeRequestUnsupported)) throw e
-      return refuse(input, e.reason)
+      throw refuse(input, e.reason)
+    }
+
+    // The wire-level request (cache markers included), so the diff reflects what the provider matches against.
+    if (cacheDiagnostics) {
+      const { comparison, snapshot } = cacheDiagnostics.record(input.streamInput.sessionID, {
+        prompt: [...llmRequest.system.map((part) => ({ role: "system", content: part })), ...llmRequest.messages],
+        tools: llmRequest.tools,
+        settings: {
+          model: input.streamInput.model.id,
+          providerID: input.streamInput.model.providerID,
+          temperature: input.params.temperature,
+          topP: input.params.topP,
+          topK: input.params.topK,
+          maxOutputTokens: input.maxOutputTokens,
+          toolChoice: input.streamInput.toolChoice,
+          providerOptions: llmRequest.providerOptions,
+        },
+      })
+      log.info("prompt cache prefix", {
+        sessionID: input.streamInput.sessionID,
+        toolCount: snapshot.tools.length,
+        systemParts: snapshot.system.length,
+        messageCount: snapshot.messages.length,
+        ...comparison,
+      })
     }
 
     const native = LLMNativeRuntime.streamRequestOnly({
@@ -828,7 +700,7 @@ export namespace LLM {
       abort: input.streamInput.abort,
     })
 
-    if (native.type === "unsupported") return refuse(input, native.reason)
+    if (native.type === "unsupported") throw refuse(input, native.reason)
 
     const fullStream = executeTools(toProcessorStream(extractThinkTags(native.events)), {
       tools: input.tools,
@@ -839,16 +711,19 @@ export namespace LLM {
   }
 
   function refuse(input: { modelRef: ModelRef; l: ReturnType<typeof log.clone> }, reason: string) {
-    input.l.debug("native llm unsupported, falling back to ai-sdk", { reason })
-    // Distinct from the pre-flight `ineligible`: that one is a configuration
-    // verdict, this one is the route refusing once it has been compiled. Same
-    // user-visible outcome, different thing to fix.
+    input.l.debug("native llm refused the request", { reason })
+    // Distinct from the pre-flight `ineligible`: that one is a configuration verdict, this one is the
+    // route refusing once it has been compiled. Same outcome for the user, different thing to fix.
     LLMCoverage.record({
       outcome: "ineligible-late",
       providerID: input.modelRef.provider,
       modelID: input.modelRef.id,
       reason,
     })
-    return undefined
+    return new NoNativeRouteError({
+      providerID: input.modelRef.provider,
+      modelID: input.modelRef.id,
+      reason,
+    })
   }
 }

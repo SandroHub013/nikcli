@@ -1,9 +1,8 @@
 import { describe, expect, it, spyOn } from "bun:test"
-import { APICallError } from "@ai-sdk/provider"
+import { APICallError } from "@/provider/error"
 import { Log } from "@nikcli-ai/util/log"
 import type { LLMEvent } from "@nikcli-ai/llm"
-import { jsonSchema, tool, type Tool } from "ai"
-import z from "zod"
+import { jsonSchema, tool, type Tool } from "@/session/llm/types"
 import {
   executeTools,
   extractThinkTags,
@@ -629,7 +628,21 @@ describe("executeTools", () => {
 
   const bash = tool({
     description: "run",
-    inputSchema: z.object({ command: z.string(), timeout: z.number().default(5) }),
+    // Validation fills the default, as a schema with defaults does: the validated input is what runs.
+    inputSchema: jsonSchema<{ command: string; timeout: number }>(
+      {
+        type: "object",
+        properties: { command: { type: "string" }, timeout: { type: "number" } },
+        required: ["command"],
+      },
+      {
+        validate: (value) => {
+          const input = value as { command?: unknown; timeout?: unknown }
+          if (typeof input.command !== "string") return { success: false, error: new Error("command must be a string") }
+          return { success: true, value: { command: input.command, timeout: Number(input.timeout ?? 5) } }
+        },
+      },
+    ),
     execute: async (input) => ({ title: "bash", output: `ran ${input.command} ${input.timeout}`, metadata: {} }),
   })
 
@@ -673,7 +686,10 @@ describe("executeTools", () => {
   it("routes an unknown tool to the invalid tool with the reason", async () => {
     const invalid = tool({
       description: "invalid",
-      inputSchema: z.object({ tool: z.string(), error: z.string() }),
+      inputSchema: jsonSchema<{ tool: string; error: string }>({
+        type: "object",
+        properties: { tool: { type: "string" }, error: { type: "string" } },
+      }),
       execute: async (input) => ({ output: `${input.tool}: ${input.error}`, title: "", metadata: {} }),
     })
     const events = await run([call("nope", {}), finish], { invalid })
@@ -688,7 +704,10 @@ describe("executeTools", () => {
   it("routes input the schema rejects to the invalid tool", async () => {
     const invalid = tool({
       description: "invalid",
-      inputSchema: z.object({ tool: z.string(), error: z.string() }),
+      inputSchema: jsonSchema<{ tool: string; error: string }>({
+        type: "object",
+        properties: { tool: { type: "string" }, error: { type: "string" } },
+      }),
       execute: async (input) => ({ output: input.error, title: "", metadata: {} }),
     })
     const events = await run([call("bash", { command: 7 }), finish], { bash, invalid })
@@ -702,7 +721,7 @@ describe("executeTools", () => {
   it("reports a throwing tool as tool-error and still closes the step", async () => {
     const boom = tool({
       description: "boom",
-      inputSchema: z.object({}),
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
       execute: async (): Promise<{ output: string }> => {
         throw new Error("exploded")
       },
@@ -721,7 +740,7 @@ describe("executeTools", () => {
     let started = false
     const slow = tool({
       description: "slow",
-      inputSchema: z.object({}),
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
       execute: async () => {
         started = true
         return { output: "done", title: "", metadata: {} }
@@ -750,7 +769,7 @@ describe("executeTools", () => {
     let received: { toolCallId?: string; abortSignal?: AbortSignal } = {}
     const probe = tool({
       description: "probe",
-      inputSchema: z.object({}),
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
       execute: async (_input, options) => {
         received = options
         return { output: "", title: "", metadata: {} }

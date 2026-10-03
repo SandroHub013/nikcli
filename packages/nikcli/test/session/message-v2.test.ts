@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { APICallError, JSONParseError, type ModelMessage } from "ai"
+import { APICallError } from "@/provider/error"
+import type { ModelMessage } from "@/session/llm/types"
 import { Identifier } from "@nikcli-ai/util/id"
 import { MessageV2 } from "@/session/message-v2"
 
@@ -51,9 +52,9 @@ describe("MessageV2 schemas and helpers", () => {
 
   it("fromError maps JSONParseError to retryable APIError (opencode #38041)", () => {
     const longMessage = "x".repeat(500)
-    const err = new JSONParseError({
-      text: "bad-stream",
-      cause: new SyntaxError(longMessage),
+    // What a malformed SSE chunk raises: the AI SDK's JSONParseError, or a native decode failure named alike.
+    const err = Object.assign(new Error(`JSON parsing failed: Text: bad-stream.\nError message: ${longMessage}`), {
+      name: "AI_JSONParseError",
     })
     const out = MessageV2.fromError(err, {
       providerID: "minimax-coding-plan",

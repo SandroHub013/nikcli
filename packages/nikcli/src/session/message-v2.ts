@@ -5,7 +5,7 @@ import { zod, zodObject, zodObjectMode, zodOverride, type DeepMutable } from "@n
 import z from "zod"
 import { EventError } from "./event-error"
 import { Effect, Schema } from "effect"
-import { APICallError, LoadAPIKeyError } from "@/provider/error"
+import { APICallError, LoadAPIKeyError, NoNativeRouteError } from "@/provider/error"
 import { convertToModelMessages } from "@/session/llm/ui-messages"
 import { type ModelMessage, type ToolSet, type UIMessage } from "@/session/llm/types"
 import { Identifier } from "@nikcli-ai/util/id"
@@ -1091,6 +1091,11 @@ export namespace MessageV2 {
         return {
           name: "MessageOutputLengthError" as const,
           data: {} as Record<string, never>,
+        }
+      case e instanceof NoNativeRouteError:
+        return {
+          name: "APIError" as const,
+          data: { message: e.message, isRetryable: false },
         }
       case LoadAPIKeyError.isInstance(e):
         return {

@@ -23,28 +23,28 @@ beforeEach(() => reset())
 describe("llm coverage counters", () => {
   it("keys by provider and outcome, and totals across providers", () => {
     record({
-      outcome: "disabled",
+      outcome: "unmapped",
       providerID: "anthropic",
       modelID: "claude-opus-5",
     })
     record({
-      outcome: "disabled",
+      outcome: "unmapped",
       providerID: "anthropic",
       modelID: "claude-sonnet-5",
     })
-    record({ outcome: "disabled", providerID: "openai", modelID: "gpt-5" })
+    record({ outcome: "unmapped", providerID: "openai", modelID: "gpt-5" })
     record({ outcome: "native", providerID: "openai", modelID: "gpt-5" })
 
     const s = snapshot()
-    expect(s.counts["anthropic:disabled"]).toBe(2)
-    expect(s.counts["openai:disabled"]).toBe(1)
+    expect(s.counts["anthropic:unmapped"]).toBe(2)
+    expect(s.counts["openai:unmapped"]).toBe(1)
     expect(s.counts["openai:native"]).toBe(1)
     expect(s.turns).toBe(4)
 
     const total = summary()
-    expect(total.disabled).toBe(3)
+    expect(total.unmapped).toBe(3)
     expect(total.native).toBe(1)
-    expect(total.unmapped).toBe(0)
+    expect(total.ineligible).toBe(0)
     expect(total.turns).toBe(4)
   })
 
@@ -92,7 +92,6 @@ describe("llm coverage counters", () => {
       reason: "no key",
     })
     record({ outcome: "native", providerID: "openai", modelID: "gpt-5" })
-    record({ outcome: "fallback", providerID: "openai", modelID: "gpt-5" })
 
     expect(snapshot().refusedModels).toEqual(["azure/gpt-5", "mistral/large"])
   })
@@ -154,25 +153,25 @@ describe("llm coverage counters", () => {
     expect(report().providers).toEqual([])
   })
 
-  it("caps custom providers and retains all six outcomes in the reserved overflow bucket", () => {
+  it("caps custom providers and retains every outcome in the reserved overflow bucket", () => {
     for (let i = 0; i < 40; i++) {
       for (const outcome of OUTCOMES) record({ outcome, providerID: `custom:${i}`, modelID: "m" })
     }
     // Existing providers remain named after admission closes.
-    record({ outcome: "disabled", providerID: "custom:0", modelID: "m" })
+    record({ outcome: "unmapped", providerID: "custom:0", modelID: "m" })
     record({ outcome: "native", providerID: "other", modelID: "m" })
     const s = snapshot()
     const r = report()
     expect(r.providers.length).toBe(33)
     expect(Object.keys(s.counts).length).toBe(33 * OUTCOMES.length)
-    expect(s.counts["custom:0:disabled"]).toBe(2)
+    expect(s.counts["custom:0:unmapped"]).toBe(2)
     expect(s.counts["custom:32:native"]).toBeUndefined()
     for (const outcome of OUTCOMES) expect(s.counts[`other:${outcome}`]).toBe(outcome === "native" ? 9 : 8)
-    expect(r.providers.find((p) => p.overflow)?.turns).toBe(49)
+    expect(r.providers.find((p) => p.overflow)?.turns).toBe(8 * OUTCOMES.length + 1)
     for (const outcome of OUTCOMES) {
       expect(r.providers.reduce((sum, p) => sum + p[outcome], 0)).toBe(r[outcome])
     }
-    expect(OUTCOMES.reduce((sum, outcome) => sum + r[outcome], 0)).toBe(242)
+    expect(OUTCOMES.reduce((sum, outcome) => sum + r[outcome], 0)).toBe(40 * OUTCOMES.length + 2)
     expect(r.providers.reduce((sum, p) => sum + p.turns, 0)).toBe(r.turns)
     expect(Object.values(s.counts).reduce((sum, n) => sum + n, 0)).toBe(s.turns)
   })
@@ -215,30 +214,24 @@ describe("llm coverage counters", () => {
     expect(snapshot().reasons).toEqual({})
   })
 
-  it("reports measured eligibility and fallback with explicit unmeasured denominators", () => {
-    record({ outcome: "disabled", providerID: "z:custom", modelID: "m" })
+  it("reports mapped and refused turns per provider", () => {
+    record({ outcome: "unmapped", providerID: "z:custom", modelID: "m" })
     for (const outcome of OUTCOMES) record({ outcome, providerID: "a", modelID: "m" })
     record({ outcome: "native", providerID: "a", modelID: "m" })
     const r = report()
     expect(r.providers.map((p) => p.providerID)).toEqual(["a", "z:custom"])
     expect(r.providers[0]).toMatchObject({
-      turns: 7,
-      mapped: 6,
-      eligibilityUnknown: 1,
+      turns: 5,
+      mapped: 4,
       eligibilityRefused: 2,
-      nativeAttempts: 3,
-      fallbackRate: 1 / 3,
       overflow: false,
     })
     expect(r.providers[1]).toMatchObject({
       turns: 1,
-      mapped: 1,
-      eligibilityUnknown: 1,
+      mapped: 0,
       eligibilityRefused: 0,
-      nativeAttempts: 0,
-      fallbackRate: null,
     })
-    expect(summary().disabled).toBe(2)
+    expect(summary().unmapped).toBe(2)
     expect(summary().native).toBe(2)
     expect(report()).toEqual(r)
   })
@@ -288,7 +281,7 @@ describe("llm coverage counters", () => {
         modelID: "m",
         reason: "Bearer sk-private012345678901234567890123456789",
       })
-      for (let i = 0; i < 24; i++) record({ outcome: "disabled", providerID: "p", modelID: "m" })
+      for (let i = 0; i < 24; i++) record({ outcome: "native", providerID: "p", modelID: "m" })
       expect(calls).toHaveBeenCalledTimes(2)
       expect(writes.mock.calls.map(([value]) => String(value)).join("")).not.toContain(
         "sk-private012345678901234567890123456789",

@@ -2,15 +2,13 @@ import { describe, expect, it } from "bun:test"
 import { features } from "@nikcli-ai/util/features"
 
 describe("features()", () => {
-  it("defaults every flag off except nativeLlm", () => {
+  it("defaults every flag off", () => {
     expect(features(undefined)).toEqual({
-      nativeLlm: true,
       tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
       requests: { latestOnlyLspRefresh: false },
       events: { schemaEncoding: false },
     })
     expect(features({})).toEqual({
-      nativeLlm: true,
       tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
       requests: { latestOnlyLspRefresh: false },
       events: { schemaEncoding: false },
@@ -20,13 +18,11 @@ describe("features()", () => {
   it("reads experimental keys as true only when strictly true", () => {
     const f = features({
       experimental: {
-        nativeLlm: true,
         tui: { cacheEviction: true, messageVirtualization: true, explorationGrouping: true },
         requests: { latestOnlyLspRefresh: true },
         events: { schemaEncoding: true },
       },
     } as any)
-    expect(f.nativeLlm).toBe(true)
     expect(f.tui.cacheEviction).toBe(true)
     expect(f.tui.messageVirtualization).toBe(true)
     expect(f.tui.explorationGrouping).toBe(true)
@@ -37,13 +33,11 @@ describe("features()", () => {
   it("keeps explicit false off", () => {
     const f = features({
       experimental: {
-        nativeLlm: false,
         tui: { cacheEviction: false, messageVirtualization: true, explorationGrouping: false },
         requests: { latestOnlyLspRefresh: false },
         events: { schemaEncoding: false },
       },
     } as any)
-    expect(f.nativeLlm).toBe(false)
     expect(f.tui.cacheEviction).toBe(false)
     expect(f.tui.messageVirtualization).toBe(true)
     expect(f.tui.explorationGrouping).toBe(false)
@@ -51,14 +45,12 @@ describe("features()", () => {
     expect(f.events.schemaEncoding).toBe(false)
   })
 
-  it("treats truthy non-boolean as off, and leaves nativeLlm on unless explicitly false", () => {
+  it("treats truthy non-boolean as off", () => {
     const f = features({
       experimental: {
-        nativeLlm: 1 as any,
         tui: { cacheEviction: "yes" as any },
       },
     } as any)
-    expect(f.nativeLlm).toBe(true)
     expect(f.tui.cacheEviction).toBe(false)
   })
 })

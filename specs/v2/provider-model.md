@@ -190,7 +190,7 @@ Credentials resolve as `providerInfo.options.apiKey ?? providerInfo.key`; the ba
 **Failure is `undefined`, not an error.** An unmapped npm, a constructor that throws, or a missing
 provider record all log a warning and return `undefined`. That is the contract: `getModelRef`
 returning nothing means "no native route", and the caller uses the AI SDK path instead. Native
-streaming is additionally gated by `experimental.nativeLlm`, which is on by default since 2026-10-03 (`false` opts out).
+streaming is the only runtime since 2026-10-03; `experimental.nativeLlm` is accepted and ignored.
 
 ## Alternatives Rejected
 

@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
-import z from "zod"
-import { tool, type ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage } from "@/session/llm/types"
 import * as LLMCoverage from "@/session/llm/coverage"
 import { withFixture } from "../helpers/fixture"
 
@@ -65,7 +64,7 @@ describe("native LLM stream end to end", () => {
         await Bun.write(
           path.join(home, "nikcli.json"),
           JSON.stringify({
-            experimental: { nativeLlm: true, openTelemetry: false },
+            experimental: { openTelemetry: false },
             enabled_providers: ["native-e2e"],
             provider: {
               "native-e2e": {
@@ -145,7 +144,11 @@ describe("native LLM stream end to end", () => {
 
   const bash = tool({
     description: "Run a shell command",
-    inputSchema: z.object({ command: z.string() }),
+    inputSchema: jsonSchema<{ command: string }>({
+      type: "object",
+      properties: { command: { type: "string" } },
+      required: ["command"],
+    }),
     execute: async (input) => ({ title: "bash", output: `ran: ${input.command}`, metadata: {} }),
   })
 

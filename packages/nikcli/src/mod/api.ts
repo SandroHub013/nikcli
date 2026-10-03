@@ -658,8 +658,7 @@ export namespace ModApi {
           Effect.gen(function* () {
             const provider = yield* Provider.Service
             const ref = choice ? Provider.parseModel(choice) : yield* provider.defaultModel()
-            const model = yield* provider.getModel(ref.providerID, ref.modelID)
-            return yield* provider.getLanguage(model)
+            return yield* provider.getModel(ref.providerID, ref.modelID)
           }),
         ),
       )
@@ -672,14 +671,14 @@ export namespace ModApi {
       model?: string
       temperature?: number
     }) => {
-      const { generateText } = await import("@/provider/legacy/ai-sdk")
+      const { generateText } = await import("@/session/llm/call")
       const result = await generateText({
         model: await language(e.model),
         system: e.system,
         prompt: String(e.prompt),
         temperature: e.temperature ?? 0,
         maxOutputTokens: Math.min(Math.max(1, e.maxTokens ?? 1024), 64_000),
-        abortSignal: ModChain.current()?.signal,
+        abort: ModChain.current()?.signal,
       })
       return {
         text: result.text,

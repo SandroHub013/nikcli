@@ -1,24 +1,17 @@
 /**
  * Native-LLM route coverage.
  *
- * `specs/effect-tui/11-provider-inference-streaming.md` scopes converging the AI
- * SDK path onto `@nikcli-ai/llm`. `specs/v2/todo.md` names what blocks deciding
- * it: `mapToModelRef` returns `undefined` for anything it cannot map, which is a
- * safe fallback and an invisible one — nothing reports that a model silently took
- * the AI SDK path. Every verdict was already computed in `session/llm.ts` and
- * written to `l.debug`, which is to say thrown away.
- *
- * This module keeps them. It is deliberately readable with
- * `experimental.nativeLlm` **off**, which is the point: `session/llm.ts` already
- * compiles the native request in shadow when the flag is down, so `disabled`
- * answers "how many turns had a native mapping, and for which providers"
- * without flipping anything on. The soak the todo asks for is this, not the flag.
+ * Native `@nikcli-ai/llm` streaming is the only runtime, so the question this answers is no longer "how
+ * much would move over" but "which turns could not run, and why": a model no route can carry, a missing
+ * credential, a request a route refused. Every verdict is computed in `session/llm.ts`; this module keeps
+ * them, so the answer is in the service's redacted log (one bounded line every `LOG_EVERY` turns)
+ * instead of being thrown away with the error.
  *
  * Discipline, following `effect/lifecycle-counters.ts`:
  *
  *  - **Every outcome has exactly one call site.** A counter nobody can increment
- *    reads as "measured, none" when it means "never measured". The six below are
- *    the six branches `session/llm.ts` can take, and adding a seventh means
+ *    reads as "measured, none" when it means "never measured". The four below are
+ *    the four branches `session/llm.ts` can take, and adding a fifth means
  *    adding the branch that emits it.
  *  - **Bounded cardinality** (EOT-01 requirement 6). Custom provider ids are
  *    arbitrary: retain at most PROVIDER_CAP, plus a reserved overflow bucket.
@@ -38,31 +31,19 @@ const log = Log.create({ service: "llm-coverage" })
 /**
  * What happened to one turn, with respect to the native route.
  *
- * Read the six as two groups: the first two are what the AI SDK path costs us
- * today, the last four are what the native path does when it is switched on.
+ * The first three end the turn with an error; `native` is a turn that streamed.
  */
 export type Outcome =
   /** No `ModelRef` at all: `mapToModelRef` could not map this model. */
   | "unmapped"
-  /** Flag off with a `ModelRef`; runtime eligibility has not been tested. */
-  | "disabled"
-  /** Flag on; the pre-flight `LLMNativeRuntime.status()` refused. A configuration verdict. */
+  /** The pre-flight `LLMNativeRuntime.status()` refused. A configuration verdict. */
   | "ineligible"
-  /** Flag on; `streamRequestOnly` refused once it saw the route. A protocol verdict. */
+  /** The route or request builder refused once it saw the request. A protocol verdict. */
   | "ineligible-late"
-  /** Flag on; the native runtime returned a stream (not proof of completion). */
+  /** The native runtime returned a stream (not proof of completion). */
   | "native"
-  /** Flag on; native threw and the caller selected the AI SDK fallback. */
-  | "fallback"
 
-export const OUTCOMES: readonly Outcome[] = [
-  "unmapped",
-  "disabled",
-  "ineligible",
-  "ineligible-late",
-  "native",
-  "fallback",
-] as const
+export const OUTCOMES: readonly Outcome[] = ["unmapped", "ineligible", "ineligible-late", "native"] as const
 
 /**
  * Distinct refusal reasons kept before the rest bucket into `other`.
@@ -207,13 +188,8 @@ export type ProviderReport = Readonly<Record<Outcome | "turns", number>> & {
   readonly providerID: string
   readonly overflow: boolean
   readonly mapped: number
-  /** Mapped with the flag off; neither preflight nor stream eligibility was measured. */
-  readonly eligibilityUnknown: number
+  /** Turns the route or pre-flight refused after a mapping existed. */
   readonly eligibilityRefused: number
-  /** Stream selected or native threw; not a count of completed native turns. */
-  readonly nativeAttempts: number
-  /** Fallback / nativeAttempts; null means no observations, not zero failures. */
-  readonly fallbackRate: number | null
 }
 
 /** Cumulative, deterministic decision inputs, without model ids or request data. */
@@ -224,17 +200,13 @@ export function report() {
       number
     >
     const total = OUTCOMES.reduce((sum, outcome) => sum + outcomes[outcome], 0)
-    const nativeAttempts = outcomes.native + outcomes.fallback
     return {
       providerID,
       overflow: providerID === PROVIDER_OVERFLOW,
       ...outcomes,
       turns: total,
       mapped: total - outcomes.unmapped,
-      eligibilityUnknown: outcomes.disabled,
       eligibilityRefused: outcomes.ineligible + outcomes["ineligible-late"],
-      nativeAttempts,
-      fallbackRate: nativeAttempts ? outcomes.fallback / nativeAttempts : null,
     }
   })
   // Reasons are values in the log payload: the redactor does not sanitize

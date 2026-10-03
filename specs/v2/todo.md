@@ -72,20 +72,14 @@ each an independent decision:
 
 ## Native LLM Routing
 
-`experimental.nativeLlm` gates native `@nikcli-ai/llm` route streaming and is **on by default** since
-2026-10-03 (`packages/util/src/features.ts` — only an explicit `false` turns it off; every other flag there still defaults off).
+`experimental.nativeLlm` is gone since 2026-10-03: native `@nikcli-ai/llm` streaming is the only runtime and the
+AI SDK is removed (`packages/util/src/features.ts` no longer reads the key).
 
-The gate is binary and global today. Two things have to be true before it flips on:
-
-1. `mapToModelRef` covers the routes that matter. It returns `undefined` for anything it cannot map,
-   which is a safe fallback but also means coverage is invisible — nothing reports "this model
-   silently took the AI SDK path".
-2. A soak that survives the failure mode the 2026-07-09 rollback found: with the flags on, the TUI
-   stopped rendering streamed assistant parts. The lesson recorded in `features.ts` is **one flag at
-   a time, verified end-to-end on the session stream**, not a flip-all.
-
-Per-route or per-provider granularity would make partial rollout possible. That is a schema change
-to the flag, so decide it before the soak, not during.
+Done: the gate is removed and the AI SDK fallback with it. Coverage is no longer invisible: a model no route can
+carry fails the turn with `NoNativeRouteError`, and `session/llm/coverage.ts` counts `unmapped` / `ineligible` /
+`ineligible-late` per provider in the service log. The 2026-07-09 rollback's cause (no `start`/`start-step` reaching
+the processor, so no step part and no snapshot) is fixed in `toProcessorStream` and guarded by
+`test/session/native-e2e.test.ts`.
 
 ## Event Envelope And Store Partitioning
 

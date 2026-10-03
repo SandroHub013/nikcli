@@ -1955,9 +1955,7 @@ export namespace Config {
           nativeLlm: z
             .boolean()
             .optional()
-            .describe(
-              "Native @nikcli-ai/llm route streaming (requires a resolvable ModelRef; falls back to the AI SDK when a model or request is not supported). Default on; set false to always use the AI SDK.",
-            ),
+            .describe("Deprecated and ignored: native @nikcli-ai/llm streaming is the only runtime."),
           tui: z
             .object({
               cacheEviction: z

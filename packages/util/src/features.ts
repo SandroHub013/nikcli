@@ -1,18 +1,12 @@
 /**
  * Typed experimental feature flags.
  *
- * Central place for opencode-parity / native-LLM gates so callers don't
- * cast `config.experimental` ad hoc. Flags default **off** until soak, except
- * `nativeLlm`, which defaults **on** and is opted out with `false`.
- * (A 2026-07-08 flip-all attempt was rolled back 2026-07-09: with the flags
- * on, the TUI stopped rendering streamed assistant parts. The native stream
- * never opened its step, so no `start`/`start-step` reached the processor;
- * fixed in `toProcessorStream`, and `nativeLlm` was re-flipped on its own
- * after verifying the session stream end-to-end.)
+ * Central place for opencode-parity gates so callers don't cast `config.experimental` ad hoc. Flags
+ * default **off** until soak. (`nativeLlm` is gone: native `@nikcli-ai/llm` streaming is the only
+ * runtime, and the config key is accepted but ignored so existing configs keep validating.)
  */
 
 export type Features = {
-  readonly nativeLlm: boolean
   readonly tui: {
     readonly cacheEviction: boolean
     readonly messageVirtualization: boolean
@@ -32,7 +26,6 @@ export type Features = {
  * bought no safety while tying a pure predicate to the server's config module.
  */
 type Experimental = {
-  nativeLlm?: boolean
   tui?: {
     cacheEviction?: boolean
     messageVirtualization?: boolean
@@ -50,8 +43,6 @@ type Experimental = {
 export function features(cfg: { experimental?: unknown } | undefined | null): Features {
   const e = cfg?.experimental as Experimental | undefined
   return {
-    // Opt-out, not opt-in: only an explicit `false` turns the native runtime off.
-    nativeLlm: e?.nativeLlm !== false,
     tui: {
       cacheEviction: e?.tui?.cacheEviction === true,
       // Stays opt-in until the windowing heuristic is finished: it assumes a flat 6-row height for

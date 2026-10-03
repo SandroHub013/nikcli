@@ -1,11 +1,9 @@
 import { describe, it } from "bun:test"
-import type { ModelMessage } from "ai"
+import type { ModelMessage } from "@/session/llm/types"
 import { recordBenchmark } from "../benchmarks/runner"
 import { Provider } from "@/provider/provider"
 import { ProviderError } from "@/provider/error"
 import { ProviderTransform, sanitizeSurrogates } from "@/provider/transform"
-import { mapOpenAICompatibleFinishReason } from "@/provider/legacy/copilot/chat/map-openai-compatible-finish-reason"
-import { mapOpenAIResponseFinishReason } from "@/provider/legacy/copilot/responses/map-openai-responses-finish-reason"
 
 function benchModel(): Provider.Model {
   return {
@@ -210,26 +208,6 @@ describe("Provider hot paths (benchmark)", () => {
       suite: "provider",
       module: "provider/error",
       scenario: "parseStreamError JSON overflow",
-      iterations,
-      value: elapsed,
-      unit: "ms",
-    })
-  })
-
-  it("mapOpenAICompatibleFinishReason and responses finish reason", () => {
-    const inputs = [undefined, "stop", "length", "tool_calls", "content_filter", "other"] as const
-    const iterations = 50_000
-    const start = performance.now()
-    for (let i = 0; i < iterations; i += 1) {
-      const fr = inputs[i % inputs.length] as (typeof inputs)[number]
-      mapOpenAICompatibleFinishReason(fr)
-      mapOpenAIResponseFinishReason({ finishReason: fr ?? null, hasFunctionCall: (i & 1) === 0 })
-    }
-    const elapsed = performance.now() - start
-    recordBenchmark({
-      suite: "provider",
-      module: "provider/legacy/copilot/chat",
-      scenario: "map finish reasons",
       iterations,
       value: elapsed,
       unit: "ms",

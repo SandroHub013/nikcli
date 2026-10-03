@@ -2,7 +2,6 @@ import { describe, expect, it, spyOn } from "bun:test"
 import { abortableIterable, status } from "@/session/llm/native-runtime"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { LLMEvent } from "@nikcli-ai/llm"
-import * as LegacyAISDK from "@/provider/legacy/ai-sdk"
 import { Effect } from "effect"
 import path from "path"
 import { withFixture } from "../helpers/fixture"
@@ -118,14 +117,12 @@ describe("LLMNativeRuntime.status OAuth", () => {
   })
 })
 
-describe("LLM.stream native fallback safety", () => {
+describe("LLM.stream native failure handling", () => {
   async function fixture(
     body: (ctx: {
       input: import("@/session/llm").LLM.StreamInput
       stream: typeof import("@/session/llm").LLM.stream
       controller: AbortController
-      fallback: ReturnType<typeof spyOn<typeof LegacyAISDK, "stream">>
-      fallbackError: Error
     }) => Promise<void>,
   ) {
     await withFixture(async ({ home }) => {
@@ -137,15 +134,11 @@ describe("LLM.stream native fallback safety", () => {
       const { Provider } = await import("@/provider/provider")
       const { LLM } = await import("@/session/llm")
       const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
-      const fallbackError = new Error("AI SDK fallback reached")
-      const fallback = spyOn(LegacyAISDK, "stream").mockImplementation(() => {
-        throw fallbackError
-      })
       try {
         await Bun.write(
           path.join(home, "nikcli.json"),
           JSON.stringify({
-            experimental: { nativeLlm: true, openTelemetry: false },
+            experimental: { openTelemetry: false },
             enabled_providers: ["native-safety"],
             provider: {
               "native-safety": {
@@ -201,13 +194,10 @@ describe("LLM.stream native fallback safety", () => {
               input,
               stream: LLM.stream,
               controller,
-              fallback,
-              fallbackError,
             })
           },
         })
       } finally {
-        fallback.mockRestore()
         await Instance.disposeAll()
         if (previous === undefined) delete process.env.NIKCLI_DISABLE_PROJECT_CONFIG
         else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previous
@@ -223,8 +213,8 @@ describe("LLM.stream native fallback safety", () => {
     { type: "tool-call", id: "call", name: "bash", input: { command: "pwd" } },
   ]
   for (const partial of partials) {
-    it(`does not fall back after native ${partial.type} then iteration failure`, async () => {
-      await fixture(async ({ input, stream, fallback }) => {
+    it(`surfaces a native ${partial.type} then iteration failure instead of retrying elsewhere`, async () => {
+      await fixture(async ({ input, stream }) => {
         const failure = new Error("native iteration failed")
         let started = false
         let closed = false
@@ -253,7 +243,6 @@ describe("LLM.stream native fallback safety", () => {
           expect(seen).not.toContain("finish")
           expect(closed).toBe(true)
           expect(native).toHaveBeenCalledTimes(1)
-          expect(fallback).not.toHaveBeenCalled()
         } finally {
           native.mockRestore()
         }
@@ -262,8 +251,8 @@ describe("LLM.stream native fallback safety", () => {
   }
 
   for (const timing of ["before iteration", "after partial output"] as const) {
-    it(`does not fall back on cancellation ${timing}`, async () => {
-      await fixture(async ({ input, stream, controller, fallback }) => {
+    it(`cancels cleanly on cancellation ${timing}`, async () => {
+      await fixture(async ({ input, stream, controller }) => {
         const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockImplementation((request) => ({
           type: "supported",
           events: abortableIterable(
@@ -287,7 +276,6 @@ describe("LLM.stream native fallback safety", () => {
           await expect(iterator.next()).rejects.toMatchObject({
             name: "AbortError",
           })
-          expect(fallback).not.toHaveBeenCalled()
         } finally {
           native.mockRestore()
         }
@@ -296,8 +284,8 @@ describe("LLM.stream native fallback safety", () => {
   }
 
   for (const kind of ["AbortError", "aborted signal"] as const) {
-    it(`does not fall back on setup-time ${kind}`, async () => {
-      await fixture(async ({ input, stream, controller, fallback }) => {
+    it(`propagates a setup-time ${kind}`, async () => {
+      await fixture(async ({ input, stream, controller }) => {
         const failure = kind === "AbortError" ? new DOMException("Cancelled", "AbortError") : new Error("setup failed")
         const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockImplementation(() => {
           if (kind === "aborted signal") controller.abort()
@@ -305,7 +293,6 @@ describe("LLM.stream native fallback safety", () => {
         })
         try {
           await expect(stream(input)).rejects.toBe(failure)
-          expect(fallback).not.toHaveBeenCalled()
         } finally {
           native.mockRestore()
         }
@@ -313,40 +300,44 @@ describe("LLM.stream native fallback safety", () => {
     })
   }
 
-  for (const refusal of ["preflight", "late"] as const) {
-    it(`preserves ${refusal} refusal fallback`, async () => {
-      await fixture(async ({ input, stream, fallback, fallbackError }) => {
-        const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockReturnValue({
-          type: "unsupported",
-          reason: "route refused",
-        })
-        const preflight =
-          refusal === "preflight"
-            ? spyOn(LLMNativeRuntime, "status").mockReturnValue({
-                type: "unsupported",
-                reason: "configuration refused",
-              })
-            : undefined
-        try {
-          await expect(stream(input)).rejects.toBe(fallbackError)
-          expect(fallback).toHaveBeenCalledTimes(1)
-          expect(native).toHaveBeenCalledTimes(refusal === "late" ? 1 : 0)
-        } finally {
-          native.mockRestore()
-          preflight?.mockRestore()
-        }
-      })
-    })
-  }
-
-  it("preserves non-cancellation setup failure fallback", async () => {
-    await fixture(async ({ input, stream, fallback, fallbackError }) => {
-      const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockImplementation(() => {
-        throw new Error("native setup failed")
+  it("fails the turn with the route's reason when the route refuses the request", async () => {
+    await fixture(async ({ input, stream }) => {
+      const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockReturnValue({
+        type: "unsupported",
+        reason: "route refused",
       })
       try {
-        await expect(stream(input)).rejects.toBe(fallbackError)
-        expect(fallback).toHaveBeenCalledTimes(1)
+        await expect(stream(input)).rejects.toMatchObject({ name: "NoNativeRouteError" })
+        await expect(stream(input)).rejects.toThrow(/route refused/)
+        expect(native).toHaveBeenCalledTimes(2)
+      } finally {
+        native.mockRestore()
+      }
+    })
+  })
+
+  it("fails the turn as a missing API key when the pre-flight finds none", async () => {
+    await fixture(async ({ input, stream }) => {
+      const preflight = spyOn(LLMNativeRuntime, "status").mockReturnValue({
+        type: "unsupported",
+        reason: "API key is not configured",
+      })
+      try {
+        await expect(stream(input)).rejects.toMatchObject({ name: "AI_LoadAPIKeyError" })
+      } finally {
+        preflight.mockRestore()
+      }
+    })
+  })
+
+  it("surfaces a non-cancellation setup failure rather than hiding it", async () => {
+    await fixture(async ({ input, stream }) => {
+      const failure = new Error("native setup failed")
+      const native = spyOn(LLMNativeRuntime, "streamRequestOnly").mockImplementation(() => {
+        throw failure
+      })
+      try {
+        await expect(stream(input)).rejects.toBe(failure)
       } finally {
         native.mockRestore()
       }

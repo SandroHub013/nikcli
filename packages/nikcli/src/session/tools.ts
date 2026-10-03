@@ -319,10 +319,7 @@ export async function resolveTools(input: {
 
   for (const { item, exposure } of registryTools) {
     if (exposure === "hidden") continue
-    const schema = ProviderTransform.schema(
-      input.model,
-      z.toJSONSchema(item.parameters) as JSONSchema7,
-    )
+    const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters) as JSONSchema7)
     tools[item.id] = tool({
       id: String(item.id) as `${string}.${string}`,
       description: describeTools

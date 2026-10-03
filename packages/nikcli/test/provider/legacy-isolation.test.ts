@@ -3,32 +3,37 @@ import { Glob } from "bun"
 import path from "path"
 
 /**
- * The AI SDK is imported in one place, `src/provider/legacy/`. Everything else gets what it needs from
- * `@/provider/legacy/ai-sdk`, so dropping the SDK later means replacing that file's exports instead of
- * hunting through the session, tool and provider code. This is what keeps it true.
+ * nikcli reaches providers through `@nikcli-ai/llm` alone. The AI SDK (`ai`, `@ai-sdk/*` and the other
+ * provider SDKs built on it) is neither imported nor a dependency, so it cannot creep back in through a
+ * convenient helper. Sessions, tools and plugins describe prompts and tools with `@/session/llm/types`.
  */
 const SDK =
   /(?:from|import\()\s*["'](?:ai|@ai-sdk\/[^"']+|@openrouter\/ai-sdk-provider|@gitlab\/gitlab-ai-provider)["']/
 
-async function offenders(root: string, skip: (file: string) => boolean = () => false) {
+async function offenders(root: string) {
   const found: string[] = []
   for await (const file of new Glob("**/*.{ts,tsx}").scan({ cwd: root })) {
-    if (skip(file)) continue
     if (SDK.test(await Bun.file(path.join(root, file)).text())) found.push(file)
   }
   return found
 }
 
-describe("AI SDK isolation", () => {
-  it("is imported only under src/provider/legacy", async () => {
-    const root = path.resolve(import.meta.dir, "../../src")
-    expect(await offenders(root, (file) => file.startsWith(`provider${path.sep}legacy${path.sep}`))).toEqual([])
+describe("AI SDK is gone", () => {
+  it("is not imported by nikcli", async () => {
+    expect(await offenders(path.resolve(import.meta.dir, "../../src"))).toEqual([])
   })
 
-  it("is no dependency of @nikcli-ai/llm", async () => {
-    const llm = path.resolve(import.meta.dir, "../../../llm")
-    const pkg = await Bun.file(path.join(llm, "package.json")).json()
-    expect(Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })).not.toContain("ai")
-    expect(await offenders(path.join(llm, "src"))).toEqual([])
+  it("is not imported by @nikcli-ai/llm", async () => {
+    expect(await offenders(path.resolve(import.meta.dir, "../../../llm/src"))).toEqual([])
+  })
+
+  it("is not a dependency of nikcli or @nikcli-ai/llm", async () => {
+    for (const pkg of ["../../package.json", "../../../llm/package.json"]) {
+      const json = await Bun.file(path.resolve(import.meta.dir, pkg)).json()
+      const names = Object.keys({ ...json.dependencies, ...json.devDependencies })
+      expect(
+        names.filter((name) => name === "ai" || name.startsWith("@ai-sdk/") || name.includes("ai-sdk-provider")),
+      ).toEqual([])
+    }
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { ModelMessage } from "ai"
+import type { ModelMessage } from "@/session/llm/types"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 

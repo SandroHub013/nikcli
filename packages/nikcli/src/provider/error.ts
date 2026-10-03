@@ -46,6 +46,29 @@ export class APICallError extends Error {
   }
 }
 
+/**
+ * A model or request no native route can carry. There is no other runtime to fall back to, so the turn
+ * fails with the reason: no route for the model's provider, or content the route cannot lower.
+ */
+export class NoNativeRouteError extends Error {
+  readonly providerID: string
+  readonly modelID: string
+  readonly reason?: string
+
+  constructor(input: { providerID: string; modelID: string; reason?: string }) {
+    super(
+      input.reason
+        ? `${input.providerID}/${input.modelID} cannot take this request: ${input.reason}`
+        : `${input.providerID}/${input.modelID} has no native route. Configure the provider as ` +
+            `@ai-sdk/openai-compatible with a baseURL, or choose another model.`,
+    )
+    this.name = "NoNativeRouteError"
+    this.providerID = input.providerID
+    this.modelID = input.modelID
+    this.reason = input.reason
+  }
+}
+
 /** A provider that needs an API key and has none configured. */
 export class LoadAPIKeyError extends Error {
   constructor(message: string) {

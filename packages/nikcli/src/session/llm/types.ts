@@ -107,8 +107,7 @@ export function isModelMessage(value: unknown): value is ModelMessage {
   if (typeof message.content === "string") return message.role !== "tool"
   if (!Array.isArray(message.content)) return false
   return message.content.every(
-    (part) =>
-      typeof part === "object" && part !== null && PART_TYPES.has((part as { type?: unknown }).type as string),
+    (part) => typeof part === "object" && part !== null && PART_TYPES.has((part as { type?: unknown }).type as string),
   )
 }
 
@@ -248,7 +247,7 @@ export type StreamEvent =
       type: "tool-call"
       toolCallId: string
       toolName: string
-      input: unknown
+      input: any
       providerExecuted?: boolean
       providerMetadata?: ProviderMetadata
     }
