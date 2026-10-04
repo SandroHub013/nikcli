@@ -291,6 +291,300 @@ export interface OpenRouterTranscriber extends Transcriber {
 }
 
 // ---------------------------------------------------------------------------
+// The Segment Request
+// ---------------------------------------------------------------------------
+
+/**
+ * What one request to the transcription service needs from the caller: the
+ * account it runs on, and where its outcome goes.
+ *
+ * Extracted from the OpenRouter factory so the streaming backend sends the
+ * very same request for the segments its socket never carried — one request
+ * builder, two backends — and so both report usage and in-flight state
+ * through the caller that owns them.
+ */
+export interface TranscribeSegmentDeps {
+  /** OpenRouter Bearer API key. */
+  apiKey: string
+  /** Raw `VoiceSettings.language`: only for the language of the missing-key message. */
+  languageSetting?: string
+  /** The language the body asks for; undefined asks the model to detect. */
+  language?: string
+  model?: string
+  timeoutMs?: number
+  fetch?: typeof globalThis.fetch
+  /** Every error this request reports goes here, bound to its purpose. */
+  onError: (error: Error, purpose: TranscriberErrorPurpose) => void
+  /** What a successful answer cost, once it is read. */
+  onUsage?: OpenRouterUsageCallback
+  /** +1 when a request starts, -1 when it ends: the caller's in-flight count. */
+  onInFlight?: (change: 1 | -1) => void
+}
+
+/**
+ * Transcribes one closed segment and hands the text to `deliver`.
+ *
+ * Reports rather than throws: every failure that leaves the sentence without
+ * a transcription reaches `deps.onError` with the purpose of the request, and
+ * the promise always resolves. An empty blob is not a failure — it is a
+ * segment with nothing in it, and it is dropped without a word.
+ */
+export async function transcribeSegment(
+  segment: CapturedSegment,
+  deliver: (text: string) => void,
+  purpose: TranscriberErrorPurpose,
+  gated: boolean,
+  deps: TranscribeSegmentDeps,
+): Promise<void> {
+  if (!segment.blob || segment.blob.size === 0) return
+  const apiKey = deps.apiKey
+  const timeoutMs = deps.timeoutMs ?? OPENROUTER_TIMEOUT_MS
+  const fetchFn = deps.fetch ?? globalThis.fetch.bind(globalThis)
+  const language = deps.language
+  const report = (error: Error) => deps.onError(error, purpose)
+
+  deps.onInFlight?.(1)
+  // Cleared once the body is read, not when the headers arrive: a body that
+  // trickles in was the one part of the request with no limit.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    if (!apiKey || apiKey.trim().length === 0) {
+      report(
+        new ApiKeyMissing({
+          message: deps.languageSetting?.startsWith("en")
+            ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
+            : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+        }) as unknown as Error,
+      )
+      return
+    }
+
+    if (segment.blob.size > MAX_AUDIO_BYTES) {
+      const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
+      report(
+        new Error(`File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`),
+      )
+      return
+    }
+
+    let base64Audio: string = ""
+    let shortFormat = segment.format || mimeToAudioFormat(segment.mimeType || segment.blob.type)
+
+    // In a browser environment, if the audio segment is in webm/m4a format,
+    // transcode it to 16 kHz WAV via AudioContext.decodeAudioData.
+    // Azure MAI-Transcribe 2 strictly requires WAV/PCM.
+    if (shortFormat !== "wav" && typeof window !== "undefined") {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        try {
+          const ctx = new AudioCtx({ sampleRate: 16000 })
+          const arrayBuf = await segment.blob.arrayBuffer()
+          const decoded = await ctx.decodeAudioData(arrayBuf)
+          const pcm = decoded.getChannelData(0)
+          const wavBlob = encodeWav(pcm, decoded.sampleRate)
+          base64Audio = await blobToBase64(wavBlob)
+          shortFormat = "wav"
+          await ctx.close().catch(() => {})
+        } catch {
+          // Decode failed (e.g. mock test blob), fall back to original blob
+        }
+      }
+    }
+
+    if (!base64Audio) {
+      try {
+        base64Audio = await blobToBase64(segment.blob)
+      } catch (err: any) {
+        report(new Error(`Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`))
+        return
+      }
+    }
+
+    const controller = new AbortController()
+    timer = setTimeout(() => controller.abort(), timeoutMs)
+
+    const primaryModel = deps.model ?? OPENROUTER_MODEL
+    const requestPayload: Record<string, any> = {
+      model: primaryModel,
+      input_audio: {
+        data: base64Audio,
+        format: shortFormat,
+      },
+      ...(language ? { language } : {}),
+      temperature: 0,
+    }
+
+    let response: Response
+    markVoice("asr-sent", `${Math.round(segment.durationMs)}ms`)
+    try {
+      response = await fetchFn(OPENROUTER_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      })
+
+      // If OpenRouter returns 400 (e.g. "Provider returned 400" because Azure MAI-Transcribe 2
+      // has an upstream provider failure or rejects language/temperature parameters):
+      // A 429 is the upstream provider being rate limited, not this app
+      // sending too much: the first sentence of a session got one in ADE
+      // Test and was lost. It goes straight to the fallback model, since
+      // asking the same model again at once would only be refused again.
+      if (!response.ok && (response.status === 400 || response.status === 429 || response.status >= 500)) {
+        // Attempt 1: Retry without language and temperature
+        if (response.status !== 429)
+          try {
+            const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: primaryModel,
+                input_audio: {
+                  data: base64Audio,
+                  format: shortFormat,
+                },
+              }),
+              signal: controller.signal,
+            })
+            if (retryResponse.ok) {
+              response = retryResponse
+            }
+          } catch {
+            // continue to fallback below
+          }
+
+        // Attempt 2: If still failing and primary was not already the fallback model, retry with whisper-large-v3
+        if (!response.ok && primaryModel !== OPENROUTER_FALLBACK_MODEL) {
+          try {
+            const fallbackResponse = await fetchFn(OPENROUTER_ENDPOINT, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: OPENROUTER_FALLBACK_MODEL,
+                input_audio: {
+                  data: base64Audio,
+                  format: shortFormat,
+                },
+                ...(language ? { language } : {}),
+              }),
+              signal: controller.signal,
+            })
+            if (fallbackResponse.ok) {
+              response = fallbackResponse
+            }
+          } catch {
+            // keep original response for standard error handling below
+          }
+        }
+      }
+    } catch (netErr: any) {
+      if (controller.signal.aborted || netErr?.name === "AbortError") {
+        report(
+          new RequestTimeout({
+            timeoutMs,
+            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+          }) as unknown as Error,
+        )
+        return
+      }
+
+      const safeNetMessage = sanitizeApiKey(netErr?.message ?? "connessione fallita", apiKey)
+      report(new Error(`Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`))
+      return
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        report(
+          new ApiKeyInvalid({
+            message: "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
+          }) as unknown as Error,
+        )
+        return
+      }
+
+      if (response.status === 402) {
+        report(
+          new QuotaExhausted({
+            message: "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
+          }) as unknown as Error,
+        )
+        return
+      }
+
+      if (response.status === 429) {
+        report(
+          new Error("Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."),
+        )
+        return
+      }
+
+      let detail = ""
+      try {
+        const errorJson = await response.json()
+        if (errorJson?.error?.message) {
+          detail = String(errorJson.error.message)
+        } else if (typeof errorJson?.error === "string") {
+          detail = errorJson.error
+        }
+      } catch {
+        // Response was not JSON
+      }
+
+      const safeDetail = sanitizeApiKey(detail, apiKey)
+      const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
+      report(
+        new Error(
+          `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`,
+        ),
+      )
+      return
+    }
+
+    try {
+      const data = await response.json()
+
+      if (data?.usage) {
+        deps.onUsage?.(data.usage, { gated })
+      }
+
+      const text = (
+        data?.text ??
+        data?.transcription ??
+        (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
+        ""
+      ).trim()
+      if (text) deliver(text)
+    } catch (parseErr: any) {
+      if (parseErr?.name === "AbortError") {
+        report(
+          new RequestTimeout({
+            timeoutMs,
+            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+          }) as unknown as Error,
+        )
+        return
+      }
+      report(
+        new Error(`Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`),
+      )
+    }
+  } finally {
+    clearTimeout(timer)
+    deps.onInFlight?.(-1)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // OpenRouter Transcriber Factory
 // ---------------------------------------------------------------------------
 
@@ -314,255 +608,21 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
 
   const now = options.now ?? Date.now
 
-  async function transcribeSegment(
-    segment: CapturedSegment,
-    deliver: (text: string) => void,
-    purpose: TranscriberErrorPurpose,
-    gated = purpose === "probe",
-  ): Promise<void> {
-    if (!segment.blob || segment.blob.size === 0) return
-    const report = (error: Error) => errorCb(error, { purpose })
-
-    inFlightRequests++
-    // Cleared once the body is read, not when the headers arrive: a body that
-    // trickles in was the one part of the request with no limit.
-    let timer: ReturnType<typeof setTimeout> | undefined
-    try {
-      if (!apiKey || apiKey.trim().length === 0) {
-        report(
-          new ApiKeyMissing({
-            message: options.language?.startsWith("en")
-              ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
-              : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
-          }) as unknown as Error,
-        )
-        return
-      }
-
-      if (segment.blob.size > MAX_AUDIO_BYTES) {
-        const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
-        report(
-          new Error(`File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`),
-        )
-        return
-      }
-
-      let base64Audio: string = ""
-      let shortFormat = segment.format || mimeToAudioFormat(segment.mimeType || segment.blob.type)
-
-      // In a browser environment, if the audio segment is in webm/m4a format,
-      // transcode it to 16 kHz WAV via AudioContext.decodeAudioData.
-      // Azure MAI-Transcribe 2 strictly requires WAV/PCM.
-      if (shortFormat !== "wav" && typeof window !== "undefined") {
-        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
-        if (AudioCtx) {
-          try {
-            const ctx = new AudioCtx({ sampleRate: 16000 })
-            const arrayBuf = await segment.blob.arrayBuffer()
-            const decoded = await ctx.decodeAudioData(arrayBuf)
-            const pcm = decoded.getChannelData(0)
-            const wavBlob = encodeWav(pcm, decoded.sampleRate)
-            base64Audio = await blobToBase64(wavBlob)
-            shortFormat = "wav"
-            await ctx.close().catch(() => {})
-          } catch {
-            // Decode failed (e.g. mock test blob), fall back to original blob
-          }
-        }
-      }
-
-      if (!base64Audio) {
-        try {
-          base64Audio = await blobToBase64(segment.blob)
-        } catch (err: any) {
-          report(new Error(`Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`))
-          return
-        }
-      }
-
-      const controller = new AbortController()
-      timer = setTimeout(() => controller.abort(), timeoutMs)
-
-      const primaryModel = options.model ?? OPENROUTER_MODEL
-      const requestPayload: Record<string, any> = {
-        model: primaryModel,
-        input_audio: {
-          data: base64Audio,
-          format: shortFormat,
-        },
-        ...(language ? { language } : {}),
-        temperature: 0,
-      }
-
-      let response: Response
-      markVoice("asr-sent", `${Math.round(segment.durationMs)}ms`)
-      try {
-        response = await fetchFn(OPENROUTER_ENDPOINT, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestPayload),
-          signal: controller.signal,
-        })
-
-        // If OpenRouter returns 400 (e.g. "Provider returned 400" because Azure MAI-Transcribe 2
-        // has an upstream provider failure or rejects language/temperature parameters):
-        // A 429 is the upstream provider being rate limited, not this app
-        // sending too much: the first sentence of a session got one in ADE
-        // Test and was lost. It goes straight to the fallback model, since
-        // asking the same model again at once would only be refused again.
-        if (!response.ok && (response.status === 400 || response.status === 429 || response.status >= 500)) {
-          // Attempt 1: Retry without language and temperature
-          if (response.status !== 429)
-            try {
-              const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: primaryModel,
-                  input_audio: {
-                    data: base64Audio,
-                    format: shortFormat,
-                  },
-                }),
-                signal: controller.signal,
-              })
-              if (retryResponse.ok) {
-                response = retryResponse
-              }
-            } catch {
-              // continue to fallback below
-            }
-
-          // Attempt 2: If still failing and primary was not already the fallback model, retry with whisper-large-v3
-          if (!response.ok && primaryModel !== OPENROUTER_FALLBACK_MODEL) {
-            try {
-              const fallbackResponse = await fetchFn(OPENROUTER_ENDPOINT, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: OPENROUTER_FALLBACK_MODEL,
-                  input_audio: {
-                    data: base64Audio,
-                    format: shortFormat,
-                  },
-                  ...(language ? { language } : {}),
-                }),
-                signal: controller.signal,
-              })
-              if (fallbackResponse.ok) {
-                response = fallbackResponse
-              }
-            } catch {
-              // keep original response for standard error handling below
-            }
-          }
-        }
-      } catch (netErr: any) {
-        if (controller.signal.aborted || netErr?.name === "AbortError") {
-          report(
-            new RequestTimeout({
-              timeoutMs,
-              message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
-            }) as unknown as Error,
-          )
-          return
-        }
-
-        const safeNetMessage = sanitizeApiKey(netErr?.message ?? "connessione fallita", apiKey)
-        report(new Error(`Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`))
-        return
-      }
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          report(
-            new ApiKeyInvalid({
-              message: "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
-            }) as unknown as Error,
-          )
-          return
-        }
-
-        if (response.status === 402) {
-          report(
-            new QuotaExhausted({
-              message: "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
-            }) as unknown as Error,
-          )
-          return
-        }
-
-        if (response.status === 429) {
-          report(
-            new Error("Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."),
-          )
-          return
-        }
-
-        let detail = ""
-        try {
-          const errorJson = await response.json()
-          if (errorJson?.error?.message) {
-            detail = String(errorJson.error.message)
-          } else if (typeof errorJson?.error === "string") {
-            detail = errorJson.error
-          }
-        } catch {
-          // Response was not JSON
-        }
-
-        const safeDetail = sanitizeApiKey(detail, apiKey)
-        const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
-        report(
-          new Error(
-            `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`,
-          ),
-        )
-        return
-      }
-
-      try {
-        const data = await response.json()
-
-        if (data?.usage) {
-          lastUsage = data.usage
-          usageCb(data.usage, { gated })
-        }
-
-        const text = (
-          data?.text ??
-          data?.transcription ??
-          (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
-          ""
-        ).trim()
-        if (text) deliver(text)
-      } catch (parseErr: any) {
-        if (parseErr?.name === "AbortError") {
-          report(
-            new RequestTimeout({
-              timeoutMs,
-              message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
-            }) as unknown as Error,
-          )
-          return
-        }
-        report(
-          new Error(`Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`),
-        )
-      }
-    } finally {
-      clearTimeout(timer)
-      inFlightRequests--
-    }
+  const segmentDeps: TranscribeSegmentDeps = {
+    apiKey,
+    languageSetting: options.language,
+    language,
+    model: options.model,
+    timeoutMs,
+    fetch: fetchFn,
+    onError: (error, purpose) => errorCb(error, { purpose }),
+    onUsage: (usage, context) => {
+      lastUsage = usage
+      usageCb(usage, context)
+    },
+    onInFlight: (change) => {
+      inFlightRequests += change
+    },
   }
 
   /** The start of a sentence, when that is all that should be sent; see `NameGate`. */
@@ -592,6 +652,7 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
           (text) => (heard = text),
           "probe",
           true,
+          segmentDeps,
         )
           .then(() => heard)
           .catch(() => "")
@@ -631,7 +692,7 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
       if (head || early) {
         let heard = ""
         if (early) heard = await early
-        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text), "probe", true)
+        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text), "probe", true, segmentDeps)
         markVoice("asr-probe-back", heard)
         if (!heard) return
         if (!options.nameGate!.accepts(heard)) {
@@ -642,7 +703,7 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
         options.nameGate!.onRequest?.()
         purpose = "turn"
       }
-      await transcribeSegment(segment, deliver, purpose, gated)
+      await transcribeSegment(segment, deliver, purpose, gated, segmentDeps)
       markVoice("asr-back")
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)

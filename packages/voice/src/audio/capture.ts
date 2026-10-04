@@ -193,6 +193,32 @@ export type SegmentCallback = (segment: CapturedSegment) => void | Promise<void>
 export type CaptureErrorCallback = (error: Error) => void
 export type SpeechLifecycleCallback = () => void
 
+/** Where a segment is in its life; see `MicCapture.onSegmentAudio`. */
+export type SegmentAudioPhase = "start" | "frame" | "end" | "cancel"
+
+/**
+ * One step of a segment while it is still being recorded.
+ *
+ * The finished segment still arrives through `onSegment`; this is the same
+ * segment unfolded, so a streaming recognizer hears it while the speaker goes
+ * on instead of after the silence that closed it.
+ */
+export interface SegmentAudio {
+  /** Which segment this step belongs to, counted from 1; see `MicCapture.onHead`. */
+  sequence: number
+  phase: SegmentAudioPhase
+  /** The 16 kHz mono samples of this step; present on `frame` only. */
+  pcm?: Float32Array
+  /**
+   * On `end` only: whether capture will keep the segment — the same verdict
+   * `flushPendingSegment` is about to take, so a listener hears the closing
+   * hand from the one that actually decides instead of guessing it later.
+   */
+  kept?: boolean
+}
+
+export type SegmentAudioCallback = (event: SegmentAudio) => void
+
 export interface MicCaptureOptions {
   /** Injected time provider (epoch ms). Mandatory for deterministic testing. */
   now?: () => number
@@ -202,6 +228,8 @@ export interface MicCaptureOptions {
   onPcmChunk?: PcmChunkCallback
   /** Closed compressed speech segments for OpenRouter. */
   onSegment?: SegmentCallback
+  /** Follows each segment while it records, for a streaming recognizer. */
+  onSegmentAudio?: SegmentAudioCallback
   /** Fired when intentional speech start is confirmed. */
   onSpeechStart?: SpeechLifecycleCallback
   /** Fired when speech concludes after silence timeout. */
@@ -266,6 +294,14 @@ export interface MicCapture {
   /** Register or update segment listener. */
   onSegment(callback: SegmentCallback): void
   /**
+   * Register or update the listener that follows a segment while it records:
+   * `start` when it opens, `frame` per PCM chunk — the pre-roll first, when the
+   * detector started it — `end` when it closes for any reason, `cancel` when it
+   * is dropped. The frames are what a streaming recognizer sends as they are
+   * heard; `onSegment` still carries the closed segment.
+   */
+  onSegmentAudio(callback: SegmentAudioCallback): void
+  /**
    * Once a segment has been recorded for `afterMs`, its first `headMs` as a
    * WAV, while the speaker goes on: so its start can be transcribed before
    * the sentence ends. The segment itself comes later with the same `sequence`.
@@ -299,6 +335,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   let onLevelCb: MicLevelCallback = options.onLevel ?? (() => {})
   let onPcmChunkCb: PcmChunkCallback = options.onPcmChunk ?? (() => {})
   let onSegmentCb: SegmentCallback = options.onSegment ?? (() => {})
+  let onSegmentAudioCb: SegmentAudioCallback = options.onSegmentAudio ?? (() => {})
   let onSpeechStartCb: SpeechLifecycleCallback = options.onSpeechStart ?? (() => {})
   let onSpeechEndCb: SpeechLifecycleCallback = options.onSpeechEnd ?? (() => {})
   let onErrorCb: CaptureErrorCallback = options.onError ?? (() => {})
@@ -534,6 +571,15 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     isRecordingSegment = true
     sequence++
     headSent = false
+    /*
+     * The start comes before the recorder and the frames before any new one,
+     * so a listener sees the segment in the order the audio happened: the
+     * pre-roll first, then whatever the detector confirms next.
+     */
+    onSegmentAudioCb({ sequence, phase: "start" })
+    if (withPreRoll) {
+      for (const chunk of recordedPcmChunks) onSegmentAudioCb({ sequence, phase: "frame", pcm: chunk })
+    }
     if (recorder) {
       try {
         recorder.start(100)
@@ -550,14 +596,30 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
   }
 
+  /**
+   * Whether a segment that just closed survives the drop of short transients:
+   * a cough, a throat clear, a click on the desk. On explicit push-to-talk
+   * commit or session stop, short commands are allowed down to 150 ms.
+   *
+   * The `end` event and `flushPendingSegment` both ask this, so the verdict a
+   * listener sees on the closing hand and the verdict the flush takes can
+   * never diverge.
+   */
+  function keepsSegment(durationMs: number, reason?: "silence" | "max_duration" | "stop" | "commit"): boolean {
+    const isIntentional = reason === "commit" || reason === "stop"
+    const threshold = isIntentional ? 150 : minDuration
+    return durationMs >= threshold
+  }
+
   function closeCurrentSegment(reason: "silence" | "max_duration" | "stop" | "commit"): void {
     if (!isRecordingSegment) {
       markVoice("segment-skipped", reason)
       return
     }
-    isRecordingSegment = false
     const closeTime = nowFn()
     const duration = Math.max(0, closeTime - segmentStartTime)
+    onSegmentAudioCb({ sequence, phase: "end", kept: keepsSegment(duration, reason) })
+    isRecordingSegment = false
     const quietSince = detector.getState().silenceStartTime
     markVoice(
       "segment-closed",
@@ -646,10 +708,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     if (!segment) return
 
     // Short transients: a cough, a throat clear, a click on the desk.
-    // On explicit push-to-talk commit or session stop, allow short commands down to 150 ms.
-    const isIntentional = segment.reason === "commit" || segment.reason === "stop"
-    const threshold = isIntentional ? 150 : minDuration
-    if (segment.durationMs < threshold) {
+    if (!keepsSegment(segment.durationMs, segment.reason)) {
       markVoice("segment-dropped", `${Math.round(segment.durationMs)}ms`)
       return
     }
@@ -733,7 +792,9 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
 
     if (isRecordingSegment) {
-      recordedPcmChunks.push(new Float32Array(pcm16k))
+      const chunk = new Float32Array(pcm16k)
+      recordedPcmChunks.push(chunk)
+      onSegmentAudioCb({ sequence, phase: "frame", pcm: chunk })
       if (head && !headSent && currentTime - segmentStartTime >= head.afterMs) {
         headSent = true
         const wanted = Math.round((head.headMs / 1000) * 16000)
@@ -878,6 +939,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     cancelSegment(): void {
       if (!isRecordingSegment) return
+      onSegmentAudioCb({ sequence, phase: "cancel" })
       isRecordingSegment = false
       recordedChunks = []
       recordedPcmChunks = []
@@ -906,6 +968,10 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     onSegment(callback: SegmentCallback): void {
       onSegmentCb = callback
+    },
+
+    onSegmentAudio(callback: SegmentAudioCallback): void {
+      onSegmentAudioCb = callback
     },
 
     onSpeechStart(callback: SpeechLifecycleCallback): void {

@@ -9,6 +9,7 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
+import type { SelectTranscriberOptions } from "./asr/select"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
@@ -479,6 +480,41 @@ describe("engine/createVoiceEngine", () => {
     expect(keys).toEqual(["old", "new"])
     expect(transcribers[1]?.isStarted).toBe(false)
     expect(engine.isRunning()).toBe(false)
+  })
+
+  test("the streaming socket receives the custom words and the wake word as keyterms", async () => {
+    const captured: SelectTranscriberOptions[] = []
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: {
+        activation: "toggle",
+        agentEngine: "off",
+        backend: "grok-stream",
+        customWords: ["docker", "nik", "docker"],
+      },
+      backendOptions: {
+        grokStreamOptions: {
+          transport: {
+            open: async () => {},
+            send: async () => {},
+            end: async () => {},
+            cancel: () => {},
+          },
+        },
+      },
+      creditLeft: async () => undefined,
+      createTranscriber: (_backend, options) => {
+        if (options) captured.push(options)
+        return createFakeTranscriber()
+      },
+    })
+
+    await engine.start()
+    // Deduped against itself and against the wake word, custom words first.
+    expect(captured[0]?.grokStreamOptions?.keyterms).toEqual(["docker", "nik"])
+    await engine.stop()
   })
 
   test("a settings restart opens the replacement transcriber with the new key", async () => {

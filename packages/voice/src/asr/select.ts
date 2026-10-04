@@ -3,6 +3,8 @@
  *
  * One engine, which works inside an embedded webview:
  * - "openrouter": Cloud ASR via OpenRouter (microsoft/mai-transcribe-2)
+ * - "grok-stream": Cloud ASR over the streaming socket to xAI, with the
+ *   OpenRouter request behind it for every segment the socket does not carry
  *
  * There were two more, and both are gone. A local neural model (NVIDIA Parakeet TDT 0.6B v3, on
  * WebGPU/WASM) took the renderer past four gigabytes and stopped it answering, and it carried a 24 MB
@@ -17,14 +19,20 @@
  */
 
 import type { Transcriber } from "./transcriber"
-import { createOpenRouterTranscriber, type OpenRouterTranscriberOptions } from "./openrouter"
+import {
+  createOpenRouterTranscriber,
+  normalizeRequestLanguage,
+  transcribeSegment,
+  type OpenRouterTranscriberOptions,
+} from "./openrouter"
+import { createGrokStreamTranscriber, type GrokBatch, type SttStreamTransport } from "./grok-stream"
 import { t } from "@nikcli-ai/ade/i18n"
 
 // ---------------------------------------------------------------------------
 // Backend Identifier & Status Types
 // ---------------------------------------------------------------------------
 
-export type TranscriberBackend = "openrouter"
+export type TranscriberBackend = "openrouter" | "grok-stream"
 
 export interface BackendStatus {
   /** Whether the backend can be activated and used right now. */
@@ -35,6 +43,15 @@ export interface BackendStatus {
 
 export interface BackendDescriptions {
   openrouter: BackendStatus
+  grokStream: BackendStatus
+}
+
+/** What the streaming backend needs from whoever chose it. */
+export interface GrokStreamSelectOptions {
+  /** The socket to the streaming service; ADE builds it over `stt_stream_*`. */
+  transport: SttStreamTransport
+  /** Wake word and custom words, sent so they come back as written. */
+  keyterms?: readonly string[]
 }
 
 export interface SelectTranscriberOptions {
@@ -51,6 +68,8 @@ export interface SelectTranscriberOptions {
   language?: string
   /** Options passed when constructing the OpenRouter transcriber. */
   openRouterOptions?: Partial<OpenRouterTranscriberOptions>
+  /** Options passed when constructing the Grok streaming transcriber. */
+  grokStreamOptions?: GrokStreamSelectOptions
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +84,8 @@ export interface SelectTranscriberOptions {
  */
 export function describeBackends(options: SelectTranscriberOptions = {}): BackendDescriptions {
   try {
-    // OpenRouter Cloud
+    // OpenRouter Cloud — and the streaming backend, whose refusals all fall
+    // back to this same account: without the key neither can carry a sentence.
     const candidateKey = options.apiKey ?? options.openRouterOptions?.apiKey
     const hasValidKey = Boolean(candidateKey && candidateKey.trim().length > 0)
     const openrouterStatus: BackendStatus = hasValidKey
@@ -77,10 +97,15 @@ export function describeBackends(options: SelectTranscriberOptions = {}): Backen
 
     return {
       openrouter: openrouterStatus,
+      grokStream: { ...openrouterStatus },
     }
   } catch {
     return {
       openrouter: {
+        usable: false,
+        reason: t("vui.asr.keyCheck"),
+      },
+      grokStream: {
         usable: false,
         reason: t("vui.asr.keyCheck"),
       },
@@ -103,6 +128,48 @@ export function createTranscriberFor(backend: TranscriberBackend, options: Selec
         language: options.language,
         ...options.openRouterOptions,
         apiKey,
+      })
+    }
+
+    case "grok-stream": {
+      const or = options.openRouterOptions
+      const apiKey = options.apiKey ?? or?.apiKey ?? ""
+      const transport = options.grokStreamOptions?.transport
+      if (!transport) {
+        throw new Error("Streaming Grok senza transport: la sessione stt_stream non è stata iniettata.")
+      }
+      /*
+       * The fallback is the very same request the OpenRouter backend sends,
+       * bound here to this backend's options: one request builder, two
+       * backends, and the refusals of the socket land on the account that
+       * would have carried them anyway.
+       */
+      const batch: GrokBatch = (request) => {
+        const raw = or?.language ?? options.language
+        return transcribeSegment(request.segment, request.deliver, request.purpose, request.gated, {
+          apiKey,
+          languageSetting: raw,
+          language: normalizeRequestLanguage(raw),
+          model: or?.model,
+          timeoutMs: or?.timeoutMs,
+          fetch: or?.fetch,
+          // The purpose is bound to the request by the caller that built it.
+          onError: (error) => request.report(error),
+          onUsage: or?.onUsage,
+        })
+      }
+      return createGrokStreamTranscriber({
+        transport,
+        batch,
+        language: or?.language ?? options.language,
+        keyterms: options.grokStreamOptions?.keyterms,
+        now: or?.now,
+        nameGate: or?.nameGate,
+        capture: or?.capture,
+        captureOptions: or?.captureOptions,
+        onPartial: or?.onPartial,
+        onFinal: or?.onFinal,
+        onError: or?.onError,
       })
     }
 
