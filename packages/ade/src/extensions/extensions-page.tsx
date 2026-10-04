@@ -28,11 +28,10 @@ import { catalogText } from "./catalog-en"
  * verified. Nothing is fetched at runtime, so opening the page tells no
  * logo host which servers the user looks at, and it works offline.
  */
-const LOGO_URLS = (
-  typeof import.meta.glob === "function"
-    ? import.meta.glob("./logos/*.svg", { query: "?url", import: "default", eager: true })
-    : {}
-) as Record<string, string>
+const LOGO_URLS = import.meta.glob("./logos/*.svg", { query: "?url", import: "default", eager: true }) as Record<
+  string,
+  string
+>
 
 function logoUrl(entry: McpCatalogEntry): { url: string; mono: boolean } | undefined {
   const file = entry.logo.kind === "simple-icons" ? `${entry.logo.id}.svg` : entry.logo.file

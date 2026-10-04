@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { readFileSync } from "node:fs"
@@ -8,6 +8,14 @@ import { SETTINGS_VIEW_STORAGE_KEY, readLastView } from "./categories"
 
 if (typeof document === "undefined") GlobalRegistrator.register()
 compileSolidJsx()
+
+mock.module("../extensions/extensions-page", () => ({
+  ExtensionsPage: () => {
+    const el = document.createElement("div")
+    el.dataset.component = "extensions-page"
+    return el
+  },
+}))
 
 const { createComponent, render } = await import("solid-js/web")
 const { SettingsSheet } = await import("./settings-sheet")
