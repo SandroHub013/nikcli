@@ -209,7 +209,7 @@ promised.
 | [EOT-18](effect-tui/18-cli-command-architecture.md)       | 2    | P3    | EOT-02, EOT-08                         | S      | Medium | CLI dispatch                | Exit-code mapping, headless posture, daemon lifecycle (parser done) |
 | [EOT-06](effect-tui/06-terminal-rendering.md)             | 2    | P3    | EOT-05                                 | L      | High   | TUI rendering               | Streaming virtualization, anchor fidelity, measured latency         |
 | [EOT-07](effect-tui/07-input-interaction.md)              | 2    | P3    | EOT-03, EOT-05                         | M      | High   | TUI interaction             | Keyboard/focus/permission matrix on real terminals                  |
-| [EOT-21](effect-tui/21-gadgets-device-bridge.md)          | 2    | P3    | EOT-04, EOT-10, EOT-14, EOT-17, EOT-19 | L      | Medium | Bridge/plugin/mod           | Scope `gadget`, bounded feed, gated tool, surface, SDK round-trip   |
+| [EOT-21](effect-tui/21-gadgets-device-bridge.md)          | 2    | P3    | EOT-04, EOT-10, EOT-14, EOT-17, EOT-19 | L      | Medium | Plugin SDK/bridge           | Bounded feed, gated tool, TUI commands, SDK round-trip              |
 
 EOT-00 is the one hard stop: while a compiled start can silently fail to paint, no startup or rendering budget may
 be ratified and no spec may be promoted past its current phase. Characterization work continues; promotion does not.
