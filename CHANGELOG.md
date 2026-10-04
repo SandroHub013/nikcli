@@ -3,6 +3,26 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.428.0 (October 2026)
+
+## Core
+
+- Bitmap frames for panels without a layout engine, sidebar block (@claude)
+- Device SDK, bridge plugin, gadget tool and /gadget TUI commands (@claude)
+
+**Thank you to 2 community contributors:**
+
+- @claude:
+  - specs: EOT-21 gadgets device SDK, bridge and agent tool
+  - feat(gadgets): device SDK, bridge plugin, gadget tool and /gadget TUI commands
+  - feat(gadgets): bitmap frames for panels without a layout engine, sidebar block
+  - fix(gadgets): review findings, and a portable C client tested against the real bridge
+  - Merge remote-tracking branch 'origin/spec/eot-21-gadgets' into spec/eot-21-gadgets
+  - fix(gadgets): second review round
+  - fix(gadgets): no quantified regexes over external input (CodeQL)
+- @nikomatt69:
+  - Merge pull request #300 from nikcli/spec/eot-21-gadgets
+
 ## v1.427.0 (October 2026)
 
 ## Mobile
