@@ -52,6 +52,21 @@ describe("layout work is bounded whatever the tree says", () => {
   })
 })
 
+describe("markdown on hostile lines", () => {
+  test("headings and list items are read by scanning, so long runs of spaces cost nothing", () => {
+    const started = Date.now()
+    expect(plainMarkdown("#" + " ".repeat(200_000) + "title")).toBe("TITLE")
+    expect(plainMarkdown(" ".repeat(200_000) + "* item")).toBe("• item")
+    expect(plainMarkdown("*" + " ".repeat(200_000))).toBe("• ")
+    expect(Date.now() - started).toBeLessThan(1_000)
+    // What is not a heading or a list stays text.
+    expect(plainMarkdown("####### seven")).toBe("####### seven")
+    expect(plainMarkdown("#nospace")).toBe("#nospace")
+    expect(plainMarkdown("-nospace")).toBe("-nospace")
+    expect(plainMarkdown("-")).toBe("-")
+  })
+})
+
 describe("nested nodes", () => {
   test("a Box inside a Text lays out at the Text's width instead of throwing", () => {
     const tree = {

@@ -407,12 +407,18 @@ export function isCommandName(value: string): boolean {
 }
 
 /** Turn a device name into the id its routes, tokens and permissions key on. */
+/** `s` without leading and trailing dashes. A loop: an anchored alternation over a name from outside is quadratic on a run of dashes. */
+function trimDashes(s: string): string {
+  let start = 0
+  let end = s.length
+  while (start < end && s[start] === "-") start++
+  while (end > start && s[end - 1] === "-") end--
+  return s.slice(start, end)
+}
+
 export function slugify(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 63)
+  const dashed = name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+  const slug = trimDashes(dashed).slice(0, 63)
   return SLUG.test(slug) ? slug : "gadget"
 }
 

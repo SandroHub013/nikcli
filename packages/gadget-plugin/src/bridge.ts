@@ -82,8 +82,11 @@ async function readJson<T>(request: Request): Promise<T> {
 
 function bearer(request: Request): string | undefined {
   const header = request.headers.get("authorization")
-  const match = header ? /^Bearer\s+(\S+)$/i.exec(header) : null
-  return match?.[1]
+  if (!header) return undefined
+  const space = header.indexOf(" ")
+  if (space < 0 || header.slice(0, space).toLowerCase() !== "bearer") return undefined
+  const token = header.slice(space + 1).trim()
+  return token && !/\s/.test(token) ? token : undefined
 }
 
 /** Interfaces a LAN device can be reached through; docker0, veth*, br-*, virbr*, tun*, tap* and wg* are not. */

@@ -56,6 +56,26 @@ function wrap(text: string, width: number): string[] {
   return out
 }
 
+/** The text of a `#`..`######` heading line, or undefined. Scanned, not matched: a line is untrusted input. */
+function headingText(line: string): string | undefined {
+  let hashes = 0
+  while (hashes < line.length && line[hashes] === "#") hashes++
+  if (hashes < 1 || hashes > 6) return undefined
+  const next = line[hashes]
+  if (next !== " " && next !== "\t") return undefined
+  return line.slice(hashes + 1).trimStart()
+}
+
+/** The text of a `- `, `* ` or `+ ` list line, or undefined. */
+function listItemText(line: string): string | undefined {
+  const trimmed = line.trimStart()
+  const marker = trimmed[0]
+  if (marker !== "-" && marker !== "*" && marker !== "+") return undefined
+  const next = trimmed[1]
+  if (next !== " " && next !== "\t") return undefined
+  return trimmed.slice(2).trimStart()
+}
+
 /** Markdown as a text panel shows it: headings upper-cased, lists bulleted, emphasis stripped. */
 export function plainMarkdown(text: string): string {
   return text
@@ -66,10 +86,10 @@ export function plainMarkdown(text: string): string {
           .replace(/\*\*(.+?)\*\*/g, "$1")
           .replace(/[*_]{1}(.+?)[*_]{1}/g, "$1")
           .replace(/`(.+?)`/g, "$1")
-      const heading = /^(#{1,6})\s+(.*)$/.exec(line)
-      if (heading) return inline(heading[2]!).toUpperCase()
-      const item = /^\s*[-*+]\s+(.*)$/.exec(line)
-      if (item) return `• ${inline(item[1]!)}`
+      const heading = headingText(line)
+      if (heading !== undefined) return inline(heading).toUpperCase()
+      const item = listItemText(line)
+      if (item !== undefined) return `• ${inline(item)}`
       return inline(line)
     })
     .join("\n")

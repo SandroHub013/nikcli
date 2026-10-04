@@ -15,6 +15,7 @@
 import { Plugin } from "@nikcli-ai/plugin/v2/tui"
 import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
 import { GadgetError, ROUTES, type GadgetInfo, type HealthInfo, type PairWindow } from "@nikcli-ai/gadget/protocol"
+import { trimTrailingSlashes } from "@nikcli-ai/gadget"
 import { Gadgets } from "./sidebar.tsx"
 
 const ID = "nikcli:gadgets"
@@ -61,9 +62,8 @@ function health(info: HealthInfo): string {
 }
 
 export function setup(context: Context) {
-  const base = (typeof context.options.url === "string" ? context.options.url : "http://127.0.0.1:4097").replace(
-    /\/+$/,
-    "",
+  const base = trimTrailingSlashes(
+    typeof context.options.url === "string" ? context.options.url : "http://127.0.0.1:4097",
   )
   const { ui } = context
 

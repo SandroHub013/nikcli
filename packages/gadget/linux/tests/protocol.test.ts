@@ -108,6 +108,15 @@ describe("GadgetError", () => {
   })
 })
 
+describe("slugify and trimming on hostile input", () => {
+  test("a run of dashes or spaces is linear, not quadratic", () => {
+    const started = Date.now()
+    expect(slugify("-".repeat(200_000) + "x" + "-".repeat(200_000))).toBe("x")
+    expect(slugify(" ".repeat(200_000))).toBe("gadget")
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+})
+
 describe("slugify", () => {
   test("lowercases, dashes, falls back", () => {
     expect(slugify("Pi Office #2")).toBe("pi-office-2")

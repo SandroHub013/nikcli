@@ -26,6 +26,13 @@ export interface TransportOptions {
   readonly fetch?: typeof globalThis.fetch
 }
 
+/** `s` without trailing slashes. A loop, not a regex: a quantified pattern over input that comes from a config file is a ReDoS finding. */
+export function trimTrailingSlashes(s: string): string {
+  let end = s.length
+  while (end > 0 && s[end - 1] === "/") end--
+  return s.slice(0, end)
+}
+
 /** A request that has not answered in this long is a dead connection, not a slow one. */
 const REQUEST_TIMEOUT_MS = 15_000
 /** The bridge pings every 15 s; three missed pings and the feed is dead. */
@@ -39,7 +46,7 @@ export class Transport {
   private readonly fetchImpl: typeof globalThis.fetch
 
   constructor(options: TransportOptions) {
-    this.server = options.server.replace(/\/+$/, "")
+    this.server = trimTrailingSlashes(options.server)
     this.token = options.token
     this.fetchImpl = options.fetch ?? globalThis.fetch
   }

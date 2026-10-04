@@ -134,6 +134,17 @@ describe("a feed that goes silent", () => {
   })
 })
 
+describe("trimTrailingSlashes", () => {
+  test("trims any number of slashes in linear time and leaves the rest alone", async () => {
+    const { trimTrailingSlashes } = await import("../src/transport.ts")
+    const started = Date.now()
+    expect(trimTrailingSlashes("http://h:1" + "/".repeat(200_000))).toBe("http://h:1")
+    expect(Date.now() - started).toBeLessThan(500)
+    expect(trimTrailingSlashes("http://h:1/a/b")).toBe("http://h:1/a/b")
+    expect(trimTrailingSlashes("///")).toBe("")
+  })
+})
+
 describe("readFrames", () => {
   test("parses data lines split across chunks and skips junk", async () => {
     const encoder = new TextEncoder()
