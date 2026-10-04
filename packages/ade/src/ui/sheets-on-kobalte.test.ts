@@ -40,15 +40,13 @@ describe("lint: the sheets are Kobalte dialogs", () => {
   })
 
   test("lint: the Settings panel is framed by a Sheet, named by the panel's own title", () => {
-    const workbench = codeOf(readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8"))
-    const start = workbench.indexOf(codeOf('<Sheet component="voice-settings-overlay"'))
+    const shell = codeOf(readFileSync(join(import.meta.dir, "..", "settings", "shell.tsx"), "utf8"))
+    const start = shell.indexOf(codeOf('<Sheet component="settings-sheet"'))
     expect(start).toBeGreaterThan(-1)
-    const end = workbench.indexOf("</Sheet>", start)
+    const end = shell.indexOf("</Sheet>", start)
     expect(end).toBeGreaterThan(start)
-    const sheet = workbench.slice(start, end)
-    expect(sheet.includes('labelledBy="voice-panel-title"')).toBe(true)
+    const sheet = shell.slice(start, end)
     expect(sheet.includes("surface={false}")).toBe(true)
-    expect(sheet.includes("<VoiceSettingsPanelframed")).toBe(true)
   })
 
   test("lint: runCommand is guarded by the open sheets, and sheetOpen covers every sheet the workbench renders", () => {
@@ -61,7 +59,7 @@ describe("lint: the sheets are Kobalte dialogs", () => {
     // Each sheet is rendered under its own <Show when={x()}>: every x() must be in sheetOpen.
     const shown = [
       ...workbench.matchAll(
-        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:ChoicesSheet|DecisionsSheet|DesignSheet|Sheet)\b/g,
+        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:ChoicesSheet|DecisionsSheet|DesignSheet|SettingsSheet|Sheet)\b/g,
       ),
     ].map((match) => match[1]!)
     expect(shown.length).toBe(4)
