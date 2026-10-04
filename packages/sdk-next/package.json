@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@nikcli-ai/sdk-next",
-  "private": true,
+  "version": "1.428.0",
   "type": "module",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
@@ -21,5 +22,9 @@
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
     "zod": "catalog:"
+  },
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
   }
 }

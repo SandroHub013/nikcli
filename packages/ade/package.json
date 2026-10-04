@@ -71,5 +71,13 @@
     "solid-js": "catalog:",
     "three": "^0.186.0"
   },
-  "main": "./src/index.ts"
+  "main": "./src/index.ts",
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -8,6 +8,14 @@
   "bin": {
     "nikcli-gadget": "./linux/src/cli.ts"
   },
+  "files": [
+    "README.md",
+    "c",
+    "linux/README.md",
+    "linux/examples",
+    "linux/install.sh",
+    "linux/src"
+  ],
   "exports": {
     ".": {
       "import": "./linux/src/index.ts",
