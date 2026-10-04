@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.427.0 (October 2026)
+
+## Mobile
+
+- Call GET /mod without trailing slash (@claude)
+
+**Thank you to 1 community contributor:**
+
+- @claude:
+  - fix(mobile): call GET /mod without trailing slash
+
 ## v1.426.0 (October 2026)
 
 ## Core
