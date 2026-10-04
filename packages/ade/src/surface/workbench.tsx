@@ -1,4 +1,4 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, lazy, Show, For, Suspense } from "solid-js"
+import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -50,7 +50,7 @@ import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
 import { RunningSessions } from "./running"
 import { restartOf, startArgsFor } from "./start-args"
-import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
+import { KeyRequestDialog, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -116,16 +116,6 @@ import {
   type HookHost,
   type HookStatus,
 } from "../session-new/agent-hooks"
-import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import {
-  BotSection,
-  GridSection,
-  LanguageSection,
-  ProviderSection,
-  RoutineSection,
-  SkillsSection,
-  ThemeSection,
-} from "../settings/sections"
 import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
 import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
 import {
@@ -136,7 +126,6 @@ import {
   type UpdateProgress,
 } from "../update/progress"
 import { exitedActivity } from "../grid/activity"
-import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
@@ -273,7 +262,6 @@ import {
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
 import { FILE_PLUGINS_DISABLED, importPluginModule } from "../plugin/loader"
-import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
@@ -361,11 +349,6 @@ import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigat
 import { anyFramePlugin } from "../plugin-frame/marker"
 import type { FramePaneInput } from "../plugin-frame/plugin-pane"
 
-/** «Spazio su disco», loaded when the section is opened: ADE with the panel closed never reads a folder for it. */
-const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
-
-/** The list of plugins in a frame, loaded when Estensioni is opened: ADE with none never fetches it. */
-const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 import {
@@ -534,7 +517,6 @@ import {
   VoiceHud,
   VoiceOrb,
   ListeningIndicator,
-  VoiceSettingsPanel,
   wakeWordEnabled,
   shortcutActivationEnabled,
   describeShortcut,

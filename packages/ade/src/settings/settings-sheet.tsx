@@ -1,4 +1,4 @@
-import { For, Show, Suspense, type JSX } from "solid-js"
+import { lazy, For, Show, Suspense, type JSX } from "solid-js"
 import {
   VoiceSettingsPanel,
   type VoiceEngine,
@@ -33,10 +33,11 @@ import {
 import { KeysSection } from "../secrets/keys-section"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import { PluginSection } from "../plugin/pane"
-import { FramePluginRows } from "../plugin-frame/plugin-rows"
-import { SpaceSectionLoader } from "../space/space-section"
 import { SettingsShell } from "./shell"
 import type { CategoryId } from "./categories"
+
+const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
+const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
 
 export interface SettingsSheetProps {
   onClose: () => void
@@ -113,7 +114,6 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
       case "voice":
         return (
           <VoiceSettingsPanel
-            inline
             framed
             engine={props.voiceEngine}
             settings={props.voiceSettings}
@@ -215,7 +215,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
         if (tab === "system/space") {
           return (
             <Suspense>
-              <SpaceSectionLoader
+              <SpaceSection
                 host={getHost}
                 roots={() => (props.project?.()?.root ? [props.project?.()!.root] : [])}
                 openWorktrees={() => props.wb().panes.flatMap((pane) => (pane.worktree ? [pane.worktree] : []))}

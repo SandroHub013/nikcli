@@ -122,24 +122,14 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
     }
   }
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.stopPropagation()
-      props.onClose()
-    }
-  }
-
-  const versionLabel = () => `ADE ${props.version ?? "0.9.1"}`
-
   return (
     <Sheet
       component="settings-sheet"
       surface={false}
       labelledBy={activeCategory() === "voice" ? "voice-panel-title" : "settings-panel-title"}
       onClose={props.onClose}
-      onKeyDown={handleKeyDown}
     >
-      <div data-component="settings-shell" class="settings-shell" onKeyDown={handleKeyDown}>
+      <div data-component="settings-shell" class="settings-shell">
         {/* Left Category Rail */}
         <nav data-slot="settings-rail" aria-label={t("settings.title")}>
           <div data-slot="settings-rail-head">
@@ -174,7 +164,9 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
           </div>
 
           <div data-slot="settings-rail-footer">
-            <span data-slot="settings-version">{versionLabel()}</span>
+            <Show when={props.version}>
+              {(v) => <span data-slot="settings-version">ADE {v()}</span>}
+            </Show>
             <button
               type="button"
               data-slot="settings-check-update"

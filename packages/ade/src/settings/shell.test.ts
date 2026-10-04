@@ -1,17 +1,16 @@
-import { afterEach, beforeAll, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import postcss from "postcss"
-import { SETTINGS_VIEW_STORAGE_KEY } from "./categories"
+import { SETTINGS_VIEW_STORAGE_KEY, readLastView } from "./categories"
 
 if (typeof document === "undefined") GlobalRegistrator.register()
 compileSolidJsx()
 
 const { createComponent, render } = await import("solid-js/web")
-const { SettingsShell } = await import("./shell")
-const { VoiceSettingsPanel } = await import("@nikcli-ai/voice")
+const { SettingsSheet } = await import("./settings-sheet")
 const { DEFAULT_VOICE_SETTINGS } = await import("@nikcli-ai/voice/core")
 
 let dispose: (() => void) | undefined
@@ -34,7 +33,7 @@ const fakeVoiceEngine = {
   cancel: () => {},
 } as never
 
-function renderShell(options: {
+function renderSettingsSheet(options: {
   initialTarget?: string
   onClose?: () => void
   version?: string
@@ -45,27 +44,31 @@ function renderShell(options: {
 
   dispose = render(
     () =>
-      createComponent(SettingsShell, {
+      createComponent(SettingsSheet, {
         initialTarget: options.initialTarget,
         onClose,
-        version: options.version ?? "0.9.1",
-        renderContent: (category, tab) => {
-          if (category === "voice") {
-            return createComponent(VoiceSettingsPanel, {
-              engine: fakeVoiceEngine,
-              settings: { ...DEFAULT_VOICE_SETTINGS },
-              onChange: () => {},
-              inline: true,
-              framed: true,
-              onClose,
-              title: "Voce",
-            })
-          }
-          const div = document.createElement("div")
-          div.dataset.slot = "dummy-section"
-          div.innerHTML = `<h3 tabindex="-1">Section ${category}/${tab}</h3><button type="button">Focusable</button>`
-          return div
+        version: options.version,
+        voiceEngine: fakeVoiceEngine,
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS },
+        onVoiceSettingsChange: () => {},
+        themeState: {
+          preference: () => "dark" as const,
+          set: () => {},
+          glassOpacity: () => 1,
+          setGlassOpacity: () => {},
         },
+        wb: () => ({ panes: [], pinnedColumns: 1 } as never),
+        setWb: () => {},
+        hookHost: () => ({ hasScript: () => false } as never),
+        hookStates: () => ({}),
+        refreshHooks: () => {},
+        openLoginSession: () => {},
+        keysHost: () => undefined,
+        extensionsIo: () => undefined,
+        pluginRuntime: { registry: { sections: () => [] } } as never,
+        openGuide: () => {},
+        openFramePluginPane: () => {},
+        askYesNo: async () => true,
       }),
     host,
   )
@@ -74,139 +77,250 @@ function renderShell(options: {
 
 describe("settings shell", () => {
   test("la rotella apre l'ultima vista salvata o Generale come fallback", () => {
-    // 1. Without saved view -> fallback to General
-    renderShell()
+    // 1. Senza vista salvata -> fallback a Generale
+    renderSettingsSheet()
     let activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
     expect(activeCat?.getAttribute("data-category")).toBe("general")
     dispose?.()
     document.body.innerHTML = ""
 
-    // 2. With saved view in localStorage -> opens that view
+    // 2. Con vista salvata in localStorage -> apre quella vista
     localStorage.setItem(
       SETTINGS_VIEW_STORAGE_KEY,
       JSON.stringify({ category: "agents", tab: "agents/keys" }),
     )
-    renderShell()
+    renderSettingsSheet()
     activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
     expect(activeCat?.getAttribute("data-category")).toBe("agents")
     const activeTab = document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')
+    expect(activeTab).not.toBeNull()
     expect(activeTab?.getAttribute("data-tab")).toBe("agents/keys")
     dispose?.()
     document.body.innerHTML = ""
   })
 
-  test("legacyTarget apre la scheda corrispondente", () => {
+  test("legacyTarget e voice.settings aprono la scheda corrispondente", () => {
     // voice-sec-backend -> voice
-    renderShell({ initialTarget: "voice-sec-backend" })
+    renderSettingsSheet({ initialTarget: "voice-sec-backend" })
     let activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
+    expect(activeCat?.getAttribute("data-category")).toBe("voice")
+    dispose?.()
+    document.body.innerHTML = ""
+
+    // voice.settings -> voice
+    renderSettingsSheet({ initialTarget: "voice-sec-mode" })
+    activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
     expect(activeCat?.getAttribute("data-category")).toBe("voice")
     dispose?.()
     document.body.innerHTML = ""
 
     // set-sec-provider -> agents / agents/account
-    renderShell({ initialTarget: "set-sec-provider" })
+    renderSettingsSheet({ initialTarget: "set-sec-provider" })
     activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
     expect(activeCat?.getAttribute("data-category")).toBe("agents")
-    const activeTab = document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')
+    let activeTab = document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')
+    expect(activeTab).not.toBeNull()
     expect(activeTab?.getAttribute("data-tab")).toBe("agents/account")
+    dispose?.()
+    document.body.innerHTML = ""
+
+    // set-sec-routine -> fallback a Generale
+    renderSettingsSheet({ initialTarget: "set-sec-routine" })
+    activeCat = document.body.querySelector('[data-slot="category-button"][data-active="true"]')
+    expect(activeCat).not.toBeNull()
+    expect(activeCat?.getAttribute("data-category")).toBe("general")
     dispose?.()
     document.body.innerHTML = ""
   })
 
-  test("Esc chiude il pannello delle impostazioni", () => {
-    let closed = false
-    renderShell({ onClose: () => { closed = true } })
-    const shellEl = document.body.querySelector<HTMLElement>('[data-component="settings-shell"]')
-    expect(shellEl).toBeDefined()
+  test("dopo un cambio di categoria o scheda, la vista salvata in localStorage si aggiorna", () => {
+    renderSettingsSheet()
+    expect(readLastView()).toEqual({ category: "general", tab: "general/appearance" })
 
-    // Dispatch Escape key event on shell container
-    shellEl!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    // Clic su Agenti
+    const agentsBtn = document.body.querySelector<HTMLButtonElement>(
+      '[data-slot="category-button"][data-category="agents"]',
+    )
+    expect(agentsBtn).not.toBeNull()
+    agentsBtn!.click()
+
+    expect(readLastView()).toEqual({ category: "agents", tab: "agents/account" })
+
+    // Clic sulla scheda Chiavi API
+    const keysTab = document.body.querySelector<HTMLButtonElement>(
+      '[data-slot="settings-tab"][data-tab="agents/keys"]',
+    )
+    expect(keysTab).not.toBeNull()
+    keysTab!.click()
+
+    expect(readLastView()).toEqual({ category: "agents", tab: "agents/keys" })
+  })
+
+  test("se la versione non c'è, lo slot di versione non compare nel DOM (B1)", () => {
+    // 1. Senza versione: nessun elemento nel DOM
+    renderSettingsSheet({ version: undefined })
+    expect(document.body.querySelector('[data-slot="settings-version"]')).toBeNull()
+    dispose?.()
+    document.body.innerHTML = ""
+
+    // 2. Con versione: elemento presente con testo esatto
+    renderSettingsSheet({ version: "1.406.0" })
+    const versionEl = document.body.querySelector('[data-slot="settings-version"]')
+    expect(versionEl).not.toBeNull()
+    expect(versionEl?.textContent).toBe("ADE 1.406.0")
+  })
+
+  test("Esc chiude il pannello delle impostazioni tramite Kobalte (B2)", () => {
+    let closed = false
+    renderSettingsSheet({ onClose: () => { closed = true } })
+    const shellEl = document.body.querySelector<HTMLElement>('[data-component="settings-shell"]')
+    expect(shellEl).not.toBeNull()
+
+    // Dispatch di Escape su document: Kobalte Dialog chiude il foglio
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    expect(closed).toBe(true)
+  })
+
+  test("A1: dentro Voce durante la registrazione di una scorciatoia Esc non chiude le Impostazioni", () => {
+    let closed = false
+    renderSettingsSheet({
+      initialTarget: "voice-sec-shortcuts",
+      onClose: () => {
+        closed = true
+      },
+    })
+
+    const recorderBtn = document.body.querySelector<HTMLButtonElement>('[data-slot="shortcut-recorder-btn"]')
+    expect(recorderBtn).not.toBeNull()
+    expect(recorderBtn!.getAttribute("data-recording")).toBeNull()
+
+    // Inizia la registrazione della scorciatoia
+    recorderBtn!.click()
+    expect(recorderBtn!.getAttribute("data-recording")).toBe("true")
+
+    // Pressione di Escape durante la registrazione: ferma la registrazione e NON chiude il pannello
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    expect(closed).toBe(false)
+    expect(recorderBtn!.getAttribute("data-recording")).toBeNull()
+
+    // Pressione di Escape successiva a riposo: chiude il pannello
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
     expect(closed).toBe(true)
   })
 
   test("le frecce muovono il fuoco nel menu e nelle schede", () => {
-    renderShell()
+    renderSettingsSheet()
     const categoryButtons = [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="category-button"]')]
     expect(categoryButtons.length).toBe(6)
 
-    // Focus first category (General)
+    // Focus prima categoria (Generale)
     categoryButtons[0]!.focus()
 
-    // ArrowDown -> Agents
+    // ArrowDown -> Agenti
     categoryButtons[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
     expect(document.activeElement).toBe(categoryButtons[1]!)
 
-    // ArrowUp -> General (wraps)
+    // ArrowUp -> Generale (wraps)
     categoryButtons[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }))
     expect(document.activeElement).toBe(categoryButtons[0]!)
 
-    // End -> System (last)
+    // End -> Sistema (ultima)
     categoryButtons[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))
     expect(document.activeElement).toBe(categoryButtons[5]!)
 
-    // Home -> General (first)
+    // Home -> Generale (prima)
     categoryButtons[5]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }))
     expect(document.activeElement).toBe(categoryButtons[0]!)
 
-    // Tab buttons navigation
+    // Navigazione schede (tab)
     const tabButtons = [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="settings-tab"]')]
     expect(tabButtons.length).toBeGreaterThan(1)
 
     tabButtons[0]!.focus()
-    // ArrowRight -> next tab
+    // ArrowRight -> tab successiva
     tabButtons[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))
     expect(document.activeElement).toBe(tabButtons[1]!)
 
-    // ArrowLeft -> previous tab
+    // ArrowLeft -> tab precedente
     tabButtons[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }))
     expect(document.activeElement).toBe(tabButtons[0]!)
   })
 
-  test("in nessuna categoria tranne Voce ci sono status-pill, Avvia ascolto o Ripristina la voce", () => {
-    // 1. In non-voice categories (e.g. General, Agents, Extensions, Record, System)
+  test("in nessuna categoria tranne Voce ci sono status-pill, Avvia ascolto o Ripristina la voce (M1)", () => {
+    // 1. Nelle categorie diverse da Voce (Generale, Agenti, Estensioni, Registrazione, Sistema)
     for (const catId of ["general", "agents", "extensions", "record", "system"]) {
-      renderShell({ initialTarget: catId })
+      renderSettingsSheet({ initialTarget: catId })
 
-      // Status pill should NOT exist
+      // Status pill non deve esistere
       const statusPill = document.body.querySelector('[data-slot="status-pill"]')
       expect(statusPill).toBeNull()
 
-      // Listen button should NOT exist
+      // Il pulsante di ascolto non deve esistere
       const listenBtn = [...document.body.querySelectorAll("button")].find(
         (b) => b.textContent?.includes("Avvia ascolto") || b.getAttribute("data-action") === "voice.listen",
       )
       expect(listenBtn).toBeUndefined()
 
-      // Reset voice button should NOT exist
+      // Il pulsante di ripristino voce non deve esistere
       const resetBtn = [...document.body.querySelectorAll("button")].find(
         (b) => b.textContent?.includes("Ripristina la voce"),
       )
       expect(resetBtn).toBeUndefined()
 
-      // Done button exists
+      // Il pulsante Fatto deve esistere ed essere non nullo
       const doneBtn = document.body.querySelector('[data-slot="settings-done"]')
-      expect(doneBtn).toBeDefined()
+      expect(doneBtn).not.toBeNull()
 
       dispose?.()
       document.body.innerHTML = ""
     }
 
-    // 2. In Voce category: status pill, listen button and reset voice button exist
-    renderShell({ initialTarget: "voice" })
+    // 2. Nella categoria Voce: status pill, pulsante ascolto, ripristino, chiudi X e Fatto esistono
+    renderSettingsSheet({ initialTarget: "voice" })
     const statusPill = document.body.querySelector('[data-slot="status-pill"]')
     expect(statusPill).not.toBeNull()
 
     const listenBtn = [...document.body.querySelectorAll("button")].find(
       (b) => b.textContent?.includes("Avvia ascolto") || b.getAttribute("data-action") === "voice.listen",
     )
-    expect(listenBtn).toBeDefined()
+    expect(listenBtn).not.toBeUndefined()
 
     const resetBtn = [...document.body.querySelectorAll("button")].find(
       (b) => b.textContent?.includes("Ripristina la voce"),
     )
-    expect(resetBtn).toBeDefined()
+    expect(resetBtn).not.toBeUndefined()
+
+    // In Voce, framed garantisce che ci siano la X e Fatto (A1)
+    const closeBtn = document.body.querySelector('[data-slot="close-btn"]')
+    expect(closeBtn).not.toBeNull()
+
+    const voiceDoneBtn = document.body.querySelector('[data-slot="solid-btn"]')
+    expect(voiceDoneBtn).not.toBeNull()
+
     dispose?.()
     document.body.innerHTML = ""
+  })
+
+  test("lint: VoiceSettingsPanel è montato solo nel case 'voice' di settings-sheet.tsx ed ha framed senza inline", () => {
+    const sheetCode = readFileSync(join(import.meta.dir, "settings-sheet.tsx"), "utf8")
+    const matches = [...sheetCode.matchAll(/<VoiceSettingsPanel\b([\s\S]*?)\/>/g)]
+    expect(matches.length).toBe(1)
+    const panelProps = matches[0]![1]!
+    expect(panelProps.includes("framed")).toBe(true)
+    expect(panelProps.includes("inline")).toBe(false)
+
+    // Verifica che stia dentro case "voice":
+    const caseVoiceIndex = sheetCode.indexOf('case "voice":')
+    expect(caseVoiceIndex).toBeGreaterThan(-1)
+    const panelIndex = sheetCode.indexOf("<VoiceSettingsPanel")
+    expect(panelIndex).toBeGreaterThan(caseVoiceIndex)
+    const caseGeneralIndex = sheetCode.indexOf('case "general":')
+    expect(panelIndex).toBeLessThan(caseGeneralIndex)
   })
 
   test("larghezza fino a ~1100 px e misure del layout in shell.css", () => {
