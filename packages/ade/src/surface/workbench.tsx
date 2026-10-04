@@ -1,4 +1,15 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
+import {
+  onMount,
+  onCleanup,
+  on,
+  createSignal,
+  createEffect,
+  createMemo,
+  createResource,
+  Show,
+  For,
+  Suspense,
+} from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -38,6 +49,15 @@ import { pathEquals } from "../host/path"
 import { belongsTo, goneFolder, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
+import {
+  cycleQuality,
+  loadRecordDir,
+  loadRecordMic,
+  loadRecordQuality,
+  saveRecordDir,
+  saveRecordMic,
+  saveRecordQuality,
+} from "../record/prefs"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
@@ -1038,35 +1058,10 @@ export function Workbench() {
    * is in the video. `record.folder` changes it.
    */
   const [recordState, setRecordState] = createSignal<RecordState>({ status: "idle" })
-  const [recordDir, setRecordDir] = createSignal<string | undefined>(
-    (() => {
-      try {
-        return localStorage.getItem("ade.record.dir") ?? undefined
-      } catch {
-        return undefined
-      }
-    })(),
-  )
-  const [recordQuality, setRecordQuality] = createSignal<RecordQuality>(
-    (() => {
-      try {
-        const saved = localStorage.getItem("ade.record.quality")
-        return QUALITY_LEVELS.some((level) => level.id === saved) ? (saved as RecordQuality) : DEFAULT_QUALITY
-      } catch {
-        return DEFAULT_QUALITY
-      }
-    })(),
-  )
+  const [recordDir, setRecordDir] = createSignal<string | undefined>(loadRecordDir())
+  const [recordQuality, setRecordQuality] = createSignal<RecordQuality>(loadRecordQuality())
   /** The microphone for takes the user starts: off until switched on (`record.mic`). */
-  const [recordMic, setRecordMic] = createSignal(
-    (() => {
-      try {
-        return localStorage.getItem("ade.record.mic") === "on"
-      } catch {
-        return false
-      }
-    })(),
-  )
+  const [recordMic, setRecordMic] = createSignal(loadRecordMic())
   const recorder = createRecorder({
     start: async (target, dir, name, quality) => {
       const host = await getHost()
@@ -1117,13 +1112,27 @@ export function Workbench() {
     const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
     if (!chosen) return undefined
     setRecordDir(chosen)
-    try {
-      localStorage.setItem("ade.record.dir", chosen)
-    } catch {
-      // A take still records; only the choice is forgotten next launch.
-    }
+    saveRecordDir(chosen)
     return chosen
   })
+
+  /*
+   * The two recording switches, one pair of functions for both entrances:
+   * the palette commands and Registrazione › Registrazione video change the
+   * same signals and write the same keys, so neither can show a choice the
+   * other does not honour.
+   */
+  const applyRecordQuality = (next: RecordQuality) => {
+    setRecordQuality(next)
+    saveRecordQuality(next)
+    const level = qualityLevel(next)
+    report(t("record.quality.set", level.label, sizePerMinute(level)), "info")
+  }
+  const applyRecordMic = (next: boolean) => {
+    setRecordMic(next)
+    saveRecordMic(next)
+    report(next ? t("record.mic.on") : t("record.mic.off"), "info")
+  }
 
   /*
    * The folder is not made a write root: Rust writes and serves only the
@@ -4601,7 +4610,8 @@ export function Workbench() {
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
       // The plugins in a frame look at their own index on the same schedule, but only when one is installed: ADE with none never loads this.
       onChecked: () => {
-        if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
+        if (anyFramePlugin())
+          void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
       },
       /*
        * Coming back to ADE is the moment to look: the release may have been
@@ -4640,7 +4650,8 @@ export function Workbench() {
     }
     setCheckingUpdate(true)
     try {
-      if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
+      if (anyFramePlugin())
+        void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
       const result = await updateWatch.check({ force: true })
       /*
        * The release already has its line in the bell. Repeating it would be
@@ -6422,29 +6433,15 @@ export function Workbench() {
           : await startRecording({ kind: "window" }, { mic: recordMic() })
       if (problem) report(problem)
     } else if (id === "record.mic") {
-      const next = !recordMic()
-      setRecordMic(next)
-      try {
-        localStorage.setItem("ade.record.mic", next ? "on" : "off")
-      } catch {
-        // Kept for this session only.
-      }
-      report(next ? t("record.mic.on") : t("record.mic.off"), "info")
+      applyRecordMic(!recordMic())
     } else if (id === "record.quality") {
       /*
        * Cycled rather than a submenu: three levels, and the palette row
-       * already says which one is on and what it costs a minute.
+       * already says which one is on and what it costs a minute. The write
+       * and the notice are `applyRecordQuality`'s, shared with the settings
+       * panel.
        */
-      const order = QUALITY_LEVELS.map((level) => level.id)
-      const next = order[(order.indexOf(recordQuality()) + 1) % order.length] ?? DEFAULT_QUALITY
-      setRecordQuality(next)
-      try {
-        localStorage.setItem("ade.record.quality", next)
-      } catch {
-        // Kept for this session only.
-      }
-      const level = qualityLevel(next)
-      report(t("record.quality.set", level.label, sizePerMinute(level)), "info")
+      applyRecordQuality(cycleQuality(recordQuality()))
     } else if (id === "record.export") {
       void exportLastTake()
     } else if (id === "record.folder") {
@@ -6836,7 +6833,11 @@ export function Workbench() {
    */
   const reclaims = new Map<string, Promise<Reclaimed>>()
   const treeClosing = new Set<string>()
-  const WORKTREE_RETRY: Retry = { times: 3, ms: 1500, wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)) }
+  const WORKTREE_RETRY: Retry = {
+    times: 3,
+    ms: 1500,
+    wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  }
   const giveBackWorktree = (pane: Pane, worktree: string) => {
     const open = project()
     const found = paneProject(pane, open, recents())
@@ -6845,11 +6846,21 @@ export function Workbench() {
       const host = await getHost()
       if (!host?.run) return { kind: "kept", reason: `"${pane.title}": ${worktree}` }
       const owner = found.kind === "open" ? open : await discoverProject(host, found.root).catch(() => open)
-      const outcome = await reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, host.adeWorktreeRescue ?? noRescue, WORKTREE_RETRY)
+      const outcome = await reclaimWorktree(
+        host.run,
+        { title: pane.title, worktree, branch, root: owner?.root },
+        host.adeWorktreeRescue ?? noRescue,
+        WORKTREE_RETRY,
+      )
       // The folder ADE makes beside a project for its worktrees goes with the last of them: nothing is left in it but the name.
       if (outcome.kind === "removed" && owner?.root) await host.adeContainerRemove?.(owner.root).catch(() => false)
       return outcome
-    })().catch((error): Reclaimed => ({ kind: "kept", reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}` }))
+    })().catch(
+      (error): Reclaimed => ({
+        kind: "kept",
+        reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}`,
+      }),
+    )
     reclaims.set(pane.id, done)
     void done.then((outcome) => {
       if (reclaims.get(pane.id) === done) reclaims.delete(pane.id)
@@ -8632,7 +8643,8 @@ export function Workbench() {
         return false
       },
       ignored: (reason) => console.warn(`[plugin-frame] ignorato: ${reason}`),
-      rolledBack: (name) => setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
+      rolledBack: (name) =>
+        setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
       install: () => openVoiceSettings("set-sec-extensions"),
     },
     guessServers,
@@ -9559,6 +9571,26 @@ export function Workbench() {
           openGuide={openGuide}
           openFramePluginPane={(id) => void openFramePluginPane(id)}
           askYesNo={askYesNo}
+          record={{
+            quality: recordQuality,
+            onQuality: applyRecordQuality,
+            mic: recordMic,
+            onMic: applyRecordMic,
+            dir: recordDir,
+            onPickFolder: () => void pickRecordDir(),
+            onExport: () => void exportLastTake(),
+          }}
+          updates={{
+            checking: checkingUpdate,
+            available: latestUpdate,
+            onInstall: () => {
+              const update = latestUpdate()
+              if (!update) return
+              // The dialog takes the window over: the sheet steps aside so the two never stack.
+              closeVoiceSettings()
+              installUpdate(update.url)
+            },
+          }}
         />
       </Show>
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Glob } from "bun"
+import { CATEGORIES } from "./settings/categories"
 
 /*
  * Polish B5: the marks a ::before or ::after took from the font (✓ ✕ ▸ ▾ ! ·)
@@ -134,5 +135,40 @@ describe("the icons fit the text they sit in (polish B5b)", () => {
       const left = sheets.filter((sheet) => sheet.text.includes(`[data-slot="${slot}"]`)).map((sheet) => sheet.file)
       expect(`${slot}: ${left.join(", ")}`).toBe(`${slot}: `)
     }
+  })
+})
+
+/*
+ * Impostazioni C, residual S2: the rail's six category marks are inline SVG
+ * in one line-icon style — a 16-unit box, a 1.5px stroke in the text's
+ * colour — so the rows read as one set beside each other, and every category
+ * the rail can show has a mark to show.
+ */
+describe("the settings rail icons", () => {
+  const icons = readFileSync(join(dir, "settings/icons.tsx"), "utf8")
+  const SIX = ["GeneralIcon", "AgentsIcon", "ExtensionsIcon", "VoiceIcon", "RecordIcon", "SystemIcon"]
+
+  /** The source of one icon function, up to the next export. */
+  const bodyOf = (name: string) => {
+    const from = icons.indexOf(`function ${name}`)
+    expect(`${name} present: ${from >= 0}`).toBe(`${name} present: true`)
+    const to = icons.indexOf("export function", from + 1)
+    return icons.slice(from, to === -1 ? undefined : to)
+  }
+
+  test("every mark is a 16-box line icon with a 1.5px stroke in currentColor", () => {
+    for (const name of SIX) {
+      const body = bodyOf(name)
+      expect(`${name} viewBox: ${body.includes('viewBox="0 0 16 16"')}`).toBe(`${name} viewBox: true`)
+      expect(`${name} stroke: ${body.includes('stroke-width="1.5"')}`).toBe(`${name} stroke: true`)
+      expect(`${name} color: ${body.includes('stroke="currentColor"')}`).toBe(`${name} color: true`)
+      expect(`${name} aria: ${body.includes('aria-hidden="true"')}`).toBe(`${name} aria: true`)
+    }
+  })
+
+  test("the category switch draws a mark for every category of the rail", () => {
+    const switchBody = icons.slice(icons.indexOf("export function CategoryIcon"))
+    for (const category of CATEGORIES)
+      expect(`${category.id}: ${switchBody.includes(`case "${category.id}":`)}`).toBe(`${category.id}: true`)
   })
 })
