@@ -234,6 +234,12 @@ interface Flow {
   wav?: CapturedSegment
   /** Resolves when the session exists; frames and the end queue behind it. */
   openPromise?: Promise<void>
+  /**
+   * This flow's transport calls, in the order the audio was taken: each one
+   * starts only after the one before it settled, so the service hears the
+   * sentence in speaking order even when a call answers slowly.
+   */
+  chain: Promise<void>
   doneTimer?: ReturnType<typeof setTimeout>
   /** Speech the service called complete, in order. */
   speechFinals: string[]
@@ -473,7 +479,15 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       failFlow(flow, "protocol")
       return
     }
-    void open
+    /*
+     * Each frame goes out behind the one before it, on this flow's own chain:
+     * `transport.send` of frame N+1 starts only after frame N settled, so a
+     * transport that answers slowly cannot reorder the sentence or let a later
+     * frame overtake an earlier one. The catch keeps the chain alive after a
+     * refusal — the settled/fallback guard makes every link behind it a no-op.
+     */
+    flow.chain = flow.chain
+      .then(() => open)
       .then(() => {
         // Abandoned while its turn in the chain was still coming up: the
         // frames belong to no session, and the next one must not hear them.
@@ -515,14 +529,25 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         markVoice("stt-open")
         return
       case "partial": {
-        flow.provisional = event.text
+        /*
+         * The preview a speaker reads is the whole sentence in progress:
+         * everything already spoken complete stays, and only the current
+         * provisional hypothesis changes at its tail. A piece just fixed must
+         * not appear twice, so it leaves the provisional slot the moment it
+         * lands in the stable ones.
+         */
         if (event.speechFinal) {
           if (event.text) flow.speechFinals.push(event.text)
           flow.finalPieces = []
-        } else if (event.isFinal && event.text) {
-          flow.finalPieces.push(event.text)
+          flow.provisional = ""
+        } else if (event.isFinal) {
+          if (event.text) flow.finalPieces.push(event.text)
+          flow.provisional = ""
+        } else {
+          flow.provisional = event.text
         }
-        if (event.text) partialCb(event.text)
+        const preview = [...flow.speechFinals, ...flow.finalPieces, flow.provisional].join(" ").trim()
+        if (preview) partialCb(preview)
         return
       }
       case "done": {
@@ -558,6 +583,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       fallback: false,
       settled: false,
       batching: false,
+      chain: Promise.resolve(),
       speechFinals: [],
       finalPieces: [],
       provisional: "",
@@ -613,6 +639,17 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
   function onSegmentEnd(event: SegmentAudio): void {
     const flow = flows.get(event.sequence)
     if (!flow || flow.settled) return
+    if (event.kept === false) {
+      /*
+       * The capture threw this segment away as a transient: noise that must
+       * not become a turn. Whatever the socket already heard dies with it —
+       * no `audio.done` goes out, for there is no sentence to finish, and
+       * the session is dropped instead of asked to answer.
+       */
+      if (flow.opened && !flow.fallback) transport.cancel()
+      settle(flow)
+      return
+    }
     flow.ended = true
     if (flow.fallback || !flow.streamable) {
       /*
@@ -626,7 +663,10 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       return
     }
     if (flow.pendingSamples > 0) send(flow, pcm16le(take(flow, flow.pendingSamples)))
-    void flow.openPromise!
+    // The end rides the same chain as the frames, so `audio.done` is the last
+    // thing the service hears — never a frame racing in after it.
+    flow.chain = flow.chain
+      .then(() => flow.openPromise!)
       .then(() => {
         // Dropped before its turn or after: there is no session to end.
         if (flow.settled || flow.fallback) return

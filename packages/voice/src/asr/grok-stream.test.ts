@@ -20,6 +20,7 @@ interface Harness {
   transcriber: GrokStreamTranscriber
   opens: SttStreamOpenOptions[]
   sent: number[]
+  order: string[]
   counts: { open: number; end: number; cancel: number }
   batches: GrokBatchRequest[]
   finals: TranscriptEvent[]
@@ -27,7 +28,7 @@ interface Harness {
   errors: Array<{ message: string; purpose?: string }>
   startSeg: (sequence?: number) => void
   frames: (sequence: number, chunks: Float32Array[]) => void
-  endSeg: (sequence?: number) => void
+  endSeg: (sequence?: number, kept?: boolean) => void
   cancelSeg: (sequence?: number) => void
   close: (sequence: number, ms: number) => void
   closeRaw: (segment: CapturedSegment) => void
@@ -43,10 +44,15 @@ function setup(
     nameGate?: NameGate
     spend?: StreamSpend
     doneTimeoutMs?: number
+    /** Milliseconds each `send` settles after, by call order: a slow transport. */
+    sendDelays?: number[]
+    endDelayMs?: number
   } = {},
 ): Harness {
   const opens: SttStreamOpenOptions[] = []
   const sent: number[] = []
+  const order: string[] = []
+  let sendCalls = 0
   const counts = { open: 0, end: 0, cancel: 0 }
   const transport: SttStreamTransport = {
     open: async (opts) => {
@@ -55,10 +61,16 @@ function setup(
       if (options.openError) throw new Error(options.openError)
     },
     send: async (bytes) => {
+      const delay = options.sendDelays?.[sendCalls++] ?? 0
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
       sent.push(bytes.length)
+      order.push("send")
     },
     end: async () => {
+      const delay = options.endDelayMs ?? 0
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
       counts.end++
+      order.push("end")
     },
     cancel: () => {
       counts.cancel++
@@ -103,6 +115,7 @@ function setup(
     transcriber,
     opens,
     sent,
+    order,
     counts,
     batches,
     finals,
@@ -110,7 +123,7 @@ function setup(
     errors,
     startSeg: (sequence = 1) => onAudio?.({ sequence, phase: "start" }),
     frames: (sequence, chunks) => chunks.forEach((pcm) => onAudio?.({ sequence, phase: "frame", pcm })),
-    endSeg: (sequence = 1) => onAudio?.({ sequence, phase: "end" }),
+    endSeg: (sequence = 1, kept = true) => onAudio?.({ sequence, phase: "end", kept }),
     cancelSeg: (sequence = 1) => onAudio?.({ sequence, phase: "cancel" }),
     close: (sequence, ms) =>
       onSegment?.({ blob: wavOf(ms), format: "wav", mimeType: "audio/wav", durationMs: ms, sequence }),
@@ -524,5 +537,68 @@ describe("asr/grok-stream stopping", () => {
     await h.tick()
     expect(h.finals).toHaveLength(0)
     expect(h.batches).toHaveLength(0)
+  })
+
+  test("a segment the capture threw away as a transient closes the socket and never becomes a turn", async () => {
+    const h = setup()
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    h.frames(1, [new Float32Array(1600)])
+    h.endSeg(1, false)
+    await h.tick()
+
+    // The socket dies without `audio.done`: there is no sentence to finish.
+    expect(h.counts.cancel).toBe(1)
+    expect(h.counts.end).toBe(0)
+    expect(h.transcriber.hasInFlight).toBe(false)
+
+    // Even if the service answers anyway, or the capture follows up late, the
+    // noise stays silent: no final, no batch, no turn.
+    h.emit({ kind: "done", text: "tosse", durationS: 0.1 })
+    h.close(1, 1_000)
+    await h.tick()
+    expect(h.finals).toHaveLength(0)
+    expect(h.batches).toHaveLength(0)
+  })
+})
+
+describe("asr/grok-stream transport order", () => {
+  test("frames and the end reach the transport in the order they were taken, even when it settles slowly", async () => {
+    // The first call answers slowest: without a chain the second frame and
+    // the end would overtake it, and the service would hear a scrambled tail.
+    const h = setup({ sendDelays: [30, 0], endDelayMs: 0 })
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    h.frames(1, [new Float32Array(1600), new Float32Array(1600)])
+    h.endSeg(1)
+    await new Promise((resolve) => setTimeout(resolve, 60))
+
+    expect(h.order).toEqual(["send", "send", "end"])
+    expect(h.counts.end).toBe(1)
+  })
+
+  test("the partial keeps the pieces already fixed and shows only the latest provisional one", async () => {
+    const h = setup()
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    h.emit({ kind: "partial", text: "prima", isFinal: false, speechFinal: false })
+    h.emit({ kind: "partial", text: "prima parte", isFinal: true, speechFinal: false })
+    h.emit({ kind: "partial", text: "seconda", isFinal: false, speechFinal: false })
+    h.emit({ kind: "partial", text: "prima parte seconda", isFinal: false, speechFinal: true })
+    h.emit({ kind: "partial", text: "ancora", isFinal: false, speechFinal: false })
+
+    expect(h.partials).toEqual([
+      "prima",
+      "prima parte",
+      "prima parte seconda",
+      "prima parte seconda",
+      "prima parte seconda ancora",
+    ])
   })
 })

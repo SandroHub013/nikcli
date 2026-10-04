@@ -580,4 +580,44 @@ describe("audio/capture segment audio", () => {
     expect(segments).toHaveLength(1)
     expect(segments[0].sequence).toBe(2)
   })
+
+  test("the end event carries the same keep-or-drop verdict the flush takes", async () => {
+    const events: SegmentAudio[] = []
+    const segments: CapturedSegment[] = []
+    let simulatedTime = 10_000
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      speechDetectorConfig: { speechThreshold: 0.9 },
+      onSegment: (seg) => {
+        segments.push(seg)
+      },
+      onSegmentAudio: (event) => {
+        events.push(event)
+      },
+    })
+    await capture.start()
+
+    // 100 ms of push-to-talk: under the 150 ms floor for an intentional
+    // close, so the flush drops it — and the end already says so.
+    capture.startSegment?.()
+    simulatedTime += 100
+    capture.processAudioFrame(new Float32Array(1600).fill(0.1))
+    capture.commitSegment?.()
+    expect(events.at(-1)!.phase).toBe("end")
+    expect(events.at(-1)!.kept).toBe(false)
+    expect(segments).toHaveLength(0)
+
+    // Over the floor: the same verdict agrees with the delivery.
+    capture.startSegment?.()
+    simulatedTime += 300
+    capture.processAudioFrame(new Float32Array(1600).fill(0.1))
+    capture.commitSegment?.()
+    capture.stop()
+    expect(events.at(-1)!.phase).toBe("end")
+    expect(events.at(-1)!.kept).toBe(true)
+    expect(segments).toHaveLength(1)
+  })
 })

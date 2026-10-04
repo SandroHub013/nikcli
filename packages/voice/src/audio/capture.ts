@@ -209,6 +209,12 @@ export interface SegmentAudio {
   phase: SegmentAudioPhase
   /** The 16 kHz mono samples of this step; present on `frame` only. */
   pcm?: Float32Array
+  /**
+   * On `end` only: whether capture will keep the segment — the same verdict
+   * `flushPendingSegment` is about to take, so a listener hears the closing
+   * hand from the one that actually decides instead of guessing it later.
+   */
+  kept?: boolean
 }
 
 export type SegmentAudioCallback = (event: SegmentAudio) => void
@@ -590,15 +596,30 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
   }
 
+  /**
+   * Whether a segment that just closed survives the drop of short transients:
+   * a cough, a throat clear, a click on the desk. On explicit push-to-talk
+   * commit or session stop, short commands are allowed down to 150 ms.
+   *
+   * The `end` event and `flushPendingSegment` both ask this, so the verdict a
+   * listener sees on the closing hand and the verdict the flush takes can
+   * never diverge.
+   */
+  function keepsSegment(durationMs: number, reason?: "silence" | "max_duration" | "stop" | "commit"): boolean {
+    const isIntentional = reason === "commit" || reason === "stop"
+    const threshold = isIntentional ? 150 : minDuration
+    return durationMs >= threshold
+  }
+
   function closeCurrentSegment(reason: "silence" | "max_duration" | "stop" | "commit"): void {
     if (!isRecordingSegment) {
       markVoice("segment-skipped", reason)
       return
     }
-    onSegmentAudioCb({ sequence, phase: "end" })
-    isRecordingSegment = false
     const closeTime = nowFn()
     const duration = Math.max(0, closeTime - segmentStartTime)
+    onSegmentAudioCb({ sequence, phase: "end", kept: keepsSegment(duration, reason) })
+    isRecordingSegment = false
     const quietSince = detector.getState().silenceStartTime
     markVoice(
       "segment-closed",
@@ -687,10 +708,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     if (!segment) return
 
     // Short transients: a cough, a throat clear, a click on the desk.
-    // On explicit push-to-talk commit or session stop, allow short commands down to 150 ms.
-    const isIntentional = segment.reason === "commit" || segment.reason === "stop"
-    const threshold = isIntentional ? 150 : minDuration
-    if (segment.durationMs < threshold) {
+    if (!keepsSegment(segment.durationMs, segment.reason)) {
       markVoice("segment-dropped", `${Math.round(segment.durationMs)}ms`)
       return
     }
