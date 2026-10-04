@@ -71,7 +71,7 @@ export type ModPane = {
   rows?: number
 }
 
-/** One loaded mod, as `GET /mod/` lists it. */
+/** One loaded mod, as `GET /mod` lists it. */
 export type ModInfo = {
   id: string
   name: string

@@ -897,7 +897,7 @@ export class MobileClient {
   // --- mods: server-side plugins that draw for every client (`/mod/ui/*`) ---
 
   modList() {
-    return this.request<import("@/lib/mod-tree").ModInfo[]>("/mod/")
+    return this.request<import("@/lib/mod-tree").ModInfo[]>("/mod")
   }
 
   modPanes() {
