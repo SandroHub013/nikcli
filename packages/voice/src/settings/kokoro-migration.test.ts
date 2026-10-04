@@ -140,8 +140,8 @@ describe("la coppia voce e backend", () => {
         ttsLocale: "it-IT",
       }),
     );
-    expect(res.replyVoice).toBe("ugo");
-    expect(res.replyBackend).toBe("piper");
+    expect(res.replyVoice).toBe("it-IT-Rosa");
+    expect(res.replyBackend).toBe("mai");
     expect(res.corrections.length).toBeGreaterThan(0);
   });
 });
@@ -210,10 +210,10 @@ describe("Kokoro con una lingua che non può parlare", () => {
 });
 
 describe("un profilo nuovo", () => {
-  test("resta Ugo su Piper, in italiano", () => {
+  test("parte su Rosa, che è la voce cloud", () => {
     const res = normalizeSettings(undefined);
-    expect(res.replyVoice).toBe("ugo");
-    expect(res.replyBackend).toBe("piper");
+    expect(res.replyVoice).toBe("it-IT-Rosa");
+    expect(res.replyBackend).toBe("mai");
     expect(res.ttsLocale).toBe("it-IT");
   });
 
@@ -237,8 +237,8 @@ describe("un profilo nuovo", () => {
       ttsLocale,
     }: Pick<VoiceSettings, "replyVoice" | "replyBackend" | "ttsLocale"> =
       normalizeSettings(undefined).settings;
-    expect(replyBackend).toBe("piper");
+    expect(replyBackend).toBe("mai");
     expect(ttsLocale).toBe("it-IT");
-    expect(replyVoice).toBe("ugo");
+    expect(replyVoice).toBe("it-IT-Rosa");
   });
 });

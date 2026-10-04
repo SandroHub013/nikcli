@@ -9,8 +9,8 @@ import {
   MAI_VOICES,
   acceptMaiVoice,
   isMaiVoice,
+  maiReplyVoice,
   maiVoiceOfferPending,
-  speakingReplyVoice,
 } from "./reply-voices";
 
 function v8(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -43,10 +43,20 @@ describe("la migrazione a v9", () => {
     }
   });
 
-  test("un profilo nuovo resta su Piper: MAI è una scelta, non un default", () => {
-    const res = normalizeSettings(null);
+  test("un profilo nuovo parte su Rosa, e ADE Test resta su Piper", () => {
+    const fresh = normalizeSettings(null);
+    expect(fresh.replyBackend).toBe("mai");
+    expect(fresh.replyVoice).toBe("it-IT-Rosa");
+    expect(fresh.ttsLocale).toBe("it-IT");
+    const test = normalizeSettings(null, { testIdentity: true });
+    expect(test.replyBackend).toBe("piper");
+    expect(test.replyVoice).toBe("ugo");
+  });
+
+  test("un profilo che aveva già una voce la tiene", () => {
+    const res = normalizeSettings({ replyVoice: "paola" });
+    expect(res.replyVoice).toBe("paola");
     expect(res.replyBackend).toBe("piper");
-    expect(res.replyVoice).toBe("ugo");
   });
 
   test("la migrazione è idempotente", () => {
@@ -55,12 +65,12 @@ describe("la migrazione a v9", () => {
     expect(twice.settings).toEqual(once.settings);
   });
 
-  test("una voce MAI sconosciuta torna a Ugo", () => {
+  test("una voce MAI sconosciuta torna a Rosa", () => {
     const res = normalizeSettings(
       v8({ replyVoice: "it-IT-Nessuno", replyBackend: "mai" }),
     );
-    expect(res.replyVoice).toBe("ugo");
-    expect(res.replyBackend).toBe("piper");
+    expect(res.replyVoice).toBe("it-IT-Rosa");
+    expect(res.replyBackend).toBe("mai");
   });
 
   test("Rosa su un altro backend torna su MAI, che è il suo", () => {
@@ -69,7 +79,7 @@ describe("la migrazione a v9", () => {
     );
     expect(res.replyBackend).toBe("mai");
     expect(res.replyVoice).toBe("it-IT-Rosa");
-    expect(res.corrections.length).toBeGreaterThan(0);
+    expect(res.corrections).toEqual([]);
   });
 
   test("la risposta alla domanda si conserva, e un valore inventato si perde", () => {
@@ -127,11 +137,28 @@ describe("la domanda una volta sola", () => {
   });
 });
 
-describe("MAI solo in italiano", () => {
-  test("una risposta italiana la legge Rosa, una inglese la legge Paola", () => {
-    expect(speakingReplyVoice("it-IT-Rosa", "it-IT", "it")).toBe("it-IT-Rosa");
-    expect(speakingReplyVoice("it-IT-Rosa", "en-US", "it")).toBe("paola");
-    expect(speakingReplyVoice("it-IT-Luca", "en-GB", "it")).toBe("ugo");
+describe("MAI solo in italiano, frase per frase", () => {
+  const rosa = { chosen: "it-IT-Rosa" as const, local: "af_heart" as const };
+
+  test("il testo decide, e se non decide decide l'interfaccia", () => {
+    expect(
+      maiReplyVoice({ ...rosa, text: "Ciao, come va oggi?", ui: "en" }),
+    ).toBe("it-IT-Rosa");
+    expect(
+      maiReplyVoice({ ...rosa, text: "Hello, how are you today?", ui: "it" }),
+    ).toBe("af_heart");
+    expect(maiReplyVoice({ ...rosa, text: "3.", ui: "it" })).toBe("it-IT-Rosa");
+    expect(maiReplyVoice({ ...rosa, text: "3.", ui: "en" })).toBe("af_heart");
+  });
+
+  test("senza una voce locale ricordata, la risposta inglese va a Ugo", () => {
+    expect(
+      maiReplyVoice({
+        chosen: "it-IT-Luca",
+        text: "The tests passed.",
+        ui: "it",
+      }),
+    ).toBe("ugo");
   });
 
   test("il catalogo è le quattro voci italiane, e nient'altro", () => {

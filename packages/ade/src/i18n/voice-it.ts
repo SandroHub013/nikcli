@@ -432,7 +432,7 @@ export const voiceIt = {
   "vui.fix.spokenAlerts":
     "Avvisi di propria iniziativa non validi: ripristinati spenti.",
   "vui.fix.replyVoice": (value: string) =>
-    `Voce delle risposte '${value}' non riconosciuta: ripristinata Ugo.`,
+    `Voce delle risposte '${value}' non riconosciuta: ripristinata Rosa.`,
   "vui.fix.replyBackend": (value: string, fallback: string) =>
     `Voce e motore non andavano insieme: la risposta ora usa il motore '${fallback}' invece di '${value}'.`,
   "vui.fix.ttsLocale": (value: string) =>

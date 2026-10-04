@@ -418,7 +418,7 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.speakReplies": "Invalid reply reading setting: turned back on.",
   "vui.fix.spokenAlerts": "Invalid proactive alerts setting: turned back off.",
   "vui.fix.replyVoice": (value) =>
-    `Unknown reply voice '${value}': restored Ugo.`,
+    `Unknown reply voice '${value}': restored Rosa.`,
   "vui.fix.replyBackend": (value, fallback) =>
     `Voice and engine did not match: replies now use the '${fallback}' engine instead of '${value}'.`,
   "vui.fix.ttsLocale": (value) =>

@@ -151,11 +151,12 @@ export const REPLY_BACKEND_BY_VOICE: Readonly<
  * starts from that same language. Nothing is offered and nothing is
  * downloaded: Kokoro is opt-in, so a profile arrives on Piper as it left.
  *
- * 9: Microsoft MAI, the cloud voice, and it is opt-in the same way. A profile
- * arrives speaking what it was speaking: naming a cloud voice is a choice,
- * and a migration that made it for the user would spend their key. The one
- * question a profile on Piper/Ugo is asked, once, lives in `replyVoiceOffer`
- * and is answered by the panel — this step only makes room for the answer.
+ * 9: Microsoft MAI, the cloud voice. A profile that already had a voice keeps
+ * it: naming a cloud voice for someone who never asked is a purchase they did
+ * not make, and the one question a profile on Piper/Ugo is asked lives in
+ * `replyVoiceOffer`. A profile with no voice at all is a new one, and a new
+ * one starts on Rosa — except ADE Test, which stays on Piper so a test run
+ * never spends a key. See `toMai`.
  */
 export const CURRENT_SETTINGS_VERSION = 9;
 
@@ -381,8 +382,8 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   customWords: Object.freeze([]),
   speakReplies: true,
   spokenAlerts: false,
-  replyVoice: "ugo",
-  replyBackend: "piper",
+  replyVoice: "it-IT-Rosa",
+  replyBackend: "mai",
   /*
    * Italian, because the default voice is Ugo and the default language of the
    * profile is Italian: a new profile speaks what it has always spoken. A
@@ -470,15 +471,45 @@ function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * Version 9: room for the cloud voice, and nothing else.
+ * Version 9: the cloud voice, for a profile that never chose one.
  *
- * MAI is opt-in. A profile written before it existed has a Piper voice, a
- * Kokoro voice or the system one, and it keeps speaking that: moving it onto a
- * voice that spends a key is not a migration, it is a purchase the user did
- * not make. The question the panel asks once (`replyVoiceOffer`) is answered
- * by the panel, so there is nothing here to write and nothing to undo.
+ * A profile that already names a voice keeps it. Moving one that was speaking
+ * Piper onto a voice that spends a key is not a migration, it is a purchase the
+ * user did not make, and the question the panel asks once (`replyVoiceOffer`)
+ * is the panel's to answer.
+ *
+ * A profile that names nothing is a new one, and a new one starts on Rosa.
+ * ADE Test is the exception: a test run that spent a key would be a test run
+ * that billed someone, so it stays on Piper. The key itself is not consulted
+ * here, because this function cannot see it — a profile without one is still
+ * Rosa, and the speaker reads it locally until a key appears.
  */
-function toMai(candidate: Record<string, unknown>): Record<string, unknown> {
+function toMai(
+  candidate: Record<string, unknown>,
+  testIdentity: boolean,
+): Record<string, unknown> {
+  // Only a profile that never named a voice is a new one. A voice that is there
+  // and not one of ours is a repair, and it falls back below — it is not a
+  // profile that asked for Rosa.
+  if (!("replyVoice" in candidate)) {
+    if (testIdentity)
+      return { ...candidate, replyVoice: "ugo", replyBackend: "piper" };
+    return {
+      ...candidate,
+      replyVoice: "it-IT-Rosa",
+      replyBackend: "mai",
+      ttsLocale: "it-IT",
+    };
+  }
+  // `toKokoro` writes piper for every profile that had no backend, including a
+  // new one that has since been given Rosa. The voice decides, so the backend
+  // written for a voice that did not exist yet does not stand.
+  if (
+    candidate.replyVoice === "it-IT-Rosa" &&
+    candidate.replyBackend === "piper"
+  ) {
+    return { ...candidate, replyBackend: "mai" };
+  }
   return candidate;
 }
 
@@ -532,17 +563,25 @@ function chordProblem(chordStr: unknown): string | undefined {
  * - Out-of-domain properties safely fall back to DEFAULT_VOICE_SETTINGS.
  * - Records Italian explanations for all repairs applied.
  */
-export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
+export function normalizeSettings(
+  raw: unknown,
+  options?: { testIdentity?: boolean },
+): NormalizedVoiceSettings {
+  const testIdentity = options?.testIdentity === true;
   const corrections: string[] = [];
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     corrections.push(t("vui.fix.defaults"));
-    return {
-      ...DEFAULT_VOICE_SETTINGS,
-      settings: DEFAULT_VOICE_SETTINGS,
-      corrections,
-      migrations: [],
-    };
+    // ADE Test never starts on a voice that spends a key. Everyone else does:
+    // a profile with nothing in it is a new one, and a new one is Rosa.
+    const settings = testIdentity
+      ? {
+          ...DEFAULT_VOICE_SETTINGS,
+          replyVoice: "ugo" as const,
+          replyBackend: "piper" as const,
+        }
+      : DEFAULT_VOICE_SETTINGS;
+    return { ...settings, settings, corrections, migrations: [] };
   }
 
   let candidate = raw as Record<string, unknown>;
@@ -564,7 +603,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       if (wakeWordEnabled()) migrations.push("listening-off");
     }
     candidate = toKokoro(candidate);
-    candidate = toMai(candidate);
+    candidate = toMai(candidate, testIdentity);
     version = CURRENT_SETTINGS_VERSION;
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -622,7 +661,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      * Version 9: MAI arrives, and a profile is left speaking what it was
      * speaking. See `toMai`.
      */
-    if (version < 9) candidate = toMai(candidate);
+    if (version < 9) candidate = toMai(candidate, testIdentity);
     version = CURRENT_SETTINGS_VERSION;
   }
 

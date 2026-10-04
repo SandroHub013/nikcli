@@ -43,7 +43,7 @@ export interface MaiSpeakerDeps {
    * `payment` is the one with its own sentence, because it is the one the user
    * can fix by adding credit.
    */
-  notice: (kind: MaiFailureKind) => string;
+  notice: (kind: MaiFailureKind, keyWasPresent: boolean) => string | undefined;
   /** A sentence was spoken, with what it was reserved at. Settlement is the caller's. */
   onSpoken?: (info: {
     generationId?: string;
@@ -60,11 +60,25 @@ export interface MaiSpeaker extends Speaker {
 }
 
 /** What the user is told, once, when the cloud voice cannot answer. */
-export function maiFallbackNotice(kind: MaiFailureKind): string {
+/**
+ * What the user is told, or nothing.
+ *
+ * No key at all is the ordinary state of a profile that has not added one yet,
+ * and it is read locally without a word. A key that disappears between one
+ * sentence and the next is not ordinary: the reply started on the cloud voice
+ * and finished on another, and that is worth saying. So is a bill that cannot
+ * be paid.
+ */
+export function maiFallbackNotice(
+  kind: MaiFailureKind,
+  keyWasPresent: boolean,
+): string | undefined {
   if (kind === "payment")
     return "Credito OpenRouter esaurito: uso la voce locale.";
-  if (kind === "no-key" || kind === "unauthorized")
-    return "Manca la chiave OpenRouter: uso la voce locale.";
+  if (kind === "no-key")
+    return keyWasPresent
+      ? "Manca la chiave OpenRouter: uso la voce locale."
+      : undefined;
   return "La voce cloud non è disponibile: uso la voce locale.";
 }
 
@@ -78,10 +92,15 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
     return maiVoice(voice as MaiVoiceId)?.id;
   }
 
-  async function sayLocal(text: string, kind: MaiFailureKind): Promise<void> {
+  async function sayLocal(
+    text: string,
+    kind: MaiFailureKind,
+    keyWasPresent: boolean,
+  ): Promise<void> {
     if (!notified) {
       notified = true;
-      await deps.local.speak(deps.notice(kind));
+      const line = deps.notice(kind, keyWasPresent);
+      if (line) await deps.local.speak(line);
     }
     if (text.trim().length > 0) await deps.local.speak(text);
   }
@@ -97,13 +116,14 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
         await deps.local.speak(clean);
         return;
       }
-      if (!deps.hasKey()) {
-        await sayLocal(clean, "no-key");
+      const hadKey = deps.hasKey();
+      if (!hadKey) {
+        await sayLocal(clean, "no-key", false);
         return;
       }
       const blocked = breaker.blocked(deps.client.now?.() ?? Date.now());
       if (blocked) {
-        await sayLocal(clean, blocked.kind);
+        await sayLocal(clean, blocked.kind, true);
         return;
       }
 
@@ -113,7 +133,7 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
         if (mine !== generation) return;
         if (!deps.hasKey()) {
           breaker.trip("no-key", deps.client.now?.() ?? Date.now());
-          await sayLocal(pending.join(" "), "no-key");
+          await sayLocal(pending.join(" "), "no-key", true);
           return;
         }
         const unit = units[i]!;
@@ -140,7 +160,7 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
             deps.client.now?.() ?? Date.now(),
             error instanceof MaiError ? error.retryAfterMs : undefined,
           );
-          await sayLocal(pending.join(" "), kind);
+          await sayLocal(pending.join(" "), kind, true);
           return;
         }
         pending = units.slice(i + 1);

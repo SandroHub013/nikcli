@@ -58,7 +58,7 @@ function world(
       },
       cancel: () => calls.push("cancel"),
     },
-    notice: maiFallbackNotice,
+    notice: (kind, hadKey) => maiFallbackNotice(kind, hadKey),
   };
   return {
     deps,
@@ -94,17 +94,13 @@ describe("MAI davanti alla voce locale", () => {
     expect(w.spoken).toEqual(["Ciao."]);
   });
 
-  test("senza chiave va alla voce locale, una volta sola il perché", async () => {
+  test("senza chiave va alla voce locale, in silenzio", async () => {
     const w = world({ key: undefined });
     const speaker = createMaiSpeaker(w.deps);
     await speaker.speak("Prima.");
     await speaker.speak("Seconda.");
     expect(w.fetchCount()).toBe(0);
-    expect(
-      w.spoken.filter((text) => text.startsWith("Manca la chiave")),
-    ).toHaveLength(1);
-    expect(w.spoken).toContain("Prima.");
-    expect(w.spoken).toContain("Seconda.");
+    expect(w.spoken).toEqual(["Prima.", "Seconda."]);
   });
 
   test("un 402 legge il resto con la voce locale e non riprova", async () => {

@@ -191,15 +191,16 @@ function piperVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
 export function replyVoiceFor(
   chosen: ReplyVoice,
   locale: TtsLocale,
+  local: ReplyVoice = "ugo",
 ): ReplyVoice {
   if (chosen === "system") return "system";
   const mai = maiVoice(chosen);
   if (mai) {
-    // Italian only. Any other language goes to the Piper voice of the same
-    // gender, and the choice stays where the user put it: nothing is written
-    // here, the same way a Kokoro voice on an Italian reply is not.
+    // Italian only. Any other language goes to the local voice, which is the
+    // one the profile had before MAI and not a voice invented here: a profile
+    // that was on Kokoro stays on Kokoro. Nothing is written.
     if (locale === "it-IT") return chosen;
-    return mai.gender === "f" ? "paola" : "ugo";
+    return isMaiVoice(local) ? (mai.gender === "f" ? "paola" : "ugo") : local;
   }
   const kokoro = kokoroVoice(chosen);
   if (!kokoro) return piperVoiceFor(chosen, locale);
@@ -220,13 +221,14 @@ export function replyVoiceFor(
 export function replyVoiceChain(
   chosen: ReplyVoice,
   locale: TtsLocale,
+  local: ReplyVoice = "ugo",
 ): ReplyVoice[] {
-  const first = replyVoiceFor(chosen, locale);
+  const first = replyVoiceFor(chosen, locale, local);
   if (first === "system") return ["system"];
-  // MAI spends a key, so the step under it is the local voice of the same
-  // gender: a cloud that cannot answer is still an answer, and it is offline.
+  // MAI spends a key, so the step under it is the local voice the profile had:
+  // a cloud that cannot answer is still an answer, and it is offline.
   if (isMaiVoice(first))
-    return [first, maiVoice(first)!.gender === "f" ? "paola" : "ugo", "system"];
+    return [first, replyVoiceFor(chosen, "en-US", local), "system"];
   if (!isKokoroVoice(first)) return [first, "system"];
   return [first, piperVoiceFor("lessac", locale), "system"];
 }
@@ -291,10 +293,41 @@ export function speakingReplyVoice(
   chosen: ReplyVoice,
   ttsLocale: TtsLocale,
   ui: Locale,
+  local: ReplyVoice = "ugo",
 ): ReplyVoice {
-  if (!isKokoroVoice(chosen) && !isMaiVoice(chosen))
-    return activeReplyVoice(chosen, ui);
+  if (isMaiVoice(chosen))
+    return replyVoiceFor(
+      chosen,
+      ttsLocale === "it-IT" ? "it-IT" : "en-US",
+      local,
+    );
+  if (!isKokoroVoice(chosen)) return activeReplyVoice(chosen, ui);
   return replyVoiceFor(chosen, ttsLocale);
+}
+
+/**
+ * Which voice reads one reply, decided from the reply itself.
+ *
+ * The text says, and the interface answers when the text does not. MAI only
+ * reads Italian, so a reply in any other language — or one the text does not
+ * decide, on an English interface — goes to the local voice the profile had
+ * before MAI. `ttsLocale` is not asked: with MAI it is always Italian, and
+ * letting it decide would read an English reply with an Italian mouth.
+ */
+export function maiReplyVoice(input: {
+  text: string;
+  ui: Locale;
+  chosen: ReplyVoice;
+  local?: ReplyVoice;
+}): ReplyVoice {
+  const detected = detectReplyLanguage(input.text);
+  const italian =
+    detected === "it" || (detected === undefined && input.ui !== "en");
+  return replyVoiceFor(
+    input.chosen,
+    italian ? "it-IT" : "en-US",
+    input.local ?? "ugo",
+  );
 }
 
 /**
