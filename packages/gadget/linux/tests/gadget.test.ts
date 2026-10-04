@@ -40,7 +40,7 @@ describe("Gadget.invoke", () => {
       callID: "c1",
       command: "echo.say",
       args: { text: "hi" },
-      deadline: Date.now() + 1000,
+      timeoutMs: 1000,
     })
     expect(result).toEqual({ output: "hi" })
   })
@@ -51,7 +51,7 @@ describe("Gadget.invoke", () => {
       callID: "c2",
       command: "echo.say",
       args: { text: "x".repeat(40) },
-      deadline: Date.now() + 1000,
+      timeoutMs: 1000,
     })
     expect(result.truncated).toBe(true)
     expect(result.output.startsWith("x".repeat(16))).toBe(true)
@@ -65,7 +65,7 @@ describe("Gadget.invoke", () => {
       callID: "c3",
       command: "slow.wait",
       args: {},
-      deadline: Date.now() + 50,
+      timeoutMs: 50,
     })
     expect(Date.now() - started).toBeLessThan(2_000)
     expect(result.isError).toBe(true)
@@ -78,7 +78,7 @@ describe("Gadget.invoke", () => {
       callID: "c4",
       command: "nope.x",
       args: {},
-      deadline: Date.now() + 1000,
+      timeoutMs: 1000,
     })
     expect(result).toEqual({ output: "unknown command nope.x", isError: true })
   })
@@ -120,5 +120,13 @@ describe("readFrames", () => {
       { type: "ping", time: 1 },
       { type: "bye", reason: "x" },
     ])
+  })
+})
+
+describe("fingerprint", () => {
+  test("is a stable 32-hex value", async () => {
+    const { fingerprint } = await import("../src/state.ts")
+    expect(fingerprint()).toMatch(/^[0-9a-f]{32}$/)
+    expect(fingerprint()).toBe(fingerprint())
   })
 })

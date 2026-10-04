@@ -160,11 +160,19 @@ describe("a gadget end to end", () => {
     const { pairing } = await connect(gadget)
     const first = await gadget.send("front door opened")
     expect(first.sessionID).toBe("ses_new")
-    await gadget.send("and closed", "ses_01")
+    await gadget.send("and closed", first.sessionID)
     expect(calls.messages).toEqual([
       { device: pairing.id, text: "front door opened", sessionID: undefined },
-      { device: pairing.id, text: "and closed", sessionID: "ses_01" },
+      { device: pairing.id, text: "and closed", sessionID: "ses_new" },
     ])
+  })
+
+  test("a device cannot write into a session it did not start", async () => {
+    const gadget = plain()
+    await connect(gadget)
+    const error = await rejection(gadget.send("hello", "ses_operators_own"))
+    expect((error as GadgetError).tag).toBe("Denied")
+    expect(calls.messages).toEqual([])
   })
 
   test("a button press reaches the host and says whether it was handled", async () => {
@@ -286,6 +294,67 @@ describe("the routes", () => {
       body: JSON.stringify({ text: "hi" }),
     })
     expect(crossed.status).toBe(403)
+  })
+
+  test("a device that has not pressed its button reaches nothing", async () => {
+    const paired = bridge.registry.pair({
+      code: bridge.registry.openPairing().code,
+      name: "needs-button",
+      platform: { os: "linux", arch: "arm64" },
+      fingerprint: "button-device-0123456789",
+      button: true,
+    })
+    expect(paired.confirm).toBe(true)
+    const post = (path: string, body: unknown) =>
+      admin(`/devices/${paired.id}${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${paired.token}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    for (const [path, body] of [
+      ["/message", { text: "inject this" }],
+      ["/event", { kind: "press", key: "ok" }],
+      ["/result", { callID: "x", output: "" }],
+    ] as const) {
+      const refused = await post(path, body)
+      expect(refused.status).toBe(409)
+      expect(((await refused.json()) as { error: { tag: string } }).error.tag).toBe("Unconfirmed")
+    }
+    expect(calls.messages).toEqual([])
+    // Pressing the button is what opens the door.
+    const confirmed = await admin("/pair/confirm", {
+      method: "POST",
+      headers: { authorization: `Bearer ${paired.token}` },
+      body: "{}",
+    })
+    expect(confirmed.status).toBe(200)
+    expect((await post("/message", { text: "now it may" })).status).toBe(202)
+  })
+
+  test("admin routes refuse what a browser sends", async () => {
+    const get = (headers: Record<string, string>) => admin("/admin/devices", { headers })
+    const tag = async (response: Response) => ((await response.json()) as { error: { tag: string } }).error.tag
+    const withOrigin = await get({ origin: "http://evil.example" })
+    expect(withOrigin.status).toBe(403)
+    expect(await tag(withOrigin)).toBe("Denied")
+    const rebound = await get({ host: "evil.example:4097" })
+    expect(rebound.status).toBe(403)
+    const textPlain = await admin("/admin/pair", {
+      method: "POST",
+      headers: { "content-type": "text/plain", "content-length": "2" },
+      body: "{}",
+    })
+    expect(textPlain.status).toBe(400)
+    // What the TUI and the CLI send is still welcome.
+    for (const host of ["127.0.0.1:4097", "localhost:4097", "[::1]:4097", "localhost"]) {
+      expect((await get({ host })).status).toBe(200)
+    }
+    const json = await admin("/admin/pair", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    })
+    expect(json.status).toBe(200)
   })
 
   test("admin routes answer this machine only", async () => {

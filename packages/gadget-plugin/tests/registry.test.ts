@@ -116,6 +116,12 @@ describe("hello", () => {
     expect(tag(error)).toBe("Denied")
   })
 
+  test("a hello that leaves the fingerprint out is refused too", () => {
+    const { registry, id } = online()
+    const bare = hello({ platform: { os: "linux", arch: "arm64" } })
+    expect(tag(throws(() => registry.hello(id, bare)))).toBe("Denied")
+  })
+
   test("a bad hello leaves the previous declaration in place", () => {
     const { registry, id } = online()
     expect(
@@ -142,7 +148,9 @@ describe("invocations", () => {
     const [frame] = feed.invokes()
     expect(frame?.command).toBe("system.run")
     expect(frame?.args).toEqual({ argv: ["uptime"] })
-    expect(frame!.deadline).toBeGreaterThan(Date.now())
+    // Relative, not an absolute time: the device's clock is not the bridge's clock.
+    expect(frame?.timeoutMs).toBe(5_000)
+    expect(frame && "deadline" in frame).toBe(false)
     expect(registry.result(id, { callID: frame!.callID, output: "up 1 day", exitCode: 0, isError: false })).toBe(true)
     const result = await pending
     expect(result).toMatchObject({ output: "up 1 day", exitCode: 0, isError: false, truncated: false })
@@ -279,6 +287,27 @@ describe("display and messages", () => {
     expect(error.retryAfterMs).toBeGreaterThan(0)
     now += 60_001
     registry.admitMessage(id, "hi")
+  })
+
+  test("the message limit holds for a device with no feed open, which is how `send` works", () => {
+    let now = 10_000
+    const registry = new Registry({ now: () => now })
+    const { id } = registry.pair(pairRequest(registry.openPairing().code))
+    expect(registry.online(id)).toBe(false)
+    for (let i = 0; i < LIMITS.MESSAGE_RATE_PER_MIN; i++) registry.admitMessage(id, "hi")
+    expect(tag(throws(() => registry.admitMessage(id, "hi")))).toBe("RateLimited")
+    now += 60_001
+    registry.admitMessage(id, "hi")
+  })
+
+  test("a device may continue only the sessions it started, and the list is capped", () => {
+    const { registry, id } = online()
+    expect(registry.ownsSession(id, "ses_a")).toBe(false)
+    registry.rememberSession(id, "ses_a")
+    expect(registry.ownsSession(id, "ses_a")).toBe(true)
+    for (let i = 0; i < 60; i++) registry.rememberSession(id, `ses_${i}`)
+    expect(registry.ownsSession(id, "ses_a")).toBe(false)
+    expect(registry.ownsSession(id, "ses_59")).toBe(true)
   })
 
   test("an empty message is a bad request", () => {

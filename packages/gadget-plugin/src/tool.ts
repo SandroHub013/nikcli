@@ -13,6 +13,9 @@ import { tool } from "@nikcli-ai/plugin/tool"
 import { GadgetError, type GadgetInfo, type InvokeResult } from "@nikcli-ai/gadget/protocol"
 import type { Bridge } from "./bridge.ts"
 
+/** Commands that run whatever they are given. */
+const OPEN_ENDED = new Set(["system.run", "file.write"])
+
 const DESCRIPTION = `Work with gadgets: devices (a Raspberry Pi, a microcontroller, a panel) paired with this nikcli.
 
 Actions:
@@ -147,7 +150,10 @@ export function createGadgetTool(bridge: () => Bridge | undefined) {
               await ctx.ask({
                 permission: "gadget",
                 patterns: [`${device}:${command}`],
-                always: [`${device}:${command}`],
+                // `system.run` and `file.write` take any argument, so "always allow" would allow `rm -rf` as readily as `ls`:
+                // they are asked every time unless the user writes a rule by hand. A command the gadget's author declared
+                // with a narrow purpose can be remembered.
+                always: OPEN_ENDED.has(command) ? [] : [`${device}:${command}`],
                 metadata: { action: "run", device, command, args: input.args ?? {} },
               })
             }

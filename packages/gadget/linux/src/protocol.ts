@@ -37,6 +37,8 @@ export const LIMITS = {
   MAX_BODY_BYTES: 4 * 1024 * 1024 + 256 * 1024,
   /** Drawing bounds — the same the nikcli mod surface enforces. */
   TREE_MAX_DEPTH: 16,
+  /** A Box's `gap` and `padding`, in cells: layout work grows with them. */
+  TREE_MAX_SPACING: 16,
   TREE_MAX_NODES: 2_000,
   TREE_MAX_TEXT: 10_000,
   /** Commands a hello may declare. */
@@ -142,8 +144,11 @@ export type Frame =
       readonly callID: string
       readonly command: string
       readonly args: Record<string, unknown>
-      /** Unix ms. The device aborts the handler at this instant. */
-      readonly deadline: number
+      /**
+       * How long the device has, from receiving this frame. Relative on purpose: the bridge's clock and the
+       * device's are not the same clock, and a Pi with no battery-backed RTC can be hours off before NTP.
+       */
+      readonly timeoutMs: number
     }
   | {
       readonly type: "show"
@@ -351,6 +356,17 @@ export function treeProblem(tree: unknown): string | undefined {
     if (element.props !== undefined && (typeof element.props !== "object" || element.props === null))
       return "props must be an object"
     const props = (element.props ?? {}) as Record<string, unknown>
+    if (element.type === "Box") {
+      for (const name of ["gap", "padding"] as const) {
+        const value = props[name]
+        if (
+          value !== undefined &&
+          (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > LIMITS.TREE_MAX_SPACING)
+        ) {
+          return `Box ${name} must be a whole number from 0 to ${LIMITS.TREE_MAX_SPACING}`
+        }
+      }
+    }
     if (element.type === "Button") {
       if (typeof element.key !== "string" || !element.key) return "Button needs a key"
       if (typeof props.label !== "string") return "Button needs a label"

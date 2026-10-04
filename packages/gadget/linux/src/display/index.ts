@@ -10,7 +10,7 @@
  */
 import { openSync, writeSync, closeSync } from "node:fs"
 import type { BitmapFrame, DisplaySpec, Tree, TreeNode } from "../protocol.ts"
-import { CELL_HEIGHT, CELL_WIDTH } from "../protocol.ts"
+import { CELL_HEIGHT, CELL_WIDTH, LIMITS } from "../protocol.ts"
 import { FONT_5X7, GLYPH_WIDTH, GLYPH_HEIGHT } from "./font.ts"
 
 export interface Viewport {
@@ -85,6 +85,13 @@ function textOf(children: readonly TreeNode[]): string {
     .join("")
 }
 
+/** A Box's gap or padding, clamped: layout work is proportional to it, and a tree can come from anywhere. */
+function spacing(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(Math.max(0, Math.floor(value)), LIMITS.TREE_MAX_SPACING)
+    : 0
+}
+
 function render(node: Tree, width: number): string[] {
   switch (node.type) {
     case "Text":
@@ -96,10 +103,10 @@ function render(node: Tree, width: number): string[] {
     case "Button":
       return [`[${node.props.label}]`.slice(0, width)]
     case "Box": {
-      const padding = Math.max(0, node.props.padding ?? 0)
+      const padding = spacing(node.props.padding)
       const border = node.props.borderStyle ? 1 : 0
       const inner = Math.max(1, width - 2 * (padding + border))
-      const gap = Math.max(0, node.props.gap ?? 0)
+      const gap = spacing(node.props.gap)
       const parts = node.children
         .filter((child): child is Tree | string | number => child !== null && child !== undefined && child !== false)
         .map((child) => (typeof child === "object" ? render(child, inner) : wrap(String(child), inner)))

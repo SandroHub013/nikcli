@@ -63,25 +63,42 @@ export function clearPairing(): void {
   if (existsSync(file)) unlinkSync(file)
 }
 
+/** Names of physical network interfaces on Linux and macOS; docker0, veth*, br-*, tun*, wg* and the like do not match. */
+const PHYSICAL = /^(en|eth|wl|ww)/
+
+function machineID(): string | undefined {
+  for (const file of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) {
+    try {
+      const id = readFileSync(file, "utf8").trim()
+      if (id.length >= 16) return id
+    } catch {
+      // Not a systemd or dbus host.
+    }
+  }
+  return undefined
+}
+
+function physicalMACs(): string[] {
+  const macs: string[] = []
+  for (const [name, list] of Object.entries(networkInterfaces())) {
+    if (!PHYSICAL.test(name)) continue
+    for (const iface of list ?? []) {
+      if (!iface.internal && iface.mac && iface.mac !== "00:00:00:00:00:00") macs.push(iface.mac)
+    }
+  }
+  return macs.sort()
+}
+
 /**
  * A stable identity for this machine, hashed so the bridge stores no MAC
- * address: the first non-internal MAC, else `/etc/machine-id`, else the
- * hostname. The bridge binds the token to it and refuses a hello from
- * anywhere else.
+ * address or machine id: the OS machine id when there is one, else the MACs of
+ * its physical interfaces, else its hostname. Virtual interfaces are left out
+ * on purpose — containers, bridges and VPNs come and go, and a fingerprint that
+ * changes with them locks the device out of its own pairing. The bridge binds
+ * the token to this value and refuses a hello from anywhere else.
  */
 export function fingerprint(): string {
-  const parts: string[] = []
-  for (const list of Object.values(networkInterfaces())) {
-    for (const iface of list ?? []) {
-      if (!iface.internal && iface.mac && iface.mac !== "00:00:00:00:00:00") parts.push(iface.mac)
-    }
-  }
-  if (parts.length === 0) {
-    try {
-      parts.push(readFileSync("/etc/machine-id", "utf8").trim())
-    } catch {
-      parts.push(hostname())
-    }
-  }
-  return createHash("sha256").update(parts.sort().join("|")).digest("hex").slice(0, 32)
+  const id = machineID()
+  const parts = id ? ["machine-id", id] : physicalMACs().length ? ["mac", ...physicalMACs()] : ["host", hostname()]
+  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 32)
 }

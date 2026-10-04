@@ -30,13 +30,11 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-RUNTIME=""
-if command -v bun >/dev/null 2>&1; then RUNTIME="$(command -v bun)"; fi
-if [ -z "$RUNTIME" ] && command -v node >/dev/null 2>&1; then RUNTIME="$(command -v node) --experimental-strip-types"; fi
-if [ -z "$RUNTIME" ]; then
-  echo "neither bun nor node >= 20 found on PATH" >&2
+if ! command -v bun >/dev/null 2>&1; then
+  echo "bun is required: the SDK ships TypeScript, which Node will not run from node_modules (https://bun.sh)" >&2
   exit 1
 fi
+RUNTIME="$(command -v bun)"
 
 FROM="$(cd "$FROM" && pwd)"
 GADGET_FILE=""

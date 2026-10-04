@@ -199,7 +199,8 @@ describe("the gadget tool", () => {
       {
         permission: "gadget",
         patterns: [`${pairing.id}:system.run`],
-        always: [`${pairing.id}:system.run`],
+        // system.run takes any argv, so there is no "always allow" to offer for it.
+        always: [],
         metadata: { action: "run", device: pairing.id, command: "system.run", args: { argv: ["echo", "hi"] } },
       },
     ])
@@ -239,6 +240,31 @@ describe("the gadget tool", () => {
       "open",
     )
     expect(executed).toEqual(["door.open"])
+  })
+
+  test("a command with a narrow purpose can be remembered; an open-ended one cannot", async () => {
+    const { execute } = await load()
+    const gadget = new Gadget({
+      name: "lamp",
+      log: () => undefined,
+      commands: {
+        "lamp.toggle": { description: "toggle the lamp", args: { type: "object" }, run: async () => "toggled" },
+      },
+    })
+    const pairing = await pairDevice(execute, gadget)
+    const asks: Ask[] = []
+    const ctx = context(asks)
+    await execute({ action: "run", device: pairing.id, command: "lamp.toggle" }, ctx)
+    await execute({ action: "run", device: pairing.id, command: "system.run", args: { argv: ["true"] } }, ctx)
+    await execute(
+      { action: "run", device: pairing.id, command: "file.write", args: { path: "/tmp/x", content: "" } },
+      ctx,
+    )
+    expect(asks.map((ask) => [ask.patterns[0], ask.always])).toEqual([
+      [`${pairing.id}:lamp.toggle`, [`${pairing.id}:lamp.toggle`]],
+      [`${pairing.id}:system.run`, []],
+      [`${pairing.id}:file.write`, []],
+    ])
   })
 
   test("typed failures reach the model by name", async () => {

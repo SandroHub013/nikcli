@@ -192,6 +192,7 @@ export class Bridge {
       if (parts[0] === "devices" && parts.length === 3) return await this.device(request, parts[1]!, parts[2]!, method)
       if (parts[0] === "admin") {
         if (!local) throw new GadgetError("Denied", "the admin routes answer callers on this machine only")
+        this.refuseBrowsers(request)
         return await this.admin(request, parts.slice(1), method)
       }
       return json(
@@ -214,6 +215,8 @@ export class Bridge {
   private async device(request: Request, id: string, action: string, method: string): Promise<Response> {
     const record = this.registry.authenticate(bearer(request))
     if (record.id !== id) throw new GadgetError("Denied", "this token belongs to another gadget")
+    // A device that has not pressed its button is not yet trusted with anything: not hello, not the feed, and not a session either.
+    if (!record.confirmed) throw new GadgetError("Unconfirmed", "press the gadget's button to finish pairing first")
     switch (`${method} ${action}`) {
       case "PUT hello": {
         this.registry.hello(id, await readJson(request))
@@ -257,13 +260,14 @@ export class Bridge {
         const body = await readJson<Partial<MessageBody>>(request)
         if (typeof body.text !== "string") throw new GadgetError("BadRequest", "text is required")
         this.registry.admitMessage(id, body.text)
+        const requested = typeof body.sessionID === "string" ? body.sessionID : undefined
+        if (requested !== undefined && !this.registry.ownsSession(id, requested)) {
+          throw new GadgetError("Denied", "a gadget can continue only the sessions it started")
+        }
         const hooks = this.options.hooks?.()
         if (!hooks) throw new GadgetError("Offline", "no nikcli instance is ready to take messages yet")
-        const sessionID = await hooks.message(
-          this.registry.get(id),
-          body.text,
-          typeof body.sessionID === "string" ? body.sessionID : undefined,
-        )
+        const sessionID = await hooks.message(this.registry.get(id), body.text, requested)
+        this.registry.rememberSession(id, sessionID)
         return json({ sessionID }, 202)
       }
       default:
@@ -316,6 +320,30 @@ export class Bridge {
   }
 
   // ----------------------------------------------------------------- admin
+
+  /**
+   * A loopback source address is not proof the caller is the operator: any web
+   * page the operator opens can send a request from their browser to
+   * 127.0.0.1, and a DNS-rebinding page can do it under its own hostname. The
+   * admin routes drive devices, so they refuse what a browser sends: a request
+   * with an `Origin` header, a `Host` that is not a loopback name, or a body
+   * that is not JSON (the only kind a page can send without a preflight is
+   * not). The TUI and the CLI send none of those.
+   */
+  private refuseBrowsers(request: Request) {
+    if (request.headers.has("origin")) {
+      throw new GadgetError("Denied", "the admin routes do not answer browsers")
+    }
+    const host = request.headers.get("host")
+    if (host !== null && !/^(127\.0\.0\.1|localhost|\[::1\])(:\d{1,5})?$/i.test(host)) {
+      throw new GadgetError("Denied", "the admin routes answer only under a loopback host name")
+    }
+    const hasBody = Number(request.headers.get("content-length") ?? "0") > 0
+    const type = request.headers.get("content-type") ?? ""
+    if (hasBody && !/^application\/json\b/i.test(type)) {
+      throw new GadgetError("BadRequest", "admin requests with a body must be application/json")
+    }
+  }
 
   private async admin(request: Request, parts: string[], method: string): Promise<Response> {
     if (parts[0] === "pair" && method === "POST") return json(this.registry.openPairing())

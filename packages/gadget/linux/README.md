@@ -1,15 +1,16 @@
 # nikcli Gadget — Linux SDK
 
 Turn a Raspberry Pi (3B+, 4, 5, Zero 2 W) or any Linux computer into a nikcli gadget: it runs commands for the agent,
-pushes messages into sessions, draws on a display and reports button presses. TypeScript, runs on **Bun** or
-**Node ≥ 20**, no native dependencies.
+pushes messages into sessions, draws on a display and reports button presses. TypeScript on **Bun**, no native
+dependencies. (The package ships TypeScript, which Node refuses to run from `node_modules`; a device without Bun can use
+the [C client](../c/README.md) instead.)
 
 ## Install
 
 On the device:
 
 ```sh
-curl -fsSL https://bun.sh/install | bash        # or use the Node you have
+curl -fsSL https://bun.sh/install | bash
 bunx @nikcli-ai/gadget init                       # writes gadget.ts
 bunx @nikcli-ai/gadget pair --server http://<nikcli-host>:4097 --code <code>
 bunx @nikcli-ai/gadget run gadget.ts

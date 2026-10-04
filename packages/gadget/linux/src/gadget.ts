@@ -34,7 +34,7 @@ import type { Button } from "./button/index.ts"
 export const SDK_VERSION = "1.427.0"
 
 export interface CommandContext {
-  /** Aborted at the bridge's deadline. Pass it to anything that can hang. */
+  /** Aborted when the command's time is up. Pass it to anything that can hang. */
   readonly signal: AbortSignal
   readonly deadline: number
   readonly maxOutputBytes: number
@@ -313,14 +313,14 @@ export class Gadget {
     const definition = this.commands.get(frame.command)
     if (!definition) return { output: `unknown command ${frame.command}`, isError: true }
     const controller = new AbortController()
-    const remaining = frame.deadline - Date.now()
-    if (remaining <= 0) return { output: "deadline already passed", isError: true }
+    const remaining = frame.timeoutMs
+    if (!Number.isFinite(remaining) || remaining <= 0) return { output: "invalid timeout", isError: true }
     const timer = setTimeout(() => controller.abort(new Error("deadline reached")), remaining)
     const maxOutputBytes = Math.min(definition.maxOutputBytes ?? LIMITS.DEFAULT_OUTPUT_BYTES, LIMITS.MAX_OUTPUT_BYTES)
     try {
       const value = await definition.run(frame.args ?? {}, {
         signal: controller.signal,
-        deadline: frame.deadline,
+        deadline: Date.now() + remaining,
         maxOutputBytes,
         callID: frame.callID,
         env: process.env,

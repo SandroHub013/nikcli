@@ -26,9 +26,6 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test linux/tests"
   },
-  "engines": {
-    "node": ">=20"
-  },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",

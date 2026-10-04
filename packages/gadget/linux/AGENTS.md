@@ -1,6 +1,6 @@
 # Linux SDK — for coding agents
 
-`@nikcli-ai/gadget`, TypeScript, Bun or Node ≥ 20. Source in `src/`, tests in `tests/`, runnable gadgets in `examples/`.
+`@nikcli-ai/gadget`, TypeScript on Bun. Source in `src/`, tests in `tests/`, runnable gadgets in `examples/`.
 
 ## Layout
 
@@ -28,7 +28,8 @@
 - Command names are `namespace.name`, lowercase; `parseHello` refuses anything else at construction time, on purpose.
 - Handlers return a string or `{ output, exitCode?, isError?, truncated? }`; they never throw for a user-visible
   failure — a thrown error becomes `isError: true` with its message, which hides the exit code.
-- No Bun-only APIs in `src/` except `cli.ts`'s shebang: the SDK has to run under Node on a Pi where Bun is not installed. `Bun.serve` is fine in tests.
+- `src/` avoids Bun-only APIs, so a compiled build could target Node, but the package ships TypeScript and needs Bun to run:
+  Node refuses to strip types under `node_modules`. `Bun.serve` is fine in tests.
 
 ## Testing
 

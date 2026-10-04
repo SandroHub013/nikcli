@@ -46,15 +46,17 @@ Two facts about the loader shaped the result and are recorded so nobody rediscov
 
 In scope, and implemented:
 
-1. `@nikcli-ai/gadget` (`packages/gadget`) — the device SDK, TypeScript on Bun or Node ≥ 20: `Gadget`, the four built-in
+1. `@nikcli-ai/gadget` (`packages/gadget`) — the device SDK, TypeScript on Bun (Node refuses to run TypeScript from
+   `node_modules`, and the package does not claim it), and a portable C client for devices without it: `Gadget`, the four built-in
    commands, display and button drivers, the transport, `nikcli-gadget pair|run|send|health|status|unpair|init`,
    `install.sh`, five examples, and the wire protocol in `linux/src/protocol.ts`.
 2. `@nikcli-ai/plugin-gadgets` (`packages/gadget-plugin`) — the bridge, the `gadget` tool and the TUI plugin.
 
 Non-goals, stated so nobody scopes them in by accident:
 
-- **No ESP32 firmware and no Nintendo Switch homebrew.** The protocol is plain JSON over HTTP and SSE so either can speak
-  it, but neither is written or built here, and nothing claims they work.
+- **No built ESP32 firmware and no Nintendo Switch homebrew.** The portable C client (`packages/gadget/c`) is built and
+  tested on a host; the ESP-IDF shell around it is written but has never been compiled, and no libnx shell exists. Nothing
+  claims either works on a device.
 - **No per-command tools.** They need the tool registry to re-derive on a device's hello, which today it does only on
   instance reload.
 - **No second transport and no change to nikcli's auth.** The bridge is a separate listener with its own token scheme.
@@ -75,17 +77,26 @@ Non-goals, stated so nobody scopes them in by accident:
    hello is accepted. Pairing always mints a fresh token. The same machine pairing again keeps its id, gets a new token,
    and the old one is revoked.
 4. **Tokens are device credentials.** `nkg_…`, hashed (SHA-256) at rest in a file written with mode 0600, compared in
-   constant time, bound to the device fingerprint (a hello from another machine is `Denied`), revocable. A revoked token
-   answers `TokenRevoked`, an unknown one `NotPaired`; the SDK stops retrying on either and tells the operator to pair
-   again. A token opens only its own device.
+   constant time, revocable. A hello must carry the fingerprint the device paired with — omitting it is refused as
+   `Denied`, not skipped — so a leaked token alone cannot take over the feed. The other device routes accept the token
+   alone, and say so here rather than claim more. A revoked token answers `TokenRevoked`, an unknown one `NotPaired`; the
+   SDK stops retrying on either and tells the operator to pair again. A token opens only its own device, and a device that
+   has not pressed its button opens nothing: `Unconfirmed` on every device route except the confirmation. The SDK's
+   fingerprint is the OS machine id, else the MACs of physical interfaces only, else the hostname; docker, veth, bridge
+   and VPN interfaces are left out because they come and go.
 5. **The bridge is a separate listener (default 4097).** The only unauthenticated routes are `GET /` and `POST /pair`, and
-   `/pair` needs the code. `/admin/*` answers only loopback callers with no `X-Forwarded-For` or `Forwarded` header.
+   `/pair` needs the code. `/admin/*` answers only loopback callers with no `X-Forwarded-For` or `Forwarded` header, and
+   refuses what a browser sends — a request with an `Origin`, a `Host` that is not a loopback name (DNS rebinding), or a
+   body that is not JSON — because a loopback source address is not proof the caller is the operator: any page the
+   operator has open can send a request from their browser to 127.0.0.1.
 6. **The invocation feed is one SSE stream per device.** Frames: `hello`, `invoke`, `show`, `message`, `ping`, `bye`. A
    ping every 15 s; a feed 256 frames behind is evicted and everything waiting on it fails `Offline`; a newer connection
    replaces the old one; a device with no feed is `Offline` immediately, not queued.
 7. **Invocations are serialized and bounded.** One command in flight per device and eight waiting behind it; the next
-   waiter is `Busy` with a retry time. The deadline runs from the moment a command is sent, not from when it was queued,
-   and the device aborts the handler at the same instant. A late result for a dropped call is discarded. A result is one
+   waiter is `Busy` with a retry time. The time allowed runs from the moment a command is sent, not from when it was queued,
+   and travels in the `invoke` frame as `timeoutMs`, relative to receipt: the bridge's clock and the device's are not the
+   same clock, and a Pi with no battery-backed RTC can be hours off before NTP. The device aborts the handler when it has
+   run that long. A late result for a dropped call is discarded. A result is one
    POST; output is cut at the command's `maxOutputBytes` (default 256 KB, ceiling 4 MB) and marked `truncated`. File
    commands move 64 KB chunks.
 8. **The built-in commands are Muse's four.** `system.run` (argv, no shell unless asked), `file.read` and `file.write`
@@ -95,16 +106,19 @@ Non-goals, stated so nobody scopes them in by accident:
 9. **The agent reaches a gadget through one tool, `gadget`.** Actions `list`, `health`, `run`, `show`, `send`, `pair`,
    `revoke`. `run` (except `device.health`), `pair` and `revoke` call `ctx.ask` with permission `gadget` and patterns
    `<device>:<command>`, `pair`, `<device>:revoke`; an unmatched call asks, a deny is a deny, and a denied call never
-   reaches the device. Typed failures reach the model as `GadgetError.<tag>: …`.
+   reaches the device. `system.run` and `file.write` take any argument, so they offer no "always allow": a stored rule for
+   them would allow `rm -rf` as readily as `ls`. A user who wants one writes the rule by hand. Typed failures reach the model as `GadgetError.<tag>: …`.
 10. **A device message is a session message.** `POST /devices/:id/message` starts a session titled "Gadget: <name>" or
-    continues the one named, and delivers the text prefixed `[gadget <id>]` through `session.promptAsync`; the answer is
-    202 with the session id. At most 60 messages a minute per device, then `RateLimited` with `retryAfterMs`. With no
+    continues one **that device started** — a device cannot write into the operator's other sessions — and delivers the text prefixed `[gadget <id>]` through `session.promptAsync`; the answer is
+    202 with the session id. At most 60 messages a minute per device, counted whether or not a feed is open (`send` has none), then `RateLimited`
+    with `retryAfterMs`. With no
     nikcli instance ready the answer is `Offline`, not a crash.
 11. **A button is a UI event.** `POST /devices/:id/event` is delivered as `mod.event` with `component: "Gadget"` and
     `requestId: <id>`, so a mod that drew a `Button` for the gadget answers it as it answers a terminal press; the reply
     says whether it was handled.
 12. **A display takes a bounded tree, or finished pixels.** `show` validates the tree against depth 16, 2,000 nodes and
-    10,000 characters (`treeProblem`) before it is sent. A `tree` display lays it out itself (`display.layout`) and draws it
+    10,000 characters, and a Box's `gap` and `padding` to whole numbers from 0 to 16 (`treeProblem`) before it is sent;
+    layout clamps them again on the device, because layout work grows with them and the bridge runs inside nikcli. A `tree` display lays it out itself (`display.layout`) and draws it
     with a driver (`terminal`, `framebuffer`). A `bitmap` display declares `width` and `height` in pixels (8 to 2048) and an
     optional `scale` (1 to 8); the bridge lays the tree out for the cells that fit, rasterizes it with a built-in 5×7 font and
     sends a `show` frame carrying `{ width, height, format: "1bpp", data }` — rows padded to bytes, most significant bit
@@ -143,7 +157,7 @@ PayloadTooLarge, RateLimited, TokenRevoked, PairingClosed, Unconfirmed, BadReque
 ## Runtime Topology
 
 ```text
-Device (Bun/Node on a Pi, or anything speaking HTTP+SSE)
+Device (Bun on a Pi, the C client on a microcontroller, or anything speaking HTTP+SSE)
   @nikcli-ai/gadget  new Gadget → hello, SSE feed, one handler per command, result POST
         │  HTTP + SSE, token nkg_…
         ▼
@@ -162,14 +176,16 @@ nikcli process
 - `packages/gadget/linux/src/gadget.ts`, `transport.ts`, `state.ts`, `cli.ts` — the runtime, the HTTP and SSE client,
   the pairing file, the CLI.
 - `packages/gadget/linux/src/commands/`, `display/`, `button/` — built-ins and drivers.
+- `packages/gadget/c/` — the C client (`include/nikcli_gadget.h`, `src/`), its POSIX host build, and an ESP-IDF shell that
+  has not been compiled.
 - `packages/gadget-plugin/src/registry.ts`, `bridge.ts`, `tool.ts`, `index.ts`, `tui.tsx`, `sidebar.tsx` — the plugin.
 - `packages/nikcli/test/plugin/gadgets.test.ts` and `packages/nikcli/test/tui/plugin-gadgets.test.ts` — the plugin through
   nikcli's own loader and through the real v2 TUI host.
 
 ## Failure and Cancellation
 
-A deadline cancels on both ends: the bridge fails the call with `Timeout` and forgets its id, the SDK aborts the
-handler's `signal`. A feed that goes away, is evicted, replaced or revoked fails every call waiting on it with `Offline`
+A timeout cancels on both ends: the bridge fails the call with `Timeout` and forgets its id, the SDK aborts the
+handler's `signal` (the C client passes the handler a deadline on its own clock). A feed that goes away, is evicted, replaced or revoked fails every call waiting on it with `Offline`
 before it is dropped, so a caller is never left awaiting a result the bridge has forgotten. A hello that fails
 validation leaves the previous declaration. A message with no instance ready is `Offline`. The SDK reconnects with
 bounded backoff and re-sends hello; it stops on `TokenRevoked` and `NotPaired`.
@@ -206,10 +222,20 @@ All run without hardware.
   before a pairing, one row per device with its state, nothing when the bridge is down.
 - Bitmap frames: protocol validation, pack and unpack, scale, the registry sending pixels instead of a tree, and the real
   SDK receiving them over HTTP (`packages/gadget/linux/tests/bitmap.test.ts`, registry and bridge tests).
+- The C client, compiled with `-Wall -Wextra -Werror` and AddressSanitizer, UBSan and LeakSanitizer, run as a separate
+  process against the real bridge (`packages/gadget-plugin/tests/c-client.test.ts`): pairing with a button, commands and
+  their failures, truncation, a handler that stops before its deadline, bitmap frames that span many reads, a frame
+  larger than the buffer, messages, presses, a wrong code, revocation, retry while the bridge is down. A sanitizer report
+  at exit fails the test.
+- One test per review finding: the admin routes refuse a browser's `Origin`, a rebound `Host` and a text/plain body; a
+  hostile `padding` or `gap` is refused and clamped; an unconfirmed device reaches nothing; the message limit holds with
+  no feed; a device cannot continue a session it did not start; `always` is empty for `system.run` and `file.write`; the
+  time allowed is relative; a program that closes its stdin cannot kill the gadget; a hello without the fingerprint is
+  refused.
 - A smoke with separate processes: a bridge in one, `nikcli-gadget pair` and `run` in another, `send` from a third.
 
-Not verified: any hardware (GPIO, framebuffer, the OBD-II example, `install.sh`), and the plugin enabled in a user's
-`nikcli.json` inside a live TUI session.
+Not verified: any hardware (GPIO, framebuffer, the OBD-II example, `install.sh`), the ESP-IDF shell (never compiled), and
+the plugin enabled in a user's `nikcli.json` inside a live TUI session.
 
 ## Migration and Rollback
 
@@ -217,8 +243,8 @@ Nothing is on by default: the plugin must be listed in `nikcli.json`. Removing t
 tool and the listener; paired devices stay in `devices.json` and come back when it is re-enabled. Nothing in nikcli's core
 changed, so there is nothing to revert.
 
-Later slices, each dependency-gated: per-command tools on registry re-derivation; ESP32 firmware and a Switch homebrew
-under their own specs; the nikcli-side mods the permission-beacon and deploy-key examples need; `plugin` options in
+Later slices, each dependency-gated: per-command tools on registry re-derivation; building and testing the ESP32 shell,
+and a libnx shell for a Switch, which would link the C client as is; the nikcli-side mods the permission-beacon and deploy-key examples need; `plugin` options in
 `nikcli.json` (a core change, and the reason the bridge reads the environment today).
 
 ## Muse ↔ nikcli Mapping

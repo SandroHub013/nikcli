@@ -81,6 +81,19 @@ describe("treeProblem", () => {
     )
     expect(treeProblem({ type: "Button", props: { label: "x" } })).toMatch(/key/)
     expect(treeProblem({ type: "Image", props: {} })).toMatch(/unknown node type/)
+    for (const bad of [
+      { padding: 300_000 },
+      { gap: 3e6 },
+      { gap: 1e10 },
+      { padding: -1 },
+      { gap: 1.5 },
+      { padding: Infinity },
+      { gap: NaN },
+      { padding: "3" },
+    ]) {
+      expect(treeProblem({ type: "Box", props: bad, children: ["a"] })).toMatch(/must be a whole number from 0 to 16/)
+    }
+    expect(treeProblem({ type: "Box", props: { gap: 16, padding: 16 }, children: ["a"] })).toBeUndefined()
   })
 })
 

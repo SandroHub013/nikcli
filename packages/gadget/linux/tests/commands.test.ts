@@ -35,6 +35,14 @@ describe("system.run", () => {
     expect(result).toMatchObject({ exitCode: 127, isError: true })
   })
 
+  test("a program that never reads its stdin cannot kill the gadget", async () => {
+    const big = "x".repeat(4 * 1024 * 1024)
+    const closed = await system.run({ argv: ["true"], stdin: big }, ctx())
+    expect(closed).toMatchObject({ exitCode: 0 })
+    const missing = await system.run({ argv: ["/definitely/not/here"], stdin: big }, ctx())
+    expect(missing).toMatchObject({ exitCode: 127, isError: true })
+  })
+
   test("aborts at the signal", async () => {
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 50)

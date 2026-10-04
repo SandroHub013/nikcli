@@ -37,6 +37,21 @@ describe("layout", () => {
   })
 })
 
+describe("layout work is bounded whatever the tree says", () => {
+  test("a hostile padding or gap is clamped, not honoured", () => {
+    const started = Date.now()
+    const padded = layout({ type: "Box", props: { padding: 300_000 }, children: ["a"] }, { columns: 40, rows: 8 })
+    const spaced = layout(
+      { type: "Box", props: { gap: 1e10, direction: "row" }, children: ["a", "b"] },
+      { columns: 40, rows: 8 },
+    )
+    expect(Date.now() - started).toBeLessThan(500)
+    expect(padded).toHaveLength(8)
+    expect(spaced).toHaveLength(8)
+    expect(spaced[0]!.length).toBeLessThanOrEqual(40)
+  })
+})
+
 describe("rasterize", () => {
   test("the font has 95 glyphs of 5 columns", () => {
     expect(FONT_5X7.length).toBe(95)

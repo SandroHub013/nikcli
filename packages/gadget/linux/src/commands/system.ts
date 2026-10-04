@@ -58,6 +58,8 @@ export const run: CommandHandler<SystemRunArgs> = async (args, ctx) => {
     if (which === "out") stdout += text
     else stderr += text
   }
+  // A program that exits (or never starts) before reading stdin closes the pipe: EPIPE on an unhandled stream error would take the whole gadget down.
+  child.stdin.on("error", () => undefined)
   child.stdout.on("data", (chunk: Buffer) => collect(chunk, "out"))
   child.stderr.on("data", (chunk: Buffer) => collect(chunk, "err"))
   if (args.stdin !== undefined) child.stdin.end(args.stdin)

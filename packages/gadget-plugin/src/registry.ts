@@ -47,6 +47,8 @@ interface DeviceRecord {
   confirmed: boolean
   lastSeen?: number
   hello?: Hello
+  /** Sessions this device started; the only ones it may continue. Newest last, capped. */
+  sessions?: string[]
 }
 
 interface Persisted {
@@ -70,7 +72,6 @@ interface Live {
   feed: Feed
   current?: Pending
   queue: Pending[]
-  messages: number[]
 }
 
 export interface RegistryOptions {
@@ -95,6 +96,8 @@ export class Registry {
   private readonly records = new Map<string, DeviceRecord>()
   private readonly revoked = new Set<string>()
   private readonly live = new Map<string, Live>()
+  /** Message times per device. Kept here, not on the live feed: a device that sends with no feed open is the common case. */
+  private readonly messageTimes = new Map<string, number[]>()
   private window: { code: string; expiresAt: number; failures: number } | undefined
   private readonly now: () => number
   private readonly file: string | undefined
@@ -236,8 +239,9 @@ export class Registry {
     const record = this.require(id)
     if (!record.confirmed) throw new GadgetError("Unconfirmed", "press the gadget's button to finish pairing first")
     const hello = parseHello(value)
-    if (hello.platform.machine !== undefined && hello.platform.machine !== record.fingerprint) {
-      throw new GadgetError("Denied", "this hello comes from a different machine than the one that paired")
+    // Required, not only checked when present: a stolen token without the fingerprint it was bound to cannot take over the feed.
+    if (hello.platform.machine === undefined || !same(hello.platform.machine, record.fingerprint)) {
+      throw new GadgetError("Denied", "this hello does not carry the fingerprint the gadget paired with")
     }
     record.hello = hello
     record.name = hello.name
@@ -255,7 +259,7 @@ export class Registry {
     const record = this.require(id)
     if (!record.hello) throw new GadgetError("HelloInvalid", "send hello before opening the feed")
     this.dropLive(id, "replaced by a newer connection")
-    const live: Live = { feed, queue: [], messages: [] }
+    const live: Live = { feed, queue: [] }
     this.live.set(id, live)
     record.lastSeen = this.now()
     feed.send({ type: "hello", id, time: this.now() })
@@ -375,7 +379,7 @@ export class Registry {
         callID: next.callID,
         command: next.command,
         args: next.args,
-        deadline: next.started + next.timeoutMs,
+        timeoutMs: next.timeoutMs,
       })
     } catch (error) {
       // push() dropped the device, which already rejected `next` through detach().
@@ -446,18 +450,30 @@ export class Registry {
     if (typeof text !== "string" || !text.trim()) throw new GadgetError("BadRequest", "text is required")
     if (Buffer.byteLength(text) > LIMITS.TREE_MAX_TEXT * 2)
       throw new GadgetError("PayloadTooLarge", "message is too long")
-    const live = this.live.get(id)
     const now = this.now()
-    const window = live ?? { messages: [] as number[] }
-    window.messages = window.messages.filter((at) => now - at < 60_000)
-    if (window.messages.length >= LIMITS.MESSAGE_RATE_PER_MIN) {
-      const retryAfterMs = Math.max(1, 60_000 - (now - window.messages[0]!))
+    const times = (this.messageTimes.get(id) ?? []).filter((at) => now - at < 60_000)
+    if (times.length >= LIMITS.MESSAGE_RATE_PER_MIN) {
+      const retryAfterMs = Math.max(1, 60_000 - (now - times[0]!))
       throw new GadgetError("RateLimited", `more than ${LIMITS.MESSAGE_RATE_PER_MIN} messages a minute`, {
         retryAfterMs,
       })
     }
-    window.messages.push(now)
-    if (live) live.messages = window.messages
+    times.push(now)
+    this.messageTimes.set(id, times)
+  }
+
+  /** Whether `sessionID` is one this device started. A device may continue only those. */
+  ownsSession(id: string, sessionID: string): boolean {
+    return this.require(id).sessions?.includes(sessionID) ?? false
+  }
+
+  /** Remember a session this device started. */
+  rememberSession(id: string, sessionID: string) {
+    const record = this.require(id)
+    const sessions = (record.sessions ?? []).filter((existing) => existing !== sessionID)
+    sessions.push(sessionID)
+    record.sessions = sessions.slice(-50)
+    this.save()
   }
 
   // ---------------------------------------------------------------- admin
@@ -501,6 +517,7 @@ export class Registry {
     }
     this.dropLive(id, "revoked")
     this.records.delete(id)
+    this.messageTimes.delete(id)
     this.revoked.add(record.tokenHash)
     this.save()
   }

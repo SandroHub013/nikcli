@@ -17,7 +17,7 @@ Two packages, one protocol:
 
 | Package                                          | Where              | What                                                                  |
 | ------------------------------------------------ | ------------------ | --------------------------------------------------------------------- |
-| `@nikcli-ai/gadget` (this directory)             | on the **device**  | The SDK and the `nikcli-gadget` CLI. TypeScript, Bun or Node ≥ 20.    |
+| `@nikcli-ai/gadget` (this directory)             | on the **device**  | The SDK and the `nikcli-gadget` CLI. TypeScript, runs on Bun.         |
 | `@nikcli-ai/plugin-gadgets` (`../gadget-plugin`) | next to **nikcli** | A nikcli plugin: the bridge, the `gadget` tool, `/gadget` in the TUI. |
 
 The wire protocol is one file, [`linux/src/protocol.ts`](linux/src/protocol.ts): JSON over HTTP and one server-sent-events
@@ -53,12 +53,13 @@ stream per device. `curl` can pair a device.
 
 ## What is in here
 
-| Path               | What                                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `linux/src/`       | The SDK: `Gadget`, built-in commands, display and button drivers, the transport, the CLI, the protocol. |
-| `linux/tests/`     | Unit tests, no hardware needed.                                                                         |
-| `linux/examples/`  | Five gadgets to start from. **Written against the SDK and typechecked; not run on real hardware.**      |
-| `linux/install.sh` | Installs a gadget as a systemd service. **Not run in CI.**                                              |
+| Path               | What                                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `linux/src/`       | The SDK: `Gadget`, built-in commands, display and button drivers, the transport, the CLI, the protocol.               |
+| `linux/tests/`     | Unit tests, no hardware needed.                                                                                       |
+| `linux/examples/`  | Five gadgets to start from. **Written against the SDK and typechecked; not run on real hardware.**                    |
+| `linux/install.sh` | Installs a gadget as a systemd service (needs Bun). **Not run in CI.**                                                |
+| `c/`               | The C client, for devices without Bun: tested on a host against the real bridge. Its `esp32/` shell is **not built**. |
 
 ## Project ideas
 
@@ -75,9 +76,12 @@ stream per device. `curl` can pair a device.
 - **Home Assistant hands.** What Muse's Home Link does, in forty lines. `linux/examples/home-assistant.ts`.
 - **Homelab watchdog.** `device.health` on every box you own and a restart command behind an ask — the SDK with no code.
 
-Not built here, but they would speak the same protocol and need only an HTTP client and the paired token: an **ESP32**
-build light (needs ESP-IDF firmware), and a **Nintendo Switch Lite** with custom firmware as the agent's handheld remote
-(needs homebrew built with devkitPro). Both are ideas, not features; nothing in this repository builds them.
+Not built, and not claimed: the **ESP32** shell in `c/esp32` has never been compiled (it needs ESP-IDF), and there is no
+**Nintendo Switch** shell at all (it would link the same C client and needs devkitPro and libnx). Both are starting points
+or ideas, not features.
+
+A smartwatch that runs its own closed firmware (a Redmi Watch, an Apple Watch) cannot be a gadget: it has no way to join
+your LAN or run code. It can still show the agent's notifications through the phone's nikcli app.
 
 ## Security, in one paragraph
 
