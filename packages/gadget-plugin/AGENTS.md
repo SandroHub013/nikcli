@@ -13,6 +13,8 @@ The nikcli side of gadgets. Read `../gadget/AGENTS.md` first for the rules that 
   `TUI_HOST_CAPABILITIES`. The sidebar is TSX compiled by the host's Solid transform; colours are fixed because an external
   plugin has no handle on the theme. The tests here preload `@opentui/solid/preload` (`bunfig.toml`); the render test is
   `packages/nikcli/test/tui/gadgets-sidebar.test.tsx`.
+- Never add a route to `/admin` that runs a command or draws: over HTTP it bypasses the `ctx.ask` in `src/tool.ts`, because any
+  local process can call it. Those stay in-process, behind the tool.
 - Do not import from `packages/nikcli`. The plugin reaches the instance only through `PluginInput.client`.
 
 `nikcli.json` takes bare plugin specifiers; settings are environment variables (see the README).

@@ -111,6 +111,12 @@ export interface Hello {
   readonly buttons?: readonly string[]
   /** Whether the device records audio for push-to-talk. */
   readonly audio?: boolean
+  /**
+   * The largest frame, in bytes of JSON, the device can read. The bridge refuses to send a bigger `invoke`, `show` or
+   * `message` (`PayloadTooLarge`) instead of sending what the device would drop, which would leave the call to time out.
+   * Absent means no limit worth stating.
+   */
+  readonly maxFrameBytes?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -513,6 +519,16 @@ export function parseHello(value: unknown): Hello {
     })
   }
   if (raw.audio !== undefined && typeof raw.audio !== "boolean") fail("audio must be a boolean")
+  const maxFrameBytes = raw.maxFrameBytes
+  if (
+    maxFrameBytes !== undefined &&
+    (typeof maxFrameBytes !== "number" ||
+      !Number.isInteger(maxFrameBytes) ||
+      maxFrameBytes < 512 ||
+      maxFrameBytes > LIMITS.MAX_BODY_BYTES)
+  ) {
+    fail(`maxFrameBytes must be a whole number from 512 to ${LIMITS.MAX_BODY_BYTES}`)
+  }
   return {
     protocol: PROTOCOL_VERSION,
     name: raw.name.trim(),
@@ -522,6 +538,7 @@ export function parseHello(value: unknown): Hello {
     ...(display === undefined ? {} : { display }),
     ...(buttons === undefined ? {} : { buttons }),
     ...(raw.audio === undefined ? {} : { audio: raw.audio as boolean }),
+    ...(maxFrameBytes === undefined ? {} : { maxFrameBytes: maxFrameBytes as number }),
   }
 }
 
@@ -539,8 +556,6 @@ export const ROUTES = {
     devices: "/admin/devices",
     pair: "/admin/pair",
     device: (id: string) => `/admin/devices/${encodeURIComponent(id)}`,
-    invoke: (id: string) => `/admin/devices/${encodeURIComponent(id)}/invoke`,
-    show: (id: string) => `/admin/devices/${encodeURIComponent(id)}/show`,
     message: (id: string) => `/admin/devices/${encodeURIComponent(id)}/message`,
     health: (id: string) => `/admin/devices/${encodeURIComponent(id)}/health`,
   },

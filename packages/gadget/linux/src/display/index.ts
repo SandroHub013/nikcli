@@ -75,12 +75,13 @@ export function plainMarkdown(text: string): string {
     .join("\n")
 }
 
-function textOf(children: readonly TreeNode[]): string {
+function textOf(children: readonly TreeNode[], width: number): string {
   return children
     .map((child) => {
       if (child === null || child === undefined || child === false) return ""
       if (typeof child === "string" || typeof child === "number") return String(child)
-      return render(child, Number.MAX_SAFE_INTEGER).join("\n")
+      // A node nested in a Text takes the width the Text has; there is no "unbounded" width to give it.
+      return render(child, width).join("\n")
     })
     .join("")
 }
@@ -92,10 +93,11 @@ function spacing(value: unknown): number {
     : 0
 }
 
-function render(node: Tree, width: number): string[] {
+function render(node: Tree, requested: number): string[] {
+  const width = Math.max(1, Math.min(Math.floor(requested) || 1, 1024))
   switch (node.type) {
     case "Text":
-      return wrap(textOf(node.children), width)
+      return wrap(textOf(node.children, width), width)
     case "Markdown":
       return wrap(plainMarkdown(node.props.text), width)
     case "Code":

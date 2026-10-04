@@ -98,6 +98,8 @@ export class Registry {
   private readonly live = new Map<string, Live>()
   /** Message times per device. Kept here, not on the live feed: a device that sends with no feed open is the common case. */
   private readonly messageTimes = new Map<string, number[]>()
+  /** Devices whose hello was accepted by this process. The stored declaration survives a restart; the proof of the fingerprint does not. */
+  private readonly greeted = new Set<string>()
   private window: { code: string; expiresAt: number; failures: number } | undefined
   private readonly now: () => number
   private readonly file: string | undefined
@@ -239,10 +241,13 @@ export class Registry {
     const record = this.require(id)
     if (!record.confirmed) throw new GadgetError("Unconfirmed", "press the gadget's button to finish pairing first")
     const hello = parseHello(value)
-    // Required, not only checked when present: a stolen token without the fingerprint it was bound to cannot take over the feed.
+    // Required, not only checked when present. The fingerprint identifies a device; it does not authenticate one (a MAC-derived
+    // value is guessable on a LAN, and whoever can read the token can read the identity file), so this notices a token copied to
+    // another machine by mistake, not a determined thief. A thief is stopped by revoking the token.
     if (hello.platform.machine === undefined || !same(hello.platform.machine, record.fingerprint)) {
       throw new GadgetError("Denied", "this hello does not carry the fingerprint the gadget paired with")
     }
+    this.greeted.add(id)
     record.hello = hello
     record.name = hello.name
     record.platform = hello.platform
@@ -257,7 +262,8 @@ export class Registry {
   /** Attach the device's feed. Returns the detach function the transport calls on close. */
   attach(id: string, feed: Feed): () => void {
     const record = this.require(id)
-    if (!record.hello) throw new GadgetError("HelloInvalid", "send hello before opening the feed")
+    if (!record.hello || !this.greeted.has(id))
+      throw new GadgetError("HelloInvalid", "send hello before opening the feed")
     this.dropLive(id, "replaced by a newer connection")
     const live: Live = { feed, queue: [] }
     this.live.set(id, live)
@@ -302,6 +308,17 @@ export class Registry {
   private push(id: string, frame: Frame): void {
     const live = this.live.get(id)
     if (!live) throw new GadgetError("Offline", `${id} is offline`)
+    const limit = this.records.get(id)?.hello?.maxFrameBytes
+    if (limit !== undefined && frame.type !== "ping" && frame.type !== "hello" && frame.type !== "bye") {
+      const size = Buffer.byteLength(JSON.stringify(frame))
+      if (size > limit) {
+        // Refused here, before it is sent: a device cannot answer a frame it had no room to read, and the call would sit until its timeout.
+        throw new GadgetError(
+          "PayloadTooLarge",
+          `${id} takes frames up to ${limit} bytes (its buffer) and this ${frame.type} needs ${size}`,
+        )
+      }
+    }
     if (!live.feed.send(frame)) {
       this.dropLive(id, "feed fell behind")
       throw new GadgetError("Offline", `${id} fell behind and was disconnected`)
@@ -382,8 +399,15 @@ export class Registry {
         timeoutMs: next.timeoutMs,
       })
     } catch (error) {
-      // push() dropped the device, which already rejected `next` through detach().
       if (!(error instanceof GadgetError)) throw error
+      if (error.tag === "PayloadTooLarge" && live.current === next) {
+        // The device is fine; this one call does not fit its buffer. Fail it and carry on with the queue.
+        if (next.timer) clearTimeout(next.timer)
+        live.current = undefined
+        next.reject(error)
+        this.pump(id)
+      }
+      // Any other failure dropped the device, which already rejected `next` through detach().
     }
   }
 
@@ -426,7 +450,16 @@ export class Registry {
     const frameID = `frame_${randomBytes(6).toString("hex")}`
     if (display.format === "bitmap") {
       // The panel has no layout engine: the bridge lays the tree out and sends pixels.
-      this.push(id, { type: "show", frameID, bitmap: renderBitmap(tree as Tree, display) })
+      let bitmap
+      try {
+        bitmap = renderBitmap(tree as Tree, display)
+      } catch (error) {
+        throw new GadgetError(
+          "BadRequest",
+          `tree could not be laid out: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+      this.push(id, { type: "show", frameID, bitmap })
       return frameID
     }
     this.push(id, {
@@ -518,6 +551,7 @@ export class Registry {
     this.dropLive(id, "revoked")
     this.records.delete(id)
     this.messageTimes.delete(id)
+    this.greeted.delete(id)
     this.revoked.add(record.tokenHash)
     this.save()
   }

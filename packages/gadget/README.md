@@ -87,7 +87,8 @@ your LAN or run code. It can still show the agent's notifications through the ph
 
 A gadget token is a device credential, not a user: it reaches the bridge's `/devices/*` routes and nothing else, and the
 bridge is a separate listener from nikcli's own server. The bridge hashes tokens at rest and binds each to the device's
-fingerprint. A command runs on the device as the device's account; nothing from a device is ever executed inside nikcli.
+fingerprint, which identifies the device and does not authenticate it: a stolen token is device impersonation until you
+revoke it. The bridge's admin routes (used by the TUI) trust any process on the machine and cannot run a command. A command runs on the device as the device's account; nothing from a device is ever executed inside nikcli.
 `run`, `pair` and `revoke` ask before every call unless a permission rule allows them. Pairing proves presence (a code
 and, optionally, a button), not identity — the same limit Muse states, stated here too. Anyone on the LAN can reach
 `/pair`, which needs the code; set `NIKCLI_GADGET_HOST` to bind a single interface if that is too open.

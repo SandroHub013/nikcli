@@ -52,6 +52,22 @@ describe("layout work is bounded whatever the tree says", () => {
   })
 })
 
+describe("nested nodes", () => {
+  test("a Box inside a Text lays out at the Text's width instead of throwing", () => {
+    const tree = {
+      type: "Text",
+      props: {},
+      children: [
+        { type: "Box", props: { padding: 1, borderStyle: "single", justifyContent: "center" }, children: ["hi"] },
+      ],
+    } as const
+    const lines = layout(tree as never, { columns: 20, rows: 6 })
+    expect(lines).toHaveLength(6)
+    expect(lines.join("\n")).toContain("hi")
+    expect(Math.max(...lines.map((line) => line.length))).toBeLessThanOrEqual(20)
+  })
+})
+
 describe("rasterize", () => {
   test("the font has 95 glyphs of 5 columns", () => {
     expect(FONT_5X7.length).toBe(95)

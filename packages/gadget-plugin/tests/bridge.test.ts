@@ -9,7 +9,7 @@ import {
   type Tree,
 } from "@nikcli-ai/gadget/protocol"
 import { Bridge, type BridgeHooks } from "../src/bridge.ts"
-import { rejection, tempDir, until } from "./helpers.ts"
+import { FakeFeed, rejection, tempDir, until } from "./helpers.ts"
 
 interface Calls {
   messages: Array<{ device: string; text: string; sessionID?: string }>
@@ -255,6 +255,75 @@ describe("a gadget end to end", () => {
     expect(frames[0]!.ink).toBeGreaterThan(20)
   })
 
+  test("a display that cannot draw does not take the command channel down", async () => {
+    const attempts: string[] = []
+    const gadget = new Gadget({
+      name: "broken-panel",
+      log: () => undefined,
+      display: {
+        spec: { columns: 20, rows: 4, depth: 1, format: "tree" },
+        draw() {
+          attempts.push("draw")
+          throw new Error("/dev/fb0 is not writable")
+        },
+      },
+    })
+    const { pairing } = await connect(gadget)
+    bridge.registry.show(pairing.id, { type: "Text", props: {}, children: ["x"] })
+    bridge.registry.tell(pairing.id, "and a message")
+    await until(() => attempts.length === 2)
+    // The feed is still up and commands still run.
+    expect(bridge.registry.online(pairing.id)).toBe(true)
+    const echoed = await bridge.registry.invoke(pairing.id, {
+      command: "system.run",
+      args: { argv: ["echo", "alive"] },
+    })
+    expect(echoed.output).toBe("alive\n")
+  })
+
+  test("a message sent to a bitmap panel is not drawn as a tree, and does not drop the feed", async () => {
+    const frames: number[] = []
+    const gadget = new Gadget({
+      name: "epaper-msg",
+      log: () => undefined,
+      display: display.bitmap({ width: 64, height: 24, push: (bitmap) => void frames.push(bitmap.width) }),
+    })
+    const { pairing } = await connect(gadget)
+    bridge.registry.tell(pairing.id, "hello panel")
+    const echoed = await bridge.registry.invoke(pairing.id, {
+      command: "system.run",
+      args: { argv: ["echo", "still here"] },
+    })
+    expect(echoed.output).toBe("still here\n")
+    expect(frames).toEqual([])
+    expect(bridge.registry.online(pairing.id)).toBe(true)
+  })
+
+  test("a feed the bridge closed is reconnected after a delay, not at once", async () => {
+    const lines: string[] = []
+    const gadget = new Gadget({ name: "polite", builtins: false, log: (line) => void lines.push(line) })
+    const { pairing } = await connect(gadget)
+    const rival = new FakeFeed()
+    // Another connection with the same token (a second process) evicts this one; two of them would otherwise loop at full speed.
+    bridge.registry.attach(pairing.id, rival)
+    await until(() => lines.some((line) => line.startsWith("feed closed by the bridge; reconnecting in")))
+    await Bun.sleep(300)
+    expect(rival.closed).toBeUndefined()
+    await until(() => rival.closed !== undefined, 4_000)
+    expect(rival.closed).toBe("replaced by a newer connection")
+  })
+
+  test("a silent connection is noticed by the transport", async () => {
+    const { Transport } = await import("@nikcli-ai/gadget")
+    const silent = Object.assign(
+      async () => new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200 }),
+      { preconnect: () => undefined },
+    ) as typeof fetch
+    const transport = new Transport({ server: "http://silent.invalid", token: "nkg_x", fetch: silent })
+    const error = await rejection(transport.feed("x", () => undefined, undefined, 80))
+    expect(String(error)).toMatch(/went quiet/)
+  })
+
   test("revoking unpairs the device and its next connect is refused", async () => {
     const gadget = plain()
     const { pairing, ended } = await connect(gadget)
@@ -372,7 +441,7 @@ describe("the routes", () => {
     expect((await fetch(`${server()}/admin/devices`)).status).toBe(200)
   })
 
-  test("admin can pair, list, invoke, show, ask for health and revoke", async () => {
+  test("admin can pair, list, ask for health, tell and revoke", async () => {
     const window = (await (await admin("/admin/pair", { method: "POST" })).json()) as { code: string; url: string }
     expect(window.code).toMatch(/^\d{6}$/)
     expect(window.url).toBe(`http://127.0.0.1:${bridge.port}`)
@@ -385,13 +454,16 @@ describe("the routes", () => {
 
     const list = (await (await admin("/admin/devices")).json()) as GadgetInfo[]
     expect(list.map((d) => d.id)).toEqual(["admin-one"])
-    const invoked = (await (
-      await admin(`/admin/devices/${pairing.id}/invoke`, {
+    // Running a command or drawing is the agent's `gadget` tool, which asks first. Over HTTP, any local process could do it
+    // without asking (the agent's own shell included), so these routes do not exist.
+    for (const action of ["invoke", "show"]) {
+      const refused = await admin(`/admin/devices/${pairing.id}/${action}`, {
         method: "POST",
-        body: JSON.stringify({ command: "system.run", args: { argv: ["echo", "hi"] } }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ command: "system.run", args: { argv: ["echo", "hi"] }, tree: {} }),
       })
-    ).json()) as InvokeResult
-    expect(invoked.output).toBe("hi\n")
+      expect(refused.status).toBe(400)
+    }
     const health = (await (await admin(`/admin/devices/${pairing.id}/health`)).json()) as { uptimeSec: number }
     expect(health.uptimeSec).toBeGreaterThanOrEqual(0)
     const told = await admin(`/admin/devices/${pairing.id}/message`, {
@@ -451,5 +523,27 @@ describe("the listener", () => {
     bridge.stop()
     expect(bridge.registry.online(pairing.id)).toBe(false)
     expect(bridge.listening).toBe(false)
+  })
+})
+
+describe("the pairing address", () => {
+  const nic = (family: string, address: string, internal = false) => [{ family, address, internal }] as never
+  test("is a physical interface's address, not docker0's", async () => {
+    const { lanAddress } = await import("../src/bridge.ts")
+    expect(
+      lanAddress({
+        docker0: nic("IPv4", "172.17.0.1"),
+        eth0: nic("IPv4", "192.168.1.5"),
+        lo: nic("IPv4", "127.0.0.1", true),
+      }),
+    ).toBe("192.168.1.5")
+    expect(lanAddress({ "br-1a2b": nic("IPv4", "172.20.0.1"), wlan0: nic("IPv4", "10.0.0.7") })).toBe("10.0.0.7")
+    expect(lanAddress({ docker0: nic("IPv4", "172.17.0.1") })).toBe("172.17.0.1")
+    expect(lanAddress({ lo: nic("IPv4", "127.0.0.1", true) })).toBe("127.0.0.1")
+  })
+
+  test("brackets an IPv6 host", () => {
+    expect(new Bridge({ port: 4097, host: "::1" }).url).toBe("http://[::1]:4097")
+    expect(new Bridge({ port: 4097, host: "192.168.1.9" }).url).toBe("http://192.168.1.9:4097")
   })
 })

@@ -35,6 +35,30 @@ describe("system.run", () => {
     expect(result).toMatchObject({ exitCode: 127, isError: true })
   })
 
+  test("the limit counts bytes once, across stdout and stderr together", async () => {
+    const script =
+      "head -c 300 /dev/zero | tr '\\0' a; head -c 300 /dev/zero | tr '\\0' b >&2; head -c 300 /dev/zero | tr '\\0' c"
+    const under = await system.run({ argv: ["sh", "-c", script] }, ctx({ maxOutputBytes: 1_000 }))
+    const text = typeof under === "string" ? under : under.output
+    expect(typeof under === "object" && under.truncated).toBe(false)
+    // All 900 bytes arrive: the old check cut this near 630.
+    expect(text.replace(/\[stderr\]\n/, "").replace(/\n/g, "").length).toBe(900)
+    const over = await system.run({ argv: ["sh", "-c", script] }, ctx({ maxOutputBytes: 500 }))
+    expect(typeof over === "object" && over.truncated).toBe(true)
+    const kept = (typeof over === "string" ? over : over.output).replace(/\n\[output truncated at 500 bytes\]$/, "")
+    expect(kept.replace(/\[stderr\]\n/, "").replace(/\n/g, "").length).toBe(500)
+  })
+
+  test("multi-byte output is counted in bytes and not split into garbage", async () => {
+    const result = await system.run(
+      { argv: ["sh", "-c", "printf 'é%.0s' 1 2 3 4 5 6 7 8 9 10"] },
+      ctx({ maxOutputBytes: 10 }),
+    )
+    const text = typeof result === "string" ? result : result.output
+    expect(text.startsWith("ééééé")).toBe(true)
+    expect(text).not.toContain("\ufffd")
+  })
+
   test("a program that never reads its stdin cannot kill the gadget", async () => {
     const big = "x".repeat(4 * 1024 * 1024)
     const closed = await system.run({ argv: ["true"], stdin: big }, ctx())

@@ -28,7 +28,8 @@ or drop the package's `src/index.ts` into `~/.config/nikcli/plugins/gadgets/` as
 - **Bridge.** A listener of its own (not nikcli's server): `POST /pair` with the code, then token-authenticated
   `PUT /devices/:id/hello`, an SSE feed at `GET /devices/:id/commands`, `POST …/result`, `…/event`, `…/message`. One
   command in flight per device, eight waiting behind it, a deadline from the moment a command is sent, a 15 s ping, a feed
-  evicted when it is 256 frames behind. `/admin/*` answers loopback callers without a proxy header only.
+  evicted when it is 256 frames behind. `/admin/*` (list, pair, health, message, revoke) answers loopback callers without a proxy header only, refuses what a browser
+  sends, and cannot run a command or draw.
 - **`gadget` tool.** Actions `list`, `health`, `run`, `show`, `send`, `pair`, `revoke`. `run` (except `device.health`),
   `pair` and `revoke` ask through `ctx.ask` with permission `gadget` and pattern `<device>:<command>`.
 - **Messages and presses.** A device message starts a session titled "Gadget: <name>" (or continues one) and is delivered

@@ -26,6 +26,11 @@ export interface TransportOptions {
   readonly fetch?: typeof globalThis.fetch
 }
 
+/** A request that has not answered in this long is a dead connection, not a slow one. */
+const REQUEST_TIMEOUT_MS = 15_000
+/** The bridge pings every 15 s; three missed pings and the feed is dead. */
+export const FEED_IDLE_MS = 45_000
+
 export type FrameHandler = (frame: Frame) => void | Promise<void>
 
 export class Transport {
@@ -52,11 +57,12 @@ export class Transport {
   }
 
   private async json<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     const response = await this.fetchImpl(this.server + path, {
       method,
       headers: this.headers(body === undefined ? {} : { "content-type": "application/json" }),
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     })
     const text = await response.text()
     let parsed: unknown = undefined
@@ -114,7 +120,7 @@ export class Transport {
    * when the bridge closes the stream or `signal` aborts; rejects on a
    * transport failure so the caller can back off and reconnect.
    */
-  async feed(id: string, onFrame: FrameHandler, signal?: AbortSignal): Promise<void> {
+  async feed(id: string, onFrame: FrameHandler, signal?: AbortSignal, idleMs = FEED_IDLE_MS): Promise<void> {
     const response = await this.fetchImpl(this.server + ROUTES.commands(id), {
       method: "GET",
       headers: this.headers({ accept: "text/event-stream" }),
@@ -131,12 +137,16 @@ export class Transport {
       throw GadgetError.fromBody(parsed) ?? new Error(`feed failed with ${response.status}: ${text.slice(0, 200)}`)
     }
     if (!response.body) throw new Error("feed response has no body")
-    for await (const frame of readFrames(response.body, signal)) await onFrame(frame)
+    for await (const frame of readFrames(response.body, signal, idleMs)) await onFrame(frame)
   }
 }
 
 /** Parse an SSE byte stream into frames. Exported for the bridge's own tests. */
-export async function* readFrames(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<Frame> {
+export async function* readFrames(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+  idleMs = 0,
+): AsyncGenerator<Frame> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
@@ -144,7 +154,7 @@ export async function* readFrames(body: ReadableStream<Uint8Array>, signal?: Abo
   signal?.addEventListener("abort", abort, { once: true })
   try {
     while (true) {
-      const { value, done } = await reader.read()
+      const { value, done } = await readWithin(reader, idleMs)
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       let index: number
@@ -168,8 +178,20 @@ export async function* readFrames(body: ReadableStream<Uint8Array>, signal?: Abo
     }
   } finally {
     signal?.removeEventListener("abort", abort)
+    // A read may still be pending (idle timeout, abort): cancel it so the lock can be released.
+    await reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
+}
+
+/** One read, failing if nothing arrives within `idleMs` (0 = wait forever). The bridge pings, so silence means a dead connection. */
+function readWithin(reader: ReadableStreamDefaultReader<Uint8Array>, idleMs: number) {
+  if (idleMs <= 0) return reader.read()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const quiet = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`the feed went quiet for ${Math.round(idleMs / 1000)}s`)), idleMs)
+  })
+  return Promise.race([reader.read(), quiet]).finally(() => clearTimeout(timer))
 }
 
 /** Bounded exponential backoff with jitter, the same shape nikcli's own clients use. */

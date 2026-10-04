@@ -86,14 +86,25 @@ function bearer(request: Request): string | undefined {
   return match?.[1]
 }
 
-/** The first non-internal IPv4 address, for the URL a pairing prints. */
-export function lanAddress(): string {
-  for (const list of Object.values(networkInterfaces())) {
+/** Interfaces a LAN device can be reached through; docker0, veth*, br-*, virbr*, tun*, tap* and wg* are not. */
+const LAN_INTERFACE = /^(en|eth|wl|ww)/
+
+/**
+ * The address a pairing prints for the device to connect to: the first IPv4
+ * address of a physical interface, else any non-internal one, else loopback.
+ * The first non-internal address on a developer machine is often Docker's
+ * 172.17.0.1, which no other machine can reach.
+ */
+export function lanAddress(interfaces: ReturnType<typeof networkInterfaces> = networkInterfaces()): string {
+  let fallback: string | undefined
+  for (const [name, list] of Object.entries(interfaces)) {
     for (const iface of list ?? []) {
-      if (iface.family === "IPv4" && !iface.internal) return iface.address
+      if (iface.family !== "IPv4" || iface.internal) continue
+      if (LAN_INTERFACE.test(name)) return iface.address
+      fallback ??= iface.address
     }
   }
-  return "127.0.0.1"
+  return fallback ?? "127.0.0.1"
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"])
@@ -117,11 +128,10 @@ export class Bridge {
   }
 
   get url(): string {
-    const host =
-      this.options.host && this.options.host !== "0.0.0.0" && this.options.host !== "::"
-        ? this.options.host
-        : lanAddress()
-    return `http://${host}:${this.port}`
+    const bound =
+      this.options.host && this.options.host !== "0.0.0.0" && this.options.host !== "::" ? this.options.host : undefined
+    const host = bound ?? lanAddress()
+    return `http://${host.includes(":") && !host.startsWith("[") ? `[${host}]` : host}:${this.port}`
   }
 
   get listening(): boolean {
@@ -358,15 +368,6 @@ export class Bridge {
       return json({ ok: true })
     }
     const action = parts[2]
-    if (action === "invoke" && method === "POST") {
-      const body = await readJson<Partial<InvokeRequest>>(request)
-      if (typeof body.command !== "string") throw new GadgetError("BadRequest", "command is required")
-      return json(await this.registry.invoke(id, { command: body.command, args: body.args, timeoutMs: body.timeoutMs }))
-    }
-    if (action === "show" && method === "POST") {
-      const body = await readJson<{ tree?: unknown }>(request)
-      return json({ frameID: this.registry.show(id, body.tree) })
-    }
     if (action === "message" && method === "POST") {
       const body = await readJson<{ text?: unknown; sessionID?: unknown }>(request)
       if (typeof body.text !== "string" || !body.text) throw new GadgetError("BadRequest", "text is required")

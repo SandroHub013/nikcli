@@ -300,6 +300,22 @@ static void device_path(const ng_config *c, const char *suffix, char *out, size_
     snprintf(out, cap, "/devices/%s%s", c->id, suffix);
 }
 
+/*
+ * The frame buffer this client has: what the config says, else enough for the
+ * panel's bitmap (base64 is 4/3 of the pixels, plus the JSON around it) and at
+ * least the default. Declared to the bridge in hello, so it never sends more.
+ */
+static size_t effective_frame_cap(const ng_config *c) {
+    if (c->frame_cap) return c->frame_cap < 512 ? 512 : c->frame_cap;
+    size_t cap = DEFAULT_FRAME_CAP;
+    if (c->bitmap_width > 0 && c->bitmap_height > 0) {
+        size_t bytes = (size_t)((c->bitmap_width + 7) / 8) * (size_t)c->bitmap_height;
+        size_t need = (bytes + 2) / 3 * 4 + 1024;
+        if (need > cap) cap = need;
+    }
+    return cap;
+}
+
 /* -------------------------------------------------------------------- pairing */
 
 int ng_pair(ng_config *c, const char *code, bool *needs_confirm) {
@@ -391,7 +407,7 @@ int ng_hello(ng_config *c) {
         }
         ng_buf_putc(&b, ']');
     }
-    ng_buf_putc(&b, '}');
+    ng_buf_printf(&b, ",\"maxFrameBytes\":%zu}", effective_frame_cap(c));
     if (b.overflow) {
         free(storage);
         fail(c, 0, "the declaration does not fit its buffer");
@@ -566,10 +582,29 @@ static void handle_show(frame_ctx *f, const char *js) {
     free(pixels);
 }
 
+/* The callID of an invoke frame that could not be parsed, found by text: the bridge writes `"type":"invoke","callID":"..."` first. */
+static bool find_invoke_call_id(const char *js, char *out, size_t cap) {
+    if (!strstr(js, "\"type\":\"invoke\"")) return false;
+    const char *key = strstr(js, "\"callID\":\"");
+    if (!key) return false;
+    key += 10;
+    size_t n = 0;
+    while (key[n] && key[n] != '"' && n + 1 < cap) {
+        out[n] = key[n];
+        n++;
+    }
+    out[n] = '\0';
+    return n > 0 && key[n] == '"';
+}
+
 static void handle_frame(ng_config *c, ng_jtok *tokens, char *out, const char *js, size_t len) {
     int n = ng_json_parse(js, len, tokens, MAX_TOKENS);
     if (n < 1 || tokens[0].type != NG_J_OBJECT) {
         note(c, "a frame was ignored: %s", n == -1 ? "too many JSON tokens" : "malformed JSON");
+        char call_id[64];
+        if (find_invoke_call_id(js, call_id, sizeof call_id)) {
+            post_result(c, call_id, n == -1 ? "this device cannot parse a call with that many arguments" : "this device could not parse the call", 1, true, false);
+        }
         return;
     }
     int type = ng_json_get(js, tokens, 0, "type");
@@ -612,6 +647,7 @@ typedef struct {
     size_t frame_len;
     size_t frame_cap;
     bool overflow;
+    char dropped_call[64]; /* the invoke that overflowed the buffer, to be answered with an error */
     ng_jtok *tokens;
     char *out;
     uint64_t last_rx;
@@ -622,6 +658,11 @@ static void sse_bytes(feed *s, const char *data, size_t n) {
     for (size_t i = 0; i < n; i++) {
         char ch = data[i];
         if (s->frame_len + 1 >= s->frame_cap) {
+            if (!s->overflow) {
+                /* The head of the frame is still in the buffer: take the callID from it, so the bridge hears back. */
+                s->frame[s->frame_len] = '\0';
+                if (!find_invoke_call_id(s->frame, s->dropped_call, sizeof s->dropped_call)) s->dropped_call[0] = '\0';
+            }
             s->overflow = true;
             s->frame_len = 0;
         }
@@ -630,6 +671,10 @@ static void sse_bytes(feed *s, const char *data, size_t n) {
             s->frame[s->frame_len] = '\0';
             if (s->overflow) {
                 note(s->c, "a frame larger than %zu bytes was dropped", s->frame_cap);
+                if (s->dropped_call[0]) {
+                    post_result(s->c, s->dropped_call, "this call is larger than the device's frame buffer", 1, true, false);
+                    s->dropped_call[0] = '\0';
+                }
                 s->overflow = false;
             } else {
                 /* Join the `data:` lines of this event in place. */
@@ -652,6 +697,7 @@ static void sse_bytes(feed *s, const char *data, size_t n) {
                     if (!end) break;
                     line = end + 1;
                 }
+                s->frame[out] = '\0';
                 if (out) handle_frame(s->c, s->tokens, s->out, s->frame, out);
             }
             s->frame_len = 0;
@@ -819,7 +865,7 @@ int ng_run(ng_config *c, volatile int *stop) {
     if (!check_config(c)) return NG_ERR_ARGUMENT;
     if (!c->id[0] || !c->token[0]) return NG_ERR_NOT_PAIRED;
     size_t out_cap = c->out_cap ? c->out_cap : DEFAULT_OUT_CAP;
-    size_t frame_cap = c->frame_cap ? c->frame_cap : DEFAULT_FRAME_CAP;
+    size_t frame_cap = effective_frame_cap(c);
     c->out_cap = out_cap;
     ng_jtok *tokens = malloc(MAX_TOKENS * sizeof *tokens);
     char *out = malloc(out_cap);

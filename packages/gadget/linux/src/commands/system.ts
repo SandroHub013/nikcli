@@ -7,6 +7,7 @@
  * safety lives — a gadget cannot approve itself.
  */
 import { spawn } from "node:child_process"
+import { StringDecoder } from "node:string_decoder"
 import type { CommandHandler } from "../gadget.ts"
 
 export interface SystemRunArgs {
@@ -47,14 +48,20 @@ export const run: CommandHandler<SystemRunArgs> = async (args, ctx) => {
   const limit = ctx.maxOutputBytes
   let stdout = ""
   let stderr = ""
+  let total = 0 // bytes kept, both streams together
   let truncated = false
+  // A decoder per stream: a multi-byte character can straddle two chunks, and counting characters would undercount bytes.
+  const decoders = { out: new StringDecoder("utf8"), err: new StringDecoder("utf8") }
   const collect = (chunk: Buffer, which: "out" | "err") => {
-    const current = which === "out" ? stdout : stderr
-    if (current.length + stdout.length + stderr.length >= limit) {
+    const room = limit - total
+    if (room <= 0) {
       truncated = true
       return
     }
-    const text = chunk.toString("utf8")
+    const kept = chunk.length > room ? chunk.subarray(0, room) : chunk
+    if (kept.length < chunk.length) truncated = true
+    total += kept.length
+    const text = decoders[which].write(kept)
     if (which === "out") stdout += text
     else stderr += text
   }

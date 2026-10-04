@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Bridge, type BridgeHooks } from "../src/bridge.ts"
-import { until } from "./helpers.ts"
+import { hello as helloFixture, until } from "./helpers.ts"
 import type { DeviceEvent, GadgetInfo } from "@nikcli-ai/gadget/protocol"
 
 /**
@@ -223,7 +223,7 @@ describe("the C client", () => {
     await quit(gadget)
   })
 
-  run("drops a frame bigger than its buffer and keeps serving", async () => {
+  run("is never sent a frame bigger than its buffer: the bridge refuses, naming the sizes", async () => {
     const gadget = start("c-small", {
       HOST_GADGET_NO_BUTTON: "1",
       HOST_GADGET_WIDTH: "296",
@@ -231,11 +231,69 @@ describe("the C client", () => {
       HOST_GADGET_FRAME_CAP: "1024",
     })
     await online(gadget, "c-small")
-    bridge.registry.show("c-small", { type: "Text", props: {}, children: ["too big for the buffer"] })
-    await until(() => gadget.err.some((line) => line.includes("was dropped")))
+    const error = (() => {
+      try {
+        bridge.registry.show("c-small", { type: "Text", props: {}, children: ["too big for the buffer"] })
+      } catch (caught) {
+        return caught as { tag: string; message: string }
+      }
+      throw new Error("show should have been refused")
+    })()
+    expect(error.tag).toBe("PayloadTooLarge")
+    expect(error.message).toMatch(/takes frames up to 1024 bytes.*needs \d+/)
     expect(gadget.out.some((line) => line.startsWith("BITMAP"))).toBe(false)
     const echoed = await bridge.registry.invoke("c-small", { command: "echo.say", args: { text: "still alive" } })
     expect(echoed.output).toBe("still alive")
+    await quit(gadget)
+  })
+
+  run("answers a call that is too big for its buffer with an error instead of leaving it to time out", async () => {
+    const gadget = start("c-tight", { HOST_GADGET_NO_BUTTON: "1", HOST_GADGET_FRAME_CAP: "1024" })
+    await online(gadget, "c-tight")
+    // A bridge that does not honour the declared limit (an older one, or a bug): lift it from the registry's side.
+    bridge.registry.hello(
+      "c-tight",
+      helloFixture({
+        platform: { os: "linux", arch: "host", machine: "c-tight-0123456789abcdef" },
+        commands: [{ name: "echo.say", description: "echo", args: { type: "object" } }],
+      }),
+    )
+    const started = Date.now()
+    const result = await bridge.registry.invoke("c-tight", {
+      command: "echo.say",
+      args: { text: "x".repeat(3_000) },
+      timeoutMs: 20_000,
+    })
+    expect(result).toMatchObject({ isError: true, output: "this call is larger than the device's frame buffer" })
+    expect(Date.now() - started).toBeLessThan(3_000)
+    await until(() => gadget.err.some((line) => line.includes("was dropped")))
+    const after = await bridge.registry.invoke("c-tight", { command: "echo.say", args: { text: "next" } })
+    expect(after.output).toBe("next")
+    await quit(gadget)
+  })
+
+  run("answers a call with more arguments than it can parse", async () => {
+    const gadget = start("c-tokens", { HOST_GADGET_NO_BUTTON: "1" })
+    await online(gadget, "c-tokens")
+    const result = await bridge.registry.invoke("c-tokens", {
+      command: "echo.say",
+      args: { text: "hi", list: Array.from({ length: 400 }, (_, i) => i) },
+      timeoutMs: 20_000,
+    })
+    expect(result).toMatchObject({ isError: true, output: "this device cannot parse a call with that many arguments" })
+    await quit(gadget)
+  })
+
+  run("sizes its buffer for a big panel on its own and declares it", async () => {
+    // 400x300 pixels is 15,000 bytes, about 20 KB as base64: more than the default buffer.
+    const gadget = start("c-big-panel", {
+      HOST_GADGET_NO_BUTTON: "1",
+      HOST_GADGET_WIDTH: "400",
+      HOST_GADGET_HEIGHT: "300",
+    })
+    await online(gadget, "c-big-panel")
+    bridge.registry.show("c-big-panel", { type: "Markdown", props: { text: "# Build green\n- tests pass" } })
+    await gadget.line(/^BITMAP 400x300 bytes=15000 ink=\d+$/)
     await quit(gadget)
   })
 

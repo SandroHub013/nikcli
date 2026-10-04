@@ -80,6 +80,55 @@ describe("pairing", () => {
   })
 })
 
+describe("the feed", () => {
+  test("opens only after a hello in this process, even though the stored declaration survives a restart", () => {
+    const { dir, cleanup } = tempDir()
+    try {
+      const file = path.join(dir, "devices.json")
+      const { id } = online({ file })
+      const restarted = new Registry({ file })
+      expect(restarted.get(id).commands.length).toBeGreaterThan(0)
+      expect(tag(throws(() => restarted.attach(id, new FakeFeed())))).toBe("HelloInvalid")
+      restarted.hello(id, hello())
+      restarted.attach(id, new FakeFeed())
+      expect(restarted.online(id)).toBe(true)
+    } finally {
+      cleanup()
+    }
+  })
+
+  test("a frame bigger than the device's buffer is refused before it is sent, and the queue carries on", async () => {
+    const { registry, id } = online()
+    registry.hello(id, hello({ maxFrameBytes: 600 }))
+    const fresh = new FakeFeed()
+    registry.attach(id, fresh)
+    const tooBig = registry.invoke(id, { command: "system.run", args: { argv: ["echo", "x".repeat(2_000)] } })
+    const small = registry.invoke(id, { command: "system.run", args: { argv: ["true"] } })
+    const error = await rejection(tooBig)
+    expect(tag(error)).toBe("PayloadTooLarge")
+    expect((error as GadgetError).message).toMatch(/takes frames up to 600 bytes/)
+    // Nothing oversized went on the wire, and the next call was sent instead of waiting out a timeout.
+    expect(fresh.invokes()).toHaveLength(1)
+    registry.result(id, { callID: fresh.invokes()[0]!.callID, output: "ok" })
+    expect((await small).output).toBe("ok")
+  })
+
+  test("a bitmap that does not fit the buffer is refused with the sizes", () => {
+    const { registry, id } = online()
+    registry.hello(
+      id,
+      hello({
+        maxFrameBytes: 1_024,
+        display: { columns: 1, rows: 1, depth: 1, format: "bitmap", width: 296, height: 128 },
+      }),
+    )
+    registry.attach(id, new FakeFeed())
+    const error = throws(() => registry.show(id, { type: "Text", props: {}, children: ["x"] })) as GadgetError
+    expect(error.tag).toBe("PayloadTooLarge")
+    expect(error.message).toMatch(/takes frames up to 1024 bytes.*needs \d+/)
+  })
+})
+
 describe("tokens", () => {
   test("unknown and revoked tokens are told apart", () => {
     const { registry, id, token } = online()

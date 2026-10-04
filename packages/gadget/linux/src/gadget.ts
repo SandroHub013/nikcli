@@ -31,6 +31,9 @@ import * as health from "./commands/health.ts"
 import { unpackBitmap, type Display } from "./display/index.ts"
 import type { Button } from "./button/index.ts"
 
+/** A feed that stayed up this long counts as a good connection and resets the backoff. */
+const STABLE_MS = 10_000
+
 export const SDK_VERSION = "1.427.0"
 
 export interface CommandContext {
@@ -112,11 +115,15 @@ export class Gadget {
     this.commands = commands
     // Validate our own declaration before the bridge does, so a typo in a
     // command name fails at construction with the same message it would get there.
-    parseHello(this.hello())
+    parseHello(this.declaration("0".repeat(32)))
   }
 
-  /** The declaration the bridge receives on every connect. */
+  /** The declaration the bridge receives on every connect. Reads (and on first use creates) this install's identity. */
   hello(): Hello {
+    return this.declaration(fingerprint())
+  }
+
+  private declaration(machine: string): Hello {
     const specs: CommandSpec[] = [...this.commands].map(([name, definition]) => ({
       name,
       description: definition.description,
@@ -129,7 +136,7 @@ export class Gadget {
       protocol: PROTOCOL_VERSION,
       name: this.name,
       version: this.version,
-      platform: { os: platform(), arch: arch(), machine: fingerprint() },
+      platform: { os: platform(), arch: arch(), machine },
       commands: specs,
       ...(display ? { display } : {}),
       ...(this.buttons ? { buttons: this.buttons.keys } : {}),
@@ -230,11 +237,27 @@ export class Gadget {
       while (!signal.aborted) {
         try {
           await transport.hello(pairing.id, this.hello(), signal)
-          attempt = 0
           this.log(`connected to ${transport.server} as ${pairing.id}`)
-          await transport.feed(pairing.id, (frame) => this.handle(frame, transport, pairing), signal)
+          const connected = Date.now()
+          await transport.feed(
+            pairing.id,
+            async (frame) => {
+              // One frame going wrong (a display that cannot draw, a handler that throws) must not take the command channel down with it.
+              try {
+                await this.handle(frame, transport, pairing)
+              } catch (error) {
+                this.log(`${frame.type} frame failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            },
+            signal,
+          )
           if (signal.aborted) break
-          this.log("feed closed by the bridge; reconnecting")
+          // A feed that ends by itself right away (two processes sharing one token evict each other) backs off like any failure.
+          const stable = Date.now() - connected >= STABLE_MS
+          attempt = stable ? 0 : attempt + 1
+          const wait = stable ? 0 : backoff(attempt - 1)
+          this.log(`feed closed by the bridge; reconnecting${wait ? ` in ${Math.round(wait / 1000)}s` : ""}`)
+          if (wait) await sleep(wait, signal)
         } catch (error) {
           if (signal.aborted) break
           if (error instanceof GadgetError && (error.tag === "TokenRevoked" || error.tag === "NotPaired")) {
@@ -260,7 +283,7 @@ export class Gadget {
         this.log(`bridge said bye: ${frame.reason}`)
         return
       case "message":
-        if (this.display) {
+        if (this.display && this.display.spec.format === "tree") {
           await this.display.draw(
             {
               type: "Box",

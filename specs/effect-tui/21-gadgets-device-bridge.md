@@ -78,20 +78,33 @@ Non-goals, stated so nobody scopes them in by accident:
    and the old one is revoked.
 4. **Tokens are device credentials.** `nkg_…`, hashed (SHA-256) at rest in a file written with mode 0600, compared in
    constant time, revocable. A hello must carry the fingerprint the device paired with — omitting it is refused as
-   `Denied`, not skipped — so a leaked token alone cannot take over the feed. The other device routes accept the token
-   alone, and say so here rather than claim more. A revoked token answers `TokenRevoked`, an unknown one `NotPaired`; the
+   `Denied`, not skipped — and the feed opens only after a hello accepted by _this_ process, since the stored declaration
+   survives a restart and the proof of the fingerprint does not. The fingerprint **identifies** a device; it does not
+   authenticate one: a MAC-derived value is guessable on a LAN and whoever can read the token can read the identity file, so
+   it notices a token copied to another machine by mistake, not a determined thief, who is stopped by revoking the token.
+   The other device routes accept the token alone. A revoked token answers `TokenRevoked`, an unknown one `NotPaired`; the
    SDK stops retrying on either and tells the operator to pair again. A token opens only its own device, and a device that
    has not pressed its button opens nothing: `Unconfirmed` on every device route except the confirmation. The SDK's
-   fingerprint is the OS machine id, else the MACs of physical interfaces only, else the hostname; docker, veth, bridge
-   and VPN interfaces are left out because they come and go.
+   fingerprint is a random value written once to its state directory (mode 0600) and kept with the pairing: not the OS
+   machine id, which cloned SD cards and two gadgets on one host share, and the bridge reads an equal fingerprint as "the
+   same device pairing again" and revokes the old token. It survives `unpair` and interface changes; on a read-only system
+   it falls back to a hash of the machine's own identifiers.
 5. **The bridge is a separate listener (default 4097).** The only unauthenticated routes are `GET /` and `POST /pair`, and
    `/pair` needs the code. `/admin/*` answers only loopback callers with no `X-Forwarded-For` or `Forwarded` header, and
    refuses what a browser sends — a request with an `Origin`, a `Host` that is not a loopback name (DNS rebinding), or a
    body that is not JSON — because a loopback source address is not proof the caller is the operator: any page the
-   operator has open can send a request from their browser to 127.0.0.1.
+   operator has open can send a request from their browser to 127.0.0.1. The admin routes are `list`, `pair`, `health`,
+   `message` and `revoke`: what the TUI uses. There is deliberately **no** route to run a command or draw, because over HTTP
+   any local process — the agent's own shell included — could call it without the `ctx.ask` the `gadget` tool performs.
+   What remains trusts any process on this machine, so `pair` and `revoke` can be done without asking by a process that can
+   run `curl`; the gate for that is the permission on the shell tool, not this bridge.
 6. **The invocation feed is one SSE stream per device.** Frames: `hello`, `invoke`, `show`, `message`, `ping`, `bye`. A
    ping every 15 s; a feed 256 frames behind is evicted and everything waiting on it fails `Offline`; a newer connection
-   replaces the old one; a device with no feed is `Offline` immediately, not queued.
+   replaces the old one; a device with no feed is `Offline` immediately, not queued. The SDK reconnects with backoff
+   when the bridge ends the stream by itself (two processes sharing one token would otherwise evict each other at full
+   speed), treats three missed pings (45 s of silence) as a dead connection, and a frame that fails to draw is logged and
+   does not drop the feed. A device may declare `maxFrameBytes`, the largest frame it can read; the bridge refuses a bigger
+   `invoke`, `show` or `message` with `PayloadTooLarge` and the sizes, instead of sending what the device would drop.
 7. **Invocations are serialized and bounded.** One command in flight per device and eight waiting behind it; the next
    waiter is `Busy` with a retry time. The time allowed runs from the moment a command is sent, not from when it was queued,
    and travels in the `invoke` frame as `timeoutMs`, relative to receipt: the bridge's clock and the device's are not the
@@ -137,22 +150,21 @@ PayloadTooLarge, RateLimited, TokenRevoked, PairingClosed, Unconfirmed, BadReque
 
 ## Wire Protocol
 
-| Operation    | Method and path                             | Auth     | Body / frames                                                              |
-| ------------ | ------------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| Info         | `GET /`                                     | none     | `{ name, version, protocol, pairing }`                                     |
-| Pair         | `POST /pair`                                | the code | `{ code, name, platform, fingerprint, button }` → `{ id, token, confirm }` |
-| Confirm      | `POST /pair/confirm`                        | token    | `{}`                                                                       |
-| Hello        | `PUT /devices/:id/hello`                    | token    | `Hello` (replaces the declaration)                                         |
-| Feed         | `GET /devices/:id/commands`                 | token    | SSE: `hello`, `invoke`, `show`, `message`, `ping`, `bye`                   |
-| Result       | `POST /devices/:id/result`                  | token    | `{ callID, output, exitCode?, isError?, truncated? }`                      |
-| Event        | `POST /devices/:id/event`                   | token    | `{ kind: "press" \| "input", key, value? }` → `{ handled }`                |
-| Message      | `POST /devices/:id/message`                 | token    | `{ text, sessionID? }` → 202 `{ sessionID }`                               |
-| List         | `GET /admin/devices`                        | loopback | `GadgetInfo[]`                                                             |
-| Open pairing | `POST /admin/pair`                          | loopback | `{ code, expiresAt, url }`                                                 |
-| Invoke       | `POST /admin/devices/:id/invoke`            | loopback | `{ command, args?, timeoutMs? }` → `InvokeResult`                          |
-| Show, tell   | `POST /admin/devices/:id/show`, `…/message` | loopback | `{ tree }`, `{ text }`                                                     |
-| Health       | `GET /admin/devices/:id/health`             | loopback | `HealthInfo`                                                               |
-| Revoke       | `DELETE /admin/devices/:id`                 | loopback | `{ ok }`                                                                   |
+| Operation    | Method and path                   | Auth     | Body / frames                                                              |
+| ------------ | --------------------------------- | -------- | -------------------------------------------------------------------------- |
+| Info         | `GET /`                           | none     | `{ name, version, protocol, pairing }`                                     |
+| Pair         | `POST /pair`                      | the code | `{ code, name, platform, fingerprint, button }` → `{ id, token, confirm }` |
+| Confirm      | `POST /pair/confirm`              | token    | `{}`                                                                       |
+| Hello        | `PUT /devices/:id/hello`          | token    | `Hello` (replaces the declaration)                                         |
+| Feed         | `GET /devices/:id/commands`       | token    | SSE: `hello`, `invoke`, `show`, `message`, `ping`, `bye`                   |
+| Result       | `POST /devices/:id/result`        | token    | `{ callID, output, exitCode?, isError?, truncated? }`                      |
+| Event        | `POST /devices/:id/event`         | token    | `{ kind: "press" \| "input", key, value? }` → `{ handled }`                |
+| Message      | `POST /devices/:id/message`       | token    | `{ text, sessionID? }` → 202 `{ sessionID }`                               |
+| List         | `GET /admin/devices`              | loopback | `GadgetInfo[]`                                                             |
+| Open pairing | `POST /admin/pair`                | loopback | `{ code, expiresAt, url }`                                                 |
+| Tell         | `POST /admin/devices/:id/message` | loopback | `{ text }`                                                                 |
+| Health       | `GET /admin/devices/:id/health`   | loopback | `HealthInfo`                                                               |
+| Revoke       | `DELETE /admin/devices/:id`       | loopback | `{ ok }`                                                                   |
 
 ## Runtime Topology
 
@@ -194,13 +206,16 @@ bounded backoff and re-sends hello; it stops on `TokenRevoked` and `NotPaired`.
 
 - A gadget token reaches `/devices/*` and nothing else, and the bridge is not nikcli's server: a device has no route to
   sessions, files or config.
-- Tokens are hashed at rest, bound to a fingerprint, revocable.
+- Tokens are hashed at rest, bound to a fingerprint that identifies and does not authenticate, revocable. A stolen token
+  is device impersonation until revoked; the spec does not claim otherwise.
 - A command runs on the device, as the device's account. State-changing calls ask the operator on the nikcli side; a
   device cannot ask for itself.
 - Everything is bounded: body 4.25 MB, output per command, tree depth and size, 8 queued calls, 60 messages a minute,
   256 frames of lag.
 - Like Muse, pairing has no manufacturer attestation: the code and the button prove presence, not identity. The listener
-  binds all interfaces by default because devices are on the LAN; `NIKCLI_GADGET_HOST` narrows it.
+  binds all interfaces by default because devices are on the LAN; `NIKCLI_GADGET_HOST` narrows it. The pairing URL uses
+  the address of a physical interface, not Docker's bridge, so the device can reach it.
+- The admin routes trust any process on the machine (see requirement 5); they offer no way to run a command or draw.
 
 ## Acceptance and Verification
 
