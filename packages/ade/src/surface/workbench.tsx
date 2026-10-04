@@ -1,4 +1,4 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, lazy, Show, For, Suspense } from "solid-js"
+import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -50,7 +50,7 @@ import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
 import { RunningSessions } from "./running"
 import { restartOf, startArgsFor } from "./start-args"
-import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
+import { KeyRequestDialog, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -116,16 +116,6 @@ import {
   type HookHost,
   type HookStatus,
 } from "../session-new/agent-hooks"
-import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import {
-  BotSection,
-  GridSection,
-  LanguageSection,
-  ProviderSection,
-  RoutineSection,
-  SkillsSection,
-  ThemeSection,
-} from "../settings/sections"
 import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
 import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
 import {
@@ -136,7 +126,6 @@ import {
   type UpdateProgress,
 } from "../update/progress"
 import { exitedActivity } from "../grid/activity"
-import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
@@ -273,7 +262,6 @@ import {
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
 import { FILE_PLUGINS_DISABLED, importPluginModule } from "../plugin/loader"
-import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
@@ -361,11 +349,6 @@ import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigat
 import { anyFramePlugin } from "../plugin-frame/marker"
 import type { FramePaneInput } from "../plugin-frame/plugin-pane"
 
-/** «Spazio su disco», loaded when the section is opened: ADE with the panel closed never reads a folder for it. */
-const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
-
-/** The list of plugins in a frame, loaded when Estensioni is opened: ADE with none never fetches it. */
-const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 import {
@@ -482,6 +465,7 @@ import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
 import { DesignSheet } from "../design/design-sheet"
+import { SettingsSheet } from "../settings/settings-sheet"
 import { Sheet } from "../ui/sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -533,7 +517,6 @@ import {
   VoiceHud,
   VoiceOrb,
   ListeningIndicator,
-  VoiceSettingsPanel,
   wakeWordEnabled,
   shortcutActivationEnabled,
   describeShortcut,
@@ -6467,7 +6450,9 @@ export function Workbench() {
     } else if (id === "record.folder") {
       await pickRecordDir()
     } else if (id === "voice.settings") {
-      setVoiceSettingsOpen(true)
+      openVoiceSettings("voice-sec-mode")
+    } else if (id === "settings.open") {
+      openVoiceSettings()
     } else if (id === "panes.closeGone") {
       await closer.closeAll(
         wb()
@@ -9071,7 +9056,7 @@ export function Workbench() {
           searchFiles={hasHost() ? searchProjectFiles : undefined}
           selectedFilePath={selectedFile()}
           onSelectFile={(path) => void openFile(path)}
-          onOpenSettings={() => setVoiceSettingsOpen(true)}
+          onOpenSettings={() => openVoiceSettings()}
           bottom={
             <ShotTray
               shots={shotSource.shots()}
@@ -9534,174 +9519,47 @@ export function Workbench() {
         panel, one gear, one answer to "where are the settings".
       */}
       <Show when={voiceSettingsOpen()}>
-        {/* On Kobalte, as the other sheets: the panel draws its own box and title. */}
-        <Sheet
-          component="voice-settings-overlay"
+        <SettingsSheet
           onClose={closeVoiceSettings}
-          surface={false}
-          labelledBy="voice-panel-title"
-        >
-          <VoiceSettingsPanel
-            framed
-            engine={voiceEngine}
-            settings={voiceSettings()}
-            initialSection={voiceSettingsSection()}
-            shortcutRefusals={shortcutRefusals()}
-            onChange={handleVoiceSettingsChange}
-            onClose={closeVoiceSettings}
-            onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
-            naturalVoiceError={voiceError()}
-            naturalVoiceDownloading={voiceDownloading()}
-            onDownloadNaturalVoice={() => void downloadNaturalVoice()}
-            {...(piperProgress() ? { naturalVoiceProgress: piperProgress() } : {})}
-            onCancelInstall={(provider) =>
-              void (provider === "kokoro"
-                ? kokoro.cancel()
-                : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
-            }
-            kokoroPack={kokoroPack()}
-            onInstallKokoro={() => void kokoro.install()}
-            onDeleteKokoro={() => void kokoro.remove()}
-            onTestVoice={testReplyVoice}
-            existingBindings={bindings}
-            settingsNotice={voiceSettingsNotice()}
-            title={t("settings.title")}
-            subtitle={t("settings.subtitle")}
-            /*
-             * Two headings, because the rail is now two lists.
-             * Six voice screens followed by six of ADE's own, unbroken, gave
-             * no clue where the microphone stopped and the application began.
-             */
-            builtInGroup={t("settings.group.voice")}
-            extraGroup={BRAND.name}
-            extraSections={[
-              {
-                id: "set-sec-theme",
-                label: t("settings.theme.title"),
-                glyph: "◐",
-                render: () => (
-                  <ThemeSection
-                    value={themeState.preference}
-                    onChange={(next) => themeState.set(next)}
-                    opacity={themeState.glassOpacity}
-                    onOpacityChange={(val) => themeState.setGlassOpacity(val)}
-                    glassStatus={glassStatus}
-                  />
-                ),
-              },
-              {
-                id: "set-sec-language",
-                label: t("settings.language.label"),
-                glyph: "文",
-                render: () => <LanguageSection />,
-              },
-              {
-                id: "set-sec-routine",
-                label: t("settings.routine"),
-                glyph: "↻",
-                render: () => <RoutineSection />,
-              },
-              {
-                id: "set-sec-bot",
-                label: "Bot",
-                glyph: "◍",
-                // The project, so the list holds the bots that belong to it as
-                // well as the global ones — which is what nikcli would see.
-                render: () => <BotSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
-              },
-              {
-                /*
-                 * "Codice" is the coding view's own settings: how its grid is
-                 * laid out, and how a session finds its way back to the
-                 * conversation it was having. Both are about the panes, and
-                 * the panes are what the `code` view is.
-                 */
-                id: "set-sec-code",
-                label: t("settings.code"),
-                glyph: "⌗",
-                value: String(Object.values(hookStates()).filter((state) => state.installed).length),
-                render: () => (
-                  <>
-                    <GridSection
-                      columns={wb().pinnedColumns}
-                      onChange={(columns) => setWb((w) => setColumns(w, columns))}
-                    />
-                    <AgentHooksSection host={hookHost()} states={hookStates()} onChanged={() => void refreshHooks()} />
-                  </>
-                ),
-              },
-              {
-                id: "set-sec-provider",
-                label: "Provider",
-                glyph: "⚿",
-                render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
-              },
-              {
-                id: "set-sec-keys",
-                label: t("settings.keys"),
-                glyph: "⚷",
-                render: () => <KeysSection host={keysHost()} agents={AGENTS} />,
-              },
-              {
-                /*
-                 * MCP and plugins on one page (S16, variant B): what is
-                 * installed, the verified MCP catalog, and the plugins. The two
-                 * separate entries were one question — "what does ADE add to
-                 * the agents?" — asked in two places, one of them empty.
-                 */
-                id: "set-sec-extensions",
-                label: t("settings.extensions"),
-                glyph: "⊞",
-                value: String(pluginRuntime.registry.sections().length),
-                render: () => (
-                  <ExtensionsPage
-                    projectRoot={project()?.root}
-                    io={extensionsIo()}
-                    pluginCount={pluginRuntime.registry.sections().length}
-                    onOpenGuide={(url) => openGuide(url)}
-                    plugins={() => (
-                      <>
-                        <Show
-                          when={pluginRuntime.registry.sections().length > 0}
-                          fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
-                        >
-                          <For each={pluginRuntime.registry.sections()}>
-                            {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
-                          </For>
-                        </Show>
-                        <Suspense>
-                          <FramePluginRows host={getHost} onOpen={(id) => void openFramePluginPane(id)} />
-                        </Suspense>
-                      </>
-                    )}
-                  />
-                ),
-              },
-              {
-                id: "set-sec-space",
-                label: t("settings.space"),
-                glyph: "◫",
-                render: () => (
-                  <Suspense>
-                    <SpaceSection
-                      host={getHost}
-                      roots={() => (project()?.root ? [project()!.root] : [])}
-                      openWorktrees={() => wb().panes.flatMap((pane) => (pane.worktree ? [pane.worktree] : []))}
-                      ask={(message) => askYesNo(message, { ok: t("space.remove"), cancel: t("window.closeConfirm.cancel") })}
-                      now={Date.now}
-                    />
-                  </Suspense>
-                ),
-              },
-              {
-                id: "set-sec-skills",
-                label: t("settings.tools"),
-                glyph: "✦",
-                render: () => <SkillsSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
-              },
-            ]}
-          />
-        </Sheet>
+          initialTarget={voiceSettingsSection()}
+          version={installedVersion()}
+          onCheckUpdates={() => void checkForUpdates()}
+          voiceEngine={voiceEngine}
+          voiceSettings={voiceSettings()}
+          onVoiceSettingsChange={handleVoiceSettingsChange}
+          shortcutRefusals={shortcutRefusals()}
+          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+          naturalVoiceError={voiceError()}
+          naturalVoiceDownloading={voiceDownloading()}
+          onDownloadNaturalVoice={() => void downloadNaturalVoice()}
+          naturalVoiceProgress={piperProgress() ?? undefined}
+          onCancelInstall={(provider) =>
+            void (provider === "kokoro"
+              ? kokoro.cancel()
+              : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
+          }
+          kokoroPack={kokoroPack()}
+          onInstallKokoro={() => void kokoro.install()}
+          onDeleteKokoro={() => void kokoro.remove()}
+          onTestVoice={testReplyVoice}
+          bindings={bindings}
+          voiceSettingsNotice={voiceSettingsNotice()}
+          themeState={themeState}
+          glassStatus={glassStatus}
+          project={project}
+          wb={wb}
+          setWb={setWb}
+          hookHost={hookHost}
+          hookStates={hookStates}
+          refreshHooks={refreshHooks}
+          openLoginSession={(runner) => openLoginSession(runner)}
+          keysHost={keysHost}
+          extensionsIo={extensionsIo}
+          pluginRuntime={pluginRuntime}
+          openGuide={openGuide}
+          openFramePluginPane={(id) => void openFramePluginPane(id)}
+          askYesNo={askYesNo}
+        />
       </Show>
 
       {/*
