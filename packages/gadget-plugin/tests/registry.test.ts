@@ -255,6 +255,21 @@ describe("display and messages", () => {
     expect(shown).toMatchObject({ type: "show", frameID, viewport: { columns: 20, rows: 4 } })
   })
 
+  test("a bitmap display is sent finished pixels the bridge rendered", () => {
+    const { registry, id, feed } = online()
+    registry.hello(id, hello({ display: { columns: 1, rows: 1, depth: 1, format: "bitmap", width: 48, height: 16 } }))
+    const fresh = new FakeFeed()
+    registry.attach(id, fresh)
+    const frameID = registry.show(id, { type: "Text", props: {}, children: ["ok"] })
+    const shown = fresh.frames.find((frame) => frame.type === "show")
+    expect(shown).toMatchObject({ type: "show", frameID, bitmap: { width: 48, height: 16, format: "1bpp" } })
+    expect(shown && "tree" in shown).toBe(false)
+    const data = Buffer.from((shown as { bitmap: { data: string } }).bitmap.data, "base64")
+    expect(data.byteLength).toBe(6 * 16)
+    expect(data.some((byte) => byte !== 0)).toBe(true)
+    expect(feed.frames.some((frame) => frame.type === "show")).toBe(false)
+  })
+
   test("sixty messages a minute, then RateLimited with a retry time", () => {
     let now = 10_000
     const { registry, id } = online({ now: () => now })

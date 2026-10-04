@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
 import { parseManifest } from "@nikcli-ai/plugin/v2/manifest"
-import tui, { setup } from "../src/tui.ts"
+import tui, { setup } from "../src/tui.tsx"
 import { Bridge } from "../src/bridge.ts"
 import { Gadget } from "@nikcli-ai/gadget"
 import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
@@ -16,10 +16,11 @@ interface Seen {
   dialogs: Array<{ title: string; message: string }>
   toasts: Array<{ variant?: string; message: string; title?: string }>
   disposed: string[]
+  slots: string[]
 }
 
 function context(url: string): { context: Context; seen: Seen } {
-  const seen: Seen = { commands: [], dialogs: [], toasts: [], disposed: [] }
+  const seen: Seen = { commands: [], dialogs: [], toasts: [], disposed: [], slots: [] }
   const ui = {
     command: (command: Seen["commands"][number]) => {
       seen.commands.push(command)
@@ -34,6 +35,10 @@ function context(url: string): { context: Context; seen: Seen } {
       return undefined
     },
     toast: (input: Seen["toasts"][number]) => void seen.toasts.push(input),
+    slot: (name: string) => {
+      seen.slots.push(name)
+      return () => void seen.disposed.push(`slot:${name}`)
+    },
   }
   return { context: { options: { url }, ui } as unknown as Context, seen }
 }
@@ -78,17 +83,18 @@ function slash(seen: Seen) {
 describe("the TUI plugin", () => {
   test("its manifest is valid and asks only for what the TUI host supplies", () => {
     const manifest = parseManifest(tui.manifest, "nikcli:gadgets")
-    expect(manifest.capabilities).toEqual(["commands"])
+    expect(manifest.capabilities).toEqual(["commands", "routes"])
     expect(tui.id).toBe(manifest.id)
   })
 
-  test("registers /gadget with arguments and a palette entry, and unregisters both", () => {
+  test("registers /gadget with arguments, a palette entry and the sidebar slot, and unregisters all three", () => {
     const { context: ctx, seen } = context(url())
     const dispose = setup(ctx)
     expect(seen.commands.map((c) => c.name)).toEqual(["gadget", "gadget.pair"])
     expect(slash(seen).slash).toEqual({ name: "gadget", aliases: ["gadgets"], arguments: true })
     dispose()
-    expect(seen.disposed).toEqual(["gadget", "gadget.pair"])
+    expect(seen.slots).toEqual(["sidebar.content"])
+    expect(seen.disposed).toEqual(["gadget", "gadget.pair", "slot:sidebar.content"])
   })
 
   test("/gadget lists what is paired, or says how to pair", async () => {

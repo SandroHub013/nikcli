@@ -9,8 +9,10 @@ The nikcli side of gadgets. Read `../gadget/AGENTS.md` first for the rules that 
 - `src/index.ts` keeps **one bridge per process** keyed by host and port, refcounted across project instances; the last
   `dispose` stops it. A taken port is recorded on the bridge and surfaced by the tool, never thrown from the plugin.
 - `src/tool.ts`: anything that changes state calls `ctx.ask` before it acts. A new action that does must too.
-- `src/tui.ts`: the manifest asks for `commands` only, which `TUI_HOST_CAPABILITIES` supplies. Do not add `routes` or
-  a slot without checking that an external plugin can render JSX in the host.
+- `src/tui.tsx` and `src/sidebar.tsx`: the manifest asks for `commands` and `routes` (a slot needs `routes`), both in
+  `TUI_HOST_CAPABILITIES`. The sidebar is TSX compiled by the host's Solid transform; colours are fixed because an external
+  plugin has no handle on the theme. The tests here preload `@opentui/solid/preload` (`bunfig.toml`); the render test is
+  `packages/nikcli/test/tui/gadgets-sidebar.test.tsx`.
 - Do not import from `packages/nikcli`. The plugin reaches the instance only through `PluginInput.client`.
 
 `nikcli.json` takes bare plugin specifiers; settings are environment variables (see the README).

@@ -216,6 +216,37 @@ describe("a gadget end to end", () => {
     expect(out).toContain("│hello     │")
   })
 
+  test("a bitmap panel receives the pixels the bridge rendered", async () => {
+    const frames: Array<{ width: number; height: number; ink: number }> = []
+    const gadget = new Gadget({
+      name: "epaper",
+      builtins: false,
+      log: () => undefined,
+      display: display.bitmap({
+        width: 64,
+        height: 24,
+        push: (bitmap) =>
+          void frames.push({
+            width: bitmap.width,
+            height: bitmap.height,
+            ink: bitmap.pixels.reduce((n, v) => n + v, 0),
+          }),
+      }),
+    })
+    const { pairing } = await connect(gadget)
+    expect(bridge.registry.get(pairing.id).display).toMatchObject({
+      format: "bitmap",
+      width: 64,
+      height: 24,
+      columns: 10,
+      rows: 3,
+    })
+    bridge.registry.show(pairing.id, { type: "Markdown", props: { text: "# Build green" } })
+    await until(() => frames.length === 1)
+    expect(frames[0]).toMatchObject({ width: 64, height: 24 })
+    expect(frames[0]!.ink).toBeGreaterThan(20)
+  })
+
   test("revoking unpairs the device and its next connect is refused", async () => {
     const gadget = plain()
     const { pairing, ended } = await connect(gadget)

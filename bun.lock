@@ -487,11 +487,22 @@
         "@nikcli-ai/plugin": "workspace:*",
       },
       "devDependencies": {
+        "@opentui/core": "0.5.11",
+        "@opentui/solid": "0.5.11",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "solid-js": "catalog:",
         "typescript": "catalog:",
       },
+      "peerDependencies": {
+        "@opentui/solid": "0.5.11",
+        "solid-js": "*",
+      },
+      "optionalPeers": [
+        "@opentui/solid",
+        "solid-js",
+      ],
     },
     "packages/http-recorder": {
       "name": "@nikcli-ai/http-recorder",

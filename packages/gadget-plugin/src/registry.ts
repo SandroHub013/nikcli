@@ -9,6 +9,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { renderBitmap } from "@nikcli-ai/gadget/display"
 import {
   GadgetError,
   LIMITS,
@@ -419,6 +420,11 @@ export class Registry {
     const problem = treeProblem(tree)
     if (problem) throw new GadgetError("PayloadTooLarge", `tree refused: ${problem}`)
     const frameID = `frame_${randomBytes(6).toString("hex")}`
+    if (display.format === "bitmap") {
+      // The panel has no layout engine: the bridge lays the tree out and sends pixels.
+      this.push(id, { type: "show", frameID, bitmap: renderBitmap(tree as Tree, display) })
+      return frameID
+    }
     this.push(id, {
       type: "show",
       frameID,

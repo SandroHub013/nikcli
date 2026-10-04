@@ -59,13 +59,35 @@ export interface CommandSpec {
 }
 
 export interface DisplaySpec {
-  /** Character cells the device can show. */
+  /** Character cells the device can show. For a `bitmap` display the bridge derives them from the pixels. */
   readonly columns: number
   readonly rows: number
-  /** Bits per pixel the panel has — informational; the first slice draws text. */
+  /** Bits per pixel the panel has — informational. */
   readonly depth: 1 | 2 | 8
-  /** What the bridge sends: a drawing tree the device lays out itself. */
-  readonly format: "tree"
+  /**
+   * What the bridge sends. `tree` is a drawing tree the device lays out itself; `bitmap` is a finished 1-bit image
+   * the bridge rendered for `width × height` pixels, for a panel with no layout engine (an e-paper board, a
+   * microcontroller).
+   */
+  readonly format: "tree" | "bitmap"
+  /** Pixels. Required when `format` is `bitmap`. */
+  readonly width?: number
+  readonly height?: number
+  /** Glyph magnification for a `bitmap` display, 1 to 8. Default 1. */
+  readonly scale?: number
+}
+
+/** The 5×7 font plus one pixel of spacing: the cell a character occupies at scale 1. */
+export const CELL_WIDTH = 6
+export const CELL_HEIGHT = 8
+
+/** A rendered frame: 1 bit per pixel, rows padded to whole bytes, most significant bit first, 1 = ink. */
+export interface BitmapFrame {
+  readonly width: number
+  readonly height: number
+  readonly format: "1bpp"
+  /** Base64 of the packed rows. */
+  readonly data: string
 }
 
 export interface Platform {
@@ -129,6 +151,7 @@ export type Frame =
       readonly tree: Tree
       readonly viewport: { readonly columns: number; readonly rows: number }
     }
+  | { readonly type: "show"; readonly frameID: string; readonly bitmap: BitmapFrame }
   | { readonly type: "message"; readonly text: string; readonly sessionID?: string }
   | { readonly type: "ping"; readonly time: number }
   | { readonly type: "bye"; readonly reason: string }
@@ -430,20 +453,39 @@ export function parseHello(value: unknown): Hello {
   let display: DisplaySpec | undefined
   if (raw.display !== undefined) {
     if (typeof raw.display !== "object" || raw.display === null) fail("display must be an object")
-    const { columns, rows, depth, format } = raw.display as Record<string, unknown>
-    if (
-      typeof columns !== "number" ||
-      typeof rows !== "number" ||
-      columns < 1 ||
-      rows < 1 ||
-      columns > 512 ||
-      rows > 256
-    ) {
-      fail("display.columns and display.rows must be between 1 and 512/256")
-    }
+    const { columns, rows, depth, format, width, height, scale } = raw.display as Record<string, unknown>
     if (depth !== 1 && depth !== 2 && depth !== 8) fail("display.depth must be 1, 2 or 8")
-    if (format !== "tree") fail('display.format must be "tree"')
-    display = { columns: Math.floor(columns), rows: Math.floor(rows), depth, format }
+    if (format === "bitmap") {
+      const whole = (value: unknown, min: number, max: number) =>
+        typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+      if (!whole(width, 8, 2048) || !whole(height, 8, 2048))
+        fail("display.width and display.height must be whole pixels between 8 and 2048")
+      if (scale !== undefined && !whole(scale, 1, 8)) fail("display.scale must be a whole number from 1 to 8")
+      const magnification = (scale as number | undefined) ?? 1
+      display = {
+        columns: Math.max(1, Math.floor((width as number) / (CELL_WIDTH * magnification))),
+        rows: Math.max(1, Math.floor((height as number) / (CELL_HEIGHT * magnification))),
+        depth,
+        format,
+        width: width as number,
+        height: height as number,
+        ...(scale === undefined ? {} : { scale: scale as number }),
+      }
+    } else if (format === "tree") {
+      if (
+        typeof columns !== "number" ||
+        typeof rows !== "number" ||
+        columns < 1 ||
+        rows < 1 ||
+        columns > 512 ||
+        rows > 256
+      ) {
+        fail("display.columns and display.rows must be between 1 and 512/256")
+      }
+      display = { columns: Math.floor(columns), rows: Math.floor(rows), depth, format }
+    } else {
+      fail('display.format must be "tree" or "bitmap"')
+    }
   }
   let buttons: string[] | undefined
   if (raw.buttons !== undefined) {

@@ -1,11 +1,11 @@
 /**
  * Deploy key — a physical key switch that gates the agent's deploys.
  *
- * A mod on the nikcli side hooks `tool.check` for `bash` calls matching
- * `git push` or your deploy script and asks this gadget `key.state`; when the
- * key is not turned the call is refused with the reason, whatever the
- * permission rules say. Turning the key is the approval, and taking it out
- * of the drawer is the audit trail.
+ * This file is the device half only. A nikcli mod (not included here) would
+ * hook `tool.check` for `bash` calls matching `git push` or your deploy
+ * script, ask this gadget `key.state`, and refuse the call while the key is
+ * not turned, whatever the permission rules say. Turning the key is then the
+ * approval, and taking it out of the drawer is the audit trail.
  *
  * Key switch between GPIO 22 and ground (pull-up): 0 = turned.
  */

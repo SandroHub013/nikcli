@@ -4,10 +4,13 @@
  *
  * nikcli asks before risky tool calls. On a Pi with an LED on GPIO 18 and a
  * button on GPIO 17, this gadget turns the LED on while a permission is
- * pending and reports the press as `ui.press { key: "approve" }`, which a
- * nikcli mod turns into the reply (see skills/gadget-permission-beacon/SKILL.md).
+ * pending and reports the press as `ui.press { key: "approve" }`.
  *
- * The LED is driven by a command so the mod can switch it: `beacon.set`.
+ * This file is the device half only. Closing the loop needs a nikcli mod that
+ * turns a pending permission into a `beacon.set` call and the press into the
+ * permission reply; that mod is not part of this repository.
+ *
+ * The LED is driven by a command so such a mod can switch it: `beacon.set`.
  */
 import { writeFileSync, existsSync } from "node:fs"
 import { Gadget, button } from "@nikcli-ai/gadget"

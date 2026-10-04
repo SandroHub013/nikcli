@@ -14,7 +14,7 @@ import { readV2TuiPlugin } from "@tui/plugin/v2"
  * bridge and shows its answer in a dialog.
  */
 const pluginDir = path.resolve(import.meta.dir, "../../../gadget-plugin")
-const tui = (await import(path.join(pluginDir, "src", "tui.ts"))).default
+const tui = (await import(path.join(pluginDir, "src", "tui.tsx"))).default
 const { Bridge } = await import(path.join(pluginDir, "src", "bridge.ts"))
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-gadgets-tui-"))
@@ -24,6 +24,7 @@ function host(url: string) {
   const layers: Array<() => TuiKeymapLayer> = []
   const dialogs: Array<{ title: string; message: string }> = []
   const toasts: string[] = []
+  const slotNames: string[] = []
   const api = {
     client: {},
     data: {},
@@ -39,18 +40,25 @@ function host(url: string) {
       DialogAlert: (props: { title: string; message: string }) => void dialogs.push(props),
       toast: (input: { message: string }) => void toasts.push(input.message),
     },
+    slots: {
+      registerDisposable: (plugin: { slots: Record<string, unknown> }) => (
+        slotNames.push(...Object.keys(plugin.slots)),
+        () => undefined
+      ),
+    },
     lifecycle: { onDispose: () => () => undefined },
   } as unknown as TuiPluginApi
   const commands = (): TuiKeymapCommand[] => layers.flatMap((layer) => layer().commands as TuiKeymapCommand[])
-  return { api, commands, dialogs, toasts, url }
+  return { api, commands, dialogs, toasts, slotNames, url }
 }
 
 describe("gadgets TUI plugin", () => {
   it("is accepted by the v2 host and registers /gadget and the palette entry", async () => {
     const loaded = readV2TuiPlugin({ default: tui }, "file:///gadgets/tui.ts")!
     expect(loaded.id).toBe("nikcli:gadgets")
-    const { api, commands } = host("http://127.0.0.1:1")
+    const { api, commands, slotNames } = host("http://127.0.0.1:1")
     await loaded.tui(api, undefined, {} as never)
+    expect(slotNames).toEqual(["sidebar.content"])
     const all = commands()
     expect(all.map((command) => command.name)).toEqual(["gadget", "gadget.pair"])
     expect(all[0]).toMatchObject({

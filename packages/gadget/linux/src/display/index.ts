@@ -9,7 +9,8 @@
  * library exposes, and `layout` plus `rasterize` do the rest.
  */
 import { openSync, writeSync, closeSync } from "node:fs"
-import type { DisplaySpec, Tree, TreeNode } from "../protocol.ts"
+import type { BitmapFrame, DisplaySpec, Tree, TreeNode } from "../protocol.ts"
+import { CELL_HEIGHT, CELL_WIDTH } from "../protocol.ts"
 import { FONT_5X7, GLYPH_WIDTH, GLYPH_HEIGHT } from "./font.ts"
 
 export interface Viewport {
@@ -19,7 +20,10 @@ export interface Viewport {
 
 export interface Display {
   readonly spec: DisplaySpec
+  /** A `tree` display draws what the bridge sends. */
   draw(tree: Tree, viewport: Viewport): Promise<void> | void
+  /** A `bitmap` display receives a finished image instead; it must implement this. */
+  drawBitmap?(bitmap: Bitmap): Promise<void> | void
   clear?(): Promise<void> | void
 }
 
@@ -200,9 +204,58 @@ export function rasterize(
 /** How many character cells a panel of `width × height` pixels holds at `scale`. */
 export function cellsFor(width: number, height: number, scale = 1): Viewport {
   return {
-    columns: Math.max(1, Math.floor(width / ((GLYPH_WIDTH + 1) * scale))),
-    rows: Math.max(1, Math.floor(height / ((GLYPH_HEIGHT + 1) * scale))),
+    columns: Math.max(1, Math.floor(width / (CELL_WIDTH * scale))),
+    rows: Math.max(1, Math.floor(height / (CELL_HEIGHT * scale))),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Bitmap frames: what the bridge sends to a panel that has no layout engine.
+
+/** Pack a bitmap to 1 bit per pixel, rows padded to whole bytes, most significant bit first. */
+export function packBitmap(bitmap: Bitmap): BitmapFrame {
+  const stride = Math.ceil(bitmap.width / 8)
+  const bytes = new Uint8Array(stride * bitmap.height)
+  for (let y = 0; y < bitmap.height; y++) {
+    for (let x = 0; x < bitmap.width; x++) {
+      if (bitmap.pixels[y * bitmap.width + x]) bytes[y * stride + (x >> 3)]! |= 0x80 >> (x & 7)
+    }
+  }
+  return { width: bitmap.width, height: bitmap.height, format: "1bpp", data: Buffer.from(bytes).toString("base64") }
+}
+
+/** The inverse of `packBitmap`. Throws when the data is not the size the dimensions say. */
+export function unpackBitmap(frame: BitmapFrame): Bitmap {
+  if (frame.format !== "1bpp") throw new Error(`unsupported bitmap format ${String(frame.format)}`)
+  const stride = Math.ceil(frame.width / 8)
+  const bytes = Buffer.from(frame.data, "base64")
+  if (bytes.byteLength !== stride * frame.height) {
+    throw new Error(
+      `bitmap is ${bytes.byteLength} bytes, expected ${stride * frame.height} for ${frame.width}x${frame.height}`,
+    )
+  }
+  const pixels = new Uint8Array(frame.width * frame.height)
+  for (let y = 0; y < frame.height; y++) {
+    for (let x = 0; x < frame.width; x++) {
+      if (bytes[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) pixels[y * frame.width + x] = 1
+    }
+  }
+  return { width: frame.width, height: frame.height, pixels }
+}
+
+/**
+ * Render a tree for a `bitmap` display: lay it out for the cells the panel
+ * holds at its scale, rasterize with the built-in font, pack. This runs on the
+ * bridge, so the device needs no font, no layout and no tree parser.
+ */
+export function renderBitmap(tree: Tree, spec: DisplaySpec): BitmapFrame {
+  if (spec.format !== "bitmap" || spec.width === undefined || spec.height === undefined) {
+    throw new Error("renderBitmap needs a bitmap display with width and height")
+  }
+  const scale = spec.scale ?? 1
+  const cells = cellsFor(spec.width, spec.height, scale)
+  const lines = layout(tree, cells)
+  return packBitmap(rasterize(lines, { width: spec.width, height: spec.height, scale }))
 }
 
 // ---------------------------------------------------------------------------
@@ -272,5 +325,40 @@ export function framebuffer(options: FramebufferOptions): Display {
     clear() {
       paint({ width: options.width, height: options.height, pixels: new Uint8Array(options.width * options.height) })
     },
+  }
+}
+
+export interface BitmapOptions {
+  readonly width: number
+  readonly height: number
+  readonly scale?: number
+  /** Called with each finished frame: push it to the panel with the vendor's library. */
+  readonly push: (bitmap: Bitmap) => Promise<void> | void
+  readonly clear?: () => Promise<void> | void
+}
+
+/**
+ * A panel that takes a finished 1-bit image — an e-paper board, an OLED over
+ * I²C. The bridge lays the tree out and rasterizes it; `push` only has to put
+ * the pixels on the glass.
+ */
+export function bitmap(options: BitmapOptions): Display {
+  const scale = options.scale ?? 1
+  const cells = cellsFor(options.width, options.height, scale)
+  return {
+    spec: {
+      columns: cells.columns,
+      rows: cells.rows,
+      depth: 1,
+      format: "bitmap",
+      width: options.width,
+      height: options.height,
+      ...(scale === 1 ? {} : { scale }),
+    },
+    draw() {
+      throw new Error("a bitmap display is sent finished images, not trees")
+    },
+    drawBitmap: (frame) => options.push(frame),
+    clear: options.clear,
   }
 }

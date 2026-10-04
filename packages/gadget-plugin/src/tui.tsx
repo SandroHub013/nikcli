@@ -3,7 +3,8 @@
  *
  * Add `"@nikcli-ai/plugin-gadgets"` to `plugin` in `tui.json` and the TUI gets
  * `/gadget` (list), `/gadget pair`, `/gadget health <id>`, `/gadget send <id>
- * <text>` and `/gadget revoke <id>`. It talks to the bridge's `/admin` routes,
+ * <text>` and `/gadget revoke <id>`, and a "Gadgets" block in the sidebar once
+ * one is paired. It talks to the bridge's `/admin` routes,
  * which answer this machine only, so the TUI has to run where the nikcli
  * server runs. Option `url` points it elsewhere on the same machine
  * (default `http://127.0.0.1:4097`).
@@ -14,6 +15,7 @@
 import { Plugin } from "@nikcli-ai/plugin/v2/tui"
 import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
 import { GadgetError, ROUTES, type GadgetInfo, type HealthInfo, type PairWindow } from "@nikcli-ai/gadget/protocol"
+import { Gadgets } from "./sidebar.tsx"
 
 const ID = "nikcli:gadgets"
 
@@ -153,11 +155,12 @@ export function setup(context: Context) {
       run: guarded(() => pair()),
     }),
   ]
+  off.push(ui.slot("sidebar.content", () => <Gadgets url={base} />))
   return () => off.forEach((dispose) => dispose())
 }
 
 export default Plugin.define({
-  manifest: { id: ID, version: "1.427.0", kind: "user", capabilities: ["commands"] },
+  manifest: { id: ID, version: "1.427.0", kind: "user", capabilities: ["commands", "routes"] },
   id: ID,
   setup,
 })

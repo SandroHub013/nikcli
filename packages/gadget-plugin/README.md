@@ -34,7 +34,11 @@ or drop the package's `src/index.ts` into `~/.config/nikcli/plugins/gadgets/` as
 - **Messages and presses.** A device message starts a session titled "Gadget: <name>" (or continues one) and is delivered
   with `[gadget <id>]` in front; a press is sent to the mods as `ui.press` with `component: "Gadget"` and
   `requestId: <id>`.
-- **`/gadget`** in the TUI: `list`, `pair`, `health <id>`, `send <id> <text>`, `revoke <id>`, plus a palette entry to pair.
+- **`/gadget`** in the TUI: `list`, `pair`, `health <id>`, `send <id> <text>`, `revoke <id>`, plus a palette entry to pair,
+  and a "Gadgets" block in the sidebar once one is paired (polls `/admin/devices` every 5 s; draws nothing when none is paired
+  or the bridge is unreachable).
+- **Bitmap panels.** A gadget that declares `display.format: "bitmap"` (with `width`, `height`, optional `scale`) is sent
+  a finished 1-bit image the bridge rendered, instead of a tree.
 
 ## Permission rules
 
@@ -50,5 +54,5 @@ An unmatched call asks. Deny is deny.
 - `src/bridge.ts` — HTTP and SSE over the registry; `Bun.serve`.
 - `src/tool.ts` — the `gadget` tool.
 - `src/index.ts` — the server plugin: one bridge per process, shared by every project instance.
-- `src/tui.ts` — the v2 TUI plugin (manifest: `commands`).
+- `src/tui.tsx`, `src/sidebar.tsx` — the v2 TUI plugin (manifest: `commands`, `routes`) and the sidebar block.
 - `tests/` — registry, bridge with the real SDK, tool and plugin, TUI.

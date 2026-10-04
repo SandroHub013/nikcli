@@ -55,9 +55,8 @@ Non-goals, stated so nobody scopes them in by accident:
 
 - **No ESP32 firmware and no Nintendo Switch homebrew.** The protocol is plain JSON over HTTP and SSE so either can speak
   it, but neither is written or built here, and nothing claims they work.
-- **No server-side rasterization, no sidebar slot, no per-command tools.** A slot needs an external plugin to render JSX in
-  the host, which is unverified; per-command tools need the tool registry to re-derive on a device's hello, which today it
-  does only on instance reload.
+- **No per-command tools.** They need the tool registry to re-derive on a device's hello, which today it does only on
+  instance reload.
 - **No second transport and no change to nikcli's auth.** The bridge is a separate listener with its own token scheme.
 - **No code from a device ever runs in nikcli.** Only JSON the registry validated crosses in.
 - **No new permission evaluator.** Gating is `ctx.ask` under permission id `gadget`; this spec adds patterns, not a mechanism.
@@ -104,12 +103,18 @@ Non-goals, stated so nobody scopes them in by accident:
 11. **A button is a UI event.** `POST /devices/:id/event` is delivered as `mod.event` with `component: "Gadget"` and
     `requestId: <id>`, so a mod that drew a `Button` for the gadget answers it as it answers a terminal press; the reply
     says whether it was handled.
-12. **A display takes a bounded tree.** `show` validates the tree against depth 16, 2,000 nodes and 10,000 characters
-    (`treeProblem`) before it is sent. The SDK lays it out for the panel's columns and rows (`display.layout`), draws it
-    with a driver (`terminal`, `framebuffer`) and can rasterize to 1-bit pixels with a built-in 5×7 font.
-13. **The TUI side is commands only.** The v2 plugin `nikcli:gadgets` declares `commands`, which the TUI host supplies, and
-    registers `/gadget` (`list`, `pair`, `health <id>`, `send <id> <text>`, `revoke <id>`) and a palette entry to pair.
-    It reaches the bridge's `/admin` routes, so the TUI must run where the server runs.
+12. **A display takes a bounded tree, or finished pixels.** `show` validates the tree against depth 16, 2,000 nodes and
+    10,000 characters (`treeProblem`) before it is sent. A `tree` display lays it out itself (`display.layout`) and draws it
+    with a driver (`terminal`, `framebuffer`). A `bitmap` display declares `width` and `height` in pixels (8 to 2048) and an
+    optional `scale` (1 to 8); the bridge lays the tree out for the cells that fit, rasterizes it with a built-in 5×7 font and
+    sends a `show` frame carrying `{ width, height, format: "1bpp", data }` — rows padded to bytes, most significant bit
+    first, base64, 1 = ink — which the SDK unpacks (`display.bitmap`) for the vendor's panel library. A device with no
+    font and no layout engine needs neither.
+13. **The TUI side is commands and one sidebar block.** The v2 plugin `nikcli:gadgets` declares `commands` and `routes` (the
+    capability a slot needs), both supplied by the TUI host, and registers `/gadget` (`list`, `pair`, `health <id>`,
+    `send <id> <text>`, `revoke <id>`), a palette entry to pair, and a `sidebar.content` slot that lists paired gadgets with
+    their state and draws nothing until one is paired. It reaches the bridge's `/admin` routes, so the TUI must run where the
+    server runs.
 14. **One bridge per process.** Every project instance that loads the plugin shares a bridge keyed by host and port; the
     last `dispose` stops it. A taken port is recorded and reported by the tool, never thrown from the plugin.
 15. **Failures are typed.** `GadgetError.{NotPaired, HelloInvalid, Offline, Busy, Timeout, CommandUnknown, Denied,
@@ -157,7 +162,7 @@ nikcli process
 - `packages/gadget/linux/src/gadget.ts`, `transport.ts`, `state.ts`, `cli.ts` — the runtime, the HTTP and SSE client,
   the pairing file, the CLI.
 - `packages/gadget/linux/src/commands/`, `display/`, `button/` — built-ins and drivers.
-- `packages/gadget-plugin/src/registry.ts`, `bridge.ts`, `tool.ts`, `index.ts`, `tui.ts` — the plugin.
+- `packages/gadget-plugin/src/registry.ts`, `bridge.ts`, `tool.ts`, `index.ts`, `tui.tsx`, `sidebar.tsx` — the plugin.
 - `packages/nikcli/test/plugin/gadgets.test.ts` and `packages/nikcli/test/tui/plugin-gadgets.test.ts` — the plugin through
   nikcli's own loader and through the real v2 TUI host.
 
@@ -196,7 +201,11 @@ All run without hardware.
 - `packages/gadget/linux/tests`: protocol, display, runtime, commands.
 - `packages/nikcli/test/plugin/gadgets.test.ts`: nikcli's `Plugin.Service` loads the plugin from a `file://` spec and a
   real SDK gadget pairs and runs a command through the tool. `packages/nikcli/test/tui/plugin-gadgets.test.ts`: the v2
-  TUI host accepts the module and `/gadget pair` shows a code the bridge issued.
+  TUI host accepts the module, registers the slot and `/gadget pair` shows a code the bridge issued.
+  `packages/nikcli/test/tui/gadgets-sidebar.test.tsx`: the sidebar painted by OpenTUI's real Solid renderer — nothing
+  before a pairing, one row per device with its state, nothing when the bridge is down.
+- Bitmap frames: protocol validation, pack and unpack, scale, the registry sending pixels instead of a tree, and the real
+  SDK receiving them over HTTP (`packages/gadget/linux/tests/bitmap.test.ts`, registry and bridge tests).
 - A smoke with separate processes: a bridge in one, `nikcli-gadget pair` and `run` in another, `send` from a third.
 
 Not verified: any hardware (GPIO, framebuffer, the OBD-II example, `install.sh`), and the plugin enabled in a user's
@@ -208,19 +217,19 @@ Nothing is on by default: the plugin must be listed in `nikcli.json`. Removing t
 tool and the listener; paired devices stay in `devices.json` and come back when it is re-enabled. Nothing in nikcli's core
 changed, so there is nothing to revert.
 
-Later slices, each dependency-gated: a sidebar slot once an external plugin can render in the host; per-command tools on
-registry re-derivation; server-side 1-bit frames for e-paper; ESP32 firmware and a Switch homebrew under their own specs;
-`plugin` options in `nikcli.json` (a core change, and the reason the bridge reads the environment today).
+Later slices, each dependency-gated: per-command tools on registry re-derivation; ESP32 firmware and a Switch homebrew
+under their own specs; the nikcli-side mods the permission-beacon and deploy-key examples need; `plugin` options in
+`nikcli.json` (a core change, and the reason the bridge reads the environment today).
 
 ## Muse ↔ nikcli Mapping
 
-| Muse Gadgets                                     | nikcli                                                                |
-| ------------------------------------------------ | --------------------------------------------------------------------- |
-| SDK token from gadgets.muse.ai                   | `nkg_` token minted by the bridge when the pairing code is entered    |
-| Pair in the Muse app, button to confirm          | code from `/gadget pair`, `nikcli-gadget pair`, button when declared  |
-| `COMMAND_SPECS` and `Executor.run`               | `commands` in `new Gadget`, JSON Schema args, one handler per command |
-| `system.run`, `file.read/write`, `device.health` | the same four, 64 KB file chunks, same account semantics              |
-| `send-user-msg --session-id`                     | `nikcli-gadget send "…" --session-id`, 202 with the session id        |
-| Text and images to the display                   | a bounded tree laid out by the SDK; no images yet                     |
-| Bluetooth LE pairing                             | HTTP on the LAN; no BLE                                               |
-| Home-network tunnel                              | none: the device reaches nikcli directly                              |
+| Muse Gadgets                                     | nikcli                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------ |
+| SDK token from gadgets.muse.ai                   | `nkg_` token minted by the bridge when the pairing code is entered       |
+| Pair in the Muse app, button to confirm          | code from `/gadget pair`, `nikcli-gadget pair`, button when declared     |
+| `COMMAND_SPECS` and `Executor.run`               | `commands` in `new Gadget`, JSON Schema args, one handler per command    |
+| `system.run`, `file.read/write`, `device.health` | the same four, 64 KB file chunks, same account semantics                 |
+| `send-user-msg --session-id`                     | `nikcli-gadget send "…" --session-id`, 202 with the session id           |
+| Text and images to the display                   | a bounded tree, or a finished 1-bit bitmap the bridge renders; no images |
+| Bluetooth LE pairing                             | HTTP on the LAN; no BLE                                                  |
+| Home-network tunnel                              | none: the device reaches nikcli directly                                 |

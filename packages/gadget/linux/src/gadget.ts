@@ -28,7 +28,7 @@ import { fingerprint, readPairing, writePairing, type PairingState } from "./sta
 import * as system from "./commands/system.ts"
 import * as file from "./commands/file.ts"
 import * as health from "./commands/health.ts"
-import type { Display } from "./display/index.ts"
+import { unpackBitmap, type Display } from "./display/index.ts"
 import type { Button } from "./button/index.ts"
 
 export const SDK_VERSION = "1.427.0"
@@ -275,6 +275,20 @@ export class Gadget {
         return
       case "show": {
         if (!this.display) return
+        if ("bitmap" in frame) {
+          if (!this.display.drawBitmap) {
+            this.log(`refusing bitmap frame ${frame.frameID}: the display does not take bitmaps`)
+            return
+          }
+          try {
+            await this.display.drawBitmap(unpackBitmap(frame.bitmap))
+          } catch (error) {
+            this.log(
+              `refusing bitmap frame ${frame.frameID}: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+          return
+        }
         const problem = treeProblem(frame.tree)
         if (problem) {
           this.log(`refusing frame ${frame.frameID}: ${problem}`)

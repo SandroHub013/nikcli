@@ -63,9 +63,11 @@ stream per device. `curl` can pair a device.
 ## Project ideas
 
 - **Permission beacon.** A lamp that lights when the agent waits for a permission, and a button that answers. You see the
-  ask from across the room. `linux/examples/permission-beacon.ts`.
-- **Deploy key.** A key switch the agent checks before a force-push or a deploy: a mod on `tool.check` asks the gadget
-  `key.state` and refuses while it is not turned. `linux/examples/deploy-key.ts`.
+  ask from across the room. `linux/examples/permission-beacon.ts` is the device half; the nikcli mod that connects it to
+  permissions is not included.
+- **Deploy key.** A key switch the agent checks before a force-push or a deploy: a mod on `tool.check` would ask the
+  gadget `key.state` and refuse while it is not turned. `linux/examples/deploy-key.ts` is the device half; the mod is not
+  included.
 - **Desk badge.** A framebuffer or e-paper panel showing what the agent is working on. `linux/examples/desk-badge.ts`.
 - **Car gadget.** A Pi Zero on the OBD-II port reading RPM, speed, coolant temperature and fault codes.
   `linux/examples/car-obd.ts`. CarPlay and Android Auto are closed platforms; this reads the car and leaves the head unit

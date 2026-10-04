@@ -87,12 +87,14 @@ export default new Gadget({
 
 The bridge sends a drawing tree (`Box`, `Text`, `Markdown`, `Code`, `Button`); `display.layout` turns it into lines for
 the panel's columns and rows, `display.rasterize` turns lines into 1-bit pixels with the built-in 5×7 font. Reference
-drivers: `display.terminal()` (preview, logs) and `display.framebuffer()` (any `/dev/fb*`). An e-paper driver is
-`{ spec, draw }` over the vendor library, with `layout` and `rasterize` doing the work.
+drivers: `display.terminal()` (preview, logs) and `display.framebuffer()` (any `/dev/fb*`). For a panel with no layout
+engine — an e-paper board, an OLED — use `display.bitmap({ width, height, scale, push })`: the bridge lays the tree out,
+rasterizes it with the built-in font and sends a finished 1-bit image (`format: "bitmap"`, rows padded to bytes, most
+significant bit first, base64); `push` receives the unpacked pixels and hands them to the vendor's library.
 
 Buttons: `button.keyboard({ keys: { ok: "enter" } })` for development, `button.gpio({ pins })` on a Pi (sysfs, pull-up,
 press to ground), `button.all(...)` to combine. A press is posted as `ui.press { key }` and reaches the mods on the nikcli
-side; the beacon skill shows how one answers a permission from it.
+side.
 
 ## Sending a message
 

@@ -16,6 +16,10 @@
     "./protocol": {
       "import": "./linux/src/protocol.ts",
       "types": "./linux/src/protocol.ts"
+    },
+    "./display": {
+      "import": "./linux/src/display/index.ts",
+      "types": "./linux/src/display/index.ts"
     }
   },
   "scripts": {

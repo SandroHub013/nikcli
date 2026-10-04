@@ -11,8 +11,8 @@
       "types": "./src/index.ts"
     },
     "./tui": {
-      "import": "./src/tui.ts",
-      "types": "./src/tui.ts"
+      "import": "./src/tui.tsx",
+      "types": "./src/tui.tsx"
     }
   },
   "scripts": {
@@ -27,6 +27,21 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@opentui/core": "0.5.11",
+    "@opentui/solid": "0.5.11",
+    "solid-js": "catalog:"
+  },
+  "peerDependencies": {
+    "@opentui/solid": "0.5.11",
+    "solid-js": "*"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   }
 }
