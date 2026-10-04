@@ -34,7 +34,6 @@ const PRESSED = [
   '[data-slot="decision-ghost"]:active:not(:disabled)',
   '[data-slot="decision-chip"]:active:not(:disabled)',
   '[data-slot="ade-icon"]:active',
-  '[data-slot="ext-tab"]:active',
   '[data-slot="ext-filter"]:active',
   '[data-slot="ade-rec"]:active',
   '[data-component="remote-space"] [data-slot="primary"]:active',
