@@ -5,31 +5,37 @@
  * normalization that repairs corrupt or legacy payloads without throwing.
  */
 
-import { describeChordRisk } from "./shortcuts"
-import type { TranscriberBackend } from "../asr/select"
-import { t } from "@nikcli-ai/ade/i18n"
+import { describeChordRisk } from "./shortcuts";
+import type { TranscriberBackend } from "../asr/select";
+import { t } from "@nikcli-ai/ade/i18n";
 
-export type VoiceMode = "agent" | "transcription"
+export type VoiceMode = "agent" | "transcription";
 
-export type VoiceActivation = "push-to-talk" | "toggle" | "wake-word"
+export type VoiceActivation = "push-to-talk" | "toggle" | "wake-word";
 
-export type TranscriptionSendMode = "manual" | "auto"
+export type TranscriptionSendMode = "manual" | "auto";
 /**
  * How the dictation chord opens the microphone: held while speaking, or a
  * switch — one tap opens it and the next closes it.
  */
-export type DictationPress = "hold" | "toggle"
+export type DictationPress = "hold" | "toggle";
 
-export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
-export type AgentEngine = (typeof AGENT_ENGINES)[number]
+export const AGENT_ENGINES = [
+  "auto",
+  "claude",
+  "codex",
+  "nikcli",
+  "off",
+] as const;
+export type AgentEngine = (typeof AGENT_ENGINES)[number];
 
 /**
  * How the agent is asked to think. `fast`: Sonnet 5 with little effort on
  * Claude Code, little effort on Codex, which is what a spoken answer needs.
  * `cli`: whatever the CLI is set to, for someone who wants its own model.
  */
-export const AGENT_SPEEDS = ["fast", "cli"] as const
-export type AgentSpeed = (typeof AGENT_SPEEDS)[number]
+export const AGENT_SPEEDS = ["fast", "cli"] as const;
+export type AgentSpeed = (typeof AGENT_SPEEDS)[number];
 
 /**
  * The voice replies are read in: a local voice ADE downloads on first use, or
@@ -51,24 +57,30 @@ export const REPLY_VOICES = [
   "am_fenrir",
   "bf_emma",
   "bm_george",
+  "it-IT-Grant",
+  "it-IT-Harper",
+  "it-IT-Luca",
+  "it-IT-Rosa",
   "system",
-] as const
-export type ReplyVoice = (typeof REPLY_VOICES)[number]
+] as const;
+export type ReplyVoice = (typeof REPLY_VOICES)[number];
 
 /**
  * What reads the replies. Piper and Kokoro are local and downloaded; `system`
  * is the Web Speech voice, always there and never better.
  *
- * No `gemini` here on purpose: that plan is not started, and the rule the two
- * plans agree on is that whoever arrives second adds only its own migration
- * step. When it does, this union and one step in `normalizeSettings` are all
- * that changes, and the version after `CURRENT_SETTINGS_VERSION` is its own.
+ * `mai` is Microsoft MAI-Voice on OpenRouter, and it arrived second: its own
+ * migration step is version 9, and this union is the only other thing that
+ * changed. It is opt-in, the same way Kokoro is — a profile that never named
+ * it stays on the voice it had.
  */
-export const REPLY_BACKENDS = ["piper", "kokoro", "system"] as const
-export type ReplyBackend = (typeof REPLY_BACKENDS)[number]
+export const REPLY_BACKENDS = ["piper", "kokoro", "mai", "system"] as const;
+export type ReplyBackend = (typeof REPLY_BACKENDS)[number];
 
 /** The last voice picked on each local backend; the system voice has only one. */
-export type ReplyVoiceMemory = Readonly<Partial<Record<Exclude<ReplyBackend, "system">, ReplyVoice>>>
+export type ReplyVoiceMemory = Readonly<
+  Partial<Record<Exclude<ReplyBackend, "system">, ReplyVoice>>
+>;
 
 /**
  * The G2P locale the replies are spoken in, and the only source of it.
@@ -79,15 +91,17 @@ export type ReplyVoiceMemory = Readonly<Partial<Record<Exclude<ReplyBackend, "sy
  * sentence instead of on the setting. The mapping to what the G2P is handed is
  * `g2pLocale` in `reply-voices.ts`, and it is not the identity — see there.
  */
-export const TTS_LOCALES = ["it-IT", "en-US", "en-GB"] as const
-export type TtsLocale = (typeof TTS_LOCALES)[number]
+export const TTS_LOCALES = ["it-IT", "en-US", "en-GB"] as const;
+export type TtsLocale = (typeof TTS_LOCALES)[number];
 
 /**
  * Which backend can speak each voice. One fact per voice, and the pair is
  * validated together: a profile that names a voice and a backend that
  * disagree has named a combination that cannot speak.
  */
-export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> = {
+export const REPLY_BACKEND_BY_VOICE: Readonly<
+  Record<ReplyVoice, ReplyBackend>
+> = {
   ugo: "piper",
   paola: "piper",
   lessac: "piper",
@@ -95,8 +109,12 @@ export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> 
   am_fenrir: "kokoro",
   bf_emma: "kokoro",
   bm_george: "kokoro",
+  "it-IT-Grant": "mai",
+  "it-IT-Harper": "mai",
+  "it-IT-Luca": "mai",
+  "it-IT-Rosa": "mai",
   system: "system",
-}
+};
 
 /**
  * 2: the assistant answers when it is called by name.
@@ -131,40 +149,45 @@ export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> 
  * in. Every profile until now had a Piper voice or the system one, and took
  * its language from the voice; the locale becomes a setting of its own, and it
  * starts from that same language. Nothing is offered and nothing is
- * downloaded: Kokoro is opt-in, so a profile arrives on Piper as it left, and
- * the Gemini plan, when it lands, takes the version after this one.
+ * downloaded: Kokoro is opt-in, so a profile arrives on Piper as it left.
+ *
+ * 9: Microsoft MAI, the cloud voice, and it is opt-in the same way. A profile
+ * arrives speaking what it was speaking: naming a cloud voice is a choice,
+ * and a migration that made it for the user would spend their key. The one
+ * question a profile on Piper/Ugo is asked, once, lives in `replyVoiceOffer`
+ * and is answered by the panel — this step only makes room for the answer.
  */
-export const CURRENT_SETTINGS_VERSION = 8
+export const CURRENT_SETTINGS_VERSION = 9;
 
 /**
  * Whether the wake word and always-on listening exist. The switch, like Chat
  * and Bot's: off, they cannot be chosen, nothing opens the microphone by
  * itself, and a stored choice of them becomes the shortcut. On since 0.7.1.
  */
-export const WAKE_WORD_ENABLED = true
+export const WAKE_WORD_ENABLED = true;
 
 /**
  * Whether push-to-talk and toggle can be chosen as the way the assistant is
  * started. Off: the name is the only way, and a stored choice of either moves
  * to it. The code and its tests stay behind this switch.
  */
-export const SHORTCUT_ACTIVATION_ENABLED = false
+export const SHORTCUT_ACTIVATION_ENABLED = false;
 
-let shortcutActivationSwitch = SHORTCUT_ACTIVATION_ENABLED
+let shortcutActivationSwitch = SHORTCUT_ACTIVATION_ENABLED;
 export function shortcutActivationEnabled(): boolean {
-  return shortcutActivationSwitch
+  return shortcutActivationSwitch;
 }
 export function setShortcutActivationEnabledForTests(on: boolean): void {
-  shortcutActivationSwitch = on
+  shortcutActivationSwitch = on;
 }
 
-let wakeWordSwitch = WAKE_WORD_ENABLED
+let wakeWordSwitch = WAKE_WORD_ENABLED;
 /** The switch as it reads now. Only tests move it, to keep the dormant path checked. */
 export function wakeWordEnabled(): boolean {
-  return wakeWordSwitch
+  return wakeWordSwitch;
 }
 export function setWakeWordEnabledForTests(on: boolean): void {
-  wakeWordSwitch = on
+  wakeWordSwitch = on;
 }
 
 /**
@@ -173,21 +196,21 @@ export function setWakeWordEnabledForTests(on: boolean): void {
  * the name, and what the recogniser makes of either — «ehi nik», «hey nick» —
  * by `settings/wake-word.ts`.
  */
-export const WAKE_PHRASE = "nik"
+export const WAKE_PHRASE = "nik";
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
-  readonly version: number
+  readonly version: number;
   /** Primary operational mode: executing agent commands or streaming raw text. */
-  readonly mode: VoiceMode
+  readonly mode: VoiceMode;
   /** Trigger mechanism determining when the microphone listens. */
-  readonly activation: VoiceActivation
+  readonly activation: VoiceActivation;
   /** Delivery behaviour for transcribed text inside the active composer. */
-  readonly transcriptionSend: TranscriptionSendMode
+  readonly transcriptionSend: TranscriptionSendMode;
   /** Target recognition language as an ISO-639-1 code (e.g. 'it'). */
-  readonly language: string
+  readonly language: string;
   /** Spoken wake-phrase waking the assistant in wake-word mode; always `WAKE_PHRASE`. */
-  readonly wakeWord: string
+  readonly wakeWord: string;
   /**
    * Whether ADE opens the microphone by itself and waits for `WAKE_PHRASE`.
    *
@@ -196,20 +219,20 @@ export interface VoiceSettings {
    * first second and a half of each sentence goes to the cloud; see
    * `asr/openrouter.ts`.
    */
-  readonly alwaysListen: boolean
+  readonly alwaysListen: boolean;
   /** Keyboard chord triggering or toggling agent command mode. */
-  readonly agentChord: string
+  readonly agentChord: string;
   /** Keyboard chord triggering or toggling transcription mode. */
-  readonly transcriptionChord: string
+  readonly transcriptionChord: string;
   /**
    * Whether the dictation chord is held while speaking or works as a switch.
    * Held is the default: a dictation left open sends the room to the pane.
    */
-  readonly dictationPress: DictationPress
+  readonly dictationPress: DictationPress;
   /** Selected speech-to-text transcription engine. */
-  readonly backend: TranscriberBackend
+  readonly backend: TranscriberBackend;
   /** Optional OpenRouter cloud speech API authentication key. */
-  readonly openRouterApiKey?: string
+  readonly openRouterApiKey?: string;
   /**
    * Words the speech model has never heard, spelled the way the user writes them.
    *
@@ -220,7 +243,7 @@ export interface VoiceSettings {
    * a wrong instruction. See `asr/custom-words.ts` for how close a fragment
    * must be before it is corrected.
    */
-  readonly customWords: readonly string[]
+  readonly customWords: readonly string[];
   /**
    * Whether the assistant reads an agent's answer back out loud.
    *
@@ -230,7 +253,7 @@ export interface VoiceSettings {
    * from — which makes a voice *agent* a dictation machine. Off is for someone
    * watching the pane anyway, who wants the microphone and not the voice.
    */
-  readonly speakReplies: boolean
+  readonly speakReplies: boolean;
   /**
    * Whether the assistant announces session events on its own: permissions,
    * task completions, or open decisions.
@@ -238,22 +261,32 @@ export interface VoiceSettings {
    * Off by default to avoid unexpected speech or consumption (S48). When on,
    * it speaks a brief announcement and opens a single 6-8s response window.
    */
-  readonly spokenAlerts: boolean
+  readonly spokenAlerts: boolean;
   /** Which voice reads them; see `REPLY_VOICES`. */
-  readonly replyVoice: ReplyVoice
+  readonly replyVoice: ReplyVoice;
   /**
    * What reads the replies: a local backend or the system voice; see
    * `REPLY_BACKENDS`. Not a free choice — it is the backend of the voice in
    * `REPLY_BACKEND_BY_VOICE`, and normalization puts the two back together when
    * a profile arrives with them disagreeing.
    */
-  readonly replyBackend: ReplyBackend
+  readonly replyBackend: ReplyBackend;
   /**
    * The voice last picked on each local backend, so that going to another one
    * and back finds it again: Paola, then Kokoro, then Piper is Paola, not the
    * first Piper voice. Absent: nothing remembered, the backend's first voice.
    */
-  readonly replyVoiceByBackend?: ReplyVoiceMemory
+  readonly replyVoiceByBackend?: ReplyVoiceMemory;
+  /**
+   * The one question a profile on Piper/Ugo is asked about the cloud voice.
+   *
+   * Asked once, and only while an OpenRouter key is present — both of those are
+   * the panel's to check, because this blob does not know whether a key exists.
+   * `accepted` is Rosa, `declined` is staying on Ugo, and neither is asked
+   * again. Absent: not asked yet. A profile that never had Ugo is never asked,
+   * so absent there means nothing.
+   */
+  readonly replyVoiceOffer?: "accepted" | "declined";
   /**
    * The G2P locale the replies are spoken in; see `TTS_LOCALES`.
    *
@@ -263,7 +296,7 @@ export interface VoiceSettings {
    * Italian answer on a Kokoro voice falls back to Piper rather than being read
    * with an English mouth. See `replyVoiceFor` in `reply-voices.ts`.
    */
-  readonly ttsLocale: TtsLocale
+  readonly ttsLocale: TtsLocale;
   /**
    * What answers a sentence the grammar does not know.
    *
@@ -275,16 +308,16 @@ export interface VoiceSettings {
    * installed; `off` keeps the old behaviour (the OpenRouter planner, when a
    * key is set).
    */
-  readonly agentEngine: AgentEngine
+  readonly agentEngine: AgentEngine;
   /** See `AGENT_SPEEDS`. */
-  readonly agentSpeed: AgentSpeed
+  readonly agentSpeed: AgentSpeed;
   /**
    * Whether to retry a request on Codex if Claude Code hits its plan rate limit.
    *
    * Off by default. When on, if agentEngine is "auto" and Claude Code returns a plan
    * rate limit error, the request is retried once on Codex after announcing the switch.
    */
-  readonly codexFallback: boolean
+  readonly codexFallback: boolean;
   /**
    * Which microphone to listen on. Absent means the system default.
    *
@@ -295,7 +328,7 @@ export interface VoiceSettings {
    * the capture asks for it with `ideal` so that falls back to the default
    * rather than failing to open anything. See `audio/capture.ts`.
    */
-  readonly inputDeviceId?: string
+  readonly inputDeviceId?: string;
   /**
    * Which speaker to answer through. Absent means the system default.
    *
@@ -304,13 +337,16 @@ export interface VoiceSettings {
    * kind and always goes to the system default, so this setting is offered
    * only where it can actually be obeyed.
    */
-  readonly outputDeviceId?: string
+  readonly outputDeviceId?: string;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   version: CURRENT_SETTINGS_VERSION,
   mode: "agent",
-  activation: WAKE_WORD_ENABLED && !SHORTCUT_ACTIVATION_ENABLED ? "wake-word" : "push-to-talk",
+  activation:
+    WAKE_WORD_ENABLED && !SHORTCUT_ACTIVATION_ENABLED
+      ? "wake-word"
+      : "push-to-talk",
   transcriptionSend: "manual",
   language: "it",
   wakeWord: WAKE_PHRASE,
@@ -356,13 +392,13 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   agentEngine: "auto",
   agentSpeed: "fast",
   codexFallback: false,
-})
+});
 
 export interface NormalizedVoiceSettings extends VoiceSettings {
   /** Self-reference to settings allowing destructuring as { settings, corrections }. */
-  readonly settings: VoiceSettings
+  readonly settings: VoiceSettings;
   /** List of repair descriptions applied in Italian for UI feedback. */
-  readonly corrections: readonly string[]
+  readonly corrections: readonly string[];
   /**
    * What this load changed under the user, named rather than described.
    *
@@ -370,7 +406,7 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
    * and finding them by searching the Italian sentence for a word breaks the
    * first time the sentence is reworded.
    */
-  readonly migrations: readonly VoiceMigration[]
+  readonly migrations: readonly VoiceMigration[];
 }
 
 /**
@@ -394,7 +430,7 @@ export type VoiceMigration =
   | "name-only"
   | "listening-off"
   | "parakeet-removed"
-  | "parakeet-listening-off"
+  | "parakeet-listening-off";
 
 /**
  * The locale a profile written before version 8 was really speaking in.
@@ -406,9 +442,10 @@ export type VoiceMigration =
  * profile with none says.
  */
 function legacyReplyLocale(candidate: Record<string, unknown>): TtsLocale {
-  if (candidate.replyVoice === "lessac") return "en-US"
-  if (candidate.replyVoice === "system") return candidate.language === "en" ? "en-US" : "it-IT"
-  return "it-IT"
+  if (candidate.replyVoice === "lessac") return "en-US";
+  if (candidate.replyVoice === "system")
+    return candidate.language === "en" ? "en-US" : "it-IT";
+  return "it-IT";
 }
 
 /**
@@ -429,7 +466,20 @@ function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
     ...candidate,
     replyBackend: candidate.replyVoice === "system" ? "system" : "piper",
     ttsLocale: legacyReplyLocale(candidate),
-  }
+  };
+}
+
+/**
+ * Version 9: room for the cloud voice, and nothing else.
+ *
+ * MAI is opt-in. A profile written before it existed has a Piper voice, a
+ * Kokoro voice or the system one, and it keeps speaking that: moving it onto a
+ * voice that spends a key is not a migration, it is a purchase the user did
+ * not make. The question the panel asks once (`replyVoiceOffer`) is answered
+ * by the panel, so there is nothing here to write and nothing to undo.
+ */
+function toMai(candidate: Record<string, unknown>): Record<string, unknown> {
+  return candidate;
 }
 
 /**
@@ -437,12 +487,19 @@ function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
  * assistant's default, always on. Its default mode becomes the agent's, since
  * the name only calls the agent; dictation keeps its own shortcut.
  */
-function toName(candidate: Record<string, unknown>, migrations: VoiceMigration[]): Record<string, unknown> {
-  if (!wakeWordEnabled() || shortcutActivationEnabled()) return candidate
-  if (candidate.activation !== "push-to-talk" && candidate.activation !== "toggle") return candidate
-  migrations.push("name-only")
+function toName(
+  candidate: Record<string, unknown>,
+  migrations: VoiceMigration[],
+): Record<string, unknown> {
+  if (!wakeWordEnabled() || shortcutActivationEnabled()) return candidate;
+  if (
+    candidate.activation !== "push-to-talk" &&
+    candidate.activation !== "toggle"
+  )
+    return candidate;
+  migrations.push("name-only");
   // Not `alwaysListen`: the name works in a microphone the user opened.
-  return { ...candidate, activation: "wake-word", mode: "agent" }
+  return { ...candidate, activation: "wake-word", mode: "agent" };
 }
 
 /**
@@ -460,11 +517,11 @@ function toName(candidate: Record<string, unknown>, migrations: VoiceMigration[]
  */
 function chordProblem(chordStr: unknown): string | undefined {
   if (typeof chordStr !== "string" || chordStr.trim().length === 0) {
-    return t("vui.fix.noMainKey")
+    return t("vui.fix.noMainKey");
   }
-  const risk = describeChordRisk(chordStr.trim(), "other")
-  if (risk.level !== "refuse") return undefined
-  return risk.message ?? t("vui.shortcut.invalid")
+  const risk = describeChordRisk(chordStr.trim(), "other");
+  if (risk.level !== "refuse") return undefined;
+  return risk.message ?? t("vui.shortcut.invalid");
 }
 
 /**
@@ -476,38 +533,39 @@ function chordProblem(chordStr: unknown): string | undefined {
  * - Records Italian explanations for all repairs applied.
  */
 export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
-  const corrections: string[] = []
+  const corrections: string[] = [];
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    corrections.push(t("vui.fix.defaults"))
+    corrections.push(t("vui.fix.defaults"));
     return {
       ...DEFAULT_VOICE_SETTINGS,
       settings: DEFAULT_VOICE_SETTINGS,
       corrections,
       migrations: [],
-    }
+    };
   }
 
-  let candidate = raw as Record<string, unknown>
+  let candidate = raw as Record<string, unknown>;
 
   // 1. Version migration
-  const migrations: VoiceMigration[] = []
-  let version = candidate.version
+  const migrations: VoiceMigration[] = [];
+  let version = candidate.version;
   if (typeof version !== "number" || Number.isNaN(version)) {
-    corrections.push(t("vui.fix.noVersion"))
+    corrections.push(t("vui.fix.noVersion"));
     /* A profile with no version is older than any of them: a "toggle" in it
        goes back to the shortcut like a versioned one. */
     if (!wakeWordEnabled() && candidate.activation === "toggle") {
-      candidate = { ...candidate, activation: "push-to-talk" }
-      migrations.push("shortcut-only")
+      candidate = { ...candidate, activation: "push-to-talk" };
+      migrations.push("shortcut-only");
     }
-    candidate = toName(candidate, migrations)
+    candidate = toName(candidate, migrations);
     if (candidate.alwaysListen === true) {
-      candidate = { ...candidate, alwaysListen: false }
-      if (wakeWordEnabled()) migrations.push("listening-off")
+      candidate = { ...candidate, alwaysListen: false };
+      if (wakeWordEnabled()) migrations.push("listening-off");
     }
-    candidate = toKokoro(candidate)
-    version = CURRENT_SETTINGS_VERSION
+    candidate = toKokoro(candidate);
+    candidate = toMai(candidate);
+    version = CURRENT_SETTINGS_VERSION;
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
     // a correction is shown at startup in the warning strip.
@@ -518,9 +576,9 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      * profile already on the wake word is left alone.
      */
     if (wakeWordEnabled() && version < 2 && candidate.activation === "toggle") {
-      candidate = { ...candidate, activation: "wake-word" }
-      migrations.push("wake-word")
-      corrections.push(t("vui.fix.wakeDefault"))
+      candidate = { ...candidate, activation: "wake-word" };
+      migrations.push("wake-word");
+      corrections.push(t("vui.fix.wakeDefault"));
     }
     /*
      * Version 3: listening is always on for whoever waits for the name. Told
@@ -532,40 +590,51 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       candidate.activation === "wake-word" &&
       candidate.mode !== "transcription"
     ) {
-      migrations.push("always-listen")
+      migrations.push("always-listen");
     }
     /* Version 5: a stored "toggle" goes back to the shortcut too. */
-    if (!wakeWordEnabled() && version < 5 && candidate.activation === "toggle") {
-      candidate = { ...candidate, activation: "push-to-talk" }
-      migrations.push("shortcut-only")
+    if (
+      !wakeWordEnabled() &&
+      version < 5 &&
+      candidate.activation === "toggle"
+    ) {
+      candidate = { ...candidate, activation: "push-to-talk" };
+      migrations.push("shortcut-only");
     }
     /* Version 6: the name is the only way to start it. */
-    if (version < 6) candidate = toName(candidate, migrations)
+    if (version < 6) candidate = toName(candidate, migrations);
     /*
      * Version 7: listening on its own is off until it is chosen. Every
      * profile until now had it, by default or by choice, so it is turned off
      * once and said where to turn it back on.
      */
     if (version < 7 && candidate.alwaysListen === true) {
-      candidate = { ...candidate, alwaysListen: false }
+      candidate = { ...candidate, alwaysListen: false };
       // Nothing to tell where listening for the name does not exist at all.
-      if (wakeWordEnabled()) migrations.push("listening-off")
+      if (wakeWordEnabled()) migrations.push("listening-off");
     }
     /*
      * Version 8: Kokoro arrives, and with it the locale the replies are spoken
      * in. See `toKokoro`.
      */
-    if (version < 8) candidate = toKokoro(candidate)
-    version = CURRENT_SETTINGS_VERSION
+    if (version < 8) candidate = toKokoro(candidate);
+    /*
+     * Version 9: MAI arrives, and a profile is left speaking what it was
+     * speaking. See `toMai`.
+     */
+    if (version < 9) candidate = toMai(candidate);
+    version = CURRENT_SETTINGS_VERSION;
   }
 
   // 2. Mode
-  let mode: VoiceMode
+  let mode: VoiceMode;
   if (candidate.mode === "agent" || candidate.mode === "transcription") {
-    mode = candidate.mode
+    mode = candidate.mode;
   } else {
-    corrections.push(t("vui.fix.mode", String(candidate.mode), DEFAULT_VOICE_SETTINGS.mode))
-    mode = DEFAULT_VOICE_SETTINGS.mode
+    corrections.push(
+      t("vui.fix.mode", String(candidate.mode), DEFAULT_VOICE_SETTINGS.mode),
+    );
+    mode = DEFAULT_VOICE_SETTINGS.mode;
   }
 
   /*
@@ -573,64 +642,88 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * switched off: back to the shortcut, quietly — nothing went wrong.
    */
   if (!wakeWordEnabled() && candidate.activation === "wake-word") {
-    candidate = { ...candidate, activation: "push-to-talk" }
-    if (!migrations.includes("shortcut-only")) migrations.push("shortcut-only")
+    candidate = { ...candidate, activation: "push-to-talk" };
+    if (!migrations.includes("shortcut-only")) migrations.push("shortcut-only");
   }
 
   // 3. Activation
-  let activation: VoiceActivation
+  let activation: VoiceActivation;
   if (
     candidate.activation === "push-to-talk" ||
     candidate.activation === "toggle" ||
     candidate.activation === "wake-word"
   ) {
-    activation = candidate.activation
+    activation = candidate.activation;
   } else {
-    corrections.push(t("vui.fix.activation", String(candidate.activation), DEFAULT_VOICE_SETTINGS.activation))
-    activation = DEFAULT_VOICE_SETTINGS.activation
+    corrections.push(
+      t(
+        "vui.fix.activation",
+        String(candidate.activation),
+        DEFAULT_VOICE_SETTINGS.activation,
+      ),
+    );
+    activation = DEFAULT_VOICE_SETTINGS.activation;
   }
 
   // 4. Transcription send mode
-  let transcriptionSend: TranscriptionSendMode
-  if (candidate.transcriptionSend === "manual" || candidate.transcriptionSend === "auto") {
-    transcriptionSend = candidate.transcriptionSend
+  let transcriptionSend: TranscriptionSendMode;
+  if (
+    candidate.transcriptionSend === "manual" ||
+    candidate.transcriptionSend === "auto"
+  ) {
+    transcriptionSend = candidate.transcriptionSend;
   } else {
-    corrections.push(t("vui.fix.send", String(candidate.transcriptionSend), DEFAULT_VOICE_SETTINGS.transcriptionSend))
-    transcriptionSend = DEFAULT_VOICE_SETTINGS.transcriptionSend
+    corrections.push(
+      t(
+        "vui.fix.send",
+        String(candidate.transcriptionSend),
+        DEFAULT_VOICE_SETTINGS.transcriptionSend,
+      ),
+    );
+    transcriptionSend = DEFAULT_VOICE_SETTINGS.transcriptionSend;
   }
 
   // 5. Language code (ISO-639-1)
-  let language: string
-  if (typeof candidate.language === "string" && candidate.language.trim().length > 0) {
-    language = candidate.language.trim().toLowerCase()
+  let language: string;
+  if (
+    typeof candidate.language === "string" &&
+    candidate.language.trim().length > 0
+  ) {
+    language = candidate.language.trim().toLowerCase();
   } else {
-    corrections.push(t("vui.fix.language", DEFAULT_VOICE_SETTINGS.language))
-    language = DEFAULT_VOICE_SETTINGS.language
+    corrections.push(t("vui.fix.language", DEFAULT_VOICE_SETTINGS.language));
+    language = DEFAULT_VOICE_SETTINGS.language;
   }
 
   // 6. Wake word: fixed. Whatever was stored — "hei nik", a name the user
   // typed — is replaced without a word; the phrase is not theirs to set now.
-  const wakeWord = WAKE_PHRASE
-  let alwaysListen = DEFAULT_VOICE_SETTINGS.alwaysListen
-  if (typeof candidate.alwaysListen === "boolean") alwaysListen = candidate.alwaysListen
+  const wakeWord = WAKE_PHRASE;
+  let alwaysListen = DEFAULT_VOICE_SETTINGS.alwaysListen;
+  if (typeof candidate.alwaysListen === "boolean")
+    alwaysListen = candidate.alwaysListen;
 
   // 7. Agent chord shortcut
-  let agentChord: string
-  const agentChordProblem = chordProblem(candidate.agentChord)
+  let agentChord: string;
+  const agentChordProblem = chordProblem(candidate.agentChord);
   if (!agentChordProblem) {
-    agentChord = String(candidate.agentChord).trim()
+    agentChord = String(candidate.agentChord).trim();
   } else {
     corrections.push(
-      t("vui.fix.agentChord", String(candidate.agentChord), agentChordProblem, DEFAULT_VOICE_SETTINGS.agentChord),
-    )
-    agentChord = DEFAULT_VOICE_SETTINGS.agentChord
+      t(
+        "vui.fix.agentChord",
+        String(candidate.agentChord),
+        agentChordProblem,
+        DEFAULT_VOICE_SETTINGS.agentChord,
+      ),
+    );
+    agentChord = DEFAULT_VOICE_SETTINGS.agentChord;
   }
 
   // 8. Transcription chord shortcut
-  let transcriptionChord: string
-  const transcriptionChordProblem = chordProblem(candidate.transcriptionChord)
+  let transcriptionChord: string;
+  const transcriptionChordProblem = chordProblem(candidate.transcriptionChord);
   if (!transcriptionChordProblem) {
-    transcriptionChord = String(candidate.transcriptionChord).trim()
+    transcriptionChord = String(candidate.transcriptionChord).trim();
   } else {
     corrections.push(
       t(
@@ -639,8 +732,8 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
         transcriptionChordProblem,
         DEFAULT_VOICE_SETTINGS.transcriptionChord,
       ),
-    )
-    transcriptionChord = DEFAULT_VOICE_SETTINGS.transcriptionChord
+    );
+    transcriptionChord = DEFAULT_VOICE_SETTINGS.transcriptionChord;
   }
 
   // 9. Backend
@@ -654,25 +747,34 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   // (`asr/legacy-parakeet.ts`). Listening on its own is turned off with it: a
   // profile that heard every phrase in the room for nothing would otherwise send
   // every one of them to a paid service, under the user, on the first start.
-  let backend: TranscriberBackend
+  let backend: TranscriberBackend;
   if (candidate.backend === "parakeet") {
-    backend = "openrouter"
-    migrations.push("parakeet-removed")
+    backend = "openrouter";
+    migrations.push("parakeet-removed");
     if (alwaysListen) {
-      alwaysListen = false
-      migrations.push("parakeet-listening-off")
+      alwaysListen = false;
+      migrations.push("parakeet-listening-off");
     }
   } else if (candidate.backend === "openrouter") {
-    backend = "openrouter"
+    backend = "openrouter";
   } else {
-    corrections.push(t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend))
-    backend = DEFAULT_VOICE_SETTINGS.backend
+    corrections.push(
+      t(
+        "vui.fix.backend",
+        String(candidate.backend),
+        DEFAULT_VOICE_SETTINGS.backend,
+      ),
+    );
+    backend = DEFAULT_VOICE_SETTINGS.backend;
   }
 
   // 10. OpenRouter API Key (optional)
-  let openRouterApiKey: string | undefined = undefined
-  if (typeof candidate.openRouterApiKey === "string" && candidate.openRouterApiKey.trim().length > 0) {
-    openRouterApiKey = candidate.openRouterApiKey.trim()
+  let openRouterApiKey: string | undefined = undefined;
+  if (
+    typeof candidate.openRouterApiKey === "string" &&
+    candidate.openRouterApiKey.trim().length > 0
+  ) {
+    openRouterApiKey = candidate.openRouterApiKey.trim();
   }
 
   /*
@@ -683,27 +785,27 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * same word would both be candidates and the transcript would flip between
    * them depending on which happened to score first.
    */
-  const customWords: string[] = []
+  const customWords: string[] = [];
   if (Array.isArray(candidate.customWords)) {
-    const seen = new Set<string>()
-    let dropped = 0
+    const seen = new Set<string>();
+    let dropped = 0;
     for (const entry of candidate.customWords) {
       if (typeof entry !== "string") {
-        dropped += 1
-        continue
+        dropped += 1;
+        continue;
       }
-      const word = entry.trim()
-      if (word.length === 0) continue
-      const key = word.toLowerCase()
-      if (seen.has(key)) continue
-      seen.add(key)
-      customWords.push(word)
+      const word = entry.trim();
+      if (word.length === 0) continue;
+      const key = word.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      customWords.push(word);
     }
     if (dropped > 0) {
-      corrections.push(t("vui.fix.wordsDropped", String(dropped)))
+      corrections.push(t("vui.fix.wordsDropped", String(dropped)));
     }
   } else if (candidate.customWords !== undefined) {
-    corrections.push(t("vui.fix.wordsInvalid"))
+    corrections.push(t("vui.fix.wordsInvalid"));
   }
 
   /*
@@ -713,23 +815,23 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * setting existed has `undefined` here, and reading that as "off" would
    * leave every existing user with the silent behaviour this exists to end.
    */
-  let speakReplies = DEFAULT_VOICE_SETTINGS.speakReplies
+  let speakReplies = DEFAULT_VOICE_SETTINGS.speakReplies;
   if (typeof candidate.speakReplies === "boolean") {
-    speakReplies = candidate.speakReplies
+    speakReplies = candidate.speakReplies;
   } else if (candidate.speakReplies !== undefined) {
-    corrections.push(t("vui.fix.speakReplies"))
+    corrections.push(t("vui.fix.speakReplies"));
   }
-  let spokenAlerts = DEFAULT_VOICE_SETTINGS.spokenAlerts
+  let spokenAlerts = DEFAULT_VOICE_SETTINGS.spokenAlerts;
   if (typeof candidate.spokenAlerts === "boolean") {
-    spokenAlerts = candidate.spokenAlerts
+    spokenAlerts = candidate.spokenAlerts;
   } else if (candidate.spokenAlerts !== undefined) {
-    corrections.push(t("vui.fix.spokenAlerts"))
+    corrections.push(t("vui.fix.spokenAlerts"));
   }
-  let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
+  let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice;
   if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
-    replyVoice = candidate.replyVoice as ReplyVoice
+    replyVoice = candidate.replyVoice as ReplyVoice;
   } else if (candidate.replyVoice !== undefined) {
-    corrections.push(t("vui.fix.replyVoice", String(candidate.replyVoice)))
+    corrections.push(t("vui.fix.replyVoice", String(candidate.replyVoice)));
   }
 
   /*
@@ -740,11 +842,11 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * a broken voice. Absent in every profile written before version 8, and that
    * is the default, so absent says nothing.
    */
-  let ttsLocale = DEFAULT_VOICE_SETTINGS.ttsLocale
+  let ttsLocale = DEFAULT_VOICE_SETTINGS.ttsLocale;
   if (TTS_LOCALES.includes(candidate.ttsLocale as TtsLocale)) {
-    ttsLocale = candidate.ttsLocale as TtsLocale
+    ttsLocale = candidate.ttsLocale as TtsLocale;
   } else if (candidate.ttsLocale !== undefined) {
-    corrections.push(t("vui.fix.ttsLocale", String(candidate.ttsLocale)))
+    corrections.push(t("vui.fix.ttsLocale", String(candidate.ttsLocale)));
   }
 
   /*
@@ -760,19 +862,29 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * A repair, so it is said: the pair was written together and does not come
    * apart on its own.
    */
-  let replyBackend = REPLY_BACKEND_BY_VOICE[replyVoice]
-  if (candidate.replyBackend !== undefined && candidate.replyBackend !== replyBackend) {
-    corrections.push(t("vui.fix.replyBackend", String(candidate.replyBackend), replyBackend))
+  let replyBackend = REPLY_BACKEND_BY_VOICE[replyVoice];
+  if (
+    candidate.replyBackend !== undefined &&
+    candidate.replyBackend !== replyBackend
+  ) {
+    corrections.push(
+      t("vui.fix.replyBackend", String(candidate.replyBackend), replyBackend),
+    );
   }
 
   // Only a voice of that backend is remembered under it: anything else is forgotten, never moved.
-  const replyVoiceByBackend: Partial<Record<Exclude<ReplyBackend, "system">, ReplyVoice>> = {}
-  const remembered = candidate.replyVoiceByBackend
+  const replyVoiceByBackend: Partial<
+    Record<Exclude<ReplyBackend, "system">, ReplyVoice>
+  > = {};
+  const remembered = candidate.replyVoiceByBackend;
   if (remembered && typeof remembered === "object") {
-    for (const local of ["piper", "kokoro"] as const) {
-      const voice = (remembered as Record<string, unknown>)[local]
-      if (REPLY_VOICES.includes(voice as ReplyVoice) && REPLY_BACKEND_BY_VOICE[voice as ReplyVoice] === local) {
-        replyVoiceByBackend[local] = voice as ReplyVoice
+    for (const local of ["piper", "kokoro", "mai"] as const) {
+      const voice = (remembered as Record<string, unknown>)[local];
+      if (
+        REPLY_VOICES.includes(voice as ReplyVoice) &&
+        REPLY_BACKEND_BY_VOICE[voice as ReplyVoice] === local
+      ) {
+        replyVoiceByBackend[local] = voice as ReplyVoice;
       }
     }
   }
@@ -809,14 +921,20 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * check belongs where the device is opened, which is why `capture.ts` asks
    * for it as `ideal`.
    */
-  let inputDeviceId: string | undefined = undefined
-  if (typeof candidate.inputDeviceId === "string" && candidate.inputDeviceId.trim().length > 0) {
-    inputDeviceId = candidate.inputDeviceId.trim()
+  let inputDeviceId: string | undefined = undefined;
+  if (
+    typeof candidate.inputDeviceId === "string" &&
+    candidate.inputDeviceId.trim().length > 0
+  ) {
+    inputDeviceId = candidate.inputDeviceId.trim();
   }
 
-  let outputDeviceId: string | undefined = undefined
-  if (typeof candidate.outputDeviceId === "string" && candidate.outputDeviceId.trim().length > 0) {
-    outputDeviceId = candidate.outputDeviceId.trim()
+  let outputDeviceId: string | undefined = undefined;
+  if (
+    typeof candidate.outputDeviceId === "string" &&
+    candidate.outputDeviceId.trim().length > 0
+  ) {
+    outputDeviceId = candidate.outputDeviceId.trim();
   }
 
   /*
@@ -826,31 +944,46 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
    * default, so absent says nothing. Only a value that is present and not one
    * of the engines is repaired aloud.
    */
-  let agentEngine = DEFAULT_VOICE_SETTINGS.agentEngine
+  let agentEngine = DEFAULT_VOICE_SETTINGS.agentEngine;
   if (AGENT_ENGINES.includes(candidate.agentEngine as AgentEngine)) {
-    agentEngine = candidate.agentEngine as AgentEngine
+    agentEngine = candidate.agentEngine as AgentEngine;
   } else if (candidate.agentEngine !== undefined) {
-    corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)))
+    corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)));
   }
 
   // 18. The agent's speed: absent in older profiles, which get the fast one.
-  let agentSpeed = DEFAULT_VOICE_SETTINGS.agentSpeed
+  let agentSpeed = DEFAULT_VOICE_SETTINGS.agentSpeed;
   if (AGENT_SPEEDS.includes(candidate.agentSpeed as AgentSpeed)) {
-    agentSpeed = candidate.agentSpeed as AgentSpeed
+    agentSpeed = candidate.agentSpeed as AgentSpeed;
   } else if (candidate.agentSpeed !== undefined) {
-    corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)))
+    corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)));
   }
 
   // 19. The fallback to Codex on Claude plan limit: absent in older profiles, which get the default (false).
-  let codexFallback = DEFAULT_VOICE_SETTINGS.codexFallback
+  let codexFallback = DEFAULT_VOICE_SETTINGS.codexFallback;
   if (typeof candidate.codexFallback === "boolean") {
-    codexFallback = candidate.codexFallback
+    codexFallback = candidate.codexFallback;
   } else if (candidate.codexFallback !== undefined) {
-    corrections.push(t("vui.fix.codexFallback"))
+    corrections.push(t("vui.fix.codexFallback"));
   }
 
   // A profile from before the choice existed has none, and gets the default without a note.
-  const dictationPress: DictationPress = candidate.dictationPress === "toggle" ? "toggle" : "hold"
+  const dictationPress: DictationPress =
+    candidate.dictationPress === "toggle" ? "toggle" : "hold";
+
+  /*
+   * The answer to the one cloud-voice question, kept as it was given.
+   *
+   * Absent is the common case and says nothing: a profile that has not been
+   * asked, or one that was never going to be. Only the two answers are kept,
+   * and anything else is dropped without a note — a hand-edited value here
+   * would otherwise greet the user with a repair for a question they cannot see.
+   */
+  const replyVoiceOffer =
+    candidate.replyVoiceOffer === "accepted" ||
+    candidate.replyVoiceOffer === "declined"
+      ? candidate.replyVoiceOffer
+      : undefined;
 
   const cleanSettings: VoiceSettings = {
     version: Number(version),
@@ -870,19 +1003,22 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     spokenAlerts,
     replyVoice,
     replyBackend,
-    ...(Object.keys(replyVoiceByBackend).length > 0 ? { replyVoiceByBackend } : {}),
+    ...(replyVoiceOffer ? { replyVoiceOffer } : {}),
+    ...(Object.keys(replyVoiceByBackend).length > 0
+      ? { replyVoiceByBackend }
+      : {}),
     ttsLocale,
     agentEngine,
     agentSpeed,
     codexFallback,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),
-  }
+  };
 
   return {
     ...cleanSettings,
     settings: cleanSettings,
     corrections,
     migrations,
-  }
+  };
 }

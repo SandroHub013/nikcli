@@ -1,52 +1,68 @@
-import type { voiceIt } from "./voice-it"
+import type { voiceIt } from "./voice-it";
 
 type VoiceMessages = {
-  [K in keyof typeof voiceIt]: (typeof voiceIt)[K] extends (...args: infer A) => string
+  [K in keyof typeof voiceIt]: (typeof voiceIt)[K] extends (
+    ...args: infer A
+  ) => string
     ? (...args: A) => string
-    : string
-}
+    : string;
+};
 
 /** The voice package's interface texts in English. */
 export const voiceEn: VoiceMessages = {
   // Voice buttons, orbs, HUD
   "vui.button.off": "Turn on voice control (microphone off)",
   "vui.button.listening": "Voice control is listening (press to turn off)",
-  "vui.button.confirming": "Waiting for a spoken confirmation (press to cancel)",
+  "vui.button.confirming":
+    "Waiting for a spoken confirmation (press to cancel)",
   "vui.button.executing": "Running a voice command",
   "vui.button.dictating": "Dictating (press to finish)",
-  "vui.dictation.mine": "Dictation on: what you say goes into the panel (press to stop)",
-  "vui.dictation.busy": "Dictate into the panel (the assistant has the microphone right now)",
+  "vui.dictation.mine":
+    "Dictation on: what you say goes into the panel (press to stop)",
+  "vui.dictation.busy":
+    "Dictate into the panel (the assistant has the microphone right now)",
   "vui.dictation.idle": "Dictate into the panel",
   "vui.orb.open": "Open the microphone",
-  "vui.orb.call": (wakeWord) => `Listening: say “${wakeWord}” or press to call it`,
-  "vui.orb.dictating": "Dictating: what you say goes into the panel (press to close)",
-  "vui.orb.asleep": "The assistant is waiting for the wake word (press to close)",
-  "vui.orb.confirming": "The assistant is waiting for confirmation (press to close)",
+  "vui.orb.call": (wakeWord) =>
+    `Listening: say “${wakeWord}” or press to call it`,
+  "vui.orb.dictating":
+    "Dictating: what you say goes into the panel (press to close)",
+  "vui.orb.asleep":
+    "The assistant is waiting for the wake word (press to close)",
+  "vui.orb.confirming":
+    "The assistant is waiting for confirmation (press to close)",
   "vui.orb.executing": "The assistant is running a command",
   "vui.orb.listening": "The assistant is listening (press to close)",
   "vui.orb.title": (chord) => `Microphone · ${chord}`,
-  "vui.dictation.hint.hold": (chord) => `Dictation: hold ${chord} while you speak`,
-  "vui.dictation.hint.toggle": (chord) => `Dictation: ${chord} opens it, ${chord} again closes it`,
+  "vui.dictation.hint.hold": (chord) =>
+    `Dictation: hold ${chord} while you speak`,
+  "vui.dictation.hint.toggle": (chord) =>
+    `Dictation: ${chord} opens it, ${chord} again closes it`,
   "vui.dictation.tapHint": (chord) =>
     `Hold ${chord} while you speak: dictation closes when you let go. To open it with a tap, choose “Switch” in the voice settings.`,
   "vui.dictation.press.title": "How the dictation shortcut works",
   "vui.dictation.press.hold": "Hold",
-  "vui.dictation.press.hold.desc": "Speak while you hold it; when you let go the text goes into the panel",
+  "vui.dictation.press.hold.desc":
+    "Speak while you hold it; when you let go the text goes into the panel",
   "vui.dictation.press.toggle": "Switch",
-  "vui.dictation.press.toggle.desc": "One tap opens dictation, the next tap closes it",
+  "vui.dictation.press.toggle.desc":
+    "One tap opens dictation, the next tap closes it",
   "vui.agentOrb.speaking": "The assistant is speaking: press to interrupt",
   "vui.agentOrb.working": "The assistant is working: press to cancel",
   "vui.listening.text": (wakeWord) => `Listening · “${wakeWord}”`,
-  "vui.listening.title": (wakeWord) => `The microphone is open and waiting for “${wakeWord}”. Press to stop listening.`,
+  "vui.listening.title": (wakeWord) =>
+    `The microphone is open and waiting for “${wakeWord}”. Press to stop listening.`,
   "vui.paused.text": "Listening paused: PC locked",
   "vui.followUp.text": "Go on…",
   "vui.followUp.title": (wakeWord) =>
     `For a few seconds you can go on without saying “${wakeWord}”. Press to stop listening.`,
-  "vui.paused.title": "It resumes by itself when you unlock the PC. Press to resume now.",
+  "vui.paused.title":
+    "It resumes by itself when you unlock the PC. Press to resume now.",
   "vui.shortcut.invalid": "Invalid shortcut.",
   "vui.shortcut.notSystem":
     "This key does not work outside ADE: use a letter, a digit, the keypad, an F key or the arrows.",
-  "vui.shortcut.conflict": (command) => `Conflicts with the '${command}' command.`,
+  "vui.shortcut.conflict": (command) =>
+    `Conflicts with the '${command}' command.`,
   "vui.hud.waiting": "waiting",
   "vui.hud.say": (wakeWord) => `say “${wakeWord}”`,
   "vui.hud.confirm": "confirm",
@@ -72,7 +88,8 @@ export const voiceEn: VoiceMessages = {
   "vui.hud.second": "the second",
   "vui.hud.listeningNow": "listening…",
   "vui.hud.target": (target) => `Text goes to ${target}`,
-  "vui.hud.target.cycle": (target) => `Target: ${target} (click to switch session)`,
+  "vui.hud.target.cycle": (target) =>
+    `Target: ${target} (click to switch session)`,
 
   // Voice settings panel
   "vui.rail.mode": "Mode",
@@ -88,7 +105,8 @@ export const voiceEn: VoiceMessages = {
   "vui.rail.engine": "Engine",
   "vui.rail.commands": "Commands",
   "vui.status.off": "Off",
-  "vui.status.off.detail": "The microphone is closed. Start listening to try the commands.",
+  "vui.status.off.detail":
+    "The microphone is closed. Start listening to try the commands.",
   "vui.status.asleep": "Waiting for the wake word",
   "vui.status.asleep.detail": "Say the wake word to wake the assistant.",
   "vui.status.idle": "Ready",
@@ -102,28 +120,35 @@ export const voiceEn: VoiceMessages = {
   "vui.status.executing": "Running",
   "vui.status.executing.detail": "Running the command.",
   "vui.engine.auto": "Automatic",
-  "vui.engine.auto.desc": "The first one installed between Claude Code and Codex",
+  "vui.engine.auto.desc":
+    "The first one installed between Claude Code and Codex",
   "vui.engine.claude.desc": "With your Anthropic subscription",
   "vui.engine.codex.desc": "With your ChatGPT subscription",
-  "vui.engine.nikcli.desc": "Doesn't answer by voice: it can't be kept read-only",
+  "vui.engine.nikcli.desc":
+    "Doesn't answer by voice: it can't be kept read-only",
   "vui.engine.off": "Commands only",
   "vui.engine.off.desc": "No agent: only known phrases are understood",
   "vui.engine.title": "Agent engine",
   "vui.speed.title": "Answer speed",
   "vui.speed.fast": "Fast",
-  "vui.speed.fast.desc": "Claude Sonnet 5 with little reasoning; Codex with little reasoning",
+  "vui.speed.fast.desc":
+    "Claude Sonnet 5 with little reasoning; Codex with little reasoning",
   "vui.speed.cli": "As the CLI",
-  "vui.speed.cli.desc": "The model and reasoning set in the CLI: slower, sometimes more accurate",
+  "vui.speed.cli.desc":
+    "The model and reasoning set in the CLI: slower, sometimes more accurate",
   "vui.codexFallback.title": "Fallback to Codex on Claude limit",
   "vui.codexFallback.on": "On",
-  "vui.codexFallback.on.desc": "If Claude Code hits the plan limit, retries the request on Codex",
+  "vui.codexFallback.on.desc":
+    "If Claude Code hits the plan limit, retries the request on Codex",
   "vui.codexFallback.off": "Off",
-  "vui.codexFallback.off.desc": "Reports the limit without switching to Codex (default)",
+  "vui.codexFallback.off.desc":
+    "Reports the limit without switching to Codex (default)",
   "vui.engine.note":
     "The agent uses your CLI account, for personal use: ADE doesn't read your credentials, keeps only a few turns together and doesn't retry when you hit the limit. It doesn't edit files or run commands in the project: it hands the work to the sessions. For heavy use, sign in to the CLI with an API key.",
   "vui.trial.noEngine": "Couldn't start the speech engine: command not sent.",
   "vui.shortcut.conflicting": "Conflicting shortcut.",
-  "vui.shortcut.shadowed": (message) => `${message} ADE takes precedence: this shortcut doesn't turn on voice.`,
+  "vui.shortcut.shadowed": (message) =>
+    `${message} ADE takes precedence: this shortcut doesn't turn on voice.`,
   "vui.shortcut.recording": "Press keys… (Esc cancels)",
   "vui.panel.title": "Voice control panel",
   "vui.panel.subtitle": "Mode, activation, shortcuts and speech engines",
@@ -138,7 +163,8 @@ export const voiceEn: VoiceMessages = {
   "vui.mode.active": "Active",
   "vui.mode.agent.desc": "You speak and ADE acts",
   "vui.mode.transcription": "Dictation",
-  "vui.mode.transcription.desc": "You speak and the text goes into the selected panel",
+  "vui.mode.transcription.desc":
+    "You speak and the text goes into the selected panel",
   "vui.replies.title": "Agent replies",
   "vui.replies.speak": "Answer aloud",
   "vui.replies.speak.desc": "Reads you what the session answered",
@@ -168,14 +194,29 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.lessac.licence": "Model dataset licensed for research only.",
   "vui.reply.system": "System voice",
   "vui.reply.system.desc": "The Windows one, nothing to download",
-  "vui.reply.fallbackNotice": "Natural voice is unavailable: using system voice.",
+  "vui.reply.fallbackNotice":
+    "Natural voice is unavailable: using system voice.",
   "vui.replies.backend": "Engine",
   "vui.backend.piper": "Piper",
   "vui.backend.piper.desc": "Local voices, Italian and one English",
   "vui.backend.kokoro": "Kokoro",
-  "vui.backend.kokoro.desc": "Four local English voices, more natural, with a download of their own",
+  "vui.backend.kokoro.desc":
+    "Four local English voices, more natural, with a download of their own",
   "vui.backend.system": "System",
   "vui.backend.system.desc": "The system's voice, nothing to download",
+  "vui.backend.mai": "Microsoft MAI",
+  "vui.backend.mai.desc": "Italian cloud voice, with the OpenRouter key",
+  "vui.reply.mai.it-IT-Grant": "Grant",
+  "vui.reply.mai.it-IT-Grant.desc": "Male, Italian",
+  "vui.reply.mai.it-IT-Harper": "Harper",
+  "vui.reply.mai.it-IT-Harper.desc": "Female, Italian",
+  "vui.reply.mai.it-IT-Luca": "Luca",
+  "vui.reply.mai.it-IT-Luca.desc": "Male, Italian",
+  "vui.reply.mai.it-IT-Rosa": "Rosa",
+  "vui.reply.mai.it-IT-Rosa.desc": "Female, Italian, the default",
+  "vui.reply.mai.licence": "Microsoft MAI-Voice, through OpenRouter.",
+  "vui.replies.maiEnglish":
+    "MAI only reads Italian: a reply in another language is read by the local voice.",
   "vui.reply.kokoro.af_heart": "Heart",
   "vui.reply.kokoro.af_heart.desc": "Female, American English",
   "vui.reply.kokoro.am_fenrir": "Fenrir",
@@ -188,11 +229,15 @@ export const voiceEn: VoiceMessages = {
   "vui.replies.kokoroItalian":
     "The Kokoro voices are English: a reply in Italian is read by Ugo or Paola, of the same gender.",
   "vui.replies.test": "Try the voice",
-  "vui.replies.sample.it": "Ciao, sono la voce che leggerà le risposte della sessione.",
-  "vui.replies.sample.en": "Hello, this is the voice that will read the replies of the session.",
+  "vui.replies.sample.it":
+    "Ciao, sono la voce che leggerà le risposte della sessione.",
+  "vui.replies.sample.en":
+    "Hello, this is the voice that will read the replies of the session.",
   "vui.pack.installing": "Installing",
-  "vui.pack.bytesOf": (done, total, percent) => `${done} of ${total} (${percent}%)`,
-  "vui.pack.filesOf": (done, file, files) => `${done}, file ${file} of ${files}`,
+  "vui.pack.bytesOf": (done, total, percent) =>
+    `${done} of ${total} (${percent}%)`,
+  "vui.pack.filesOf": (done, file, files) =>
+    `${done}, file ${file} of ${files}`,
   "vui.pack.cancel": "Cancel",
   "vui.pack.cancelling": "Cancelling…",
   "vui.pack.install": "Install",
@@ -221,7 +266,8 @@ export const voiceEn: VoiceMessages = {
   "vui.activation.toggle": "On and off (toggle)",
   "vui.activation.toggle.desc": "One command turns it on, one turns it off",
   "vui.activation.wake": "Answers only when called by name",
-  "vui.activation.wake.desc": "Recommended with the microphone open: what's said in the room, or on TV, stays out",
+  "vui.activation.wake.desc":
+    "Recommended with the microphone open: what's said in the room, or on TV, stays out",
   "vui.activation.wake.disabled":
     "Off: the wake word isn't supported in dictation mode; it only works for agent commands.",
   "vui.listen.title": "Listening",
@@ -242,11 +288,15 @@ export const voiceEn: VoiceMessages = {
   "vui.shortcuts.reset": "Restore",
   "vui.shortcuts.saved": (warning) => `Shortcut saved. ${warning}`,
   "vui.shortcuts.transcription": "Dictation mode shortcut",
-  "vui.shortcuts.transcription.desc": "Hold it while you dictate: the text goes into the selected panel",
-  "vui.shortcuts.transcription.desc.toggle": "One tap opens dictation into the selected panel, the next tap closes it",
-  "vui.shortcuts.transcription.reset": "Restore the default dictation mode shortcut",
+  "vui.shortcuts.transcription.desc":
+    "Hold it while you dictate: the text goes into the selected panel",
+  "vui.shortcuts.transcription.desc.toggle":
+    "One tap opens dictation into the selected panel, the next tap closes it",
+  "vui.shortcuts.transcription.reset":
+    "Restore the default dictation mode shortcut",
   "vui.language.title": "Language",
-  "vui.language.desc": "Active language, based on what the selected engine supports",
+  "vui.language.desc":
+    "Active language, based on what the selected engine supports",
   "vui.language.search": "Search a language",
   "vui.language.search.placeholder": "Type to filter (e.g. ital, en, fr)…",
   "vui.language.select": "Speech recognition language",
@@ -256,7 +306,8 @@ export const voiceEn: VoiceMessages = {
     `The current language ("${language}") isn't supported by the selected engine (${backend}).`,
   "vui.language.switch": (language) => `Switch to ${language}`,
   "vui.audio.title": "Audio",
-  "vui.audio.desc": "Which microphone listens, and where the assistant's voice goes",
+  "vui.audio.desc":
+    "Which microphone listens, and where the assistant's voice goes",
   "vui.audio.mic": "Microphone",
   "vui.audio.unlabelled":
     "Device names appear after the first microphone permission. Start listening once, then reopen this section.",
@@ -270,13 +321,15 @@ export const voiceEn: VoiceMessages = {
   "vui.device.output": (position) => `Audio output ${position}`,
   "vui.device.missing": "Device not connected",
   "vui.backend.title": "Speech engine",
-  "vui.backend.desc": "The three supported speech engines and whether each can run",
+  "vui.backend.desc":
+    "The three supported speech engines and whether each can run",
   "vui.backend.readyLocal": "Ready (local)",
   "vui.backend.ready": "Ready",
   "vui.backend.available": "Available (~640 MB)",
   "vui.backend.unsupported": "Not supported",
   "vui.backend.needsKey": "Key needed",
-  "vui.backend.openrouter.desc": "High-accuracy cloud transcription (microsoft/mai-transcribe-2)",
+  "vui.backend.openrouter.desc":
+    "High-accuracy cloud transcription (microsoft/mai-transcribe-2)",
   "vui.key.title": "OpenRouter API key",
   "vui.key.saved": (masked) => `Saved key: ${masked}`,
   "vui.key.remove": "Remove",
@@ -284,11 +337,14 @@ export const voiceEn: VoiceMessages = {
   "vui.key.hide": "Hide",
   "vui.key.show": "Show",
   "vui.key.save": "Save",
-  "vui.key.looksWrong": "OpenRouter keys normally start with sk-or-: check that you pasted the right one.",
-  "vui.key.hint": "The key is never shown in clear or written to log files. Enter saves, Esc clears the field.",
+  "vui.key.looksWrong":
+    "OpenRouter keys normally start with sk-or-: check that you pasted the right one.",
+  "vui.key.hint":
+    "The key is never shown in clear or written to log files. Enter saves, Esc clears the field.",
   "vui.key.cost": "Cost of the last request:",
   "vui.commands.title": "Voice commands",
-  "vui.commands.desc": "The recognized vocabulary. Type one to try it without speaking",
+  "vui.commands.desc":
+    "The recognized vocabulary. Type one to try it without speaking",
   "vui.commands.trial.placeholder": "E.g. “apri la tavolozza”",
   "vui.commands.trial": "Try a command by typing it",
   "vui.commands.sending": "Sending…",
@@ -300,13 +356,15 @@ export const voiceEn: VoiceMessages = {
   "vui.commands.usePhrase": "Use this phrase in the trial field",
   "vui.commands.count": (shown, total) =>
     `${shown} of ${total} commands. Click a phrase to copy it into the trial field above.`,
-  "vui.live.cancel.tip": "Stops the current sentence without closing the microphone",
+  "vui.live.cancel.tip":
+    "Stops the current sentence without closing the microphone",
   "vui.live.cancel": "Cancel",
   "vui.live.stop": "Stop listening",
   "vui.live.start": "Start listening",
   "vui.footer.keys": "Arrows to choose · Enter to confirm · Esc to close",
   "vui.footer.done": "Done",
-  "vui.asr.noRuntime": "Neither WebGPU nor WebAssembly is supported in this browser or environment.",
+  "vui.asr.noRuntime":
+    "Neither WebGPU nor WebAssembly is supported in this browser or environment.",
   "vui.asr.noKey": "OpenRouter API key missing.",
   "vui.asr.keyCheck": "Checking the OpenRouter key failed.",
 
@@ -318,42 +376,57 @@ export const voiceEn: VoiceMessages = {
   "vui.error.unknown": "unknown error",
   "vui.mic.noFormat":
     "No supported recording format: neither 'audio/webm;codecs=opus' nor 'audio/mp4' is available in this environment.",
-  "vui.mic.unsupported": "Microphone access isn't supported in this browser or environment.",
-  "vui.mic.chosenMissing": "The chosen microphone isn't available. Pick another one in the voice settings.",
+  "vui.mic.unsupported":
+    "Microphone access isn't supported in this browser or environment.",
+  "vui.mic.chosenMissing":
+    "The chosen microphone isn't available. Pick another one in the voice settings.",
   "vui.mic.denied":
     "Microphone access denied: allow it in the system privacy settings (Windows: Settings › Privacy & security › Microphone, for desktop apps).",
   "vui.mic.none": "No microphone found. Connect a microphone and try again.",
-  "vui.mic.noneDevice": "No microphone found. Connect an audio device and try again.",
+  "vui.mic.noneDevice":
+    "No microphone found. Connect an audio device and try again.",
   "vui.mic.failed": (reason) => `Couldn't access the microphone: ${reason}`,
   "vui.mic.noStream": "No audio stream available.",
-  "vui.mic.noAudioContext": "This browser doesn't support AudioContext for measuring audio levels.",
-  "vui.fix.noStorage": "Local storage isn't available; changes will only stay in memory.",
+  "vui.mic.noAudioContext":
+    "This browser doesn't support AudioContext for measuring audio levels.",
+  "vui.fix.noStorage":
+    "Local storage isn't available; changes will only stay in memory.",
   "vui.fix.saveFailed": "Couldn't save the settings to local storage.",
   "vui.fix.noMainKey": "A main key is missing.",
   "vui.fix.defaults": "Settings invalid or missing: defaults restored.",
   "vui.fix.noVersion": "Settings version missing: set to version 1.",
-  "vui.fix.migrated": (from, to) => `Settings migrated from version ${from} to ${to}.`,
+  "vui.fix.migrated": (from, to) =>
+    `Settings migrated from version ${from} to ${to}.`,
   "vui.fix.wakeDefault":
     "The assistant now answers only when called by name: you can change this in the voice settings.",
-  "vui.fix.mode": (value, fallback) => `Unknown mode '${value}': restored '${fallback}'.`,
-  "vui.fix.activation": (value, fallback) => `Unknown activation '${value}': restored '${fallback}'.`,
-  "vui.fix.send": (value, fallback) => `Invalid dictation send '${value}': restored '${fallback}'.`,
+  "vui.fix.mode": (value, fallback) =>
+    `Unknown mode '${value}': restored '${fallback}'.`,
+  "vui.fix.activation": (value, fallback) =>
+    `Unknown activation '${value}': restored '${fallback}'.`,
+  "vui.fix.send": (value, fallback) =>
+    `Invalid dictation send '${value}': restored '${fallback}'.`,
   "vui.fix.language": (fallback) => `No language set: restored '${fallback}'.`,
   "vui.fix.agentChord": (value, problem, fallback) =>
     `Agent mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
   "vui.fix.transcriptionChord": (value, problem, fallback) =>
     `Dictation mode shortcut can't be used ('${value}'). ${problem} Restored '${fallback}'.`,
-  "vui.fix.backend": (value, fallback) => `Invalid engine '${value}': restored '${fallback}'.`,
-  "vui.fix.wordsDropped": (dropped) => `Ignored custom words that aren't text: ${dropped}.`,
+  "vui.fix.backend": (value, fallback) =>
+    `Invalid engine '${value}': restored '${fallback}'.`,
+  "vui.fix.wordsDropped": (dropped) =>
+    `Ignored custom words that aren't text: ${dropped}.`,
   "vui.fix.wordsInvalid": "Invalid custom word list: cleared.",
   "vui.fix.speakReplies": "Invalid reply reading setting: turned back on.",
   "vui.fix.spokenAlerts": "Invalid proactive alerts setting: turned back off.",
-  "vui.fix.replyVoice": (value) => `Unknown reply voice '${value}': restored Ugo.`,
+  "vui.fix.replyVoice": (value) =>
+    `Unknown reply voice '${value}': restored Ugo.`,
   "vui.fix.replyBackend": (value, fallback) =>
-    `Kokoro voices read in English: replies now use the '${fallback}' backend instead of '${value}'.`,
-  "vui.fix.ttsLocale": (value) => `Unknown reply language '${value}': restored Italian.`,
-  "vui.fix.agentSpeed": (value) => `Unknown agent speed '${value}': restored fast.`,
-  "vui.fix.agentEngine": (value) => `Unknown agent engine '${value}': restored automatic.`,
+    `Voice and engine did not match: replies now use the '${fallback}' engine instead of '${value}'.`,
+  "vui.fix.ttsLocale": (value) =>
+    `Unknown reply language '${value}': restored Italian.`,
+  "vui.fix.agentSpeed": (value) =>
+    `Unknown agent speed '${value}': restored fast.`,
+  "vui.fix.agentEngine": (value) =>
+    `Unknown agent engine '${value}': restored automatic.`,
   "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
   "vui.command.palette": "Command palette",
   "vui.command.sessionNew": "New session",
@@ -367,15 +440,21 @@ export const voiceEn: VoiceMessages = {
   "vui.command.transcription": "Dictation mode",
   "vui.clash.taken": (label, chord, winner) =>
     `${label}: “${chord}” already belongs to '${winner}', which takes precedence.`,
-  "vui.clash.both": (label, chord) => `${label}: both use “${chord}”, so neither one works.`,
-  "vui.clash.inactive": (details) => `Voice shortcuts not active. ${details} Change them in the voice panel.`,
+  "vui.clash.both": (label, chord) =>
+    `${label}: both use “${chord}”, so neither one works.`,
+  "vui.clash.inactive": (details) =>
+    `Voice shortcuts not active. ${details} Change them in the voice panel.`,
   "vui.risk.noMainKey": "Invalid shortcut: a main key is missing.",
-  "vui.risk.typing": (key) => `“${key}” alone is for typing: add Ctrl, Alt or Cmd.`,
-  "vui.risk.typingMove": (key) => `“${key}” alone is for typing and moving through text: add Ctrl, Alt or Cmd.`,
-  "vui.risk.winKey": "Windows and many Linux desktops reserve combinations with the Win key: it may never reach ADE.",
+  "vui.risk.typing": (key) =>
+    `“${key}” alone is for typing: add Ctrl, Alt or Cmd.`,
+  "vui.risk.typingMove": (key) =>
+    `“${key}” alone is for typing and moving through text: add Ctrl, Alt or Cmd.`,
+  "vui.risk.winKey":
+    "Windows and many Linux desktops reserve combinations with the Win key: it may never reach ADE.",
   "vui.risk.altLetter":
     "Alt plus a letter can be caught by the window menu or needed by AltGr to type accented characters.",
 
   // Voice recording error
-  "vui.mic.recordFailed": (reason) => `Couldn't start audio recording: ${reason}`,
-}
+  "vui.mic.recordFailed": (reason) =>
+    `Couldn't start audio recording: ${reason}`,
+};
