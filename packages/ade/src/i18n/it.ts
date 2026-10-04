@@ -158,8 +158,7 @@ export const it = {
   "newPane.nikverse": "NikVerse",
   "newPane.nikverse.hint": "la città delle tue sessioni, in tempo reale",
   "nikverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
-  "nikverse.assets.fetching": (megabytes: number) =>
-    `Scarico il mondo di NikVerse (${megabytes} MB), solo la prima volta…`,
+  "nikverse.assets.fetching": (megabytes: number) => `Scarico il mondo di NikVerse (${megabytes} MB), solo la prima volta…`,
   "nikverse.assets.failed": (reason: string) =>
     `Non sono riuscita a scaricare il mondo di NikVerse: ${reason} Per ora vedi i segnaposto.`,
   "nikverse.assets.retry": "Riprova",
@@ -175,8 +174,7 @@ export const it = {
   "plugin.failed": (name: string, reason: string) => `${name} non è partito: ${reason}`,
   "plugin.rolledBack": (name: string) => `La versione nuova di ${name} non è partita: sei tornato alla precedente.`,
   "plugin.uninstall": "Disinstalla",
-  "plugin.uninstall.ask": (name: string, freed: string) =>
-    `Disinstallare ${name}? Libera ${freed} e cancella i suoi dati.`,
+  "plugin.uninstall.ask": (name: string, freed: string) => `Disinstallare ${name}? Libera ${freed} e cancella i suoi dati.`,
   "plugin.uninstall.cancel": "Annulla",
   "plugin.confirm.title": (name: string, version: string) => `Installare ${name} ${version}?`,
   "plugin.confirm.size": (size: string) => `Da scaricare: ${size}`,
@@ -491,8 +489,7 @@ export const it = {
   "settings.extensions": "Estensioni",
   "settings.space": "Spazio su disco",
   "space.title": "Spazio su disco",
-  "space.desc":
-    "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
+  "space.desc": "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
   "space.empty": "Non c'è niente da togliere.",
   "space.group.voices": "Voci locali",
   "space.group.assets": "Asset di NikVerse",
@@ -513,8 +510,7 @@ export const it = {
   "space.worktree.locked": "La worktree è bloccata",
   "space.branches": (a: string) => `${a} branch`,
   "space.prune": (a: string) => `${a}: file di .ade/`,
-  "space.prune.detail": (a: string) =>
-    `${a} file: le catture oltre le ultime 50 e i risultati e le note oltre i 30 giorni`,
+  "space.prune.detail": (a: string) => `${a} file: le catture oltre le ultime 50 e i risultati e le note oltre i 30 giorni`,
   "space.prune.action": "Pota",
   "space.confirm.frees": (a: string) => `Libera circa ${a}.`,
   "space.confirm.frees.none": "Libera pochissimo spazio: toglie solo il nome.",

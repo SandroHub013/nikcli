@@ -153,10 +153,8 @@ export const en: Messages = {
   "newPane.nikverse": "NikVerse",
   "newPane.nikverse.hint": "the city of your sessions, live",
   "nikverse.unloaded": "World unloaded to save memory: come back to this panel to reopen it.",
-  "nikverse.assets.fetching": (megabytes: number) =>
-    `Downloading NikVerse's world (${megabytes} MB), the first time only…`,
-  "nikverse.assets.failed": (reason: string) =>
-    `Could not download NikVerse's world: ${reason} For now you see placeholders.`,
+  "nikverse.assets.fetching": (megabytes: number) => `Downloading NikVerse's world (${megabytes} MB), the first time only…`,
+  "nikverse.assets.failed": (reason: string) => `Could not download NikVerse's world: ${reason} For now you see placeholders.`,
   "nikverse.assets.retry": "Try again",
   "nikverse.ask": (what) => `NikVerse asks to: ${what}`,
   "nikverse.allow": "Allow",
@@ -176,8 +174,7 @@ export const en: Messages = {
   "plugin.confirm.size": (size: string) => `To download: ${size}`,
   "plugin.confirm.asks": "This plugin:",
   "plugin.confirm.none": "It asks for no permission.",
-  "plugin.confirm.unknown": (names: string) =>
-    `It also asks for things ADE does not know (${names}): it will not get them.`,
+  "plugin.confirm.unknown": (names: string) => `It also asks for things ADE does not know (${names}): it will not get them.`,
   "plugin.confirm.install": "Install",
   "plugin.confirm.preview": "Show the install confirmation",
   "plugin.confirm.cancel": "Cancel",
@@ -478,8 +475,7 @@ export const en: Messages = {
   "settings.extensions": "Extensions",
   "settings.space": "Disk space",
   "space.title": "Disk space",
-  "space.desc":
-    "What ADE keeps on your computer and can be taken away. It says how much it frees before it deletes; work that has not landed, secrets, decisions and projects' memory are never touched.",
+  "space.desc": "What ADE keeps on your computer and can be taken away. It says how much it frees before it deletes; work that has not landed, secrets, decisions and projects' memory are never touched.",
   "space.empty": "There is nothing to remove.",
   "space.group.voices": "Local voices",
   "space.group.assets": "NikVerse assets",

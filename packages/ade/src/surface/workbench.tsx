@@ -1,15 +1,4 @@
-import {
-  onMount,
-  onCleanup,
-  on,
-  createSignal,
-  createEffect,
-  createMemo,
-  createResource,
-  Show,
-  For,
-  Suspense,
-} from "solid-js"
+import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -4610,8 +4599,7 @@ export function Workbench() {
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
       // The plugins in a frame look at their own index on the same schedule, but only when one is installed: ADE with none never loads this.
       onChecked: () => {
-        if (anyFramePlugin())
-          void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
+        if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
       },
       /*
        * Coming back to ADE is the moment to look: the release may have been
@@ -4650,8 +4638,7 @@ export function Workbench() {
     }
     setCheckingUpdate(true)
     try {
-      if (anyFramePlugin())
-        void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
+      if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
       const result = await updateWatch.check({ force: true })
       /*
        * The release already has its line in the bell. Repeating it would be
@@ -6833,11 +6820,7 @@ export function Workbench() {
    */
   const reclaims = new Map<string, Promise<Reclaimed>>()
   const treeClosing = new Set<string>()
-  const WORKTREE_RETRY: Retry = {
-    times: 3,
-    ms: 1500,
-    wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-  }
+  const WORKTREE_RETRY: Retry = { times: 3, ms: 1500, wait: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)) }
   const giveBackWorktree = (pane: Pane, worktree: string) => {
     const open = project()
     const found = paneProject(pane, open, recents())
@@ -6846,21 +6829,11 @@ export function Workbench() {
       const host = await getHost()
       if (!host?.run) return { kind: "kept", reason: `"${pane.title}": ${worktree}` }
       const owner = found.kind === "open" ? open : await discoverProject(host, found.root).catch(() => open)
-      const outcome = await reclaimWorktree(
-        host.run,
-        { title: pane.title, worktree, branch, root: owner?.root },
-        host.adeWorktreeRescue ?? noRescue,
-        WORKTREE_RETRY,
-      )
+      const outcome = await reclaimWorktree(host.run, { title: pane.title, worktree, branch, root: owner?.root }, host.adeWorktreeRescue ?? noRescue, WORKTREE_RETRY)
       // The folder ADE makes beside a project for its worktrees goes with the last of them: nothing is left in it but the name.
       if (outcome.kind === "removed" && owner?.root) await host.adeContainerRemove?.(owner.root).catch(() => false)
       return outcome
-    })().catch(
-      (error): Reclaimed => ({
-        kind: "kept",
-        reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}`,
-      }),
-    )
+    })().catch((error): Reclaimed => ({ kind: "kept", reason: `"${pane.title}": ${error instanceof Error ? error.message : String(error)}` }))
     reclaims.set(pane.id, done)
     void done.then((outcome) => {
       if (reclaims.get(pane.id) === done) reclaims.delete(pane.id)
@@ -8643,9 +8616,8 @@ export function Workbench() {
         return false
       },
       ignored: (reason) => console.warn(`[plugin-frame] ignorato: ${reason}`),
-      rolledBack: (name) =>
-        setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
-      install: () => openVoiceSettings("set-sec-extensions"),
+      rolledBack: (name) => setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
+      install: () => openVoiceSettings("extensions/plugins"),
     },
     guessServers,
     confirmOpen,

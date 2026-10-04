@@ -462,6 +462,17 @@ describe("settings shell", () => {
       dispose?.()
       document.body.innerHTML = ""
     }
+
+    // Il foglio passa la vista alla vera pagina: questa la disegna davvero.
+    // Montarla qui non è possibile (in `bun test` manca `import.meta.glob` dei
+    // loghi, il ripiego è vietato), quindi si legge il sorgente: la prop
+    // `view` comanda i tre rami `Show` e nessun tab interno resta.
+    const page = readFileSync(join(import.meta.dir, "../extensions/extensions-page.tsx"), "utf-8")
+    expect(page).toContain("const tab = () => props.view")
+    expect(page).not.toContain("setTab")
+    for (const view of ["catalogo", "installati", "plugin"]) {
+      expect(page, `ramo ${view}`).toContain(`<Show when={tab() === "${view}"}>`)
+    }
   })
 
   test("M2: Registrazione video chiama le stesse funzioni dei comandi record.*", () => {
@@ -534,8 +545,10 @@ describe("settings shell", () => {
       [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="settings-choice"]')].find(
         (button) => button.textContent?.trim() === "2",
       )
-    expect(choiceTwo()).toBeDefined()
-    choiceTwo()!.click()
+    // Trovato o mancante, qui: il find ritorna undefined, mai null.
+    const two = choiceTwo()
+    expect(two).not.toBeUndefined()
+    two!.click()
     expect(gridColumns).toBe(2)
     dispose?.()
     document.body.innerHTML = ""
