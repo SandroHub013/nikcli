@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, batch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createAssetsFlow, type AssetsFlow, type AssetsHost, type AssetsView } from "./assets"
 import { createLifecycle } from "./lifecycle"
 import { createHandshake, newNonce } from "./handshake"
@@ -81,6 +81,11 @@ export function NikversePane(props: {
   const sourceFor = (secret: string) =>
     `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list })}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
+  /*
+   * Each reload is a new frame element. The address of a retry differs from the last one only after the `#` (the
+   * nonce), and a frame whose address changes only there is not reloaded: its old document stays, without its port.
+   */
+  const [frameLoad, setFrameLoad] = createSignal(1)
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
   /*
@@ -96,7 +101,10 @@ export function NikversePane(props: {
     link?.close()
     link = undefined
     nonce = newNonce()
-    setFrameSrc(sourceFor(nonce))
+    batch(() => {
+      setFrameSrc(sourceFor(nonce))
+      setFrameLoad((n) => n + 1)
+    })
   }
   /** Whether the panel can be seen: only that time counts against the opening (`opening.ts`). */
   let seen = true
@@ -385,20 +393,24 @@ export function NikversePane(props: {
           </div>
         </Show>
         <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
-          <iframe
-            ref={frame}
-            data-slot="nikverse-frame"
-            title={t("newPane.nikverse")}
-            name="ade-nikverse"
-            src={frameSrc()}
-            // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
-            // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
-            // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.
-            sandbox="allow-scripts"
-            referrerpolicy="no-referrer"
-            // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
-            onLoad={() => link?.probe()}
-          />
+          <Show when={frameLoad()} keyed>
+            {(_load) => (
+              <iframe
+                ref={frame}
+                data-slot="nikverse-frame"
+                title={t("newPane.nikverse")}
+                name="ade-nikverse"
+                src={frameSrc()}
+                // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
+                // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
+                // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.
+                sandbox="allow-scripts"
+                referrerpolicy="no-referrer"
+                // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
+                onLoad={() => link?.probe()}
+              />
+            )}
+          </Show>
         </Show>
       </div>
     </article>

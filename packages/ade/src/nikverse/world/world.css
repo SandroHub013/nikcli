@@ -168,6 +168,13 @@ button:focus-visible {
   background: var(--bg);
 }
 
+/* No city (the list the user chose after an opening that did not come, or a city that could not start): the stage is
+   opaque and over the list, so it goes, and the list is the page. */
+html[data-city="off"] #stage,
+html[data-city="failed"] #stage {
+  display: none;
+}
+
 #stage canvas.city {
   display: block;
   width: 100%;

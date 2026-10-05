@@ -130,6 +130,18 @@ describe("the line of an opening that did not come", () => {
   })
 })
 
+describe("a reload of the world", () => {
+  test("is a new frame element: a retry's address differs only after the #, which reloads nothing", () => {
+    // «Riprova» and the files coming late change only the nonce, after the `#`: the same element would keep the old
+    // document, whose port reloadFrame has just closed, and the opening would be late again 30 s later.
+    expect(new URL("https://nikverse.localhost/?bench=1#n=a").search).toBe(new URL("https://nikverse.localhost/?bench=1#n=b").search)
+    const pane = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
+    const reload = pane.slice(pane.indexOf("const reloadFrame = () => {"), pane.indexOf("/** Whether the panel can be seen"))
+    expect(reload).toContain("setFrameLoad((n) => n + 1)")
+    expect(pane).toMatch(/<Show when=\{frameLoad\(\)\} keyed>\s*\{\(_load\) => \(\s*<iframe/)
+  })
+})
+
 describe("the world's address", () => {
   test("the bench door, the lowered level and the list go in the query; nothing, no query", () => {
     expect(worldQuery({})).toBe("")

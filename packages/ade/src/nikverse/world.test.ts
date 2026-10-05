@@ -304,6 +304,17 @@ describe("what the world's page is allowed to be", () => {
     expect(script).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|fetch\(|XMLHttpRequest|WebSocket|importScripts/)
   })
 
+  test("without a city (the list chosen, or a city that failed) the stage does not cover the list", () => {
+    // The stage is fixed and opaque over the page: left there, «Apri la lista» showed an empty panel.
+    const css = readFileSync(join(dir, "world.css"), "utf8")
+    const stage = /(^|\n)#stage \{([^}]*)\}/.exec(css)?.[2] ?? ""
+    expect(stage).toContain("position: fixed")
+    for (const city of ["off", "failed"]) {
+      const rule = new RegExp(`html\\[data-city="${city}"\\] #stage[^{]*\\{([^}]*)\\}`).exec(css)?.[1] ?? ""
+      expect(rule).toContain("display: none")
+    }
+  })
+
   test("lint: it keeps nothing in the browser: an opaque origin has no storage, and the position is ADE's to save", () => {
     expect(script).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie|caches\./)
   })
