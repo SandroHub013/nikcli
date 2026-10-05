@@ -253,6 +253,7 @@ export {
   type GrokBatchRequest,
   type GrokStreamTranscriber,
   type GrokStreamTranscriberOptions,
+  type StreamState,
   type SttStreamEvent,
   type SttStreamOpenOptions,
   type SttStreamReason,

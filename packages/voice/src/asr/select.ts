@@ -29,6 +29,7 @@ import {
   createGrokStreamTranscriber,
   type GrokBatch,
   type StreamSpend,
+  type StreamState,
   type SttStreamTransport,
 } from "./grok-stream"
 import { t } from "@nikcli-ai/ade/i18n"
@@ -59,8 +60,10 @@ export interface GrokStreamSelectOptions {
   keyterms?: readonly string[]
   /** Where the streamed seconds are counted: the day's tally, read before every socket opens. */
   spend?: StreamSpend
-  /** Dollars of streaming allowed per day (`VoiceSettings.streamDailyCapUsd`); 0 is off. */
-  dailyCapUsd?: number
+  /** Dollars of streaming allowed per day (`VoiceSettings.streamDailyCapUsd`); 0 is off. A getter is read per socket. */
+  dailyCapUsd?: number | (() => number)
+  /** Told when the reason the stream is or is not carrying sentences changes: the settings page shows it. */
+  onStreamState?: (state: StreamState) => void
 }
 
 export interface SelectTranscriberOptions {
@@ -174,6 +177,7 @@ export function createTranscriberFor(backend: TranscriberBackend, options: Selec
         keyterms: options.grokStreamOptions?.keyterms,
         spend: options.grokStreamOptions?.spend,
         dailyCapUsd: options.grokStreamOptions?.dailyCapUsd,
+        onStreamState: options.grokStreamOptions?.onStreamState,
         now: or?.now,
         nameGate: or?.nameGate,
         capture: or?.capture,

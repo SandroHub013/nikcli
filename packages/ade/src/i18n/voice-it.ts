@@ -324,6 +324,30 @@ export const voiceIt = {
   "vui.key.where":
     "La chiave sta nel portachiavi del sistema, nella pagina Chiavi API: la usano la trascrizione e la voce MAI.",
   "vui.key.cost": "Costo dell'ultima richiesta:",
+  "vui.backend.grok": "Grok in tempo reale (xAI)",
+  "vui.backend.grok.desc": "Scrive mentre parli, con ripiego su MAI-Transcribe-2",
+  "vui.backend.mai2": "MAI-Transcribe-2 (OpenRouter)",
+  "vui.stream.status.test": "ADE Test: trascrive sempre MAI-Transcribe-2",
+  "vui.stream.status.batch": "Trascrive MAI-Transcribe-2, a frase finita",
+  "vui.stream.status.noKey": "Streaming: nessuna chiave xAI, trascrivo con MAI-Transcribe-2",
+  "vui.stream.status.off": "Streaming spento (tetto a 0 $): trascrivo con MAI-Transcribe-2",
+  "vui.stream.status.cap": "Tetto del giorno raggiunto: trascrivo con MAI-Transcribe-2 fino a domani",
+  "vui.stream.status.auth": "Chiave xAI rifiutata: trascrivo con MAI-Transcribe-2",
+  "vui.stream.status.credit": (time: string) =>
+    `Credito xAI finito: trascrivo con MAI-Transcribe-2 fino a domani alle ${time}`,
+  "vui.stream.status.paused": (time: string) => `Streaming in pausa dopo un errore: riprovo alle ${time}`,
+  "vui.stream.status.unknownKey": "Streaming, con ripiego su MAI-Transcribe-2",
+  "vui.stream.status.active": (masked: string) => `Streaming attivo, chiave xAI ${masked}`,
+  "vui.stream.retry": "Riprova lo streaming",
+  "vui.stream.cap": "Tetto giornaliero dello streaming ($)",
+  "vui.stream.cap.hint": "Da 0 a 5 dollari al giorno. 0 spegne lo streaming.",
+  "vui.stream.spend": (minutes: string, spent: string, cap: string) =>
+    `Oggi in tempo reale: ${minutes} min, ${spent} di ${cap}`,
+  "vui.stream.spendOther": (calls: number, spent: string) =>
+    `Il resto oggi (OpenRouter): ${calls} ${calls === 1 ? "richiesta" : "richieste"}, ${spent}`,
+  "vui.stream.needsOpenRouter": "Senza la chiave OpenRouter la voce non parte, anche con la chiave xAI.",
+  "vui.stream.how":
+    "Con Grok le parole arrivano mentre parli, su una connessione a xAI che si apre per ogni frase. La chiave xAI resta nel portachiavi e la legge solo ADE, mai la pagina. Quando lo streaming non può scrivere la frase (nessuna chiave, chiave rifiutata, credito finito, tetto del giorno raggiunto, rete giù), la frase va a MAI-Transcribe-2 con la chiave OpenRouter, e nessuna parola si perde. Il tetto conta solo i secondi in streaming, a 0,20 $ l'ora; quello che spende OpenRouter è nella riga sotto, a parte.",
   "vui.commands.title": "Comandi vocali",
   "vui.commands.desc": "Il vocabolario riconosciuto. Scrivine uno per provarlo senza parlare",
   "vui.commands.trial.placeholder": "Es. «apri la tavolozza»",

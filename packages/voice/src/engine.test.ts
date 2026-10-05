@@ -525,6 +525,11 @@ describe("engine/createVoiceEngine", () => {
       end: async () => {},
       cancel: () => {},
     }
+    /** The cap the transcriber would read now: a getter since T5b, so it follows the settings. */
+    const capOf = (options: SelectTranscriberOptions | undefined) => {
+      const cap = options?.grokStreamOptions?.dailyCapUsd
+      return typeof cap === "function" ? cap() : cap
+    }
     const build = (settings: Record<string, unknown>, tally: ReturnType<typeof createSpendTally>) => {
       const captured: SelectTranscriberOptions[] = []
       const engine = createVoiceEngine({
@@ -549,7 +554,7 @@ describe("engine/createVoiceEngine", () => {
       await engine.start()
 
       const stream = captured[0]?.grokStreamOptions
-      expect(stream?.dailyCapUsd).toBe(0.25)
+      expect(capOf(captured[0])).toBe(0.25)
       expect(stream?.spend).not.toBeUndefined()
       // Nothing streamed yet.
       expect(stream?.spend?.costToday()).toBe(0)
@@ -566,7 +571,7 @@ describe("engine/createVoiceEngine", () => {
     test("a cap of zero is handed over as zero: streaming off", async () => {
       const { engine, captured } = build({ streamDailyCapUsd: 0 }, createSpendTally(null, 10_000))
       await engine.start()
-      expect(captured[0]?.grokStreamOptions?.dailyCapUsd).toBe(0)
+      expect(capOf(captured[0])).toBe(0)
       await engine.stop()
     })
 
@@ -583,15 +588,47 @@ describe("engine/createVoiceEngine", () => {
     test("the default cap is fifty cents", async () => {
       const { engine, captured } = build({}, createSpendTally(null, 10_000))
       await engine.start()
-      expect(captured[0]?.grokStreamOptions?.dailyCapUsd).toBe(0.5)
+      expect(capOf(captured[0])).toBe(0.5)
       await engine.stop()
     })
 
-    test("changing the cap while listening opens a transcriber that has the new one", async () => {
+    test("changing the cap while listening keeps the microphone: the open transcriber reads the new one", async () => {
       const { engine, captured } = build({ streamDailyCapUsd: 0.5 }, createSpendTally(null, 10_000))
       await engine.start()
       await engine.updateSettings({ streamDailyCapUsd: 1 })
-      expect(captured.map((options) => options.grokStreamOptions?.dailyCapUsd)).toEqual([0.5, 1])
+      expect(captured).toHaveLength(1)
+      expect(capOf(captured[0])).toBe(1)
+      await engine.stop()
+    })
+
+    test("with OpenRouter chosen, moving the cap restarts nothing (review T5a, B2)", async () => {
+      const { engine, captured } = build(
+        { backend: "openrouter", streamDailyCapUsd: 0.5 },
+        createSpendTally(null, 10_000),
+      )
+      await engine.start()
+      await engine.updateSettings({ streamDailyCapUsd: 2 })
+      expect(captured).toHaveLength(1)
+      await engine.stop()
+    })
+
+    test("«Riprova» reaches the open transcriber, and is harmless without one", async () => {
+      let retried = 0
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "toggle", agentEngine: "off", backend: "grok-stream" } as never,
+        backendOptions: { grokStreamOptions: { transport } },
+        spendTally: createSpendTally(null, 10_000),
+        creditLeft: async () => undefined,
+        createTranscriber: () => Object.assign(createFakeTranscriber(), { retryStreaming: () => void retried++ }),
+      })
+      engine.retryStream()
+      expect(retried).toBe(0)
+      await engine.start()
+      engine.retryStream()
+      expect(retried).toBe(1)
       await engine.stop()
     })
   })

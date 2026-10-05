@@ -14,6 +14,7 @@ import {
   type LocalProvider,
   type PackState,
   type MaiFailureKind,
+  type StreamState,
 } from "@nikcli-ai/voice"
 import type { Binding } from "../keyboard/keymap"
 import { getHost } from "../host/shell"
@@ -75,6 +76,11 @@ export interface SettingsSheetProps {
   onTestVoice?: () => void
   maiBlocked?: MaiFailureKind
   onRetryMai?: () => void
+  /** The xAI key's masked tail from the keychain, `null` without one; the value never reaches the page. */
+  xaiKeyMasked?: string | null
+  /** Why the streaming transcription is or is not writing, as it last said. */
+  streamState?: StreamState
+  onRetryStream?: () => void
   testIdentity?: boolean
   bindings?: readonly Binding[]
   voiceSettingsNotice?: string
@@ -194,6 +200,15 @@ function voiceStateProps(props: SettingsSheetProps): VoiceSettingsStateProps {
     get onRetryMai() {
       return props.onRetryMai
     },
+    get xaiKeyMasked() {
+      return props.xaiKeyMasked
+    },
+    get streamState() {
+      return props.streamState
+    },
+    get onRetryStream() {
+      return props.onRetryStream
+    },
     get testIdentity() {
       return props.testIdentity
     },
@@ -259,7 +274,15 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
 
       case "agents":
         if (tab === "agents/keys") {
-          return <KeysSection host={props.keysHost()} agents={AGENTS} voiceConflict={props.voiceKeyConflict} />
+          return (
+            <KeysSection
+              host={props.keysHost()}
+              agents={AGENTS}
+              voiceConflict={props.voiceKeyConflict}
+              xaiStreaming={props.voiceSettings.backend === "grok-stream"}
+              xaiRefused={props.streamState?.kind === "auth"}
+            />
+          )
         }
         if (tab === "agents/bots") {
           return (

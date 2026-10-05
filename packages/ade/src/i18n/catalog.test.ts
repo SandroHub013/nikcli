@@ -47,6 +47,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.backend.piper",
   "vui.backend.kokoro",
   "vui.backend.mai",
+  "vui.backend.mai2",
   "vui.reply.mai.it-IT-Grant",
   "vui.reply.mai.it-IT-Harper",
   "vui.reply.mai.it-IT-Luca",

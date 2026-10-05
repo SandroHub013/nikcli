@@ -113,6 +113,22 @@ describe("asr/select", () => {
     expect(typeof transcriber.finish).toBe("function")
   })
 
+  test("the streaming backend tells the page its state through the selection", () => {
+    const kinds: string[] = []
+    createTranscriberFor("grok-stream", {
+      apiKey: "test-key",
+      grokStreamOptions: {
+        transport: { open: async () => {}, send: async () => {}, end: async () => {}, cancel: () => {} },
+        dailyCapUsd: () => 0.5,
+        onStreamState: (state) => kinds.push(state.kind),
+      },
+      openRouterOptions: {
+        captureOptions: { mediaStream: { getTracks: () => [] } as any, isTypeSupported: () => true },
+      },
+    })
+    expect(kinds).toEqual(["ready"])
+  })
+
   test("the streaming backend refuses to be built without its transport", () => {
     expect(() => createTranscriberFor("grok-stream", { apiKey: "test-key" })).toThrow(/transport/i)
   })

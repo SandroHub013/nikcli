@@ -14,6 +14,7 @@ import {
   type KeyDraft,
   type KeyInfo,
 } from "./keys"
+import { xaiKeyDraft, xaiKeyEntry, xaiKeyUse } from "./xai-key"
 import "./keys.css"
 import { t } from "../i18n"
 
@@ -43,6 +44,10 @@ export function KeysSection(props: {
    * once, which to keep. Undefined when there is nothing to ask.
    */
   voiceConflict?: ((choice: "voice" | "keychain") => Promise<void>) | undefined
+  /** Whether the voice is set to transcribe with Grok streaming: the xAI key's line says if it is used. */
+  xaiStreaming?: boolean
+  /** Whether xAI refused the key at the last sentence. */
+  xaiRefused?: boolean
 }) {
   const [keys, setKeys] = createSignal<KeyInfo[]>([])
   const [loadProblem, setLoadProblem] = createSignal<string>()
@@ -108,6 +113,21 @@ export function KeysSection(props: {
               </button>
             </div>
           </div>
+        )}
+      </Show>
+
+      <Show when={props.host}>
+        {(host) => (
+          <XaiKeyBlock
+            host={host()}
+            keys={keys()}
+            streaming={props.xaiStreaming === true}
+            refused={props.xaiRefused === true}
+            onChanged={(text) => {
+              setNotice(text)
+              void refresh()
+            }}
+          />
         )}
       </Show>
 
@@ -246,6 +266,151 @@ export function KeysSection(props: {
         </Show>
       </Show>
     </>
+  )
+}
+
+/**
+ * The streaming transcription's key, in a block of its own (T5b).
+ *
+ * The entry is an ordinary one («xAI», `XAI_API_KEY`, for no agent) and is
+ * listed below with the others; this block is the short way to it from the
+ * voice, and says what the transcription makes of it. The value goes in once,
+ * in a password field emptied as soon as the keychain has it, and never comes
+ * back: `stt_stream.rs` reads it itself.
+ */
+function XaiKeyBlock(props: {
+  host: KeysHost
+  keys: readonly KeyInfo[]
+  streaming: boolean
+  refused: boolean
+  onChanged: (notice: string) => void
+}) {
+  const [busy, setBusy] = createSignal(false)
+  const [problem, setProblem] = createSignal<string>()
+  const [confirming, setConfirming] = createSignal(false)
+  const entry = () => xaiKeyEntry(props.keys)
+  const use = () => xaiKeyUse({ streaming: props.streaming, refused: props.refused })
+  const useText = () => ({ used: t("keys.xai.used"), refused: t("keys.xai.refused"), idle: t("keys.xai.idle") })[use()]
+  let field: HTMLInputElement | undefined
+
+  const save = async (event: Event) => {
+    event.preventDefault()
+    const value = field?.value ?? ""
+    const wrong = valueProblem(value)
+    if (wrong) {
+      setProblem(wrong)
+      return
+    }
+    setBusy(true)
+    setProblem(undefined)
+    try {
+      const draft = xaiKeyDraft(props.keys, value)
+      await props.host.save(draft)
+      if (field) field.value = ""
+      props.onChanged(t("keys.saved", draft.name))
+    } catch (failure) {
+      setProblem(message(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (name: string) => {
+    setBusy(true)
+    try {
+      await props.host.remove(name)
+      setConfirming(false)
+      props.onChanged(t("keys.deleted", name))
+    } catch (failure) {
+      setProblem(message(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div data-slot="keys-row" data-xai-key="">
+      <div data-slot="keys-head">
+        <span data-slot="settings-name">{t("keys.xai.title")}</span>
+      </div>
+      <p data-slot="section-desc">{t("keys.xai.desc")}</p>
+      <Show
+        when={entry()}
+        fallback={
+          <form data-slot="keys-form" data-secrets onSubmit={(event) => void save(event)} autocomplete="off">
+            <label data-slot="keys-field">
+              <span>{t("keys.field.value")}</span>
+              <input
+                ref={field}
+                type="password"
+                data-xai-input=""
+                placeholder={t("keys.field.paste")}
+                autocomplete="off"
+                spellcheck={false}
+              />
+            </label>
+            <div data-slot="keys-actions">
+              <button type="submit" data-slot="settings-choice" data-xai-save="" disabled={busy()}>
+                {busy() ? t("keys.saving") : t("keys.xai.save")}
+              </button>
+            </div>
+          </form>
+        }
+      >
+        {(saved) => (
+          <>
+            <div data-slot="keys-meta" data-xai-status={use()}>
+              <span>{t("keys.xai.saved", saved().masked ?? t("keys.missingValue"))}</span>
+              <span>{useText()}</span>
+            </div>
+            <Show
+              when={confirming()}
+              fallback={
+                <div data-slot="keys-actions">
+                  <button
+                    type="button"
+                    data-slot="settings-choice"
+                    data-xai-remove=""
+                    onClick={() => setConfirming(true)}
+                  >
+                    {t("keys.xai.remove")}
+                  </button>
+                </div>
+              }
+            >
+              <div role="group" aria-label={t("keys.xai.confirm")} data-xai-confirm="">
+                <p data-slot="section-desc">{t("keys.xai.confirm")}</p>
+                <div data-slot="keys-actions">
+                  <button
+                    type="button"
+                    data-slot="settings-choice"
+                    data-danger="true"
+                    data-xai-remove-yes=""
+                    disabled={busy()}
+                    onClick={() => void remove(saved().name)}
+                  >
+                    {t("keys.xai.confirmYes")}
+                  </button>
+                  <button
+                    type="button"
+                    data-slot="settings-choice"
+                    data-xai-remove-no=""
+                    onClick={() => setConfirming(false)}
+                  >
+                    {t("new.cancel")}
+                  </button>
+                </div>
+              </div>
+            </Show>
+          </>
+        )}
+      </Show>
+      <Show when={problem()}>
+        <p data-slot="keys-problem" role="alert">
+          {problem()}
+        </p>
+      </Show>
+    </div>
   )
 }
 

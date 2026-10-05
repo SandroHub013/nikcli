@@ -407,6 +407,50 @@ describe("ADE Test e la voce cloud", () => {
     expect(onDisk(store).replyVoice).toBe("paola")
   })
 
+  test("un salvataggio dell'oggetto intero, come fa ADE, non scrive Ugo sopra la Rosa", () => {
+    const store = rosaV8()
+    const shown = loadVoiceSettings(store, { testIdentity: true }).settings
+    saveVoiceSettings({ ...shown, speakReplies: true }, store, { testIdentity: true })
+    expect(onDisk(store).replyVoice).toBe("it-IT-Rosa")
+    expect(onDisk(store).speakReplies).toBe(true)
+  })
+
+  const streamV10 = () => {
+    const store = new MemoryStorage()
+    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify({ ...DEFAULT_VOICE_SETTINGS, backend: "grok-stream" }))
+    return store
+  }
+
+  test("ADE Test legge lo streaming come OpenRouter, ma un salvataggio intero non lo scrive sopra (T5a, B1)", () => {
+    const store = streamV10()
+    const shown = loadVoiceSettings(store, { testIdentity: true }).settings
+    expect(shown.backend).toBe("openrouter")
+    saveVoiceSettings({ ...shown, streamDailyCapUsd: 1 }, store, { testIdentity: true })
+    expect(onDisk(store).backend).toBe("grok-stream")
+    expect(onDisk(store).streamDailyCapUsd).toBe(1)
+    // Fuori da ADE Test lo streaming c'è ancora.
+    expect(loadVoiceSettings(store).settings.backend).toBe("grok-stream")
+  })
+
+  test("un profilo di prima dello streaming, migrato in ADE Test, sul disco va allo streaming come fuori", () => {
+    const store = rosaV8()
+    loadVoiceSettings(store, { testIdentity: true })
+    expect(onDisk(store).backend).toBe("grok-stream")
+  })
+
+  test("un motore scelto in ADE Test si scrive, e si legge OpenRouter", () => {
+    const store = streamV10()
+    const saved = saveVoiceSettings({ backend: "openrouter" }, store, { testIdentity: true })
+    expect(saved.settings.backend).toBe("openrouter")
+    // OpenRouter è già quello che si legge: non è una scelta, e lo streaming resta.
+    expect(onDisk(store).backend).toBe("grok-stream")
+    const plain = new MemoryStorage()
+    plain.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify({ ...DEFAULT_VOICE_SETTINGS, backend: "openrouter" }))
+    saveVoiceSettings({ backend: "grok-stream" }, plain, { testIdentity: true })
+    expect(onDisk(plain).backend).toBe("grok-stream")
+    expect(loadVoiceSettings(plain, { testIdentity: true }).settings.backend).toBe("openrouter")
+  })
+
   test("un {} salvato con la chiave nel suo spazio è un profilo, non uno nuovo", () => {
     const store = new MemoryStorage()
     store.setItem(VOICE_SETTINGS_STORAGE_KEY, "{}")

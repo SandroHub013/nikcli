@@ -23,6 +23,8 @@ import {
   acceptMaiVoice,
 } from "../settings/reply-voices"
 import type { MaiPanelInput } from "./mai-panel"
+import type { StreamPanelInput } from "./stream-panel"
+import type { StreamState } from "../asr/grok-stream"
 import type { MaiFailureKind } from "../tts/mai"
 import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
 import { panelEscape, panelFrame, panelListensEarly, panelTrapsTab } from "./panel-keys"
@@ -98,6 +100,15 @@ export interface VoiceSettingsStateProps {
   onRetryMai?: () => void
   /** Opens the host's page for keys (ADE's Chiavi API), where the OpenRouter key is managed. Absent: no link. */
   onManageKeys?: () => void
+  /**
+   * The xAI key as the host's keychain shows it (`••••abcd`), `null` without one.
+   * Absent: the host cannot tell, and the page says nothing about the key.
+   */
+  xaiKeyMasked?: string | null
+  /** Why the open transcriber is or is not streaming, as it last said. */
+  streamState?: StreamState
+  /** «Riprova lo streaming»: clears a refusal or a pause. Absent: no button. */
+  onRetryStream?: () => void
   /** ADE Test: MAI is never used, and its question is never asked. */
   testIdentity?: boolean
   /** Optional cost of the most recent speech transcription request. */
@@ -645,6 +656,17 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     ...(props.maiBlocked ? { blocked: props.maiBlocked } : {}),
     spend: props.engine.listenSpend(),
   })
+  /* The streaming engine, in Riconoscimento: what it shows is decided in `stream-panel.ts`. */
+  const streamInput = (): StreamPanelInput => ({
+    backend: props.settings.backend,
+    ...(props.xaiKeyMasked !== undefined ? { xaiKey: props.xaiKeyMasked } : {}),
+    capUsd: props.settings.streamDailyCapUsd,
+    spend: props.engine.listenSpend(),
+    ...(props.streamState ? { state: props.streamState } : {}),
+    testIdentity: props.testIdentity === true,
+    now: Date.now(),
+    language: locale(),
+  })
   // «Usa» keeps Ugo as the local voice underneath, so the fallback is the voice the profile had.
   const acceptMaiOffer = () =>
     updateSettings({
@@ -735,6 +757,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     fallbackKeys,
     activationKeys,
     backendKeys,
+    streamInput,
   }
 }
 
