@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createSttStreamTransport, type SttStreamBridge } from "./stt-stream"
 import type { SttStreamEvent, SttStreamOpenOptions } from "@nikcli-ai/voice"
+import { STT_STREAM_CANCELLED } from "@nikcli-ai/voice/core"
 
 /** A fake Rust side: every call recorded, every open released by hand. */
 function fakeBridge() {
@@ -158,6 +159,22 @@ describe("stt-stream transport", () => {
     const fake = fakeBridge()
     const transport = createSttStreamTransport(fake.bridge)
     expect(() => transport.cancel()).not.toThrow()
+  })
+
+  test("a send still on its way after a cancel says the session was cancelled, not lost (review S7, B2)", async () => {
+    const fake = fakeBridge()
+    const transport = createSttStreamTransport(fake.bridge)
+
+    await transport.open(openOptions(() => {}))
+    transport.cancel()
+    await expect(transport.send(new Uint8Array([1]))).rejects.toThrow(STT_STREAM_CANCELLED)
+    await expect(transport.end()).rejects.toThrow(STT_STREAM_CANCELLED)
+    // A new session forgets it: a send with nothing open is again «no session».
+    await transport.open(openOptions(() => {}))
+    transport.cancel()
+    await transport.open(openOptions(() => {}))
+    fake.opens.at(-1)!.onEvent({ kind: "done", text: "" })
+    await expect(transport.send(new Uint8Array([1]))).rejects.toThrow(/nessuna sessione/i)
   })
 
   test("sending or ending without a session says so instead of guessing", async () => {

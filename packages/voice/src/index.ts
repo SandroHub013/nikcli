@@ -249,6 +249,7 @@ export {
 // The streaming backend: the socket over ADE's Rust host, and its fallback
 export {
   createGrokStreamTranscriber,
+  STT_STREAM_CANCELLED,
   type GrokBatch,
   type GrokBatchRequest,
   type GrokStreamTranscriber,
