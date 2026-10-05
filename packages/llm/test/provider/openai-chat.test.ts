@@ -344,6 +344,30 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("turns a gateway's in-stream error chunk into a typed, retryable provider error", () =>
+    Effect.gen(function* () {
+      // OpenRouter reports an upstream failure inside a 200 stream: no `choices`, an `error` object.
+      const body = sseEvents({ error: { code: 502, message: "Provider disconnected", metadata: { error_type: "provider_unavailable" } } })
+      const events = Array.from(yield* LLMClient.stream(request).pipe(Stream.runCollect, Effect.provide(fixedResponse(body))))
+      const failure = events.find((event) => event.type === "provider-error")
+      expect(failure).toMatchObject({ type: "provider-error", message: "Provider disconnected", retryable: true })
+      expect(JSON.stringify(failure)).toContain("502")
+    }),
+  )
+
+  it.effect("an in-stream rate limit is retryable and says so; a 4xx code is not", () =>
+    Effect.gen(function* () {
+      const run = (code: number) =>
+        LLMClient.stream(request).pipe(
+          Stream.runCollect,
+          Effect.provide(fixedResponse(sseEvents({ error: { code, message: "nope" } }))),
+          Effect.map((events) => Array.from(events).find((event) => event.type === "provider-error")),
+        )
+      expect(yield* run(429)).toMatchObject({ retryable: true, message: "Rate Limited: nope" })
+      expect(yield* run(400)).toMatchObject({ retryable: false, message: "nope" })
+    }),
+  )
+
   it.effect("surfaces transport errors that occur mid-stream", () =>
     Effect.gen(function* () {
       const layer = truncatedStream([
