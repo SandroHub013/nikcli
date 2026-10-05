@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -173,7 +174,9 @@ describe("InstanceBootstrap cost per directory", () => {
     }
 
     await Instance.disposeAll()
-    for (const dir of cleanup) await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    for (const dir of cleanup) await removeTestDir(dir)
 
     // Not a threshold — the harness has to have actually done the work for
     // the recorded numbers to mean anything.

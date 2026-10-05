@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, beforeEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -18,7 +19,7 @@ const { Truncate } = await import("@/tool/truncation")
 
 describe("Truncate.Service", () => {
   beforeEach(async () => {
-    await fs.rm(Truncate.DIR, { recursive: true, force: true })
+    await removeTestDir(Truncate.DIR)
     await fs.mkdir(Truncate.DIR, { recursive: true })
   })
 
@@ -51,5 +52,7 @@ describe("Truncate.Service", () => {
 })
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

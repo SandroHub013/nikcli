@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { Renderable, RGBA, SyntaxStyle, type CapturedFrame } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -229,5 +230,5 @@ describe("streaming churn", () => {
 afterAll(async () => {
   const { Database } = await import("@/database/database")
   Database.close(testDatabase)
-  await fs.rm(testHome, { recursive: true, force: true })
+  await removeTestDir(testHome)
 })

@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -39,5 +40,7 @@ describe("ShareNext.Service", () => {
 
 afterAll(async () => {
   delete process.env.NIKCLI_DISABLE_SHARE
-  await fs.rm(testHome, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

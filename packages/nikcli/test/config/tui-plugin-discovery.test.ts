@@ -1,7 +1,7 @@
 import { preserveTestEnv } from "../helpers/env"
-import { canCreateFileSymlinks } from "../helpers/fs"
+import { canCreateFileSymlinks, removeTestDir } from "../helpers/fs"
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "fs/promises"
+import { mkdir, mkdtemp, symlink, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -30,7 +30,7 @@ async function scratch() {
   return {
     path: dir,
     async [Symbol.asyncDispose]() {
-      await rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     },
   }
 }

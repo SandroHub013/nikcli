@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -47,8 +48,10 @@ function request(pathname: string, init?: RequestInit) {
 afterAll(async () => {
   await Server.stopMobile()
   await Instance.disposeAll().catch(() => undefined)
-  await fs.rm(testHome, { recursive: true, force: true })
-  await fs.rm(projectDir, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
+  await removeTestDir(projectDir)
 })
 
 describe("mobile pairing listener", () => {

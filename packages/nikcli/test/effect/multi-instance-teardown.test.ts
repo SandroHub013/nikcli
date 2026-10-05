@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { Cause, Effect, Exit, Fiber } from "effect"
 import { InstanceScope } from "@/effect/instance-scope"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
@@ -23,13 +24,15 @@ async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
     return await fn(await fs.realpath(home))
   } finally {
     await Instance.disposeAll().catch(() => undefined)
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
     if (previousHome === undefined) delete process.env.NIKCLI_TEST_HOME
     else process.env.NIKCLI_TEST_HOME = previousHome
     if (previousDb === undefined) delete process.env.NIKCLI_DB
     else process.env.NIKCLI_DB = previousDb
     if (previousConfig === undefined) delete process.env.NIKCLI_DISABLE_PROJECT_CONFIG
     else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previousConfig
-    await fs.rm(home, { recursive: true, force: true }).catch(() => undefined)
+    await removeTestDir(home)
   }
 }
 

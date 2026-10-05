@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdtempSync, mkdirSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import path from "path"
 
@@ -52,7 +53,7 @@ async function check(fixture: Fixture) {
     const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
     return { code: await proc.exited, output: stdout + stderr }
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    removeTestDirSync(root)
   }
 }
 

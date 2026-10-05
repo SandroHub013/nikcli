@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import fs from "fs/promises"
@@ -81,7 +82,7 @@ async function mount(text: string) {
 }
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true }).catch(() => {})
+  await removeTestDir(testHome)
 })
 
 describe("what a message costs the renderer", () => {

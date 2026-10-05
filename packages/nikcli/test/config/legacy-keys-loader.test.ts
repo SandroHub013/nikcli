@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -158,12 +159,14 @@ describe("top-level tools → permission", () => {
 
 afterEach(async () => {
   await Instance.disposeAll().catch(() => undefined)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
 })
 
 afterAll(async () => {
   // Teardown of temp directories, not an assertion: Windows can hold a handle
   // for a moment after disposal and `force` only swallows ENOENT.
   for (const dir of [...projectDirs, testHome]) {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined)
+    await removeTestDir(dir)
   }
 })

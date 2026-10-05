@@ -4,28 +4,87 @@ import os from "os"
 import path from "path"
 
 /**
+ * Removal options shared by every test temp-dir cleanup.
+ *
+ * `maxRetries`/`retryDelay` make `fs.rm` itself wait out the short window where
+ * Windows still holds a just-closed handle (a SQLite database is the usual
+ * culprit). `force` keeps a missing directory from being an error, so cleanup
+ * can run unconditionally.
+ */
+const REMOVE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 10,
+  retryDelay: 100,
+} as const
+
+/**
+ * Release the handles that a retry loop cannot outwait.
+ *
+ * `Database.close()` reports success on Windows and the file stays locked
+ * anyway: `bun:sqlite` keeps the native handle alive until the wrapper object
+ * is collected, and a plain retry just re-fails with EBUSY. A forced
+ * synchronous collection is what actually hands the file back, and it costs
+ * nothing on the happy path because this only runs after a failed removal.
+ */
+function collectLockedHandles(): void {
+  try {
+    ;(globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(true)
+  } catch {}
+}
+
+/**
  * Remove a temp directory a test suite created, tolerating Windows file locks.
  *
  * Windows refuses to delete a file any process still holds open, and most
  * suites here open the session SQLite database without closing it. A plain
  * `fs.rm(recursive)` in `afterAll` then throws EBUSY and fails the whole file
- * on Windows while passing everywhere else. Retry for a moment, then leave the
- * directory to the OS — losing a temp dir is not worth failing a test run over.
+ * on Windows while passing everywhere else.
+ *
+ * Cleanup is never allowed to fail a test: after the retries and the forced
+ * collection are exhausted the directory is left to the OS, a log line records
+ * it, and the caller carries on. Leaking a temp dir costs disk; failing 180
+ * files because a handle was late costs the whole signal the suite exists to
+ * produce.
  */
-export async function removeTestDir(dir: string, attempts = 20): Promise<void> {
-  for (let attempt = 0; ; attempt++) {
+export async function removeTestDir(dir: string): Promise<void> {
+  try {
+    await fs.rm(dir, REMOVE_OPTIONS)
+    return
+  } catch (error) {
+    collectLockedHandles()
     try {
-      await fs.rm(dir, { recursive: true, force: true })
-      return
-    } catch (error) {
-      // SAFETY: this catch only wraps `fs.rm`, and Node rejects filesystem
-      // calls with an `ErrnoException`.
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw error
-      if (attempt >= attempts) return
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      await fs.rm(dir, REMOVE_OPTIONS)
+    } catch {
+      reportTempDirLeftover(dir, error)
     }
   }
+}
+
+/**
+ * Synchronous {@link removeTestDir} for suites whose hooks are not async.
+ *
+ * Same contract: retries Windows locks, never throws, logs the leftover.
+ */
+export function removeTestDirSync(dir: string): void {
+  try {
+    rmSync(dir, REMOVE_OPTIONS)
+    return
+  } catch (error) {
+    collectLockedHandles()
+    try {
+      rmSync(dir, REMOVE_OPTIONS)
+    } catch {
+      reportTempDirLeftover(dir, error)
+    }
+  }
+}
+
+function reportTempDirLeftover(dir: string, error: unknown): void {
+  // SAFETY: this only runs with whatever `fs.rm` rejected with, and Node
+  // rejects filesystem calls with an `ErrnoException`.
+  const code = (error as NodeJS.ErrnoException | undefined)?.code ?? "unknown"
+  console.warn(`[test] could not remove temp dir ${dir} (${code}); leaving it to the OS`)
 }
 
 /**

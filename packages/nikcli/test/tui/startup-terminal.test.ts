@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { removeTestDirSync } from "../helpers/fs"
 import { startupTerminalMode } from "../../script/tui-startup-terminal"
 import { spawnPty } from "@nikcli-ai/util/pty"
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -63,7 +64,7 @@ async function fixture(
       report: JSON.parse(readFileSync(reportPath, "utf8")),
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    removeTestDirSync(dir)
   }
 }
 

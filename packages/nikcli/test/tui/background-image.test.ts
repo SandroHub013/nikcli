@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -237,7 +238,9 @@ describe("background source", () => {
   const nested = path.join(root, "nested")
 
   afterAll(async () => {
-    await fs.rm(root, { recursive: true, force: true })
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(root)
   })
 
   async function seed() {

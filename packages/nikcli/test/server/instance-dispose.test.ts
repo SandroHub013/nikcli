@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -40,8 +41,10 @@ function url(pathname: string, directory: string) {
 }
 
 afterAll(async () => {
-  for (const dir of projectDirs) await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined)
-  await fs.rm(testHome, { recursive: true, force: true }).catch(() => undefined)
+  for (const dir of projectDirs) await removeTestDir(dir)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })
 
 describe("POST /instance/dispose", () => {

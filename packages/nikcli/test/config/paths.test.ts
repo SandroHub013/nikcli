@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -25,7 +26,7 @@ describe("ConfigPaths", () => {
     })
 
     afterEach(async () => {
-      await fs.rm(testDir, { recursive: true, force: true })
+      await removeTestDir(testDir)
       delete process.env[envKey]
     })
 

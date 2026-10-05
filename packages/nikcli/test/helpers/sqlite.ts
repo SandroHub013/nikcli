@@ -27,6 +27,7 @@
  * genuinely need the global database (rare; e.g. migration tests).
  */
 import fs from "fs/promises"
+import { removeTestDir } from "./fs"
 import os from "os"
 import path from "path"
 
@@ -85,6 +86,6 @@ export async function withIsolatedDatabase<T>(
     else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previousProjectConfig
     if (previousDatabase === undefined) delete process.env.NIKCLI_DB
     else process.env.NIKCLI_DB = previousDatabase
-    await fs.rm(home, { recursive: true, force: true }).catch(() => {})
+    await removeTestDir(home)
   }
 }

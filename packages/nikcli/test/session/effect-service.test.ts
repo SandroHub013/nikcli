@@ -20,6 +20,8 @@ const [{ Session }, { locallyInstance }, { Global }, { Identifier }] = await Pro
 ])
 
 afterAll(async () => {
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await removeTestDir(testHome)
 })
 
@@ -88,7 +90,7 @@ describe("Session.Service", () => {
       expect(result.messages).toHaveLength(1)
       expect(result.messages[0]?.parts).toHaveLength(1)
     } finally {
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdirSync, mkdtempSync, readFileSync, existsSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -50,7 +51,7 @@ describe("shared log file", () => {
       for (const line of lines)
         expect(line).toMatch(/^INFO {2}\S+ \+\d+ms service=writer-(main|worker) who=(main|worker) i=\d+ line$/)
     } finally {
-      rmSync(home, { recursive: true, force: true })
+      removeTestDirSync(home)
     }
   })
 })

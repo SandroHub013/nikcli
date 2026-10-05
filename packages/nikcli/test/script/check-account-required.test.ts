@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -61,7 +62,7 @@ describe("check-account-required.ts (EOT-12)", () => {
       dir = mkdtempSync(path.join(tmpdir(), "nikcli-account-required-"))
       mkdirSync(path.join(dir, "routes"))
     })
-    afterEach(() => rmSync(dir, { recursive: true, force: true }))
+    afterEach(() => removeTestDirSync(dir))
 
     const write = (name: string, body: string) => writeFileSync(path.join(dir, "routes", name), body)
 

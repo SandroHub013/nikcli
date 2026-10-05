@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { createHash } from "crypto"
 import fs from "fs/promises"
 import os from "os"
@@ -95,7 +96,7 @@ describe("importPlugin", () => {
       expect((error as PluginExitError).code).toBe(2)
       expect(process.exit).toBe(exit)
     } finally {
-      await fs.rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     }
   })
 
@@ -116,7 +117,7 @@ describe("importPlugin", () => {
       expect(calls).toEqual([0])
     } finally {
       process.exit = exit
-      await fs.rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     }
   })
 
@@ -131,7 +132,7 @@ describe("importPlugin", () => {
       const [, error] = await Promise.all([importPlugin(fast, fast), importPlugin(late, late).catch((e: unknown) => e)])
       expect(error).toBeInstanceOf(PluginExitError)
     } finally {
-      await fs.rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     }
   })
 })

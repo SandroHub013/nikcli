@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -50,7 +51,7 @@ afterEach(async () => {
   setEnabled(false)
   setTestSocketPath(undefined)
   process.env = { ...originalEnv }
-  await fs.rm(tmpDir, { recursive: true, force: true })
+  await removeTestDir(tmpDir)
 })
 
 describe("HerdrBridge — detect", () => {

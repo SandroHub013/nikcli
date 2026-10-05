@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import {
   parseFinding,
   isFileReal,
@@ -46,7 +47,7 @@ export class TestClass {
 
 async function teardown() {
   try {
-    await fs.rm(TEST_DIR, { recursive: true, force: true })
+    await removeTestDir(TEST_DIR)
   } catch {}
 }
 

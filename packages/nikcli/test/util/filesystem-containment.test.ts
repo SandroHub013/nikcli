@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -15,8 +16,8 @@ describe("Filesystem.realpathInside", () => {
   })
 
   afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true })
-    await fs.rm(outside, { recursive: true, force: true })
+    await removeTestDir(root)
+    await removeTestDir(outside)
   })
 
   test("returns ok for a path directly inside the root", async () => {

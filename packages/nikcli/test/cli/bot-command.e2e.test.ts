@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -9,7 +10,7 @@ const xdgDataHome = path.join(testHome, "data")
 await fs.mkdir(path.join(xdgDataHome, "nikcli"), { recursive: true })
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true })
+  await removeTestDir(testHome)
 })
 
 describe("bot command (subprocess, browser conditions)", () => {

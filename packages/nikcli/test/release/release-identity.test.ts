@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDirSync } from "../helpers/fs"
 import fs from "node:fs/promises"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -111,7 +112,7 @@ describe("release identity probe", () => {
         expect(stderr).toContain("✗")
       }
     } finally {
-      rmSync(cwd, { recursive: true, force: true })
+      removeTestDirSync(cwd)
     }
   })
 })

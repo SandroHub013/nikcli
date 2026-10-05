@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -29,8 +30,10 @@ const projectDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ni
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
-  await fs.rm(testHome, { recursive: true, force: true }).catch(() => {})
+  await removeTestDir(projectDir)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })
 
 /** A plugin that records its version on every event and on dispose. */
@@ -119,7 +122,7 @@ describe("plugin folder discovery", () => {
       await Bun.write(path.join(tui, "index.ts"), "export {}")
       expect(await Config.pluginFolderEntry(tui)).toBeUndefined()
     } finally {
-      await fs.rm(root, { recursive: true, force: true })
+      await removeTestDir(root)
     }
   })
 
@@ -131,7 +134,7 @@ describe("plugin folder discovery", () => {
       // A local build installs `latest`; there is no version to compare against.
       expect(await Config.needsInstall(dir)).toBe(false)
     } finally {
-      await fs.rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     }
   })
 

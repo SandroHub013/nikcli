@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { removeTestDir } from "./fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -40,7 +41,7 @@ describe("bench-report", () => {
       expect(data.meta).toEqual({ tag: "test" })
       expect(typeof data.runId).toBe("string")
     } finally {
-      await fs.rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     }
   })
 

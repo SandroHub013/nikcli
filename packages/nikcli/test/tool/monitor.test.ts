@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -25,9 +26,10 @@ const def = await withProjectDirectory(projectDir, () => MonitorTool.init())
 describe("MonitorTool", () => {
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
+    Database.closeAll()
     Database.close(path.join(testHome, "data", "nikcli.db"))
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
-    await fs.rm(testHome, { recursive: true, force: true }).catch(() => {})
+    await removeTestDir(projectDir)
+    await removeTestDir(testHome)
   })
 
   it("rejects non-positive timeout before starting", async () => {

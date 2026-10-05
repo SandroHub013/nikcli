@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { preserveTestEnv } from "../helpers/env"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -54,7 +55,9 @@ const { Instance } = await import("@/project/instance")
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await fs.rm(home, { recursive: true, force: true }).catch(() => undefined)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(home)
 })
 
 /** Routes that never answer, or answer only when something happens elsewhere. */

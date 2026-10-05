@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -78,11 +79,12 @@ afterEach(async () => {
 // instances are disposed, and `force` only swallows ENOENT — an EBUSY still
 // rejects and fails the suite. Retry, then give up quietly: this is teardown of
 // a temp directory, not an assertion.
-const rmTemp = (dir: string) =>
-  fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => undefined)
+const rmTemp = (dir: string) => removeTestDir(dir)
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await Promise.all(projectDirs.map(rmTemp))
   await rmTemp(testHome)
 })

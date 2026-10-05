@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { locallyInstance } from "@/effect"
@@ -53,7 +54,7 @@ describe("Bus.Service", () => {
 
       expect(seen).toEqual(["first"])
     } finally {
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })

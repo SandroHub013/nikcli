@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -21,7 +22,9 @@ const { Tool } = await import("@/tool/tool")
 const z = (await import("zod")).default
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })
 
 describe("InstanceState hot reload", () => {
@@ -69,7 +72,7 @@ describe("InstanceState hot reload", () => {
       expect(result.rebuilt).toBe(2)
       expect(result.stable).toBe(1)
     } finally {
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 
@@ -103,7 +106,7 @@ describe("InstanceState hot reload", () => {
       expect(result.second).toBe(2)
       expect(result.builds).toBe(2)
     } finally {
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })
@@ -158,7 +161,7 @@ describe("config-derived services join hot reload", () => {
       expect(result.after).not.toContain("alpha")
     } finally {
       await Instance.provide({ directory, fn: () => Instance.dispose() })
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 
@@ -200,7 +203,7 @@ describe("config-derived services join hot reload", () => {
       expect(result.after).not.toContain("alpha")
     } finally {
       await Instance.provide({ directory, fn: () => Instance.dispose() })
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 
@@ -258,7 +261,7 @@ describe("config-derived services join hot reload", () => {
       expect(result.after).toContain("sticky_runtime")
     } finally {
       await Instance.provide({ directory, fn: () => Instance.dispose() })
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })
@@ -288,7 +291,7 @@ describe("InstanceReload", () => {
       expect(seen).toContain(InstanceReload.Event.Completed.type)
     } finally {
       await Instance.provide({ directory, fn: () => Instance.dispose() })
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 
@@ -331,7 +334,7 @@ describe("InstanceReload", () => {
       expect(result.after).not.toContain("alpha")
     } finally {
       await Instance.provide({ directory, fn: () => Instance.dispose() })
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })

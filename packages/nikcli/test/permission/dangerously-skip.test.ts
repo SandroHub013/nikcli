@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -36,8 +37,10 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await Promise.all(projectDirs.map((d) => fs.rm(d, { recursive: true, force: true })))
-  await fs.rm(home, { recursive: true, force: true })
+  await Promise.all(projectDirs.map((d) => removeTestDir(d)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(home)
 })
 
 describe("PermissionNext namespace (opencode #22047 wiring)", () => {

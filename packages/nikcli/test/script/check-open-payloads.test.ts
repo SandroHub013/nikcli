@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -51,7 +52,7 @@ describe("check-open-payloads.ts (EOT-10)", () => {
       mkdirSync(src)
       allowlist = path.join(dir, "allowlist.json")
     })
-    afterEach(() => rmSync(dir, { recursive: true, force: true }))
+    afterEach(() => removeTestDirSync(dir))
 
     const entry = (snippet: string, count?: number) => ({
       file: "route.ts",

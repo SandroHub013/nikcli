@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -26,7 +27,7 @@ describe("BashTool", () => {
 
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    await removeTestDir(projectDir)
   })
 
   it("runs a simple echo command and returns stdout", async () => {
@@ -116,7 +117,9 @@ describe("BashTool", () => {
       ])
       expect(asked.find((item) => item.permission === "bash")?.patterns).toEqual(["Get-ChildItem"])
     } finally {
-      await fs.rm(outside, { recursive: true, force: true })
+      const { Database } = await import("@/database/database")
+      Database.closeAll()
+      await removeTestDir(outside)
     }
   })
 

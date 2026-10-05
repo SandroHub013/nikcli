@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test"
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises"
+import { removeTestDir } from "../helpers/fs"
 import os from "node:os"
 import path from "node:path"
 import { Global } from "@nikcli-ai/util/global"
@@ -29,7 +30,7 @@ describe("tui plugin storage quota", () => {
     clearPluginStorage()
     if (original === undefined) delete process.env.NIKCLI_TEST_HOME
     else process.env.NIKCLI_TEST_HOME = original
-    await rm(root, { recursive: true, force: true })
+    await removeTestDir(root)
   })
 
   function store(id: string) {

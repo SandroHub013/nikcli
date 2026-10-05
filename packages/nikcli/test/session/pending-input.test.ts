@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -44,7 +45,7 @@ async function withSession(
       })
     } finally {
       await Instance.disposeAll().catch(() => undefined)
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 }
