@@ -235,7 +235,8 @@
 
 [data-slot="settings-tab"][data-active="true"] {
   color: var(--ade-accent);
-  border-bottom-color: var(--ade-accent);
+  /* Not the accent: no accent contour without an accent fill (contorni.test.ts). */
+  border-bottom-color: var(--ade-text);
   font-weight: var(--ade-weight-semibold);
 }
 
