@@ -155,15 +155,33 @@ export function SkillsSection(props: SkillsSectionProps) {
         <p data-slot="section-desc">{t("settings.skills.desc")}</p>
       </div>
 
-      <Show when={restricted().length > 0} fallback={<p data-slot="settings-empty">{t("settings.skills.empty")}</p>}>
+      <Show
+        when={restricted().length > 0}
+        fallback={
+          <div data-slot="settings-empty">
+            <p>{t("settings.skills.none")}</p>
+            <p data-slot="settings-hint">{t("settings.skills.addHint")}</p>
+          </div>
+        }
+      >
         <ul data-slot="settings-list">
           <For each={restricted()}>
-            {(bot) => (
-              <li data-slot="settings-row">
-                <span data-slot="settings-name">{bot.identifier}</span>
-                <span data-slot="settings-meta">{t("settings.skills.without", bot.disabledTools.join(", "))}</span>
-              </li>
-            )}
+            {(bot) => {
+              const hasNoTools = () => bot.disabledTools.includes("*")
+              return (
+                <li data-slot="settings-row">
+                  <span data-slot="settings-name">{bot.identifier}</span>
+                  <span data-slot="settings-meta">
+                    {hasNoTools()
+                      ? t("settings.skills.none")
+                      : t("settings.skills.without", bot.disabledTools.join(", "))}
+                  </span>
+                  <Show when={hasNoTools()}>
+                    <span data-slot="settings-hint">{t("settings.skills.addHint")}</span>
+                  </Show>
+                </li>
+              )
+            }}
           </For>
         </ul>
       </Show>

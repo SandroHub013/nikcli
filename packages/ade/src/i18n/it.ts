@@ -316,6 +316,7 @@ export const it = {
   "hooks.update": "Aggiorna",
   "hooks.outdated": "Quello installato è di una versione precedente di ADE: premi Aggiorna per mettere quello nuovo.",
   "hooks.remove": "Rimuovi",
+  "hooks.details": "Dettagli",
   "hooks.outside":
     "Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova, quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.",
   "agent.mic.start": "Avvia il microfono",
@@ -534,7 +535,12 @@ export const it = {
   "settings.skills.desc":
     "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: nikcli registra nel file solo le rinunce.",
   "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.",
+  "settings.skills.none": "Nessuno strumento",
+  "settings.skills.addHint": "Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.",
   "settings.skills.without": (tools: string) => `senza ${tools}`,
+  "settings.howItWorks": "Come funziona",
+  "settings.account.intro":
+    "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
   "settings.providers.title": "Provider",
   "settings.providers.desc1":
     "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
@@ -547,6 +553,9 @@ export const it = {
   "settings.providers.notConnected": "Non collegato",
   "settings.providers.unverified": "Da verificare",
   "settings.providers.switchAccount": "Cambia account",
+  "settings.providers.switchPrompt": (runner: string) => `Si apre l'accesso di ${runner}. Continuare?`,
+  "settings.providers.switchContinue": "Continua",
+  "settings.providers.switchCancel": "Annulla",
   "settings.providers.login": "Accedi",
   "settings.providers.checkAgain": "Controlla di nuovo",
 

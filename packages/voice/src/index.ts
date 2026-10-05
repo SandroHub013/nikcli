@@ -173,6 +173,8 @@ export { NikCube, type NikCubeProps } from "./ui/nik-cube"
 
 export { VoiceSettingsPanel, type VoiceSettingsPanelProps } from "./ui/voice-settings-panel"
 
+export { HowItWorks, type HowItWorksProps } from "./ui/how-it-works"
+
 export {
   captureKeyboardEvent,
   checkShortcutConflict,

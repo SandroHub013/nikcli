@@ -67,6 +67,11 @@
   font-size: var(--ade-font-xs);
 }
 
+[data-slot="settings-hint"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
 /*
  * A small set of mutually exclusive values, shown all at once.
  *

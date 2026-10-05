@@ -98,12 +98,15 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                 </Show>
 
                 <Show when={state() && !state()?.error}>
-                  <p data-slot="hook-paths">
-                    <Show when={state()?.configPath}>
-                      <code>{state()?.configPath}</code>
-                    </Show>
-                    <code>{state()?.scriptPath}</code>
-                  </p>
+                  <details data-slot="hook-details">
+                    <summary>{t("hooks.details")}</summary>
+                    <p data-slot="hook-paths">
+                      <Show when={state()?.configPath}>
+                        <code>{state()?.configPath}</code>
+                      </Show>
+                      <code>{state()?.scriptPath}</code>
+                    </p>
+                  </details>
                 </Show>
 
                 <Show when={state()?.error}>

@@ -26,10 +26,10 @@ import {
   GridSection,
   LanguageSection,
   NotBuiltYet,
-  ProviderSection,
   SkillsSection,
   ThemeSection,
 } from "./sections"
+import { AccountSection } from "./account"
 import { KeysSection } from "../secrets/keys-section"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import { PluginSection } from "../plugin/pane"
@@ -181,7 +181,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
             />
           )
         }
-        return <ProviderSection onLogin={(runner) => props.openLoginSession(runner)} />
+        return <AccountSection onLogin={(runner) => props.openLoginSession(runner)} />
 
       case "extensions":
         return (
