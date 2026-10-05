@@ -5,6 +5,7 @@ import { MessageV2 } from "./message-v2"
 import { Provider } from "../provider/provider"
 import { Session } from "."
 import { iife } from "@nikcli-ai/util/iife"
+import { HeadlessTitle } from "./headless-title"
 
 const log = Log.create({ service: "session.prompt.title" })
 
@@ -60,6 +61,27 @@ export namespace PromptTitle {
 
     const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
     const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
+    // A `nikcli run` session has no reader: cut the title from the prompt, no model call.
+    if (HeadlessTitle.isHeadless(input.session)) {
+      const text = hasOnlySubtaskParts
+        ? subtaskParts.map((p) => p.prompt).join("\n")
+        : firstRealUser.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+            .map((p) => p.text)
+            .join("\n")
+      const title = HeadlessTitle.fromPrompt(text)
+      if (title)
+        await deps.sessionUpdate(
+          input.session.id,
+          (draft) => {
+            // Same guard as the generated path: a rename that landed meanwhile wins.
+            if (Session.isDefaultTitle(draft.title)) draft.title = title
+          },
+          { touch: false },
+        )
+      return
+    }
 
     const agent = await deps.agentGet("title")
     if (!agent) return
