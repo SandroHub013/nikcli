@@ -972,6 +972,18 @@ describe("S7: i testi della voce", () => {
     }
   })
 
+  test("Comandi: le frasi non sono fermate di Tab, il campo di prova e il filtro sì (S8)", () => {
+    renderSettingsSheet({ initialTarget: "voice/commands" })
+    const chips = [...body().querySelectorAll<HTMLButtonElement>('[data-slot="phrase-chip"]')]
+    expect(chips.length).toBeGreaterThan(90)
+    expect(chips.filter((chip) => chip.tabIndex !== -1).map((chip) => chip.textContent)).toEqual([])
+    expect(body().querySelector<HTMLInputElement>("#voice-trial-input")!.tabIndex).toBe(0)
+    expect(body().querySelector<HTMLInputElement>("#voice-command-filter")!.tabIndex).toBe(0)
+    // Il clic resta: copia la frase nel campo di prova.
+    chips[0]!.click()
+    expect(body().querySelector<HTMLInputElement>("#voice-trial-input")!.value).toBe(chips[0]!.textContent!)
+  })
+
   test("Comandi: il filtro trova un comando anche dal suo nome", () => {
     renderSettingsSheet({ initialTarget: "voice/commands" })
     const filter = body().querySelector<HTMLInputElement>(
