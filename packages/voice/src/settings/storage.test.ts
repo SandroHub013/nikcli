@@ -13,6 +13,7 @@ import {
   saveVoiceSettings,
 } from "./storage"
 import { DEFAULT_VOICE_SETTINGS, setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./model"
+import { maiVoiceOfferPending } from "./reply-voices"
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>()
@@ -333,5 +334,80 @@ describe("after 0.7.0: a profile saved on the shortcut", () => {
     expect(first.migrations).toEqual(["name-only"])
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("wake-word")
     expect(loadVoiceSettings(store).migrations).toEqual([])
+  })
+})
+
+describe("ADE Test e la voce cloud", () => {
+  test("sotto l'identità di test un profilo nuovo parte su Piper, e la domanda non compare", () => {
+    const store = new MemoryStorage()
+    store.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
+    const loaded = loadVoiceSettings(store, { testIdentity: true })
+    expect(loaded.settings.replyVoice).toBe("ugo")
+    expect(loaded.settings.replyBackend).toBe("piper")
+    expect(
+      maiVoiceOfferPending({
+        replyVoice: loaded.settings.replyVoice,
+        hasKey: Boolean(loaded.settings.openRouterApiKey),
+        testIdentity: true,
+      }),
+    ).toBe(false)
+    // Fuori da ADE Test lo stesso profilo nuovo è Rosa.
+    expect(loadVoiceSettings(new MemoryStorage()).settings.replyVoice).toBe("it-IT-Rosa")
+  })
+
+  test("il primo salvataggio in ADE Test non scrive Rosa sul disco", () => {
+    const store = new MemoryStorage()
+    const saved = saveVoiceSettings({ speakReplies: true }, store, { testIdentity: true })
+    expect(saved.settings.replyVoice).toBe("ugo")
+    expect(JSON.parse(store.getItem(VOICE_SETTINGS_STORAGE_KEY)!).replyVoice).toBe("ugo")
+  })
+
+  const rosaV8 = () => {
+    const store = new MemoryStorage()
+    const old = { ...DEFAULT_VOICE_SETTINGS, version: 8, replyVoice: "it-IT-Rosa", replyBackend: "mai" }
+    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(old))
+    return store
+  }
+  const onDisk = (store: Storage) => JSON.parse(store.getItem(VOICE_SETTINGS_STORAGE_KEY)!)
+
+  test("un profilo migrato in ADE Test si legge Ugo ma resta Rosa sul disco", () => {
+    const store = rosaV8()
+    const loaded = loadVoiceSettings(store, { testIdentity: true })
+    expect(loaded.settings.replyVoice).toBe("ugo")
+    expect(onDisk(store).version).toBe(9)
+    expect(onDisk(store).replyVoice).toBe("it-IT-Rosa")
+    expect(onDisk(store).replyBackend).toBe("mai")
+    // Fuori da ADE Test la Rosa c'è ancora.
+    expect(loadVoiceSettings(store).settings.replyVoice).toBe("it-IT-Rosa")
+  })
+
+  test("un salvataggio in ADE Test non scrive Ugo sopra la Rosa salvata", () => {
+    const store = rosaV8()
+    const saved = saveVoiceSettings({ speakReplies: true }, store, { testIdentity: true })
+    expect(saved.settings.replyVoice).toBe("ugo")
+    expect(onDisk(store).replyVoice).toBe("it-IT-Rosa")
+    expect(onDisk(store).speakReplies).toBe(true)
+  })
+
+  test("una Rosa scelta in ADE Test si scrive, e si legge Ugo", () => {
+    const store = new MemoryStorage()
+    saveVoiceSettings({ speakReplies: true }, store, { testIdentity: true })
+    const saved = saveVoiceSettings({ replyVoice: "it-IT-Rosa" }, store, { testIdentity: true })
+    expect(saved.settings.replyVoice).toBe("ugo")
+    expect(onDisk(store).replyVoice).toBe("it-IT-Rosa")
+    // Una voce locale scelta dopo prende il suo posto.
+    saveVoiceSettings({ replyVoice: "paola" }, store, { testIdentity: true })
+    expect(onDisk(store).replyVoice).toBe("paola")
+  })
+
+  test("un {} salvato con la chiave nel suo spazio è un profilo, non uno nuovo", () => {
+    const store = new MemoryStorage()
+    store.setItem(VOICE_SETTINGS_STORAGE_KEY, "{}")
+    store.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
+    expect(loadVoiceSettings(store).settings.replyVoice).toBe("ugo")
+    // Senza niente salvato, con la sola chiave, è nuovo: Rosa.
+    const fresh = new MemoryStorage()
+    fresh.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
+    expect(loadVoiceSettings(fresh).settings.replyVoice).toBe("it-IT-Rosa")
   })
 })

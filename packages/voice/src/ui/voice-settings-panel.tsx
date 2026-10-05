@@ -22,7 +22,13 @@ import {
   replyVoiceChoicesFor,
   voiceOnBackend,
   rememberReplyVoice,
+  acceptMaiVoice,
+  isMaiVoice,
+  localReplyVoice,
+  MAI_VOICE_CHOICES,
 } from "../settings/reply-voices"
+import { maiOfferShown, maiRetryShown, maiSpendText, maiStatusText, type MaiPanelInput } from "./mai-panel"
+import type { MaiFailureKind } from "../tts/mai"
 import { packView, type InstallProgress, type LocalProvider, type PackState } from "../settings/voice-pack"
 import { InstallBar, VoicePackBox } from "./voice-pack-box"
 import { panelEscape, panelFrame, panelListensEarly, panelTrapsTab } from "./panel-keys"
@@ -119,6 +125,12 @@ export interface VoiceSettingsPanelProps {
   onDeleteKokoro?: () => void
   /** Speaks a short sample in the voice chosen. Absent: no button. */
   onTestVoice?: () => void
+  /** Why the MAI speaker is not asking MAI right now, as it last said; undefined when it is. */
+  maiBlocked?: MaiFailureKind
+  /** The panel's «Riprova MAI»: opens the breaker, and asks nothing until a sentence needs it. */
+  onRetryMai?: () => void
+  /** ADE Test: MAI is never used, and its question is never asked. */
+  testIdentity?: boolean
   /** Optional cost of the most recent speech transcription request. */
   lastCost?: number
   /**
@@ -894,6 +906,25 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   })
   /** The backend the chosen voice belongs to: the one whose voices are listed. */
   const replyBackendNow = () => backendOf(props.settings.replyVoice)
+  /* MAI, in the OpenRouter card: what it shows is decided in `mai-panel.ts`. */
+  const maiInput = (): MaiPanelInput => ({
+    replyVoice: props.settings.replyVoice,
+    ...(props.settings.replyVoiceOffer ? { replyVoiceOffer: props.settings.replyVoiceOffer } : {}),
+    hasKey: Boolean(props.settings.openRouterApiKey),
+    testIdentity: props.testIdentity === true,
+    ...(props.maiBlocked ? { blocked: props.maiBlocked } : {}),
+    spend: props.engine.listenSpend(),
+  })
+  // «Usa» keeps Ugo as the local voice underneath, so the fallback is the voice the profile had.
+  const acceptMaiOffer = () =>
+    updateSettings({
+      ...acceptMaiVoice(),
+      replyVoiceByBackend: rememberReplyVoice(props.settings.replyVoiceByBackend, props.settings.replyVoice) ?? {},
+    })
+  const declineMaiOffer = () => updateSettings({ replyVoiceOffer: "declined" })
+  /** The local voice under MAI: remembered on Piper, where `localReplyVoice` looks first. */
+  const pickMaiLocal = (voice: ReplyVoice) =>
+    updateSettings({ replyVoiceByBackend: rememberReplyVoice(props.settings.replyVoiceByBackend, voice) ?? {} })
   /** The voice marked in the list: a Piper one follows the interface language, as it speaks. */
   const shownReplyVoice = () =>
     replyBackendNow() === "piper" ? activeReplyVoice(props.settings.replyVoice, locale()) : props.settings.replyVoice
@@ -2137,6 +2168,70 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   </div>
                 </Show>
               </div>
+            </div>
+
+            {/* The reply voice on MAI: here, because it is the OpenRouter key above that it spends. */}
+            <div data-slot="sub-choice-box" data-component="mai-box">
+              <span id="mai-title" data-slot="sub-choice-label">
+                {t("vui.mai.title")}
+              </span>
+              <p data-slot="sub-choice-note" data-mai="status">
+                {maiStatusText(maiInput())}
+              </p>
+              <Show when={maiOfferShown(maiInput())}>
+                <div data-slot="reason-box" data-tone="muted" role="group" aria-label={t("vui.mai.offer")}>
+                  <span>{t("vui.mai.offer")}</span>{" "}
+                  <button type="button" data-slot="solid-btn" data-mai-offer="use" onClick={acceptMaiOffer}>
+                    {t("vui.mai.offer.use")}
+                  </button>{" "}
+                  <button type="button" data-slot="ghost-btn" data-mai-offer="keep" onClick={declineMaiOffer}>
+                    {t("vui.mai.offer.keep")}
+                  </button>
+                </div>
+              </Show>
+              <Show when={!props.testIdentity}>
+                <label for="mai-voice-select" data-slot="label">
+                  {t("vui.mai.voice")}
+                </label>
+                <select
+                  id="mai-voice-select"
+                  data-slot="select"
+                  value={isMaiVoice(props.settings.replyVoice) ? props.settings.replyVoice : ""}
+                  onChange={(event) => {
+                    const choice = MAI_VOICE_CHOICES.find((voice) => voice.value === event.currentTarget.value)
+                    if (choice) pickReplyVoice(choice.value)
+                  }}
+                >
+                  <Show when={!isMaiVoice(props.settings.replyVoice)}>
+                    <option value="">—</option>
+                  </Show>
+                  <For each={MAI_VOICE_CHOICES}>{(choice) => <option value={choice.value}>{choice.title}</option>}</For>
+                </select>
+                <label for="mai-local-select" data-slot="label">
+                  {t("vui.mai.local")}
+                </label>
+                <select
+                  id="mai-local-select"
+                  data-slot="select"
+                  value={localReplyVoice(props.settings)}
+                  onChange={(event) => {
+                    const choice = replyVoiceChoicesFor("piper", "it").find(
+                      (voice) => voice.value === event.currentTarget.value,
+                    )
+                    if (choice) pickMaiLocal(choice.value)
+                  }}
+                >
+                  <For each={replyVoiceChoicesFor("piper", "it")}>
+                    {(choice) => <option value={choice.value}>{choice.title}</option>}
+                  </For>
+                </select>
+                <p data-slot="cost-tag">{maiSpendText(props.engine.listenSpend(), locale())}</p>
+                <Show when={props.onRetryMai && maiRetryShown(maiInput())}>
+                  <button type="button" data-slot="ghost-btn" data-mai-retry="" onClick={() => props.onRetryMai?.()}>
+                    {t("vui.mai.retry")}
+                  </button>
+                </Show>
+              </Show>
             </div>
           </section>
 

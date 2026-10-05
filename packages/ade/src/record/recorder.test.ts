@@ -168,8 +168,8 @@ describe("record/recorder tracks", () => {
     // The frame comes first, so the export can map page pixels to the video.
     expect(lines[0]).toMatchObject({ kind: "frame", at: 0, width: 1440, dpr: 1.25 })
     expect(lines[1]).toEqual({ kind: "said", at: 200, text: "Ci sono due sessioni." })
-    // 1 s at 10 samples a second: the voice track lasts as long as the take.
-    expect(bytes[0]!.size).toBe(44 + 10 * 2)
+    // 1 s at the track's 24 kHz: the voice track lasts as long as the take.
+    expect(bytes[0]!.size).toBe(44 + 24000 * 2)
   })
 
   test("a refused microphone records the take anyway, without that track", async () => {

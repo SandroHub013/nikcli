@@ -434,6 +434,7 @@ import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
+import { testBuildMarked } from "../host/build-identity"
 import { MODEL_EXTENSIONS } from "../model3d/model"
 import {
   createOutsideConfirmationTracker,
@@ -538,6 +539,14 @@ import {
   type PackState,
   kokoroVoice,
   KOKORO_DOWNLOAD_BYTES,
+  createMaiSpeaker,
+  createSpendTally,
+  isMaiVoice,
+  localReplyVoice,
+  maiFallbackNotice,
+  maiReplyVoice,
+  settleMai,
+  type MaiFailureKind,
 } from "@nikcli-ai/voice"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
@@ -4867,7 +4876,14 @@ export function Workbench() {
    */
   const voiceAvailable = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
   const rawSavedVoice = typeof localStorage !== "undefined" ? localStorage.getItem("voice.settings") : null
-  const initialVoice = loadVoiceSettings()
+  /*
+   * ADE Test, read from the mark `dev.tsx` writes before the surface renders:
+   * it is synchronous, and the settings are loaded synchronously right here, so
+   * asking Tauri again would mean loading twice. An identifier that could not be
+   * read is marked too and counts as a test build, as for the key sync.
+   */
+  const testBuild = testBuildMarked()
+  const initialVoice = loadVoiceSettings(undefined, { testIdentity: testBuild })
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceSettings>(initialVoice.settings)
   const [voiceSettingsOpen, setVoiceSettingsOpen] = createSignal(false)
   const [voiceSettingsSection, setVoiceSettingsSection] = createSignal<string | undefined>(undefined)
@@ -5099,20 +5115,23 @@ export function Workbench() {
    */
   const testReplyVoice = () => {
     const settings = voiceSettings()
-    const voice = activeReplyVoice(settings.replyVoice, locale())
+    const voice = activeReplyVoice(localReplyVoice(settings), locale())
+    // MAI reads Italian only: its sample is the Italian one, one sentence, through the same speaker as a reply.
     const english =
-      Boolean(kokoroVoice(settings.replyVoice)) || voice === "lessac" || (voice === "system" && locale() === "en")
+      !isMaiVoice(settings.replyVoice) &&
+      (Boolean(kokoroVoice(settings.replyVoice)) || voice === "lessac" || (voice === "system" && locale() === "en"))
     void speaker.speak(english ? t("vui.replies.sample.en") : t("vui.replies.sample.it"))
   }
 
-  const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
+  // The local voices are asked about the local voice: under MAI that is the one underneath, not Rosa.
+  const activePiperVoice = () => activeReplyVoice(localReplyVoice(voiceSettings()), locale())
   /*
    * The voice the speaker is actually asking the host for, which is not always
    * the one the panel shows: a Kokoro voice on an Italian reply is spoken by
    * Piper, and it is Piper's download that has to be tracked. The panel's own
    * choice stays `activePiperVoice`, and K6 is where the two are put together.
    */
-  const speakingVoice = () => speakingReplyVoice(voiceSettings().replyVoice, voiceSettings().ttsLocale, locale())
+  const speakingVoice = () => speakingReplyVoice(localReplyVoice(voiceSettings()), voiceSettings().ttsLocale, locale())
   // The failure is looked for with the voice that is actually speaking, not with
   // the one the panel shows: they differ as soon as a Kokoro voice meets an
   // Italian reply, and a download error recorded under one and looked for under
@@ -5166,10 +5185,12 @@ export function Workbench() {
      */
     voiceFor: (detected) => {
       const settings = voiceSettings()
+      // Under MAI this speaker reads what MAI does not, in the profile's local voice.
+      const local = localReplyVoice(settings)
       // Not called `locale`: that is the language of the window, and it is asked
       // for one line below.
-      const spoken = replyLocale(settings.replyVoice, detected, interfaceLocale(locale(), settings.ttsLocale))
-      return { voice: speakingReplyVoice(settings.replyVoice, spoken, locale()), locale: spoken }
+      const spoken = replyLocale(local, detected, interfaceLocale(locale(), settings.ttsLocale))
+      return { voice: speakingReplyVoice(local, spoken, locale()), locale: spoken }
     },
     status: async (voice) => {
       const host = await getHost()
@@ -5255,6 +5276,42 @@ export function Workbench() {
     },
   })
   /*
+   * What the voice spends in a day, made once: listening and the replies write
+   * the same day under the same key, and two tallies on one key would each
+   * write over the other's figure.
+   */
+  const voiceSpend = createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
+  const [maiBlocked, setMaiBlocked] = createSignal<MaiFailureKind | undefined>(undefined)
+  // ADE Test never spends a key: with no key, MAI reads locally in silence.
+  const maiClient = {
+    apiKey: () => (testBuild ? undefined : voiceSettings().openRouterApiKey || undefined),
+    fetchFn: (input: string, init: RequestInit) => fetch(input, init),
+  }
+  /*
+   * MAI in front of the local voices: an Italian reply on a MAI voice goes to
+   * MAI, everything else — and whatever MAI cannot read — to the speaker above,
+   * which falls from Piper to the system voice as before.
+   */
+  const maiSpeaker = createMaiSpeaker({
+    voiceFor: (text) => {
+      const settings = voiceSettings()
+      const voice = maiReplyVoice({ text, ui: locale(), chosen: settings.replyVoice, local: localReplyVoice(settings) })
+      return { voice, locale: "it-IT" }
+    },
+    hasKey: () => Boolean(maiClient.apiKey()),
+    client: maiClient,
+    local: naturalSpeaker,
+    play: (wav, signal) => {
+      recorder.noteVoice(wav)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+        report(t("vui.device.missing"), "warning")
+      })
+    },
+    notice: maiFallbackNotice,
+    spend: { tally: voiceSpend, settle: (id) => settleMai(id, maiClient) },
+    onState: setMaiBlocked,
+  })
+  /*
    * The whole reply counts for the sphere, synthesis included: a long first
    * sentence takes Piper longer than the sphere waits, and it flew home and
    * back before the voice started.
@@ -5264,10 +5321,17 @@ export function Workbench() {
     speak: async (text: string) => {
       const stop = playbackMeter.reply()
       try {
-        await naturalSpeaker.speak(text)
+        await maiSpeaker.speak(text)
       } finally {
         stop()
       }
+    },
+    cancel: () => maiSpeaker.cancel(),
+    prefetch: (text: string) => maiSpeaker.prefetch?.(text),
+    // Opening the microphone warms the voice that will answer: under a MAI voice that can answer, none.
+    prepare: () => {
+      if (isMaiVoice(voiceSettings().replyVoice) && maiSpeaker.available()) return
+      naturalSpeaker.prepare()
     },
   }
 
@@ -5301,6 +5365,7 @@ export function Workbench() {
 
   const voiceEngine = createVoiceEngine({
     host: voiceHost,
+    spendTally: voiceSpend,
     settings: voiceSettings(),
     // The socket the streaming backend speaks over: built here, over the Rust
     // host, and handed to whichever backend the settings chose.
@@ -5460,7 +5525,7 @@ export function Workbench() {
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
     const previousVoice = activePiperVoice()
-    const saved = saveVoiceSettings(next)
+    const saved = saveVoiceSettings(next, undefined, { testIdentity: testBuild })
     setVoiceSettings(saved.settings)
     const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
     if (nextVoice !== previousVoice) {
@@ -9527,6 +9592,9 @@ export function Workbench() {
           onInstallKokoro={() => void kokoro.install()}
           onDeleteKokoro={() => void kokoro.remove()}
           onTestVoice={testReplyVoice}
+          maiBlocked={maiBlocked()}
+          onRetryMai={() => maiSpeaker.retry()}
+          testIdentity={testBuild}
           bindings={bindings}
           voiceSettingsNotice={voiceSettingsNotice()}
           themeState={themeState}

@@ -458,6 +458,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   const spendTally = options.spendTally ?? createSpendTally(voiceStorage(), now())
   const [listenSpend, setListenSpend] = createSignal<DaySpend>(spendTally.today(now()))
+  // The voice of the replies writes the same day (one tally, made once by the workbench): what it adds shows here too.
+  spendTally.onChange((next) => setListenSpend(next))
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
