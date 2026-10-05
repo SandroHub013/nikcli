@@ -265,6 +265,27 @@ describe("MAI davanti alla voce locale", () => {
     expect(inputs.join(" ")).toBe("Vedi la guida per i dettagli.")
   })
 
+  test("l'avviso si riarma solo dopo una frase sentita, non dopo una sintetizzata", async () => {
+    const w = world()
+    let clock = 0
+    w.deps.client.now = () => clock
+    const notices = () => w.spoken.filter((text) => text.includes("non è disponibile"))
+    const speaker = createMaiSpeaker(w.deps)
+    w.setStatus(500)
+    await speaker.speak("Prima.")
+    expect(notices()).toHaveLength(1)
+    // Il breaker si riapre, MAI sintetizza, ma l'audio non suona: il guasto non è finito.
+    clock += 10 * 60_000
+    w.setStatus(200)
+    w.deps.play = async () => {
+      throw new Error("dispositivo audio")
+    }
+    await speaker.speak("Seconda.")
+    expect(w.fetchCount()).toBe(2)
+    expect(notices()).toHaveLength(1)
+    expect(w.spoken.at(-1)).toBe("Seconda.")
+  })
+
   test("prepare non esiste: il prefetch di una voce MAI non chiede nulla", () => {
     const w = world()
     const speaker = createMaiSpeaker(w.deps)

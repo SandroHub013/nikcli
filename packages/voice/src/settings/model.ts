@@ -536,7 +536,10 @@ function chordProblem(chordStr: unknown): string | undefined {
  * - Out-of-domain properties safely fall back to DEFAULT_VOICE_SETTINGS.
  * - Records Italian explanations for all repairs applied.
  */
-export function normalizeSettings(raw: unknown, options?: { testIdentity?: boolean }): NormalizedVoiceSettings {
+export function normalizeSettings(
+  raw: unknown,
+  options?: { testIdentity?: boolean; fresh?: boolean },
+): NormalizedVoiceSettings {
   const testIdentity = options?.testIdentity === true
   const corrections: string[] = []
 
@@ -558,10 +561,12 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
   /*
    * A first start that already has a key: the loader puts the key, which has a
    * slot of its own, into an object with nothing else in it. That is a new
-   * profile, not an old one that lost its voice.
+   * profile, not an old one that lost its voice. The loader knows better than
+   * the shape — a stored `{}` with a key looks the same — so it says so when
+   * it can.
    */
   const keys = Object.keys(candidate)
-  const fresh = keys.length === 1 && keys[0] === "openRouterApiKey"
+  const fresh = options?.fresh ?? (keys.length === 1 && keys[0] === "openRouterApiKey")
 
   // 1. Version migration
   const migrations: VoiceMigration[] = []
