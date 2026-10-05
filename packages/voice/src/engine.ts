@@ -996,7 +996,20 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         },
       },
       grokStreamOptions: options.backendOptions?.grokStreamOptions
-        ? { ...options.backendOptions.grokStreamOptions, keyterms: streamKeyterms(s) }
+        ? {
+            ...options.backendOptions.grokStreamOptions,
+            keyterms: streamKeyterms(s),
+            /*
+             * The day's tally is the one place streamed seconds are counted, and the
+             * cap is the setting's: read before every socket, so a day that rolls over
+             * starts from nothing. The tally tells the panel by itself (`onChange`).
+             */
+            spend: {
+              costToday: () => spendTally.today(now()).streamCost ?? 0,
+              addSeconds: (seconds: number) => void spendTally.addStream(now(), seconds),
+            },
+            dailyCapUsd: s.streamDailyCapUsd,
+          }
         : undefined,
     })
   }
@@ -1752,6 +1765,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        */
       const backendChanged =
         normalized.backend !== prev.backend ||
+        // Baked into the transcriber at construction, like the language.
+        normalized.streamDailyCapUsd !== prev.streamDailyCapUsd ||
         normalized.openRouterApiKey !== prev.openRouterApiKey ||
         normalized.language !== prev.language ||
         normalized.inputDeviceId !== prev.inputDeviceId

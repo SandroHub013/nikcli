@@ -15,7 +15,16 @@
  * day, `replyCalls`/`replyCost` the part of it the replies took. Listening adds
  * through `add`/`addCost`, the replies through `addReply`/`settleReply`, and the
  * cap compares `replyCost` (see `maiCapReached` in `tts/mai.ts`).
+ *
+ * Streamed transcription is counted apart, and in none of the figures above:
+ * it is not OpenRouter's, and `calls`/`cost` are what the voice sent to
+ * OpenRouter. It is the seconds of audio the socket really carried, at the
+ * hourly rate, in `streamSeconds`/`streamCost`; the day's cap on it
+ * (`streamDailyCapUsd`) compares `streamCost` and nothing else, so what the
+ * replies or the fallback spent on OpenRouter never eats into it.
  */
+
+import { STREAM_BYTES_PER_SECOND, STREAM_USD_PER_HOUR } from "../asr/grok-stream"
 
 export const VOICE_SPEND_STORAGE_KEY = "voice.listenSpend"
 
@@ -32,6 +41,10 @@ export interface DaySpend {
   readonly replyCost?: number
   /** The generation ids already settled today, so settling one twice changes nothing. */
   readonly settled?: readonly string[]
+  /** Seconds of audio the streaming socket carried today, counted from what was sent. */
+  readonly streamSeconds?: number
+  /** What those seconds cost, in dollars, at the streaming rate. Not part of `cost`. */
+  readonly streamCost?: number
 }
 
 export const emptyDay = (day: string): DaySpend => ({ day, calls: 0, cost: 0 })
@@ -42,6 +55,24 @@ const SETTLED_KEPT = 500
 const count = (value: unknown): number => (typeof value === "number" && value >= 0 ? Math.floor(value) : 0)
 const money = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0
+
+/** Seconds of 16 kHz mono PCM16 in `bytes`: what the socket carried. */
+export function streamSecondsOf(bytes: number): number {
+  return money(bytes) / STREAM_BYTES_PER_SECOND
+}
+
+/** Dollars `seconds` of streamed audio cost, at `STREAM_USD_PER_HOUR`. */
+export function streamCostOf(seconds: number): number {
+  return (money(seconds) * STREAM_USD_PER_HOUR) / 3600
+}
+
+/**
+ * Whether streaming has spent its day. A cap of 0 is spent from the start, which
+ * is how streaming is turned off; the amount is compared as it is stored.
+ */
+export function streamCapReached(spend: DaySpend, capUsd: number): boolean {
+  return (spend.streamCost ?? 0) >= capUsd
+}
 
 /** The local day of `at`: the user's day, not UTC's. */
 export function dayOf(at: number): string {
@@ -60,6 +91,8 @@ export function readDaySpend(raw: string | null, at: number): DaySpend {
     const day: DaySpend = { day: today, calls: count(parsed.calls), cost: money(parsed.cost) }
     const replyCalls = count(parsed.replyCalls)
     const replyCost = money(parsed.replyCost)
+    const streamSeconds = money(parsed.streamSeconds)
+    const streamCost = money(parsed.streamCost)
     const settled = Array.isArray(parsed.settled)
       ? parsed.settled.filter((id): id is string => typeof id === "string").slice(-SETTLED_KEPT)
       : []
@@ -68,6 +101,8 @@ export function readDaySpend(raw: string | null, at: number): DaySpend {
       ...(replyCalls > 0 ? { replyCalls } : {}),
       ...(replyCost > 0 ? { replyCost } : {}),
       ...(settled.length > 0 ? { settled } : {}),
+      ...(streamSeconds > 0 ? { streamSeconds } : {}),
+      ...(streamCost > 0 ? { streamCost } : {}),
     }
   } catch {
     return emptyDay(today)
@@ -88,6 +123,22 @@ export function addReplySpend(spend: DaySpend, at: number, reserved: number): Da
     ...counted,
     replyCalls: (counted.replyCalls ?? 0) + 1,
     replyCost: (counted.replyCost ?? 0) + money(reserved),
+  }
+}
+
+/**
+ * Seconds of audio the streaming socket really carried, and what they cost at
+ * the hourly rate. Counted on their own: `calls` and `cost` are OpenRouter's.
+ */
+export function addStreamSpend(spend: DaySpend, at: number, seconds: number): DaySpend {
+  const today = dayOf(at)
+  const base = spend.day === today ? spend : emptyDay(today)
+  const carried = money(seconds)
+  if (carried === 0) return base
+  return {
+    ...base,
+    streamSeconds: (base.streamSeconds ?? 0) + carried,
+    streamCost: (base.streamCost ?? 0) + streamCostOf(carried),
   }
 }
 
@@ -131,6 +182,8 @@ export interface SpendTally {
   add(at: number, cost: number | undefined): DaySpend
   /** Adds the cost reported for a request already counted. */
   addCost(at: number, cost: number): DaySpend
+  /** Counts seconds of audio the streaming socket carried; see `addStreamSpend`. */
+  addStream(at: number, seconds: number): DaySpend
   /** Counts one request of the voice of the replies, reserved before it goes out. */
   addReply(at: number, reserved: number): DaySpend
   /** Corrects a reply request by what it really cost; see `settleReplySpend`. */
@@ -180,6 +233,13 @@ export function createSpendTally(storage: Storage | null, at: number): SpendTall
       const today = dayOf(now)
       const base = spend.day === today ? spend : emptyDay(today)
       spend = { ...base, cost: base.cost + (cost > 0 ? cost : 0) }
+      write()
+      return spend
+    },
+    addStream(now: number, seconds: number): DaySpend {
+      const next = addStreamSpend(spend, now, seconds)
+      if (next === spend) return spend
+      spend = next
       write()
       return spend
     },

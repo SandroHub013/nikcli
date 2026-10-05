@@ -147,8 +147,21 @@ export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> 
  * `replyVoiceOffer`. A profile with no voice at all is a new one, and a new
  * one starts on Rosa — except ADE Test, which stays on Piper so a test run
  * never spends a key. See `toMai`.
+ *
+ * 10: live transcription over the streaming socket (xAI Grok). The backend a
+ * profile on OpenRouter had is moved to the streaming one without a word: it
+ * falls back to OpenRouter by itself for every sentence it cannot carry (no
+ * key, a refusal, the day's cap), so a profile with no xAI key behaves exactly
+ * as it did, and one that wants OpenRouter alone says so. A new setting, the
+ * day's cap on streamed audio, starts at fifty cents. ADE Test stays on
+ * OpenRouter, as it stays on Piper: a test run never spends a key.
  */
-export const CURRENT_SETTINGS_VERSION = 9
+export const CURRENT_SETTINGS_VERSION = 10
+
+/** What streamed transcription may cost in a day, in dollars, before it falls back to OpenRouter. */
+export const STREAM_DAILY_CAP_DEFAULT_USD = 0.5
+/** The most the setting can be raised to; 0 turns streaming off. */
+export const STREAM_DAILY_CAP_MAX_USD = 5
 
 /**
  * Whether the wake word and always-on listening exist. The switch, like Chat
@@ -222,6 +235,12 @@ export interface VoiceSettings {
   readonly dictationPress: DictationPress
   /** Selected speech-to-text transcription engine. */
   readonly backend: TranscriberBackend
+  /**
+   * What streamed transcription may cost in a day, in dollars: from 0 to
+   * `STREAM_DAILY_CAP_MAX_USD`. At the cap the rest of the day goes to
+   * OpenRouter; 0 is streaming off.
+   */
+  readonly streamDailyCapUsd: number
   /** Optional OpenRouter cloud speech API authentication key. */
   readonly openRouterApiKey?: string
   /**
@@ -350,14 +369,16 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   transcriptionChord: "mod+shift+j",
   dictationPress: "hold",
   /*
-   * The cloud engine, despite needing a key and sending audio away.
+   * The streaming engine, which is a cloud one: it needs an xAI key and sends
+   * audio away, and without the key it is OpenRouter's, sentence by sentence.
    *
-   * The only engine. There was a local one (Parakeet) and it is gone: running
-   * a 0.6B model inside the webview took the renderer past four gigabytes and
-   * stopped it answering, whichever accelerator it picked. Local transcription
-   * that does not freeze the window needs a process of its own, not a tab.
+   * There was a local engine (Parakeet) and it is gone: running a 0.6B model
+   * inside the webview took the renderer past four gigabytes and stopped it
+   * answering, whichever accelerator it picked. Local transcription that does
+   * not freeze the window needs a process of its own, not a tab.
    */
-  backend: "openrouter",
+  backend: "grok-stream",
+  streamDailyCapUsd: STREAM_DAILY_CAP_DEFAULT_USD,
   /*
    * Empty, not seeded with this project's own jargon.
    *
@@ -552,6 +573,7 @@ export function normalizeSettings(
           ...DEFAULT_VOICE_SETTINGS,
           replyVoice: "ugo" as const,
           replyBackend: "piper" as const,
+          backend: "openrouter" as const,
         }
       : DEFAULT_VOICE_SETTINGS
     return { ...settings, settings, corrections, migrations: [] }
@@ -571,6 +593,8 @@ export function normalizeSettings(
   // 1. Version migration
   const migrations: VoiceMigration[] = []
   let version = candidate.version
+  /* Where the profile came from, kept for the migrations that decide at the end (the backend). */
+  const fromVersion = typeof version === "number" && !Number.isNaN(version) ? version : 0
   if (typeof version !== "number" || Number.isNaN(version)) {
     corrections.push(t("vui.fix.noVersion"))
     /* A profile with no version is older than any of them: a "toggle" in it
@@ -640,6 +664,10 @@ export function normalizeSettings(
      * speaking. See `toMai`.
      */
     if (version < 9) candidate = toMai(candidate, testIdentity, fresh)
+    /*
+     * Version 10: the streaming engine, and the cap on it. The backend is
+     * moved below, where it is read; there is nothing to say about it.
+     */
     version = CURRENT_SETTINGS_VERSION
   }
 
@@ -748,9 +776,32 @@ export function normalizeSettings(
     }
   } else if (candidate.backend === "openrouter") {
     backend = "openrouter"
+  } else if (candidate.backend === "grok-stream") {
+    backend = "grok-stream"
   } else {
     corrections.push(t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend))
     backend = DEFAULT_VOICE_SETTINGS.backend
+  }
+  /*
+   * Version 10, silently: a profile saved before the streaming engine existed
+   * was on OpenRouter because there was nothing else, not because it chose
+   * it, and the streaming engine falls back to OpenRouter on its own. Only a
+   * profile that has already been through version 10 can be on OpenRouter by
+   * choice. ADE Test is never on the streaming engine, whatever is stored.
+   */
+  if (fromVersion < 10 && backend === "openrouter") backend = "grok-stream"
+  if (testIdentity && backend === "grok-stream") backend = "openrouter"
+
+  // 9b. The day's cap on streamed audio: absent is the default, a bad value is repaired.
+  let streamDailyCapUsd = STREAM_DAILY_CAP_DEFAULT_USD
+  if (candidate.streamDailyCapUsd !== undefined) {
+    const stored = candidate.streamDailyCapUsd
+    if (typeof stored === "number" && Number.isFinite(stored)) {
+      streamDailyCapUsd = Math.min(STREAM_DAILY_CAP_MAX_USD, Math.max(0, stored))
+      if (streamDailyCapUsd !== stored) corrections.push(t("vui.fix.streamCap", String(stored), streamDailyCapUsd))
+    } else {
+      corrections.push(t("vui.fix.streamCap", String(stored), streamDailyCapUsd))
+    }
   }
 
   // 10. OpenRouter API Key (optional)
@@ -970,6 +1021,7 @@ export function normalizeSettings(
     agentChord,
     transcriptionChord,
     backend,
+    streamDailyCapUsd,
     ...(openRouterApiKey ? { openRouterApiKey } : {}),
     customWords,
     speakReplies,

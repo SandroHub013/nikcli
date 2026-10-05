@@ -399,6 +399,8 @@ export const voiceIt = {
   "vui.fix.agentSpeed": (value: string) =>
     `Velocità dell'agente '${value}' non riconosciuta: ripristinata quella rapida.`,
   "vui.fix.agentEngine": (value: string) => `Motore dell'agente '${value}' non riconosciuto: ripristinato automatico.`,
+  "vui.fix.streamCap": (value: string, fallback: number) =>
+    `Tetto giornaliero della trascrizione in tempo reale '${value}' non valido: usato ${fallback} $.`,
   "vui.fix.codexFallback": "Impostazione ricaduta su Codex non valida: ripristinata disattivata.",
   "vui.command.palette": "Tavolozza comandi",
   "vui.command.sessionNew": "Nuova sessione",

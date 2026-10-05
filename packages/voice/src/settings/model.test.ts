@@ -29,7 +29,7 @@ describe("settings/model - normalizeSettings", () => {
       expect(res.wakeWord).toBe("nik")
       expect(res.agentChord).toBe("mod+shift+k")
       expect(res.transcriptionChord).toBe("mod+shift+j")
-      expect(res.backend).toBe("openrouter")
+      expect(res.backend).toBe("grok-stream")
 
       expect(res.corrections.length).toBeGreaterThan(0)
       // Allows destructuring { settings, corrections }
@@ -55,7 +55,7 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.mode).toBe("agent")
     expect(res.activation).toBe("wake-word")
     expect(res.transcriptionSend).toBe("manual")
-    expect(res.backend).toBe("openrouter")
+    expect(res.backend).toBe("grok-stream")
     expect(res.language).toBe("it")
     expect(res.wakeWord).toBe("nik")
     expect(res.agentChord).toBe("mod+shift+k")
@@ -93,8 +93,8 @@ describe("settings/model - normalizeSettings", () => {
     // The phrase is fixed: a stored one is replaced.
     expect(res.wakeWord).toBe("nik")
     // The local engine is gone: a profile that chose it moves to the cloud one, silently (not a correction),
-    // and its acceleration preference is dropped with it.
-    expect(res.backend).toBe("openrouter")
+    // and its acceleration preference is dropped with it. Cloud now starts on the streaming engine.
+    expect(res.backend).toBe("grok-stream")
     expect("parakeetBackend" in res).toBe(false)
     // Moving to a newer version is not reported as a repair.
     expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(false)
