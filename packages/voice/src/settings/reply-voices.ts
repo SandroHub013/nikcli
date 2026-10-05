@@ -1,11 +1,5 @@
-import {
-  REPLY_VOICES,
-  type ReplyBackend,
-  type ReplyVoice,
-  type ReplyVoiceMemory,
-  type TtsLocale,
-} from "./model";
-import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
+import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model"
+import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n"
 
 /*
  * Nothing in this file may import a *value* from `model.ts`. `model.ts` needs
@@ -15,24 +9,24 @@ import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n";
  */
 
 /** The Kokoro voices, as facts and not as labels. */
-export type KokoroVoiceId = "af_heart" | "am_fenrir" | "bf_emma" | "bm_george";
+export type KokoroVoiceId = "af_heart" | "am_fenrir" | "bf_emma" | "bm_george"
 
 export interface KokoroVoice {
-  readonly id: KokoroVoiceId;
+  readonly id: KokoroVoiceId
   /** The locale the voice is spoken in, and the only one it can be spoken in. */
-  readonly locale: TtsLocale;
-  readonly gender: "f" | "m";
+  readonly locale: TtsLocale
+  readonly gender: "f" | "m"
   /**
    * The speaker index in the voice pack. The model is shared by all four and
    * weighs 163 MB; this is what says which voice speaks, and it is why the
    * pack is installed once for the four rather than four times.
    */
-  readonly sid: number;
+  readonly sid: number
   /** The weights behind the voice, and the licence they come with. */
-  readonly model: string;
+  readonly model: string
   /** Where the files are pinned: a release tag, not a branch. */
-  readonly source: string;
-  readonly licence: string;
+  readonly source: string
+  readonly licence: string
 }
 
 /**
@@ -85,20 +79,18 @@ export const KOKORO_VOICES: readonly KokoroVoice[] = [
     source: "thewh1teagle/kokoro-onnx@model-files-v1.1",
     licence: "Apache-2.0",
   },
-];
+]
 
-const BY_ID = new Map<string, KokoroVoice>(
-  KOKORO_VOICES.map((voice) => [voice.id, voice]),
-);
+const BY_ID = new Map<string, KokoroVoice>(KOKORO_VOICES.map((voice) => [voice.id, voice]))
 
 /** What is known about a voice, or nothing when it is not a Kokoro one. */
 export function kokoroVoice(voice: ReplyVoice): KokoroVoice | undefined {
-  return BY_ID.get(voice);
+  return BY_ID.get(voice)
 }
 
 /** Whether this voice is read by Kokoro rather than by Piper. */
 export function isKokoroVoice(voice: ReplyVoice): boolean {
-  return BY_ID.has(voice);
+  return BY_ID.has(voice)
 }
 
 /**
@@ -113,43 +105,37 @@ export function isKokoroVoice(voice: ReplyVoice): boolean {
  * voice and its own name together, and a request that sends only the id is a
  * request the model does not recognise.
  */
-export type MaiVoiceId =
-  | "it-IT-Grant"
-  | "it-IT-Harper"
-  | "it-IT-Luca"
-  | "it-IT-Rosa";
+export type MaiVoiceId = "it-IT-Grant" | "it-IT-Harper" | "it-IT-Luca" | "it-IT-Rosa"
 
 export interface MaiVoice {
-  readonly id: MaiVoiceId;
-  readonly gender: "f" | "m";
+  readonly id: MaiVoiceId
+  readonly gender: "f" | "m"
   /** What `voice` is in the speech request. */
-  readonly wire: string;
+  readonly wire: string
 }
 
-export const MAI_MODEL = "microsoft/mai-voice-2.1-flash";
+export const MAI_MODEL = "microsoft/mai-voice-2.1-flash"
 
 /** The default, and the one the one-time question offers. */
-export const MAI_DEFAULT_VOICE: MaiVoiceId = "it-IT-Rosa";
+export const MAI_DEFAULT_VOICE: MaiVoiceId = "it-IT-Rosa"
 
 export const MAI_VOICES: readonly MaiVoice[] = [
   { id: "it-IT-Grant", gender: "m", wire: "it-IT-Grant:MAI-Voice-2.1-Flash" },
   { id: "it-IT-Harper", gender: "f", wire: "it-IT-Harper:MAI-Voice-2.1-Flash" },
   { id: "it-IT-Luca", gender: "m", wire: "it-IT-Luca:MAI-Voice-2.1-Flash" },
   { id: "it-IT-Rosa", gender: "f", wire: "it-IT-Rosa:MAI-Voice-2.1-Flash" },
-];
+]
 
-const MAI_BY_ID = new Map<string, MaiVoice>(
-  MAI_VOICES.map((voice) => [voice.id, voice]),
-);
+const MAI_BY_ID = new Map<string, MaiVoice>(MAI_VOICES.map((voice) => [voice.id, voice]))
 
 /** What is known about a voice, or nothing when it is not a MAI one. */
 export function maiVoice(voice: ReplyVoice): MaiVoice | undefined {
-  return MAI_BY_ID.get(voice);
+  return MAI_BY_ID.get(voice)
 }
 
 /** Whether this voice is read by MAI rather than by a local backend. */
 export function isMaiVoice(voice: ReplyVoice): boolean {
-  return MAI_BY_ID.has(voice);
+  return MAI_BY_ID.has(voice)
 }
 
 /**
@@ -162,16 +148,16 @@ export function isMaiVoice(voice: ReplyVoice): boolean {
  * otherwise have been the only thing wrong.
  */
 export function g2pLocale(locale: TtsLocale): "it" | "en-us" | "en" {
-  if (locale === "en-US") return "en-us";
-  if (locale === "en-GB") return "en";
-  return "it";
+  if (locale === "en-US") return "en-us"
+  if (locale === "en-GB") return "en"
+  return "it"
 }
 
 /** A Piper voice asked for the wrong language: Lessac is the English one. */
 function piperVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
-  const italian = chosen === "ugo" || chosen === "paola";
-  if (locale.startsWith("en")) return italian ? "lessac" : chosen;
-  return chosen === "lessac" ? "ugo" : chosen;
+  const italian = chosen === "ugo" || chosen === "paola"
+  if (locale.startsWith("en")) return italian ? "lessac" : chosen
+  return chosen === "lessac" ? "ugo" : chosen
 }
 
 /**
@@ -188,24 +174,20 @@ function piperVoiceFor(chosen: ReplyVoice, locale: TtsLocale): ReplyVoice {
  * read in English would be an Italian voice saying English words, which is the
  * thing this whole rule exists to avoid.
  */
-export function replyVoiceFor(
-  chosen: ReplyVoice,
-  locale: TtsLocale,
-  local: ReplyVoice = "ugo",
-): ReplyVoice {
-  if (chosen === "system") return "system";
-  const mai = maiVoice(chosen);
+export function replyVoiceFor(chosen: ReplyVoice, locale: TtsLocale, local: ReplyVoice = "ugo"): ReplyVoice {
+  if (chosen === "system") return "system"
+  const mai = maiVoice(chosen)
   if (mai) {
     // Italian only. Any other language goes to the local voice, which is the
     // one the profile had before MAI and not a voice invented here: a profile
     // that was on Kokoro stays on Kokoro. Nothing is written.
-    if (locale === "it-IT") return chosen;
-    return isMaiVoice(local) ? (mai.gender === "f" ? "paola" : "ugo") : local;
+    if (locale === "it-IT") return chosen
+    return isMaiVoice(local) ? (mai.gender === "f" ? "paola" : "ugo") : local
   }
-  const kokoro = kokoroVoice(chosen);
-  if (!kokoro) return piperVoiceFor(chosen, locale);
-  if (locale.startsWith("en")) return chosen;
-  return kokoro.gender === "f" ? "paola" : "ugo";
+  const kokoro = kokoroVoice(chosen)
+  if (!kokoro) return piperVoiceFor(chosen, locale)
+  if (locale.startsWith("en")) return chosen
+  return kokoro.gender === "f" ? "paola" : "ugo"
 }
 
 /**
@@ -218,24 +200,19 @@ export function replyVoiceFor(
  * become a Kokoro one, because Kokoro is opt-in and nobody asked for 219 MB.
  * And a profile that never chose Kokoro cannot reach it through this chain.
  */
-export function replyVoiceChain(
-  chosen: ReplyVoice,
-  locale: TtsLocale,
-  local: ReplyVoice = "ugo",
-): ReplyVoice[] {
-  const first = replyVoiceFor(chosen, locale, local);
-  if (first === "system") return ["system"];
+export function replyVoiceChain(chosen: ReplyVoice, locale: TtsLocale, local: ReplyVoice = "ugo"): ReplyVoice[] {
+  const first = replyVoiceFor(chosen, locale, local)
+  if (first === "system") return ["system"]
   // MAI spends a key, so the step under it is the local voice the profile had:
   // a cloud that cannot answer is still an answer, and it is offline.
-  if (isMaiVoice(first))
-    return [first, replyVoiceFor(chosen, "en-US", local), "system"];
-  if (!isKokoroVoice(first)) return [first, "system"];
-  return [first, piperVoiceFor("lessac", locale), "system"];
+  if (isMaiVoice(first)) return [first, replyVoiceFor(chosen, "en-US", local), "system"]
+  if (!isKokoroVoice(first)) return [first, "system"]
+  return [first, piperVoiceFor("lessac", locale), "system"]
 }
 
 /** Whether a plain string is one of the voices the catalog knows. */
 function isReplyVoice(voice: string): voice is ReplyVoice {
-  return (REPLY_VOICES as readonly string[]).includes(voice);
+  return (REPLY_VOICES as readonly string[]).includes(voice)
 }
 
 /**
@@ -256,24 +233,16 @@ function isReplyVoice(voice: string): voice is ReplyVoice {
  * point: the same language on the small local voice, while the 219 MB download
  * goes on. An id nothing knows is the only step there is.
  */
-export function replyVoiceChainFrom(
-  voice: string,
-  locale: TtsLocale,
-): string[] {
-  if (!isReplyVoice(voice)) return voice === "system" ? ["system"] : [voice];
-  if (isKokoroVoice(voice) || isMaiVoice(voice))
-    return replyVoiceChain(voice, locale);
-  return [voice, "system"];
+export function replyVoiceChainFrom(voice: string, locale: TtsLocale): string[] {
+  if (!isReplyVoice(voice)) return voice === "system" ? ["system"] : [voice]
+  if (isKokoroVoice(voice) || isMaiVoice(voice)) return replyVoiceChain(voice, locale)
+  return [voice, "system"]
 }
 
 /** The backend that reads a voice, for the panel and the bridge. */
 export function backendOf(voice: ReplyVoice): ReplyBackend {
-  if (isMaiVoice(voice)) return "mai";
-  return kokoroVoice(voice)
-    ? "kokoro"
-    : voice === "system"
-      ? "system"
-      : "piper";
+  if (isMaiVoice(voice)) return "mai"
+  return kokoroVoice(voice) ? "kokoro" : voice === "system" ? "system" : "piper"
 }
 
 /**
@@ -295,14 +264,9 @@ export function speakingReplyVoice(
   ui: Locale,
   local: ReplyVoice = "ugo",
 ): ReplyVoice {
-  if (isMaiVoice(chosen))
-    return replyVoiceFor(
-      chosen,
-      ttsLocale === "it-IT" ? "it-IT" : "en-US",
-      local,
-    );
-  if (!isKokoroVoice(chosen)) return activeReplyVoice(chosen, ui);
-  return replyVoiceFor(chosen, ttsLocale);
+  if (isMaiVoice(chosen)) return replyVoiceFor(chosen, ttsLocale === "it-IT" ? "it-IT" : "en-US", local)
+  if (!isKokoroVoice(chosen)) return activeReplyVoice(chosen, ui)
+  return replyVoiceFor(chosen, ttsLocale)
 }
 
 /**
@@ -314,20 +278,10 @@ export function speakingReplyVoice(
  * before MAI. `ttsLocale` is not asked: with MAI it is always Italian, and
  * letting it decide would read an English reply with an Italian mouth.
  */
-export function maiReplyVoice(input: {
-  text: string;
-  ui: Locale;
-  chosen: ReplyVoice;
-  local?: ReplyVoice;
-}): ReplyVoice {
-  const detected = detectReplyLanguage(input.text);
-  const italian =
-    detected === "it" || (detected === undefined && input.ui !== "en");
-  return replyVoiceFor(
-    input.chosen,
-    italian ? "it-IT" : "en-US",
-    input.local ?? "ugo",
-  );
+export function maiReplyVoice(input: { text: string; ui: Locale; chosen: ReplyVoice; local?: ReplyVoice }): ReplyVoice {
+  const detected = detectReplyLanguage(input.text)
+  const italian = detected === "it" || (detected === undefined && input.ui !== "en")
+  return replyVoiceFor(input.chosen, italian ? "it-IT" : "en-US", input.local ?? "ugo")
 }
 
 /**
@@ -340,65 +294,62 @@ export function maiReplyVoice(input: {
  * facts, and `KOKORO_VOICE_CHOICES` below gives them their names (K6).
  */
 export const REPLY_VOICE_CHOICES: readonly {
-  value: ReplyVoice;
-  title: string;
-  desc: string;
-  licence?: string;
+  value: ReplyVoice
+  title: string
+  desc: string
+  licence?: string
 }[] = [
   {
     value: "ugo",
     get title() {
-      return t("vui.reply.male");
+      return t("vui.reply.male")
     },
     get desc() {
-      return t("vui.reply.ugo");
+      return t("vui.reply.ugo")
     },
     get licence() {
-      return t("vui.reply.ugo.licence");
+      return t("vui.reply.ugo.licence")
     },
   },
   {
     value: "paola",
     get title() {
-      return t("vui.reply.female");
+      return t("vui.reply.female")
     },
     get desc() {
-      return t("vui.reply.paola");
+      return t("vui.reply.paola")
     },
     get licence() {
-      return t("vui.reply.paola.licence");
+      return t("vui.reply.paola.licence")
     },
   },
   {
     value: "lessac",
     get title() {
-      return t("vui.reply.lessac.title");
+      return t("vui.reply.lessac.title")
     },
     get desc() {
-      return t("vui.reply.lessac.desc");
+      return t("vui.reply.lessac.desc")
     },
     get licence() {
-      return t("vui.reply.lessac.licence");
+      return t("vui.reply.lessac.licence")
     },
   },
   {
     value: "system",
     get title() {
-      return t("vui.reply.system");
+      return t("vui.reply.system")
     },
     get desc() {
-      return t("vui.reply.system.desc");
+      return t("vui.reply.system.desc")
     },
   },
-];
+]
 
-type ReplyVoiceChoice = (typeof REPLY_VOICE_CHOICES)[number];
+type ReplyVoiceChoice = (typeof REPLY_VOICE_CHOICES)[number]
 
 /** The names the panel gives the Kokoro voices, and who speaks in each. */
-const KOKORO_LABELS: Record<
-  KokoroVoiceId,
-  { readonly title: MessageKey; readonly desc: MessageKey }
-> = {
+const KOKORO_LABELS: Record<KokoroVoiceId, { readonly title: MessageKey; readonly desc: MessageKey }> = {
   af_heart: {
     title: "vui.reply.kokoro.af_heart",
     desc: "vui.reply.kokoro.af_heart.desc",
@@ -415,13 +366,10 @@ const KOKORO_LABELS: Record<
     title: "vui.reply.kokoro.bm_george",
     desc: "vui.reply.kokoro.bm_george.desc",
   },
-};
+}
 
 /** The names the panel gives the MAI voices. */
-const MAI_LABELS: Record<
-  MaiVoiceId,
-  { readonly title: MessageKey; readonly desc: MessageKey }
-> = {
+const MAI_LABELS: Record<MaiVoiceId, { readonly title: MessageKey; readonly desc: MessageKey }> = {
   "it-IT-Grant": {
     title: "vui.reply.mai.it-IT-Grant",
     desc: "vui.reply.mai.it-IT-Grant.desc",
@@ -438,38 +386,35 @@ const MAI_LABELS: Record<
     title: "vui.reply.mai.it-IT-Rosa",
     desc: "vui.reply.mai.it-IT-Rosa.desc",
   },
-};
+}
 
 /** The four Italian MAI voices as the panel offers them, Rosa last so she reads as the default. */
-export const MAI_VOICE_CHOICES: readonly ReplyVoiceChoice[] = MAI_VOICES.map(
-  (voice) => ({
-    value: voice.id,
-    get title() {
-      return t(MAI_LABELS[voice.id].title);
-    },
-    get desc() {
-      return t(MAI_LABELS[voice.id].desc);
-    },
-    get licence() {
-      return t("vui.reply.mai.licence");
-    },
-  }),
-);
+export const MAI_VOICE_CHOICES: readonly ReplyVoiceChoice[] = MAI_VOICES.map((voice) => ({
+  value: voice.id,
+  get title() {
+    return t(MAI_LABELS[voice.id].title)
+  },
+  get desc() {
+    return t(MAI_LABELS[voice.id].desc)
+  },
+  get licence() {
+    return t("vui.reply.mai.licence")
+  },
+}))
 
 /** The four Kokoro voices as the panel offers them, in the catalog's order (K6). */
-export const KOKORO_VOICE_CHOICES: readonly ReplyVoiceChoice[] =
-  KOKORO_VOICES.map((voice) => ({
-    value: voice.id,
-    get title() {
-      return t(KOKORO_LABELS[voice.id].title);
-    },
-    get desc() {
-      return t(KOKORO_LABELS[voice.id].desc);
-    },
-    get licence() {
-      return t("vui.reply.kokoro.licence");
-    },
-  }));
+export const KOKORO_VOICE_CHOICES: readonly ReplyVoiceChoice[] = KOKORO_VOICES.map((voice) => ({
+  value: voice.id,
+  get title() {
+    return t(KOKORO_LABELS[voice.id].title)
+  },
+  get desc() {
+    return t(KOKORO_LABELS[voice.id].desc)
+  },
+  get licence() {
+    return t("vui.reply.kokoro.licence")
+  },
+}))
 
 /**
  * What reads the replies, chosen before the voice (K6): the voices a backend
@@ -477,61 +422,57 @@ export const KOKORO_VOICE_CHOICES: readonly ReplyVoiceChoice[] =
  * as if it were a Piper one, and the install it needs is said where it is.
  */
 export const REPLY_BACKEND_CHOICES: readonly {
-  value: ReplyBackend;
-  title: string;
-  desc: string;
+  value: ReplyBackend
+  title: string
+  desc: string
 }[] = [
   {
     value: "piper",
     get title() {
-      return t("vui.backend.piper");
+      return t("vui.backend.piper")
     },
     get desc() {
-      return t("vui.backend.piper.desc");
+      return t("vui.backend.piper.desc")
     },
   },
   {
     value: "kokoro",
     get title() {
-      return t("vui.backend.kokoro");
+      return t("vui.backend.kokoro")
     },
     get desc() {
-      return t("vui.backend.kokoro.desc");
+      return t("vui.backend.kokoro.desc")
     },
   },
   {
     value: "mai",
     get title() {
-      return t("vui.backend.mai");
+      return t("vui.backend.mai")
     },
     get desc() {
-      return t("vui.backend.mai.desc");
+      return t("vui.backend.mai.desc")
     },
   },
   {
     value: "system",
     get title() {
-      return t("vui.backend.system");
+      return t("vui.backend.system")
     },
     get desc() {
-      return t("vui.backend.system.desc");
+      return t("vui.backend.system.desc")
     },
   },
-];
+]
 
 const PIPER_BY_LOCALE: Record<Locale, ReadonlySet<ReplyVoice>> = {
   it: new Set<ReplyVoice>(["ugo", "paola"]),
   en: new Set<ReplyVoice>(["lessac"]),
-};
+}
 
 /** Voices the panel may offer for the interface language: matching Piper voices, plus system. */
-export function replyVoiceChoicesForLocale(
-  language: Locale,
-): (typeof REPLY_VOICE_CHOICES)[number][] {
-  const piper = PIPER_BY_LOCALE[language];
-  return REPLY_VOICE_CHOICES.filter(
-    (choice) => choice.value === "system" || piper.has(choice.value),
-  );
+export function replyVoiceChoicesForLocale(language: Locale): (typeof REPLY_VOICE_CHOICES)[number][] {
+  const piper = PIPER_BY_LOCALE[language]
+  return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system" || piper.has(choice.value))
 }
 
 /**
@@ -539,16 +480,12 @@ export function replyVoiceChoicesForLocale(
  * they always have; Kokoro's are its four English ones whatever the interface,
  * since an Italian reply on one of them is read by Ugo or Paola anyway.
  */
-export function replyVoiceChoicesFor(
-  backend: ReplyBackend,
-  language: Locale,
-): ReplyVoiceChoice[] {
-  if (backend === "kokoro") return [...KOKORO_VOICE_CHOICES];
-  if (backend === "mai") return [...MAI_VOICE_CHOICES];
-  if (backend === "system")
-    return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system");
-  const piper = PIPER_BY_LOCALE[language];
-  return REPLY_VOICE_CHOICES.filter((choice) => piper.has(choice.value));
+export function replyVoiceChoicesFor(backend: ReplyBackend, language: Locale): ReplyVoiceChoice[] {
+  if (backend === "kokoro") return [...KOKORO_VOICE_CHOICES]
+  if (backend === "mai") return [...MAI_VOICE_CHOICES]
+  if (backend === "system") return REPLY_VOICE_CHOICES.filter((choice) => choice.value === "system")
+  const piper = PIPER_BY_LOCALE[language]
+  return REPLY_VOICE_CHOICES.filter((choice) => piper.has(choice.value))
 }
 
 /**
@@ -560,27 +497,27 @@ export function replyVoiceChoicesFor(
  * one — is never asked again. The voice it would switch to is Rosa.
  */
 export function maiVoiceOfferPending(input: {
-  replyVoice: ReplyVoice;
-  replyVoiceOffer?: "accepted" | "declined";
-  hasKey: boolean;
-  testIdentity: boolean;
+  replyVoice: ReplyVoice
+  replyVoiceOffer?: "accepted" | "declined"
+  hasKey: boolean
+  testIdentity: boolean
 }): boolean {
-  if (input.testIdentity || !input.hasKey) return false;
-  if (input.replyVoiceOffer !== undefined) return false;
-  return input.replyVoice === "ugo";
+  if (input.testIdentity || !input.hasKey) return false
+  if (input.replyVoiceOffer !== undefined) return false
+  return input.replyVoice === "ugo"
 }
 
 /** What «Usa» writes: Rosa, on MAI, and the question closed. */
 export function acceptMaiVoice(): {
-  replyVoice: MaiVoiceId;
-  replyBackend: "mai";
-  replyVoiceOffer: "accepted";
+  replyVoice: MaiVoiceId
+  replyBackend: "mai"
+  replyVoiceOffer: "accepted"
 } {
   return {
     replyVoice: MAI_DEFAULT_VOICE,
     replyBackend: "mai",
     replyVoiceOffer: "accepted",
-  };
+  }
 }
 
 /**
@@ -594,10 +531,10 @@ export function voiceOnBackend(
   language: Locale,
   memory?: ReplyVoiceMemory,
 ): ReplyVoice {
-  if (backendOf(chosen) === backend) return chosen;
-  const remembered = backend === "system" ? undefined : memory?.[backend];
-  if (remembered && backendOf(remembered) === backend) return remembered;
-  return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system";
+  if (backendOf(chosen) === backend) return chosen
+  const remembered = backend === "system" ? undefined : memory?.[backend]
+  if (remembered && backendOf(remembered) === backend) return remembered
+  return replyVoiceChoicesFor(backend, language)[0]?.value ?? "system"
 }
 
 /** `memory` with `voice` as the last one picked on its backend; the system voice has nothing to remember. */
@@ -605,9 +542,9 @@ export function rememberReplyVoice(
   memory: ReplyVoiceMemory | undefined,
   voice: ReplyVoice,
 ): ReplyVoiceMemory | undefined {
-  const backend = backendOf(voice);
-  if (backend === "system") return memory;
-  return { ...memory, [backend]: voice };
+  const backend = backendOf(voice)
+  if (backend === "system") return memory
+  return { ...memory, [backend]: voice }
 }
 
 /**
@@ -618,7 +555,7 @@ export function rememberReplyVoice(
  * English voice ends up reading an Italian sentence. So this only answers when
  * the words are enough, and the setting is what answers the rest.
  */
-export type ReplyLanguage = "it" | "en";
+export type ReplyLanguage = "it" | "en"
 
 /*
  * Words that only one of the two languages uses, as whole words.
@@ -701,7 +638,7 @@ const ITALIAN_WORDS = new Set([
   "riprova",
   "funziona",
   "volendo",
-]);
+])
 
 const ENGLISH_WORDS = new Set([
   "the",
@@ -766,10 +703,10 @@ const ENGLISH_WORDS = new Set([
   "please",
   "here",
   "now",
-]);
+])
 
 /** The accented letters an Italian sentence has and an English one does not. */
-const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i;
+const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i
 
 /**
  * The language a reply is written in, or `undefined` when the text does not say.
@@ -783,18 +720,18 @@ const ITALIAN_ONLY_LETTERS = /[àèéìíîòóùú]/i;
  * a wrong answer here is a wrong voice, not a wrong word.
  */
 export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
-  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
-  if (words.length === 0) return undefined;
-  let italian = 0;
-  let english = 0;
+  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? []
+  if (words.length === 0) return undefined
+  let italian = 0
+  let english = 0
   for (const word of words) {
-    if (ITALIAN_WORDS.has(word)) italian += 1;
-    if (ENGLISH_WORDS.has(word)) english += 1;
+    if (ITALIAN_WORDS.has(word)) italian += 1
+    if (ENGLISH_WORDS.has(word)) english += 1
   }
-  if (ITALIAN_ONLY_LETTERS.test(text) && italian + 1 > english) italian += 1;
-  if (italian > english) return "it";
-  if (english > italian) return "en";
-  return undefined;
+  if (ITALIAN_ONLY_LETTERS.test(text) && italian + 1 > english) italian += 1
+  if (italian > english) return "it"
+  if (english > italian) return "en"
+  return undefined
 }
 
 /**
@@ -814,8 +751,8 @@ export function detectReplyLanguage(text: string): ReplyLanguage | undefined {
  * there is one Italian voice locale and no variant to preserve.
  */
 export function interfaceLocale(ui: Locale, ttsLocale: TtsLocale): TtsLocale {
-  if (ui !== "en") return "it-IT";
-  return ttsLocale.startsWith("en") ? ttsLocale : "en-US";
+  if (ui !== "en") return "it-IT"
+  return ttsLocale.startsWith("en") ? ttsLocale : "en-US"
 }
 
 /**
@@ -837,23 +774,19 @@ export function interfaceLocale(ui: Locale, ttsLocale: TtsLocale): TtsLocale {
  * prevent. A Kokoro voice is English, so a rule that let it decide would be a
  * rule that always answered in English.
  */
-export function replyLocale(
-  chosen: ReplyVoice,
-  detected: ReplyLanguage | undefined,
-  fallback: TtsLocale,
-): TtsLocale {
-  const voice = kokoroVoice(chosen);
-  if (detected === "it") return "it-IT";
+export function replyLocale(chosen: ReplyVoice, detected: ReplyLanguage | undefined, fallback: TtsLocale): TtsLocale {
+  const voice = kokoroVoice(chosen)
+  if (detected === "it") return "it-IT"
   if (detected === "en") {
     // The variant is the voice's own, and only because the reply is English: the
     // British voices are not en-US, and rounding them to it is what K1 measured
     // as a voice with the wrong mouth.
-    if (voice && voice.locale.startsWith("en")) return voice.locale;
-    return fallback.startsWith("en") ? fallback : "en-US";
+    if (voice && voice.locale.startsWith("en")) return voice.locale
+    return fallback.startsWith("en") ? fallback : "en-US"
   }
   // Nothing said: the interface's language, which is what the setting holds, and
   // the voice is derived from it by `replyVoiceFor`.
-  return fallback;
+  return fallback
 }
 
 /**
@@ -863,12 +796,8 @@ export function replyLocale(
  * agree; the catalog still holds every id, the panel just does not offer the
  * ones that would do nothing.
  */
-export function activeReplyVoice(
-  chosen: ReplyVoice,
-  language: Locale,
-): ReplyVoice {
-  if (chosen === "system") return "system";
-  if (language === "en")
-    return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen;
-  return chosen === "lessac" ? "ugo" : chosen;
+export function activeReplyVoice(chosen: ReplyVoice, language: Locale): ReplyVoice {
+  if (chosen === "system") return "system"
+  if (language === "en") return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
+  return chosen === "lessac" ? "ugo" : chosen
 }
