@@ -749,7 +749,6 @@
   font-size: var(--ade-font-sm);
   color: var(--ade-text-soft);
   margin: 0;
-  padding-left: calc(20px + var(--ade-space-4));
 }
 
 [data-component="voice-settings-panel"] [data-slot="sub-item-licence"] {

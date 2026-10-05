@@ -1171,6 +1171,26 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   })
 })
 
+describe("S8: la frase sotto il titolo della pagina parte dal bordo", () => {
+  test("niente rientro per un'icona che il titolo non ha più", () => {
+    renderSettingsSheet({ initialTarget: "voice/activation" })
+    const head = document.body.querySelector('[data-slot="settings-body"] [data-slot="section-head"]')!
+    expect(head.querySelector("svg, img, [data-slot*='icon']")).toBeNull()
+    const voiceCss = readFileSync(
+      join(import.meta.dir, "..", "..", "..", "voice", "src", "ui", "voice-settings.css"),
+      "utf-8",
+    )
+    const indents: string[] = []
+    postcss.parse(voiceCss).walkRules((rule) => {
+      if (!rule.selector.includes('[data-slot="section-desc"]')) return
+      rule.walkDecls(/^padding/, (d) => {
+        indents.push(`${d.prop}: ${d.value}`)
+      })
+    })
+    expect(indents).toEqual([])
+  })
+})
+
 describe("S8: a finestra stretta le schede vanno a capo", () => {
   test("nessuna scheda tagliata sotto una barra di scorrimento: la riga si spezza in due", () => {
     const decls: Record<string, string> = {}
