@@ -67,14 +67,13 @@ export const EditTool = Tool.define("edit", {
       throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
-    const filePath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(ctx.instance.directory, params.filePath)
+    const filePath = normalizeToolPath(params.filePath, ctx.instance.directory)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
     let contentOld = ""
     let contentNew = ""
+    let reformatted: string | undefined
     let replacements = 0
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
@@ -101,7 +100,7 @@ export const EditTool = Tool.define("edit", {
           },
         })
         await Bun.write(filePath, Bom.join(contentNew, replacement.bom))
-        await Format.formatFile(filePath, replacement.bom)
+        reformatted = await Format.formatFileReport(filePath, replacement.bom, contentNew)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -149,7 +148,7 @@ export const EditTool = Tool.define("edit", {
       })
 
       await file.write(Bom.join(contentNew, writtenBom))
-      await Format.formatFile(filePath, writtenBom)
+      reformatted = await Format.formatFileReport(filePath, writtenBom, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -183,6 +182,7 @@ export const EditTool = Tool.define("edit", {
       replacements === 0
         ? "Created file."
         : `Replaced ${replacements} ${replacements === 1 ? "occurrence" : "occurrences"} in ${path.relative(ctx.instance.worktree, filePath)}.`
+    if (reformatted) output += `\n\n${reformatted}`
     const diagnostics = await runLSP(
       Effect.gen(function* () {
         const lsp = yield* LSP.Service

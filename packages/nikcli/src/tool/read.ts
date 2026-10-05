@@ -8,6 +8,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Identifier } from "@nikcli-ai/util/id"
 import { assertExternalDirectory } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
 
@@ -43,13 +44,9 @@ export const ReadTool = Tool.define("read", {
     if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1)) {
       throw new Error("limit must be a positive integer")
     }
-    let filepath = params.filePath
-    if (!path.isAbsolute(filepath)) {
-      // The instance, not `process.cwd()`: the background service runs every
-      // project from one process, so its cwd is none of them. `write` and
-      // `edit` already resolve this way.
-      filepath = path.join(ctx.instance.directory, filepath)
-    }
+    // The instance, not `process.cwd()`: the background service runs every project from one process,
+    // so its cwd is none of them. Every file tool reads the path the same way (see normalizeToolPath).
+    const filepath = normalizeToolPath(params.filePath, ctx.instance.directory)
     const title = path.relative(ctx.instance.worktree, filepath)
 
     await assertExternalDirectory(ctx, filepath, {

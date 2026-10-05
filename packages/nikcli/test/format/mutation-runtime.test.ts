@@ -197,6 +197,9 @@ describe("mutation tool formatting (opencode #39564)", () => {
 
     expect(await fs.readFile(target, "utf8")).toBe("write_FORMATTED\n")
     expect(result.metadata.diff).toContain("+write_FORMATTED")
+    // The agent wrote "write_raw": it is told the file is not what it wrote, and what it is now.
+    expect(result.output).toContain("mutation reformatted this file after the write (1 line changed)")
+    expect(result.output).toContain("1| write_FORMATTED")
   })
 
   it("edit preserves BOM and returns a diff from final formatted content", async () => {
@@ -222,6 +225,7 @@ describe("mutation tool formatting (opencode #39564)", () => {
 
     expect(await fs.readFile(target, "utf8")).toBe("\uFEFFafter_FORMATTED\r\nrest\r\n")
     expect(result.metadata.diff).toContain("+after_FORMATTED")
+    expect(result.output).toContain("mutation reformatted this file after the write")
   })
 
   it("edit create reports final formatted content", async () => {
@@ -245,6 +249,7 @@ describe("mutation tool formatting (opencode #39564)", () => {
 
     expect(await fs.readFile(target, "utf8")).toBe("created_FORMATTED\n")
     expect(result.metadata.diff).toContain("+created_FORMATTED")
+    expect(result.output).toContain("mutation reformatted this file after the write")
   })
 
   it("apply_patch preserves BOM and reports final formatted content", async () => {
@@ -274,6 +279,49 @@ describe("mutation tool formatting (opencode #39564)", () => {
 
     expect(await fs.readFile(target, "utf8")).toBe("\uFEFFafter_FORMATTED\n")
     expect(result.metadata.diff).toContain("+after_FORMATTED")
+    expect(result.output).toContain("patch.mut: Note: mutation reformatted this file after the write")
+  })
+
+  it("says nothing when the formatter leaves the text as written", async () => {
+    const directory = await makeProject({})
+    const noop = await script(directory, "noop.ts", "process.exit(0)")
+    await fs.writeFile(
+      path.join(directory, "nikcli.json"),
+      JSON.stringify({ formatter: { noop: { command: command(noop), extensions: [".mut"] } } }),
+    )
+    const target = path.join(directory, "same.mut")
+    const def = await withProjectDirectory(directory, () => WriteTool.init())
+    const { ctx } = makeToolContext()
+
+    const result = await withProjectDirectory(directory, () =>
+      def.executeAsync({ filePath: target, content: "same\n" }, ctx),
+    )
+
+    expect(result.output).not.toContain("reformatted")
+  })
+})
+
+describe("Format.reformatNotice", () => {
+  it("is undefined when nothing changed, and ignores a leading BOM", () => {
+    expect(Format.reformatNotice("uv", "a\nb\n", "a\nb\n")).toBeUndefined()
+    expect(Format.reformatNotice("uv", "﻿a\n", "a\n")).toBeUndefined()
+  })
+
+  it("names the formatter, counts the changed lines and quotes them with their numbers", () => {
+    const note = Format.reformatNotice("uv format", "x = 1\ny = {'a':1}\nz = 3\n", 'x = 1\ny = {"a": 1}\nz = 3\n')!
+    expect(note).toContain(
+      "uv format reformatted this file after the write (1 line changed). Re-read it before the next edit.",
+    )
+    expect(note).toContain('2| y = {"a": 1}')
+    expect(note).not.toContain("1| x = 1")
+  })
+
+  it("does not quote a big reflow, only says to re-read", () => {
+    const before = Array.from({ length: 40 }, (_, i) => `a${i}`).join("\n") + "\n"
+    const after = Array.from({ length: 40 }, (_, i) => `b${i}`).join("\n") + "\n"
+    const note = Format.reformatNotice("fmt", before, after)!
+    expect(note).toContain("40 lines changed")
+    expect(note).not.toContain("Changed lines as they are now")
   })
 })
 

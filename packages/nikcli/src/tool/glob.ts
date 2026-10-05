@@ -115,8 +115,9 @@ export const GlobTool = Tool.define("glob", {
     // Models serialize an absent path as the literal string sometimes; treat it
     // as "not provided" rather than as a directory named "undefined".
     const requested = params.path === "undefined" || params.path === "null" ? undefined : params.path
-    let dir = requested ?? ctx.instance.directory
-    dir = path.isAbsolute(dir) ? dir : path.resolve(ctx.instance.directory, dir)
+    const dir = isProjectRootAlias(requested)
+      ? ctx.instance.directory
+      : normalizeToolPath(requested!, ctx.instance.directory)
     await assertExternalDirectory(ctx, dir, { kind: "directory" })
 
     // The search root has to be a directory. A missing or file path used to fall

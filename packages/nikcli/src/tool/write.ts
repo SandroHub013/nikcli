@@ -13,6 +13,7 @@ import { Bom } from "../util/bom"
 import { Format } from "../format"
 import { buildFileDiff, readAfterMutation, trimDiff } from "./file-diff"
 import { assertExternalDirectory } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Effect } from "effect"
 
@@ -57,9 +58,7 @@ export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: zod(Parameters),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(ctx.instance.directory, params.filePath)
+    const filepath = normalizeToolPath(params.filePath, ctx.instance.directory)
     await assertExternalDirectory(ctx, filepath)
 
     const file = Bun.file(filepath)
@@ -111,6 +110,7 @@ export const WriteTool = Tool.define("write", {
     })
 
     let output = "Wrote file successfully."
+    if (reformatted) output += `\n\n${reformatted}`
     const diagnostics = await runLSP(
       Effect.gen(function* () {
         const lsp = yield* LSP.Service

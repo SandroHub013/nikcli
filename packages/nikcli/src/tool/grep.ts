@@ -181,8 +181,9 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let dir = params.path ?? ctx.instance.directory
-    dir = path.isAbsolute(dir) ? dir : path.resolve(ctx.instance.directory, dir)
+    const dir = isProjectRootAlias(params.path)
+      ? ctx.instance.directory
+      : normalizeToolPath(params.path!, ctx.instance.directory)
     await assertExternalDirectory(ctx, dir, { kind: "directory" })
 
     const outcome = await withSearchDeadline(

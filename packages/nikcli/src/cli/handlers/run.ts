@@ -469,6 +469,12 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: st
         const part = event.properties.part
         if (part.sessionID !== sessionID) continue
 
+        // A failed call is a call too: without this the JSON stream shows only the ones that worked, and every
+        // consumer (the bench's tool counts, a failure analysis) sees an error-free run.
+        if (part.type === "tool" && part.state.status === "error") {
+          if (outputJsonEvent("tool_use", { part })) continue
+        }
+
         if (part.type === "tool" && part.state.status === "completed") {
           if (outputJsonEvent("tool_use", { part })) continue
           const [tool, color] = TOOL.get(part.tool) ?? [part.tool, UI.Style.TEXT_INFO_BOLD]

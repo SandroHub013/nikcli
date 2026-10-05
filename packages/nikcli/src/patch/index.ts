@@ -111,18 +111,33 @@ export namespace Patch {
     return null
   }
 
+  /**
+   * What follows `@@` as a line to anchor on. A model often writes the unified-diff header
+   * (`@@ -12,7 +12,8 @@ def f():`) instead of the bare `@@ def f():`: the numbers are not an anchor, so they are dropped
+   * and only the text after the closing `@@` is kept.
+   */
+  function hunkHeaderContext(line: string): string {
+    const numbered = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@(.*)$/)
+    if (numbered) return numbered[1].trim()
+    const closed = line.match(/^@@(.*?)@@\s*$/)
+    if (closed && closed[1].trim() === "") return ""
+    return line.substring(2).trim()
+  }
+
   function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: UpdateFileChunk[]; nextIdx: number } {
     const chunks: UpdateFileChunk[] = []
     let i = startIdx
 
     while (i < lines.length && !lines[i].startsWith("***")) {
       if (lines[i].startsWith("@@")) {
-        const contextLine = lines[i].substring(2).trim()
+        const contextLine = hunkHeaderContext(lines[i])
         i++
 
         const oldLines: string[] = []
         const newLines: string[] = []
         let isEndOfFile = false
+        // Bare empty lines at the end of a hunk are the gap before the next section, not content.
+        let trailingBlank = 0
 
         while (i < lines.length && !lines[i].startsWith("@@") && !lines[i].startsWith("***")) {
           const changeLine = lines[i]
@@ -132,6 +147,16 @@ export namespace Patch {
             i++
             break
           }
+
+          if (changeLine === "" || changeLine === "\r") {
+            // A blank context line the model wrote as "" instead of " " (what the Codex parser also accepts).
+            oldLines.push("")
+            newLines.push("")
+            trailingBlank++
+            i++
+            continue
+          }
+          trailingBlank = 0
 
           if (changeLine.startsWith(" ")) {
             const content = changeLine.substring(1)
@@ -144,6 +169,10 @@ export namespace Patch {
           }
 
           i++
+        }
+        if (trailingBlank > 0) {
+          oldLines.length -= trailingBlank
+          newLines.length -= trailingBlank
         }
 
         chunks.push({
@@ -394,14 +423,67 @@ export namespace Patch {
       if (found !== -1) {
         replacements.push([found, pattern.length, newSlice])
         lineIndex = found + pattern.length
+        continue
+      }
+
+      // Last try: the stretch of the file that has the same lines once blank lines are set aside on both sides.
+      const loose = seekIgnoringBlankLines(originalLines, chunk.old_lines, lineIndex)
+      if (loose) {
+        replacements.push([loose.at, loose.length, chunk.new_lines])
+        lineIndex = loose.at + loose.length
       } else {
-        throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`)
+        throw new Error(mismatchMessage(filePath, originalLines, chunk.old_lines))
       }
     }
 
     replacements.sort((a, b) => a[0] - b[0])
 
     return replacements
+  }
+
+  /**
+   * The error for a hunk that matches nowhere: it names the first line that does not fit and shows the
+   * closest stretch of the file as it is now, with numbers, so the next patch needs no re-read.
+   */
+  function mismatchMessage(filePath: string, fileLines: string[], expected: string[]): string {
+    const head = `Failed to find expected lines in ${filePath}`
+    const same = (a: string, b: string) => squash(a) === squash(b)
+    let bestAt = -1
+    let bestScore = 0
+    for (let i = 0; i < fileLines.length; i++) {
+      let score = 0
+      for (let j = 0; j < expected.length && i + j < fileLines.length; j++) {
+        if (same(fileLines[i + j], expected[j])) score++
+      }
+      if (score > bestScore) {
+        bestScore = score
+        bestAt = i
+      }
+    }
+    if (bestAt === -1) {
+      return `${head}. No line of the hunk occurs in the file as it is now; read the file again before patching.\nExpected:\n${expected.join("\n")}`
+    }
+    let firstBad = 0
+    while (
+      firstBad < expected.length &&
+      bestAt + firstBad < fileLines.length &&
+      same(fileLines[bestAt + firstBad], expected[firstBad])
+    )
+      firstBad++
+    const from = Math.max(0, bestAt - 1)
+    const to = Math.min(fileLines.length, bestAt + Math.min(expected.length, 12) + 1)
+    const width = String(to).length
+    const shown: string[] = []
+    for (let n = from; n < to; n++) shown.push(`${String(n + 1).padStart(width)}| ${fileLines[n]}`)
+    const want = expected[firstBad]
+    const have = fileLines[bestAt + firstBad]
+    const detail =
+      want === undefined
+        ? "The hunk matches the start of this stretch but is longer than it."
+        : have === undefined
+          ? `Hunk line ${firstBad + 1} (${JSON.stringify(want)}) is past the end of the file.`
+          : `Hunk line ${firstBad + 1} is ${JSON.stringify(want)} but file line ${bestAt + firstBad + 1} is ${JSON.stringify(have)}.`
+    return `${head}. Closest match: ${bestScore} of ${expected.length} lines, at line ${bestAt + 1}. ${detail}\nThe file now reads:\n${shown.join("\n")}`
   }
 
   function applyReplacements(lines: string[], replacements: Array<[number, number, string[]]>): string[] {
@@ -434,6 +516,9 @@ export namespace Patch {
     )
   }
 
+  // Whitespace inside a line is the last thing allowed to differ.
+  const squash = (x: string) => normalizeUnicode(x.trim()).replace(/\s+/g, " ")
+
   type Comparator = (a: string, b: string) => boolean
 
   function tryMatch(lines: string[], pattern: string[], startIndex: number, compare: Comparator, eof: boolean): number {
@@ -465,6 +550,28 @@ export namespace Patch {
     return -1
   }
 
+  function seekIgnoringBlankLines(
+    lines: string[],
+    pattern: string[],
+    startIndex: number,
+  ): { at: number; length: number } | undefined {
+    const wanted = pattern.filter((line) => line.trim() !== "").map(squash)
+    if (wanted.length === 0) return undefined
+    for (let i = startIndex; i < lines.length; i++) {
+      if (lines[i].trim() === "" || squash(lines[i]) !== wanted[0]) continue
+      let matched = 1
+      let end = i
+      for (let k = i + 1; k < lines.length && matched < wanted.length; k++) {
+        if (lines[k].trim() === "") continue
+        if (squash(lines[k]) !== wanted[matched]) break
+        matched++
+        end = k
+      }
+      if (matched === wanted.length) return { at: i, length: end - i + 1 }
+    }
+    return undefined
+  }
+
   function seekSequence(lines: string[], pattern: string[], startIndex: number, eof = false): number {
     if (pattern.length === 0) return -1
 
@@ -484,7 +591,9 @@ export namespace Patch {
       (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
       eof,
     )
-    return normalized
+    if (normalized !== -1) return normalized
+
+    return tryMatch(lines, pattern, startIndex, (a, b) => squash(a) === squash(b), eof)
   }
 
   function generateUnifiedDiff(oldContent: string, newContent: string): string {
