@@ -277,7 +277,7 @@ export const voiceIt = {
     "Le risposte ora non si leggono: la voce scelta qui si sente quando accendi «Rispondi a voce» in Modalità.",
   "vui.shortcuts.title": "Scorciatoie da tastiera",
   "vui.shortcuts.desc":
-    "Due combinazioni libere: fai clic su una scorciatoia e premi i tasti che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a scrivere",
+    "Due combinazioni libere: fai clic su una scorciatoia e premi i tasti che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a scrivere.",
   "vui.shortcuts.agent": "Scorciatoia modalità agente",
   "vui.shortcuts.agent.desc": "Attiva l'ascolto dei comandi dell'agente",
   "vui.shortcuts.agent.reset": "Ripristina la scorciatoia predefinita per la modalità agente",
@@ -411,7 +411,7 @@ export const voiceIt = {
 
   // Voice wake word hint
   "vui.wake.hint": (wakeWord: string) =>
-    `Basta dire "nik" per chiamarlo. Pronuncia "ei nik" staccato, con una pausa dopo il nome. Inizia la frase con "${wakeWord}" (va bene anche "ehi nik" o "hey nick"), per esempio "${wakeWord}, apri il browser". Il silenzio non costa niente. Mentre aspetta il nome, anche mentre sta lavorando, delle frasi più lunghe di due secondi manda al servizio di trascrizione solo il primo secondo e mezzo, e il resto solo se inizia con il nome; le frasi più corte, come «annulla», partono intere. Detto il nome da solo, o premuto il pulsante, ascolta senza nome per dieci secondi. L'ascolto da solo è spento di serie, perché ogni frase che sente si paga: lo accendi nelle impostazioni della voce, dove c'è scritto quanto costa e quanto ha speso oggi. Acceso, si ferma da solo se in un'ora manda più di 120 frasi o se per mezz'ora nessuno lo chiama, e resta fermo finché non lo riaccendi tu. Con il PC bloccato o in sospensione si mette in pausa e riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.`,
+    `Basta dire «nik» per chiamarlo. Pronuncia «ei nik» staccato, con una pausa dopo il nome. Inizia la frase con «${wakeWord}» (va bene anche «ehi nik» o «hey nick»), per esempio «${wakeWord}, apri il browser». Il silenzio non costa niente. Mentre aspetta il nome, anche mentre sta lavorando, delle frasi più lunghe di due secondi manda al servizio di trascrizione solo il primo secondo e mezzo, e il resto solo se inizia con il nome; le frasi più corte, come «annulla», partono intere. Detto il nome da solo, o premuto il pulsante, ascolta senza nome per dieci secondi. L'ascolto da solo è spento di serie, perché ogni frase che sente si paga: lo accendi nelle impostazioni della voce, dove c'è scritto quanto costa e quanto ha speso oggi. Acceso, si ferma da solo se in un'ora manda più di 120 frasi o se per mezz'ora nessuno lo chiama, e resta fermo finché non lo riaccendi tu. Con il PC bloccato o in sospensione si mette in pausa e riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.`,
 
   // Voice microphone errors, settings repairs, shortcut warnings
   "vui.error.unknown": "errore sconosciuto",

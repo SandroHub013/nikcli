@@ -269,14 +269,14 @@ export const voiceEn: VoiceMessages = {
     `Cost: about $0.20 an hour of voices in the room in real time, up to ${cap} a day; nothing in silence · today ${minutes} min, ${spent}`,
   "vui.listen.manual": "Only when you open it",
   "vui.listen.manual.desc": "With the button at the top or the shortcut",
-  "vui.wake.short": (wakeWord) => `Start the sentence with "${wakeWord}", for example "${wakeWord}, open the browser".`,
+  "vui.wake.short": (wakeWord) => `Start the sentence with “${wakeWord}”, for example “${wakeWord}, open the browser”.`,
   "vui.activation.manualHow":
     "Opened by hand, without an accepted sentence the microphone closes by itself after 30 seconds.",
   "vui.reply.silent":
     "Replies are not read aloud now: the voice chosen here is heard once “Answer aloud” is on in Mode.",
   "vui.shortcuts.title": "Keyboard shortcuts",
   "vui.shortcuts.desc":
-    "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
+    "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing.",
   "vui.shortcuts.agent": "Agent mode shortcut",
   "vui.shortcuts.agent.desc": "Starts listening for agent commands",
   "vui.shortcuts.agent.reset": "Restore the default agent mode shortcut",
@@ -292,7 +292,7 @@ export const voiceEn: VoiceMessages = {
   "vui.language.search.placeholder": "Type to filter (e.g. ital, en, fr)…",
   "vui.language.select": "Speech recognition language",
   "vui.language.count": (shown, total) => `${shown} of ${total} languages. Enter in the search field picks the first.`,
-  "vui.language.unsupported": (language) => `The language set ("${language}") can't be recognised: pick another one.`,
+  "vui.language.unsupported": (language) => `The language set (“${language}”) can't be recognised: pick another one.`,
   "vui.language.switch": (language) => `Switch to ${language}`,
   "vui.audio.title": "Audio",
   "vui.audio.desc": "The microphone that hears you and the speaker that answers",
@@ -406,7 +406,7 @@ export const voiceEn: VoiceMessages = {
 
   // Voice wake word hint
   "vui.wake.hint": (wakeWord) =>
-    `Just say "${wakeWord}" to call it. Say "ei nik" as separate words, with a pause after the name. Start the sentence with "${wakeWord}" ("ehi nik" or "hey nick" work too), for example "${wakeWord}, open the browser". Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. Listening by itself is off unless you turn it on, because every sentence it hears is paid for: the switch is in the voice settings, where what it costs and what it has spent today are written. On, it stops by itself past 120 sentences in an hour or after half an hour with nobody calling it, and stays stopped until you turn it back on. When the PC is locked or asleep it pauses and comes back by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
+    `Just say “${wakeWord}” to call it. Say “ei nik” as separate words, with a pause after the name. Start the sentence with “${wakeWord}” (“ehi nik” or “hey nick” work too), for example “${wakeWord}, open the browser”. Silence costs nothing. While it waits for the name, even while it's working, it sends only the first second and a half of sentences longer than two seconds to the transcription service, and the rest only if it starts with the name; shorter sentences, like “annulla”, go through whole. After the name alone, or a press of the button, it listens without the name for ten seconds. Listening by itself is off unless you turn it on, because every sentence it hears is paid for: the switch is in the voice settings, where what it costs and what it has spent today are written. On, it stops by itself past 120 sentences in an hour or after half an hour with nobody calling it, and stays stopped until you turn it back on. When the PC is locked or asleep it pauses and comes back by itself. The button at the top and the shortcut call it without saying anything; while it's working, “annulla” still stops it.`,
 
   // Voice microphone errors, settings repairs, shortcut warnings
   "vui.error.unknown": "unknown error",

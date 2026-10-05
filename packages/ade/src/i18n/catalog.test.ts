@@ -73,17 +73,17 @@ function sample(entry: unknown): string {
 describe("the catalogs", () => {
   test("the voice hint explains the pause in ei nik and that nik alone is enough", () => {
     const italian = it["vui.wake.hint"]("nik")
-    expect(italian).toContain('Basta dire "nik"')
-    expect(italian).toContain('"ei nik" staccato, con una pausa dopo il nome')
+    expect(italian).toContain("Basta dire «nik»")
+    expect(italian).toContain("«ei nik» staccato, con una pausa dopo il nome")
     const english = en["vui.wake.hint"]("nik")
-    expect(english).toContain('Just say "nik"')
-    expect(english).toContain('"ei nik" as separate words, with a pause after the name')
-    expect(english).toContain('for example "nik, open the browser"')
+    expect(english).toContain("Just say “nik”")
+    expect(english).toContain("“ei nik” as separate words, with a pause after the name")
+    expect(english).toContain("for example “nik, open the browser”")
     expect(english).not.toContain("apri il browser")
   })
 
   test("the English voice hint calls the configured name", () => {
-    expect(en["vui.wake.hint"]("jarvis")).toStartWith('Just say "jarvis" to call it.')
+    expect(en["vui.wake.hint"]("jarvis")).toStartWith("Just say “jarvis” to call it.")
   })
 
   test("the voice texts use the glossary: no «motore» in Italian, no engine in English (S7)", () => {
@@ -159,6 +159,20 @@ describe("the catalogs", () => {
       }
     }
     expect(dropped).toEqual([])
+  })
+
+  test("the voice texts quote with «» in Italian and “” in English, never straight quotes (S8)", () => {
+    for (const catalog of [it, en]) {
+      const straight = (Object.keys(catalog) as Key[]).filter(
+        (key) => key.startsWith("vui.") && sample(catalog[key]).includes('"'),
+      )
+      expect(straight).toEqual([])
+    }
+  })
+
+  test("the shortcuts page description ends its sentence (S8)", () => {
+    expect(sample(it["vui.shortcuts.desc"])).toEndWith(".")
+    expect(sample(en["vui.shortcuts.desc"])).toEndWith(".")
   })
 
   test("the exceptions still exist, so the list cannot rot", () => {
