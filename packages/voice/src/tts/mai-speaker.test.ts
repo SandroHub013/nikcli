@@ -143,7 +143,125 @@ describe("MAI davanti alla voce locale", () => {
     }
     await createMaiSpeaker(w.deps).speak("Prima frase completa. Seconda frase completa.")
     expect(fetches).toBe(1)
-    expect(w.spoken.at(-1)).toContain("Seconda frase completa.")
+    expect(w.played).toBe(1)
+    expect(w.spoken).toEqual(["Manca la chiave OpenRouter: uso la voce locale.", "Seconda frase completa."])
+  })
+
+  test("una chiave rimessa si usa subito, senza aspettare", async () => {
+    const w = world()
+    const speaker = createMaiSpeaker(w.deps)
+    w.deps.client.fetchFn = async () => {
+      w.setKey(undefined)
+      return ok()
+    }
+    await speaker.speak("Prima frase completa. Seconda frase completa.")
+    w.setKey("key")
+    let fetches = 0
+    w.deps.client.fetchFn = async () => {
+      fetches += 1
+      return ok()
+    }
+    await speaker.speak("Una risposta nuova, con la chiave.")
+    expect(fetches).toBe(1)
+  })
+
+  test("annullare chiude la richiesta in volo, che altrimenti si paga", async () => {
+    const w = world()
+    let seen: AbortSignal | undefined
+    w.deps.client.fetchFn = (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        seen = init.signal ?? undefined
+        init.signal?.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+        )
+      })
+    // Nessuna scadenza: la richiesta si chiude perché si è annullato, non perché è passato il tempo.
+    w.deps.client.schedule = () => new Promise<never>(() => {})
+    const speaker = createMaiSpeaker(w.deps)
+    const pending = speaker.speak("Ciao, questa è una frase intera.")
+    await Promise.resolve()
+    speaker.cancel()
+    expect(seen?.aborted).toBe(true)
+    await pending
+    expect(w.spoken).toEqual([])
+  })
+
+  test("annullare ferma la frase che sta suonando", async () => {
+    const w = world()
+    let playing: AbortSignal | undefined
+    let started: () => void = () => {}
+    const begun = new Promise<void>((resolve) => (started = resolve))
+    w.deps.play = (_wav, signal) =>
+      new Promise<void>((resolve) => {
+        playing = signal
+        started()
+        signal.addEventListener("abort", () => resolve())
+      })
+    const speaker = createMaiSpeaker(w.deps)
+    const pending = speaker.speak("Ciao, questa è una frase intera. E questa è la seconda.")
+    await begun
+    speaker.cancel()
+    await pending
+    expect(playing?.aborted).toBe(true)
+    // La seconda frase non viene chiesta.
+    expect(w.fetchCount()).toBe(1)
+  })
+
+  test("una risposta nuova ferma quella che sta suonando", async () => {
+    const w = world()
+    const signals: AbortSignal[] = []
+    let started: () => void = () => {}
+    const begun = new Promise<void>((resolve) => (started = resolve))
+    w.deps.play = (_wav, signal) =>
+      new Promise<void>((resolve) => {
+        signals.push(signal)
+        if (signals.length === 1) {
+          started()
+          signal.addEventListener("abort", () => resolve())
+        } else resolve()
+      })
+    const speaker = createMaiSpeaker(w.deps)
+    const first = speaker.speak("Una risposta vecchia, ancora in corso.")
+    await begun
+    await speaker.speak("Una risposta nuova.")
+    await first
+    expect(signals[0]?.aborted).toBe(true)
+    expect(signals).toHaveLength(2)
+  })
+
+  test("annullare durante l'avviso non fa ripartire il testo vecchio", async () => {
+    const w = world()
+    w.setStatus(402)
+    let releaseNotice: () => void = () => {}
+    let noticeStarted: () => void = () => {}
+    const noticing = new Promise<void>((resolve) => (noticeStarted = resolve))
+    w.deps.local.speak = async (text) => {
+      w.spoken.push(text)
+      if (text.startsWith("Credito")) {
+        noticeStarted()
+        await new Promise<void>((resolve) => (releaseNotice = resolve))
+      }
+    }
+    const speaker = createMaiSpeaker(w.deps)
+    const pending = speaker.speak("Prima frase completa. Seconda frase completa.")
+    await noticing
+    speaker.cancel()
+    releaseNotice()
+    await pending
+    expect(w.spoken).toEqual(["Credito OpenRouter esaurito: uso la voce locale."])
+  })
+
+  test("markdown, link e fonti non vanno a MAI, che li farebbe pagare", async () => {
+    const w = world()
+    const inputs: string[] = []
+    w.deps.client.fetchFn = async (_url, init) => {
+      inputs.push(JSON.parse(String(init.body)).input)
+      return ok()
+    }
+    await createMaiSpeaker(w.deps).speak(
+      "Vedi [la guida](https://example.com/guida) per i dettagli. Fonti: https://example.com",
+    )
+    expect(inputs.join(" ")).toBe("Vedi la guida per i dettagli.")
   })
 
   test("prepare non esiste: il prefetch di una voce MAI non chiede nulla", () => {

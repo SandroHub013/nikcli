@@ -13,6 +13,7 @@
  */
 
 import type { Speaker } from "./speaker"
+import { cleanForSpeech } from "./clean"
 import { splitSentences } from "./natural-speaker"
 import { isMaiVoice, maiVoice, type MaiVoiceId } from "../settings/reply-voices"
 import { createMaiBreaker, MaiError, reserveMai, speakMai, type MaiClientDeps, type MaiFailureKind } from "./mai"
@@ -25,8 +26,11 @@ export interface MaiSpeakerDeps {
   client: MaiClientDeps
   /** What reads whatever MAI does not. */
   local: Speaker
-  /** Plays one WAV and resolves when it ends, or when `cancel` aborts it. */
-  play: (wav: ArrayBuffer) => Promise<void>
+  /**
+   * Plays one WAV and resolves when it ends. When `signal` aborts — «annulla»,
+   * or the next reply starting — the sound stops and the promise resolves.
+   */
+  play: (wav: ArrayBuffer, signal: AbortSignal) => Promise<void>
   /**
    * Said once when MAI gives up, before the local voice takes the rest.
    * `payment` is the one with its own sentence, because it is the one the user
@@ -44,7 +48,6 @@ export interface MaiSpeaker extends Speaker {
   available(): boolean
 }
 
-/** What the user is told, once, when the cloud voice cannot answer. */
 /**
  * What the user is told, or nothing.
  *
@@ -64,17 +67,26 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
   const breaker = createMaiBreaker()
   let generation = 0
   let notified = false
+  /*
+   * One per reply. «Annulla» and the next reply both abort it, and with it the
+   * request in flight — which would otherwise go on for up to fifteen seconds
+   * and be paid for — and the sentence that is playing.
+   */
+  let reply: AbortController | undefined
 
   function maiVoiceOf(voice: string): MaiVoiceId | undefined {
     if (!isMaiVoice(voice as MaiVoiceId)) return undefined
     return maiVoice(voice as MaiVoiceId)?.id
   }
 
-  async function sayLocal(text: string, kind: MaiFailureKind, keyWasPresent: boolean): Promise<void> {
+  async function sayLocal(mine: number, text: string, kind: MaiFailureKind, keyWasPresent: boolean): Promise<void> {
     if (!notified) {
       notified = true
       const line = deps.notice(kind, keyWasPresent)
       if (line) await deps.local.speak(line)
+      // «Annulla» while the notice was being said stops the notice; the rest of
+      // a reply that was cancelled is not read afterwards as if nothing happened.
+      if (mine !== generation) return
     }
     if (text.trim().length > 0) await deps.local.speak(text)
   }
@@ -82,7 +94,12 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
   return {
     async speak(text: string): Promise<void> {
       const mine = ++generation
-      const clean = text.trim()
+      reply?.abort()
+      const controller = new AbortController()
+      reply = controller
+      // Cleaned as the local voices clean it: markdown, code and links are not
+      // read aloud, and on MAI they would be paid for by the character too.
+      const clean = cleanForSpeech(text).trim()
       if (clean.length === 0) return
       const { voice } = deps.voiceFor(clean)
       const mai = maiVoiceOf(voice)
@@ -92,12 +109,12 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
       }
       const hadKey = deps.hasKey()
       if (!hadKey) {
-        await sayLocal(clean, "no-key", false)
+        await sayLocal(mine, clean, "no-key", false)
         return
       }
       const blocked = breaker.blocked(deps.client.now?.() ?? Date.now())
       if (blocked) {
-        await sayLocal(clean, blocked.kind, true)
+        await sayLocal(mine, clean, blocked.kind, true)
         return
       }
 
@@ -105,23 +122,26 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
       let pending = units
       for (let i = 0; i < units.length; i++) {
         if (mine !== generation) return
+        // Not a breaker trip: the key is read before every sentence, so one
+        // put back is used at once instead of after a cooldown.
         if (!deps.hasKey()) {
-          breaker.trip("no-key", deps.client.now?.() ?? Date.now())
-          await sayLocal(pending.join(" "), "no-key", true)
+          await sayLocal(mine, pending.join(" "), "no-key", true)
           return
         }
         const unit = units[i]!
         try {
-          const result = await speakMai({ voice: mai, text: unit }, deps.client)
+          const result = await speakMai({ voice: mai, text: unit, signal: controller.signal }, deps.client)
           if (mine !== generation) return
           breaker.reset()
-          notified = false
           deps.onSpoken?.({
             generationId: result.generationId,
             reservedUsd: result.reservedUsd,
             chars: unit.length,
           })
-          await deps.play(result.wav)
+          await deps.play(result.wav, controller.signal)
+          if (mine !== generation) return
+          // The outage is over once a sentence was heard, not once it was synthesised.
+          notified = false
         } catch (error) {
           if (mine !== generation) return
           const kind = error instanceof MaiError ? error.kind : "transient"
@@ -131,7 +151,7 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
             deps.client.now?.() ?? Date.now(),
             error instanceof MaiError ? error.retryAfterMs : undefined,
           )
-          await sayLocal(pending.join(" "), kind, true)
+          await sayLocal(mine, pending.join(" "), kind, true)
           return
         }
         pending = units.slice(i + 1)
@@ -140,6 +160,8 @@ export function createMaiSpeaker(deps: MaiSpeakerDeps): MaiSpeaker {
 
     cancel(): void {
       generation++
+      reply?.abort()
+      reply = undefined
       deps.local.cancel()
     },
 
