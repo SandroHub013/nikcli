@@ -37,6 +37,8 @@ export const VSYNC_60_MS = 1000 / 60
 export const SLOW_SHARE = 0.05
 /** The window, in seconds of moving: over the last ten, a p95 above 25 ms and the level is too much for the machine. */
 export const SLOW_SECONDS = 10
+/** A pause longer than this and the seconds before it are forgotten: another moment, maybe another corner of the city. */
+export const SLOW_FORGET_AFTER_MS = 60_000
 
 /**
  * Whether the machine keeps up with a 60 fps level: fed every display frame of the moving mode (the time since the one
@@ -44,15 +46,18 @@ export const SLOW_SECONDS = 10
  * vsyncs on more than one frame in twenty: at 60 Hz, a p95 above 25 ms. One window and not ten seconds each over the
  * line: a machine near the line has its good and bad seconds, and a single good one used to start the count again. A frame that came on its vsync is never slow, so a 75 or 144 Hz display
  * pacing 60 fps (draws 13.3 or 26.7 ms apart, but a callback on every vsync) is not taken for a slow machine. Still and
- * immobile time is not fed: there the frames are slow on purpose. `pause` drops the second in progress, not the run.
+ * immobile time is not fed: there the frames are slow on purpose. `pause` drops the second in progress; the window goes
+ * too when the pause lasted more than `SLOW_FORGET_AFTER_MS` (`now` is the page's clock).
  */
-export function createSlowWatch() {
+export function createSlowWatch(now: () => number = () => performance.now()) {
   let elapsed = 0
   let frames = 0
   let slow = 0
   /** The last `SLOW_SECONDS` whole seconds of moving: frames, and slow ones. */
   const seconds: { frames: number; slow: number }[] = []
   let said = false
+  /** When the pause in progress began; undefined while moving. */
+  let pausedAt: number | undefined
   const share = () => {
     const total = seconds.reduce((sum, s) => sum + s.frames, 0)
     return total ? seconds.reduce((sum, s) => sum + s.slow, 0) / total : 0
@@ -60,6 +65,8 @@ export function createSlowWatch() {
   return {
     push(ms: number, vsyncMs = VSYNC_60_MS): boolean {
       if (said) return false
+      if (pausedAt !== undefined && now() - pausedAt > SLOW_FORGET_AFTER_MS) seconds.length = 0
+      pausedAt = undefined
       elapsed += ms
       frames++
       if (ms > 1.5 * Math.min(vsyncMs, VSYNC_60_MS)) slow++
@@ -73,6 +80,7 @@ export function createSlowWatch() {
     },
     pause() {
       elapsed = frames = slow = 0
+      pausedAt ??= now()
     },
     /** Where the watch is, for `__nikverseWhy`: the seconds in the window, their share of slow frames, and whether it said so. */
     state: () => ({ seconds: seconds.length, share: Math.round(share() * 1000) / 1000, said }),

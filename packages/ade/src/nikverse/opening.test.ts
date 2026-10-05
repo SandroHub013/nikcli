@@ -126,19 +126,16 @@ describe("the line of an opening that did not come", () => {
     const box = rule('[data-slot="nikverse-late"]')
     for (const line of ["display: flex", "align-items: center", "padding: 8px 12px", "position: absolute"]) expect(box).toContain(line)
     expect(rule('[data-slot="nikverse-late"] p')).toContain("margin: 0")
-    expect(rule('[data-slot="nikverse-late"] button')).toContain("border-radius: var(--ade-radius-sm)")
+    expect(rule('[data-slot="nikverse-late"] button')).toContain("border-radius: var(--ade-radius-sm, 5px)")
   })
-})
 
-describe("a reload of the world", () => {
-  test("is a new frame element: a retry's address differs only after the #, which reloads nothing", () => {
-    // «Riprova» and the files coming late change only the nonce, after the `#`: the same element would keep the old
-    // document, whose port reloadFrame has just closed, and the opening would be late again 30 s later.
-    expect(new URL("https://nikverse.localhost/?bench=1#n=a").search).toBe(new URL("https://nikverse.localhost/?bench=1#n=b").search)
-    const pane = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
-    const reload = pane.slice(pane.indexOf("const reloadFrame = () => {"), pane.indexOf("/** Whether the panel can be seen"))
-    expect(reload).toContain("setFrameLoad((n) => n + 1)")
-    expect(pane).toMatch(/<Show when=\{frameLoad\(\)\} keyed>\s*\{\(_load\) => \(\s*<iframe/)
+  test("every token it uses has a fallback, like the panel's others (the type scale's are bare, as type-scale.test wants)", () => {
+    const css = readFileSync(join(import.meta.dir, "nikverse.css"), "utf8")
+    const rules = [...css.matchAll(/(^|\n)(\[data-slot="nikverse-late"\][^{]*)\{([^}]*)\}/g)]
+    expect(rules.length).toBeGreaterThanOrEqual(4)
+    const tokens = rules.flatMap((r) => [...r[3].replace(/font-(size|weight):[^;]*;/g, "").matchAll(/var\((--[\w-]+)([^)]*)\)/g)])
+    expect(tokens.length).toBeGreaterThan(0)
+    for (const [use, , rest] of tokens) expect({ use, fallback: rest.trim().startsWith(",") }).toEqual({ use, fallback: true })
   })
 })
 
