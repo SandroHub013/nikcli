@@ -237,19 +237,35 @@ async function runProcessor(
 }
 
 describe("SessionProcessor retry safety", () => {
-  it("does not replay a completed text part when the next stream event fails", async () => {
+  it("retries after a completed text part and does not leave it next to the new attempt's text", async () => {
     const result = await runProcessor(async function* () {
       yield* success()
       throw apiFailure()
     })
-    expect(result.calls).toBe(1)
-    expect(result.waits).toEqual([])
-    expect(result.events.some((event) => event.type === "removed")).toBe(false)
-    expect(result.parts).toMatchObject([{ type: "text", text: "recovered output" }])
-    expect(result.info.error).toMatchObject({
-      name: "APIError",
-      data: { statusCode: 503 },
+    // Every attempt streams the text and then fails, so the budget runs out; what is left is one text part, not six.
+    expect(result.calls).toBe(SessionRetry.RETRY_MAX_ATTEMPTS + 1)
+    expect(result.events.filter((event) => event.type === "removed")).toHaveLength(SessionRetry.RETRY_MAX_ATTEMPTS)
+    expect(result.parts.filter((part) => part.type === "text")).toHaveLength(1)
+    expect(result.info.error).toMatchObject({ name: "APIError", data: { statusCode: 503 } })
+  })
+
+  it("recovers when the first attempt fails after its text and the second completes", async () => {
+    const result = await runProcessor(async function* (attempt) {
+      if (attempt === 1) {
+        yield { type: "text-start", id: "first" }
+        yield { type: "text-delta", id: "first", text: "half an answer" }
+        throw apiFailure()
+      }
+      yield* success()
     })
+    expect(result.calls).toBe(2)
+    expect(result.errors).toEqual([])
+    expect(result.info.error).toBeUndefined()
+    // The half answer is gone from storage; only the second attempt's text remains.
+    expect(result.parts.filter((part) => part.type === "text")).toMatchObject([{ type: "text", text: "recovered output" }])
+    const partial = result.events.findIndex((event) => event.type === "updated" && event.text === "half an answer")
+    expect(partial).toBeGreaterThanOrEqual(0)
+    expect(result.events.some((event) => event.type === "removed" && event.partID === result.events[partial]?.partID)).toBe(true)
   })
 
   it("retries after an empty reasoning start without publishing the discarded part", async () => {
@@ -423,16 +439,12 @@ describe("SessionProcessor retry safety", () => {
   })
 
   for (const kind of ["reasoning", "text"] as const) {
-    it(`preserves partial ${kind} published to Bus and stops without retry`, async () => {
+    it(`discards partial ${kind} published to Bus and retries`, async () => {
       const result = await runProcessor(async function* (attempt) {
         if (attempt === 1) {
           if (kind === "reasoning") {
             yield { type: "reasoning-start", id: "partial" }
-            yield {
-              type: "reasoning-delta",
-              id: "partial",
-              text: "partial output",
-            }
+            yield { type: "reasoning-delta", id: "partial", text: "partial output" }
           } else {
             yield { type: "text-start", id: "partial" }
             yield { type: "text-delta", id: "partial", text: "partial output" }
@@ -441,21 +453,19 @@ describe("SessionProcessor retry safety", () => {
         }
         yield* success()
       })
-      expect(result.calls).toBe(1)
-      expect(result.waits).toEqual([])
+      expect(result.calls).toBe(2)
+      expect(result.waits).toEqual([0])
       const partial = result.events.findIndex((event) => event.type === "updated" && event.text === "partial output")
       expect(partial).toBeGreaterThanOrEqual(0)
       const removed = result.events.findIndex(
         (event) => event.type === "removed" && event.partID === result.events[partial]?.partID,
       )
-      expect(removed).toBe(-1)
-      expect(result.events.some((event) => event.text === "recovered output")).toBe(false)
-      expect(result.parts).toMatchObject([{ type: kind, text: "partial output" }])
-      expect(result.info.error).toMatchObject({
-        name: "APIError",
-        data: { statusCode: 503 },
-      })
-      expect(result.errors).toEqual([result.info.error] as typeof result.errors)
+      expect(removed).toBeGreaterThan(partial)
+      expect(result.parts.filter((part) => part.type !== "step-start")).toMatchObject([
+        { type: "text", text: "recovered output" },
+      ])
+      expect(result.info.error).toBeUndefined()
+      expect(result.errors).toEqual([])
       expect(result.info.time.completed).toBeNumber()
     })
   }
@@ -501,35 +511,25 @@ describe("SessionProcessor retry safety", () => {
   })
 
   for (const kind of ["text", "reasoning"] as const) {
-    it(`stops a native provider failure after partial ${kind} without retrying`, async () => {
+    // The field case (Terminal-Bench make-doom-for-mips): the provider's own 504 "Upstream idle timeout exceeded"
+    // arrives inside the stream after the model had started to answer, with nothing irreversible done.
+    it(`retries a native provider failure after partial ${kind}, and removes the partial part`, async () => {
       async function* native(): AsyncGenerator<LLMEvent> {
-        yield {
-          type: `${kind}-delta`,
-          id: "native-part",
-          text: "native partial output",
-        }
+        yield { type: `${kind}-delta`, id: "native-part", text: "native partial output" }
         yield {
           type: "provider-error",
-          message: "overloaded",
+          message: "Upstream idle timeout exceeded",
           retryable: true,
-          providerMetadata: { provider: { statusCode: 503 } },
+          providerMetadata: { openrouter: { statusCode: 504 } },
         }
       }
-      const result = await runProcessor(() => toProcessorStream(native()))
-      expect(result.calls).toBe(1)
-      expect(result.waits).toEqual([])
-      expect(result.events.some((event) => event.type === "removed")).toBe(false)
-      // The native stream opens its step like any other, so a step-start part leads the content.
-      expect(result.parts.filter((part) => part.type !== "step-start")).toMatchObject([
-        { type: kind, text: "native partial output" },
-      ])
-      expect(result.parts.some((part) => part.type === "step-finish")).toBe(false)
-      expect(result.info.finish).toBeUndefined()
-      expect(result.info.error).toMatchObject({
-        name: "APIError",
-        data: { statusCode: 503 },
-      })
-      expect(result.errors).toEqual([result.info.error] as typeof result.errors)
+      const result = await runProcessor((attempt) => (attempt === 1 ? toProcessorStream(native()) : success()))
+      expect(result.calls).toBe(2)
+      expect(result.waits).toHaveLength(1)
+      expect(result.parts.filter((part) => part.type === "text")).toMatchObject([{ type: "text", text: "recovered output" }])
+      expect(result.parts.some((part) => part.type === "reasoning")).toBe(false)
+      expect(result.info.error).toBeUndefined()
+      expect(result.errors).toEqual([])
     })
   }
 })

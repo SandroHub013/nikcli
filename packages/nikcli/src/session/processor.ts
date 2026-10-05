@@ -169,6 +169,11 @@ export namespace SessionProcessor {
     let rateAttempt = 0
     let rateWaited = 0
     let needsCompaction = false
+    // True once the attempt did something a retry cannot take back: a tool call was started (it may have run,
+    // so a second attempt would repeat its effect), or a step was finished. Streamed text and reasoning do not
+    // count: a retry removes those parts (`cleanupRetryAttempt`) and the new attempt writes its own, so a provider
+    // that times out in the middle of a long answer is retried like one that fails before the first token. The name
+    // is kept from 1.422, where any streamed part blocked the retry (P19 narrows it).
     let outputEmitted = false
     // Ring buffer for doom-loop detection - avoids repeated storage I/O
     const doomLoopBuffer: Array<{ tool: string; input: unknown }> = []
@@ -187,7 +192,7 @@ export namespace SessionProcessor {
       )
 
     const updatePart = (part: MessageV2.Part) => {
-      if (part.type !== "step-start") outputEmitted = true
+      if (part.type !== "step-start" && part.type !== "text" && part.type !== "reasoning") outputEmitted = true
       return runSession(
         Effect.gen(function* () {
           const session = yield* Session.Service
@@ -221,7 +226,6 @@ export namespace SessionProcessor {
     // projector (with `publish: false`, since the bus already heard every
     // delta) so the row is written in exactly one place.
     async function updatePartCoalesced(part: MessageV2.TextPart | MessageV2.ReasoningPart, delta: string) {
-      outputEmitted = true
       Bus.publish(MessageV2.Event.PartUpdated, { part, delta })
       const key = ["part", part.messageID, part.id]
       coalescer.schedule(key, part, async (_k, content) => {
@@ -675,7 +679,6 @@ export namespace SessionProcessor {
                       }),
                     )
                     textPart.text = textOutput.text
-                    if (textPart.text) outputEmitted = true
                     textPart.time = {
                       start: textPart.time?.start ?? Date.now(),
                       end: Date.now(),
@@ -713,7 +716,7 @@ export namespace SessionProcessor {
                 stack: JSON.stringify(e.stack),
               })
             }
-            // Removing a part cannot retract streamed output or undo a tool call.
+            // A retry removes the attempt's streamed text and reasoning, but cannot undo a tool call (see outputEmitted).
             const rateLimited =
               !interrupted && !outputEmitted && MessageV2.APIError.isInstance(error) && SessionRetry.isRateLimit(error)
             const retry =
