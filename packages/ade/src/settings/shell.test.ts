@@ -755,6 +755,207 @@ describe("S6: la chiave OpenRouter sta in Chiavi API", () => {
   })
 })
 
+describe("T5b: lo streaming in Riconoscimento", () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const recognition = (voice: Record<string, unknown>) =>
+    renderSettingsSheet({ initialTarget: "voice/recognition", voice })
+  const status = () => document.body.querySelector('[data-stream="status"]')?.textContent
+  const grok = { ...DEFAULT_VOICE_SETTINGS, backend: "grok-stream" as const, openRouterApiKey: "sk-or-finta-0000abcd" }
+
+  test("due motori da scegliere: Grok in tempo reale e MAI-Transcribe-2; un clic passa a MAI", () => {
+    const changes: { backend: string }[] = []
+    recognition({ voiceSettings: grok, onVoiceSettingsChange: (next: { backend: string }) => changes.push(next) })
+    const radios = [...document.body.querySelectorAll('[data-slot="backend-list"] [role="radio"]')]
+    expect(radios.map((radio) => radio.getAttribute("data-value"))).toEqual(["grok-stream", "openrouter"])
+    expect(radios[0]!.getAttribute("aria-checked")).toBe("true")
+    expect(radios[0]!.textContent).toContain("Grok in tempo reale (xAI)")
+    expect(radios[1]!.textContent).toContain("MAI-Transcribe-2 (OpenRouter)")
+    ;(radios[1] as HTMLElement).click()
+    expect(changes.at(-1)?.backend).toBe("openrouter")
+  })
+
+  test("streaming scelto senza chiave xAI: lo dice, e trascrive MAI-Transcribe-2", () => {
+    recognition({ voiceSettings: grok, xaiKeyMasked: null })
+    expect(status()).toBe("Streaming: nessuna chiave xAI, trascrivo con MAI-Transcribe-2")
+  })
+
+  test("con la chiave xAI dice lo streaming attivo con la coda della chiave; rifiutata, il motivo e «Riprova»", () => {
+    let retried = 0
+    recognition({
+      voiceSettings: grok,
+      xaiKeyMasked: "••••wxyz",
+      streamState: { kind: "auth" },
+      onRetryStream: () => {
+        retried++
+      },
+    })
+    expect(status()).toBe("Chiave xAI rifiutata: trascrivo con MAI-Transcribe-2")
+    document.body.querySelector<HTMLButtonElement>("[data-stream-retry]")!.click()
+    expect(retried).toBe(1)
+    dispose?.()
+    document.body.innerHTML = ""
+    recognition({ voiceSettings: grok, xaiKeyMasked: "••••wxyz", onRetryStream: () => {} })
+    expect(status()).toBe("Streaming attivo, chiave xAI ••••wxyz")
+    expect(document.body.querySelector("[data-stream-retry]")).toBeNull()
+  })
+
+  test("il tetto del giorno si cambia qui, fra 0 e 5 dollari", () => {
+    const changes: { streamDailyCapUsd: number }[] = []
+    recognition({
+      voiceSettings: grok,
+      xaiKeyMasked: "••••wxyz",
+      onVoiceSettingsChange: (next: { streamDailyCapUsd: number }) => changes.push(next),
+    })
+    const input = document.body.querySelector<HTMLInputElement>("#voice-stream-cap")!
+    expect(input.value).toBe("0.5")
+    input.value = "1,25"
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+    expect(changes.at(-1)?.streamDailyCapUsd).toBe(1.25)
+    input.value = "9"
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+    expect(changes.at(-1)?.streamDailyCapUsd).toBe(5)
+    const before = changes.length
+    input.value = "abc"
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+    expect(changes).toHaveLength(before)
+  })
+
+  test("il tetto non si mostra con MAI-Transcribe-2 scelto", () => {
+    recognition({ voiceSettings: { ...grok, backend: "openrouter" } })
+    expect(document.body.querySelector("#voice-stream-cap")).toBeNull()
+    expect(status()).toBe("Trascrive MAI-Transcribe-2, a frase finita")
+  })
+
+  test("la spesa del giorno tiene lo streaming separato dal resto", () => {
+    recognition({
+      voiceSettings: grok,
+      voiceEngine: {
+        ...(fakeVoiceEngine as object),
+        listenSpend: () => ({ day: "2026-10-05", calls: 3, cost: 0.02, streamSeconds: 600, streamCost: 0.04 }),
+      },
+    })
+    const spend = document.body.querySelector('[data-stream="spend"]')!.textContent!
+    const other = document.body.querySelector('[data-stream="spend-other"]')!.textContent!
+    expect(spend).toContain("10 min")
+    expect(spend).toContain("0,04")
+    expect(other).toContain("3 richieste")
+    expect(other).toContain("0,02")
+    expect(other).not.toContain("0,04")
+  })
+
+  test("senza la chiave OpenRouter una riga dice che la voce non parte, anche con la chiave xAI (B3)", () => {
+    recognition({ voiceSettings: { ...grok, openRouterApiKey: undefined }, xaiKeyMasked: "••••wxyz" })
+    expect(document.body.querySelector("[data-needs-openrouter]")?.textContent).toBe(
+      "Senza la chiave OpenRouter la voce non parte, anche con la chiave xAI.",
+    )
+    dispose?.()
+    document.body.innerHTML = ""
+    recognition({ voiceSettings: grok, xaiKeyMasked: "••••wxyz" })
+    expect(document.body.querySelector("[data-needs-openrouter]")).toBeNull()
+  })
+
+  test("il testo lungo sta in «Come funziona», chiuso finché non lo si apre", () => {
+    recognition({ voiceSettings: grok })
+    expect(document.body.textContent).not.toContain("0,20 $ l'ora")
+    const toggle = [...document.body.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Come funziona"),
+    )!
+    toggle.click()
+    expect(document.body.textContent).toContain("0,20 $ l'ora")
+  })
+})
+
+describe("T5b: la chiave xAI in Chiavi API", () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+  /** Un portachiavi finto: nomi e code mascherate, valori mai restituiti. */
+  const fakeKeys = (initial: { name: string; env: string; masked?: string }[]) => {
+    const keys = initial.map((key) => ({ ...key, agents: [] as string[], createdMs: 0 }))
+    const saved: { name: string; env: string; agents: readonly string[]; value?: string }[] = []
+    const removed: string[] = []
+    const host = {
+      list: async () => keys.map((key) => ({ ...key })),
+      save: async (draft: { name: string; env: string; agents: readonly string[]; value?: string }) => {
+        saved.push(draft)
+        keys.push({
+          name: draft.name,
+          env: draft.env,
+          masked: "••••" + draft.value!.slice(-4),
+          agents: [],
+          createdMs: 0,
+        })
+      },
+      remove: async (name: string) => {
+        removed.push(name)
+        keys.splice(
+          keys.findIndex((key) => key.name === name),
+          1,
+        )
+      },
+      copy: async () => 30,
+    }
+    return { host, saved, removed }
+  }
+  const block = () => document.body.querySelector("[data-xai-key]")
+
+  test("senza chiave: un campo password e «Salva», che salva «xAI» su XAI_API_KEY per nessun agente", async () => {
+    const keys = fakeKeys([{ name: "OpenRouter", env: "OPENROUTER_API_KEY", masked: "••••abcd" }])
+    renderSettingsSheet({ initialTarget: "agents/keys", voice: { keysHost: () => keys.host } })
+    await tick()
+    const field = block()!.querySelector<HTMLInputElement>('input[type="password"][data-xai-input]')!
+    field.value = "xai-finta-1234"
+    block()!
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await tick()
+    await tick()
+    expect(keys.saved).toEqual([{ name: "xAI", env: "XAI_API_KEY", agents: [], value: "xai-finta-1234" }])
+    expect(block()!.querySelector("[data-xai-input]")).toBeNull()
+    expect(block()!.textContent).toContain("Salvata (••••1234)")
+    expect(block()!.textContent).not.toContain("xai-finta")
+  })
+
+  test("salvata: dice se la usa la trascrizione o se è stata rifiutata", async () => {
+    const keys = fakeKeys([{ name: "xAI", env: "XAI_API_KEY", masked: "••••wxyz" }])
+    renderSettingsSheet({
+      initialTarget: "agents/keys",
+      voice: { keysHost: () => keys.host, voiceSettings: { ...DEFAULT_VOICE_SETTINGS, backend: "grok-stream" } },
+    })
+    await tick()
+    expect(block()!.querySelector("[data-xai-status]")?.textContent).toBe("Salvata (••••wxyz)Usata dalla trascrizione")
+    dispose?.()
+    document.body.innerHTML = ""
+    renderSettingsSheet({
+      initialTarget: "agents/keys",
+      voice: {
+        keysHost: () => keys.host,
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, backend: "grok-stream" },
+        streamState: { kind: "auth" },
+      },
+    })
+    await tick()
+    expect(block()!.querySelector("[data-xai-status]")?.getAttribute("data-xai-status")).toBe("refused")
+    expect(block()!.textContent).toContain("Rifiutata")
+  })
+
+  test("«Rimuovi» chiede conferma con le parole giuste, e solo «Togli» la toglie", async () => {
+    const keys = fakeKeys([{ name: "xAI", env: "XAI_API_KEY", masked: "••••wxyz" }])
+    renderSettingsSheet({ initialTarget: "agents/keys", voice: { keysHost: () => keys.host } })
+    await tick()
+    block()!.querySelector<HTMLButtonElement>("[data-xai-remove]")!.click()
+    expect(block()!.querySelector("[data-xai-confirm]")?.textContent).toContain(
+      "Togliere la chiave xAI? La trascrizione torna a MAI-Transcribe-2.",
+    )
+    block()!.querySelector<HTMLButtonElement>("[data-xai-remove-no]")!.click()
+    expect(keys.removed).toEqual([])
+    block()!.querySelector<HTMLButtonElement>("[data-xai-remove]")!.click()
+    block()!.querySelector<HTMLButtonElement>("[data-xai-remove-yes]")!.click()
+    await tick()
+    await tick()
+    expect(keys.removed).toEqual(["xAI"])
+    expect(block()!.querySelector("[data-xai-input]")).not.toBeNull()
+  })
+})
+
 describe("settings shell: the frame holds the panel", () => {
   const rule = (selector: string) => {
     const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))

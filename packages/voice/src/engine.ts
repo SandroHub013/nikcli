@@ -209,6 +209,11 @@ export interface VoiceEngine {
   readonly listenHalted: () => boolean
   /** Whether a tap is holding the microphone open until the next press. */
   readonly isLatched: () => boolean
+  /**
+   * Lets the open session try the stream again: a new xAI key was saved, or the
+   * user pressed «Riprova». A session that is not streaming has nothing to clear.
+   */
+  retryStream(): void
 
   // Control methods
   /**
@@ -1008,7 +1013,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
               costToday: () => spendTally.today(now()).streamCost ?? 0,
               addSeconds: (seconds: number) => void spendTally.addStream(now(), seconds),
             },
-            dailyCapUsd: s.streamDailyCapUsd,
+            // A getter: the cap moves in the settings without a new transcriber (review T5a, B2).
+            dailyCapUsd: () => currentSettings().streamDailyCapUsd,
           }
         : undefined,
     })
@@ -1454,6 +1460,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     isLatched: () => latched,
     followUp,
 
+    retryStream(): void {
+      const transcriber = activeTranscriber as (Transcriber & { retryStreaming?: () => void }) | null
+      transcriber?.retryStreaming?.()
+    },
+
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean; automatic?: boolean }): Promise<void> {
       if (startInFlight) return startInFlight
       const result = enqueueLifecycle((generation) => startNow(mode, startOptions, generation))
@@ -1765,8 +1776,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        */
       const backendChanged =
         normalized.backend !== prev.backend ||
-        // Baked into the transcriber at construction, like the language.
-        normalized.streamDailyCapUsd !== prev.streamDailyCapUsd ||
+        // Not the stream's cap: it is read before every socket, so moving it restarts nothing.
         normalized.openRouterApiKey !== prev.openRouterApiKey ||
         normalized.language !== prev.language ||
         normalized.inputDeviceId !== prev.inputDeviceId

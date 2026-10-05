@@ -68,6 +68,7 @@ import {
   type LegacyVoiceKey,
   type VoiceKeyHost,
 } from "../secrets/voice-key"
+import { XAI_KEY_ENV, xaiKeyEntry } from "../secrets/xai-key"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -559,6 +560,7 @@ import {
   maiReplyVoice,
   settleMai,
   type MaiFailureKind,
+  type StreamState,
 } from "@nikcli-ai/voice"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
@@ -919,7 +921,9 @@ export function Workbench() {
    * The page's saves and deletions also reach the voice when they touch its
    * key (`OPENROUTER_API_KEY`): removed here, the voice stops spending it at
    * the next sentence and nikcli's copy does not bring it back; saved here,
-   * the voice uses it from the next sentence.
+   * the voice uses it from the next sentence. The xAI key (`XAI_API_KEY`) is
+   * read by Rust at each socket, so the page only lifts a refusal when a new
+   * one is saved, and closes the open socket when it is removed.
    */
   const keysService: KeysHost = {
     list: () => withKeys().then((host) => host.listSecrets()),
@@ -929,14 +933,23 @@ export function Workbench() {
         clearOpenRouterKeyRemoved()
         void refreshVoiceKey()
       }
+      if (draft.env === XAI_KEY_ENV) {
+        voiceEngine.retryStream()
+        setStreamState({ kind: "ready" })
+        void refreshXaiKey()
+      }
     },
     remove: async (name) => {
       const host = await withKeys()
-      const wasVoice = (await host.listSecrets()).some((key) => key.name === name && key.env === VOICE_KEY_ENV)
+      const env = (await host.listSecrets()).find((key) => key.name === name)?.env
       await host.deleteSecret(name)
-      if (wasVoice) {
+      if (env === VOICE_KEY_ENV) {
         markOpenRouterKeyRemoved()
         void refreshVoiceKey()
+      }
+      if (env === XAI_KEY_ENV) {
+        sttTransport.cancel()
+        void refreshXaiKey()
       }
     },
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
@@ -5327,6 +5340,21 @@ export function Workbench() {
    */
   const voiceSpend = createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
   const [maiBlocked, setMaiBlocked] = createSignal<MaiFailureKind | undefined>(undefined)
+  /** Why the streaming transcription is or is not writing, as the open transcriber last said. */
+  const [streamState, setStreamState] = createSignal<StreamState | undefined>(undefined)
+  /** The xAI key's masked tail from the keychain, `null` without one; undefined until read. Never the value. */
+  const [xaiKeyMasked, setXaiKeyMasked] = createSignal<string | null | undefined>(undefined)
+  const refreshXaiKey = async () => {
+    if (!keysAvailable()) return
+    const keys = await keysService.list().catch(() => undefined)
+    if (keys) setXaiKeyMasked(xaiKeyEntry(keys)?.masked ?? null)
+  }
+  // Read once the keychain answers: only whether there is a key, and its masked tail (T5b).
+  createEffect(() => {
+    if (keysAvailable()) void refreshXaiKey()
+  })
+  // The socket the streaming backend speaks over: kept, so removing the xAI key can close it.
+  const sttTransport = createSttStreamTransport()
   // ADE Test never spends a key: with no key, MAI reads locally in silence.
   const maiClient = {
     apiKey: () => (testBuild ? undefined : voiceSettings().openRouterApiKey || undefined),
@@ -5414,7 +5442,7 @@ export function Workbench() {
     settings: voiceSettings(),
     // The socket the streaming backend speaks over: built here, over the Rust
     // host, and handed to whichever backend the settings chose.
-    backendOptions: { grokStreamOptions: { transport: createSttStreamTransport() } },
+    backendOptions: { grokStreamOptions: { transport: sttTransport, onStreamState: setStreamState } },
     // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
     onDictationTap: () =>
       report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
@@ -9706,6 +9734,12 @@ export function Workbench() {
           onTestVoice={testReplyVoice}
           maiBlocked={maiBlocked()}
           onRetryMai={() => maiSpeaker.retry()}
+          xaiKeyMasked={xaiKeyMasked()}
+          streamState={streamState()}
+          onRetryStream={() => {
+            voiceEngine.retryStream()
+            setStreamState({ kind: "ready" })
+          }}
           testIdentity={testBuild}
           bindings={bindings}
           voiceSettingsNotice={voiceSettingsNotice()}

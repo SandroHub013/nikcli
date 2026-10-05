@@ -59,11 +59,16 @@ export function voiceKeyEntry(keys: readonly KeyInfo[]): KeyInfo | undefined {
  * saving under its name would turn it into this one.
  */
 export function freeVoiceKeyName(keys: readonly KeyInfo[]): string {
+  return freeKeyName(keys, VOICE_KEY_NAME)
+}
+
+/** `base`, or `base 2`, `base 3`…: the first name no key has. */
+export function freeKeyName(keys: readonly KeyInfo[], base: string): string {
   const taken = new Set(keys.map((key) => key.name))
-  if (!taken.has(VOICE_KEY_NAME)) return VOICE_KEY_NAME
+  if (!taken.has(base)) return base
   let n = 2
-  while (taken.has(`${VOICE_KEY_NAME} ${n}`)) n++
-  return `${VOICE_KEY_NAME} ${n}`
+  while (taken.has(`${base} ${n}`)) n++
+  return `${base} ${n}`
 }
 
 /**

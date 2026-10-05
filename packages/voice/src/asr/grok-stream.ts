@@ -143,6 +143,22 @@ export const STREAM_DAILY_CAP_USD = 0.5
 /** What a streamed hour counts against the cap, until settings carry their own rate. */
 export const STREAM_USD_PER_HOUR = 0.2
 
+/**
+ * Why the stream is not carrying sentences right now, for the settings page.
+ *
+ * `ready` is the stream as it should be; the others say why the sentences go
+ * to MAI-Transcribe-2 instead: the key refused (until «Riprova» or a new key),
+ * the credit gone (a day), a pause after a refusal or a network failure (until
+ * `until`), the day's cap reached. No key at all is not here: the page knows it
+ * from the keychain, and nothing is latched for it.
+ */
+export type StreamState =
+  | { readonly kind: "ready" }
+  | { readonly kind: "auth" }
+  | { readonly kind: "credit"; readonly until: number }
+  | { readonly kind: "paused"; readonly until: number }
+  | { readonly kind: "cap" }
+
 /** Where streamed audio is counted, so the cap can stop it in time. */
 export interface StreamSpend {
   /** Dollars of streaming audio counted so far today. */
@@ -168,8 +184,13 @@ export interface GrokStreamTranscriberOptions extends TranscriberOptions {
   keyterms?: readonly string[]
   /** Where streamed seconds are counted; a local counter is used when absent. */
   spend?: StreamSpend
-  /** Dollars of streaming allowed per day (default 0.50). */
-  dailyCapUsd?: number
+  /**
+   * Dollars of streaming allowed per day (default 0.50). A getter is read before
+   * every socket, so moving the cap in the settings needs no new transcriber.
+   */
+  dailyCapUsd?: number | (() => number)
+  /** Told whenever the reason the stream is (or is not) carrying sentences changes. */
+  onStreamState?: (state: StreamState) => void
   /** Dollars a streamed hour counts for, with the local counter (default 0.20). */
   usdPerHour?: number
   /** Silence after a rate or unavailability refusal (default 60 s). */
@@ -294,7 +315,21 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
   const pauseRateMs = options.pauseRateMs ?? 60_000
   const pauseNetworkMs = options.pauseNetworkMs ?? 30_000
   const doneTimeoutMs = options.doneTimeoutMs ?? 5_000
-  const dailyCapUsd = options.dailyCapUsd ?? STREAM_DAILY_CAP_USD
+  const capOption = options.dailyCapUsd
+  const dailyCapUsd = (): number => {
+    const value = typeof capOption === "function" ? capOption() : capOption
+    return typeof value === "number" && Number.isFinite(value) ? value : STREAM_DAILY_CAP_USD
+  }
+  let lastState = "ready"
+  /** Tells the page, once per change: a state repeated on every segment is not news. */
+  const tellState = (state: StreamState) => {
+    const key = state.kind === "credit" || state.kind === "paused" ? `${state.kind}:${state.until}` : state.kind
+    if (key === lastState) return
+    lastState = key
+    options.onStreamState?.(state)
+  }
+  // A new transcriber starts with nothing latched: the page drops what the last one said.
+  options.onStreamState?.({ kind: "ready" })
 
   let partialCb: PartialTranscriptCallback = options.onPartial ?? (() => {})
   let finalCb: FinalTranscriptCallback = options.onFinal ?? (() => {})
@@ -387,7 +422,8 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
     if (nowMs >= creditUntil) creditWarned = false
     if (nowMs < creditUntil) return false
     if (nowMs < retryAt) return false
-    if (spend.costToday() >= dailyCapUsd) {
+    if (spend.costToday() >= dailyCapUsd()) {
+      tellState({ kind: "cap" })
       if (!capWarned) {
         capWarned = true
         errorCb(
@@ -400,6 +436,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       return false
     }
     capWarned = false
+    tellState({ kind: "ready" })
     return true
   }
 
@@ -413,6 +450,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         break
       case "auth":
         authLatched = true
+        tellState({ kind: "auth" })
         if (!authWarned) {
           authWarned = true
           errorCb(new Error("La chiave xAI non funziona: trascrivo con MAI-Transcribe-2."), { purpose: "turn" })
@@ -420,6 +458,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         break
       case "credit":
         creditUntil = nowMs + 24 * 3_600_000
+        tellState({ kind: "credit", until: creditUntil })
         if (!creditWarned) {
           creditWarned = true
           errorCb(new Error("Il credito xAI è finito: trascrivo con MAI-Transcribe-2 finché non lo ricarichi."), {
@@ -431,10 +470,12 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       case "unavailable":
       case "backpressure":
         retryAt = Math.max(retryAt, nowMs + pauseRateMs)
+        tellState({ kind: "paused", until: retryAt })
         break
       case "network":
       case "timeout":
         retryAt = Math.max(retryAt, nowMs + pauseNetworkMs)
+        tellState({ kind: "paused", until: retryAt })
         break
       case "protocol":
         // Mid-sentence, on this one segment only: the batch takes it over and
@@ -806,6 +847,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       creditUntil = 0
       retryAt = 0
       capWarned = false
+      tellState({ kind: "ready" })
     },
 
     startSegment(): void {

@@ -8,6 +8,7 @@ import {
   type SttStreamOpenOptions,
   type SttStreamTransport,
   type StreamSpend,
+  type StreamState,
 } from "./grok-stream"
 import { createMicCapture, encodeWav, type CapturedSegment, type SegmentAudio } from "../audio/capture"
 import type { TranscriptEvent } from "./transcriber"
@@ -43,6 +44,8 @@ function setup(
     keyterms?: readonly string[]
     nameGate?: NameGate
     spend?: StreamSpend
+    dailyCapUsd?: number | (() => number)
+    onStreamState?: (state: StreamState) => void
     doneTimeoutMs?: number
     /** Milliseconds each `send` settles after, by call order: a slow transport. */
     sendDelays?: number[]
@@ -104,6 +107,8 @@ function setup(
     capture,
     nameGate: options.nameGate,
     spend: options.spend,
+    dailyCapUsd: options.dailyCapUsd,
+    onStreamState: options.onStreamState,
     doneTimeoutMs: options.doneTimeoutMs,
     keyterms: options.keyterms,
     onPartial: (text) => partials.push(text),
@@ -298,6 +303,69 @@ describe("asr/grok-stream counting the seconds and the cap", () => {
     h.close(2, 1_200)
     expect(h.batches).toHaveLength(2)
     expect(h.errors).toHaveLength(1)
+  })
+
+  test("the cap is read before every socket: raising it in the settings opens the next one", async () => {
+    let cap = 0.5
+    const spend: StreamSpend = { costToday: () => 0.6, addSeconds: () => {} }
+    const h = setup({ spend, dailyCapUsd: () => cap })
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    expect(h.opens).toHaveLength(0)
+    h.close(1, 1_200)
+
+    cap = 1
+    h.startSeg(2)
+    await h.tick()
+    expect(h.opens).toHaveLength(1)
+  })
+})
+
+describe("asr/grok-stream state for the settings page", () => {
+  test("says why the stream stopped, once per change, and «Riprova» says it is back", async () => {
+    const states: StreamState[] = []
+    const h = setup({ onStreamState: (state) => states.push(state) })
+    expect(states).toEqual([{ kind: "ready" }])
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    h.emit({ kind: "failed", reason: "auth" })
+    h.endSeg(1)
+    h.close(1, 1_000)
+    h.startSeg(2)
+    await h.tick()
+    h.close(2, 1_000)
+    expect(states.map((state) => state.kind)).toEqual(["ready", "auth"])
+
+    h.transcriber.retryStreaming()
+    expect(states.at(-1)).toEqual({ kind: "ready" })
+  })
+
+  test("a rate refusal is a pause with its end, and the cap is said as the cap", async () => {
+    const states: StreamState[] = []
+    let cost = 0
+    const spend: StreamSpend = { costToday: () => cost, addSeconds: () => {} }
+    const h = setup({ spend, dailyCapUsd: 0.5, onStreamState: (state) => states.push(state) })
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    h.emit({ kind: "failed", reason: "rate" })
+    h.endSeg(1)
+    h.close(1, 1_000)
+    const paused = states.at(-1)
+    expect(paused?.kind).toBe("paused")
+    expect(paused?.kind === "paused" && paused.until > Date.now()).toBe(true)
+
+    h.transcriber.retryStreaming()
+    cost = 0.5
+    h.startSeg(2)
+    await h.tick()
+    h.close(2, 1_000)
+    expect(states.at(-1)).toEqual({ kind: "cap" })
   })
 })
 

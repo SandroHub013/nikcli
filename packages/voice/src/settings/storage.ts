@@ -16,6 +16,7 @@ import {
   type ReplyVoice,
   type VoiceSettings,
 } from "./model"
+import type { TranscriberBackend } from "../asr/select"
 import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
@@ -109,7 +110,7 @@ export function loadVoiceSettings(storage?: Storage, options?: VoiceSettingsLoad
     // Also a profile of the current version that a migration still moved (a backend that was removed
     // after it was written): without the write it is moved, and told, at every start.
     if (merged !== null && (storedVersion !== normalized.settings.version || normalized.migrations.length > 0)) {
-      writeSettings(store, persisted(normalized.settings, replyVoiceOf(parsed), options))
+      writeSettings(store, persisted(normalized.settings, intendedOf(merged), options))
     }
 
     return normalized
@@ -118,31 +119,48 @@ export function loadVoiceSettings(storage?: Storage, options?: VoiceSettingsLoad
   }
 }
 
+/** What the profile asked for, before ADE Test's reading of it: the reply voice and the engine. */
+interface Intended {
+  readonly replyVoice: unknown
+  readonly backend: TranscriberBackend | undefined
+}
+
 /**
  * What is written, under ADE Test.
  *
- * ADE Test reads a voice that spends a key as Ugo (`normalizeSettings`), and
- * that is a reading, not a choice. Written back, it would put Ugo over the
- * user's Rosa the first time a test build opened the profile, so the MAI voice
- * the profile named, or the one a save asked for, is written as it was.
+ * ADE Test reads a voice that spends a key as Ugo, and the streaming engine as
+ * OpenRouter (`normalizeSettings`): readings, not choices. Written back, they
+ * would put Ugo over the user's Rosa, and OpenRouter over the user's stream,
+ * the first time a test build opened the profile or saved it. So the MAI voice
+ * and the engine the profile named, or the ones a save asked for, are written
+ * as they were.
  */
-function persisted(settings: VoiceSettings, intended: unknown, options?: VoiceSettingsLoadOptions): VoiceSettings {
+function persisted(settings: VoiceSettings, intended: Intended, options?: VoiceSettingsLoadOptions): VoiceSettings {
   if (!options?.testIdentity) return settings
-  const voice = intended as ReplyVoice
-  if (!REPLY_VOICES.includes(voice) || REPLY_BACKEND_BY_VOICE[voice] !== "mai") return settings
-  return { ...settings, replyVoice: voice, replyBackend: "mai" }
+  let written = settings
+  const voice = intended.replyVoice as ReplyVoice
+  if (REPLY_VOICES.includes(voice) && REPLY_BACKEND_BY_VOICE[voice] === "mai") {
+    written = { ...written, replyVoice: voice, replyBackend: "mai" }
+  }
+  if (intended.backend) written = { ...written, backend: intended.backend }
+  return written
 }
 
-function replyVoiceOf(parsed: unknown): unknown {
-  return typeof parsed === "object" && parsed !== null ? (parsed as { replyVoice?: unknown }).replyVoice : undefined
+/** The profile as a build that is not ADE Test would read it: the engine after its migrations. */
+function intendedOf(parsed: unknown): Intended {
+  if (typeof parsed !== "object" || parsed === null) return { replyVoice: undefined, backend: undefined }
+  return {
+    replyVoice: (parsed as { replyVoice?: unknown }).replyVoice,
+    backend: normalizeSettings(parsed).settings.backend,
+  }
 }
 
-function storedReplyVoice(store: Storage): unknown {
+function storedIntended(store: Storage): Intended {
   try {
     const raw = store.getItem(VOICE_SETTINGS_STORAGE_KEY)
-    return replyVoiceOf(raw ? JSON.parse(raw) : null)
+    return intendedOf(raw ? JSON.parse(raw) : null)
   } catch {
-    return undefined
+    return { replyVoice: undefined, backend: undefined }
   }
 }
 
@@ -241,7 +259,17 @@ export function saveVoiceSettings(
     }
   }
 
-  const intended = "replyVoice" in patch ? patch.replyVoice : storedReplyVoice(store)
+  /*
+   * A patch carries a choice only where it differs from what was read: hosts
+   * save the whole settings object, and in ADE Test that object holds the
+   * test's Ugo and OpenRouter, which the profile never chose.
+   */
+  const stored = storedIntended(store)
+  const chose = <K extends keyof VoiceSettings>(key: K) => key in patch && patch[key] !== current.settings[key]
+  const intended: Intended = {
+    replyVoice: chose("replyVoice") ? patch.replyVoice : stored.replyVoice,
+    backend: chose("backend") ? patch.backend : stored.backend,
+  }
   if (writeSettings(store, persisted(normalized.settings, intended, options))) {
     return normalized
   }
