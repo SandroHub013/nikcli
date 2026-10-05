@@ -1,5 +1,6 @@
 import { Config } from "../config/config"
 import { resolveLocale } from "../locale/resolve"
+import { scratchEnvLine } from "../util/scratch"
 import { Log } from "@nikcli-ai/util/log"
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
@@ -159,6 +160,7 @@ export namespace SystemPrompt {
         `  Workspace root folder: ${ctx.worktree}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
+        scratchEnvLine(),
         ...(packageManager ? [`  Package manager: ${packageManager}`] : []),
         `  Today's date: ${new Date().toDateString()}`,
         `  User locale: ${loc.locale}`,

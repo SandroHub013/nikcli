@@ -9,6 +9,15 @@ type Options = {
   kind?: Kind
 }
 
+/**
+ * Whether `target` sits outside the project — the question
+ * `assertExternalDirectory` asks before it asks anything. Answered without the
+ * permission prompt, for callers that only want to word an error better.
+ */
+export function isExternalPath(target: string): boolean {
+  return !Instance.containsPath(target)
+}
+
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
   if (!target) return
 

@@ -10,9 +10,11 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Bom } from "../util/bom"
+import { notFoundMessage } from "../util/scratch"
 import { Format } from "../format"
 import { buildFileDiff, trimDiff } from "./file-diff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isExternalPath } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
 
@@ -112,7 +114,7 @@ export const EditTool = Tool.define("edit", {
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => {})
-      if (!stats) throw new Error(`File not found: ${filePath}`)
+      if (!stats) throw new Error(notFoundMessage(filePath, ctx.instance.directory, isExternalPath(filePath)))
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       // opencode #39564: `Bun.file().text()` drops the BOM, so read it explicitly

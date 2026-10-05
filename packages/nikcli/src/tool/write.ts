@@ -10,6 +10,7 @@ import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Bom } from "../util/bom"
+import { withScratchHint } from "../util/scratch"
 import { Format } from "../format"
 import { buildFileDiff, readAfterMutation, trimDiff } from "./file-diff"
 import { assertExternalDirectory } from "./external-directory"
@@ -93,8 +94,14 @@ export const WriteTool = Tool.define("write", {
 
     const writtenBom = original.bom || contentBom
     const written = Bom.join(preserveLineEndingsAndBom(contentOld, contentText), writtenBom)
-    await Bun.write(filepath, written)
-    await Format.formatFile(filepath, writtenBom)
+    try {
+      await Bun.write(filepath, written)
+    } catch (error) {
+      // `Bun.write` creates missing parents itself, so a path the model invented arrives as a bare
+      // EPERM from mkdir. That turn is already spent; it comes back with the two places that do work.
+      throw withScratchHint(error, ctx.instance.directory)
+    }
+    const reformatted = await Format.formatFileReport(filepath, writtenBom, written)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
