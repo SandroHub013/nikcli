@@ -180,9 +180,11 @@ export function replyVoiceFor(chosen: ReplyVoice, locale: TtsLocale, local: Repl
   if (mai) {
     // Italian only. Any other language goes to the local voice, which is the
     // one the profile had before MAI and not a voice invented here: a profile
-    // that was on Kokoro stays on Kokoro. Nothing is written.
+    // that was on Kokoro stays on Kokoro. And it goes there the way that voice
+    // is read today, through the same rule: Ugo asked for English is Lessac.
+    // Nothing is written.
     if (locale === "it-IT") return chosen
-    return isMaiVoice(local) ? (mai.gender === "f" ? "paola" : "ugo") : local
+    return replyVoiceFor(localUnderMai(local), locale)
   }
   const kokoro = kokoroVoice(chosen)
   if (!kokoro) return piperVoiceFor(chosen, locale)
@@ -205,9 +207,14 @@ export function replyVoiceChain(chosen: ReplyVoice, locale: TtsLocale, local: Re
   if (first === "system") return ["system"]
   // MAI spends a key, so the step under it is the local voice the profile had:
   // a cloud that cannot answer is still an answer, and it is offline.
-  if (isMaiVoice(first)) return [first, replyVoiceFor(chosen, "en-US", local), "system"]
+  if (isMaiVoice(first)) return [first, replyVoiceFor(localUnderMai(local), locale), "system"]
   if (!isKokoroVoice(first)) return [first, "system"]
   return [first, piperVoiceFor("lessac", locale), "system"]
+}
+
+/** The local voice a MAI profile falls to: the one it had, or Ugo when what it remembers is MAI too. */
+function localUnderMai(local: ReplyVoice): ReplyVoice {
+  return isMaiVoice(local) ? "ugo" : local
 }
 
 /** Whether a plain string is one of the voices the catalog knows. */

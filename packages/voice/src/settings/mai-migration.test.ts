@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { CURRENT_SETTINGS_VERSION, DEFAULT_VOICE_SETTINGS, normalizeSettings, type VoiceSettings } from "./model"
-import { MAI_VOICES, acceptMaiVoice, isMaiVoice, maiReplyVoice, maiVoiceOfferPending } from "./reply-voices"
+import {
+  MAI_VOICES,
+  acceptMaiVoice,
+  isMaiVoice,
+  maiReplyVoice,
+  maiVoiceOfferPending,
+  replyVoiceChain,
+  replyVoiceFor,
+  speakingReplyVoice,
+} from "./reply-voices"
 
 function v8(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -48,10 +57,11 @@ describe("la migrazione a v9", () => {
     expect(twice.settings).toEqual(once.settings)
   })
 
-  test("una voce MAI sconosciuta torna a Rosa", () => {
+  test("una voce MAI sconosciuta torna a Ugo, non a una voce che spende la chiave", () => {
     const res = normalizeSettings(v8({ replyVoice: "it-IT-Nessuno", replyBackend: "mai" }))
-    expect(res.replyVoice).toBe("it-IT-Rosa")
-    expect(res.replyBackend).toBe("mai")
+    expect(res.replyVoice).toBe("ugo")
+    expect(res.replyBackend).toBe("piper")
+    expect(res.corrections.join()).toContain("it-IT-Nessuno")
   })
 
   test("Rosa su un altro backend torna su MAI, che è il suo", () => {
@@ -114,14 +124,14 @@ describe("MAI solo in italiano, frase per frase", () => {
     expect(maiReplyVoice({ ...rosa, text: "3.", ui: "en" })).toBe("af_heart")
   })
 
-  test("senza una voce locale ricordata, la risposta inglese va a Ugo", () => {
+  test("senza una voce locale ricordata, la risposta inglese va a Lessac, come oggi Ugo in inglese", () => {
     expect(
       maiReplyVoice({
         chosen: "it-IT-Luca",
         text: "The tests passed.",
         ui: "it",
       }),
-    ).toBe("ugo")
+    ).toBe("lessac")
   })
 
   test("il catalogo è le quattro voci italiane, e nient'altro", () => {
@@ -139,5 +149,60 @@ describe("MAI solo in italiano, frase per frase", () => {
       replyBackend: "mai",
     }
     expect(settings.replyBackend).toBe("mai")
+  })
+})
+
+describe("un profilo che c'era non passa al cloud da solo", () => {
+  test("di qualunque versione, senza replyVoice resta su Piper/Ugo", () => {
+    for (const raw of [{ version: 2 }, { version: 7 }, { version: 8 }, {}, { language: "it" }]) {
+      const res = normalizeSettings(raw)
+      expect(res.replyVoice).toBe("ugo")
+      expect(res.replyBackend).toBe("piper")
+    }
+  })
+
+  test("nuovo è solo un profilo vuoto, anche se ha già la chiave", () => {
+    for (const raw of [null, undefined, { openRouterApiKey: "sk-finta" }]) {
+      const res = normalizeSettings(raw)
+      expect(res.replyVoice).toBe("it-IT-Rosa")
+      expect(res.replyBackend).toBe("mai")
+    }
+  })
+
+  test("una voce corrotta torna a Ugo, anche in ADE Test", () => {
+    for (const testIdentity of [false, true]) {
+      const res = normalizeSettings(v8({ replyVoice: "bogus" }), { testIdentity })
+      expect(res.replyVoice).toBe("ugo")
+      expect(res.replyBackend).toBe("piper")
+    }
+  })
+
+  test("ADE Test non legge mai con Rosa, qualunque cosa dica il profilo", () => {
+    const stored = normalizeSettings(v8({ replyVoice: "it-IT-Rosa", replyBackend: "mai" }), { testIdentity: true })
+    expect(stored.replyVoice).toBe("ugo")
+    expect(stored.replyBackend).toBe("piper")
+    expect(stored.corrections).toEqual([])
+    for (const raw of [null, { openRouterApiKey: "sk-finta" }, { version: 7 }, {}]) {
+      expect(normalizeSettings(raw, { testIdentity: true }).replyVoice).toBe("ugo")
+    }
+  })
+})
+
+describe("una risposta non italiana su una voce MAI", () => {
+  test("va alla voce locale come oggi: Ugo in inglese è Lessac", () => {
+    expect(replyVoiceFor("ugo", "en-US")).toBe("lessac")
+    expect(replyVoiceFor("it-IT-Rosa", "en-US")).toBe("lessac")
+    expect(replyVoiceFor("it-IT-Rosa", "en-US", "paola")).toBe("lessac")
+    expect(replyVoiceFor("it-IT-Rosa", "en-US", "it-IT-Luca")).toBe("lessac")
+    expect(replyVoiceFor("it-IT-Rosa", "en-GB", "bm_george")).toBe("bm_george")
+    expect(speakingReplyVoice("it-IT-Rosa", "en-US", "it")).toBe("lessac")
+    expect(maiReplyVoice({ chosen: "it-IT-Rosa", local: "ugo", text: "The build is green again.", ui: "it" })).toBe(
+      "lessac",
+    )
+  })
+
+  test("in italiano, sotto MAI c'è la voce locale italiana", () => {
+    expect(replyVoiceChain("it-IT-Rosa", "it-IT")).toEqual(["it-IT-Rosa", "ugo", "system"])
+    expect(replyVoiceChain("it-IT-Rosa", "it-IT", "paola")).toEqual(["it-IT-Rosa", "paola", "system"])
   })
 })

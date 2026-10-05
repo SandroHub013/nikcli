@@ -116,8 +116,8 @@ describe("la coppia voce e backend", () => {
         ttsLocale: "it-IT",
       }),
     )
-    expect(res.replyVoice).toBe("it-IT-Rosa")
-    expect(res.replyBackend).toBe("mai")
+    expect(res.replyVoice).toBe("ugo")
+    expect(res.replyBackend).toBe("piper")
     expect(res.corrections.length).toBeGreaterThan(0)
   })
 })

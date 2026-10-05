@@ -391,13 +391,14 @@ describe("settings/model agentEngine", () => {
 })
 
 describe("settings/model replyVoice", () => {
-  test("Rosa by default, an unknown voice repaired to Rosa, a known one kept", () => {
+  test("Rosa by default, an unknown voice repaired to Ugo, a known one kept", () => {
     expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("it-IT-Rosa")
     const absent = normalizeSettings({
       ...DEFAULT_VOICE_SETTINGS,
       replyVoice: undefined,
+      replyBackend: "piper",
     } as never)
-    expect(absent.settings.replyVoice).toBe("it-IT-Rosa")
+    expect(absent.settings.replyVoice).toBe("ugo")
     expect(absent.corrections).toEqual([])
     // Giorgio was offered before D19 kept only Ugo and Paola.
     expect(
@@ -405,13 +406,13 @@ describe("settings/model replyVoice", () => {
         ...DEFAULT_VOICE_SETTINGS,
         replyVoice: "giorgio",
       } as never).settings.replyVoice,
-    ).toBe("it-IT-Rosa")
+    ).toBe("ugo")
     expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "paola" }).settings.replyVoice).toBe("paola")
     const unknown = normalizeSettings({
       ...DEFAULT_VOICE_SETTINGS,
       replyVoice: "kokoro",
     } as never)
-    expect(unknown.settings.replyVoice).toBe("it-IT-Rosa")
+    expect(unknown.settings.replyVoice).toBe("ugo")
     expect(unknown.corrections.join()).toContain("kokoro")
     expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "system" }).settings.replyVoice).toBe("system")
   })

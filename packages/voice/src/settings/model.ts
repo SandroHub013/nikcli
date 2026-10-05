@@ -464,18 +464,19 @@ function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
  * user did not make, and the question the panel asks once (`replyVoiceOffer`)
  * is the panel's to answer.
  *
- * A profile that names nothing is a new one, and a new one starts on Rosa.
- * ADE Test is the exception: a test run that spent a key would be a test run
- * that billed someone, so it stays on Piper. The key itself is not consulted
+ * A profile that names no voice is still a profile: of any version, it was
+ * speaking Ugo, and it goes on speaking Ugo. Only `fresh` — nothing stored but
+ * the key that lives in its own slot — is a new one, and a new one starts on
+ * Rosa. ADE Test is the exception: a test run that spent a key would be a test
+ * run that billed someone, so it stays on Piper. The key itself is not consulted
  * here, because this function cannot see it — a profile without one is still
  * Rosa, and the speaker reads it locally until a key appears.
  */
-function toMai(candidate: Record<string, unknown>, testIdentity: boolean): Record<string, unknown> {
-  // Only a profile that never named a voice is a new one. A voice that is there
-  // and not one of ours is a repair, and it falls back below — it is not a
-  // profile that asked for Rosa.
+function toMai(candidate: Record<string, unknown>, testIdentity: boolean, fresh: boolean): Record<string, unknown> {
+  // A voice that is there and not one of ours is a repair, and it falls back
+  // below — it is not a profile that asked for Rosa.
   if (!("replyVoice" in candidate)) {
-    if (testIdentity) return { ...candidate, replyVoice: "ugo", replyBackend: "piper" }
+    if (testIdentity || !fresh) return { ...candidate, replyVoice: "ugo", replyBackend: "piper" }
     return {
       ...candidate,
       replyVoice: "it-IT-Rosa",
@@ -554,6 +555,13 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
   }
 
   let candidate = raw as Record<string, unknown>
+  /*
+   * A first start that already has a key: the loader puts the key, which has a
+   * slot of its own, into an object with nothing else in it. That is a new
+   * profile, not an old one that lost its voice.
+   */
+  const keys = Object.keys(candidate)
+  const fresh = keys.length === 1 && keys[0] === "openRouterApiKey"
 
   // 1. Version migration
   const migrations: VoiceMigration[] = []
@@ -572,7 +580,7 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
       if (wakeWordEnabled()) migrations.push("listening-off")
     }
     candidate = toKokoro(candidate)
-    candidate = toMai(candidate, testIdentity)
+    candidate = toMai(candidate, testIdentity, fresh)
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -626,7 +634,7 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
      * Version 9: MAI arrives, and a profile is left speaking what it was
      * speaking. See `toMai`.
      */
-    if (version < 9) candidate = toMai(candidate, testIdentity)
+    if (version < 9) candidate = toMai(candidate, testIdentity, fresh)
     version = CURRENT_SETTINGS_VERSION
   }
 
@@ -796,12 +804,21 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
   } else if (candidate.spokenAlerts !== undefined) {
     corrections.push(t("vui.fix.spokenAlerts"))
   }
-  let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
+  /*
+   * A voice that cannot be read goes back to Ugo, not to the default. Rosa is
+   * what a new profile starts on; a profile that is here already, with a voice
+   * that broke, was speaking Piper, and repairing it onto a voice that spends a
+   * key would be the move to the cloud that `toMai` refuses to make.
+   */
+  let replyVoice: ReplyVoice = "ugo"
   if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
     replyVoice = candidate.replyVoice as ReplyVoice
   } else if (candidate.replyVoice !== undefined) {
     corrections.push(t("vui.fix.replyVoice", String(candidate.replyVoice)))
   }
+  // ADE Test never reads with a voice that spends a key, whatever its profile says. Not a repair: nothing is told.
+  const keptLocal = testIdentity && REPLY_BACKEND_BY_VOICE[replyVoice] === "mai"
+  if (keptLocal) replyVoice = "ugo"
 
   /*
    * 14. The locale the replies are spoken in.
@@ -832,7 +849,7 @@ export function normalizeSettings(raw: unknown, options?: { testIdentity?: boole
    * apart on its own.
    */
   let replyBackend = REPLY_BACKEND_BY_VOICE[replyVoice]
-  if (candidate.replyBackend !== undefined && candidate.replyBackend !== replyBackend) {
+  if (!keptLocal && candidate.replyBackend !== undefined && candidate.replyBackend !== replyBackend) {
     corrections.push(t("vui.fix.replyBackend", String(candidate.replyBackend), replyBackend))
   }
 
