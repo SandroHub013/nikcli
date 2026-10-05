@@ -146,6 +146,71 @@ export type UpdateAvailable = {
 
 const log = Log.create({ service: "tui.app" })
 
+/**
+ * Keep a console overlay that cannot be built from ending the session.
+ *
+ * The renderer registers its own error handler as a *process-level*
+ * `uncaughtException` / `unhandledRejection` listener, and that handler opens
+ * the console overlay so the error is readable. The overlay allocates a native
+ * framebuffer, and the native allocator has a fixed budget of 65,536 live
+ * allocations — every buffer, text buffer and node draws from the same pool.
+ * When that budget is spent, `createOptimizedBuffer` returns null and opentui
+ * throws `Failed to create optimized buffer: WxH`: from the renderables, which
+ * catch it (`Renderable.createFrameBuffer`), and from the console, which does
+ * not. A throw inside an uncaught-exception handler is not recoverable, so the
+ * terminal died with `script "dev" exited with code 7` and the whole session
+ * was lost — the overlay, of all things, is what took it down.
+ *
+ * So the cost of a full pool is the overlay and a line in the log. The wrap is
+ * on the instance, not the prototype, and it keeps `show()`'s behaviour for
+ * every caller that can afford it — including the error handler's own.
+ *
+ * Exported for `test/tui/console-overlay.test.ts`: this is the difference
+ * between a lost session and a log line, and the one way to reach it is to ask
+ * the module that installs it.
+ */
+export function guardConsoleOverlay(renderer: CliRenderer) {
+  const overlay = renderer?.console as { show?: () => void } | undefined
+  if (!overlay || typeof overlay.show !== "function") return
+  const open = overlay.show.bind(overlay)
+  overlay.show = () => {
+    try {
+      open()
+    } catch (error) {
+      log.error("failed to open the console overlay", { error })
+    }
+  }
+}
+
+/**
+ * Let an emitter's listener cap follow what is actually subscribed instead of a
+ * hardcoded number.
+ *
+ * Components subscribe to renderer and key events and unsubscribe on cleanup, so
+ * the legitimate count scales with how many are mounted — `EventEmitter`'s default
+ * of 10 is far too low, and any fixed replacement is just a guess that goes stale.
+ * `newListener` fires *before* the listener is added, so raising the cap there
+ * means the warning never prints, and the cap never sits above what is in use by
+ * more than `headroom`. Each raise is logged, so a runaway event still leaves a trail.
+ */
+export function followListenerCount(
+  emitter: {
+    on: (event: any, listener: (...args: any[]) => void) => unknown
+    listenerCount: (event: any) => number
+    getMaxListeners: () => number
+    setMaxListeners: (n: number) => unknown
+  },
+  name: string,
+  headroom = 10,
+) {
+  emitter.on("newListener", (event: unknown) => {
+    const count = emitter.listenerCount(event)
+    if (count < emitter.getMaxListeners()) return
+    emitter.setMaxListeners(count + 1 + headroom)
+    log.debug("raised listener cap", { emitter: name, event: String(event), count: count + 1 })
+  })
+}
+
 export function tui(input: {
   url: string
   args: Args
@@ -234,9 +299,11 @@ export function tui(input: {
         // alone is used in 32 files) and to key events (`useKeyboard`), all of which
         // unsubscribe on cleanup. That is well past EventEmitter's default cap of 10,
         // so without this bun prints a MaxListenersExceededWarning straight over the
-        // first frame — once for the renderer, once for its key handler.
-        renderer.setMaxListeners(200)
-        renderer.keyInput.setMaxListeners(200)
+        // first frame — once for the renderer, once for its key handler. The cap
+        // follows the real subscriber count rather than a fixed number.
+        followListenerCount(renderer, "renderer")
+        followListenerCount(renderer.keyInput, "keyInput")
+        guardConsoleOverlay(renderer)
         if (!headless) void renderer.getPalette({ size: 16 }).catch(() => undefined)
         const mode = headless ? "dark" : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark")
         const onExit = async () => {
@@ -477,7 +544,9 @@ function App(props: {
       if (choice === "extra") {
         // Saved before installing: the preference stands even if this install fails.
         await upgradeCtx.enableAutoUpdate?.().catch((error) => {
-          log.error("enabling auto-update failed", { error: errorMessage(error) })
+          log.error("enabling auto-update failed", {
+            error: errorMessage(error),
+          })
           toast.error(error)
         })
       }
@@ -930,12 +999,17 @@ function App(props: {
       await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch((error) => {
         // The backend registered but its stream has not answered yet. Requests
         // already go to it; the stream keeps retrying on its own.
-        log.warn("restarted backend has not streamed events yet", { error: errorMessage(error) })
+        log.warn("restarted backend has not streamed events yet", {
+          error: errorMessage(error),
+        })
       })
       const failure = await sync.bootstrap({ fatal: false })
       if (failure) throw failure
       await TuiPluginRuntime.reload()
-      toast.show({ variant: "success", message: options.success ?? `Restarted the ${target}` })
+      toast.show({
+        variant: "success",
+        message: options.success ?? `Restarted the ${target}`,
+      })
       return "restarted"
     } catch (error) {
       log.error("restart failed", { error: errorMessage(error) })
@@ -1867,6 +1941,21 @@ function App(props: {
         }
       }}
     >
+      {/*
+        Plugin backdrops, ahead of the built-in wallpaper.
+
+        Absolute and sized to the frame, so the slot takes no room in the column
+        while a plugin's node still gets a real box to lay out in — a zero-size
+        wrapper lays its children out at width 0, and a full-screen node inside
+        one renders nothing at all. First in child order, so whatever a plugin
+        draws here paints after the app's own background and before every UI
+        sibling. A node added to `renderer.root` cannot do this: it sits behind
+        the opaque app box and is never seen, which is why this mount point
+        exists.
+      */}
+      <box position="absolute" left={0} top={0} width={dimensions().width} height={dimensions().height}>
+        <TuiPluginRuntime.Slot name="backdrop" />
+      </box>
       {/*
         Keep the wallpaper first in logical child order as well as at z-index
         -1. The image appears asynchronously; this gives Solid an anchor before

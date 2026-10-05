@@ -87,7 +87,9 @@ describe("restart command", () => {
     // Several wrapped the call in try/catch, which never helped: a fatal
     // bootstrap does not throw, it exits nikcli.
     const offenders: string[] = []
-    for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: TUI_SRC })) {
+    for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({
+      cwd: TUI_SRC,
+    })) {
       if (file === "context/sync.tsx") continue
       const text = stripComments(await tuiSource(file))
       if (/\bbootstrap\(\s*\)/.test(text)) offenders.push(file)
@@ -113,8 +115,12 @@ describe("restart command", () => {
 
   it("hands the restart contract down to the component that owns the command", async () => {
     const app = stripComments(await tuiSource("app.tsx"))
-    expect(app).toContain("onRestart={input.onRestart}")
-    expect(app).toContain("restartTarget={input.restartTarget}")
+    // Whitespace-tolerant: what matters is that the prop reaches the component
+    // that owns the command, not whether a formatter kept the JSX attribute on
+    // one line. Both were reflowed by a prettier run and the test failed for a
+    // reason unrelated to the wiring it exists to pin.
+    expect(app).toMatch(/onRestart=\{\s*input\.onRestart\s*\}/)
+    expect(app).toMatch(/restartTarget=\{\s*input\.restartTarget\s*\}/)
   })
 
   it("says a host with no backend cannot restart, instead of doing nothing", async () => {

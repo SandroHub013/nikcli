@@ -1,7 +1,7 @@
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
 import { Auth } from "@/auth"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { ModelsDev } from "@/provider/models"
 import { Effect } from "effect"

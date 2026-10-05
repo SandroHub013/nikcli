@@ -47,7 +47,7 @@ import { VERSION } from "@nikcli-ai/util/version"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { clearSlotErrors, setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
-import { adaptV2TuiPlugin, readV2TuiPlugin } from "./v2"
+import { adaptValidatedV2TuiPlugin, readV2TuiPlugin } from "./v2"
 import { evictPluginStorage, pluginStorage } from "./storage"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, type SourceWatcher } from "./reload"
 import { dbg } from "../feature-plugins/background/__debug"
@@ -399,7 +399,12 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
     "setup" in item
       ? {
           id: item.id,
-          tui: adaptV2TuiPlugin(item),
+          // Validated like a file plugin: an internal definition's manifest is
+          // parsed, the host is checked and capabilities are granted. This used
+          // to call `adaptV2TuiPlugin` directly, so an internal plugin could
+          // carry an incompatible manifest and load anyway, which is requirement 2
+          // not holding for the plugins shipped in the box.
+          tui: adaptValidatedV2TuiPlugin(item as unknown as Record<string, unknown>, spec),
         }
       : item
 
@@ -470,8 +475,71 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
     }
   }
 
+  /**
+   * The plugin's view of the abort signal.
+   *
+   * `abort()` dispatches to the listeners a plugin registered on it, and one
+   * that throws does not come back out of `abort()` — Bun reports it through
+   * `process.on("uncaughtException")`, which the renderer answers by opening the
+   * console overlay, and a second failure inside that handler is fatal. It
+   * reaches no plugin-cleanup reporting either, so the log never says which
+   * plugin did it. Wrapping the listener turns that into an ordinary attributed
+   * failure: the queue below still runs, and the error is the host's to report.
+   *
+   * A proxy rather than a subclass so the plugin still gets the very signal the
+   * host aborts. Reads go through the *target* as receiver: `aborted` and
+   * `reason` are accessors over an internal slot, and a getter invoked with the
+   * proxy as `this` throws `Illegal invocation` — which is the whole signal
+   * reporting itself unusable, not a cosmetic difference.
+   */
+  const guarded = new WeakMap<EventListener, EventListener>()
+  const signal = new Proxy(ctrl.signal, {
+    get(target, property) {
+      if (property === "addEventListener") {
+        return (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+          options?: boolean | AddEventListenerOptions,
+        ) => {
+          if (type !== "abort" || typeof listener !== "function") {
+            if (listener) target.addEventListener(type, listener, options)
+            return
+          }
+          const wrapper: EventListener = (event) => {
+            try {
+              listener.call(target, event)
+            } catch (error) {
+              fail("tui plugin abort listener threw", {
+                path: load.spec,
+                id,
+                error,
+              })
+            }
+          }
+          guarded.set(listener, wrapper)
+          target.addEventListener(type, wrapper, options)
+        }
+      }
+      if (property === "removeEventListener") {
+        return (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+          options?: boolean | EventListenerOptions,
+        ) => {
+          const mapped = typeof listener === "function" ? (guarded.get(listener) ?? listener) : listener
+          if (mapped) target.removeEventListener(type, mapped, options)
+        }
+      }
+      // Anything else is read off the target, and a method is bound to it, so
+      // `aborted`, `reason` and anything the plugin calls on the signal keep
+      // working exactly as they would on the real one.
+      const value = Reflect.get(target, property, target)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  }) as AbortSignal
+
   const lifecycle: TuiPluginApi["lifecycle"] = {
-    signal: ctrl.signal,
+    signal,
     onDispose,
   }
 
@@ -483,6 +551,12 @@ export function createPluginScope(load: PluginLoad, id: string, timeoutMs = DISP
   const dispose = async (deadline?: number) => {
     if (done) return
     done = true
+    // `abort()` runs the plugin's own `lifecycle.signal` listeners. Bun reports
+    // a listener that throws through `process.on("uncaughtException")` rather
+    // than out of this call, so it cannot skip the queue below — but it does
+    // reach the renderer's error handler, which opens the console overlay, and
+    // a second failure inside that handler is fatal. `guardConsoleOverlay` in
+    // `app.tsx` is what keeps that second failure survivable.
     ctrl.abort()
     const queue = [...list].reverse()
     list = []
@@ -832,6 +906,7 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
     },
     event,
     renderer: api.renderer,
+    graphics: api.graphics,
     slots,
     plugins: {
       list() {

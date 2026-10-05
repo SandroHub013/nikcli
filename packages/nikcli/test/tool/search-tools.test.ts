@@ -32,12 +32,26 @@ describe("SearchToolsTool", () => {
     return withProjectDirectory(projectDir, () => def.executeAsync({ query }, contextWithModel(model)))
   }
 
-  it("matches a tool by name and returns a summary alongside it", async () => {
-    const result = await search("grep")
-    expect(result.output).toContain("grep")
+  it("matches a tool by name fragment and returns a summary alongside it", async () => {
+    const result = await search("gre")
     // "- <id>: <summary>" — a bare id list would not tell the model how to use it.
-    expect(result.output).toMatch(/- grep: \S/)
+    expect(result.output).toMatch(/^- grep: \S/m)
     expect(result.metadata.matches).toBeGreaterThan(0)
+  })
+
+  it("treats an exact tool name as a request for that tool", async () => {
+    const result = await search("grep")
+    expect(result.output).toContain("Already in your toolset: grep")
+    expect(result.metadata.matches).toBe(1)
+  })
+
+  it("reports the names in a list that the session does not have", async () => {
+    const result = await search("grep,no_such_tool")
+    expect(result.output).toContain("Already in your toolset: grep")
+    expect(result.output).toContain("Not available in this session: no_such_tool")
+    // Claude Code's `select:` form is the same request.
+    const select = await search("select:no_such_tool")
+    expect(select.output).toContain("Not available in this session: no_such_tool")
   })
 
   it("matches a capability keyword that appears only in descriptions", async () => {
@@ -66,10 +80,11 @@ describe("SearchToolsTool", () => {
   })
 
   it("ranks a name match above a description-only match", async () => {
-    const result = await search("read")
-    const lines = result.output.split("\n").filter((line) => line.startsWith("- "))
-    const readIndex = lines.findIndex((line) => line.startsWith("- read:"))
-    expect(readIndex).toBe(0)
+    const result = await search("todo")
+    const ids = matchedIds(result.output)
+    // Both todo tools carry the word in their name; anything below them only
+    // mentions it.
+    expect(ids.slice(0, 2).sort()).toEqual(["todoread", "todowrite"])
   })
 
   it("ranks the tool that owns a capability above tools that merely catalog it", async () => {
@@ -77,10 +92,7 @@ describe("SearchToolsTool", () => {
     // contains almost every capability word. Density scoring has to keep the
     // tool that actually takes screenshots ahead of it.
     const result = await search("screenshot")
-    const ids = result.output
-      .split("\n")
-      .filter((line) => line.startsWith("- "))
-      .map((line) => line.slice(2, line.indexOf(":")))
+    const ids = matchedIds(result.output)
     const computer = ids.indexOf("computer")
     const codeMode = ids.indexOf("code_mode")
     // Both tools sit behind experimental flags; assert the ordering only when
@@ -95,12 +107,23 @@ describe("SearchToolsTool", () => {
     // other way around. `search_tools` has to follow that same split.
     const gpt = await search("patch", { providerID: "openai", api: { id: "gpt-5" } })
     expect(gpt.output).toMatch(/^- apply_patch:/m)
+    const gptEdit = await search("edit", { providerID: "openai", api: { id: "gpt-5" } })
+    expect(gptEdit.output).not.toContain("Already in your toolset: edit")
 
     const other = await search("edit", { providerID: "anthropic", api: { id: "claude-opus-5" } })
-    expect(other.output).toMatch(/^- edit:/m)
-    expect(other.output).not.toMatch(/^- apply_patch:/m)
+    expect(other.output).toContain("Already in your toolset: edit")
+    const otherPatch = await search("patch", { providerID: "anthropic", api: { id: "claude-opus-5" } })
+    expect(matchedIds(otherPatch.output)).not.toContain("apply_patch")
   })
 })
+
+/** The ids on the "- <id>[ status]: <summary>" lines of a search result. */
+function matchedIds(output: string) {
+  return output
+    .split("\n")
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).split(/[ :]/, 1)[0])
+}
 
 describe("ToolRegistry.visible", () => {
   it("keeps an ordinary tool with an empty ruleset", () => {
@@ -111,9 +134,10 @@ describe("ToolRegistry.visible", () => {
     expect(ToolRegistry.visible("read", { disabledTools: { read: true }, ruleset: [] })).toBe(false)
   })
 
-  it("keeps opt-in tools out until they are explicitly switched on", () => {
-    expect(ToolRegistry.visible("opentui", { ruleset: [] })).toBe(false)
+  it("keeps a deferred tool visible — loadable — until the user switches it off", () => {
+    expect(ToolRegistry.visible("opentui", { ruleset: [] })).toBe(true)
     expect(ToolRegistry.visible("opentui", { disabledTools: { opentui: false }, ruleset: [] })).toBe(true)
+    expect(ToolRegistry.visible("opentui", { disabledTools: { opentui: true }, ruleset: [] })).toBe(false)
   })
 
   it("drops a wholly-denied tool but keeps a resource-scoped deny", () => {

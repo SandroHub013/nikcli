@@ -1,7 +1,30 @@
 import { Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { GlobalFlags, normalizeArgv } from "../global-flags"
+import { UI } from "../ui"
 import type { Spec } from "./spec"
+
+/** EOT-18 requirement 9. Anything not listed keeps the runner's own code (`1`). */
+export const ExitCode = {
+  ok: 0,
+  failure: 1,
+  usage: 2,
+  config: 64,
+  noInput: 66,
+  unavailable: 69,
+  interrupted: 130,
+} as const
+
+/**
+ * The documented exit code for a failure the handler raised on purpose, or
+ * `undefined` for everything else — an unknown defect must still reach the
+ * runner untouched, so it keeps its report and its code.
+ */
+export function exitCodeFor(error: unknown): number | undefined {
+  if (error instanceof UI.CancelledError) return ExitCode.interrupted
+  if (error instanceof UI.HeadlessFailure) return ExitCode.noInput
+  return undefined
+}
 
 /**
  * Binds handlers to a {@link Spec} tree, loading each one only when it runs.
@@ -83,7 +106,18 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Command.
           Effect.promise(async () => {
             const module = await found.load()
             await module.default(input)
-          }),
+          }).pipe(
+            // A cancelled prompt is the user's decision, not a crash: report it
+            // quietly with the interrupt code. Every other defect is rethrown as-is.
+            Effect.catchDefect((defect) => {
+              const code = exitCodeFor(defect)
+              if (code === undefined) return Effect.die(defect)
+              // A cancel is silent; a headless refusal has to say what it needs.
+              if (defect instanceof UI.HeadlessFailure) UI.error(defect.message)
+              process.exitCode = code
+              return Effect.void
+            }),
+          ),
         ),
       )
     : node.spec

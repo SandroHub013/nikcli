@@ -103,9 +103,21 @@ const TEXT_FIELDS: Record<TextField, { title: string; placeholder: string; hint:
 }
 
 const LIST_FIELDS: Record<ListField, { title: string; placeholder: string; hint: string }> = {
-  stack: { title: "Stack", placeholder: "e.g. bun", hint: "Languages, frameworks and runtimes you work in." },
-  expertise: { title: "Knows well", placeholder: "e.g. distributed systems", hint: "Agents skip the basics here." },
-  learning: { title: "Learning", placeholder: "e.g. rust", hint: "Agents explain more in these areas." },
+  stack: {
+    title: "Stack",
+    placeholder: "e.g. bun",
+    hint: "Languages, frameworks and runtimes you work in.",
+  },
+  expertise: {
+    title: "Knows well",
+    placeholder: "e.g. distributed systems",
+    hint: "Agents skip the basics here.",
+  },
+  learning: {
+    title: "Learning",
+    placeholder: "e.g. rust",
+    hint: "Agents explain more in these areas.",
+  },
   conventions: {
     title: "Conventions",
     placeholder: "e.g. always bun, never npm",
@@ -136,21 +148,29 @@ export function DialogProfile() {
 
   const reopen = () => dialog.replace(() => <DialogProfile />)
 
-  async function apply(input: ProfileInput, message: string) {
+  async function apply(input: ProfileInput, message: string, revision = dialog.revision) {
+    if (dialog.revision !== revision) return
     try {
       await patchProfile(sdk.client, input)
+      if (dialog.revision !== revision) return
       toast.show({ message, variant: "success" })
       await refetch()
+      if (dialog.revision !== revision) return
       await refetchPreview()
+      if (dialog.revision !== revision) return
     } catch (error: any) {
-      toast.show({ message: `Could not save: ${error?.message ?? error}`, variant: "error" })
+      if (dialog.revision !== revision) return
+      toast.show({
+        message: `Could not save: ${error?.message ?? error}`,
+        variant: "error",
+      })
     }
   }
 
   async function editText(field: TextField) {
     const meta = TEXT_FIELDS[field]
     const current = (profile()?.[field] as string | undefined) ?? ""
-    const result = await DialogPrompt.show(dialog, meta.title, {
+    const pending = DialogPrompt.show(dialog, meta.title, {
       // `reopen` has been here all along; this is what makes it visible.
       back: reopen,
       placeholder: meta.placeholder,
@@ -161,8 +181,14 @@ export function DialogProfile() {
         <text fg={theme.foreground.muted}>{`${meta.hint}${current ? " Enter - to clear." : ""}`}</text>
       ),
     })
+    // The prompt has replaced this owner. Its stack revision, not owner cleanup,
+    // decides whether the continuation still belongs to the visible flow.
+    const revision = dialog.revision
+    const result = await pending
+    if (dialog.revision !== revision) return
     if (result !== null) {
-      await apply({ [field]: result.trim() === "-" ? "" : result } as ProfileInput, `${meta.title} saved`)
+      await apply({ [field]: result.trim() === "-" ? "" : result } as ProfileInput, `${meta.title} saved`, revision)
+      if (dialog.revision !== revision) return
     }
     reopen()
   }
@@ -292,7 +318,12 @@ export function DialogProfile() {
       category: "Communication",
       onSelect: () =>
         void apply(
-          { communication: { ...info?.communication, explain: !(info?.communication?.explain ?? false) } },
+          {
+            communication: {
+              ...info?.communication,
+              explain: !(info?.communication?.explain ?? false),
+            },
+          },
           "Saved",
         ),
     })
@@ -302,7 +333,7 @@ export function DialogProfile() {
       description: info?.communication?.language ?? "not set — follows your locale",
       category: "Communication",
       onSelect: async () => {
-        const result = await DialogPrompt.show(dialog, "Reply language", {
+        const pending = DialogPrompt.show(dialog, "Reply language", {
           back: reopen,
           placeholder: "e.g. Italian",
           value: info?.communication?.language ?? "",
@@ -310,7 +341,12 @@ export function DialogProfile() {
             <text fg={theme.foreground.muted}>Prose only — code, identifiers and commands stay as they are.</text>
           ),
         })
-        if (result !== null) await apply({ communication: { ...info?.communication, language: result } }, "Saved")
+        const revision = dialog.revision
+        const result = await pending
+        if (dialog.revision !== revision) return
+        if (result !== null)
+          await apply({ communication: { ...info?.communication, language: result } }, "Saved", revision)
+        if (dialog.revision !== revision) return
         reopen()
       },
     })
@@ -384,12 +420,18 @@ function DialogProfileList(props: { field: ListField }) {
   const [profile, { refetch }] = createResource(() => loadProfile(sdk.client))
   const values = createMemo(() => (profile()?.[props.field] as string[] | undefined) ?? [])
 
-  async function write(next: string[]) {
+  async function write(next: string[], revision = dialog.revision) {
+    if (dialog.revision !== revision) return
     try {
       await patchProfile(sdk.client, { [props.field]: next } as ProfileInput)
+      if (dialog.revision !== revision) return
       await refetch()
     } catch (error: any) {
-      toast.show({ message: `Could not save: ${error?.message ?? error}`, variant: "error" })
+      if (dialog.revision !== revision) return
+      toast.show({
+        message: `Could not save: ${error?.message ?? error}`,
+        variant: "error",
+      })
     }
   }
 
@@ -400,13 +442,17 @@ function DialogProfileList(props: { field: ListField }) {
       description: meta.hint,
       category: "Actions",
       onSelect: async () => {
-        const result = await DialogPrompt.show(dialog, `Add to ${meta.title.toLowerCase()}`, {
+        const pending = DialogPrompt.show(dialog, `Add to ${meta.title.toLowerCase()}`, {
           // The list, not the profile root: this prompt was opened from here.
           back: () => dialog.replace(() => <DialogProfileList field={props.field} />),
           placeholder: meta.placeholder,
           description: () => <text fg={theme.foreground.muted}>{meta.hint}</text>,
         })
-        if (result) await write([...values(), result.trim()])
+        const revision = dialog.revision
+        const result = await pending
+        if (dialog.revision !== revision) return
+        if (result) await write([...values(), result.trim()], revision)
+        if (dialog.revision !== revision) return
         dialog.replace(() => <DialogProfileList field={props.field} />)
       },
     },
@@ -440,7 +486,7 @@ function TogglePicker(props: {
   catalog: () => { id: string; description?: string }[]
   loading: () => boolean
   initial: () => string[]
-  onDone: (values: string[]) => Promise<void>
+  onDone: (values: string[], revision: number) => Promise<void>
 }) {
   const dialog = useDialog()
   const [selected, setSelected] = createSignal<string[]>(props.initial())
@@ -471,7 +517,9 @@ function TogglePicker(props: {
         description: props.hint,
         category: "Actions",
         onSelect: async () => {
-          await props.onDone(chosen)
+          const revision = dialog.revision
+          await props.onDone(chosen, revision)
+          if (dialog.revision !== revision) return
           dialog.replace(() => <DialogProfile />)
         },
       },
@@ -481,11 +529,20 @@ function TogglePicker(props: {
         description: "For anything not in the list",
         category: "Actions",
         onSelect: async () => {
-          const result = await DialogPrompt.show(dialog, props.title, { placeholder: "name" })
+          const pending = DialogPrompt.show(dialog, props.title, {
+            placeholder: "name",
+            // `replace` unmounts this picker, so the way back is handing over a
+            // closure — the same one the Done option above reopens.
+            back: () => dialog.replace(() => <DialogProfile />),
+          })
+          const revision = dialog.revision
+          const result = await pending
+          if (dialog.revision !== revision) return
           if (result) {
             const value = result.trim()
-            await props.onDone(chosen.includes(value) ? chosen : [...chosen, value])
+            await props.onDone(chosen.includes(value) ? chosen : [...chosen, value], revision)
           }
+          if (dialog.revision !== revision) return
           dialog.replace(() => <DialogProfile />)
         },
       },
@@ -514,6 +571,7 @@ function TogglePicker(props: {
 }
 
 function DialogProfileSkills() {
+  const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
   const [profile] = createResource(() => loadProfile(sdk.client))
@@ -527,18 +585,29 @@ function DialogProfileSkills() {
       title="Preferred skills"
       hint="Agents are told to reach for these first — they still load a skill only when it fits."
       loading={() => skills.loading}
-      catalog={() => (skills() ?? []).map((skill) => ({ id: skill.name, description: skill.description }))}
+      catalog={() =>
+        (skills() ?? []).map((skill) => ({
+          id: skill.name,
+          description: skill.description,
+        }))
+      }
       initial={() => profile()?.skills ?? []}
-      onDone={async (values) => {
-        await patchProfile(sdk.client, { skills: values }).catch((error: any) =>
-          toast.show({ message: `Could not save: ${error?.message ?? error}`, variant: "error" }),
-        )
+      onDone={async (values, revision) => {
+        if (dialog.revision !== revision) return
+        await patchProfile(sdk.client, { skills: values }).catch((error: any) => {
+          if (dialog.revision !== revision) return
+          toast.show({
+            message: `Could not save: ${error?.message ?? error}`,
+            variant: "error",
+          })
+        })
       }}
     />
   )
 }
 
 function DialogProfileTools(props: { kind: "preferred" | "avoid" }) {
+  const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
   const [profile] = createResource(() => loadProfile(sdk.client))
@@ -558,10 +627,17 @@ function DialogProfileTools(props: { kind: "preferred" | "avoid" }) {
       loading={() => tools.loading}
       catalog={() => (tools() ?? []).map((id) => ({ id }))}
       initial={() => profile()?.tools?.[props.kind] ?? []}
-      onDone={async (values) => {
-        await patchProfile(sdk.client, { tools: { ...profile()?.tools, [props.kind]: values } }).catch((error: any) =>
-          toast.show({ message: `Could not save: ${error?.message ?? error}`, variant: "error" }),
-        )
+      onDone={async (values, revision) => {
+        if (dialog.revision !== revision) return
+        await patchProfile(sdk.client, {
+          tools: { ...profile()?.tools, [props.kind]: values },
+        }).catch((error: any) => {
+          if (dialog.revision !== revision) return
+          toast.show({
+            message: `Could not save: ${error?.message ?? error}`,
+            variant: "error",
+          })
+        })
       }}
     />
   )
@@ -606,14 +682,20 @@ function DialogProfileVerbosity() {
       options={options()}
       current={profile()?.communication?.verbosity ?? "unset"}
       onSelect={async (option: DialogSelectOption<ProfileVerbosity | "unset">) => {
+        const revision = dialog.revision
         await patchProfile(sdk.client, {
           communication: {
             ...profile()?.communication,
             verbosity: option.value === "unset" ? undefined : option.value,
           },
-        }).catch((error: any) =>
-          toast.show({ message: `Could not save: ${error?.message ?? error}`, variant: "error" }),
-        )
+        }).catch((error: any) => {
+          if (dialog.revision !== revision) return
+          toast.show({
+            message: `Could not save: ${error?.message ?? error}`,
+            variant: "error",
+          })
+        })
+        if (dialog.revision !== revision) return
         dialog.replace(() => <DialogProfile />)
       }}
     />

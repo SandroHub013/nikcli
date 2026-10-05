@@ -42,36 +42,36 @@ describe("input precedence", () => {
   })
 })
 
-/**
- * The mismatch that keeps this table unwired, in executable form.
- *
- * `input-precedence.ts` had zero production call sites, and wiring it found a
- * reason rather than an oversight: the one site that genuinely arbitrates —
- * `ui/dialog.tsx`'s Ctrl+C branch — resolves the same two layers the opposite
- * way round, and is right to.
- *
- * These cases exist so nobody closes the gap by making the dialog follow the
- * table. That would send Ctrl+C to the modal while the user is typing, which
- * is the behaviour the big comment in `ui/dialog.tsx` records having already
- * been fixed once.
- */
-describe("the flat order cannot serve both keys", () => {
-  it("puts the modal above the editable, which is right for escape", async () => {
-    // Escape must close the dialog even while a text field has focus.
-    expect(ownerOf({ modal: true, editable: true })).toBe("modal")
+describe("key-aware input ownership", () => {
+  it("gives Escape to the modal even with a focused editor", () => {
+    expect(ownerOf({ modal: true, editable: true }, { name: "escape" })).toBe("modal")
+    expect(owns("editable", { modal: true, editable: true }, { name: "escape" })).toBe(false)
   })
 
-  it("is contradicted by the shipped Ctrl+C arbitration, on purpose", async () => {
-    // The dialog gives the key to the focused editor when both are active.
-    // Asserted against the source, because mounting a dialog drags in the
-    // whole TUI — the trade `dialog-lifecycle.test.ts` documents.
+  it("gives Ctrl+C to the focused editor instead of closing its modal", () => {
+    const active = {
+      modal: true,
+      editable: true,
+      route: true,
+      application: true,
+    }
+    const key = { name: "c", ctrl: true }
+    expect(ownerOf(active, key)).toBe("editable")
+    expect(owns("modal", active, key)).toBe(false)
+    expect(superseded(active, key)).toEqual(["modal", "route", "application"])
+  })
+
+  it("keeps plain C and Ctrl+C without an editor owned by the modal", () => {
+    expect(ownerOf({ modal: true, editable: true }, { name: "c" })).toBe("modal")
+    expect(ownerOf({ modal: true, route: true }, { name: "c", ctrl: true })).toBe("modal")
+  })
+
+  it("uses renderer focus for the shipped Ctrl+C arbitration", async () => {
     const src = await tuiSource("ui/dialog.tsx")
     expect(src).toMatch(/renderer\.currentFocusedEditor !== null/)
-    expect(src).toMatch(/if \(!isInteractive\)/)
-
-    // So for Ctrl+C the owner the table names is the layer that must *not*
-    // take the event. Both statements are true; that is the finding.
-    expect(ownerOf({ modal: true, editable: true })).not.toBe("editable")
+    // The one site that arbitrates now asks the table, with the key in hand.
+    expect(src).toMatch(/ownerOf\(/)
+    expect(src).toMatch(/if \(owner !== "editable"\)/)
   })
 
   it("still names one owner for every unambiguous combination", async () => {

@@ -119,6 +119,11 @@
       "note": "Fetches the Copilot model list with the issued token."
     },
     {
+      "file": "packages/nikcli/src/mod/api.ts",
+      "purpose": "tool",
+      "note": "`$.http.fetch` of a mod: dials whatever URL the mod passes, as the user. It is an event (`http.fetch`), so a policy mod can audit or refuse it; no nikcli-level network policy covers it."
+    },
+    {
       "file": "packages/nikcli/src/plugin/index.ts",
       "purpose": "notify",
       "note": "Delivers plugin notify payloads to a user-configured webhook."

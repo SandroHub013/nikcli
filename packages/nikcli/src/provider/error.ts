@@ -1,5 +1,87 @@
-import { APICallError } from "ai"
 import { Schema } from "effect"
+
+/**
+ * A provider request that came back as a failure, or a native stream failure shaped like one.
+ *
+ * The session classifies failures on this (status, retryability, body), so the native runtime builds
+ * one for every provider error it surfaces. Same fields as the AI SDK's error of the name, which the
+ * session was written against; `isInstance` also accepts errors that carry the SDK's marker.
+ */
+export class APICallError extends Error {
+  readonly url: string
+  readonly requestBodyValues: unknown
+  readonly statusCode?: number
+  readonly responseHeaders?: Record<string, string>
+  readonly responseBody?: string
+  readonly isRetryable: boolean
+  readonly data?: unknown
+
+  constructor(input: {
+    message: string
+    url: string
+    requestBodyValues?: unknown
+    statusCode?: number
+    responseHeaders?: Record<string, string>
+    responseBody?: string
+    cause?: unknown
+    isRetryable?: boolean
+    data?: unknown
+  }) {
+    super(input.message, { cause: input.cause })
+    this.name = "AI_APICallError"
+    this.url = input.url
+    this.requestBodyValues = input.requestBodyValues
+    this.statusCode = input.statusCode
+    this.responseHeaders = input.responseHeaders
+    this.responseBody = input.responseBody
+    this.isRetryable =
+      input.isRetryable ??
+      (input.statusCode !== undefined &&
+        (input.statusCode === 408 || input.statusCode === 409 || input.statusCode === 429 || input.statusCode >= 500))
+    this.data = input.data
+  }
+
+  static isInstance(error: unknown): error is APICallError {
+    return error instanceof APICallError || (error instanceof Error && error.name === "AI_APICallError")
+  }
+}
+
+/**
+ * A model or request no native route can carry. There is no other runtime to fall back to, so the turn
+ * fails with the reason: no route for the model's provider, or content the route cannot lower.
+ */
+export class NoNativeRouteError extends Error {
+  readonly providerID: string
+  readonly modelID: string
+  readonly reason?: string
+
+  constructor(input: { providerID: string; modelID: string; reason?: string }) {
+    super(
+      input.reason
+        ? `${input.providerID}/${input.modelID} cannot take this request: ${input.reason}`
+        : `${input.providerID}/${input.modelID} has no native route. If the service speaks the OpenAI, ` +
+            `Anthropic or Gemini API, set provider.${input.providerID}.options.protocol ` +
+            `(openai-compatible | openai-responses | anthropic | gemini) and a baseURL; if it needs its own ` +
+            `authentication, a plugin's auth loader can supply a fetch. Otherwise choose another model.`,
+    )
+    this.name = "NoNativeRouteError"
+    this.providerID = input.providerID
+    this.modelID = input.modelID
+    this.reason = input.reason
+  }
+}
+
+/** A provider that needs an API key and has none configured. */
+export class LoadAPIKeyError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "AI_LoadAPIKeyError"
+  }
+
+  static isInstance(error: unknown): error is LoadAPIKeyError {
+    return error instanceof LoadAPIKeyError || (error instanceof Error && error.name === "AI_LoadAPIKeyError")
+  }
+}
 
 export namespace ProviderError {
   /**

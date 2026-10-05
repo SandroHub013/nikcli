@@ -20,6 +20,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnPty, type NativePty } from "@nikcli-ai/util/pty"
+import { spawnSync } from "node:child_process"
 import {
   formatBytes,
   stallRate,
@@ -76,8 +77,9 @@ function envInt(name: string, fallback: number) {
   const raw = process.env[name]
   if (raw === undefined || raw === "") return fallback
   const value = Number(raw)
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be a non-negative number`)
-  return Math.floor(value)
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative safe integer`)
+  if (["COLS", "ROWS", "TIMEOUT_MS"].includes(name) && value === 0) throw new Error(`${name} must be positive`)
+  return value
 }
 
 function findRepoRoot(start: string) {
@@ -184,6 +186,7 @@ export async function waitForExit(pty: NativePty): Promise<void> {
     exitedBeforeGrace = true
   })
   await Promise.race([track, grace])
+  if (timer) clearTimeout(timer)
   if (!exitedBeforeGrace) {
     if (timer) clearTimeout(timer)
     pty.kill("SIGKILL")
@@ -339,6 +342,15 @@ function compareAgainstBaseline(report: { startup: { hangRate: number }; summary
     startup?: { hangRate?: number }
     summary?: { warm?: WarmSummary | null }
   }
+  const limit = process.env.BASELINE_MAX_REGRESSION ? Number(process.env.BASELINE_MAX_REGRESSION) : undefined
+  if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+    throw new Error(`BASELINE_MAX_REGRESSION must be a positive percentage, got ${process.env.BASELINE_MAX_REGRESSION}`)
+  }
+  if (limit !== undefined) {
+    if (previous?.startup?.hangRate !== 0 || report.startup.hangRate !== 0) {
+      throw new Error("startup gate requires recorded zero hangRate in both runs")
+    }
+  }
   // A baseline recorded before stalls were counted has no rate; say so rather
   // than reading its absence as a clean 0.
   const hangBefore = previous.startup?.hangRate
@@ -348,19 +360,33 @@ function compareAgainstBaseline(report: { startup: { hangRate: number }; summary
   const before = previous.summary?.warm
   const after = report.summary.warm
   if (!before || !after) {
+    if (limit !== undefined) throw new Error("startup gate requires warm samples in both runs")
     progress("baseline: one of the two runs has no warm samples; nothing to compare")
     return
-  }
-
-  const limit = process.env.BASELINE_MAX_REGRESSION ? Number(process.env.BASELINE_MAX_REGRESSION) : undefined
-  if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
-    throw new Error(`BASELINE_MAX_REGRESSION must be a positive percentage, got ${process.env.BASELINE_MAX_REGRESSION}`)
   }
 
   const regressions: string[] = []
   for (const metric of ["firstPaint", "usablePrompt", "rssBytes"] as const) {
     const a = before[metric]
     const b = after[metric]
+    if (limit !== undefined) {
+      if ((!a || !b) && metric !== "rssBytes") throw new Error(`startup gate missing ${metric}`)
+      if (Boolean(a) !== Boolean(b)) throw new Error(`startup gate ${metric} availability differs`)
+      for (const stats of [a, b]) {
+        if (!stats) continue
+        if (
+          !Number.isSafeInteger(stats.count) ||
+          stats.count <= 0 ||
+          ![stats.min, stats.median, stats.p95, stats.max].every(
+            (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
+          ) ||
+          !(stats.min <= stats.median && stats.median <= stats.p95 && stats.p95 <= stats.max)
+        ) {
+          throw new Error(`startup gate invalid ${metric} summary`)
+        }
+      }
+      if (a && b && a.count !== b.count) throw new Error(`startup gate ${metric} sample counts differ`)
+    }
     if (!a || !b) continue
     const format = metric === "rssBytes" ? formatBytes : ms
     for (const stat of ["median", "p95"] as const) {
@@ -368,7 +394,7 @@ function compareAgainstBaseline(report: { startup: { hangRate: number }; summary
       const to = b[stat]
       // A zero baseline cannot express a percentage, and a metric that was
       // zero and is not any more is a change worth seeing rather than dividing.
-      const delta = from === 0 ? Number.POSITIVE_INFINITY : ((to - from) / from) * 100
+      const delta = from === 0 ? (to === 0 ? 0 : Number.POSITIVE_INFINITY) : ((to - from) / from) * 100
       const sign = delta >= 0 ? "+" : ""
       progress(`baseline warm ${metric} ${stat}: ${format(from)} -> ${format(to)} (${sign}${delta.toFixed(1)}%)`)
       if (limit !== undefined && delta > limit) {
@@ -382,8 +408,39 @@ function compareAgainstBaseline(report: { startup: { hangRate: number }; summary
   }
 }
 
+function terminalEvidence() {
+  const ancestors: string[] = []
+  let pid = process.ppid
+  const seen = new Set<number>()
+  for (let i = 0; i < 32 && pid > 1 && !seen.has(pid); i++) {
+    seen.add(pid)
+    const result = spawnSync("ps", ["-o", "ppid=,comm=", "-p", String(pid)], {
+      encoding: "utf8",
+      timeout: 1000,
+    })
+    if (result.status !== 0) break
+    const match = result.stdout.trim().match(/^(\d+)\s+(.+)$/)
+    if (!match) break
+    ancestors.push(path.basename(match[2]).toLowerCase())
+    pid = Number(match[1])
+  }
+  const relayed = terminalMode === "attached-terminal"
+  const ghostty = relayed && ancestors.some((name) => name === "ghostty")
+  const tmux = relayed && ancestors.some((name) => /^tmux(?:$|: server)/.test(name))
+  return {
+    source: "process-ancestry-and-terminal-relay",
+    ghostty,
+    tmux,
+    realTerminalCoverage: relayed ? (ghostty || tmux ? "observed-process-context" : "unverified") : "unavailable",
+    claimedGhostty: process.env.TERM_PROGRAM?.toLowerCase() === "ghostty",
+    claimedTmux: Boolean(process.env.TMUX),
+    note: "Environment labels are not terminal evidence; a single run does not satisfy the EOT-00 matrix.",
+  }
+}
+
 // Shared with `packages/tui/script/import-cost.ts` so two probes emit one
 // comparison format instead of two that drift apart.
+const evidence = terminalEvidence()
 const environment = {
   ...probeEnvironment({ spec: "EOT-01", repoRoot }),
   terminal: {
@@ -391,7 +448,8 @@ const environment = {
     mode: terminalMode,
     program: process.env.TERM_PROGRAM ?? null,
     programVersion: process.env.TERM_PROGRAM_VERSION ?? null,
-    tmux: Boolean(process.env.TMUX),
+    tmux: evidence.tmux,
+    evidence,
     cols: COLS,
     rows: ROWS,
   },
@@ -421,6 +479,7 @@ try {
   // run's without the revision and machine that produced them. This used to
   // reach the JSON blob on the last line and nowhere else.
   progress(formatProbeEnvironment(environment))
+  progress(`terminal evidence: ${evidence.realTerminalCoverage}; Ghostty=${evidence.ghostty}, tmux=${evidence.tmux}`)
 
   const warm: Marks[] = []
   const cold: Marks[] = []
@@ -431,10 +490,16 @@ try {
     cold: [],
   }
   let attempts = 0
+  const outcomes: {
+    phase: "bootstrap" | "warm" | "cold"
+    index: number
+    attempt: Attempt
+  }[] = []
 
   if (WARM_RUNS > 0) {
     const home = scratch()
     const first = await once(home)
+    outcomes.push({ phase: "bootstrap", index: 0, attempt: first })
     attempts++
     if (first.ok) {
       bootstrap = first.marks
@@ -449,6 +514,7 @@ try {
     await Bun.sleep(500)
     for (let i = 0; i < WARM_RUNS; i++) {
       const attempt = await once(home)
+      outcomes.push({ phase: "warm", index: i + 1, attempt })
       attempts++
       if (!attempt.ok) {
         stalls.warm.push(attempt.stall)
@@ -469,6 +535,7 @@ try {
   for (let i = 0; i < COLD_RUNS; i++) {
     const home = scratch()
     const attempt = await once(home)
+    outcomes.push({ phase: "cold", index: i + 1, attempt })
     attempts++
     if (!attempt.ok) {
       stalls.cold.push(attempt.stall)
@@ -524,6 +591,9 @@ try {
     environment,
     loadavg1AtEnd,
     startup,
+    requested: { warm: WARM_RUNS, cold: COLD_RUNS },
+    outcomes,
+    budgetRatification: "not ratified: private-server startup characterization, not full EOT-00/EOT-01 coverage",
     stalls,
     bootstrap: bootstrap ?? null,
     samples: {
@@ -548,9 +618,23 @@ try {
         : null,
     },
   }
-  compareAgainstBaseline(report)
-  if (reportPath) await Bun.write(reportPath, JSON.stringify(report) + "\n")
-  else console.log(JSON.stringify(report))
+  let comparisonError: unknown
+  try {
+    compareAgainstBaseline(report)
+  } catch (error) {
+    comparisonError = error
+  }
+  const preserved = {
+    ...report,
+    comparison: {
+      status: comparisonError ? "failed" : process.env.BASELINE ? "compared" : "not-requested",
+      error:
+        comparisonError instanceof Error ? comparisonError.message : comparisonError ? String(comparisonError) : null,
+    },
+  }
+  if (reportPath) await Bun.write(reportPath, JSON.stringify(preserved) + "\n")
+  else console.log(JSON.stringify(preserved))
+  if (comparisonError) throw comparisonError
   await reap()
   // The report is complete either way; a stalled start still fails the check,
   // because a startup that sometimes does not happen is not a pass.

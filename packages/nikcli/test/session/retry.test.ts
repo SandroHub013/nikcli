@@ -56,6 +56,34 @@ describe("SessionRetry", () => {
       // attempt 5 base = 32000 → capped at 30000 even with jitter
       expect(SessionRetry.delay(5)).toBe(30_000)
     })
+
+    it("uses a future Retry-After HTTP date without jitter", () => {
+      const now = spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-30T12:00:00Z"))
+      try {
+        const err = apiError({
+          message: "rate limited",
+          isRetryable: true,
+          responseHeaders: { "retry-after": "Wed, 30 Sep 2026 12:00:07 GMT" },
+        })
+        expect(SessionRetry.delay(5, err)).toBe(7_000)
+      } finally {
+        now.mockRestore()
+      }
+    })
+
+    it("falls back to backoff for an expired Retry-After HTTP date", () => {
+      const now = spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-30T12:00:00Z"))
+      try {
+        const err = apiError({
+          message: "rate limited",
+          isRetryable: true,
+          responseHeaders: { "retry-after": "Wed, 30 Sep 2026 11:59:00 GMT" },
+        })
+        expect(SessionRetry.delay(2, err)).toBe(4_000)
+      } finally {
+        now.mockRestore()
+      }
+    })
   })
 
   describe("retryable", () => {
@@ -135,6 +163,20 @@ describe("SessionRetry", () => {
   })
 
   describe("sleep", () => {
+    it("cancels an in-flight backoff and removes its abort listener", async () => {
+      const ac = new AbortController()
+      const remove = spyOn(ac.signal, "removeEventListener")
+      try {
+        const pending = SessionRetry.sleep(SessionRetry.RETRY_MAX_DELAY, ac.signal)
+        ac.abort()
+        await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+        expect(remove).toHaveBeenCalledTimes(1)
+        expect(remove.mock.calls[0]?.[0]).toBe("abort")
+      } finally {
+        remove.mockRestore()
+      }
+    })
+
     it("rejects immediately when already aborted", async () => {
       const ac = new AbortController()
       ac.abort()

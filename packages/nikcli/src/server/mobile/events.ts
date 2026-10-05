@@ -5,7 +5,7 @@ import { EventFeed } from "../httpapi/event-feed"
 const HEARTBEAT_MS = 30_000
 
 /** Instance-scoped live updates the mobile app actually renders. */
-const ALLOWED_PREFIXES = ["mission.", "loop.", "todo.", "lsp.", "server."] as const
+const ALLOWED_PREFIXES = ["mission.", "loop.", "todo.", "lsp.", "server.", "mod.ui."] as const
 
 const instanceFeeds = new Map<string, { feed: EventFeed.Feed; unsubscribe: () => void }>()
 const envelope: EventFeed.Envelope = (event) => event

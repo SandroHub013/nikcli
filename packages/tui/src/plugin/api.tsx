@@ -20,6 +20,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import type { useToast } from "../ui/toast"
 import { VERSION } from "@nikcli-ai/util/version"
 import { TuiPluginRuntime } from "./runtime"
+import { createGraphicsApi } from "./graphics"
 import { createV2Data } from "./data"
 
 type RouteEntry = {
@@ -131,7 +132,12 @@ function routeNavigate(
       ? (sync.session.get(sessionID)?.workspaceID ??
         (route.data.type === "session" ? route.data.workspaceID : undefined))
       : route.data.workspaceID
-    route.navigate({ type: "workspace", tab: "github", sessionID, workspaceID })
+    route.navigate({
+      type: "workspace",
+      tab: "github",
+      sessionID,
+      workspaceID,
+    })
     return
   }
 
@@ -146,7 +152,12 @@ function routeNavigate(
       ? (sync.session.get(sessionID)?.workspaceID ??
         (route.data.type === "session" ? route.data.workspaceID : undefined))
       : route.data.workspaceID
-    route.navigate({ type: "workspace", tab: "actions", sessionID, workspaceID })
+    route.navigate({
+      type: "workspace",
+      tab: "actions",
+      sessionID,
+      workspaceID,
+    })
     return
   }
 
@@ -298,7 +309,11 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       return sync.data.part[messageID] ?? []
     },
     lsp() {
-      return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
+      return sync.data.lsp.map((item) => ({
+        id: item.id,
+        root: item.root,
+        status: item.status,
+      }))
     },
     mcp() {
       return Object.entries(sync.data.mcp)
@@ -492,6 +507,9 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
     },
     renderer: input.renderer,
+    // Available outside plugin context too: the placement is terminal work, not
+    // plugin work, so nothing here is scoped to one plugin's generation.
+    graphics: createGraphicsApi(input),
     slots: {
       register() {
         throw new Error("slots.register is only available in plugin context")

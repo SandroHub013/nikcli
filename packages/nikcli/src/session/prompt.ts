@@ -9,6 +9,7 @@ import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { SessionCompaction } from "./compaction"
+import { Mod } from "../mod"
 import { Bus } from "../bus"
 import { InstructionSync } from "./instruction-sync"
 import { Plugin } from "../plugin"
@@ -54,8 +55,6 @@ import { SessionPending } from "./pending"
 import { SessionV2Write } from "./v2/write"
 import { LLM } from "./llm"
 import { stripDanglingXmlArtifacts } from "@/util/dangling-xml"
-
-globalThis.AI_SDK_LOG_WARNINGS = false
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
@@ -731,7 +730,54 @@ export namespace SessionPrompt {
     return result
   }
 
+  /**
+   * A turn: everything done in answer to one prompt, from the first model request to the
+   * final answer. `turn.start` and `turn.complete` mods see its edges; `runLoopTurn` is the
+   * loop itself, which re-enters itself when a steered or queued prompt follows.
+   */
   async function runLoop(sessionID: string, controller: AbortController) {
+    const turnId = `turn_${ulid()}`
+    const started = Date.now()
+    turnIds.set(sessionID, turnId)
+    await Mod.turnStart({ sessionID, turnId })
+    try {
+      const item = await runLoopTurn(sessionID, controller)
+      await completeTurn(sessionID, turnId, started, controller.signal.aborted, item)
+      return item
+    } catch (error) {
+      await completeTurn(sessionID, turnId, started, true)
+      throw error
+    }
+  }
+
+  /** The turn each session is running, so a step can name it. */
+  const turnIds = new Map<string, string>()
+
+  async function completeTurn(
+    sessionID: string,
+    turnId: string,
+    started: number,
+    isAborted: boolean,
+    item?: MessageV2.WithParts,
+  ) {
+    if (turnIds.get(sessionID) === turnId) turnIds.delete(sessionID)
+    if (!(await Mod.handles("turn.complete"))) return
+    const answer = (item?.parts ?? [])
+      .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
+      .map((part) => part.text)
+      .join("\n")
+    const tokens = item?.info.role === "assistant" ? item.info.tokens : undefined
+    await Mod.turnComplete({
+      sessionID,
+      turnId,
+      answer,
+      durationMs: Date.now() - started,
+      isAborted,
+      usage: tokens ? { ...tokens } : undefined,
+    }).catch((error) => log.warn("turn.complete failed", { error: String(error) }))
+  }
+
+  async function runLoopTurn(sessionID: string, controller: AbortController): Promise<MessageV2.WithParts> {
     const abort = controller.signal
 
     await using _ = defer(() => PromptState.finish(sessionID, controller))
@@ -872,8 +918,30 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      const model = await providerGetModel(lastUser.model.providerID, lastUser.model.modelID)
+      let model = await providerGetModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
+
+      // `turn.step` mods see each request before it is built, and can send it to another model.
+      if (!task && (await Mod.handles("turn.step"))) {
+        const stepped = await Mod.turnStep({
+          sessionID,
+          turnId: turnIds.get(sessionID) ?? "",
+          step,
+          agent: lastUser.agent,
+          model: `${model.providerID}/${model.id}`,
+          variant: lastUser.variant,
+        })
+        const chosen = Provider.parseModel(stepped.model)
+        if (chosen.providerID !== model.providerID || chosen.modelID !== model.id) {
+          model = await providerGetModel(chosen.providerID, chosen.modelID).catch((error) => {
+            log.warn("turn.step chose a model that is not available; keeping the configured one", {
+              model: stepped.model,
+              error: String(error),
+            })
+            return model
+          })
+        }
+      }
 
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
@@ -999,7 +1067,22 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.executeAsync(taskArgs, taskCtx).catch((error: unknown) => {
+        const result = await Mod.toolCall(
+          {
+            tool: "task",
+            sessionID,
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            callID: part.callID,
+            args: taskArgs,
+          },
+          (callArgs) => taskTool.executeAsync(callArgs as typeof taskArgs, taskCtx),
+          (text) =>
+            ({ title: task.description, output: text, metadata: {} }) as Awaited<
+              ReturnType<typeof taskTool.executeAsync>
+            >,
+          abort,
+        ).catch((error: unknown) => {
           executionError = error instanceof Error ? error : new Error(String(error))
           log.error("subtask execution failed", {
             error,
@@ -1151,7 +1234,7 @@ export namespace SessionPrompt {
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-      const tools = await resolveTools({
+      const { tools, deferred } = await resolveTools({
         agent,
         session,
         model,
@@ -1246,6 +1329,7 @@ export namespace SessionPrompt {
             : []),
         ],
         tools,
+        deferred,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
@@ -1392,9 +1476,9 @@ export namespace SessionPrompt {
       PromptState.resolve(sessionID, item)
       if (!abort.aborted) {
         const steered = await promote(sessionID, "steer")
-        if (steered.length > 0) return runLoop(sessionID, controller)
+        if (steered.length > 0) return runLoopTurn(sessionID, controller)
         const queued = await promote(sessionID, "queue")
-        if (queued.length > 0) return runLoop(sessionID, controller)
+        if (queued.length > 0) return runLoopTurn(sessionID, controller)
       }
       void runCompaction(
         Effect.gen(function* () {
@@ -1483,8 +1567,22 @@ export namespace SessionPrompt {
     // indexed column write, skipped when the value is unchanged.
     Effect.runSync(SessionRepo.setLastModel(input.sessionID, model))
 
+    // `prompt.submit` mods see the text the user typed before the turn starts: they can
+    // rewrite it, add text only the model reads, or drop the prompt.
+    let sourceParts = input.parts
+    const typed = sourceParts.findIndex((part) => part.type === "text" && !part.synthetic)
+    if (typed >= 0 && (await Mod.handles("prompt.submit"))) {
+      const original = sourceParts[typed] as MessageV2.TextPart
+      const submitted = await Mod.promptSubmit({ sessionID: input.sessionID, agent: agent.name, text: original.text })
+      sourceParts = sourceParts.map((part, index) => (index === typed ? { ...part, text: submitted.text } : part))
+      sourceParts = [
+        ...sourceParts,
+        ...submitted.context.map((text) => ({ type: "text" as const, text, synthetic: true })),
+      ]
+    }
+
     const parts = await Promise.all(
-      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
+      sourceParts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
@@ -2081,7 +2179,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       message: { id: Identifier.ascending("message") } as MessageV2.Assistant,
       partFromToolCall: () => undefined,
     }
-    const resolved = await resolveTools({
+    const { tools: resolved, deferred } = await resolveTools({
       agent,
       session,
       model,
@@ -2117,6 +2215,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       abort: input.abort,
       retries: 2,
       tools,
+      // Same offer as the session's own requests, so this one reads the same
+      // cached prefix.
+      deferred,
       messages: [
         ...rendered.skillMessages.map((content) => ({ role: "user" as const, content })),
         ...MessageV2.toModelMessages(sessionMessages, model, { wrap }),

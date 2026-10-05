@@ -20,6 +20,7 @@ import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import { PermissionRuleset } from "../permission/ruleset"
+import { Wildcard } from "@/util/wildcard"
 import path from "path"
 import { existsSync } from "fs"
 import { type ToolDefinition } from "@nikcli-ai/plugin"
@@ -83,38 +84,119 @@ export namespace ToolRegistry {
   }
 
   /**
-   * Tools that stay registered but are **off until the user asks for them**.
+   * The registry tools an open-ended agent gets in its **first** request.
    *
-   * Everything else is on unless `session.disabledTools` says otherwise. These
-   * invert that: `opentui` carries a large schema and an equally large
-   * description, and it pays for that space in every prompt of every session —
-   * including the ones that will never draw a dashboard. Being registered but
-   * excluded is what lets `/usage` list it and switch it on per session; a flag
-   * in the registry would hide it from that dialog entirely.
+   * Every other registry tool is deferred: its schema stays out of the prompt,
+   * `search_tools` lists it by name and one-line summary, and it joins the
+   * toolset for the rest of the session once `search_tools` loads it or the
+   * model calls it by name. Tool schemas are the first and largest block of the
+   * provider prompt, so each tool here is paid for on every request of every
+   * session — it has to earn that by being used in most of them, or by being
+   * something the system prompt tells the model to reach for unprompted:
+   *
+   * - the edit loop: `read`, `edit`/`write` (`apply_patch` for GPT), `bash`,
+   *   `glob`, `grep`;
+   * - how the agent organises its work: `task`, `todowrite`/`todoread`,
+   *   `skill`, `question`, and `search_tools` itself;
+   * - code intelligence and publishing the agent is expected to reach for
+   *   unprompted: `lsp` and `artifact`;
+   * - tools the primary agents' prompts name as the way to do something:
+   *   `monitor` (long-running commands), `delegation` (background results),
+   *   `plan_enter`/`plan_exit`, and the goal tools the `/goal`, mission and
+   *   loop prompts call;
+   * - tools that only exist because config opted in to them for exactly this
+   *   use: `advisor` (`agent.advisor`), `batch` (`experimental.batch_tool`).
+   *
+   * `invalid` is here so it is never offered for loading; the model does not
+   * see it either way.
+   *
+   * `config.tool.eager` adds to this set; MCP and connector tools are not
+   * registry tools and are not deferred.
    */
-  export const OPT_IN = new Set(["opentui"])
+  export const CORE: ReadonlySet<string> = new Set([
+    "invalid",
+    "read",
+    "edit",
+    "write",
+    "apply_patch",
+    "bash",
+    "glob",
+    "grep",
+    "task",
+    "todowrite",
+    "todoread",
+    "lsp",
+    "artifact",
+    "skill",
+    "question",
+    "search_tools",
+    "monitor",
+    "delegation",
+    "plan_enter",
+    "plan_exit",
+    "create_goal",
+    "get_goal",
+    "update_goal",
+    "advisor",
+    "batch",
+  ])
 
   /**
-   * Whether a tool goes into the model's tool list, given a session's
-   * `disabledTools` map.
-   *
-   * The map is tri-state for opt-in tools: absent means "not asked for", and
-   * only an explicit `false` — what the `/usage` toggle writes when it enables
-   * a source — turns one on.
+   * Whether the ruleset hands the agent a curated toolset: anything it does not
+   * name is denied. Subagents like `scout` or `explore` are built this way, and
+   * everything they can see is what their prompt tells them to use — deferring
+   * any of it would only add a round trip to their main job, so nothing is
+   * deferred for them.
    */
-  export function enabled(id: string, disabled: Record<string, boolean> | undefined): boolean {
-    const value = disabled?.[id]
-    return OPT_IN.has(id) ? value === false : value !== true
+  export function curated(ruleset: PermissionRuleset.Ruleset): boolean {
+    const fallback = ruleset.findLast((rule) => rule.permission === "*")
+    return fallback?.action === "deny" && fallback.pattern === "*"
   }
 
   /**
-   * The per-session half of "can the model call this tool", on top of the
+   * How a registry tool reaches the model:
+   *
+   * - `active` — schema in every request;
+   * - `deferred` — callable, and listed by `search_tools`, but its schema is
+   *   left out of the request until it is loaded;
+   * - `hidden` — not offered at all.
+   */
+  export type Exposure = "active" | "deferred" | "hidden"
+
+  /**
+   * Where a registry tool stands for one session, on top of the
    * model/agent/flag filters {@link Interface.tools} already applies.
    *
+   * `session.disabledTools` is tri-state: `true` is the user switching a tool
+   * off, `false` is a deferred tool that has been loaded — by `search_tools`,
+   * by a direct call, or by the `/usage` toggle — and an absent entry is the
+   * default for the tool.
+   *
    * Shared on purpose. `resolveTools` uses it to build the toolset the model
-   * receives and `search_tools` uses it to build the catalog it advertises; if
-   * the two drifted, `search_tools` would name a tool that is not in the
-   * model's schema and every call to it would come back as an unknown tool.
+   * receives, `search_tools` to build the catalog it offers and `/usage` to
+   * report what is in context; if they drifted, `search_tools` would offer a
+   * tool the session will not run.
+   */
+  export function exposure(
+    id: string,
+    input: {
+      disabledTools?: Record<string, boolean>
+      ruleset: PermissionRuleset.Ruleset
+      /** `config.tool.eager`: ids or wildcards loaded from the first request. */
+      eager?: readonly string[]
+    },
+  ): Exposure {
+    if (!visible(id, input)) return "hidden"
+    if (CORE.has(id)) return "active"
+    if (input.disabledTools?.[id] === false) return "active"
+    if (input.eager?.some((pattern) => Wildcard.match(id, pattern))) return "active"
+    if (curated(input.ruleset)) return "active"
+    return "deferred"
+  }
+
+  /**
+   * Whether the session can use a tool at all — the switch MCP and connector
+   * tools go through, and the `hidden` half of {@link exposure}.
    */
   export function visible(
     id: string,
@@ -123,9 +205,8 @@ export namespace ToolRegistry {
       ruleset: PermissionRuleset.Ruleset
     },
   ): boolean {
-    // Tools the user switched off for this session, plus the opt-in tools
-    // nobody has asked for yet.
-    if (!enabled(id, input.disabledTools)) return false
+    // Tools the user switched off for this session.
+    if (input.disabledTools?.[id] === true) return false
     // Wholly-denied tools (pattern "*"). Resource-scoped denies stay visible —
     // the tool still works on the paths that are allowed.
     if (PermissionRuleset.disabled([id], input.ruleset).has(id)) return false

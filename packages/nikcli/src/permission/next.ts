@@ -11,6 +11,7 @@ import { PermissionRepo } from "./permission-repo"
 import { PermissionRuleset } from "./ruleset"
 import { AutoMode } from "./auto"
 import { Flag } from "@nikcli-ai/util/flag"
+import { Mod } from "@/mod"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
@@ -154,6 +155,7 @@ export namespace PermissionNext {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const mods = yield* Mod.Service
       const state = yield* InstanceState.make<State>((ctx) =>
         Effect.gen(function* () {
           // A ruleset that cannot be read is not recoverable here: the
@@ -323,6 +325,47 @@ export namespace PermissionNext {
           return { pattern, rule }
         })
 
+        // `tool.check` mods decide before anyone is asked: they can approve a call,
+        // refuse it, or insist it is asked about. What the rules decided is on the
+        // event as `rule`, which is what the guard `sec-default` reads to keep a
+        // `deny` rule a deny. With no hook on the event nothing below runs.
+        if (yield* mods.handles("tool.check")) {
+          const rule: "allow" | "ask" | "deny" = evaluated.some((entry) => entry.rule.action === "deny")
+            ? "deny"
+            : evaluated.some((entry) => entry.rule.action === "ask")
+              ? "ask"
+              : "allow"
+          const verdict: { decision: "allow" | "ask" | "deny"; reason?: string } = yield* mods.emit(
+            "tool.check",
+            {
+              tool: request.permission,
+              patterns: request.patterns,
+              input: request.metadata,
+              rule,
+              sessionID: request.sessionID,
+              agent,
+              callID: request.tool?.callID,
+            },
+            () => Effect.succeed({ decision: rule } as { decision: "allow" | "ask" | "deny"; reason?: string }),
+            {
+              validate: (result) =>
+                result &&
+                typeof result === "object" &&
+                ["allow", "ask", "deny"].includes((result as { decision?: string }).decision ?? "")
+                  ? undefined
+                  : "needs { decision: 'allow' | 'ask' | 'deny' }",
+            },
+          )
+          if (verdict.decision === "deny" && rule !== "deny") {
+            const reason = verdict.reason ?? "a mod refused this call"
+            return yield* Effect.fail(
+              new BlockedError({ rule: "Mod", reason, detail: `A mod refused this tool call: ${reason}` }),
+            )
+          }
+          if (verdict.decision === "allow") return
+          if (verdict.decision === "ask" && rule === "allow") return yield* prompt(s, request)
+        }
+
         // Auto mode only matters when a decision could change under it; a safe
         // tool the ruleset already allows never pays for the mode lookup.
         if (
@@ -457,7 +500,7 @@ export namespace PermissionNext {
     }),
   )
 
-  export const defaultLayer = layer
+  export const defaultLayer = layer.pipe(Layer.provide(Mod.defaultLayer))
 
   export const evaluate = PermissionRuleset.evaluate
   export const disabled = PermissionRuleset.disabled

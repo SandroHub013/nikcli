@@ -26,6 +26,23 @@ export namespace Flag {
     return undefined
   }
 
+  /**
+   * Turn every mod off for this process (`NIKCLI_DISABLE_MODS=1`), the safe-mode switch. Read on
+   * every access for the same reason as `autoApprove`: the CLI can set it after this module is
+   * first imported.
+   */
+  export function modsDisabled() {
+    return truthy("NIKCLI_DISABLE_MODS")
+  }
+
+  /**
+   * An extra directory of managed settings and organization mods
+   * (`NIKCLI_MANAGED_CONFIG_DIR`), for MDM and tests. Read on every access like `autoApprove`.
+   */
+  export function managedConfigDir() {
+    return process.env["NIKCLI_MANAGED_CONFIG_DIR"]
+  }
+
   export const NIKCLI_AUTO_SHARE = truthy("NIKCLI_AUTO_SHARE")
   export const NIKCLI_GIT_BASH_PATH = process.env["NIKCLI_GIT_BASH_PATH"]
   export const NIKCLI_CONFIG = process.env["NIKCLI_CONFIG"]

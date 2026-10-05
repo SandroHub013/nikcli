@@ -1,6 +1,6 @@
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { Artifact } from "@/artifact"
 import { UI } from "@/cli/ui"
 import { log } from "./shared"

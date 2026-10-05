@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>nikcli &middot; logo lab</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        padding: 32px 28px 64px;
+        background: #0b0d10;
+        color: #e6edf3;
+        font:
+          14px/1.5 ui-sans-serif,
+          -apple-system,
+          "SF Pro Text",
+          system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 4px;
+      }
+      .lede {
+        color: #6b7684;
+        margin: 0 0 28px;
+        max-width: 62ch;
+      }
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(max-content, 1fr));
+      }
+      section {
+        background: #0f1319;
+        border: 1px solid #1e2530;
+        border-radius: 10px;
+        padding: 16px 18px;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      header b {
+        color: #7ee787;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      header span {
+        color: #e3b341;
+        font:
+          11px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      header em {
+        color: #6b7684;
+        font-style: normal;
+        font-size: 12px;
+      }
+      pre {
+        margin: 0;
+        font:
+          13px/1.15 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        white-space: pre;
+        overflow-x: auto;
+      }
+      .credit {
+        margin: 10px 0 0;
+        color: #79c0ff;
+        font:
+          12px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .credit a {
+        color: inherit;
+        text-decoration: none;
+      }
+      code {
+        background: #161b23;
+        padding: 1px 5px;
+        border-radius: 4px;
+        color: #e6edf3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>nikcli &middot; logo lab</h1>
+    <p class="lede">
+      10 wordmark styles off one shared 5&times;7 grid (plus two hand-authored fonts). Rendered with the shipped logo's
+      row luminance ramp. Run the live one with <code>bun run script/logo-lab.ts</code> &mdash; arrows to switch,
+      <code>r</code> to replay, <code>q</code> to quit.
+    </p>
+    <div class="grid">
+      <section>
+        <header>
+          <b>shadow</b><span>45&times;6</span><em>shipped today — figlet ANSI Shadow, box-drawing diagonals</em>
+        </header>
+        <pre><span style="color:#a6afb9">███╗   ██╗ ██╗ ██╗  ██╗  ██████╗ ██╗      ██╗</span>
+<span style="color:#b7c0c9">████╗  ██║ ██║ ██║ ██╔╝ ██╔════╝ ██║      ██║</span>
+<span style="color:#d0d8df">██╔██╗ ██║ ██║ █████╔╝  ██║      ██║      ██║</span>
+<span style="color:#e6edf3">██║╚██╗██║ ██║ ██╔═██╗  ██║      ██║      ██║</span>
+<span style="color:#c4ccd4">██║ ╚████║ ██║ ██║  ██╗ ╚██████╗ ███████╗ ██║</span>
+<span style="color:#a9b2bc">╚═╝  ╚═══╝ ╚═╝ ╚═╝  ╚═╝  ╚═════╝ ╚══════╝ ╚═╝</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>block</b><span>35&times;7</span><em>solid 5x7 grid — the cleanest silhouette</em></header>
+        <pre><span style="color:#a2acb6">█   █ █████ █   █  ████ █     █████</span>
+<span style="color:#c4ccd4">█   █   █   █  █  █     █       █  </span>
+<span style="color:#dde4eb">██  █   █   █ █   █     █       █  </span>
+<span style="color:#e6edf3">█ █ █   █   ███   █     █       █  </span>
+<span style="color:#dde4eb">█  ██   █   █ █   █     █       █  </span>
+<span style="color:#c4ccd4">█   █   █   █  █  █     █       █  </span>
+<span style="color:#a2acb6">█   █ █████ █   █  ████ █████ █████</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>banner</b><span>70&times;7</span><em>block doubled to display width — 70 columns</em></header>
+        <pre><span style="color:#a2acb6">██      ██  ██████████  ██      ██    ████████  ██          ██████████</span>
+<span style="color:#c4ccd4">██      ██      ██      ██    ██    ██          ██              ██    </span>
+<span style="color:#dde4eb">████    ██      ██      ██  ██      ██          ██              ██    </span>
+<span style="color:#e6edf3">██  ██  ██      ██      ██████      ██          ██              ██    </span>
+<span style="color:#dde4eb">██    ████      ██      ██  ██      ██          ██              ██    </span>
+<span style="color:#c4ccd4">██      ██      ██      ██    ██    ██          ██              ██    </span>
+<span style="color:#a2acb6">██      ██  ██████████  ██      ██    ████████  ██████████  ██████████</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>outline</b><span>35&times;7</span><em>hollow strokes, solid silhouette</em></header>
+        <pre><span style="color:#a2acb6">█   █ █░░░█ █   █  █░░█ █     █░░░█</span>
+<span style="color:#c4ccd4">█   █   █   █  █  █     █       █  </span>
+<span style="color:#dde4eb">██  █   █   █ █   █     █       █  </span>
+<span style="color:#e6edf3">█ █ █   █   █░█   █     █       █  </span>
+<span style="color:#dde4eb">█  ██   █   █ █   █     █       █  </span>
+<span style="color:#c4ccd4">█   █   █   █  █  █     █       █  </span>
+<span style="color:#a2acb6">█   █ █░░░█ █   █  █░░█ █░░░█ █░░░█</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>halftone</b><span>35&times;7</span><em>░▒▓█ ramp driven by the row luminance</em></header>
+        <pre><span style="color:#a2acb6">▒   ▒ ▒▒▒▒▒ ▒   ▒  ▒▒▒▒ ▒     ▒▒▒▒▒</span>
+<span style="color:#c4ccd4">▓   ▓   ▓   ▓  ▓  ▓     ▓       ▓  </span>
+<span style="color:#dde4eb">██  █   █   █ █   █     █       █  </span>
+<span style="color:#e6edf3">█ █ █   █   ███   █     █       █  </span>
+<span style="color:#dde4eb">█  ██   █   █ █   █     █       █  </span>
+<span style="color:#c4ccd4">▓   ▓   ▓   ▓  ▓  ▓     ▓       ▓  </span>
+<span style="color:#a2acb6">▒   ▒ ▒▒▒▒▒ ▒   ▒  ▒▒▒▒ ▒▒▒▒▒ ▒▒▒▒▒</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>slant</b><span>41&times;7</span><em>italic shear, one extra column per row</em></header>
+        <pre><span style="color:#a2acb6">      █   █ █████ █   █  ████ █     █████</span>
+<span style="color:#c4ccd4">     █   █   █   █  █  █     █       █  </span>
+<span style="color:#dde4eb">    ██  █   █   █ █   █     █       █  </span>
+<span style="color:#e6edf3">   █ █ █   █   ███   █     █       █  </span>
+<span style="color:#dde4eb">  █  ██   █   █ █   █     █       █  </span>
+<span style="color:#c4ccd4"> █   █   █   █  █  █     █       █  </span>
+<span style="color:#a2acb6">█   █ █████ █   █  ████ █████ █████</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>ascii</b><span>36&times;8</span><em>7-bit only — # with a . shadow, no Unicode</em></header>
+        <pre><span style="color:#a2acb6">#   # ##### #   #  #### #     #####</span>
+<span style="color:#c0c8d0">#.  #. .#...#. # .# ....#.     .#...</span>
+<span style="color:#d7dfe6">##  #.  #.  #.# . #.    #.      #.</span>
+<span style="color:#e4ebf1">#.# #.  #.  ###.  #.    #.      #.</span>
+<span style="color:#e4ebf1">#. ##.  #.  #.#.  #.    #.      #.</span>
+<span style="color:#d7dfe6">#.  #.  #.  #. #  #.    #.      #.</span>
+<span style="color:#c0c8d0">#.  #.##### #.  #  #### ##### #####</span>
+<span style="color:#a2acb6"> .   . ..... .   .  .... ..... .....</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>chunky</b><span>32&times;4</span><em>half blocks, four rows — fits a 40 column header</em></header>
+        <pre><span style="color:#a2acb6">▄▄▄▄▄ ▄▄▄ █▀▀▀▀   ▄▀▀▀ █     ▄▄▄</span>
+<span style="color:#dde4eb">█   █  █  █ ██   █     █      █ </span>
+<span style="color:#dde4eb">█   █  █  █▄▄▄▄  █     █      █ </span>
+<span style="color:#a2acb6">▀▀▀▀▀ ▀▀▀ ▀   ▀▀  ▀▀▀▀ ▀▀▀▀▀ ▀▀▀</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>line</b><span>27&times;4</span><em>hairline box drawing — the narrowest candidate</em></header>
+        <pre><span style="color:#a2acb6">┌─┐┬ ┌─┐ ┌─┐┬ ╭─── │    ┌─┐</span>
+<span style="color:#dde4eb">│ ││ │ │ │ ├┤ │    │    │ │</span>
+<span style="color:#dde4eb">│ ├┤ ├─┤ │ ││ │    │    ├─┤</span>
+<span style="color:#a2acb6">└─┘┘ └─┘ └─┘┘ ╰─── ╰─── └─┘</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+      <section>
+        <header><b>badge</b><span>43&times;13</span><em>block framed, credit inside — for a splash header</em></header>
+        <pre><span style="color:#a2acb6">╭───────────────────────────────────────╮</span>
+<span style="color:#b4bcc6">│                                         │</span>
+<span style="color:#c4ccd4">│  █   █ █████ █   █  ████ █     █████    │</span>
+<span style="color:#d2dae1">│  █   █   █   █  █  █     █       █      │</span>
+<span style="color:#dde4eb">│  ██  █   █   █ █   █     █       █      │</span>
+<span style="color:#e4ebf1">│  █ █ █   █   ███   █     █       █      │</span>
+<span style="color:#e6edf3">│  █  ██   █   █ █   █     █       █      │</span>
+<span style="color:#e4ebf1">│  █   █   █   █  █  █     █       █      │</span>
+<span style="color:#dde4eb">│  █   █ █████ █   █  ████ █████ █████    │</span>
+<span style="color:#d2dae1">│                                         │</span>
+<span style="color:#c4ccd4">│           ◇ by @nikomatt69              │</span>
+<span style="color:#b4bcc6">│                                         │</span>
+<span style="color:#a2acb6">╰───────────────────────────────────────╯</span></pre>
+        <p class="credit">&#9671; <a href="https://github.com/nikomatt69">by @nikomatt69</a></p>
+      </section>
+    </div>
+  </body>
+</html>

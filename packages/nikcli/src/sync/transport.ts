@@ -28,6 +28,14 @@ const log = Log.create({ service: "sync.remote.transport" })
 export type BacklogResponse = {
   events: SyncEventRecord[]
   hasMore: boolean
+  nextCursor?: BacklogCursor
+}
+
+export type BacklogCursor = { seq: number; aggregate: string; id: string }
+export type SubscriptionLifecycle = {
+  ready(): void
+  stale(error: unknown): void
+  wake(): void
 }
 
 export type PushOutcome = { ok: true } | { ok: false; permanent?: boolean; error?: string }
@@ -37,9 +45,9 @@ export type RemoteTokenResolver = () => Promise<string | undefined>
 export interface RemoteTransport {
   /** Fetch missed events with seq > `since`. May be called multiple
    *  times until `hasMore` is false. */
-  pullBacklog(since: number): Promise<BacklogResponse>
+  pullBacklog(since: number, cursor?: BacklogCursor): Promise<BacklogResponse>
   /** Subscribe to live events. Return value unsubscribes. */
-  subscribe(onEvent: (event: SyncEventRecord) => void | Promise<void>): () => void
+  subscribe(onEvent: (event: SyncEventRecord) => void | Promise<void>, lifecycle?: SubscriptionLifecycle): () => void
   /** Push a single event. The shape `PushOutcome` lets adapters signal
    *  permanent failures (e.g. HTTP 401) so the outbox stops retrying. */
   push(event: SyncEventRecord): Promise<PushOutcome>
@@ -77,6 +85,9 @@ export type HttpRemoteTransportOptions = {
   onError?: (error: unknown) => void
   fetchImpl?: typeof fetch
   eventSourceImpl?: typeof EventSource
+  /** First reconnect delay after a malformed frame. Doubles per consecutive
+   *  failure up to `reopenCapMs`, and resets on a real `ready`. */
+  reopenDelayMs?: number
 }
 
 export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): RemoteTransport {
@@ -87,6 +98,13 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
   let token = opts.token
   let refreshingToken: Promise<boolean> | undefined
   let source: EventSource | undefined
+  const reopenCapMs = 30_000
+  const baseReopenDelayMs = Math.max(0, opts.reopenDelayMs ?? 1_000)
+  let reopenDelayMs = baseReopenDelayMs
+  let reopenTimer: ReturnType<typeof setTimeout> | undefined
+  let closed = false
+  const cancellation = new AbortController()
+  const lifecycles = new Set<SubscriptionLifecycle>()
   const subscribers = new Set<(event: SyncEventRecord) => void | Promise<void>>()
 
   async function refreshToken(failedToken: string): Promise<boolean> {
@@ -97,6 +115,7 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
         .resolveToken()
         .then((next) => {
           if (!next || next === failedToken) return false
+          if (closed) return false
           token = next
           return true
         })
@@ -114,12 +133,18 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
   }
 
   async function fetchWithToken(input: string, init: RequestInit = {}): Promise<Response> {
+    if (closed) throw new Error("transport closed")
+    init = {
+      ...init,
+      signal: AbortSignal.any([cancellation.signal, init.signal ?? AbortSignal.timeout(30_000)]),
+    }
     const failedToken = token
     const first = await fetchImpl(input, {
       ...init,
       headers: withToken(init.headers, failedToken),
     })
     if (first.status !== 401 || !(await refreshToken(failedToken))) return first
+    if (closed) throw new Error("transport closed")
     return fetchImpl(input, {
       ...init,
       headers: withToken(init.headers, token),
@@ -132,10 +157,15 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
     }
   }
 
-  async function pullBacklog(since: number): Promise<BacklogResponse> {
+  async function pullBacklog(since: number, cursor?: BacklogCursor): Promise<BacklogResponse> {
     const url = new URL(`${base}/sync/outbox`)
     url.searchParams.set("projectID", opts.projectID)
     url.searchParams.set("since", String(since))
+    if (cursor) {
+      url.searchParams.set("since", String(cursor.seq))
+      url.searchParams.set("afterAggregate", cursor.aggregate)
+      url.searchParams.set("afterID", cursor.id)
+    }
     const res = await fetchWithToken(url.toString(), {
       signal: AbortSignal.timeout(30_000),
     })
@@ -144,41 +174,97 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
   }
 
   function openSource(): void {
+    if (closed) return
     const streamUrl = new URL(`${base}/sync/stream`)
     streamUrl.searchParams.set("projectID", opts.projectID)
     streamUrl.searchParams.set("token", token)
+    streamUrl.searchParams.set("readiness", "1")
     const sourceToken = token
     const nextSource = new EventSourceImpl!(streamUrl.toString())
     source = nextSource
+    nextSource.addEventListener("ready", () => {
+      if (closed || source !== nextSource) return
+      // A stream that reached `ready` is trusted again, so the next malformed
+      // frame starts from the base delay rather than the escalated one.
+      reopenDelayMs = baseReopenDelayMs
+      for (const lifecycle of lifecycles) lifecycle.ready()
+    })
     // The server emits `event: sync` on the stream
     // (server/routes/sync.ts), so listen for that event name.
     nextSource.addEventListener("sync", (e: MessageEvent) => {
       try {
-        const event = JSON.parse(e.data) as SyncEventRecord
+        if (closed || source !== nextSource) return
+        const event = JSON.parse(e.data)
+        if (event.type === "sync.received") {
+          for (const lifecycle of lifecycles) lifecycle.wake()
+          return
+        }
+        if (
+          event.projectId !== opts.projectID ||
+          typeof event.id !== "string" ||
+          typeof event.aggregate !== "string" ||
+          !Number.isSafeInteger(event.seq) ||
+          event.seq < 1
+        ) {
+          throw new Error("invalid remote sync event")
+        }
         fanout(event)
       } catch (error) {
+        nextSource.close()
+        source = undefined
         opts.onError?.(error)
+        for (const lifecycle of lifecycles) lifecycle.stale(error)
+        scheduleReopen()
       }
     })
     nextSource.addEventListener("error", (event: Event) => {
+      if (closed || source !== nextSource) return
       opts.onError?.(event)
+      for (const lifecycle of lifecycles) lifecycle.stale(event)
       const code = (event as Event & { code?: unknown }).code
       if (code !== 401 || source !== nextSource) return
       nextSource.close()
       source = undefined
       void refreshToken(sourceToken)
         .then((changed) => {
-          if (changed && subscribers.size > 0 && !source) openSource()
+          if (!closed && changed && subscribers.size > 0 && !source) openSource()
         })
         .catch((error) => opts.onError?.(error))
     })
   }
 
-  function subscribe(onEvent: (event: SyncEventRecord) => void | Promise<void>): () => void {
+  /**
+   * Replace a stream that produced a frame the client could not parse.
+   *
+   * A malformed frame means the connection cannot be trusted, so readiness is
+   * invalidated and the replacement is opened after a backoff rather than
+   * immediately: a hub that keeps emitting malformed frames must not be met
+   * with a hot reconnect loop. Malformed input stays recoverable — the stream
+   * comes back and the next `ready` re-fences the consumer.
+   */
+  function scheduleReopen(): void {
+    if (closed || source || reopenTimer) return
+    if (subscribers.size === 0) return
+    const delay = reopenDelayMs
+    reopenDelayMs = Math.min(reopenDelayMs * 2, reopenCapMs)
+    reopenTimer = setTimeout(() => {
+      reopenTimer = undefined
+      if (closed || source || subscribers.size === 0) return
+      openSource()
+    }, delay)
+  }
+
+  function subscribe(
+    onEvent: (event: SyncEventRecord) => void | Promise<void>,
+    lifecycle?: SubscriptionLifecycle,
+  ): () => void {
+    if (closed) throw new Error("transport closed")
     subscribers.add(onEvent)
+    if (lifecycle) lifecycles.add(lifecycle)
     if (!source) openSource()
     return () => {
       subscribers.delete(onEvent)
+      if (lifecycle) lifecycles.delete(lifecycle)
       if (subscribers.size === 0 && source) {
         source.close()
         source = undefined
@@ -210,11 +296,18 @@ export function createHttpRemoteTransport(opts: HttpRemoteTransportOptions): Rem
   }
 
   function close(): void {
+    closed = true
+    cancellation.abort()
+    if (reopenTimer) {
+      clearTimeout(reopenTimer)
+      reopenTimer = undefined
+    }
     if (source) {
       source.close()
       source = undefined
     }
     subscribers.clear()
+    lifecycles.clear()
   }
 
   return { pullBacklog, subscribe, push, close }
@@ -352,8 +445,9 @@ export function createInMemoryRemoteTransport(): RemoteTransport & {
       since = Math.max(since, ...filtered.map((e) => e.seq))
       return { events: filtered, hasMore: false }
     },
-    subscribe(onEvent) {
+    subscribe(onEvent, lifecycle) {
       subscribers.add(onEvent)
+      lifecycle?.ready()
       return () => subscribers.delete(onEvent)
     },
     async push(event) {

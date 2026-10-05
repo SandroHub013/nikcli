@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Zenburn",
+  "id": "zenburn",
+  "light": {
+    "seeds": {
+      "neutral": "#ffffef",
+      "primary": "#5f7f8f",
+      "success": "#5f8f5f",
+      "warning": "#8f8f5f",
+      "error": "#8f5f5f",
+      "info": "#8f7f5f",
+      "interactive": "#5f7f8f",
+      "diffAdd": "#5f8f5f",
+      "diffDelete": "#8f5f5f"
+    },
+    "overrides": {
+      "background-base": "#ffffef",
+      "background-weak": "#ebebdb",
+      "background-strong": "#ffffef",
+      "background-stronger": "#f5f5e5",
+      "surface-raised-stronger-non-alpha": "#f5f5e5",
+      "text-strong": "#3f3f3f",
+      "text-base": "#505050",
+      "text-weak": "#6f6f6f",
+      "text-weaker": "#a1a19c",
+      "border-weak-base": "#e0e0d0",
+      "border-base": "#d0d0c0",
+      "border-strong-base": "#5f7f8f"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#3f3f3f",
+      "primary": "#8cd0d3",
+      "success": "#7f9f7f",
+      "warning": "#f0dfaf",
+      "error": "#cc9393",
+      "info": "#dfaf8f",
+      "interactive": "#8cd0d3",
+      "diffAdd": "#7f9f7f",
+      "diffDelete": "#cc9393"
+    },
+    "overrides": {
+      "background-base": "#3f3f3f",
+      "background-weak": "#5f5f5f",
+      "background-strong": "#3f3f3f",
+      "background-stronger": "#4f4f4f",
+      "surface-raised-stronger-non-alpha": "#4f4f4f",
+      "text-strong": "#eeeee6",
+      "text-base": "#c7c7bc",
+      "text-weak": "#a4a4a4",
+      "text-weaker": "#7d7d7d",
+      "border-weak-base": "#4f4f4f",
+      "border-base": "#5f5f5f",
+      "border-strong-base": "#8cd0d3"
+    }
+  }
+}

@@ -19,6 +19,7 @@ export default function MoreLayout() {
       <Stack.Screen name="loops" options={{ headerShown: false }} />
       <Stack.Screen name="missions" options={{ headerShown: false }} />
       <Stack.Screen name="brain" options={{ title: "Brain" }} />
+      <Stack.Screen name="mods" options={{ title: "Mods" }} />
       <Stack.Screen name="chatbots" options={{ title: "Chatbots" }} />
       <Stack.Screen name="observability" options={{ title: "Observability" }} />
       <Stack.Screen name="host" options={{ title: "Host status" }} />

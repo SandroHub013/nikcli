@@ -4,10 +4,12 @@ export * as Azure from "./azure"
 export * as Cloudflare from "./cloudflare"
 export * as GitHubCopilot from "./github-copilot"
 export * as Google from "./google"
+export * as GoogleVertex from "./google-vertex"
 export * as NikcliInference from "./nikcli-inference"
 export * as OpenAI from "./openai"
 export * as OpenAICompatible from "./openai-compatible"
 export * as OpenRouter from "./openrouter"
+export * as VercelGateway from "./vercel-gateway"
 export * as XAI from "./xai"
 
 // Provider-options namespaces — one typed facade per provider, modeled after

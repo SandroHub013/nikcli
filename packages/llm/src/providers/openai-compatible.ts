@@ -63,8 +63,12 @@ export const provider = Provider.make({
 
 export const baseten = define(profiles.baseten)
 export const cerebras = define(profiles.cerebras)
+export const cohere = define(profiles.cohere)
 export const deepinfra = define(profiles.deepinfra)
 export const deepseek = define(profiles.deepseek)
 export const fireworks = define(profiles.fireworks)
 export const groq = define(profiles.groq)
+export const mistral = define(profiles.mistral)
+export const perplexity = define(profiles.perplexity)
 export const togetherai = define(profiles.togetherai)
+export const v0 = define(profiles.v0)

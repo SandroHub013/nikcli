@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Ethereal",
+  "id": "ethereal",
+  "light": {
+    "seeds": {
+      "neutral": "#f8f8fc",
+      "primary": "#98c8e8",
+      "success": "#d0e8d8",
+      "warning": "#e0d8c8",
+      "error": "#d4d0e0",
+      "info": "#a8d8d8",
+      "interactive": "#98c8e8",
+      "diffAdd": "#d0e8d8",
+      "diffDelete": "#d4d0e0"
+    },
+    "overrides": {
+      "background-base": "#f8f8fc",
+      "background-weak": "#e8e8f0",
+      "background-strong": "#f8f8fc",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#181828",
+      "text-base": "#343444",
+      "text-weak": "#686878",
+      "text-weaker": "#9a9aa6",
+      "border-weak-base": "#f0f0f8",
+      "border-base": "#d0d0e0",
+      "border-strong-base": "#98c8e8"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#050508",
+      "primary": "#b4b4d0",
+      "success": "#d0e8d8",
+      "warning": "#e0d8c8",
+      "error": "#d4d0e0",
+      "info": "#a8d8d8",
+      "interactive": "#b4b4d0",
+      "diffAdd": "#d0e8d8",
+      "diffDelete": "#d4d0e0"
+    },
+    "overrides": {
+      "background-base": "#050508",
+      "background-weak": "#101018",
+      "background-strong": "#050508",
+      "background-stronger": "#000002",
+      "surface-raised-stronger-non-alpha": "#000002",
+      "text-strong": "#e8e8f0",
+      "text-base": "#bbbbc6",
+      "text-weak": "#686878",
+      "text-weaker": "#4e4e5a",
+      "border-weak-base": "#000002",
+      "border-base": "#1a1a28",
+      "border-strong-base": "#b4b4d0"
+    }
+  }
+}

@@ -984,6 +984,7 @@ describe("the planner is the host's, on the agent's own runner", () => {
     if (plan) (host as VoiceHost).plan = plan
     const speaker = createFakeSpeaker()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker,
       now: () => 10_000,
@@ -1583,6 +1584,7 @@ describe("always-on listening", () => {
     const speaker = createFakeSpeaker()
     let clock = 10_000
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       transcriber,
       speaker,
@@ -1681,6 +1683,7 @@ describe("always-on listening", () => {
     const transcriber = createFakeTranscriber()
     const host = new MockVoiceHost()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -1728,6 +1731,7 @@ describe("always-on listening", () => {
       )
     const transcriber = createFakeTranscriber()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => 10_000,
@@ -1829,6 +1833,7 @@ describe("always-on listening", () => {
     let clock = 0
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -1875,6 +1880,7 @@ describe("always-on listening", () => {
     let gate: any
     let usage: ((u: { cost?: number }, context: { gated: boolean }) => void) | undefined
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => clock,
@@ -1945,6 +1951,7 @@ describe("always-on listening", () => {
     }
     let gate: any
     const first = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
@@ -1966,6 +1973,7 @@ describe("always-on listening", () => {
 
     // ADE closed and opened: the microphone stays shut, and says why.
     const next = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       transcriber: createFakeTranscriber(),
@@ -1999,6 +2007,7 @@ describe("always-on listening", () => {
     }
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
@@ -2035,6 +2044,7 @@ describe("always-on listening", () => {
     // A dictation handing the microphone back is not a hand on the switch:
     // a stop that arrived while dictating still holds when it ends.
     const back = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => Date.now(),
@@ -2158,6 +2168,7 @@ describe("always-on listening", () => {
     let gate: any
     const transcriber = createFakeTranscriber()
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => 10_000,
@@ -2720,6 +2731,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
     const transcriber = createFakeTranscriber()
     const cues: string[] = []
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       transcriber,
       speaker: createFakeSpeaker(),
@@ -2905,6 +2917,7 @@ describe("interrupted while it talks", () => {
     const transcriber = createFakeTranscriber()
     let gate: any
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker,
       now: () => 10_000,
@@ -2983,6 +2996,7 @@ describe("a television talking on does not keep the window open", () => {
     let gate: any
     let clock = 10_000
     const engine = createVoiceEngine({
+      creditLeft: async () => undefined,
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,

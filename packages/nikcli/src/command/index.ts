@@ -9,6 +9,7 @@ import PROMPT_GOAL from "./template/goal.txt"
 import { MCP } from "../mcp"
 import { Connectors } from "../connectors"
 import { Skill } from "../skill"
+import { Mod } from "../mod"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { Context, Effect, Layer, Schema } from "effect"
 
@@ -38,6 +39,8 @@ export namespace Command {
       model: z.string().optional(),
       mcp: z.boolean().optional(),
       skill: z.boolean().optional(),
+      /** Registered by a mod with `$.command.register`: it runs at once, with no model turn. */
+      mod: z.boolean().optional(),
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
       hints: z.array(z.string()),
@@ -102,6 +105,7 @@ export namespace Command {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const mods = yield* Mod.Service
       const state = yield* InstanceState.make<Record<string, Info>>(
         (ctx) =>
           Effect.gen(function* () {
@@ -288,12 +292,52 @@ export namespace Command {
         { reloadable: true },
       )
 
+      /** A mod's command, as a slash command that has no template: it runs at once. A configured command of the same name wins. */
+      const modInfo = (command: { name: string; description?: string }): Info => ({
+        name: command.name,
+        description: command.description,
+        mod: true,
+        template: "",
+        hints: [],
+      })
+
       const get: Interface["get"] = Effect.fn("Command.get")(function* (name: string) {
-        return (yield* InstanceState.get(state))[name]
+        const configured = (yield* InstanceState.get(state))[name]
+        if (configured) return configured
+        const registered = yield* mods.command(name)
+        return registered ? modInfo(registered) : undefined
       })
 
       const list: Interface["list"] = Effect.fn("Command.list")(function* () {
-        return Object.values(yield* InstanceState.get(state))
+        const configured = yield* InstanceState.get(state)
+        const registered = (yield* mods.commands()).filter((command) => !configured[command.name]).map(modInfo)
+        const all = [...Object.values(configured), ...registered]
+        if (!(yield* mods.handles("command.describe"))) return all
+        // `command.describe` mods rewrite how each command is listed, or hide it from the menu.
+        const described: Info[] = []
+        for (const command of all) {
+          const out: { description?: string; argumentHint?: string; isHidden?: boolean } = yield* mods.emit(
+            "command.describe",
+            {
+              name: command.name,
+              description: command.description ?? "",
+              argumentHint: command.hints.join(" "),
+              isHidden: false,
+            },
+            (e) => Effect.succeed({ description: e.description, argumentHint: e.argumentHint, isHidden: e.isHidden }),
+            {
+              validate: (r) =>
+                r && typeof r === "object" ? undefined : "needs { description, argumentHint, isHidden }",
+            },
+          )
+          if (out.isHidden === true) continue
+          described.push({
+            ...command,
+            description: out.description || command.description,
+            hints: out.argumentHint ? out.argumentHint.split(" ") : command.hints,
+          })
+        }
+        return described
       })
 
       return Service.of({
@@ -303,5 +347,8 @@ export namespace Command {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Layer.suspend(() => Skill.defaultLayer)))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Layer.suspend(() => Skill.defaultLayer)),
+    Layer.provide(Mod.defaultLayer),
+  )
 }

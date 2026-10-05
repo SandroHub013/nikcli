@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Nightfox",
+  "id": "nightfox",
+  "light": {
+    "seeds": {
+      "neutral": "#f6f2ee",
+      "primary": "#2848a9",
+      "success": "#618774",
+      "warning": "#ac5402",
+      "error": "#a5222f",
+      "info": "#287980",
+      "interactive": "#2848a9",
+      "diffAdd": "#618774",
+      "diffDelete": "#a5222f"
+    },
+    "overrides": {
+      "background-base": "#f6f2ee",
+      "background-weak": "#ebe6e5",
+      "background-strong": "#f6f2ee",
+      "background-stronger": "#ebe5df",
+      "surface-raised-stronger-non-alpha": "#ebe5df",
+      "text-strong": "#3d2b5a",
+      "text-base": "#55375a",
+      "text-weak": "#824d5b",
+      "text-weaker": "#ab878e",
+      "border-weak-base": "#e7e0e5",
+      "border-base": "#dbd1dd",
+      "border-strong-base": "#a497af"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#192330",
+      "primary": "#719cd6",
+      "success": "#81b29a",
+      "warning": "#dbc074",
+      "error": "#c94f6d",
+      "info": "#63cdcf",
+      "interactive": "#719cd6",
+      "diffAdd": "#81b29a",
+      "diffDelete": "#c94f6d"
+    },
+    "overrides": {
+      "background-base": "#192330",
+      "background-weak": "#242d3a",
+      "background-strong": "#192330",
+      "background-stronger": "#131a24",
+      "surface-raised-stronger-non-alpha": "#131a24",
+      "text-strong": "#cdcecf",
+      "text-base": "#adb4bd",
+      "text-weak": "#71839b",
+      "text-weaker": "#526176",
+      "border-weak-base": "#222f41",
+      "border-base": "#29394f",
+      "border-strong-base": "#626d7c"
+    }
+  }
+}

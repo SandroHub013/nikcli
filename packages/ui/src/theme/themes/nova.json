@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Nova",
+  "id": "nova",
+  "light": {
+    "seeds": {
+      "neutral": "#fafafa",
+      "primary": "#818cf8",
+      "success": "#4ade80",
+      "warning": "#fb923c",
+      "error": "#f87171",
+      "info": "#7dd3fc",
+      "interactive": "#818cf8",
+      "diffAdd": "#4ade80",
+      "diffDelete": "#f87171"
+    },
+    "overrides": {
+      "background-base": "#fafafa",
+      "background-weak": "#e4e4e7",
+      "background-strong": "#fafafa",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#18181b",
+      "text-base": "#34343e",
+      "text-weak": "#686880",
+      "text-weaker": "#9b9bab",
+      "border-weak-base": "#f5f5f5",
+      "border-base": "#d4d4d8",
+      "border-strong-base": "#818cf8"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0c0c10",
+      "primary": "#7dd3fc",
+      "success": "#4ade80",
+      "warning": "#fb923c",
+      "error": "#f87171",
+      "info": "#7dd3fc",
+      "interactive": "#7dd3fc",
+      "diffAdd": "#4ade80",
+      "diffDelete": "#f87171"
+    },
+    "overrides": {
+      "background-base": "#0c0c10",
+      "background-weak": "#181820",
+      "background-strong": "#0c0c10",
+      "background-stronger": "#040406",
+      "surface-raised-stronger-non-alpha": "#040406",
+      "text-strong": "#e8e8f0",
+      "text-base": "#bbbbc9",
+      "text-weak": "#686880",
+      "text-weaker": "#515161",
+      "border-weak-base": "#040406",
+      "border-base": "#252538",
+      "border-strong-base": "#7dd3fc"
+    }
+  }
+}

@@ -49,11 +49,11 @@
   --app-max: 96rem;
 
   /* Radius — tighter, more precise */
-  --radius-card: 16px;
-  --radius-shell: 20px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-card: 20px;
+  --radius-shell: 26px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -93,6 +93,15 @@
   --ease-in-out-expo: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Hairlines: half a pixel on retina, 1px elsewhere */
+  --hairline: 1px;
+}
+
+@media (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
 }
 
 [data-theme="dark"] {
@@ -238,8 +247,9 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid rgb(var(--terminal-accent));
+  outline: 2px solid rgb(var(--terminal-accent) / 0.6);
   outline-offset: 2px;
+  transition: outline-offset 120ms var(--ease-out-expo);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -437,4 +447,214 @@ select:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Hairlines — every Tailwind border becomes a true half-pixel on retina
+───────────────────────────────────────────────────────────── */
+
+.border {
+  border-width: var(--hairline);
+}
+.border-t {
+  border-top-width: var(--hairline);
+}
+.border-b {
+  border-bottom-width: var(--hairline);
+}
+.border-l {
+  border-left-width: var(--hairline);
+}
+.border-r {
+  border-right-width: var(--hairline);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Liquid Glass (iOS 27 language)
+   Fill comes from the site's own panel colour, so glass follows light/dark and any
+   future theme. Layers: blurred backdrop, tinted fill, sheen, bevel, lens edge, shadow.
+───────────────────────────────────────────────────────────── */
+
+:root {
+  --glass-blur: 26px;
+  --glass-saturate: 170%;
+  --glass-fill: rgb(var(--terminal-panel) / 0.58);
+  --glass-fill-strong: rgb(var(--terminal-panel) / 0.78);
+  --glass-fill-tint: rgb(var(--terminal-panel) / 0.34);
+  --glass-sheen:
+    radial-gradient(
+      120% 90% at var(--gx, 18%) var(--gy, 0%),
+      light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.1)) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      155deg,
+      light-dark(rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.05)) 0%,
+      transparent 40%,
+      transparent 72%,
+      light-dark(rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.02)) 100%
+    );
+  --glass-rim:
+    inset 0 var(--hairline) 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.16)),
+    inset var(--hairline) 0 0 light-dark(rgb(255 255 255 / 0.45), rgb(255 255 255 / 0.06)),
+    inset 0 calc(var(--hairline) * -1) 0 light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4)),
+    inset 0 0 0 var(--hairline) light-dark(rgb(var(--terminal-shadow) / 0.1), rgb(255 255 255 / 0.09));
+  --glass-shadow:
+    0 22px 52px -16px light-dark(rgb(var(--terminal-shadow) / 0.26), rgb(0 0 0 / 0.65)),
+    0 6px 16px -4px light-dark(rgb(var(--terminal-shadow) / 0.09), rgb(0 0 0 / 0.35)),
+    0 1px 2px light-dark(rgb(var(--terminal-shadow) / 0.06), rgb(0 0 0 / 0.3));
+  --glass-shadow-sm:
+    0 10px 26px -10px light-dark(rgb(var(--terminal-shadow) / 0.2), rgb(0 0 0 / 0.55)),
+    0 2px 6px -1px light-dark(rgb(var(--terminal-shadow) / 0.07), rgb(0 0 0 / 0.3));
+}
+
+.glass,
+.glass-strong,
+.glass-chip,
+.glass-window,
+.glass-bar {
+  background-color: var(--glass-fill);
+  background-image: var(--glass-sheen);
+  border-color: transparent;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-rim), var(--glass-shadow-sm);
+}
+
+.glass-strong,
+.glass-window {
+  background-color: var(--glass-fill-strong);
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+}
+
+.glass-chip {
+  background-color: var(--glass-fill-tint);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: var(--glass-rim);
+  transition:
+    background-color 140ms ease,
+    box-shadow 160ms var(--ease-out-expo),
+    transform 160ms var(--ease-out-expo),
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.glass-chip:hover {
+  background-color: var(--glass-fill);
+}
+
+/* Sticky bars: a scroll-edge, not a hard divider */
+.glass-bar {
+  background-color: rgb(var(--terminal-bg) / 0.6);
+  box-shadow: inset 0 calc(var(--hairline) * -1) 0 rgb(var(--terminal-border) / 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(185%);
+  backdrop-filter: blur(24px) saturate(185%);
+}
+
+/* Lens edge: gradient hairline, bright where light enters and where it leaves */
+:where(.glass, .glass-strong, .glass-window):not(.absolute):not(.fixed):not(.sticky) {
+  position: relative;
+}
+
+.glass::before,
+.glass-strong::before,
+.glass-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: var(--hairline);
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    140deg,
+    light-dark(rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.3)) 0%,
+    light-dark(rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.03)) 34%,
+    transparent 62%,
+    light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.14)) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* Cards that lift on hover keep the glass bevel */
+.glass:hover {
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-strong,
+  .glass-chip,
+  .glass-window {
+    background-color: rgb(var(--terminal-panel));
+    background-image: none;
+  }
+  .glass-bar {
+    background-color: rgb(var(--terminal-bg) / 0.94);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong,
+  .glass-chip,
+  .glass-window {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    background-color: rgb(var(--terminal-panel));
+  }
+  .glass-bar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: rgb(var(--terminal-bg));
+  }
+  .glass::before,
+  .glass-strong::before,
+  .glass-window::before {
+    display: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass,
+  .glass-strong,
+  .glass-chip,
+  .glass-window {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    background-color: rgb(var(--terminal-panel));
+    border: 1px solid rgb(var(--terminal-border));
+  }
+}
+
+@media (forced-colors: active) {
+  .glass,
+  .glass-strong,
+  .glass-chip,
+  .glass-window,
+  .glass-bar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-image: none;
+    border: 1px solid CanvasText;
+  }
+  .glass::before,
+  .glass-strong::before,
+  .glass-window::before {
+    display: none;
+  }
+}
+
+/* Empty states: a quiet glass card instead of a dashed outline */
+.glass-empty {
+  border-style: solid;
 }

@@ -5,6 +5,7 @@ import * as Clipboard from "expo-clipboard"
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -32,6 +33,7 @@ import { SessionComposer } from "@/components/session/SessionComposer"
 import { JumpToLatestPill } from "@/components/session/JumpToLatestPill"
 import { BackgroundActivitySheet } from "@/components/session/BackgroundActivitySheet"
 import { ScaffoldingRow } from "@/components/session/ScaffoldingRow"
+import { ModBand } from "@/components/mods/ModBand"
 import { SessionStatusLine } from "@/components/session/SessionStatusLine"
 import { TimeDivider } from "@/components/ui/TimeDivider"
 import { buildTranscriptRows, type TranscriptRow } from "@/lib/transcript-rows"
@@ -62,7 +64,6 @@ import {
 } from "@/lib/model-catalog"
 import { getModelVariant, setModelVariant } from "@/lib/model-preferences"
 import { PublishSheet } from "@/components/session/PublishSheet"
-import { SessionSummaryCard } from "@/components/session/SessionSummaryCard"
 import {
   ArtifactViewerSheet,
   SessionPreviewStrip,
@@ -73,7 +74,6 @@ import {
 import { extractSessionPreviews } from "@/lib/session-artifacts"
 import { GitStatusBar } from "@/components/git/GitStatusBar"
 import { GitReviewModal } from "@/components/git/GitReviewModal"
-import { EmptyState } from "@/components/ui/EmptyState"
 import { triggerHaptic } from "@/lib/haptics"
 import { useUIStore } from "@/lib/store"
 import { sessionWorkspaceDirectory, sessionWorkspaceFallback } from "@/lib/client"
@@ -102,7 +102,8 @@ import {
   type ToolState,
 } from "@/lib/types"
 
-const STARTER_PROMPTS = ["Explain this codebase", "What changed recently?", "Fix the failing tests"]
+const MARK_DARK = require("@/assets/app-icon-mark.png")
+const MARK_LIGHT = require("@/assets/app-icon-mark-light.png")
 
 export type PendingAttachment = {
   id: string
@@ -1571,6 +1572,7 @@ export default function SessionScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
     >
+      <SessionWallpaper emphasis={rows.length === 0} />
       <View
         style={{
           paddingHorizontal: 16,
@@ -1657,7 +1659,6 @@ export default function SessionScreen() {
         here to keep the existing manual scroll-to-latest logic authoritative.
       */}
       <View style={{ flex: 1 }}>
-        <SessionWallpaper />
         <FlashList
           ref={listRef}
           style={{ flex: 1 }}
@@ -1713,16 +1714,6 @@ export default function SessionScreen() {
           }}
           ListHeaderComponent={
             <>
-              <SessionSummaryCard
-                detail={detail}
-                sessionBlocked={sessionBlocked}
-                cleaned={cleaned}
-                cleaning={cleaning}
-                onPublish={openPublishModal}
-                onAbort={() => void abort()}
-                onCleanup={() => void cleanup()}
-                onOpenGit={() => setGitReviewOpen(true)}
-              />
               <SessionPreviewStrip previews={previews} project={sessionProjectPanel} onSelectPreview={openArtifact} />
               {detail?.permissions.length ? (
                 <View className="mb-2">
@@ -1737,60 +1728,29 @@ export default function SessionScreen() {
               ) : null}
             </>
           }
-          ListEmptyComponent={
-            <EmptyState
-              title="No messages yet"
-              description="Tell the agent what to do — it will work in this session and report back here."
-              action={
-                <View style={{ gap: 8 }}>
-                  {STARTER_PROMPTS.map((prompt) => (
-                    <Pressable
-                      key={prompt}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        void triggerHaptic("selection")
-                        setInput(prompt)
-                      }}
-                      style={({ pressed }) => ({
-                        alignSelf: "stretch",
-                        opacity: pressed ? 0.85 : 1,
-                        transform: [{ scale: pressed ? 0.97 : 1 }],
-                      })}
-                    >
-                      <View
-                        style={{
-                          minHeight: 44,
-                          borderRadius: 999,
-                          borderCurve: "continuous",
-                          borderWidth: 1,
-                          borderColor: hexToRgba(palette.ink, 0.12),
-                          paddingHorizontal: 16,
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          style={{
-                            color: palette.ink,
-                            ...typeStyle(14, { weight: "500" }),
-                          }}
-                        >
-                          {prompt}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              }
-            />
-          }
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 16,
             paddingBottom: 16,
           }}
         />
+
+        {rows.length === 0 ? (
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", gap: 18 }]}
+          >
+            <Image
+              source={isDark ? MARK_DARK : MARK_LIGHT}
+              style={{ width: 56, height: 56 }}
+              resizeMode="contain"
+              accessibilityLabel="NIKCLI"
+            />
+            <Text style={{ color: palette.ink, textAlign: "center", ...typeStyle(24, { weight: "600" }) }}>
+              What are we building?
+            </Text>
+          </View>
+        ) : null}
 
         <JumpToLatestPill visible={!isFollowing && messages.length > 0} count={unseenCount} onPress={scrollToBottom} />
       </View>
@@ -1814,6 +1774,8 @@ export default function SessionScreen() {
           onOpenActivity={() => setActivityOpen(true)}
         />
       </View>
+
+      {sessionId ? <ModBand sessionID={sessionId} working={sessionBlocked} /> : null}
 
       <ComposerApprovalBar
         approvals={[...(detail?.permissions ?? []), ...(detail?.questions ?? [])]}
@@ -1983,6 +1945,18 @@ export default function SessionScreen() {
           void triggerHaptic("selection")
         }}
         previewCount={previews.length}
+        onReview={
+          detail?.info.github || hasCleanableWorktree
+            ? () => actionsSheetRef.current?.dismiss(() => setGitReviewOpen(true))
+            : undefined
+        }
+        onPublish={detail?.info.github ? () => actionsSheetRef.current?.dismiss(() => openPublishModal()) : undefined}
+        publishLabel={detail?.info.github?.pullRequest ? "Update pull request" : "Publish pull request"}
+        publishDisabled={sessionBlocked || cleaned}
+        onCleanup={hasCleanableWorktree ? () => actionsSheetRef.current?.dismiss(() => void cleanup()) : undefined}
+        cleanupLabel={cleaned ? "Worktree cleaned" : "Clean up worktree"}
+        cleanupDisabled={cleaning || sessionBlocked || cleaned}
+        cleaning={cleaning}
         onOpenTerminal={() => {
           actionsSheetRef.current?.dismiss()
           const cwd = detail ? sessionWorkspaceDirectory(detail.info) : undefined

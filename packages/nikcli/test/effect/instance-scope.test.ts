@@ -133,6 +133,45 @@ describe("InstanceScope", () => {
     expect(workspace.id).toBe("workspace-test")
   })
 
+  // B31, measured rather than commented. `InstanceState` caches are keyed by directory, so two
+  // workspaces on one directory share one entry: the initializer runs once and both see the same
+  // value. This pins the CURRENT behaviour so that giving each workspace its own scope has to
+  // change it on purpose — when that lands, flip these expectations and update
+  // `16-workspace-isolation.md`.
+  it("shares one InstanceState entry between two workspaces on one directory (B31)", async () => {
+    const directory = await makeProjectDir()
+    let inits = 0
+    const seen = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const cache = yield* InstanceState.make(() =>
+            Effect.sync(() => {
+              inits++
+              return { id: inits }
+            }),
+          )
+          const observe = (workspaceID: string) =>
+            InstanceScope.with(
+              { directory, workspaceID },
+              Effect.gen(function* () {
+                const workspace = yield* WorkspaceRef
+                const state = yield* InstanceState.get(cache)
+                return { workspace: workspace.id, state }
+              }),
+            )
+          return [yield* observe("wrk_first"), yield* observe("wrk_second")] as const
+        }),
+      ),
+    )
+
+    // Distinct workspaces...
+    expect(seen[0].workspace).toBe("wrk_first")
+    expect(seen[1].workspace).toBe("wrk_second")
+    // ...one instance-scoped resource: the gap.
+    expect(inits).toBe(1)
+    expect(seen[1].state).toBe(seen[0].state)
+  })
+
   it("exposes legacy Instance ALS reads inside the bridged effect", async () => {
     const directory = await makeProjectDir()
     const seen = await Effect.runPromise(

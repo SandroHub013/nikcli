@@ -11,6 +11,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type MediaPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
@@ -57,6 +58,23 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
+const OpenAIChatUserContentPart = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    text: Schema.String,
+    cache_control: Schema.optional(OpenAIChatCacheControl),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("image_url"),
+    image_url: Schema.Struct({ url: Schema.String }),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("file"),
+    file: Schema.Struct({ filename: Schema.optional(Schema.String), file_data: Schema.String }),
+  }),
+])
+type OpenAIChatUserContentPart = Schema.Schema.Type<typeof OpenAIChatUserContentPart>
+
 const OpenAIChatMessage = Schema.Union([
   Schema.Struct({
     role: Schema.Literal("system"),
@@ -73,16 +91,7 @@ const OpenAIChatMessage = Schema.Union([
   }),
   Schema.Struct({
     role: Schema.Literal("user"),
-    content: Schema.Union([
-      Schema.String,
-      Schema.Array(
-        Schema.Struct({
-          type: Schema.Literal("text"),
-          text: Schema.String,
-          cache_control: Schema.optional(OpenAIChatCacheControl),
-        }),
-      ),
-    ]),
+    content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContentPart)]),
   }),
   Schema.Struct({
     role: Schema.Literal("assistant"),
@@ -235,22 +244,35 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
+// Images ride as data URLs; documents as `file` parts. Other media (audio, video) have no Chat Completions
+// user-message shape here, so they are refused at the protocol boundary.
+const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+  const url = `data:${part.mediaType};base64,${ProviderShared.mediaBytes(part)}`
+  if (part.mediaType.startsWith("image/")) return { type: "image_url" as const, image_url: { url } }
+  if (part.mediaType === "application/pdf")
+    return { type: "file" as const, file: { filename: part.filename, file_data: url } }
+  return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support ${part.mediaType} user media`)
+})
+
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
   message: OpenAIChatRequestMessage,
   options: LoweringOptions,
 ) {
-  const content: Array<{
-    type: "text"
-    text: string
-    cache_control?: Schema.Schema.Type<typeof OpenAIChatCacheControl>
-  }> = []
+  const content: OpenAIChatUserContentPart[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text"])
+    if (!ProviderShared.supportsContent(part, ["text", "media"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
+    if (part.type === "media") {
+      content.push(yield* lowerMedia(part))
+      continue
+    }
     content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
   }
-  if (content.every((part) => part.cache_control === undefined))
-    return { role: "user" as const, content: content.map((part) => part.text).join("\n") }
+  if (content.every((part) => part.type === "text" && part.cache_control === undefined))
+    return {
+      role: "user" as const,
+      content: content.map((part) => (part.type === "text" ? part.text : "")).join("\n"),
+    }
   return { role: "user" as const, content }
 })
 
@@ -261,6 +283,8 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const content: TextPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
+    // Chat Completions has no reasoning input item; replay rides `native.openaiCompatible.reasoning_content`.
+    if (part.type === "reasoning") continue
     if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "tool-call"])
     if (part.type === "text") {

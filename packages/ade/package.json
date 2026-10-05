@@ -1,6 +1,6 @@
 {
   "name": "@nikcli-ai/ade",
-  "version": "1.406.0",
+  "version": "1.429.0",
   "description": "Agent development environment: many live agent sessions, side by side.",
   "type": "module",
   "exports": {
@@ -71,5 +71,13 @@
     "solid-js": "catalog:",
     "three": "^0.186.0"
   },
-  "main": "./src/index.ts"
+  "main": "./src/index.ts",
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

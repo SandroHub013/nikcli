@@ -118,6 +118,9 @@ to other providers and to the live route. Roll back the adapter behind the exist
 delete the AI SDK route until every caller uses the new seam. Cache invalidation must be additive; never delete
 user-visible cache state as part of a streaming refactor.
 
+Retain the partial-output safety guard during rollback: never restore retries over published text, reasoning, tool or
+billed step output. Removing persisted parts cannot retract Bus publication or undo tool effects.
+
 ## Coverage Before Convergence — 2026-09-21
 
 The plan for this spec was per-route granularity on `experimental.nativeLlm`, then a soak. Reading
@@ -126,11 +129,12 @@ it is. The flag is not binary and global in effect:
 
 - `LLMNativeRuntime.status()` already returns a **typed** verdict with a reason, before anything is
   sent (`session/llm.ts`, the `nativeLlmEnabled && modelRef` block).
-- A native stream that throws mid-turn already **falls back per turn** to the AI SDK, with a warning.
+- A non-cancellation native setup failure can fall back to the AI SDK before an iterable is returned.
+  Midstream failures arise during lazy iteration, outside that setup catch; they do not fall back mid-turn.
 - With the flag **off**, the native request is still compiled in shadow — the block commented
   "Debug-only route compile".
 
-So the per-turn rollback exists, and so does the shadow path a measurement would ride on. What was
+So the setup fallback exists, and so does the shadow path a measurement would ride on. What was
 missing is that every one of those verdicts went to `l.debug` and was discarded. Nothing aggregated
 them, which is exactly the invisibility the todo names: `mapToModelRef` returns `undefined` for what
 it cannot map, and no one is told which models took the AI SDK path because of it.
@@ -144,8 +148,8 @@ it cannot map, and no one is told which models took the AI SDK path because of i
 | `disabled`        | flag off, `ModelRef` present — this turn _would_ have gone native |
 | `ineligible`      | flag on, pre-flight `status()` refused — a configuration verdict  |
 | `ineligible-late` | flag on, `streamRequestOnly` refused — a protocol verdict         |
-| `native`          | the native runtime streamed the turn                              |
-| `fallback`        | native threw mid-stream, the AI SDK finished                      |
+| `native`          | native iterable returned; iteration may still fail                |
+| `fallback`        | native setup threw before returning an iterable; AI SDK selected  |
 
 Three things about the shape, each a rule this catalogue has already paid for:
 
@@ -173,3 +177,183 @@ one module that was about to repeat it.
 
 **What this is not.** It is not the adapter convergence. The AI SDK path and the native path are
 still two pipelines, and this spec's release gate still asks for one.
+
+---
+
+## Rate limits and missing usage
+
+2026-10-02: the header-handling and missing-usage items from the previous section, again a slice rather than promotion.
+Status stays proposed, Tier 1/P2 and dependencies unchanged; EOT-00's real Ghostty/tmux gate remains open.
+
+Both items started as a measurement rather than an assumption, and the measurement changed the shape of the work.
+
+**`Retry-After` (requirement 6, acceptance line "a real `Retry-After` produces the same path").** Serving an actual
+429 with `retry-after: 7` from a local server showed three things. The native runtime honours the header on its own
+retries — with `retry-after: 7` the turn sat idle past a 5s test timeout, and with `retry-after: 1` it landed three
+times before giving up. When it gave up it threw `LLMError` whose `reason` was a fully populated `RateLimit`: `status`,
+`retryAfterMs` and redacted response headers, all present. And that error crossed into `MessageV2.fromError` as
+**`UnknownError`**, which classifies as non-retryable. So a throttled turn showed an untyped failure, and
+`SessionRetry.delay` never saw the header the provider had sent — the opposite of what requirement 6 asks for.
+
+`packages/nikcli/src/session/llm/llm-event-adapter.ts` now maps a thrown native `LLMError` to `APICallError` at the one
+seam every native failure crosses, preserving `statusCode`, the response headers, the parsed `retryAfterMs` under the
+`retry-after-ms` key `SessionRetry.delay` reads first, and the runtime's own `retryable` verdict. The gate for applying
+it is "an HTTP response actually exists", with `Transport` and `NoRoute` excluded on purpose: a network reset carries a
+request-only context, and mapping it would invent a status for a request that never got an answer. Auth, quota, invalid
+request, content policy and 5xx reasons all come back as `APIError` with their status intact, so a 400 stays terminal
+and a 429 stays retryable.
+
+- `packages/nikcli/test/session/native-retry-after.test.ts` serves real 429 and 400 responses through the native route
+  and asserts `APIError`, `statusCode`, the `Retry-After` header surviving as `retry-after-ms: 1000`,
+  `SessionRetry.retryable` returning a reason for the 429 and `undefined` for the 400, `SessionRetry.delay(1, …)`
+  returning exactly 1000, and exactly three server hits so the runtime's retries stay its own business.
+- Removing the mapping turns both cases red with `Received: "UnknownError"`, which is how the test was confirmed to be
+  load-bearing rather than decorative.
+
+**Missing usage (requirement 10, acceptance line "flagged, not interpolated").** The flag half now exists in the same
+module: a finish event that arrives without `usage` increments a gap counter and warns with the running totals, instead
+of leaving a zero-billed turn looking like a free request. Nothing is reconstructed — `Session.getUsage` still
+substitutes zeros, and the counter exists precisely so that the result is counted rather than invisible. Two integers,
+no provider or model ids, because the observation happens below the model reference.
+
+- `packages/nikcli/test/session/llm-event-adapter.test.ts` replaces the "currently reports no gap" characterization with
+  assertions that the gap is counted and warned while `usage` stays `undefined`, that a finish carrying usage counts no
+  gap, and that a turn finishing twice is counted once — a gap tally that disagreed with the turns would be its own lie.
+
+After both changes, `bun test` over the nine session suites above reported **175 pass, 0 fail, exit 0**;
+`bun run format:check` and `bun run lint` exited 0 (0 lint errors).
+
+Next: full adapter convergence remains open. `CachePolicy.Service` and `Usage.Service` are still absent — the gap
+counter is a stopgap standing in for the second, not an implementation of it.
+
+---
+
+## Review the evidence
+
+2026-09-30: test-only characterization, not production implementation or promotion. Status remains proposed,
+Tier 1/P2 and dependencies unchanged; EOT-00's real Ghostty/tmux matrix remains open.
+
+- `packages/nikcli/test/session/processor-retry.test.ts` pins transient recovery, exhaustion, non-retryable failures
+  and backoff cancellation; cancellation leaves terminal persistence to the caller.
+- The same processor tests pin partial text/reasoning published to Bus, then removed before retry output appears.
+  Removal does not undo publication: this is a requirement 6 gap, not compliance.
+- `packages/nikcli/test/session/session.test.ts` pins cache normalization, metadata precedence and pricing.
+  Missing usage fields default to zero, but Anthropic/Bedrock recompute zero totals while OpenAI/Google leave absent totals undefined.
+- `packages/nikcli/test/session/llm-event-adapter.test.ts` pins step billing without double-counting request totals,
+  cache-write metadata, failure propagation without finish events and early iterator release.
+- Those adapter tests also pin absent native finish usage as undefined, without a gap signal, and dropped
+  `Retry-After` metadata at the API error boundary; neither satisfies the missing-usage or header requirements.
+- `packages/nikcli/test/session/retry.test.ts` and `packages/nikcli/test/session/retry-precise.test.ts` pin classification,
+  backoff, header delays and abort cleanup, not a partial-output safety guard.
+
+User-supplied verified result from `packages/nikcli`: **120 pass, 0 fail, exit 0** across
+`test/session/{session,llm-event-adapter,retry,retry-precise}.test.ts`; not a new run here.
+Processor tests were inspected without a confirmed run count.
+
+---
+
+## Guard partial output
+
+2026-10-02: partial-output safety slice, not full spec promotion. Status remains proposed, Tier 1/P2 and dependencies
+unchanged; EOT-00's real Ghostty/tmux gate remains open.
+
+`packages/nikcli/src/session/processor.ts` now stops retries after published text, reasoning, tool or billed step output.
+It preserves partial content and the terminal `APIError`; deleting a part is no longer treated as undoing publication.
+
+- `packages/nikcli/test/session/processor-retry.test.ts` asserts one provider call, no backoff or part removal, preserved
+  partial text/reasoning and a persisted `APIError`, including native provider errors through the adapter.
+- The same suite covers published pending tools and retains pre-output transient retries, empty unpublished starts/deltas,
+  retry exhaustion and cancellation persistence; billed step output is guarded by the processor's non-`step-start` updates.
+- `packages/nikcli/test/session/native-runtime.test.ts` asserts lazy iteration after `LLM.stream` returns, propagation of
+  failures after text/reasoning/tool events, iterator closure, no synthetic finish and no AI SDK fallback.
+- Native safety tests also cover cancellation and preserve preflight/late refusal and non-cancellation setup fallback.
+  Iteration failures never enter the setup fallback catch; this is not a new midstream fallback mechanism.
+- `packages/nikcli/test/session/llm-event-adapter.test.ts` retains failure propagation without finish events and the
+  existing missing-usage and `Retry-After` gap characterizations.
+
+Baseline before changes, from `packages/nikcli`:
+`bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts`
+reported **49 pass, 0 fail, exit 0**. After the slice,
+`bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts test/session/processor-effect-service.test.ts test/session/retry.test.ts test/session/retry-precise.test.ts`
+reported **108 pass, 0 fail, exit 0**, and `bun run format:check` plus `bun run lint` both exited 0 (0 lint errors).
+
+The whole suite was then run through `bun run script/test-ci.ts` (487 files, 21 ignored, 20 batches). The only figure
+worth quoting is one taken with nothing else running: **5377 pass, 4 fail**. Both surviving failures reproduce with this
+slice stashed, at pristine `live-main`, so neither is a regression: three in `test/auth/pkce-no-downgrade.test.ts`
+(`spawnSync("rg")` returns a null `stdout` because ripgrep is not installed on this machine) and one in
+`test/release/automation.test.ts`, whose committed expectation still spells `macos/ADE.app.tar.gz` while
+`ade-release.yml` uses `macos/$NAME.app.tar.gz`. Every session suite passed. The count moved from 5376 to 5377 when the
+later EOT-15 outbox slice added its test; the four failures did not change.
+
+**All four fixed 2026-10-03**, so this baseline is no longer the whole story — the suite's only failures were two environment
+and expectation problems, not product defects, and both are now gone rather than tolerated.
+
+The three PKCE failures were a test defect, not a missing dependency. `test/auth/pkce-no-downgrade.test.ts` shelled out to
+`rg`, which this repository treats as an _optional_ accelerator: production resolves it with `Bun.which("rg")` and disables the
+tier when it is absent (`packages/nikcli/src/file/ripgrep.ts:41-49`). Requiring the binary in a test made an optional tool
+mandatory and pushed the fix toward "install ripgrep in CI" instead of "the test needs no external tool". The helper is now a
+native `readdirSync` walk, matching the existing precedent in `test/plugin/autoload-safety.test.ts`. That also closed a silent
+hole: the old helper mapped **both** exit 1 (no match) and exit 2 (bad pattern) to "no offenders", so a pattern that failed to
+compile turned a security assertion into a vacuous pass. It now throws instead. Revert-verified: planting
+`code_challenge_method="plain"` under `packages/nikcli/src` turns the file red (2 fail, 2 pass) and removing it returns
+4 pass.
+
+The `automation.test.ts` failure was stale expectation, not a broken workflow. Commit `0384786e75` (ADE 0.9.0) migrated
+`ade-release.yml` to derive every bundle name from `brand.json` via `NAME="$(jq -r .name packages/ade/brand.json)"` and never
+touched the test, which still spelled the old literal `macos/ADE.app.tar.gz`. The test was the wrong side. Its two assertions
+now follow `$NAME`. The second one was masked: line 300 threw first, so the `entry windows-aarch64 "ADE_..."` expectation at
+line 301 never ran — it was stale too, and the workflow at line 451 already read `"${NAME}_${VERSION}_arm64-setup.exe"`.
+Signal preserved: the indentation, the `ATTACH_ONLY` guard and the manifest key are all still asserted.
+
+Worth recording as a method note, because the numbers look alarming and are not. Three runs of the same suite in one
+session reported 13 fail, 5 fail, and 4 fail with the extra failures landing in a _different_ file each time —
+`check-spec-paths`, `docker-versions`, then `Session HttpApi bridge`, and a codemode failure that disappeared again when
+it had failed in the run before. Every one of those was a 30s test timeout caused by work running alongside the suite,
+not by the code: each passes standalone (`test/codemode/parity.test.ts` alone reports **54 pass, 0 fail**), and the swap
+pattern — a failure appearing in one file and vanishing from another across runs — is what contention looks like, not
+what a regression looks like. A suite number gathered under contention measures the contention.
+
+Next, address missing-usage signals and header handling: absent native finish usage still has no gap signal, and native
+`Retry-After` metadata is still dropped at the API error boundary.
+
+`CachePolicy.Service`, `Usage.Service` and the tagged `ProviderError` service remain absent.
+Existing cache, usage and error helper modules are not these services, and passing characterization tests do not close this spec.
+
+Typecheck note: `bun run typecheck` from the repository root exits 0 (`Tasks: 39 successful, 39 total`). Two runs earlier in
+this session failed for reasons that had nothing to do with this work — twelve errors in
+the vendored Copilot chat language model (since removed with the AI SDK) from a duplicated `@ai-sdk/provider` in the
+installed tree, and `@nikcli-ai/identity`'s `wrangler types --check`. `bun install --frozen-lockfile` cleared both, which
+is worth recording because the two look like code faults and are install drift.
+
+### A `Usage` accumulator cannot reconstruct the native gap — 2026-10-03
+
+Requirement 10 allows the aggregator to "reconstruct from prior deltas **or** flag
+the gap explicitly". The flag half is what landed. The reconstruct half is not
+merely unwritten, it is **impossible without a protocol change**, and the reason
+is in the event schema rather than in the adapter.
+
+Only `StepFinish` and `RequestFinish` carry `usage` — both declared
+`usage: Schema.optional(Usage)` at `packages/llm/src/schema/events.ts:106` and
+`:117`, and no other variant in the union has the field. (The third hit, `:213`,
+is `LLMResponse.usage`, not an event.) A native turn that streams is therefore a
+single usage reading at the end and nothing before it, so a finish that omits
+`usage` leaves no prior delta in the same turn to fold. `responseUsage`
+(`events.ts:205-210`) does not contradict this: it reduces over a collected
+`events` array picking the last usage-bearing event, and for a native stream that
+last event is the same finish event that already had nothing.
+
+So the options are: keep flagging (current), have `packages/llm` emit
+usage-bearing deltas mid-stream, or estimate. Estimation is out — it would invent
+a billable number, which is the failure requirement 10 was written against. That
+leaves a protocol change.
+
+The spec's naming is also a category error for this tree: there is no
+`Effect.Service` anywhere in `packages/nikcli/src`. The house idiom is
+`export namespace X` with `defaultLayer` and `runPromiseWithLayer`
+(`src/effect/runtime.ts`), as in `background/run.ts:16-18`.
+
+An accumulator is still worth having for a different reason — `Session.getUsage`
+folds every message on read, so a running total would be O(1) — but that is a
+performance refactor, not the correctness fix requirement 10 asks for, and it
+would not close the gap. Recorded so the next attempt does not build a fold with
+nothing to fold.

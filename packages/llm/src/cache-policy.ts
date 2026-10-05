@@ -33,7 +33,7 @@ const BREAKPOINT_CAP = 4
 
 // Only these protocols read inline hints; everywhere else placement is a no-op.
 // OpenAI and Gemini cache implicitly and have no breakpoint concept.
-const RESPECTS_INLINE_HINTS = new Set(["anthropic-messages", "bedrock-converse", "openrouter"])
+const RESPECTS_INLINE_HINTS = new Set(["anthropic-messages", "bedrock-converse", "openrouter", "vercel-gateway"])
 
 // Resolution rules:
 //   - undefined   → "auto" — caching is on by default. The math favors it:

@@ -164,6 +164,23 @@ Adding or changing an endpoint:
 - The `plugin` tool (`src/tool/plugin.ts`) writes, reloads and reports plugins. Its
   permission `plugin` asks by default and is denied to `plan`.
 
+### Mods
+
+- A plugin module that exports `register(on, options)` is a **mod** (`src/mod/`, `Mod.Service`). It hooks events
+  (`tool.*`, `prompt.*`, `command.run`, `turn.*`, `agent.*`, `session.start/end`, `ui.render/press/input/select`, and every `$` call) and each hook can
+  observe, rewrite, answer or wrap the event. Author types: `@nikcli-ai/plugin/mod`. Review one with
+  `nikcli mod validate <dir>`. Design and the list of what is not implemented: `specs/effect-tui/14-plugin-v2-architecture.md`
+  ("Mods").
+- Call sites fire events with `Mod.toolCall` / `Mod.promptSubmit` / `Mod.describe` (Promise side) or `mods.emit` (Effect
+  side). **Never** add an event call that changes behaviour with no mod loaded: with no hook on the event it must be
+  exactly `final(event)`.
+- A tool's own error is rethrown unchanged after the chain; do not wrap it. A hook failing is the hook's problem, never the
+  engine's (`ModChain`).
+- Policy is **managed settings only** (`mod` in `nikcli.json` under a managed directory). Never read it from a user or
+  project config. `sec-default` (`src/mod/guard.ts`) must stay first in the chain.
+- `PermissionNext.layer` and `Plugin.layer` require `Mod.Service`; their `defaultLayer`s provide `Mod.defaultLayer`. Do not
+  make `Mod` depend on either (cycle).
+
 ### Permission coupling
 
 - Explicit map: `PermissionRuleset.TOOL_PERMISSION` (e.g. `monitor` → `bash`, edit-family → `edit`).

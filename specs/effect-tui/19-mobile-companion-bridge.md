@@ -147,3 +147,20 @@ own routes, taken from its only callers (`src/sync/transport.ts`, `src/sync/remo
 reconfigure this machine — `/sync/config`, `/connect`, `/disconnect`, `/drain` — are outside it. A refused route is a
 403 naming the scope, for the reason the capability refusal is. `mobile` and `studio` tokens are unchanged; classifying
 `read`/`write` for them remains open.
+
+## Classifying `read` / `write` Gates Nothing Today — 2026-09-30
+
+Read-only inventory, no code changed. `MobileAuth.CAPABILITIES` derives capabilities from the scope:
+`mobile` = read, write, pty, teleport, git; `studio` = read, write, git; `cli-sync` = read. The contract has 348
+endpoints, and `mobile`/`studio` are meant to drive most of them (sessions, files, git, pty).
+
+Two consequences for the "classify `read`/`write` for `mobile` and `studio`" item above:
+
+1. **It would change no decision.** Both scopes hold _both_ capabilities, so any `read`/`write` rule admits everything
+   they already reach. The one scope with `read` alone, `cli-sync`, is already an allowlist (`scopeReaches`).
+2. **Its only possible effect is a regression.** A misclassified route is a 403 for the mobile app or studio, on a
+   surface with 348 endpoints and clients in other packages.
+
+So the item is not open work until capabilities become **per token** (the table's own comment calls that "a later
+slice"): only then can a token hold `read` without `write`, and only then does classifying GET vs mutating routes have
+something to enforce. Do it with that slice, with a route-by-route table pinned by a test, not before.

@@ -1,6 +1,6 @@
 {
   "name": "@nikcli-ai/voice",
-  "version": "1.406.0",
+  "version": "1.429.0",
   "description": "Voice control logical core for ADE in Italian",
   "type": "module",
   "exports": {
@@ -31,5 +31,13 @@
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

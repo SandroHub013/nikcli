@@ -116,14 +116,20 @@ html {
 
 .prose blockquote {
   font-style: normal;
-  border-left: 3px solid rgb(var(--terminal-accent));
-  background-color: rgb(var(--terminal-accent) / 0.06);
+  border: 0;
+  background-color: rgb(var(--terminal-accent) / 0.07);
+  background-image: var(--glass-sheen);
   padding: var(--space-4) var(--space-5);
   margin-top: 2rem;
   margin-bottom: 2rem;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-lg);
   color: rgb(var(--terminal-text));
-  box-shadow: var(--shadow-soft);
+  /* accent edge as an inset bar keeps the rounded glass outline intact */
+  box-shadow:
+    inset 3px 0 0 rgb(var(--terminal-accent)),
+    var(--glass-rim);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
   font-weight: 500;
 }
 
@@ -141,13 +147,13 @@ html {
 .prose pre {
   margin-top: 1.75rem;
   margin-bottom: 1.75rem;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5);
   font-size: var(--type-body-sm);
   line-height: 1.75;
-  border: 1px solid rgb(var(--terminal-window-border));
+  border: var(--hairline, 1px) solid rgb(var(--terminal-window-border));
   background-color: rgb(var(--terminal-window-code));
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--glass-rim), var(--shadow-soft);
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -230,10 +236,10 @@ html {
   line-height: 1.6;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid rgb(var(--terminal-border));
-  border-radius: var(--radius-md);
+  border: var(--hairline, 1px) solid rgb(var(--terminal-border));
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--glass-rim), var(--shadow-soft);
 }
 
 @media (max-width: 767px) {
@@ -308,7 +314,8 @@ html {
 .docs-nav-active {
   color: rgb(var(--terminal-accent)) !important;
   background-color: rgb(var(--terminal-accent) / 0.08) !important;
-  border: 1px solid rgb(var(--terminal-accent) / 0.2) !important;
+  border: var(--hairline, 1px) solid rgb(var(--terminal-accent) / 0.22) !important;
+  border-radius: 10px !important;
   padding-left: 0.875rem !important;
 }
 

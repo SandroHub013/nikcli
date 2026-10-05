@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Moonstone",
+  "id": "moonstone",
+  "light": {
+    "seeds": {
+      "neutral": "#f7f7f8",
+      "primary": "#2c66a0",
+      "success": "#308462",
+      "warning": "#a55d2f",
+      "error": "#9e3437",
+      "info": "#318091",
+      "interactive": "#2c66a0",
+      "diffAdd": "#2b5fa1",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f7f7f8",
+      "background-weak": "#ebeced",
+      "background-strong": "#f7f7f8",
+      "background-stronger": "#f2f2f3",
+      "surface-raised-stronger-non-alpha": "#f2f2f3",
+      "text-strong": "#181b20",
+      "text-base": "#303338",
+      "text-weak": "#5d6064",
+      "text-weaker": "#939598",
+      "border-weak-base": "#d0d1d2",
+      "border-base": "#b6b7b9",
+      "border-strong-base": "#2c66a0"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#131416",
+      "primary": "#629eda",
+      "success": "#74c9a7",
+      "warning": "#d39369",
+      "error": "#cf7b7f",
+      "info": "#6ebccf",
+      "interactive": "#629eda",
+      "diffAdd": "#74a2db",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#131416",
+      "background-weak": "#23262a",
+      "background-strong": "#131416",
+      "background-stronger": "#1b1d20",
+      "surface-raised-stronger-non-alpha": "#1b1d20",
+      "text-strong": "#ecedee",
+      "text-base": "#ced1d5",
+      "text-weak": "#969da6",
+      "text-weaker": "#686d74",
+      "border-weak-base": "#393d41",
+      "border-base": "#53565b",
+      "border-strong-base": "#629eda"
+    }
+  }
+}

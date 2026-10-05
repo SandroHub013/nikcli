@@ -166,10 +166,22 @@ What changed, and what did not:
   that first floor of 125-250 ms.
 - The wait is `sleepUnlessAborted`, not `Bun.sleep`: closing the provider ends it immediately instead of leaving the
   loop alive for up to five seconds after cleanup.
-- Not changed: the client batch is still uncapped (its own comment records why — overload has to be observable before a
-  cap is safe, and the queue meter is that observation), auth and schema failures are still retried rather than
+- Not changed: auth and schema failures are still retried rather than
   classified non-retryable, and there is still no restoration barrier. Those remain open under this spec.
 
 `packages/nikcli/test/tui/reconnect-gate.test.ts` mounts the real `SDKProvider` against that server and bounds the
 subscribes in a 400 ms window to three. Removing the post-EOF wait fails it (270 against a limit of 3). Its fake
 `fetch` yields one macrotask per subscribe on purpose: without it the unfixed loop hangs the test instead of failing it.
+
+### Client batch cap — pinned 2026-09-30
+
+The bullet above once said the client batch was uncapped. It is not: `EVENT_BATCH_CAP = 512` in
+`packages/tui/src/context/sdk.tsx` flushes a full batch at once instead of waiting out the 16 ms window, and it drops
+nothing — the queue carries permission prompts and terminal session outcomes, so the cap costs batching latency and
+never events. It had no test. `test/tui/reconnect-gate.test.ts` now mounts the real `SDKProvider`, streams a 1500-frame
+burst in one chunk and asserts that every envelope arrives, no flush exceeds 512, and the burst was split into at least
+three flushes. With the cap raised to 1,000,000 the same test fails (largest flush 1499 against a limit of 512).
+
+Still open under this spec: auth and schema failures are retried rather than classified non-retryable — left alone here:
+the sync recovery (EOT-15) re-runs on a token-refresh reopen, and whether a 401 must stay retryable for that path has
+not been checked, so classifying it is a decision to make with that path in view — and there is no restoration barrier.

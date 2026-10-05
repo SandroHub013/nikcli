@@ -20,24 +20,26 @@
   [data-slot="switch-control"] {
     display: inline-flex;
     align-items: center;
-    width: 28px;
-    height: 16px;
+    box-sizing: border-box;
+    width: 34px;
+    height: 20px;
     flex-shrink: 0;
-    border-radius: 3px;
-    border: 1px solid var(--border-weak-base);
-    background: var(--surface-base);
+    border-radius: 999px;
+    border: var(--hairline, 1px) solid var(--border-weak-base);
+    background: var(--surface-inset-strong);
     transition:
-      background-color 150ms,
-      border-color 150ms;
+      background-color 200ms var(--ease-out-strong),
+      border-color 200ms var(--ease-out-strong),
+      box-shadow 160ms var(--ease-out-strong);
   }
 
   [data-slot="switch-thumb"] {
     width: 14px;
     height: 14px;
-    box-sizing: content-box;
+    box-sizing: border-box;
 
-    border-radius: 2px;
-    border: 1px solid var(--border-base);
+    border-radius: 999px;
+    border: none;
     background: var(--icon-invert-base);
 
     /* shadows/shadow-xs */
@@ -46,10 +48,11 @@
       0 1px 2px 0 rgba(19, 16, 16, 0.06),
       0 1px 3px 0 rgba(19, 16, 16, 0.08);
 
-    transform: translateX(-1px);
+    transform: translateX(1px);
     transition:
-      transform 150ms,
-      background-color 150ms;
+      transform 260ms var(--ease-drawer),
+      width 160ms var(--ease-out-strong),
+      background-color 200ms var(--ease-out-strong);
   }
 
   [data-slot="switch-label"] {
@@ -99,8 +102,17 @@
 
   &[data-checked] [data-slot="switch-thumb"] {
     border: none;
-    transform: translateX(12px);
+    transform: translateX(17px);
     background-color: var(--icon-invert-base);
+  }
+
+  /* Pressing stretches the thumb (iOS); the checked edge stays anchored */
+  &:active:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    width: 18px;
+  }
+
+  &[data-checked]:active:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    transform: translateX(13px);
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {

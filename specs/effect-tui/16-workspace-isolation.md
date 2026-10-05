@@ -121,3 +121,16 @@ cache eviction is additive; never delete shared keys as part of the scope tighte
 2. `WorkspaceRef` and `locallyWorkspace` stay exported from `effect/instance-ref.ts`, and `effect/instance-scope.ts` still pins a workspace through `locallyWorkspace` when `input.workspaceID` is present.
 3. The bridge comment still cites the open B31 gap. This one is unusual and deliberate: the comment records that two workspaces on one directory currently _share_ the instance scope's resources. A refactor that promotes the workspace to its own owning `Scope` changes what disposal releases, and the gate forces that refactor to update the note rather than leave a stale explanation next to changed behaviour.
 4. `workspace/index.ts` registers no SIGINT/SIGTERM handlers of its own — connection lifecycle owns them, and a second handler is how a shutdown ends up racing itself.
+
+## B31, Pinned by Behaviour — 2026-09-30
+
+Until now the gap lived in a source comment and in structural tests that read source text. `test/effect/instance-scope.test.ts`
+now measures it: a per-instance cache (`InstanceState.make`) read from two `InstanceScope.with` calls on one directory
+with `wrk_first` and `wrk_second` runs its initializer **once** and hands both the same value, while each still sees its
+own `WorkspaceRef`. That is the sharing B31 describes, as an observation.
+
+The test is a characterization, not a wish: it passes today because the gap is open. The change that gives each workspace
+its own scope has to flip its two expectations (`inits` to 2, the states no longer identical) and update this file in
+the same commit — which is the point. Note for that change: `InstanceState` caches are keyed by directory
+(`ScopedCache<string, S>`), and `Instance.provide` caches instances per directory too, so the key and the disposal
+owner both move; that is the regression surface to measure first.

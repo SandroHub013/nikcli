@@ -1,7 +1,8 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import type { JSONSchema7 } from "@/session/llm/types"
+import { generateObject } from "@/session/llm/call"
 import { SystemPrompt } from "../session/system"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth"
@@ -45,6 +46,11 @@ For typecheck, builds, test suites, dev servers, and any long-running or potenti
 The monitor tool only streams a short preview of the output. The full results are written to a log file on disk (the "Log file:" path returned when the job starts). To read the complete output of a background job — for example to inspect typecheck or build errors — read that log file from the filesystem with the read tool once the job has produced output or finished, rather than relying on the streamed preview alone.
 `
 
+const MOD_TOOL_AWARENESS = `
+
+When the user wants something enforced or changed in how nikcli itself behaves, not done once (block or rewrite tool calls, approve or refuse permission checks, rewrite prompts or tool descriptions, steer subagents and models, add a tool, slash command or UI), write a mod with the plugin tool: a hot-reloaded TypeScript module. The plugin tool is not loaded by default. Load it with search_tools (query "plugin") when you need it: its description holds the events, the \`$\` API and the rules, so do not guess them. Do not write a mod for a one-off task you can simply do now, and never one that hides what it does from the user.
+`
+
 const PRIMARY_AGENT_RESEARCH_AWARENESS = `
 
 When you identify a knowledge gap, outdated external dependency question, missing docs context, or a decision that needs evidence, proactively launch a background research run with the task tool using subagent_type: "researcher".
@@ -54,6 +60,12 @@ When you identify a knowledge gap, outdated external dependency question, missin
 - While research runs, continue any independent work instead of blocking.
 - When the research becomes relevant, use delegator or delegation to read and incorporate the result.
 `
+
+const GeneratedAgent = z.object({
+  identifier: z.string(),
+  whenToUse: z.string(),
+  systemPrompt: z.string(),
+})
 
 export namespace Agent {
   /**
@@ -205,7 +217,7 @@ You have access to subagents that can be launched as background tasks.${PRIMARY_
         prompt: `You are a build agent focused on creating and implementing features.
 
 You are aware of the project context (directory, worktree) and can use all available tools.
-You have access to subagents that can be launched as background tasks.${MONITOR_TOOL_AWARENESS}${PRIMARY_AGENT_DELEGATION_AWARENESS}${PRIMARY_AGENT_RESEARCH_AWARENESS}`,
+You have access to subagents that can be launched as background tasks.${MONITOR_TOOL_AWARENESS}${MOD_TOOL_AWARENESS}${PRIMARY_AGENT_DELEGATION_AWARENESS}${PRIMARY_AGENT_RESEARCH_AWARENESS}`,
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -986,15 +998,13 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
         generate: (input) =>
           Effect.gen(function* () {
             const ctx = yield* InstanceState.context
-            const cfg = yield* Effect.promise(() => configGet(ctx))
-            const { defaultModel, model, language } = yield* Effect.promise(() =>
+            const { defaultModel, model } = yield* Effect.promise(() =>
               runProvider(
                 Effect.gen(function* () {
                   const provider = yield* Provider.Service
                   const defaultModel = input.model ?? (yield* provider.defaultModel())
                   const model = yield* provider.getModel(defaultModel.providerID, defaultModel.modelID)
-                  const language = yield* provider.getLanguage(model)
-                  return { defaultModel, model, language }
+                  return { defaultModel, model }
                 }),
                 ctx,
               ),
@@ -1003,34 +1013,7 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
             const system = SystemPrompt.header(defaultModel.providerID)
             system.push(PROMPT_GENERATE)
             const existing = yield* list()
-
-            const params = {
-              experimental_telemetry: {
-                isEnabled: cfg.experimental?.openTelemetry ?? true,
-                metadata: {
-                  userId: cfg.username ?? "unknown",
-                },
-              },
-              temperature: 0.3,
-              messages: [
-                ...system.map(
-                  (item): ModelMessage => ({
-                    role: "system",
-                    content: item,
-                  }),
-                ),
-                {
-                  role: "user",
-                  content: `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i: Info) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
-                },
-              ],
-              model: language,
-              schema: z.object({
-                identifier: z.string(),
-                whenToUse: z.string(),
-                systemPrompt: z.string(),
-              }),
-            } satisfies Parameters<typeof generateObject>[0]
+            const prompt = `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i: Info) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`
 
             const auth = yield* Effect.promise(() =>
               runAuth(
@@ -1040,25 +1023,25 @@ Inspect this local reference path directly. Stay read-only and cite absolute pat
                 }),
               ),
             )
-            if (defaultModel.providerID === "openai" && auth?.type === "oauth") {
-              return yield* Effect.promise(async () => {
-                const result = streamObject({
-                  ...params,
-                  providerOptions: ProviderTransform.providerOptions(model, {
-                    instructions: SystemPrompt.instructions(),
-                    store: false,
-                  }),
-                  onError: () => {},
-                })
-                for await (const part of result.fullStream) {
-                  if (part.type === "error") throw part.error
-                }
-                return result.object
-              })
-            }
+            // A ChatGPT-plan (Codex) session takes its system prompt as `instructions` plus a leading user
+            // message, and does not store the response, as in `LLM.stream`.
+            const codex = defaultModel.providerID === "openai" && auth?.type === "oauth"
 
-            const result = yield* Effect.promise(() => generateObject(params))
-            return result.object
+            const result = yield* Effect.promise(() =>
+              generateObject({
+                model,
+                temperature: 0.3,
+                schema: z.toJSONSchema(GeneratedAgent) as JSONSchema7,
+                ...(codex
+                  ? {
+                      messages: [{ role: "user", content: system.join("\n\n") }],
+                      providerOptions: { instructions: SystemPrompt.instructions(), store: false },
+                    }
+                  : { system }),
+                prompt,
+              }),
+            )
+            return GeneratedAgent.parse(result.object)
           }),
       })
     }),

@@ -25,12 +25,14 @@
   display: flex;
   align-items: flex-start;
   gap: 20px;
-  padding: 16px 20px;
+  padding: 14px 16px;
   pointer-events: auto;
-  transition: all 150ms ease-out;
+  transition:
+    transform 200ms var(--ease-out-strong),
+    opacity 200ms var(--ease-out-strong);
 
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-weak-base);
+  border: var(--hairline, 1px) solid var(--border-weak-base);
   background: var(--surface-float-base);
   color: var(--text-invert-base);
   box-shadow: var(--shadow-md);
@@ -42,11 +44,11 @@
   }
 
   &[data-opened] {
-    animation: toastPopIn 150ms ease-out;
+    animation: toastPopIn 260ms var(--ease-out-strong);
   }
 
   &[data-closed] {
-    animation: toastPopOut 100ms ease-in forwards;
+    animation: toastPopOut 160ms var(--ease-out-strong) forwards;
   }
 
   &[data-swipe="move"] {
@@ -55,11 +57,11 @@
 
   &[data-swipe="cancel"] {
     transform: translateX(0);
-    transition: transform 200ms ease-out;
+    transition: transform 220ms var(--ease-drawer);
   }
 
   &[data-swipe="end"] {
-    animation: toastSwipeOut 100ms ease-out forwards;
+    animation: toastSwipeOut 160ms var(--ease-out-strong) forwards;
   }
 
   &[data-variant="success"] {
@@ -155,6 +157,11 @@
 
     &:hover {
       text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    &:active {
+      opacity: 0.7;
     }
 
     &:first-child {
@@ -173,7 +180,7 @@
     right: 0;
     height: 3px;
     background-color: var(--surface-base);
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    border-radius: 0 0 var(--glass-radius-lg, 18px) var(--glass-radius-lg, 18px);
     overflow: hidden;
   }
 
@@ -188,11 +195,11 @@
 @keyframes toastPopIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(16px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 

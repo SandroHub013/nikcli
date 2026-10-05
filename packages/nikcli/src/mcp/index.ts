@@ -1,4 +1,4 @@
-import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "@/session/llm/types"
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -29,9 +29,13 @@ import type { InstanceContext } from "@/effect"
  * while a server is being connected to or a tool is being called, so the load
  * lands inside work that is already spawning processes or waiting on a socket.
  *
- * `require` rather than `await import` because `registerNotificationHandlers` is
- * synchronous; by the time any of these run a client already exists, so the
+ * Bun's literal `require` rather than `await import` because `registerNotificationHandlers`
+ * is synchronous; by the time any of these run a client already exists, so the
  * modules are warm and the call is a cache hit.
+ *
+ * Keep the package specifiers literal: Bun embeds these modules into standalone
+ * executables. A createRequire alias resolves from disk at runtime instead and
+ * fails when the binary is distributed without node_modules.
  */
 type McpSdk = {
   Client: typeof import("@modelcontextprotocol/sdk/client/index.js").Client
@@ -166,7 +170,9 @@ export namespace MCP {
 
   function registerNotificationHandlers(client: MCPClient, serverName: string) {
     client.setNotificationHandler(mcpSdk().ToolListChangedNotificationSchema, async () => {
-      log.info("tools list changed notification received", { server: serverName })
+      log.info("tools list changed notification received", {
+        server: serverName,
+      })
       Bus.publish(ToolsChanged, { server: serverName })
     })
   }
@@ -409,7 +415,10 @@ export namespace MCP {
           },
           {
             onRedirect: async (url) => {
-              log.info("oauth redirect requested", { key, url: url.toString() })
+              log.info("oauth redirect requested", {
+                key,
+                url: url.toString(),
+              })
             },
           },
         )
@@ -450,7 +459,10 @@ export namespace MCP {
           lastError = error instanceof Error ? error : new Error(String(error))
 
           if (error instanceof mcpSdk().UnauthorizedError) {
-            log.info("mcp server requires authentication", { key, transport: name })
+            log.info("mcp server requires authentication", {
+              key,
+              transport: name,
+            })
 
             if (lastError.message.includes("registration") || lastError.message.includes("client_id")) {
               status = {
@@ -568,7 +580,10 @@ export namespace MCP {
       }
     }
 
-    log.info("create() successfully created client", { key, toolCount: result.tools.length })
+    log.info("create() successfully created client", {
+      key,
+      toolCount: result.tools.length,
+    })
     return {
       mcpClient,
       status,
@@ -602,7 +617,9 @@ export namespace MCP {
     }
 
     if (!isMcpConfigured(mcp)) {
-      log.error("Ignoring MCP connect request for config without type", { name })
+      log.error("Ignoring MCP connect request for config without type", {
+        name,
+      })
       return
     }
 
@@ -676,8 +693,14 @@ export namespace MCP {
 
     // Apply all failures after collecting (prevents race conditions)
     for (const clientName of failedClients) {
-      log.error("failed to get tools", { clientName, error: failedErrors[clientName] })
-      s.status[clientName] = { status: "failed" as const, error: failedErrors[clientName] }
+      log.error("failed to get tools", {
+        clientName,
+        error: failedErrors[clientName],
+      })
+      s.status[clientName] = {
+        status: "failed" as const,
+        error: failedErrors[clientName],
+      }
       delete s.clients[clientName]
     }
 
@@ -865,7 +888,11 @@ export namespace MCP {
       throw new Error("OAuth state not found - this should not happen")
     }
 
-    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+    log.info("opening browser for oauth", {
+      mcpName,
+      url: authorizationUrl,
+      state: oauthState,
+    })
 
     const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
 
@@ -885,7 +912,10 @@ export namespace MCP {
         })
       })
     } catch (error) {
-      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+      log.warn("failed to open browser, user must open URL manually", {
+        mcpName,
+        error,
+      })
       Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
@@ -955,7 +985,10 @@ export namespace MCP {
       registerNotificationHandlers(client, mcpName)
 
       const toolsResult = await withTimeout(client.listTools(), connectTimeout).catch((error) => {
-        log.error("failed to get tools from oauth-connected client", { mcpName, error })
+        log.error("failed to get tools from oauth-connected client", {
+          mcpName,
+          error,
+        })
         return undefined
       })
 
@@ -966,14 +999,20 @@ export namespace MCP {
       const existingClient = s.clients[mcpName]
       if (existingClient) {
         await existingClient.close().catch((error) => {
-          log.error("Failed to close existing MCP client", { name: mcpName, error })
+          log.error("Failed to close existing MCP client", {
+            name: mcpName,
+            error,
+          })
         })
       }
 
       s.clients[mcpName] = client
       s.status[mcpName] = { status: "connected" }
       pendingOAuthTransports.delete(mcpName)
-      log.info("connected pending oauth transport", { mcpName, toolCount: toolsResult.tools.length })
+      log.info("connected pending oauth transport", {
+        mcpName,
+        toolCount: toolsResult.tools.length,
+      })
 
       return s.status[mcpName]
     } catch (error) {

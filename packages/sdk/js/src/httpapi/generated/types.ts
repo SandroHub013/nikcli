@@ -397,6 +397,7 @@ export type ProviderConfig = {
         baseURL?: string | undefined
         enterpriseUrl?: string | undefined
         setCacheKey?: boolean | undefined
+        protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
         timeout?: number | false | undefined
         headerTimeout?: number | false | undefined
         chunkTimeout?: number | undefined
@@ -968,6 +969,7 @@ export type ProviderConfig1 = {
         baseURL?: string | undefined
         enterpriseUrl?: string | undefined
         setCacheKey?: boolean | undefined
+        protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
         timeout?: number | false | undefined
         headerTimeout?: number | false | undefined
         chunkTimeout?: number | undefined
@@ -1876,6 +1878,22 @@ export type PermissionBlocked = {
   tool?: { messageID: string; callID: string } | undefined
 }
 
+export type ModInfo = {
+  id: string
+  name: string
+  tier: "prepend" | "user" | "append" | "builtin"
+  rank: number
+  events: Array<string>
+  tools: Array<string>
+  commands: Array<string>
+}
+
+export type ModPanePlacement = "dock" | "inline"
+
+export type ModRenderOutput2 = { kind: "default" | "tree"; tree?: string | undefined; props?: string | undefined }
+
+export type ModEventOutput2 = { handled: boolean }
+
 export type Pty1 = {
   id: string
   title: string
@@ -1971,6 +1989,7 @@ export type SessionContextSource = {
   detail?: string
   tokens: number
   enabled: boolean
+  deferred?: boolean
   togglable: boolean
   toggleKind?: "mcp" | "skill" | "instruction" | "tool"
   toggleKey?: string
@@ -2083,7 +2102,11 @@ export type SessionMonitorLogOutput2 = {
 
 export type AccountResponse = unknown
 
-export type SyncOutboxResponse = { events: Array<unknown>; hasMore: boolean }
+export type SyncOutboxResponse = {
+  events: Array<unknown>
+  hasMore: boolean
+  nextCursor?: { seq: number; aggregate: string; id: string } | undefined
+}
 
 export type SyncSnapshotResponse = { lastSeq: number; state: unknown }
 
@@ -2178,6 +2201,18 @@ export type EventTelemetryRecord = {
 }
 
 export type EventServerInstanceDisposed = { type: "server.instance.disposed"; properties: { directory: string } }
+
+export type EventModLog = {
+  type: "mod.log"
+  properties: { plugin: string; sessionID?: string | undefined; text: string }
+}
+
+export type EventModUiInvalidate = {
+  type: "mod.ui.invalidate"
+  properties: { component?: string | undefined; requestID?: string | undefined }
+}
+
+export type EventModUiPanes = { type: "mod.ui.panes"; properties: {} }
 
 export type PermissionRequest2 = {
   id: string
@@ -3081,6 +3116,14 @@ export type QuestionInfo1 = {
   custom?: boolean | undefined
 }
 
+export type ModPane = {
+  id: string
+  plugin: string
+  title: string
+  placement: ModPanePlacement
+  rows?: number | undefined
+}
+
 export type PtyList = Array<Pty1>
 
 export type LoopTemplatesOutput2 = { templates: Array<LoopTemplate> }
@@ -3853,6 +3896,15 @@ export type Config = {
   reference?: { [x: string]: ReferenceConfig } | undefined
   watcher?: { ignore?: Array<string> | undefined } | undefined
   plugin?: Array<string> | undefined
+  mod?:
+    | {
+        prependPlugins?: Array<string> | undefined
+        appendPlugins?: Array<string> | undefined
+        allowManagedModsOnly?: boolean | undefined
+        allowModsToOverrideDenyRules?: boolean | undefined
+        disableAllMods?: boolean | undefined
+      }
+    | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
@@ -3937,7 +3989,13 @@ export type Config = {
   permission_mode?: PermissionModeConfig | undefined
   auto_mode?: AutoModeConfig | undefined
   tools?: { [x: string]: boolean } | undefined
-  tool?: { allow?: Array<string> | undefined; pin?: { [x: string]: string } | undefined } | undefined
+  tool?:
+    | {
+        allow?: Array<string> | undefined
+        pin?: { [x: string]: string } | undefined
+        eager?: Array<string> | undefined
+      }
+    | undefined
   enterprise?: { url?: string | undefined } | undefined
   compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
   experimental?:
@@ -4100,6 +4158,15 @@ export type MobileConfigInfo = {
   reference?: { [x: string]: ReferenceConfig1 } | undefined
   watcher?: { ignore?: Array<string> | undefined } | undefined
   plugin?: Array<string> | undefined
+  mod?:
+    | {
+        prependPlugins?: Array<string> | undefined
+        appendPlugins?: Array<string> | undefined
+        allowManagedModsOnly?: boolean | undefined
+        allowModsToOverrideDenyRules?: boolean | undefined
+        disableAllMods?: boolean | undefined
+      }
+    | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
@@ -4186,7 +4253,13 @@ export type MobileConfigInfo = {
   permission_mode?: PermissionModeConfig1 | undefined
   auto_mode?: AutoModeConfig1 | undefined
   tools?: { [x: string]: boolean } | undefined
-  tool?: { allow?: Array<string> | undefined; pin?: { [x: string]: string } | undefined } | undefined
+  tool?:
+    | {
+        allow?: Array<string> | undefined
+        pin?: { [x: string]: string } | undefined
+        eager?: Array<string> | undefined
+      }
+    | undefined
   enterprise?: { url?: string | undefined } | undefined
   compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
   experimental?:
@@ -4440,6 +4513,9 @@ export type Event =
   | EventProjectUpdated
   | EventTelemetryRecord
   | EventServerInstanceDisposed
+  | EventModLog
+  | EventModUiInvalidate
+  | EventModUiPanes
   | EventPermissionAsked
   | EventPermissionReplied
   | EventPermissionBlocked
@@ -4509,6 +4585,9 @@ export type Event1 =
   | EventProjectUpdated
   | EventTelemetryRecord
   | EventServerInstanceDisposed
+  | EventModLog
+  | EventModUiInvalidate
+  | EventModUiPanes
   | EventPermissionAsked
   | EventPermissionReplied
   | EventPermissionBlocked
@@ -5597,6 +5676,26 @@ export type PermissionReplyPayload = {
   readonly message?: string | undefined
 }
 
+export type ModRenderPayload = {
+  readonly component: string
+  readonly requestId?: string | undefined
+  readonly sessionID?: string | undefined
+  readonly props: string
+  readonly surface?: "terminal" | "mobile" | "desktop" | "ade" | undefined
+  readonly columns?: number | undefined
+  readonly rows?: number | undefined
+}
+
+export type ModEventPayload = {
+  readonly kind: "press" | "input" | "select" | "close" | "message"
+  readonly key?: string | undefined
+  readonly value?: string | undefined
+  readonly submit?: boolean | undefined
+  readonly component?: string | undefined
+  readonly requestId?: string | undefined
+  readonly sessionID?: string | undefined
+}
+
 export type PtyCreatePayload = {
   readonly command?: string | undefined
   readonly args?: ReadonlyArray<string> | undefined
@@ -6313,6 +6412,15 @@ export type ConfigUpdateInput = {
       | undefined
     readonly watcher?: { readonly ignore?: ReadonlyArray<string> | undefined } | undefined
     readonly plugin?: ReadonlyArray<string> | undefined
+    readonly mod?:
+      | {
+          readonly prependPlugins?: ReadonlyArray<string> | undefined
+          readonly appendPlugins?: ReadonlyArray<string> | undefined
+          readonly allowManagedModsOnly?: boolean | undefined
+          readonly allowModsToOverrideDenyRules?: boolean | undefined
+          readonly disableAllMods?: boolean | undefined
+        }
+      | undefined
     readonly snapshot?: boolean | undefined
     readonly sync?:
       | {
@@ -6773,6 +6881,7 @@ export type ConfigUpdateInput = {
                   readonly baseURL?: string | undefined
                   readonly enterpriseUrl?: string | undefined
                   readonly setCacheKey?: boolean | undefined
+                  readonly protocol?: "openai-compatible" | "openai-responses" | "anthropic" | "gemini" | undefined
                   readonly timeout?: number | false | undefined
                   readonly headerTimeout?: number | false | undefined
                   readonly chunkTimeout?: number | undefined
@@ -6908,6 +7017,7 @@ export type ConfigUpdateInput = {
       | {
           readonly allow?: ReadonlyArray<string> | undefined
           readonly pin?: { readonly [x: string]: string } | undefined
+          readonly eager?: ReadonlyArray<string> | undefined
         }
       | undefined
     readonly enterprise?: { readonly url?: string | undefined } | undefined
@@ -8170,6 +8280,34 @@ export type PermissionReplyInput = {
 
 export type PermissionReplyOutput = boolean
 
+export type ModListOutput = Array<ModInfo>
+
+export type ModPanesOutput = Array<ModPane>
+
+export type ModRenderInput = {
+  readonly component: ModRenderPayload["component"]
+  readonly requestId?: ModRenderPayload["requestId"]
+  readonly sessionID?: ModRenderPayload["sessionID"]
+  readonly props: ModRenderPayload["props"]
+  readonly surface?: ModRenderPayload["surface"]
+  readonly columns?: ModRenderPayload["columns"]
+  readonly rows?: ModRenderPayload["rows"]
+}
+
+export type ModRenderOutput = ModRenderOutput2
+
+export type ModEventInput = {
+  readonly kind: ModEventPayload["kind"]
+  readonly key?: ModEventPayload["key"]
+  readonly value?: ModEventPayload["value"]
+  readonly submit?: ModEventPayload["submit"]
+  readonly component?: ModEventPayload["component"]
+  readonly requestId?: ModEventPayload["requestId"]
+  readonly sessionID?: ModEventPayload["sessionID"]
+}
+
+export type ModEventOutput = ModEventOutput2
+
 export type PtyListOutput = PtyList
 
 export type PtyCreateInput = {
@@ -8813,8 +8951,41 @@ export type SyncEventInput = {
 export type SyncEventOutput = void
 
 export type SyncOutboxInput = {
-  readonly projectID: { readonly projectID: string; readonly since?: number | undefined }["projectID"]
-  readonly since?: { readonly projectID: string; readonly since?: number | undefined }["since"]
+  readonly projectID: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["projectID"]
+  readonly since?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["since"]
+  readonly afterAggregate?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["afterAggregate"]
+  readonly afterID?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["afterID"]
+  readonly aggregate?: {
+    readonly projectID: string
+    readonly since?: number | undefined
+    readonly afterAggregate?: string | undefined
+    readonly afterID?: string | undefined
+    readonly aggregate?: string | undefined
+  }["aggregate"]
 }
 
 export type SyncOutboxOutput = SyncOutboxResponse
@@ -8827,8 +8998,21 @@ export type SyncSnapshotInput = {
 export type SyncSnapshotOutput = SyncSnapshotResponse
 
 export type SyncStreamInput = {
-  readonly projectID: { readonly projectID: string; readonly token: string }["projectID"]
-  readonly token: { readonly projectID: string; readonly token: string }["token"]
+  readonly projectID: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["projectID"]
+  readonly readiness?: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["readiness"]
+  readonly token: {
+    readonly projectID: string
+    readonly readiness?: string | undefined
+    readonly token: string
+  }["token"]
 }
 
 export type SyncStreamOutput = unknown

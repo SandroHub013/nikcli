@@ -301,8 +301,13 @@ describe("plugin scope dispose", () => {
     const src = await Bun.file(path.join(TUI_SRC, "plugin/runtime.ts")).text()
     const body = src.slice(src.indexOf("export async function dispose()"), src.indexOf("function schedule(state:"))
     const deadline = body.indexOf("const deadline = Date.now() + SHUTDOWN_BUDGET_MS")
-    const loadWait = body.indexOf("await runCleanup(() => task,")
-    const reloadWait = body.indexOf("await runCleanup(() => reloading,")
+    // Whitespace-tolerant: the claims are about which call receives which
+    // budget, not about the line they happen to sit on, and a prettier run that
+    // reflowed `runCleanup(` onto its own line used to fail this for a reason
+    // that had nothing to do with the code.
+    const waitFor = (argument: string) => body.search(new RegExp(`await runCleanup\\(\\s*\\(\\)\\s*=>\\s*${argument}`))
+    const loadWait = waitFor("task")
+    const reloadWait = waitFor("reloading")
 
     expect(deadline).toBeGreaterThan(-1)
     // Before both waits, not after them.

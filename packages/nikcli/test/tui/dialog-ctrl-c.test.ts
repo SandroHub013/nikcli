@@ -26,7 +26,10 @@ describe("dialog Ctrl+C interactivity", () => {
   test("still clears the stack when nothing is being typed into", async () => {
     const src = await tuiSource("ui/dialog.tsx")
     const branch = src.split("const isInteractive")[1] ?? ""
-    expect(branch).toMatch(/if \(!isInteractive\)/)
+    // Ownership is resolved per key, not by a flat layer order: Ctrl+C with a
+    // focused editor belongs to the editor, so the stack survives it.
+    expect(branch).toMatch(/ownerOf\(/)
+    expect(branch).toMatch(/if \(owner !== "editable"\)/)
     expect(branch).toMatch(/setStore\("stack", \[\]\)/)
   })
 

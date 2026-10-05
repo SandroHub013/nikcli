@@ -57,6 +57,7 @@ Source: the `commands` field of the root `Spec.make("nikcli", …)` in `src/cli/
 | `debug`           | `config`, `lsp`, `search`, `file`, `scrap`, `skill`, `snapshot`, `agent`, `paths`, `wait`          |                                                        |
 | `generate`        | —                                                                                                  | OpenAPI / codegen helper                               |
 | `plugin`          | `<module>`                                                                                         | `src/cli/handlers/plugin.ts`                           |
+| `mod`             | `validate <directory> [--strict] [--json]`                                                         | Review a mod without running it (EOT-14)               |
 | `connectors`      | `list`, `auth [name]`, `logout [name]`, `add`                                                      |                                                        |
 | `sync`            | `status`, `connect`, `disconnect`, `token create`                                                  |                                                        |
 | `remote`          | `start`, `stop`, `status`, `share`, `attach <sessionId>`                                           |                                                        |
@@ -71,6 +72,7 @@ Source: the `commands` field of the root `Spec.make("nikcli", …)` in `src/cli/
 | `artifact`        | `login`, `logout`, `list [session-id]`                                                             |                                                        |
 | `ads`             | `create`, `list`, `remove [id]`, `toggle [id]`, `enable`, `disable`                                |                                                        |
 | `bot`             | `list`, `add`, `start [name]`, `stop [name]`, `webhook [name]`                                     | Chatbot                                                |
+| `auto-mode`       | `defaults`, `config`, `critique`, `reset`                                                          | Permission auto-mode classifier rules                  |
 | `heap`            | —                                                                                                  |                                                        |
 | `completion`      | —                                                                                                  | yargs-generated shell completion                       |
 

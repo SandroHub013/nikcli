@@ -33,6 +33,12 @@ describe("isHeadless", () => {
     expect(isHeadless({ env: {}, stdinIsTTY: true })).toBe(false)
   })
 
+  it("treats an undefined isTTY as headless — that is what a real pipe reports", () => {
+    // Node and Bun leave `isTTY` unset on a non-terminal stream; only a TTY sets it.
+    // `bun -e 'console.log(process.stdin.isTTY)' < /dev/null` prints `undefined`.
+    expect(isHeadless({ env: {}, stdinIsTTY: undefined })).toBe(process.stdin.isTTY ? false : true)
+  })
+
   it("exempts the managed PTY the mobile companion runs behind", () => {
     // `NIKCLI_TERMINAL=1` is the signal that stdin is a real terminal the host
     // is driving. Same exception the TUI default command makes; without it,

@@ -271,6 +271,9 @@ const tui: TuiPlugin = async (api) => {
         name: "plugins.list",
         title: "Plugins",
         namespace: "System",
+        // `/plugins`, and `/mod` for the same list: mods are plugins.
+        slashName: "plugins",
+        slashAliases: ["mod", "mods"],
         run() {
           show(api)
         },

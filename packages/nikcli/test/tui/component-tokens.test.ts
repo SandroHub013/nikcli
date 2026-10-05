@@ -72,7 +72,10 @@ describe("resolveComponents", () => {
     expect(prompt.box.paddingLeft).toBe(2)
     expect(prompt.box.paddingRight).toBe(2)
     expect(prompt.box.paddingTop).toBe(1)
-    expect(prompt.box.paddingBottom).toBe(0)
+    // A row of the prompt's surface under the footer, in place of the `▀`
+    // rule the prompt used to draw below itself (now off by default).
+    expect(prompt.box.paddingBottom).toBe(1)
+    expect(styles["session.prompt-shadow"].box.borderSides).toEqual([])
     expect(prompt.box.gap).toBe(1)
     expect(prompt.box.borderSides).toEqual(["left"])
     expect(prompt.colors.background).toEqual(SEMANTIC.surface.offset)
