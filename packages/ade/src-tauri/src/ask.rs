@@ -81,6 +81,23 @@ mod native {
         }
     }
 
+    /// Gives the foreground to the question that is open over `parent`, and says whether there was one.
+    ///
+    /// The question is modal, so `parent` is disabled while it stands: focusing the window (what
+    /// `unminimize` and `setFocus` do) leaves the foreground on a window that ignores every key, and
+    /// an answer from the keyboard needs a click first. `GW_ENABLEDPOPUP` finds the enabled window
+    /// `parent` owns, which is the question; with none it returns `parent` itself, and that is «no».
+    pub fn front(parent: isize) -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindow, SetForegroundWindow, GW_ENABLEDPOPUP};
+        let parent = HWND(parent as *mut core::ffi::c_void);
+        // SAFETY: both calls take a handle and read no memory of ours; a stale handle makes them fail.
+        let popup = match unsafe { GetWindow(parent, GW_ENABLEDPOPUP) } {
+            Ok(popup) if !popup.0.is_null() && popup != parent => popup,
+            _ => return false,
+        };
+        unsafe { SetForegroundWindow(popup) }.as_bool()
+    }
+
     /// Opens the question over `parent` and waits for the answer. Any failure is «no».
     pub fn ask(parent: isize, title: &str, message: &str, yes: &str, no: &str) -> bool {
         let spec = Spec::new(title, message, yes, no);
@@ -120,9 +137,32 @@ pub async fn ade_ask(
     }
 }
 
+/// Brings the open question to the front, so a key answers it at once. False when none is open.
+#[tauri::command]
+pub async fn ade_ask_front(window: tauri::WebviewWindow) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        let parent = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+        Ok(native::front(parent))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn with_no_question_open_there_is_nothing_to_bring_forward() {
+        // No window at all, and a handle that is not one: both say «no question», without a panic.
+        assert!(!native::front(0));
+        assert!(!native::front(1));
+    }
 
     #[test]
     fn only_the_yes_button_answers_yes() {

@@ -35,6 +35,7 @@ function deps(over: Partial<AskDeps> = {}): AskDeps & { asked: [string, AskOptio
     },
     isMinimized: async () => false,
     restore: async () => {},
+    front: async () => {},
     ...over,
   }
 }
@@ -166,19 +167,22 @@ describe("una domanda sì/no in ADE", () => {
     expect(steps).toEqual(["attenzione", "basta", "attenzione", "basta"])
   })
 
-  test("lint: the flash only when the window is not focused; the focus is taken back only to restore it from the icon", () => {
+  test("lint: the flash only when the window is not focused; the window is never focused, the question is brought forward", () => {
     const capabilities = JSON.parse(
       readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8"),
     )
     expect(capabilities.permissions).toContain("core:window:allow-request-user-attention")
-    // The window calls the restore makes must be granted, or it is silently refused.
+    // The window call the restore makes must be granted, or it is silently refused.
     expect(capabilities.permissions).toContain("core:window:allow-unminimize")
-    expect(capabilities.permissions).toContain("core:window:allow-set-focus")
     const source = readFileSync(join(import.meta.dir, "ask.ts"), "utf8")
     expect(source).toContain("if (!(await win.isFocused())) await win.requestUserAttention(UserAttentionType.Critical)")
-    // setFocus is called once, in `restore`, which runs only for a minimised window. A stray key is a «No» now.
-    expect(source.match(/setFocus/g)).toHaveLength(1)
+    // The window is disabled while the question stands: focusing it left the foreground on a window that ignores keys.
+    expect(source).not.toContain("setFocus")
+    expect(source).toContain('invoke("ade_ask_front")')
     expect(source).toContain("if (minimized) await deps.restore()")
+    const rust = readFileSync(join(import.meta.dir, "../../src-tauri/src/ask.rs"), "utf8")
+    expect(rust).toContain("GW_ENABLEDPOPUP")
+    expect(readFileSync(join(import.meta.dir, "../../src-tauri/src/lib.rs"), "utf8")).toContain("ask::ade_ask_front,")
   })
 
   test("lint: every close question of the workbench goes through askYesNo, and a second ✕ is reminded", () => {
@@ -297,6 +301,64 @@ describe("su Windows la domanda è ade_ask, con No predefinito", () => {
     await askDialog("Lo usi?", {}, d)
     await settle()
     expect(steps).toEqual(["attenzione", "domanda", "basta"])
+  })
+})
+
+/*
+ * Prova dal vivo: dopo la seconda ✕ il primo piano era la finestra madre, disabilitata perché la domanda è modale,
+ * e non il dialogo. Un tasto non lo raggiungeva: serviva un clic. Il fuoco va alla domanda, non alla finestra.
+ */
+describe("la domanda aperta prende il fuoco, non la finestra madre", () => {
+  test("dopo il ripristino dall'icona, la domanda viene portata davanti, prima dell'attenzione", async () => {
+    const steps: string[] = []
+    const d = windows({
+      isMinimized: async () => true,
+      restore: async () => void steps.push("ripristino"),
+      front: async () => void steps.push("domanda davanti"),
+      attention: async (on) => void steps.push(on ? "attenzione" : "basta"),
+    })
+    await remindQuestion(d)
+    expect(steps).toEqual(["ripristino", "domanda davanti", "attenzione"])
+  })
+
+  test("anche con la finestra normale ma dietro, la domanda viene portata davanti", async () => {
+    const steps: string[] = []
+    const d = windows({
+      front: async () => void steps.push("domanda davanti"),
+      restore: async () => void steps.push("ripristino"),
+    })
+    await remindQuestion(d)
+    expect(steps).toEqual(["domanda davanti"])
+  })
+
+  test("fuori da Windows non c'è una domanda nativa da portare davanti", async () => {
+    const steps: string[] = []
+    const d = deps({
+      isMinimized: async () => true,
+      restore: async () => void steps.push("ripristino"),
+      front: async () => void steps.push("domanda davanti"),
+    })
+    await remindQuestion(d)
+    expect(steps).toEqual(["ripristino"])
+  })
+
+  test("un guasto o un ritardo infinito di front non fanno fallire il richiamo", async () => {
+    await remindQuestion(windows({ front: () => Promise.reject(new Error("no question")) }))
+    const started = Date.now()
+    await remindQuestion(windows({ front: () => new Promise<void>(() => {}) }))
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+
+  test("una domanda nuova non chiama front: si apre da sola in primo piano", async () => {
+    const steps: string[] = []
+    const d = windows({
+      isMinimized: async () => true,
+      restore: async () => void steps.push("ripristino"),
+      front: async () => void steps.push("domanda davanti"),
+      nativeAsk: async () => (steps.push("domanda"), false),
+    })
+    await askYesNo("Chiudo?", {}, d)
+    expect(steps).toEqual(["ripristino", "domanda"])
   })
 })
 

@@ -2377,6 +2377,7 @@ pub fn run() {
             project_bytes::read_project_bytes,
             append::append_text_file,
             ask::ade_ask,
+            ask::ade_ask_front,
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,

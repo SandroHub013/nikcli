@@ -51,8 +51,10 @@ export interface AskDeps {
   readonly nativeAsk: (message: string, options: NativeAskOptions) => Promise<boolean>
   /** Whether the window is reduced to an icon, where a question owned by it cannot be seen. */
   readonly isMinimized: () => Promise<boolean>
-  /** Brings the window back from the icon and in front. */
+  /** Brings the window back from the icon. Not the focus: the question is the one to have it. */
   readonly restore: () => Promise<void>
+  /** Gives the foreground to the question already open, so a key answers it at once. */
+  readonly front: () => Promise<void>
 }
 
 const defaultDeps: AskDeps = {
@@ -76,9 +78,11 @@ const defaultDeps: AskDeps = {
   },
   restore: async () => {
     const { getCurrentWindow } = await import("@tauri-apps/api/window")
-    const win = getCurrentWindow()
-    await win.unminimize()
-    await win.setFocus()
+    await getCurrentWindow().unminimize()
+  },
+  front: async () => {
+    const { invoke } = await import("@tauri-apps/api/core")
+    await invoke("ade_ask_front")
   },
 }
 
@@ -100,8 +104,10 @@ const bounded = (work: Promise<unknown>): Promise<void> =>
  * Brings ADE back from the icon, so the question that waits on it can be seen.
  *
  * The question is owned by the window, and goes with it when the window is
- * minimised. The focus can be taken here, which the flash alone did not do on
- * purpose: a key that arrives at the question now answers no.
+ * minimised. Only the window is restored here: it is disabled while the question
+ * stands, so focusing it left the foreground on a window that ignores
+ * every key. A question not open yet takes the foreground when it opens; one that
+ * is open gets it from `front`. A key that arrives at it answers no.
  */
 async function showWindow(deps: AskDeps): Promise<void> {
   const minimized = await deps.isMinimized().catch(() => false)
@@ -115,7 +121,9 @@ async function showWindow(deps: AskDeps): Promise<void> {
  */
 export async function remindQuestion(deps: AskDeps = defaultDeps): Promise<void> {
   if (!deps.inTauri()) return
-  await bounded(showWindow(deps))
+  await bounded(
+    showWindow(deps).then(() => (deps.nativeAvailable() ? deps.front().catch(() => undefined) : undefined)),
+  )
   void deps.attention(true).catch(() => undefined)
 }
 
