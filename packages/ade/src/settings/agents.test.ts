@@ -55,6 +55,7 @@ const { HOOK_TARGETS } = await import("../session-new/agent-hooks")
 let dispose: (() => void) | undefined
 let logins: string[] = []
 let hookStates: Record<string, unknown> = {}
+let closed = 0
 
 beforeEach(() => {
   installed = { claude: true, codex: true, nikcli: true }
@@ -66,6 +67,7 @@ beforeEach(() => {
   botFiles = {}
   logins = []
   hookStates = {}
+  closed = 0
 })
 
 afterEach(() => {
@@ -84,7 +86,9 @@ function renderTab(tab: string) {
     () =>
       createComponent(SettingsSheet, {
         initialTarget: tab,
-        onClose: () => {},
+        onClose: () => {
+          closed++
+        },
         voiceEngine: {
           isRunning: () => false,
           status: () => "idle",
@@ -208,6 +212,25 @@ describe("Agenti e account › Account", () => {
     press(card("claude")?.querySelector('[data-slot="switch-continue"]'))
     expect(logins).toEqual(["claude"])
     expect(card("claude")?.querySelector('[data-slot="switch-prompt"]')).toBeNull()
+  })
+
+  test("Esc chiude solo la conferma; con la conferma chiusa chiude le Impostazioni", async () => {
+    renderTab("agents/account")
+    await settle()
+    const escape = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+
+    press(card("claude")?.querySelector('[data-action="switch"]'))
+    expect(card("claude")?.querySelector('[data-slot="switch-prompt"]')).not.toBeNull()
+
+    escape()
+    expect(card("claude")?.querySelector('[data-slot="switch-prompt"]'), "la domanda si chiude").toBeNull()
+    expect(buttons("claude")).toEqual(["Cambia account"])
+    expect(closed, "le Impostazioni restano aperte").toBe(0)
+    expect(logins).toEqual([])
+
+    // Senza domanda in piedi l'Esc è del foglio, come sempre.
+    escape()
+    expect(closed).toBe(1)
   })
 
   test("«Accedi» non chiede conferma: non c'è un account da perdere", async () => {

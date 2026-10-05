@@ -125,6 +125,7 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
   return (
     <Sheet
       component="settings-sheet"
+      place="center"
       surface={false}
       labelledBy={activeCategory() === "voice" ? "voice-panel-title" : "settings-panel-title"}
       onClose={props.onClose}

@@ -15,6 +15,17 @@
   box-sizing: border-box;
 }
 
+/*
+ * The sheet's frame is as wide as the panel it holds. `layout.css` gives a frame
+ * 560px unless told otherwise, and the shell is 1100px: left alone, the shell
+ * overflowed the frame and ran off the right edge of the window. Below 1148px
+ * the frame is the window less its gutters, and the shell's own `min()` keeps it
+ * inside.
+ */
+[data-component="settings-sheet"] [data-layout="frame"] {
+  --ade-surface-max: 1100px;
+}
+
 /* Category menu (left rail) */
 
 [data-slot="settings-rail"] {

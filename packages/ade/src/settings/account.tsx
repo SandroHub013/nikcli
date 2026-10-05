@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show, type JSX } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount, For, Show, type JSX } from "solid-js"
 import { HowItWorks } from "@nikcli-ai/voice"
 import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
@@ -59,6 +59,24 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
     ).finally(() => setChecking(false))
   }
   onMount(check)
+
+  /*
+   * Esc answers the question and nothing more: the sheet closes on an Escape
+   * that reaches the document in the bubbling phase, so this one listens in the
+   * capture phase and claims it first, the way the voice panel does for its own
+   * Escapes (`panelListensEarly`). Only while a question is standing.
+   */
+  createEffect(() => {
+    if (confirming() === undefined) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      setConfirming(undefined)
+    }
+    document.addEventListener("keydown", onKey, true)
+    onCleanup(() => document.removeEventListener("keydown", onKey, true))
+  })
 
   return (
     <>
@@ -126,15 +144,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                           </button>
                         }
                       >
-                        <div
-                          data-slot="switch-confirm"
-                          role="group"
-                          onKeyDown={(event) => {
-                            if (event.key !== "Escape") return
-                            event.stopPropagation()
-                            setConfirming(undefined)
-                          }}
-                        >
+                        <div data-slot="switch-confirm" role="group">
                           <p data-slot="switch-prompt">{t("settings.providers.switchPrompt", runner.label)}</p>
                           <div data-slot="switch-buttons">
                             <button
