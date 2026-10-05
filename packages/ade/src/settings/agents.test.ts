@@ -233,6 +233,70 @@ describe("Agenti e account › Account", () => {
     expect(closed).toBe(1)
   })
 
+  test("un doppio clic su «Cambia account» non preme «Continua»: il secondo clic non è una risposta", async () => {
+    renderTab("agents/account")
+    await settle()
+
+    press(card("claude")?.querySelector('[data-action="switch"]'))
+    const continueButton = card("claude")?.querySelector('[data-slot="switch-continue"]')
+    expect(continueButton, "«Continua»").not.toBeNull()
+
+    // Il secondo clic di un doppio clic arriva con detail 2, sul punto dove c'era «Cambia account».
+    continueButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 }))
+    expect(logins).toEqual([])
+    expect(card("claude")?.querySelector('[data-slot="switch-prompt"]'), "la domanda resta").not.toBeNull()
+
+    // Un clic o un Invio veri (detail 1 o 0) rispondono.
+    continueButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }))
+    expect(logins).toEqual(["claude"])
+  })
+
+  test("«Accedi» da «Da verificare» chiede conferma: l'account potrebbe esserci", async () => {
+    answers.claude = { lines: ["???"], code: 0 }
+    renderTab("agents/account")
+    await settle()
+
+    expect(card("claude")?.getAttribute("data-state")).toBe("unverified")
+    press(card("claude")?.querySelector('[data-action="login"]'))
+    expect(logins, "il login non parte al primo clic").toEqual([])
+    expect(card("claude")?.querySelector('[data-slot="switch-prompt"]')?.textContent).toBe(
+      "Si apre l'accesso di Claude Code. Continuare?",
+    )
+    press(card("claude")?.querySelector('[data-slot="switch-cancel"]'))
+    expect(logins).toEqual([])
+    expect(buttons("claude")).toEqual(["Accedi"])
+
+    press(card("claude")?.querySelector('[data-action="login"]'))
+    press(card("claude")?.querySelector('[data-slot="switch-continue"]'))
+    expect(logins).toEqual(["claude"])
+  })
+
+  test("il fuoco segue la domanda: su «Annulla» quando si apre, sul pulsante quando si chiude", async () => {
+    renderTab("agents/account")
+    await settle()
+    const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve))
+
+    press(card("claude")?.querySelector('[data-action="switch"]'))
+    await tick()
+    expect(document.activeElement).toBe(card("claude")?.querySelector('[data-slot="switch-cancel"]') ?? null)
+    // Il gruppo è nominato dalla sua domanda.
+    const group = card("claude")?.querySelector('[data-slot="switch-confirm"]')
+    expect(document.getElementById(group?.getAttribute("aria-labelledby") ?? "")?.textContent).toBe(
+      "Si apre l'accesso di Claude Code. Continuare?",
+    )
+
+    press(card("claude")?.querySelector('[data-slot="switch-cancel"]'))
+    await tick()
+    expect(document.activeElement).toBe(card("claude")?.querySelector('[data-action="switch"]') ?? null)
+
+    // Anche con Esc il fuoco torna al pulsante.
+    press(card("claude")?.querySelector('[data-action="switch"]'))
+    await tick()
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    await tick()
+    expect(document.activeElement).toBe(card("claude")?.querySelector('[data-action="switch"]') ?? null)
+  })
+
   test("«Accedi» non chiede conferma: non c'è un account da perdere", async () => {
     renderTab("agents/account")
     await settle()
@@ -273,12 +337,15 @@ describe("Agenti e account › Account", () => {
 })
 
 describe("Agenti e account › Bot e strumenti", () => {
-  test("senza bot con limitazioni dice «Nessuno strumento» e come aggiungerne", async () => {
+  test("senza bot con limitazioni dice che non ce ne sono, non «Nessuno strumento», e come aggiungerne", async () => {
     renderTab("agents/bots")
     await settle()
 
     const body = document.body.textContent ?? ""
-    expect(body).toContain("Nessuno strumento")
+    // Nessuna limitazione vuol dire che ogni bot ha tutti gli strumenti: il contrario di «nessuno strumento».
+    expect(body).toContain("Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.")
+    expect(body).not.toContain("Nessuno strumento")
+    expect(document.body.querySelectorAll('[data-slot="settings-hint"]').length).toBe(1)
     expect(body).toContain("Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.")
     expect(body).not.toContain('senza "*"')
     expect(body).not.toContain("senza *")
@@ -297,6 +364,9 @@ describe("Agenti e account › Bot e strumenti", () => {
     expect(restricted.length).toBe(1)
     expect(restricted[0]?.textContent).toContain("muto")
     expect(document.body.textContent).not.toContain("senza *")
+    // Con una riga per bot il suggerimento non si ripete: una volta sola, sotto la lista.
+    expect(document.body.querySelectorAll('[data-slot="settings-hint"]').length).toBe(1)
+    expect(document.body.textContent).not.toContain("Nessun bot ha limitazioni")
   })
 
   test("Bot e Strumenti stanno nella stessa scheda, con due sottotitoli e nessun h3", async () => {

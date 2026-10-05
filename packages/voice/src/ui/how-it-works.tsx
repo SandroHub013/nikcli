@@ -30,7 +30,7 @@ export function HowItWorks(props: HowItWorksProps): JSX.Element {
         id={`${id}-toggle`}
         data-slot="how-it-works-toggle"
         aria-expanded={open()}
-        aria-controls={`${id}-panel`}
+        aria-controls={open() ? `${id}-panel` : undefined}
         onClick={() => setOpen((value) => !value)}
       >
         <span data-slot="how-it-works-chevron" aria-hidden="true" />

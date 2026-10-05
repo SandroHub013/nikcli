@@ -18,7 +18,8 @@ describe("ui/how-it-works", () => {
 
   test("the button reports the state and controls the panel", () => {
     expect(source).toContain(codeOf("aria-expanded={open()}"))
-    expect(source).toContain(codeOf("aria-controls={`${id}-panel`}"))
+    // Only while open: from closed it would point at a panel that does not exist.
+    expect(source).toContain(codeOf("aria-controls={open() ? `${id}-panel` : undefined}"))
     expect(source).toContain(codeOf("onClick={() => setOpen((value) => !value)}"))
   })
 

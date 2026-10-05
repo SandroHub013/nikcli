@@ -136,36 +136,29 @@ export function SkillsSection(props: SkillsSectionProps) {
 
       <Show
         when={restricted().length > 0}
-        fallback={
-          <div data-slot="settings-empty">
-            <p>{t("settings.skills.none")}</p>
-            <p data-slot="settings-hint">{t("settings.skills.addHint")}</p>
-          </div>
-        }
+        fallback={<p data-slot="settings-empty">{t("settings.skills.empty")}</p>}
       >
         <ul data-slot="settings-list">
           <For each={restricted()}>
             {(bot) => {
               /* The file spells the key as it is written there: `"*": false`, quotes included. */
               const disabled = () => bot.disabledTools.map(unquoted)
-              const hasNoTools = () => disabled().includes("*")
               return (
                 <li data-slot="settings-row">
                   <span data-slot="settings-name">{bot.identifier}</span>
                   <span data-slot="settings-meta">
-                    {hasNoTools()
+                    {disabled().includes("*")
                       ? t("settings.skills.none")
                       : t("settings.skills.without", disabled().join(", "))}
                   </span>
-                  <Show when={hasNoTools()}>
-                    <span data-slot="settings-hint">{t("settings.skills.addHint")}</span>
-                  </Show>
                 </li>
               )
             }}
           </For>
         </ul>
       </Show>
+
+      <p data-slot="settings-hint">{t("settings.skills.addHint")}</p>
     </>
   )
 }

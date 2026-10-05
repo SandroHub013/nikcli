@@ -20,6 +20,16 @@ export function resolveStatusKind(state: ProviderState | undefined): ProviderSta
   return "unverified"
 }
 
+/**
+ * Whether a sign-in needs the user's word first. «Collegato» has an account to
+ * lose; «Da verificare» may have one too, since the CLI could not say, and the
+ * sign-in that opens is a real one that finishes by itself. «Non collegato» has
+ * nothing to lose.
+ */
+export function needsConfirmation(kind: ProviderStatusKind): boolean {
+  return kind === "connected" || kind === "unverified"
+}
+
 export function statusLabel(kind: ProviderStatusKind): string {
   switch (kind) {
     case "connected":
@@ -60,6 +70,21 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
   }
   onMount(check)
 
+  /* The focus follows the question: onto «Annulla» when it opens, back onto the button when it closes. */
+  const cardPart = (runner: string | undefined, part: string) =>
+    runner
+      ? document.querySelector<HTMLElement>(`[data-slot="provider-card"][data-runner="${runner}"] ${part}`)
+      : null
+  const ask = (runner: string) => {
+    setConfirming(runner)
+    queueMicrotask(() => cardPart(runner, '[data-slot="switch-cancel"]')?.focus())
+  }
+  const closeQuestion = () => {
+    const runner = confirming()
+    setConfirming(undefined)
+    queueMicrotask(() => cardPart(runner, "[data-action]")?.focus())
+  }
+
   /*
    * Esc answers the question and nothing more: the sheet closes on an Escape
    * that reaches the document in the bubbling phase, so this one listens in the
@@ -72,7 +97,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
       if (event.key !== "Escape") return
       event.preventDefault()
       event.stopPropagation()
-      setConfirming(undefined)
+      closeQuestion()
     }
     document.addEventListener("keydown", onKey, true)
     onCleanup(() => document.removeEventListener("keydown", onKey, true))
@@ -119,50 +144,46 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                 <div data-slot="provider-actions">
                   <Show when={props.onLogin && state()?.installed && runner.login.length > 0}>
                     <Show
-                      when={state()?.login.state === "in"}
+                      when={isConfirming()}
                       fallback={
                         <button
                           type="button"
                           data-slot="settings-choice"
-                          onClick={() => props.onLogin?.(runner)}
+                          data-action={kind() === "connected" ? "switch" : "login"}
+                          onClick={() => (needsConfirmation(kind()) ? ask(runner.id) : props.onLogin?.(runner))}
                           title={`${runner.command} ${runner.login.join(" ")}`}
                         >
-                          {t("settings.providers.login")}
+                          {kind() === "connected"
+                            ? t("settings.providers.switchAccount")
+                            : t("settings.providers.login")}
                         </button>
                       }
                     >
-                      <Show
-                        when={isConfirming()}
-                        fallback={
+                      <div data-slot="switch-confirm" role="group" aria-labelledby={`switch-prompt-${runner.id}`}>
+                        <p data-slot="switch-prompt" id={`switch-prompt-${runner.id}`}>
+                          {t("settings.providers.switchPrompt", runner.label)}
+                        </p>
+                        <div data-slot="switch-buttons">
                           <button
                             type="button"
-                            data-slot="settings-choice"
-                            data-action="switch"
-                            onClick={() => setConfirming(runner.id)}
+                            data-slot="switch-continue"
+                            onClick={(event) => {
+                              /*
+                               * The question stands where the button was pressed, so the second
+                               * press of a double click lands on «Continua». It is not an answer.
+                               */
+                              if (event.detail > 1) return
+                              setConfirming(undefined)
+                              props.onLogin?.(runner)
+                            }}
                           >
-                            {t("settings.providers.switchAccount")}
+                            {t("settings.providers.switchContinue")}
                           </button>
-                        }
-                      >
-                        <div data-slot="switch-confirm" role="group">
-                          <p data-slot="switch-prompt">{t("settings.providers.switchPrompt", runner.label)}</p>
-                          <div data-slot="switch-buttons">
-                            <button
-                              type="button"
-                              data-slot="switch-continue"
-                              onClick={() => {
-                                setConfirming(undefined)
-                                props.onLogin?.(runner)
-                              }}
-                            >
-                              {t("settings.providers.switchContinue")}
-                            </button>
-                            <button type="button" data-slot="switch-cancel" onClick={() => setConfirming(undefined)}>
-                              {t("settings.providers.switchCancel")}
-                            </button>
-                          </div>
+                          <button type="button" data-slot="switch-cancel" onClick={() => closeQuestion()}>
+                            {t("settings.providers.switchCancel")}
+                          </button>
                         </div>
-                      </Show>
+                      </div>
                     </Show>
                   </Show>
                 </div>
