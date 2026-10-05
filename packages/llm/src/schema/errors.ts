@@ -120,10 +120,14 @@ export class TransportReason extends Schema.Class<TransportReason>("LLM.Error.Tr
   message: Schema.String,
   kind: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
+  /** The underlying failure (e.g. `ECONNRESET`), redacted, so a bare "transport failed" is never all there is. */
+  cause: Schema.optional(Schema.String),
+  /** Set when the connection broke before any response arrived, so replaying the request is safe and useful. */
+  transient: Schema.optional(Schema.Boolean),
   http: Schema.optional(HttpContext),
 }) {
   get retryable() {
-    return false
+    return this.transient === true
   }
 }
 
