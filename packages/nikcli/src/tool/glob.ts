@@ -5,7 +5,8 @@ import { zod } from "@nikcli-ai/util/effect-zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { FFF } from "../file/fff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isProjectRootAlias } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { withSearchDeadline } from "./search-deadline"
 
 type Row = {

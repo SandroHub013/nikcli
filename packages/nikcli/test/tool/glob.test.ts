@@ -78,3 +78,19 @@ describe("GlobTool", () => {
     expect(result.output).toContain("c.md")
   })
 })
+
+describe("GlobTool with the root of the disk spelled as a path", () => {
+  it('reads path "/" as the project, not as the disk', async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-glob-root-"))
+    try {
+      await fs.writeFile(path.join(projectDir, "only-here.ts"), "x\n")
+      const def = await withProjectDirectory(projectDir, () => GlobTool.init())
+      const { ctx } = makeToolContext()
+      const result = await withProjectDirectory(projectDir, () => def.executeAsync({ pattern: "*.ts", path: "/" }, ctx))
+      expect(result.output).toContain("only-here.ts")
+    } finally {
+      await Instance.disposeAll().catch(() => undefined)
+      await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    }
+  })
+})

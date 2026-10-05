@@ -6,7 +6,8 @@ import DESCRIPTION from "./grep.txt"
 import { FFF } from "../file/fff"
 import { SearchBackend } from "../file/searchBackend"
 import type { GrepMode, GrepMatch as FFFGrepMatch } from "#fff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isProjectRootAlias } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { withSearchDeadline } from "./search-deadline"
 
 const MAX_LINE = 180

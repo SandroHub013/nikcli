@@ -30,3 +30,15 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
     },
   })
 }
+
+/**
+ * Whether a tool's `path` argument means "the project": absent, empty, ".", or a bare "/" or "\".
+ *
+ * A model that wants to see the project often writes `path: "/"` for "the root". `path.resolve`
+ * takes that literally, as the root of the disk, and `tree` or `glob` then list the whole drive
+ * into the context. Read as the project root it is what the model meant.
+ */
+export function isProjectRootAlias(value: string | undefined): boolean {
+  const trimmed = value?.trim()
+  return !trimmed || trimmed === "." || trimmed === "/" || trimmed === "\\"
+}

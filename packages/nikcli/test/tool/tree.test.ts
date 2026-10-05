@@ -53,4 +53,34 @@ describe("TreeTool", () => {
     expect(result.output).toContain("branch")
     expect(result.output).not.toContain("root.txt")
   })
+
+  it.each(["/", "\\", "", ".", " / "])("reads path %j as the project root, not the root of the disk", async (value) => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () => def.executeAsync({ path: value, maxDepth: 3 }, ctx))
+    expect(result.output).toContain("root.txt")
+    expect(result.output).toContain("leaf.txt")
+    expect(result.output.split("\n")[0]).toBe(".")
+  })
+
+  it("answers a path outside the project with the project root to use, not a listing", async () => {
+    const { ctx } = makeToolContext()
+    const outside = path.parse(projectDir).root // the disk root: never inside a project
+    const error = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ path: outside, maxDepth: 1 }, ctx),
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught as Error,
+    )
+    expect(error).toBeDefined()
+    expect(error!.message).toContain("outside the project")
+    expect(error!.message).toContain(projectDir)
+    expect(error!.message.length).toBeLessThan(400)
+  })
+
+  it("still takes a relative path inside the project", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () => def.executeAsync({ path: "branch", maxDepth: 2 }, ctx))
+    expect(result.output).toContain("leaf.txt")
+    expect(result.output).not.toContain("root.txt")
+  })
 })

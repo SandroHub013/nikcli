@@ -3,7 +3,9 @@ import path from "path"
 import { readdir, stat } from "fs/promises"
 import { Tool } from "./tool"
 import DESCRIPTION from "./tree.txt"
-import { assertExternalDirectory } from "./external-directory"
+import { isProjectRootAlias } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
+import { Instance } from "../project/instance"
 import { IGNORE_PATTERNS } from "./ls"
 
 type TreeNode = {
@@ -44,12 +46,20 @@ export const TreeTool = Tool.define<typeof parameters, { stats: TreeStats }>("tr
   description: DESCRIPTION,
   parameters,
   async execute(params, ctx) {
-    const base = params.path ? path.resolve(ctx.instance.directory, params.path) : ctx.instance.directory
+    // "/" and friends mean the project root, not the root of the disk; a path outside the project
+    // is an error that names the root to use, not a listing of someone else's directories.
+    const base = isProjectRootAlias(params.path)
+      ? ctx.instance.directory
+      : normalizeToolPath(params.path!, ctx.instance.directory)
+    if (!Instance.containsPath(base)) {
+      throw new Error(
+        `${params.path} is outside the project. The project root is ${ctx.instance.directory}: pass a path relative to it, or omit path.`,
+      )
+    }
     const maxDepth = params.maxDepth ?? 5
     const showHidden = params.showHidden ?? false
     const showSize = params.showSize ?? true
     const showFullPath = params.showFullPath ?? false
-    await assertExternalDirectory(ctx, base, { kind: "directory" })
 
     await ctx.ask({
       permission: "tree",

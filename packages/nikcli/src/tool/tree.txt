@@ -1,7 +1,7 @@
 Show a directory tree with basic stats.
 
 Usage:
-- path: base directory (defaults to current workspace)
+- path: directory relative to the project (default: the project root; "/" means the root)
 - maxDepth: max depth to traverse (default: 5)
 - showHidden: include dotfiles (default: false)
 - showSize: include file sizes (default: true)
