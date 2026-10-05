@@ -514,6 +514,24 @@ export interface HookStatus {
 }
 
 /**
+ * The one line the resume page opens with: how many programs have the hook on,
+ * and how many of those that are on or half-installed want attention (a hook
+ * that does nothing, or an earlier ADE's). A program whose state is not read
+ * yet counts as off; one that could not be read counts for neither.
+ */
+export function hooksSummary(states: Record<string, HookStatus>): { on: number; total: number; attention: number } {
+  let on = 0
+  let attention = 0
+  for (const target of HOOK_TARGETS) {
+    const state = states[target.id]
+    if (!state || state.error) continue
+    if (state.installed) on++
+    if (state.broken || state.outdated) attention++
+  }
+  return { on, total: HOOK_TARGETS.length, attention }
+}
+
+/**
  * Whether this is a test build, which is the one `dev.tsx` marks. Read here the
  * same way `chat/model.ts` reads it, rather than a second way of asking.
  */

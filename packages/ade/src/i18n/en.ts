@@ -297,6 +297,10 @@ export const en: Messages = {
     "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
   "hooks.files":
     "These files don't belong to ADE. They're shown in full below, any entries already in them are left alone, and Remove puts the configuration back the way it was.",
+  "hooks.summary": (on, total) =>
+    on === 0 ? "Resume is not on for any program." : `Resume is on for ${on} of ${total} programs.`,
+  "hooks.summary.attention": (on, total, attention) =>
+    `Resume is on for ${on} of ${total} programs; ${attention === 1 ? "one needs" : `${attention} need`} attention.`,
   "hooks.state.unavailable": "unavailable",
   "hooks.state.on": "on",
   "hooks.state.broken": "needs reinstalling",
@@ -310,6 +314,7 @@ export const en: Messages = {
   "hooks.update": "Update",
   "hooks.outdated": "The installed one is from an earlier ADE: press Update to put in the new one.",
   "hooks.remove": "Remove",
+  "hooks.details": "Details",
   "hooks.outside":
     "The script does nothing outside ADE: it exits at the first environment variable it can't find, so the same CLI started from any other terminal behaves exactly as before.",
   "agent.mic.start": "Turn on microphone",
@@ -528,8 +533,12 @@ export const en: Messages = {
   "settings.skills.desc":
     "Which tools have been disabled for a bot. Any bot not listed here has all of them: nikcli only records disabled tools in the file.",
   "settings.skills.empty": "No bot has restrictions: all bots can use every nikcli tool.",
+  "settings.skills.none": "No tools",
+  "settings.skills.addHint": "Add or remove restrictions by configuring the bot in the Bot view.",
   "settings.skills.without": (tools) => `without ${tools}`,
-  "settings.providers.title": "Providers",
+  "settings.howItWorks": "How it works",
+  "settings.account.intro":
+    "The runners bots can run on, each using its own CLI account.",
   "settings.providers.desc1":
     "The runners a bot can use, each with its own CLI account: Anthropic subscriptions go through Claude Code, ChatGPT through Codex, and keys and other subscriptions through nikcli. The engine, model, and reasoning effort are set in each bot's card.",
   "settings.providers.desc2Before": (max) =>
@@ -541,6 +550,9 @@ export const en: Messages = {
   "settings.providers.notConnected": "Not connected",
   "settings.providers.unverified": "Unverified",
   "settings.providers.switchAccount": "Switch account",
+  "settings.providers.switchPrompt": (runner) => `Sign-in for ${runner} will open. Continue?`,
+  "settings.providers.switchContinue": "Continue",
+  "settings.providers.switchCancel": "Cancel",
   "settings.providers.login": "Sign in",
   "settings.providers.checkAgain": "Check again",
 

@@ -570,3 +570,47 @@ describe("settings shell", () => {
     }
   })
 })
+
+describe("settings shell: the frame holds the panel", () => {
+  const rule = (selector: string) => {
+    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
+    let found: postcss.Rule | undefined
+    parsed.walkRules((candidate) => {
+      if (candidate.selector === selector && candidate.parent?.type !== "atrule") found = candidate
+    })
+    return found
+  }
+  const decl = (r: postcss.Rule | undefined, prop: string) => {
+    let value: string | undefined
+    r?.walkDecls(prop, (d) => {
+      value = d.value
+    })
+    return value
+  }
+
+  test("the sheet's frame is as wide as the shell, not the 560px of a bare frame", () => {
+    renderSettingsSheet()
+    // The selector in the CSS is the structure the sheet really renders.
+    const frame = document.body.querySelector('[data-component="settings-sheet"] [data-layout="frame"]')
+    expect(frame, "il frame dentro la sheet delle impostazioni").not.toBeNull()
+    expect(frame?.querySelector('[data-component="settings-shell"]')).not.toBeNull()
+
+    const frameRule = rule('[data-component="settings-sheet"] [data-layout="frame"]')
+    expect(frameRule, "la regola che allarga il frame").not.toBeUndefined()
+    // The same number as the shell's own limit: one cannot grow without the other.
+    expect(decl(frameRule, "--ade-surface-max")).toBe("1100px")
+    expect(decl(rule(".settings-shell"), "max-width")).toBe("1100px")
+  })
+
+  test("below 1148px the shell takes the window less its gutters, inside the frame", () => {
+    // The frame is the window less the overlay's side padding (one gutter each side); the shell is narrower still.
+    expect(decl(rule(".settings-shell"), "width")).toBe("min(1100px, calc(100vw - 2 * var(--space-6, 24px)))")
+    expect(decl(rule(".settings-shell"), "height")).toBe("min(90vh, calc(100vh - 2 * var(--space-6, 24px)))")
+  })
+
+  test("the sheet is centred, so a 90vh panel is not pushed below the window by the overlay's top padding", () => {
+    renderSettingsSheet()
+    const overlay = document.body.querySelector('[data-component="settings-sheet"]')
+    expect(overlay?.getAttribute("data-place")).toBe("center")
+  })
+})

@@ -25,12 +25,12 @@ import {
   BotSection,
   GridSection,
   LanguageSection,
-  ProviderSection,
   RecordVideoSection,
   SkillsSection,
   ThemeSection,
   UpdatesSection,
 } from "./sections"
+import { AccountSection } from "./account"
 import type { RecordQuality } from "../record/recording"
 import { KeysSection } from "../secrets/keys-section"
 import { ExtensionsPage } from "../extensions/extensions-page"
@@ -214,7 +214,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
             />
           )
         }
-        return <ProviderSection onLogin={(runner) => props.openLoginSession(runner)} />
+        return <AccountSection onLogin={(runner) => props.openLoginSession(runner)} />
 
       case "extensions":
         return (
