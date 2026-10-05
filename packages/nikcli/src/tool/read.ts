@@ -93,6 +93,7 @@ export const ReadTool = Tool.define("read", {
         .slice(0, 3)
 
       if (suggestions.length > 0) {
+        logSuggestions(filepath, suggestions, "siblings")
         throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
       }
 
@@ -424,9 +425,20 @@ function relativeSlash(root: string, target: string): string {
   return path.relative(root, target).split(path.sep).join("/")
 }
 
+const suggestLog = Log.create({ service: "read" })
+
+/**
+ * One line per read that came back with suggestions (`read.suggest n=K`), so a run log can count how often
+ * it happens and whether the next call uses one of the paths offered.
+ */
+function logSuggestions(requested: string, suggestions: string[], source: "siblings" | "project") {
+  suggestLog.info("read.suggest", { n: suggestions.length, source, requested, suggested: suggestions.join(",") })
+}
+
 /** The missing-file error, with near misses appended when any were found. */
 function notFound(filepath: string, nearby: string[]): Error {
   if (nearby.length === 0) return new Error(`File not found: ${filepath}`)
+  logSuggestions(filepath, nearby, "project")
   return new Error(`File not found: ${filepath}\n\nDid you mean: ${nearby.join(", ")}?`)
 }
 
