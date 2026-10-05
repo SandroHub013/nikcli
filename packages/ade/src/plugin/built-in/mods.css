@@ -1,0 +1,65 @@
+/* mods: what the project's server-side plugins draw, in ADE's own colors */
+
+[data-component="ade-mods"] {
+  --mod-text: var(--ade-text);
+  --mod-text-weak: var(--ade-text-weak);
+  --mod-accent: var(--ade-accent);
+  --mod-success: var(--ade-done);
+  --mod-warning: var(--ade-warning);
+  --mod-critical: var(--ade-error);
+  --mod-surface: var(--ade-surface);
+  --mod-raised: var(--ade-raised);
+  --mod-inset: var(--ade-sunken);
+  --mod-border: var(--ade-border);
+  --mod-border-weak: var(--ade-border-subtle);
+  --mod-border-focus: var(--ade-accent);
+  --mod-sans: var(--ade-sans);
+  --mod-mono: var(--ade-mono);
+  --mod-font: var(--ade-font-body);
+  --mod-font-sm: var(--ade-font-sm);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-2) var(--ade-space-4);
+  overflow: auto;
+}
+
+[data-component="ade-mods"][data-surface="pane"] {
+  height: 100%;
+  padding: var(--ade-space-4) var(--ade-space-6);
+}
+
+[data-component="ade-mods"] [data-slot="mods-note"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-component="ade-mods"] [data-slot="mods-connect"] {
+  align-self: flex-start;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  background: var(--ade-raised);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  cursor: pointer;
+}
+
+[data-component="ade-mods"] [data-slot="mods-connect"]:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+[data-component="ade-mods"] [data-slot="mods-list"] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}

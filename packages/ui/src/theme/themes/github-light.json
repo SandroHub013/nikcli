@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Github Light",
+  "id": "github-light",
+  "light": {
+    "seeds": {
+      "neutral": "#e1e4e8",
+      "primary": "#0366d6",
+      "success": "#22863a",
+      "warning": "#d73a49",
+      "error": "#cb2431",
+      "info": "#0366d6",
+      "interactive": "#0366d6",
+      "diffAdd": "#22863a",
+      "diffDelete": "#cb2431"
+    },
+    "overrides": {
+      "background-base": "#e1e4e8",
+      "background-weak": "#0366d6",
+      "background-strong": "#e1e4e8",
+      "background-stronger": "#d1d5da",
+      "surface-raised-stronger-non-alpha": "#d1d5da",
+      "text-strong": "#24292e",
+      "text-base": "#3d434a",
+      "text-weak": "#6a737d",
+      "text-weaker": "#949ba2",
+      "border-weak-base": "#dadada",
+      "border-base": "#d1d5da",
+      "border-strong-base": "#0366d6"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1b1f23",
+      "primary": "#0366d6",
+      "success": "#22863a",
+      "warning": "#d73a49",
+      "error": "#cb2431",
+      "info": "#0366d6",
+      "interactive": "#0366d6",
+      "diffAdd": "#22863a",
+      "diffDelete": "#cb2431"
+    },
+    "overrides": {
+      "background-base": "#1b1f23",
+      "background-weak": "#2f363d",
+      "background-strong": "#1b1f23",
+      "background-stronger": "#24292e",
+      "surface-raised-stronger-non-alpha": "#24292e",
+      "text-strong": "#e1e4e8",
+      "text-base": "#c3c8ce",
+      "text-weak": "#8b949e",
+      "text-weaker": "#646b73",
+      "border-weak-base": "#24292e",
+      "border-base": "#30363d",
+      "border-strong-base": "#0366d6"
+    }
+  }
+}

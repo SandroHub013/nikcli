@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Vercel",
+  "id": "vercel",
+  "light": {
+    "seeds": {
+      "neutral": "#ffffff",
+      "primary": "#0070f3",
+      "success": "#388e3c",
+      "warning": "#ff9500",
+      "error": "#dc3545",
+      "info": "#0070f3",
+      "interactive": "#0070f3",
+      "diffAdd": "#46a758",
+      "diffDelete": "#e5484d"
+    },
+    "overrides": {
+      "background-base": "#ffffff",
+      "background-weak": "#eaeaea",
+      "background-strong": "#ffffff",
+      "background-stronger": "#fafafa",
+      "surface-raised-stronger-non-alpha": "#fafafa",
+      "text-strong": "#171717",
+      "text-base": "#333333",
+      "text-weak": "#666666",
+      "text-weaker": "#9c9c9c",
+      "border-weak-base": "#eaeaea",
+      "border-base": "#eaeaea",
+      "border-strong-base": "#999999"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#000000",
+      "primary": "#0070f3",
+      "success": "#46a758",
+      "warning": "#ffb224",
+      "error": "#e5484d",
+      "info": "#52a8ff",
+      "interactive": "#0070f3",
+      "diffAdd": "#63c46d",
+      "diffDelete": "#ff6166"
+    },
+    "overrides": {
+      "background-base": "#000000",
+      "background-weak": "#292929",
+      "background-strong": "#000000",
+      "background-stronger": "#1a1a1a",
+      "surface-raised-stronger-non-alpha": "#1a1a1a",
+      "text-strong": "#ededed",
+      "text-base": "#c9c9c9",
+      "text-weak": "#878787",
+      "text-weaker": "#585858",
+      "border-weak-base": "#1a1a1a",
+      "border-base": "#1f1f1f",
+      "border-strong-base": "#454545"
+    }
+  }
+}

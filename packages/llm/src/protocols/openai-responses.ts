@@ -10,6 +10,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type MediaPart,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -36,9 +37,27 @@ const OpenAIResponsesOutputText = Schema.Struct({
   text: Schema.String,
 })
 
+const OpenAIResponsesInputImage = Schema.Struct({
+  type: Schema.tag("input_image"),
+  image_url: Schema.String,
+})
+
+const OpenAIResponsesInputFile = Schema.Struct({
+  type: Schema.tag("input_file"),
+  filename: Schema.optional(Schema.String),
+  file_data: Schema.String,
+})
+
+const OpenAIResponsesUserContent = Schema.Union([
+  OpenAIResponsesInputText,
+  OpenAIResponsesInputImage,
+  OpenAIResponsesInputFile,
+])
+type OpenAIResponsesUserContent = Schema.Schema.Type<typeof OpenAIResponsesUserContent>
+
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputText) }),
+  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesUserContent) }),
   Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
   Schema.Struct({
     type: Schema.tag("function_call"),
@@ -74,6 +93,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 // transports in sync without a destructure-and-strip dance.
 const OpenAIResponsesCoreFields = {
   model: Schema.String,
+  instructions: Schema.optional(Schema.String),
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
@@ -83,7 +103,7 @@ const OpenAIResponsesCoreFields = {
   reasoning: Schema.optional(
     Schema.Struct({
       effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
-      summary: Schema.optional(Schema.Literal("auto")),
+      summary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
     }),
   ),
   text: Schema.optional(
@@ -201,6 +221,15 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   arguments: ProviderShared.encodeJson(part.input),
 })
 
+// Images and PDFs ride as data URLs. Other media has no Responses user-input item here.
+const lowerMedia = Effect.fn("OpenAIResponses.lowerMedia")(function* (part: MediaPart) {
+  const url = `data:${part.mediaType};base64,${ProviderShared.mediaBytes(part)}`
+  if (part.mediaType.startsWith("image/")) return { type: "input_image" as const, image_url: url }
+  if (part.mediaType === "application/pdf")
+    return { type: "input_file" as const, filename: part.filename, file_data: url }
+  return yield* invalid(`OpenAI Responses does not support ${part.mediaType} user media`)
+})
+
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -208,19 +237,21 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: TextPart[] = []
+      const content: OpenAIResponsesUserContent[] = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text"]))
-          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text"])
-        content.push(part)
+        if (!ProviderShared.supportsContent(part, ["text", "media"]))
+          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
+        content.push(part.type === "media" ? yield* lowerMedia(part) : { type: "input_text", text: part.text })
       }
-      input.push({ role: "user", content: content.map((part) => ({ type: "input_text", text: part.text })) })
+      input.push({ role: "user", content })
       continue
     }
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
       for (const part of message.content) {
+        // Reasoning items are not replayed: they are only valid with the response ids `store: false` omits.
+        if (part.type === "reasoning") continue
         if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", ["text", "tool-call"])
         if (part.type === "text") {
@@ -256,7 +287,9 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const summary = OpenAIOptions.reasoningSummary(request)
   const encryptedState = OpenAIOptions.encryptedReasoning(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
+  const instructions = OpenAIOptions.instructions(request)
   return {
+    ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),

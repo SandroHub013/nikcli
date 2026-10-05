@@ -27,7 +27,7 @@
       display: block;
       flex-grow: 1;
       height: 100%;
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
       background-color: var(--background-base);
     }
 
@@ -55,8 +55,8 @@
     white-space: nowrap;
     flex-shrink: 0;
     max-width: 280px;
-    border-bottom: 1px solid var(--border-weak-base);
-    border-right: 1px solid var(--border-weak-base);
+    border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
+    border-right: var(--hairline, 1px) solid var(--border-weak-base);
     background-color: var(--background-base);
 
     [data-slot="tabs-trigger"] {
@@ -145,7 +145,7 @@
       padding-left: 24px;
       padding-right: 24px;
       gap: 12px;
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: var(--hairline, 1px) solid var(--border-weak-base);
       background-color: transparent;
 
       &::after {
@@ -233,9 +233,13 @@
     [data-slot="tabs-trigger-wrapper"] {
       height: 32px;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 10px;
       background-color: transparent;
       gap: 0;
+      transition:
+        background-color 140ms ease,
+        color 140ms ease,
+        scale 160ms var(--ease-out-strong);
 
       /* text-13-medium */
       font-family: var(--font-family-sans);
@@ -277,8 +281,8 @@
     }
 
     [data-slot="tabs-trigger-wrapper"] {
-      height: 26px;
-      border-radius: 6px;
+      height: 28px;
+      border-radius: 10px;
       color: var(--text-weak);
 
       &:not(:has([data-selected])):hover:not(:disabled) {
@@ -303,7 +307,7 @@
       padding: 8px;
       gap: 4px;
       background-color: var(--background-base);
-      border-right: 1px solid var(--border-weak-base);
+      border-right: var(--hairline, 1px) solid var(--border-weak-base);
 
       &::after {
         display: none;
@@ -314,8 +318,11 @@
       width: 100%;
       height: 32px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       background-color: transparent;
+      transition:
+        background-color 140ms ease,
+        color 140ms ease;
 
       [data-slot="tabs-trigger"] {
         height: 100%;
@@ -353,7 +360,10 @@
       [data-slot="tabs-trigger-wrapper"] {
         height: 32px;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
+        transition:
+          background-color 140ms ease,
+          color 140ms ease;
 
         [data-slot="tabs-trigger"] {
           border: none;
@@ -385,7 +395,7 @@
         padding: 12px;
         gap: 0;
         background-color: var(--background-base);
-        border-right: 1px solid var(--border-weak-base);
+        border-right: var(--hairline, 1px) solid var(--border-weak-base);
 
         &::after {
           display: none;
@@ -402,9 +412,12 @@
       }
 
       [data-slot="tabs-trigger-wrapper"] {
-        height: 32px;
+        height: 34px;
         border: none;
-        border-radius: var(--radius-md);
+        border-radius: 10px;
+        transition:
+          background-color 140ms ease,
+          color 140ms ease;
 
         /* text-14-medium */
         font-family: var(--font-family-sans);

@@ -2,7 +2,7 @@ import { Option } from "effect"
 import { Runtime } from "../../framework/runtime"
 import { passthrough } from "../../framework/args"
 import { Commands } from "../../commands"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { bootstrap } from "@/cli/bootstrap"
 import { Routine } from "@/mobile/routine"
 

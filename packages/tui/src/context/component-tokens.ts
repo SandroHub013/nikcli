@@ -260,7 +260,9 @@ export const COMPONENT_DEFAULTS = {
   "session.prompt": {
     box: box({
       paddingTop: 1,
-      paddingBottom: 0,
+      // A row of the prompt's own surface under the footer, matching the one
+      // above the input: the box closes on itself instead of on a rule.
+      paddingBottom: 1,
       paddingLeft: 2,
       paddingRight: 2,
       // The space between the input and the agent/model footer. Its own field,
@@ -376,11 +378,11 @@ export const COMPONENT_DEFAULTS = {
    *
    * It is its own entry rather than a flag on `session.prompt` because that is
    * how the catalog says "optional": an empty `borderSides` removes the row
-   * entirely, and a theme that wants the prompt flush against the status line
-   * sets it to `[]`. The default is what the prompt has always drawn.
+   * entirely. Off by default — the prompt sits flush against the status line —
+   * and a theme that wants the rule back sets it to `["bottom"]`.
    */
   "session.prompt-shadow": {
-    box: box({ borderSides: ["bottom"], borderCharset: "none" }),
+    box: box({ borderSides: [], borderCharset: "none" }),
     colors: {
       fill: "surface.offset",
     },

@@ -384,6 +384,12 @@ import type {
   PermissionBlockedOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  ModListOutput,
+  ModPanesOutput,
+  ModRenderInput,
+  ModRenderOutput,
+  ModEventInput,
+  ModEventOutput,
   PtyListOutput,
   PtyCreateInput,
   PtyCreateOutput,
@@ -3185,6 +3191,58 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
+    mod: {
+      list: (requestOptions?: RequestOptions) =>
+        request<ModListOutput>(
+          { method: "GET", path: `/mod`, successStatus: 200, declaredStatuses: [], empty: false },
+          requestOptions,
+        ),
+      panes: (requestOptions?: RequestOptions) =>
+        request<ModPanesOutput>(
+          { method: "GET", path: `/mod/ui/panes`, successStatus: 200, declaredStatuses: [], empty: false },
+          requestOptions,
+        ),
+      render: (input: ModRenderInput, requestOptions?: RequestOptions) =>
+        request<ModRenderOutput>(
+          {
+            method: "POST",
+            path: `/mod/ui/render`,
+            body: {
+              component: input["component"],
+              requestId: input["requestId"],
+              sessionID: input["sessionID"],
+              props: input["props"],
+              surface: input["surface"],
+              columns: input["columns"],
+              rows: input["rows"],
+            },
+            successStatus: 200,
+            declaredStatuses: [],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      event: (input: ModEventInput, requestOptions?: RequestOptions) =>
+        request<ModEventOutput>(
+          {
+            method: "POST",
+            path: `/mod/ui/event`,
+            body: {
+              kind: input["kind"],
+              key: input["key"],
+              value: input["value"],
+              submit: input["submit"],
+              component: input["component"],
+              requestId: input["requestId"],
+              sessionID: input["sessionID"],
+            },
+            successStatus: 200,
+            declaredStatuses: [],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
     pty: {
       list: (requestOptions?: RequestOptions) =>
         request<PtyListOutput>(
@@ -3962,7 +4020,13 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/sync/outbox`,
-            query: { projectID: input["projectID"], since: input["since"] },
+            query: {
+              projectID: input["projectID"],
+              since: input["since"],
+              afterAggregate: input["afterAggregate"],
+              afterID: input["afterID"],
+              aggregate: input["aggregate"],
+            },
             successStatus: 200,
             declaredStatuses: [],
             empty: false,
@@ -3986,7 +4050,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/sync/stream`,
-            query: { projectID: input["projectID"], token: input["token"] },
+            query: { projectID: input["projectID"], readiness: input["readiness"], token: input["token"] },
             successStatus: 200,
             declaredStatuses: [],
             empty: false,

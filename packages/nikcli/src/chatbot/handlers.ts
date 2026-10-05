@@ -1,13 +1,13 @@
 import { Chat, type Thread, type Message } from "chat"
 import { ChatBot } from "./index"
-import { streamText, type ModelMessage, wrapLanguageModel } from "ai"
+import { generateText } from "@/session/llm/call"
+import { type ModelMessage } from "@/session/llm/types"
 import { Provider } from "../provider/provider"
 import { Config } from "../config/config"
 import { Log } from "@nikcli-ai/util/log"
 import { SystemPrompt } from "../session/system"
 import { Plugin } from "../plugin"
 import { clone } from "remeda"
-import { ProviderTransform } from "../provider/transform"
 import { Effect } from "effect"
 import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync, type InstanceContext } from "@/effect"
 
@@ -86,13 +86,11 @@ export namespace BotHandlers {
     customPrompt?: string,
     _customTools?: Record<string, any>,
   ): Promise<string> {
-    const { model, language } = await runProvider(
+    const model = await runProvider(
       Effect.gen(function* () {
         const provider = yield* Provider.Service
         const modelInfo = yield* provider.defaultModel()
-        const model = yield* provider.getModel(modelInfo.providerID, modelInfo.modelID)
-        const language = yield* provider.getLanguage(model)
-        return { model, language }
+        return yield* provider.getModel(modelInfo.providerID, modelInfo.modelID)
       }),
     )
 
@@ -114,40 +112,14 @@ export namespace BotHandlers {
 
     const messages: ModelMessage[] = [{ role: "user", content: userMessage }]
 
-    const result = await streamText({
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, model, {})
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-      system: systemParts.join("\n"),
-      messages,
-      onError({ error }) {
-        log.error("stream error", { error })
-        throw error
-      },
-    })
-
-    let fullResponse = ""
-    for await (const chunk of result.textStream) {
-      fullResponse += chunk
+    let result: Awaited<ReturnType<typeof generateText>>
+    try {
+      result = await generateText({ model, system: systemParts.join("\n"), messages })
+    } catch (error) {
+      log.error("stream error", { error })
+      throw error
     }
-
-    const finishReason = await result.finishReason
-    if (!fullResponse && finishReason === "error") {
-      throw new Error("No output generated due to stream error")
-    }
-
-    return fullResponse
+    return result.text
   }
 
   export function registerAiHandler(

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
+import { stripComments, tuiSource } from "./tui-source"
 import { testRender } from "@opentui/solid"
 import { createComponent } from "solid-js"
-import { SDKProvider } from "@tui/context/sdk"
+import { SDKProvider, useSDK } from "@tui/context/sdk"
 import {
   createReconnectGate,
   reconnectDelay,
@@ -152,5 +153,118 @@ describe("SDKProvider event stream", () => {
     } finally {
       renderer.destroy()
     }
+  })
+})
+
+describe("SDKProvider event batch", () => {
+  it("flushes a burst in bounded batches and delivers every envelope", async () => {
+    // The client batch used to grow without a bound for as long as a burst
+    // lasted. EVENT_BATCH_CAP (512) flushes it early — and must do so without
+    // discarding anything, because this queue carries permission prompts and
+    // terminal session outcomes.
+    const total = 1500
+    const encoder = new TextEncoder()
+    const fetch = (async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      if (!url.includes("/global/event")) return new Response("{}", { headers: { "content-type": "application/json" } })
+      let sent = false
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            // One chunk holding the whole burst, then stay open like a live stream.
+            if (sent) return new Promise(() => {})
+            sent = true
+            const frames = Array.from(
+              { length: total },
+              (_, index) =>
+                `data: ${JSON.stringify({
+                  directory: "/burst",
+                  payload: { type: "burst.test", properties: { index } },
+                })}\n\n`,
+            ).join("")
+            controller.enqueue(encoder.encode(frames))
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    }) as typeof globalThis.fetch
+
+    // Handlers of one flush run synchronously; a microtask boundary separates flushes.
+    const sizes: number[] = []
+    const seen = new Set<number>()
+    let open = false
+    const Probe = () => {
+      const sdk = useSDK()
+      sdk.onEnvelope((envelope) => {
+        const payload = envelope.payload as { type: string; properties?: { index?: number } }
+        if (payload.type !== "burst.test") return
+        if (!open) {
+          open = true
+          sizes.push(0)
+          queueMicrotask(() => (open = false))
+        }
+        sizes[sizes.length - 1]++
+        seen.add(payload.properties?.index ?? -1)
+      })
+      return null
+    }
+
+    const { renderer } = await testRender(() =>
+      createComponent(SDKProvider, {
+        url: "http://nikcli.test",
+        fetch,
+        get children() {
+          return createComponent(Probe, {})
+        },
+      }),
+    )
+    try {
+      const deadline = Date.now() + 5_000
+      while (seen.size < total && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(seen.size).toBe(total)
+      expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(total)
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(512)
+      // The cap is what split the burst: a single window would be one batch of ~1500.
+      expect(sizes.length).toBeGreaterThanOrEqual(3)
+    } finally {
+      renderer.destroy()
+    }
+  })
+})
+
+/**
+ * The recovery barrier, EOT-15 requirement 8.
+ *
+ * Asserted against the source text rather than mounted, the trade
+ * `dialog-lifecycle.test.ts` documents: `SyncProvider` bootstraps against a live
+ * server, so mounting it here would drag in the whole TUI. The invariants pinned
+ * below are the ones that are easy to break and invisible when broken.
+ */
+describe("tui sync recovery barrier", () => {
+  it("is separate from ready, and a failed refetch leaves it down", async () => {
+    const code = stripComments(await tuiSource("context/sync.tsx"))
+
+    // Requirement 8's first clause, and the part that is real for a snapshot
+    // consumer: the barrier completes. The cursor half of the requirement has no
+    // subject here — this context recovers through typed REST endpoints and
+    // never reads `/sync/outbox`, so there is no cursor to validate.
+    expect(code).toContain('setStore("barrier", false)')
+    expect(code).toContain('setStore("barrier", true)')
+
+    // `ready` is data-availability and gates the analytics and command-center
+    // pollers. Reusing it would pin those polling forever whenever a provider
+    // is down, which is the bug the `status` docblock records as already fixed.
+    expect(code).toContain("get ready()")
+    expect(code).toContain("get barrier()")
+    const ready = code.slice(code.indexOf("get ready()"), code.indexOf("get barrier()"))
+    expect(ready).not.toContain("barrier")
+
+    // The load-bearing asymmetry: a non-fatal refetch failure must NOT raise the
+    // barrier. It returns early before the settle path, so a naive
+    // `barrier = status !== "loading"` would report a stale snapshot as a
+    // trustworthy one — the exact class of bug the spec keeps having to correct.
+    const nonFatal = code.slice(code.indexOf("if (!fatal) {"))
+    expect(nonFatal.slice(0, 400)).not.toContain('setStore("barrier", true)')
   })
 })

@@ -894,6 +894,46 @@ export class MobileClient {
     return result as LoopListResult
   }
 
+  // --- mods: server-side plugins that draw for every client (`/mod/ui/*`) ---
+
+  modList() {
+    return this.request<import("@/lib/mod-tree").ModInfo[]>("/mod")
+  }
+
+  modPanes() {
+    return this.request<import("@/lib/mod-tree").ModPane[]>("/mod/ui/panes")
+  }
+
+  /** Asks the mods what to draw at one site. Always as the `mobile` surface, so a mod can tailor for a phone. */
+  modRender(input: { component: string; requestId?: string; sessionID?: string; props?: Record<string, unknown> }) {
+    return this.request<import("@/lib/mod-tree").ModRenderOutput>("/mod/ui/render", {
+      method: "POST",
+      body: JSON.stringify({
+        component: input.component,
+        requestId: input.requestId,
+        sessionID: input.sessionID,
+        props: JSON.stringify(input.props ?? {}),
+        surface: "mobile",
+      }),
+    })
+  }
+
+  /** Reports a control a mod drew: a press, typing, or a choice. */
+  modEvent(input: {
+    kind: "press" | "input" | "select"
+    key: string
+    value?: string
+    submit?: boolean
+    component?: string
+    requestId?: string
+    sessionID?: string
+  }) {
+    return this.request<{ handled: boolean }>("/mod/ui/event", {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+  }
+
   listLoopTemplates() {
     return this.request<{ templates: LoopTemplate[] }>("/mobile/loops/templates")
   }

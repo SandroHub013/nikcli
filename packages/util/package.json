@@ -1,7 +1,6 @@
 {
   "name": "@nikcli-ai/util",
-  "version": "1.406.0",
-  "private": true,
+  "version": "1.429.0",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -24,5 +23,8 @@
     "@types/semver": "7.7.1",
     "typescript": "catalog:",
     "@types/bun": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

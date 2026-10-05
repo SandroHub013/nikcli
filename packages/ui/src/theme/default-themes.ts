@@ -14,6 +14,7 @@ import vesperThemeJson from "./themes/vesper.json"
 import carbonfoxThemeJson from "./themes/carbonfox.json"
 import gruvboxThemeJson from "./themes/gruvbox.json"
 import auraThemeJson from "./themes/aura.json"
+import { GENERATED_THEMES } from "./themes.generated"
 
 export const nikCliDefaultTheme = nikCliDefaultThemeJson as DesktopTheme
 export const tokyonightTheme = tokyoThemeJson as DesktopTheme
@@ -32,6 +33,7 @@ export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
+  ...GENERATED_THEMES,
   "nikcli-default": nikCliDefaultTheme,
   aura: auraTheme,
   ayu: ayuTheme,

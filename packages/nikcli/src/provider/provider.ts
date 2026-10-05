@@ -3,7 +3,6 @@ import { parseModel as parseModelLight } from "@nikcli-ai/util/model"
 import * as ProviderSchema from "./schema"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "@nikcli-ai/util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -19,13 +18,8 @@ import { iife } from "@nikcli-ai/util/iife"
 import { Context, Effect, Exit, Layer, Schema, ScopedCache } from "effect"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 
-// Bundled provider SDKs are loaded lazily (see BUNDLED_PROVIDERS): evaluating
-// all twenty packages eagerly costs ~2s at process start, while a session only
-// ever touches the ones it actually uses.
-import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
-import type { LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import type { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { accessToken } from "./google-auth"
 import * as CachePolicy from "./cache-policy"
 import { ProviderError } from "./error"
 import { Policy } from "@/policy/policy"
@@ -49,9 +43,11 @@ import {
   OpenRouter,
   GitHubCopilot,
   OpenAICompatible,
+  VercelGateway,
+  GoogleVertex,
 } from "@nikcli-ai/llm/providers"
 import { byProvider as providerProfiles } from "@nikcli-ai/llm/providers/openai-compatible-profile"
-import type { ModelRef } from "@nikcli-ai/llm"
+import { ModelRef } from "@nikcli-ai/llm"
 import z from "zod"
 
 function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service | Config.Service>) {
@@ -438,49 +434,7 @@ export namespace Provider {
     return models
   }
 
-  function isGpt5OrLater(modelID: string): boolean {
-    const match = /^gpt-(\d+)/.exec(modelID)
-    if (!match) {
-      return false
-    }
-    return Number(match[1]) >= 5
-  }
-
-  function shouldUseCopilotResponsesApi(modelID: string): boolean {
-    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
-  }
-
   type ProviderSdkOptions = ProviderSchema.Info["options"]
-  type BundledFactory = (options: ProviderSdkOptions) => SDK
-
-  const BUNDLED_PROVIDERS: Record<string, () => Promise<BundledFactory>> = {
-    "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
-    "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
-    "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
-    "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
-    "@ai-sdk/google-vertex": () => import("@ai-sdk/google-vertex").then((m) => m.createVertex),
-    "@ai-sdk/google-vertex/anthropic": () =>
-      import("@ai-sdk/google-vertex/anthropic").then((m) => m.createVertexAnthropic),
-    "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
-    "@ai-sdk/openai-compatible": () =>
-      import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible as unknown as BundledFactory),
-    "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
-    "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
-    "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),
-    "@ai-sdk/groq": () => import("@ai-sdk/groq").then((m) => m.createGroq),
-    "@ai-sdk/deepinfra": () => import("@ai-sdk/deepinfra").then((m) => m.createDeepInfra),
-    "@ai-sdk/cerebras": () => import("@ai-sdk/cerebras").then((m) => m.createCerebras),
-    "@ai-sdk/cohere": () => import("@ai-sdk/cohere").then((m) => m.createCohere),
-    "@ai-sdk/gateway": () => import("@ai-sdk/gateway").then((m) => m.createGateway),
-    "@ai-sdk/togetherai": () => import("@ai-sdk/togetherai").then((m) => m.createTogetherAI),
-    "@ai-sdk/perplexity": () => import("@ai-sdk/perplexity").then((m) => m.createPerplexity),
-    "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
-    "@gitlab/gitlab-ai-provider": () => import("@gitlab/gitlab-ai-provider").then((m) => m.createGitLab),
-    "@ai-sdk/github-copilot": () =>
-      import("./sdk/copilot").then((m) => m.createOpenaiCompatible as unknown as BundledFactory),
-  }
-
-  type CustomModelLoader = (sdk: SDK, modelID: string, options?: ProviderSdkOptions) => Promise<LanguageModelV2>
   // Loaders receive the converted Provider.Info entry held in `database` — nikcli's
   // own model shape with nested `capabilities` — not the raw ModelsDev catalog.
   type CustomLoader = (
@@ -488,9 +442,15 @@ export namespace Provider {
     ctx: InstanceContext,
   ) => Promise<{
     autoload: boolean
-    getModel?: CustomModelLoader
     options?: ProviderSdkOptions
   }>
+
+  /** Adds the Application Default Credentials access token as the bearer of a Vertex request. */
+  const vertexFetch = async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+    const headers = new Headers(init?.headers)
+    headers.set("authorization", `Bearer ${await accessToken()}`)
+    return globalThis.fetch(input, { ...init, headers })
+  }
 
   const CUSTOM_LOADERS = {
     async anthropic() {
@@ -568,9 +528,6 @@ export namespace Provider {
     openai: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: ProviderSdkOptions) {
-          return sdk.responses(modelID)
-        },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }
     },
@@ -588,39 +545,23 @@ export namespace Provider {
         // absent `options` is ignored by the loader merge (so it can never wipe the
         // OAuth `apiKey`/`fetch` merged earlier by the xai auth plugin).
         options: {},
-        async getModel(sdk: any, modelID: string, _options?: ProviderSdkOptions) {
-          return sdk.responses(modelID)
-        },
       }
     },
     "github-copilot": async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: ProviderSdkOptions) {
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
-        },
         options: {},
       }
     },
     "github-copilot-enterprise": async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: ProviderSdkOptions) {
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
-        },
         options: {},
       }
     },
     azure: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: ProviderSdkOptions) {
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
-        },
         options: {},
       }
     },
@@ -628,13 +569,6 @@ export namespace Provider {
       const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: ProviderSdkOptions) {
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
-        },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
         },
@@ -675,7 +609,7 @@ export namespace Provider {
 
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
 
-      const providerOptions: AmazonBedrockProviderSettings = {
+      const providerOptions: Record<string, unknown> = {
         region: defaultRegion,
       }
 
@@ -699,89 +633,6 @@ export namespace Provider {
       return {
         autoload: true,
         options: providerOptions,
-        async getModel(sdk: any, modelID: string, options?: ProviderSdkOptions) {
-          // Skip region prefixing if model already has a cross-region inference profile prefix
-          if (modelID.startsWith("global.") || modelID.startsWith("jp.")) {
-            return sdk.languageModel(modelID)
-          }
-
-          // Region resolution precedence (highest to lowest):
-          // 1. options.region from nikcli.json provider config
-          // 2. defaultRegion from AWS_REGION environment variable
-          // 3. Default "us-east-1" (baked into defaultRegion)
-          const region = options?.region ?? defaultRegion
-
-          let regionPrefix = region.split("-")[0]
-
-          switch (regionPrefix) {
-            case "us": {
-              const modelRequiresPrefix = [
-                "nova-micro",
-                "nova-lite",
-                "nova-pro",
-                "nova-premier",
-                "nova-2",
-                "claude",
-                "deepseek",
-              ].some((m) => modelID.includes(m))
-              const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
-              }
-              break
-            }
-            case "eu": {
-              const regionRequiresPrefix = [
-                "eu-west-1",
-                "eu-west-2",
-                "eu-west-3",
-                "eu-north-1",
-                "eu-central-1",
-                "eu-south-1",
-                "eu-south-2",
-              ].some((r) => region.includes(r))
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
-                modelID.includes(m),
-              )
-              if (regionRequiresPrefix && modelRequiresPrefix) {
-                modelID = `${regionPrefix}.${modelID}`
-              }
-              break
-            }
-            case "ap": {
-              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
-              const isTokyoRegion = region === "ap-northeast-1"
-              if (
-                isAustraliaRegion &&
-                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
-              ) {
-                regionPrefix = "au"
-                modelID = `${regionPrefix}.${modelID}`
-              } else if (isTokyoRegion) {
-                // Tokyo region uses jp. prefix for cross-region inference
-                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                  modelID.includes(m),
-                )
-                if (modelRequiresPrefix) {
-                  regionPrefix = "jp"
-                  modelID = `${regionPrefix}.${modelID}`
-                }
-              } else {
-                // Other APAC regions use apac. prefix
-                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                  modelID.includes(m),
-                )
-                if (modelRequiresPrefix) {
-                  regionPrefix = "apac"
-                  modelID = `${regionPrefix}.${modelID}`
-                }
-              }
-              break
-            }
-          }
-
-          return sdk.languageModel(modelID)
-        },
       }
     },
     openrouter: async () => {
@@ -824,10 +675,8 @@ export namespace Provider {
         options: {
           project,
           location,
-        },
-        async getModel(sdk: any, modelID: string) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
+          // Vertex takes an OAuth access token as a bearer, minted from Application Default Credentials.
+          fetch: vertexFetch,
         },
       }
     },
@@ -841,10 +690,8 @@ export namespace Provider {
         options: {
           project,
           location,
-        },
-        async getModel(sdk: any, modelID: string) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
+          // Vertex takes an OAuth access token as a bearer, minted from Application Default Credentials.
+          fetch: vertexFetch,
         },
       }
     },
@@ -865,9 +712,6 @@ export namespace Provider {
       return {
         autoload: !!envServiceKey,
         options: envServiceKey ? { deploymentId, resourceGroup } : {},
-        async getModel(sdk: any, modelID: string) {
-          return sdk(modelID)
-        },
       }
     },
     zenmux: async () => {
@@ -905,15 +749,6 @@ export namespace Provider {
             ...providerConfig?.options?.featureFlags,
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
-          return sdk.agenticChat(modelID, {
-            featureFlags: {
-              duo_agent_platform_agentic_chat: true,
-              duo_agent_platform: true,
-              ...providerConfig?.options?.featureFlags,
-            },
-          })
-        },
       }
     },
     "cloudflare-ai-gateway": async (input: { id: string }) => {
@@ -933,9 +768,6 @@ export namespace Provider {
 
       return {
         autoload: true,
-        async getModel(sdk: any, modelID: string, _options?: ProviderSdkOptions) {
-          return sdk.languageModel(modelID)
-        },
         options: {
           baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
           headers: {
@@ -1284,19 +1116,13 @@ export namespace Provider {
   const cachedRequestyModels = createRequestyDiscoveryCache()
 
   type State = {
-    models: Map<string, LanguageModelV2>
-    images: Map<string, ReturnType<SDK["imageModel"]>>
     providers: { [providerID: string]: Info }
-    sdk: Map<number, SDK>
-    modelLoaders: { [providerID: string]: CustomModelLoader }
   }
 
   export interface Interface {
     list(): Effect.Effect<Record<string, Info>, never>
     getProvider(providerID: string): Effect.Effect<Info | undefined, never>
     getModel(providerID: string, modelID: string): Effect.Effect<Model, Error>
-    getLanguage(model: Model): Effect.Effect<LanguageModelV2, Error>
-    getImageModel(model: Model): Effect.Effect<ReturnType<SDK["imageModel"]>, Error>
     /** Resolve a model to a @nikcli-ai/llm ModelRef for the route-based provider system. */
     getModelRef(model: Model): Effect.Effect<ModelRef | undefined, never>
     closest(
@@ -1363,12 +1189,6 @@ export namespace Provider {
     if (openaiAuth?.type !== "oauth") delete database["openai"]?.models[GPT_RESERVE_ID]
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
-    const images = new Map<string, ReturnType<SDK["imageModel"]>>()
-    const modelLoaders: {
-      [providerID: string]: CustomModelLoader
-    } = {}
-    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -1647,7 +1467,6 @@ export namespace Provider {
       }
       const result = await fn(data, ctx)
       if (result && (result.autoload || providers[providerID])) {
-        if (result.getModel) modelLoaders[providerID] = result.getModel
         // Only forward `options` when the loader actually returned them.
         // mergeDeep treats an explicit `options: undefined` as an overwrite,
         // which would wipe options already merged by env/auth/plugin loaders
@@ -1733,290 +1552,10 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
-    return {
-      models: languages,
-      images,
-      providers,
-      sdk,
-      modelLoaders,
-    }
+    return { providers }
   }
 
   const stateEffect = InstanceState.make<State>((ctx) => Effect.promise(() => buildState(ctx)))
-
-  const sdkCacheFnIds = new WeakMap<Function, number>()
-  let sdkCacheFnSeq = 1
-  function sdkCacheFnId(fn: Function): number {
-    const existing = sdkCacheFnIds.get(fn)
-    if (existing) return existing
-    const next = sdkCacheFnSeq++
-    sdkCacheFnIds.set(fn, next)
-    return next
-  }
-
-  function isPlainObject(value: unknown): value is Record<string, unknown> {
-    if (!value || typeof value !== "object") return false
-    const proto = Object.getPrototypeOf(value)
-    return proto === Object.prototype || proto === null
-  }
-
-  function stableKey(value: unknown, seen: Map<object, number>): string {
-    if (value === null) return "null"
-    switch (typeof value) {
-      case "string":
-        return `s:${value}`
-      case "number":
-        return Number.isFinite(value) ? `n:${value}` : `n:${String(value)}`
-      case "boolean":
-        return value ? "b:1" : "b:0"
-      case "undefined":
-        return "u"
-      case "function":
-        return `f:${sdkCacheFnId(value)}`
-      case "bigint":
-        return `bi:${value.toString()}`
-      case "symbol":
-        return `sym:${String(value)}`
-      case "object": {
-        const obj = value as object
-        const existing = seen.get(obj)
-        if (existing !== undefined) return `ref:${existing}`
-        const id = seen.size + 1
-        seen.set(obj, id)
-
-        if (Array.isArray(value)) {
-          return `a:[${value.map((v) => stableKey(v, seen)).join(",")}]`
-        }
-        if (isPlainObject(value)) {
-          const keys = Object.keys(value).sort()
-          const rec = value as Record<string, unknown>
-          let out = "o:{"
-          for (const k of keys) {
-            out += `${k}:${stableKey(rec[k], seen)};`
-          }
-          out += "}"
-          return out
-        }
-        return `obj:${Object.prototype.toString.call(value)}#${id}`
-      }
-    }
-    return "unknown"
-  }
-
-  function stableHeadersKey(headers: unknown): string {
-    if (!headers || typeof headers !== "object") return ""
-    const obj = headers as Record<string, unknown>
-    const keys = Object.keys(obj).sort()
-    let out = ""
-    for (const k of keys) {
-      const v = obj[k]
-      // Headers are expected to be string-like.
-      out += `${k}\0${typeof v === "string" ? v : String(v)}\0`
-    }
-    return out
-  }
-
-  function sdkCacheKey(npm: string, options: ProviderSdkOptions): number {
-    const baseURL = options["baseURL"] ?? ""
-    const apiKey = options["apiKey"] ?? ""
-    const includeUsage = options["includeUsage"] ?? ""
-    const timeout = options["timeout"] ?? ""
-    const headersKey = stableHeadersKey(options["headers"])
-    const fetchKey = typeof options["fetch"] === "function" ? `fetch:${sdkCacheFnId(options["fetch"])}` : ""
-
-    const seen = new Map<object, number>()
-    const restKeys = Object.keys(options)
-      .filter((k) => k !== "baseURL" && k !== "apiKey" && k !== "includeUsage" && k !== "timeout" && k !== "headers")
-      .sort()
-    let rest = ""
-    for (const k of restKeys) {
-      const v = options[k]
-      // Skip undefined to match common JSON-ish semantics, and avoid hashing huge transient objects.
-      if (v === undefined) continue
-      rest += `${k}=${stableKey(v, seen)}\n`
-    }
-
-    return Bun.hash.xxHash32(
-      `${npm}\n${baseURL}\n${apiKey}\n${includeUsage}\n${timeout}\n${headersKey}\n${fetchKey}\n${rest}`,
-    )
-  }
-
-  async function getSDK(s: State, model: Model) {
-    try {
-      using _ = log.time("getSDK", {
-        providerID: model.providerID,
-      })
-      const provider = s.providers[model.providerID]
-      const options = { ...provider.options }
-
-      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-        options["includeUsage"] = true
-      }
-
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-      if (model.headers)
-        options["headers"] = {
-          ...(options["headers"] as Model["headers"] | undefined),
-          ...model.headers,
-        }
-
-      const key = sdkCacheKey(model.api.npm, options)
-      const existing = s.sdk.get(key)
-      if (existing) return existing
-
-      const customFetch = options["fetch"] as
-        | ((input: any, init?: BunFetchRequestInit) => Promise<Response>)
-        | undefined
-      const chunkTimeout = options["chunkTimeout"]
-      const headerTimeout = options["headerTimeout"]
-      delete options["chunkTimeout"]
-      delete options["headerTimeout"]
-
-      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
-        const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
-        const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
-        const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
-        const signals: AbortSignal[] = []
-
-        if (opts.signal) signals.push(opts.signal)
-        if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
-        if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
-        if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false) {
-          signals.push(AbortSignal.timeout(options["timeout"] as number))
-        }
-
-        const combined = signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
-        if (combined) opts.signal = combined
-
-        // Strip openai itemId metadata following what codex does
-        // Codex uses #[serde(skip_serializing)] on id fields for all item types:
-        // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
-        // IDs are only re-attached for Azure with store=true
-        if (
-          (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
-          opts.body &&
-          opts.method === "POST"
-        ) {
-          const body = JSON.parse(opts.body as string)
-          const keepIds = body.store === true
-          if (!keepIds && Array.isArray(body.input)) {
-            for (const item of body.input) {
-              if ("id" in item) {
-                delete item.id
-              }
-            }
-            opts.body = JSON.stringify(body)
-          }
-        }
-
-        // Inject cache_control on the last tool definition for Anthropic-compatible providers.
-        // Anthropic treats this as a cache breakpoint — all preceding tools get cached together.
-        // Saves 5-15k tokens/call after the first request in a session.
-        const isAnthropicLike =
-          model.api.npm === "@ai-sdk/anthropic" ||
-          model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
-          model.api.npm === "@ai-sdk/amazon-bedrock" ||
-          model.providerID === "google-vertex-anthropic"
-        if (isAnthropicLike && opts.body && opts.method === "POST") {
-          try {
-            const body = JSON.parse(opts.body as string)
-            if (Array.isArray(body.tools) && body.tools.length > 0) {
-              const last = body.tools[body.tools.length - 1]
-              // Anthropic rejects a request carrying more than four breakpoints, so
-              // count what message-level placement already spent rather than assuming
-              // this marker is free. `transform.applyCaching` reserves a slot for it,
-              // but plugins and provider-specific paths can add their own.
-              const spent = CachePolicy.countWireBreakpoints(body)
-              if (!last.cache_control && spent < CachePolicy.BREAKPOINT_CAP) {
-                // The tool array is the largest byte-stable block in the request, so
-                // it is the breakpoint that gains most from the longer lifetime — a
-                // retention setting that skipped it would miss the point.
-                const ttl = CachePolicy.ttlFor(CachePolicy.resolveRetention())
-                last.cache_control = ttl ? { type: "ephemeral", ttl } : { type: "ephemeral" }
-                opts.body = JSON.stringify(body)
-              } else if (spent >= CachePolicy.BREAKPOINT_CAP) {
-                log.warn("skipping tool cache breakpoint", {
-                  reason: "request already at the provider breakpoint cap",
-                  spent,
-                })
-              }
-            }
-          } catch {
-            // Malformed body — skip caching, don't break the request
-          }
-        }
-
-        const res = await fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        }).finally(() => headerTimeoutCtl?.clear())
-
-        if (!chunkAbortCtl) return res
-        return wrapSSE(res, chunkTimeout as number, chunkAbortCtl)
-      }
-
-      // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
-      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
-      if (bundledFn) {
-        log.info("using bundled provider", {
-          providerID: model.providerID,
-          pkg: bundledKey,
-        })
-        const create = await bundledFn()
-        const loaded = create({
-          name: model.providerID,
-          ...options,
-        })
-        s.sdk.set(key, loaded)
-        return loaded as SDK
-      }
-
-      let installedPath: string
-      if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
-      } else {
-        log.info("loading local provider", { pkg: model.api.npm })
-        installedPath = model.api.npm
-      }
-
-      const mod = await import(installedPath)
-
-      const createKey = Object.keys(mod).find((key) => key.startsWith("create"))
-      if (!createKey) {
-        log.error("No create function found in provider module", {
-          npm: model.api.npm,
-          keys: Object.keys(mod),
-        })
-        throw Object.assign(new InitError({ providerID: model.providerID }), {
-          cause: new Error("Provider module missing create function"),
-        })
-      }
-      const fn = mod[createKey]
-      const loaded = fn({
-        name: model.providerID,
-        ...options,
-      })
-      s.sdk.set(key, loaded)
-      return loaded as SDK
-    } catch (e) {
-      log.error("getSDK failed", {
-        providerID: model.providerID,
-        modelID: model.id,
-        npm: model.api.npm,
-        error: e instanceof Error ? e.message : String(e),
-        stack: e instanceof Error ? e.stack : undefined,
-      })
-      throw Object.assign(new InitError({ providerID: model.providerID }), {
-        cause: e,
-      })
-    }
-  }
 
   function modelFromState(s: State, providerID: string, modelID: string) {
     const provider = s.providers[providerID]
@@ -2051,9 +1590,59 @@ export namespace Provider {
     return info
   }
 
+  /**
+   * Stands in for an API key on a provider whose auth lives in its `fetch` (OAuth bearer renewal, account
+   * tokens). The route still wants a key to build its static `Authorization` header; the fetch replaces it.
+   */
+  export const FETCH_MANAGED_KEY = "fetch-managed"
+
+  /**
+   * The fetch a native stream sends through, or undefined to use the global one.
+   *
+   * It is the provider's own `fetch` (what the plugins install for OAuth renewal, endpoint rewrites and
+   * account tokens) with the configured timeouts, i.e. what `getSDK` hands the AI SDK minus that path's
+   * body rewrites, which the native route has no use for (it places its own cache breakpoints and sends no
+   * item ids). Bodies arrive as bytes from the HTTP client; plugins inspect and replay string bodies, so
+   * the JSON text is restored before the call.
+   */
+  export function nativeFetch(info: Info): typeof globalThis.fetch | undefined {
+    const options = info.options ?? {}
+    const custom = options["fetch"] as typeof globalThis.fetch | undefined
+    const chunkTimeout = options["chunkTimeout"]
+    const headerTimeout = options["headerTimeout"]
+    const timeout = options["timeout"]
+    const timed = (typeof chunkTimeout === "number" && chunkTimeout > 0) || typeof headerTimeout === "number"
+    const totalTimeout = timeout !== undefined && timeout !== null && timeout !== false
+    if (typeof custom !== "function" && !timed && !totalTimeout) return undefined
+
+    return (async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      const next: RequestInit = { ...init }
+      if (next.body instanceof Uint8Array) next.body = new TextDecoder().decode(next.body)
+
+      const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+      const headerTimeoutCtl = typeof headerTimeout === "number" ? timeoutController(headerTimeout) : undefined
+      const signals: AbortSignal[] = []
+      if (next.signal) signals.push(next.signal)
+      if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+      if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
+      if (totalTimeout) signals.push(AbortSignal.timeout(timeout as number))
+      if (signals.length > 0) next.signal = signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+
+      const res = await (custom ?? globalThis.fetch)(input, {
+        ...next,
+        // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+        timeout: false,
+      }).finally(() => headerTimeoutCtl?.clear())
+      return chunkAbortCtl ? wrapSSE(res, chunkTimeout as number, chunkAbortCtl) : res
+    }) as typeof globalThis.fetch
+  }
+
   /** Resolve a @nikcli-ai/llm ModelRef from a Provider.Model + Provider.Info pair. */
-  function mapToModelRef(model: Model, providerInfo: Info): ModelRef | undefined {
-    const apiKey = (providerInfo.options?.["apiKey"] as string | undefined) ?? providerInfo.key
+  export function mapToModelRef(model: Model, providerInfo: Info): ModelRef | undefined {
+    const apiKey =
+      (providerInfo.options?.["apiKey"] as string | undefined) ||
+      providerInfo.key ||
+      (typeof providerInfo.options?.["fetch"] === "function" ? FETCH_MANAGED_KEY : undefined)
     const baseURL = model.api.url || (providerInfo.options?.["baseURL"] as string | undefined)
     const providerID = model.providerID
     const npm = model.api.npm
@@ -2064,6 +1653,26 @@ export namespace Provider {
     const opt = <T>(key: string): T | undefined => providerInfo.options?.[key] as T | undefined
 
     try {
+      // A custom provider names its wire protocol instead of an SDK. `options.protocol` comes from config or
+      // from a plugin's auth loader, which can also supply the `fetch` that signs or renews credentials
+      // (`nativeFetch` runs it), so a provider with an unusual host or auth needs no SDK at all.
+      const protocol = opt<string>("protocol")
+      if (protocol !== undefined) {
+        if (!baseURL) return undefined
+        switch (protocol) {
+          case "openai-compatible":
+            return OpenAICompatible.model(id, { provider: providerID, baseURL, apiKey } as any)
+          case "openai-responses":
+            return OpenAI.responses(id, { baseURL, apiKey } as any)
+          case "anthropic":
+            return Anthropic.model(id, { baseURL, apiKey } as any)
+          case "gemini":
+            return Google.model(id, { baseURL, apiKey } as any)
+          default:
+            return undefined
+        }
+      }
+
       switch (npm) {
         case "@ai-sdk/openai":
           // OpenAI SDK is shared by OpenAI, Azure, and GitHub Copilot — disambiguate by providerID.
@@ -2074,16 +1683,11 @@ export namespace Provider {
               headers: model.headers,
             } as any)
           }
-          if (providerID.includes("azure")) {
-            const resourceName =
-              (providerInfo.options?.["resourceName"] as string | undefined) ?? extractAzureResource(baseURL ?? "")
-            return Azure.model(id, {
-              ...(resourceName ? { resourceName } : undefined),
-              baseURL,
-              apiKey,
-            } as any)
-          }
+          if (providerID.includes("azure")) return azureModelRef(id, providerInfo, baseURL, apiKey)
           return OpenAI.responses(id, { baseURL, apiKey } as any)
+
+        case "@ai-sdk/azure":
+          return azureModelRef(id, providerInfo, baseURL, apiKey)
 
         case "@ai-sdk/anthropic":
           return Anthropic.model(id, { baseURL, apiKey } as any)
@@ -2123,8 +1727,42 @@ export namespace Provider {
         case "@ai-sdk/github-copilot-enterprise":
           return GitHubCopilot.model(id, { baseURL, apiKey } as any)
 
-        case "@ai-sdk/openai-compatible":
-        default: {
+        // These SDKs only wrap an OpenAI-compatible chat endpoint, so the provider's
+        // family profile carries the canonical host.
+        case "@ai-sdk/mistral":
+        case "@ai-sdk/perplexity":
+        case "@ai-sdk/cohere":
+        case "@ai-sdk/vercel":
+        case "@aihubmix/ai-sdk-provider":
+        case "venice-ai-sdk-provider":
+        case "merge-gateway-ai-sdk-provider": {
+          const profile = providerProfiles[OPENAI_COMPATIBLE_NPM_PROFILE[npm]]
+          // Merge's catalog URL is the path its own SDK speaks; the OpenAI-compatible one is the profile's.
+          const host = npm === "merge-gateway-ai-sdk-provider" || baseURL?.endsWith("/v1/ai-sdk") ? undefined : baseURL
+          return profile ? OpenAICompatible.profileModel(profile, id, { apiKey, baseURL: host } as any) : undefined
+        }
+
+        case "@ai-sdk/gateway":
+          return VercelGateway.model(id, { apiKey, ...spreadIf("baseURL", baseURL) } as any)
+
+        // Cloudflare AI Gateway's unified `/compat` endpoint is OpenAI Chat; the provider loader supplies its
+        // URL, `cf-aig-authorization` header and the fetch that strips the bearer.
+        case "ai-gateway-provider":
+          return baseURL ? OpenAICompatible.model(id, { provider: providerID, baseURL, apiKey } as any) : undefined
+
+        case "@ai-sdk/google-vertex": {
+          const project = opt<string>("project")
+          const location = opt<string>("location")
+          return project && location ? GoogleVertex.gemini(id, { project, location, apiKey } as any) : undefined
+        }
+
+        case "@ai-sdk/google-vertex/anthropic": {
+          const project = opt<string>("project")
+          const location = opt<string>("location")
+          return project && location ? GoogleVertex.claude(id, { project, location, apiKey } as any) : undefined
+        }
+
+        case "@ai-sdk/openai-compatible": {
           // Try to match against known OpenAI-compatible profiles
           const profile = providerProfiles[providerID]
           if (profile) {
@@ -2144,6 +1782,12 @@ export namespace Provider {
           // No baseURL — can't construct a valid route without an endpoint
           return undefined
         }
+
+        // Any other SDK (gitlab, sap, watsonx, bedrock/mantle, a custom npm package, ...) speaks a
+        // protocol this mapper cannot express. Guessing OpenAI-compatible here would send those
+        // models the wrong wire format, so they stay unmapped.
+        default:
+          return undefined
       }
     } catch (e) {
       log.warn("mapToModelRef failed", {
@@ -2154,6 +1798,43 @@ export namespace Provider {
       })
       return undefined
     }
+  }
+
+  /** npm package -> OpenAI-compatible profile id (`@nikcli-ai/llm/providers/openai-compatible-profile`). */
+  const OPENAI_COMPATIBLE_NPM_PROFILE: Record<string, string> = {
+    "@ai-sdk/mistral": "mistral",
+    "@ai-sdk/perplexity": "perplexity",
+    "@ai-sdk/cohere": "cohere",
+    "@ai-sdk/vercel": "v0",
+    "@aihubmix/ai-sdk-provider": "aihubmix",
+    "venice-ai-sdk-provider": "venice",
+    "merge-gateway-ai-sdk-provider": "merge-gateway",
+  }
+
+  /**
+   * Azure OpenAI needs the customer's resource host. A baseURL that is not an
+   * `*.openai.azure.com` resource (cognitive-services, custom gateways) has no
+   * native mapping and returns undefined so the AI SDK keeps handling it.
+   */
+  function azureModelRef(id: string, providerInfo: Info, baseURL: string | undefined, apiKey: string | undefined) {
+    const resourceName =
+      (providerInfo.options?.["resourceName"] as string | undefined) ?? extractAzureResource(baseURL ?? "")
+    if (!resourceName) {
+      // Azure AI Foundry / Cognitive Services resources live on their own host, with the OpenAI API under `/openai`.
+      if (baseURL && /^https:\/\/[^/]+\.(cognitiveservices|services\.ai)\.azure\.com\//.test(baseURL)) {
+        return Azure.model(id, {
+          baseURL: `${baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1`,
+          apiKey,
+          ...spreadIf("useCompletionUrls", providerInfo.options?.["useCompletionUrls"] === true ? true : undefined),
+        } as any)
+      }
+      return undefined
+    }
+    return Azure.model(id, {
+      resourceName,
+      apiKey,
+      ...spreadIf("useCompletionUrls", providerInfo.options?.["useCompletionUrls"] === true ? true : undefined),
+    } as any)
   }
 
   /** Extract the Azure resource name from an azure.com baseURL. */
@@ -2171,95 +1852,6 @@ export namespace Provider {
       const getModelEffect: Interface["getModel"] = Effect.fn("Provider.getModel")(function* (providerID, modelID) {
         const s = yield* getState()
         return modelFromState(s, providerID, modelID)
-      })
-
-      const getLanguage: Interface["getLanguage"] = Effect.fn("Provider.getLanguage")(function* (model) {
-        const s = yield* getState()
-        const key = `${model.providerID}/${model.id}`
-        if (s.models.has(key)) return s.models.get(key)!
-
-        const provider = s.providers[model.providerID]
-        const sdk = yield* Effect.tryPromise({
-          try: () => getSDK(s, model),
-          catch: asProviderError,
-        })
-
-        return yield* Effect.tryPromise<LanguageModelV2, Error>({
-          try: async () => {
-            try {
-              const language = s.modelLoaders[model.providerID]
-                ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
-                : sdk.languageModel(model.api.id)
-              s.models.set(key, language as LanguageModelV2)
-              return language as LanguageModelV2
-            } catch (e) {
-              if (e instanceof NoSuchModelError) {
-                throw Object.assign(
-                  new ModelNotFoundError({
-                    modelID: model.id,
-                    providerID: model.providerID,
-                  }),
-                  { cause: e },
-                )
-              }
-              throw e
-            }
-          },
-          catch: asProviderError,
-        })
-      })
-
-      const getImageModel: Interface["getImageModel"] = Effect.fn("Provider.getImageModel")(function* (model) {
-        const s = yield* getState()
-        const key = `${model.providerID}/${model.id}`
-        if (s.images.has(key)) return s.images.get(key)!
-
-        return yield* Effect.tryPromise<ReturnType<SDK["imageModel"]>, Error>({
-          try: async () => {
-            const providerID = model.providerID ?? ""
-            const apiNpm = model.api?.npm ?? ""
-
-            if (
-              providerID.includes("openrouter") ||
-              apiNpm.includes("openrouter") ||
-              apiNpm.includes("openai-compatible")
-            ) {
-              const { createOpenAI } = await import("@ai-sdk/openai")
-              const provider = s.providers[providerID] || s.providers["openrouter"]
-              const openrouterApi = "https://openrouter.ai/api/v1"
-              const baseURL = model.api?.url || (providerID.includes("openrouter") ? openrouterApi : undefined)
-
-              const openaiSDK = createOpenAI({
-                name: providerID,
-                baseURL,
-                apiKey: provider?.key ?? (provider as any)?.options?.apiKey,
-              })
-
-              const image = openaiSDK.imageModel(model.api.id)
-              s.images.set(key, image)
-              return image
-            }
-
-            const sdk = await getSDK(s, model)
-            try {
-              const image = sdk.imageModel(model.api.id)
-              s.images.set(key, image)
-              return image
-            } catch (e) {
-              if (e instanceof NoSuchModelError) {
-                throw Object.assign(
-                  new ModelNotFoundError({
-                    modelID: model.id,
-                    providerID: model.providerID,
-                  }),
-                  { cause: e },
-                )
-              }
-              throw e
-            }
-          },
-          catch: asProviderError,
-        })
       })
 
       const closest: Interface["closest"] = Effect.fn("Provider.closest")(function* (providerID, query) {
@@ -2346,19 +1938,21 @@ export namespace Provider {
         const s = yield* getState()
         const providerInfo = s.providers[model.providerID]
         if (!providerInfo) return undefined
-        return mapToModelRef(model, providerInfo)
+        const ref = mapToModelRef(model, providerInfo)
+        if (!ref) return ref
+        // The AI SDK path sends `options.headers` then `model.headers` on every request; the ref has to
+        // carry the same, or a gateway that needs a custom header only works on the fallback path.
+        const headers = Object.fromEntries(
+          Object.entries({
+            ...ref.headers,
+            ...(providerInfo.options?.["headers"] as Record<string, unknown> | undefined),
+            ...model.headers,
+          }).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        )
+        return Object.keys(headers).length > 0 ? ModelRef.update(ref, { headers }) : ref
       })
 
       const refresh: Interface["refresh"] = Effect.fn("Provider.refresh")(function* () {
-        // Clear the cached LanguageModel instances built from the old SDK +
-        // auth before invalidating, so the next getLanguage() rebuilds them.
-        // Effect failures don't surface as JS exceptions inside Effect.gen, so
-        // capture the Exit instead of a try/catch (state may not be built yet).
-        const stateExit = yield* Effect.exit(getState())
-        if (Exit.isSuccess(stateExit)) {
-          stateExit.value.models.clear()
-          stateExit.value.sdk.clear()
-        }
         // Invalidate every cached directory entry, not just the current one.
         // Auth (`auth.json`) and config live in global/shared locations, so a
         // credential change affects the provider list for *every* instance
@@ -2377,8 +1971,6 @@ export namespace Provider {
           return (yield* getState()).providers[providerID]
         }),
         getModel: getModelEffect,
-        getLanguage,
-        getImageModel,
         getModelRef,
         closest,
         getSmallModel,

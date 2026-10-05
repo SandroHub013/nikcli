@@ -1,14 +1,15 @@
-Search the tools available in this session by name or capability keyword.
+Find and load tools that are not in your toolset yet.
 
-The query is matched against both tool names and tool descriptions, so a capability word works even when no tool is named after it (e.g. "git" finds the tools that run git, "screenshot" finds the ones that can take one). Results are limited to tools that are actually callable in this session — anything disabled or denied by permission is left out, so a tool that appears here can be used.
+Only the core tools are sent with their full schemas on every request. The others are deferred: they are listed at the end of this description by name and a one-line summary, and once loaded a deferred tool is a regular tool — full schema included — for the rest of the session.
 
-Each result is the tool name plus a one-line summary. Call the tool directly once you have the name.
+The query is either:
+- Exact tool names, comma-separated (e.g. "webfetch" or "webfetch,websearch"). Each deferred one is loaded, and its schema is available from your next step. Prefer this whenever the list below has what you need.
+- A capability keyword (e.g. "image", "browser", "git") when you don't know which tool provides it. It is matched against the names and descriptions of every tool in the session, loaded or not, and the best few deferred matches are loaded.
 
-When to use:
-- You need a capability but don't know which tool provides it (e.g. "image", "memory", "browser")
-- You want to verify a tool exists, and is enabled here, before attempting to use it
-- You're exploring what capabilities are available
+Only tools this session can actually use are listed or loaded — anything disabled or denied by permission is left out.
+
+Calling a deferred tool by name without loading it first also loads it, but you have not seen its parameters yet, so the call may be rejected; load it here first unless its arguments are obvious.
 
 When NOT to use:
-- If you already know the tool name, just use it directly
-- For general codebase searches, use grep or glob instead
+- The tool is already in your toolset: call it directly.
+- For searching the codebase, use grep or glob instead.

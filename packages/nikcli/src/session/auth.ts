@@ -1,6 +1,6 @@
 import { Auth } from "../auth"
 
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 
 import { ModelsDev } from "../provider/models"
 import { map, pipe, sortBy, values } from "remeda"

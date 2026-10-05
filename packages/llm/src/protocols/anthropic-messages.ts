@@ -10,6 +10,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type MediaPart,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -87,7 +88,30 @@ const AnthropicToolResultBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
-const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicToolResultBlock])
+const AnthropicImageBlock = Schema.Struct({
+  type: Schema.tag("image"),
+  source: Schema.Struct({ type: Schema.tag("base64"), media_type: Schema.String, data: Schema.String }),
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+
+const AnthropicDocumentBlock = Schema.Struct({
+  type: Schema.tag("document"),
+  source: Schema.Struct({
+    type: Schema.tag("base64"),
+    media_type: Schema.Literal("application/pdf"),
+    data: Schema.String,
+  }),
+  title: Schema.optional(Schema.String),
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+
+const AnthropicUserBlock = Schema.Union([
+  AnthropicTextBlock,
+  AnthropicImageBlock,
+  AnthropicDocumentBlock,
+  AnthropicToolResultBlock,
+])
+type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicThinkingBlock,
@@ -117,10 +141,14 @@ const AnthropicToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
 ])
 
-const AnthropicThinking = Schema.Struct({
-  type: Schema.tag("enabled"),
-  budget_tokens: Schema.Number,
-})
+const AnthropicThinking = Schema.Union([
+  Schema.Struct({ type: Schema.tag("enabled"), budget_tokens: Schema.Number }),
+  // Adaptive thinking (newer models): the model decides how much to think, steered by `output_config.effort`.
+  Schema.Struct({ type: Schema.tag("adaptive"), display: Schema.optional(Schema.Literals(["summarized", "omitted"])) }),
+])
+
+const AnthropicEffort = Schema.Literals(["low", "medium", "high", "max"])
+type AnthropicEffort = Schema.Schema.Type<typeof AnthropicEffort>
 
 const AnthropicBodyFields = {
   model: Schema.String,
@@ -135,6 +163,7 @@ const AnthropicBodyFields = {
   top_k: Schema.optional(Schema.Number),
   stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
+  output_config: Schema.optional(Schema.Struct({ effort: AnthropicEffort })),
 }
 const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
@@ -249,15 +278,33 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
 })
 
+// Images and PDFs ride as base64 sources. Other media has no Messages user-block here.
+const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
+  const data = ProviderShared.mediaBytes(part)
+  if (part.mediaType.startsWith("image/"))
+    return { type: "image" as const, source: { type: "base64" as const, media_type: part.mediaType, data } }
+  if (part.mediaType === "application/pdf")
+    return {
+      type: "document" as const,
+      source: { type: "base64" as const, media_type: "application/pdf" as const, data },
+      title: part.filename,
+    }
+  return yield* invalid(`Anthropic Messages does not support ${part.mediaType} user media`)
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (request: LLMRequest) {
   const messages: AnthropicMessage[] = []
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: AnthropicTextBlock[] = []
+      const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text"]))
-          return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text"])
+        if (!ProviderShared.supportsContent(part, ["text", "media"]))
+          return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
+        if (part.type === "media") {
+          content.push(yield* lowerMedia(part))
+          continue
+        }
         content.push({ type: "text", text: part.text, cache_control: cacheControl(part.cache) })
       }
       messages.push({ role: "user", content })
@@ -316,7 +363,14 @@ const anthropicOptions = (request: LLMRequest) => request.providerOptions?.anthr
 
 const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (request: LLMRequest) {
   const thinking = anthropicOptions(request)?.thinking
-  if (!ProviderShared.isRecord(thinking) || thinking.type !== "enabled") return undefined
+  if (!ProviderShared.isRecord(thinking)) return undefined
+  if (thinking.type === "adaptive")
+    return {
+      type: "adaptive" as const,
+      ...(thinking.display === "summarized" ? { display: "summarized" as const } : {}),
+      ...(thinking.display === "omitted" ? { display: "omitted" as const } : {}),
+    }
+  if (thinking.type !== "enabled") return undefined
   const budget =
     typeof thinking.budgetTokens === "number"
       ? thinking.budgetTokens
@@ -326,6 +380,13 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
   if (budget === undefined) return yield* invalid("Anthropic thinking provider option requires budgetTokens")
   return { type: "enabled" as const, budget_tokens: budget }
 })
+
+const EFFORTS: ReadonlySet<string> = new Set(["low", "medium", "high", "max"])
+
+const effort = (request: LLMRequest): AnthropicEffort | undefined => {
+  const value = anthropicOptions(request)?.effort
+  return typeof value === "string" && EFFORTS.has(value) ? (value as AnthropicEffort) : undefined
+}
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
@@ -350,6 +411,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
     thinking: yield* lowerThinking(request),
+    output_config: effort(request) ? { effort: effort(request)! } : undefined,
   }
 })
 
@@ -579,7 +641,11 @@ export const route = Route.make({
   endpoint: Endpoint.path(PATH),
   auth: Auth.apiKeyHeader("x-api-key"),
   framing: Framing.sse,
-  headers: () => ({ "anthropic-version": "2023-06-01" }),
+  // `effort` is gated behind a beta flag; the transport unions it with any `anthropic-beta` the deployment sets.
+  headers: ({ request }) => ({
+    "anthropic-version": "2023-06-01",
+    ...(effort(request) ? { "anthropic-beta": "effort-2025-11-24" } : {}),
+  }),
 })
 
 // =============================================================================

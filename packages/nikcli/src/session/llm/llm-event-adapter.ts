@@ -1,10 +1,9 @@
 import type { LLMEvent } from "@nikcli-ai/llm"
-import { APICallError } from "@ai-sdk/provider"
-import type { streamText } from "ai"
+import { APICallError } from "@/provider/error"
+import { asSchema, type ModelMessage, type StreamEvent, type Tool } from "@/session/llm/types"
 import { Log } from "@nikcli-ai/util/log"
 
-type Result = Awaited<ReturnType<typeof streamText>>
-export type ProcessorStreamEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
+export type ProcessorStreamEvent = StreamEvent
 
 const log = Log.create({ service: "llm-event-adapter" })
 
@@ -82,11 +81,207 @@ export function providerErrorToAPICallError(event: Extract<LLMEvent, { type: "pr
   })
 }
 
+/**
+ * The shape `LLMError.reason` has when it carries an HTTP failure.
+ *
+ * Declared structurally rather than imported as a class: `LLMError` is an
+ * Effect `Schema.TaggedError`, so importing it here would pull `Schema` into
+ * this module's runtime graph purely to read fields, and the fields are the
+ * whole contract anyway. `packages/llm/src/schema/errors.ts` is the authority on
+ * what actually arrives.
+ */
+type NativeHttpReason = {
+  readonly _tag?: string
+  readonly message?: string
+  readonly status?: number
+  readonly retryAfterMs?: number
+  readonly http?: {
+    readonly body?: string
+    readonly response?: {
+      readonly status?: number
+      readonly headers?: Record<string, string>
+    }
+    readonly rateLimit?: { readonly retryAfterMs?: number }
+  }
+}
+
+function nativeHttpReason(error: unknown): NativeHttpReason | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const reason = (error as { reason?: unknown }).reason
+  if (!reason || typeof reason !== "object") return undefined
+  const record = reason as NativeHttpReason
+  // `Transport` and `NoRoute` are excluded on purpose, and the rest is decided
+  // by evidence that a real provider response exists rather than by listing
+  // tags: a network reset carries a request-only context, so mapping it would
+  // invent a status for a request that never got an answer and turn a reset into
+  // a fake 500. Two independent pieces of that evidence count — a status or
+  // response context, or a parsed `retryAfterMs`, which can only have come from
+  // a response header.
+  //
+  // The second one is not redundant. `RateLimitReason` carries no `status`
+  // field at all (`statusReason` in `packages/llm/src/route/executor.ts` builds
+  // it from `retryAfterMs`, `rateLimit` and `http`), so a rate-limit reason
+  // without a response context would be the one case that fell through and came
+  // back as the `UnknownError` this mapping exists to prevent.
+  if (record._tag === "Transport" || record._tag === "NoRoute") return undefined
+  // `!= null` rather than `typeof === "object"` alone, because `typeof null` is
+  // `"object"` and a null `http.response` would otherwise count as a response.
+  const nativeResponse = record.http?.response
+  const hasResponse =
+    typeof record.status === "number" ||
+    (nativeResponse != null && typeof nativeResponse === "object") ||
+    typeof record.retryAfterMs === "number" ||
+    typeof record.http?.rateLimit?.retryAfterMs === "number"
+  return hasResponse ? record : undefined
+}
+
+/**
+ * Map a thrown native `LLMError` to `APICallError`.
+ *
+ * This is the other half of `providerErrorToAPICallError`, for the failures that
+ * arrive as a thrown error instead of an in-band event, and it is where the
+ * status and the `Retry-After` headers are actually available.
+ *
+ * Measured, not assumed: a real 429 carrying `retry-after: 7` makes the native
+ * runtime retry twice and then throw `LLMError` whose `reason` is
+ * `RateLimit` with `retryAfterMs`, `status` and redacted response headers
+ * populated. Without this mapping that error crossed into `MessageV2.fromError`
+ * as `UnknownError`, which classifies as non-retryable — so a throttled turn
+ * showed an untyped failure and `SessionRetry.delay` never saw the header the
+ * provider sent. `specs/effect-tui/11-provider-inference-streaming.md`
+ * requirements 6 and 8 ask for exactly the opposite: a typed rate-limit failure
+ * carrying `retryAfter`, not a silent non-retry.
+ *
+ * Headers pass through as the response recorded them, and nothing is recomputed
+ * here. They are already redacted at construction in
+ * `packages/llm/src/route/executor.ts`.
+ */
+export function nativeErrorToAPICallError(error: unknown): APICallError | undefined {
+  const reason = nativeHttpReason(error)
+  if (!reason) return undefined
+
+  const response = reason.http?.response
+  const headers = response?.headers
+  const statusCode =
+    typeof reason.status === "number"
+      ? reason.status
+      : typeof response?.status === "number"
+        ? response.status
+        : undefined
+
+  // Deliberately not republishing the executor's parsed `retryAfterMs` under
+  // `retry-after-ms`. That value is a snapshot taken at response time, so a
+  // date-form `Retry-After` went stale and fired late; `Retry-After: 0` became
+  // the truthy string `"0"` and skipped backoff entirely, compounding the
+  // runtime's own two retries; and an unbounded value like `Retry-After: +1h`
+  // bypassed the 30s no-headers ceiling `SessionRetry.delay` otherwise applies.
+  // `SessionRetry.delay` already parses `retry-after-ms`, `retry-after` seconds
+  // and `retry-after` dates, so the recorded header is both sufficient and
+  // fresher than anything recomputed here.
+  return new APICallError({
+    message: nativeFailureMessage(reason),
+    url: "nikcli://native-llm/request",
+    requestBodyValues: undefined,
+    statusCode,
+    responseHeaders: headers ? { ...headers } : undefined,
+    // Deliberately not the provider body: `SessionRetry` classifies any body
+    // that merely has an `error` key as "Provider Server Error", which relabels a
+    // rate limit as a server fault. `message` already carries the provider's own
+    // text and the status.
+    responseBody: undefined,
+    isRetryable:
+      typeof (error as { retryable?: unknown }).retryable === "boolean"
+        ? (error as { retryable: boolean }).retryable
+        : statusCode !== undefined && (statusCode === 408 || statusCode === 429 || statusCode >= 500),
+  })
+}
+
+/**
+ * The session layer's vocabulary for the reasons the runtime already typed.
+ *
+ * Requirement 8 asks for a provider rate limit to surface as a typed failure
+ * rather than a raw transport string, and `SessionRetry.retryable` recognises
+ * these phrasings. Without the map a throttled turn reports the executor's
+ * "RequestExecutor.execute: Provider request failed with HTTP 429: …", which is
+ * accurate and unreadable; with it the same turn reports "Rate Limited" and the
+ * user-facing reason matches the AI SDK path.
+ */
+function nativeFailureMessage(reason: NativeHttpReason): string {
+  switch (reason._tag) {
+    case "RateLimit":
+      return "Rate Limited"
+    case "QuotaExceeded":
+      return "Free usage exceeded, add credits https://nikcli-ai.dev/zen"
+    case "Authentication":
+      return reason.message || "Provider authentication failed"
+    case "InvalidRequest":
+      return reason.message || "Provider rejected the request"
+    case "ContentPolicy":
+      return reason.message || "Provider content policy rejected the request"
+    case "ProviderInternal":
+      return reason.message || "Provider Server Error"
+    default:
+      return reason.message || "Native provider request failed"
+  }
+}
+
 type FinishEvent = LLMEvent & { type: "step-finish" | "request-finish" }
+
+/**
+ * Finish events that carried no `usage`, against the ones seen.
+ *
+ * `specs/effect-tui/11-provider-inference-streaming.md` requirement 10: missing
+ * usage "must not silently under-report; the aggregator either reconstructs from
+ * prior deltas or flags the gap explicitly", and the acceptance line is "Missing
+ * `usage` chunks are flagged, not interpolated".
+ *
+ * This is the flag half, and it is deliberately the cheap half. Nothing here
+ * reconstructs a number: `Session.getUsage` still turns absent fields into
+ * zeros, and this counter exists precisely so that the resulting zero-billed
+ * turn is *counted* rather than looking like a free request. Interpolating from
+ * prior deltas would need a real accumulator, which is `Usage.Service` work that
+ * has not landed — see the spec's "Review the evidence" section, which still
+ * records that service as absent.
+ *
+ * Counting only, and two integers at that: no provider ids, model ids, prompts
+ * or tokens are accepted, because the observation happens below both the model
+ * reference and the message, so there is nothing to key on anyway and nothing
+ * safe to retain.
+ */
+let usageFinishes = 0
+let usageGaps = 0
+
+export type UsageGapSnapshot = {
+  /** Finish events (`step-finish` / `request-finish`) this adapter observed. */
+  readonly finishes: number
+  /** Those that arrived with no `usage` at all. */
+  readonly gaps: number
+}
+
+export function usageGap(): UsageGapSnapshot {
+  return { finishes: usageFinishes, gaps: usageGaps }
+}
+
+/**
+ * Module state, so `bun test` shares it across a run: reset in `beforeEach`,
+ * not only in `afterEach`, or a test inherits the previous file's counts.
+ */
+export function resetUsageGap(): void {
+  usageFinishes = 0
+  usageGaps = 0
+}
 
 function usageToAISDK(usage: FinishEvent) {
   const u = usage.usage
-  if (!u) return undefined
+  usageFinishes++
+  if (!u) {
+    usageGaps++
+    // Warned per gap rather than folded into a periodic roll-up: a gap is the
+    // only thing standing between a silent zero-billed turn and a noticed one, so
+    // it should be visible where the turn actually happened.
+    log.warn("native finish carried no usage; the turn bills zero tokens", usageGap())
+    return undefined
+  }
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
@@ -103,7 +298,10 @@ function usageToAISDK(usage: FinishEvent) {
 function metadataWithCacheWrite(event: FinishEvent) {
   const write = event.usage?.cacheWriteInputTokens
   if (write === undefined) return event.providerMetadata
-  return { ...event.providerMetadata, nikcli: { cacheWriteInputTokens: write } }
+  return {
+    ...event.providerMetadata,
+    nikcli: { cacheWriteInputTokens: write },
+  }
 }
 
 /**
@@ -140,11 +338,17 @@ function startStep(state: AdapterState): ProcessorStreamEvent[] {
 function closeOpenParts(state: AdapterState): ProcessorStreamEvent[] {
   const out: ProcessorStreamEvent[] = []
   if (state.currentReasoningID) {
-    out.push({ type: "reasoning-end", id: state.currentReasoningID } as ProcessorStreamEvent)
+    out.push({
+      type: "reasoning-end",
+      id: state.currentReasoningID,
+    } as ProcessorStreamEvent)
     state.currentReasoningID = undefined
   }
   if (state.currentTextID) {
-    out.push({ type: "text-end", id: state.currentTextID } as ProcessorStreamEvent)
+    out.push({
+      type: "text-end",
+      id: state.currentTextID,
+    } as ProcessorStreamEvent)
     state.currentTextID = undefined
   }
   return out
@@ -159,7 +363,11 @@ function closeOpenParts(state: AdapterState): ProcessorStreamEvent[] {
  */
 function providerExecutedOutput(
   name: string,
-  normalized: { output: unknown; title?: string; metadata?: Record<string, unknown> },
+  normalized: {
+    output: unknown
+    title?: string
+    metadata?: Record<string, unknown>
+  },
 ) {
   const output =
     typeof normalized.output === "string" ? normalized.output : JSON.stringify(normalized.output ?? "", null, 2)
@@ -384,6 +592,13 @@ export async function* toProcessorStream(llmEvents: AsyncIterable<LLMEvent>): As
   const state = adapterState()
   try {
     for await (const event of llmEvents) {
+      // No native protocol emits `request-start`, so without this the processor would get content and a
+      // `finish-step` with no `start`/`start-step` before them: no step-start part, and no snapshot taken
+      // for the step, which is what file-change tracking (diffs, undo) is built from. The first event of
+      // any kind opens the step; a provider that does send `request-start` is deduplicated by the state.
+      if (!state.emittedStart && event.type !== "provider-error") {
+        for (const mapped of mapLLMEvent(state, { type: "request-start" } as LLMEvent)) yield mapped
+      }
       for (const mapped of mapLLMEvent(state, event)) {
         yield mapped
       }
@@ -394,9 +609,200 @@ export async function* toProcessorStream(llmEvents: AsyncIterable<LLMEvent>): As
       yield event
     }
   } catch (e) {
+    // The runtime's own failures arrive as thrown `LLMError`s rather than
+    // `provider-error` events, and they are the ones that carry an HTTP status
+    // and `Retry-After`. Converted here, at the one seam every native failure
+    // crosses, so the processor classifies a throttled turn as a retryable
+    // `APIError` instead of an opaque `UnknownError`.
+    const mapped = nativeErrorToAPICallError(e)
+    if (mapped) throw mapped
     if (e instanceof Error) throw e
     throw new Error(String(e))
   }
+}
+
+const THINK_OPEN = "<think>"
+const THINK_CLOSE = "</think>"
+
+/** Length of the longest suffix of `text` that is a proper prefix of `tag`: a tag possibly split across deltas. */
+function partialTag(text: string, tag: string) {
+  for (let length = Math.min(tag.length - 1, text.length); length > 0; length--) {
+    if (tag.startsWith(text.slice(text.length - length))) return length
+  }
+  return 0
+}
+
+/**
+ * Move inline `<think>…</think>` out of text into reasoning, as the AI SDK path's
+ * `extractReasoningMiddleware({ tagName: "think" })` does for models that stream their reasoning
+ * as tagged text (DeepSeek-R1 and Qwen behind OpenAI-compatible endpoints, local runtimes).
+ * Tags may be split across deltas, so a trailing fragment that could still become a tag is held
+ * back until the next delta decides it, and flushed when the request ends.
+ */
+export async function* extractThinkTags(events: AsyncIterable<LLMEvent>): AsyncGenerator<LLMEvent> {
+  let inThink = false
+  let held = ""
+  let block = 0
+  let last: Extract<LLMEvent, { type: "text-delta" }> | undefined
+
+  const emit = (text: string): LLMEvent[] => {
+    if (text.length === 0) return []
+    if (inThink) return [{ type: "reasoning-delta", id: `think-${block}`, text } as LLMEvent]
+    return last ? [{ ...last, text }] : []
+  }
+
+  const drain = (final: boolean): LLMEvent[] => {
+    const out: LLMEvent[] = []
+    while (held.length > 0) {
+      const tag = inThink ? THINK_CLOSE : THINK_OPEN
+      const at = held.indexOf(tag)
+      if (at >= 0) {
+        out.push(...emit(held.slice(0, at)))
+        held = held.slice(at + tag.length)
+        inThink = !inThink
+        if (inThink) block++
+        continue
+      }
+      const keep = final ? 0 : partialTag(held, tag)
+      out.push(...emit(held.slice(0, held.length - keep)))
+      held = held.slice(held.length - keep)
+      break
+    }
+    return out
+  }
+
+  for await (const event of events) {
+    if (event.type === "text-delta") {
+      last = event
+      held += event.text
+      yield* drain(false)
+      continue
+    }
+    if (event.type === "text-end" || event.type === "step-finish" || event.type === "request-finish") {
+      yield* drain(true)
+    }
+    yield event
+  }
+  yield* drain(true)
+}
+
+type ToolRunContext = {
+  readonly tools: Record<string, Tool>
+  readonly messages: readonly ModelMessage[]
+  readonly abort: AbortSignal
+}
+
+type ToolRunResult =
+  | { readonly ok: true; readonly input: unknown; readonly output: unknown }
+  | { readonly ok: false; readonly input: unknown; readonly error: unknown }
+
+/** The tool a call lands on when its name or input cannot be used (`ToolRegistry`'s `invalid`). */
+const INVALID_TOOL = "invalid"
+
+/**
+ * Resolve a model-issued call to something runnable, mirroring the AI SDK's
+ * `experimental_repairToolCall` in `LLM.stream`: a wrong-cased name is fixed, and
+ * an unknown name or an input the schema rejects is routed to the `invalid` tool
+ * with the reason, so the model sees what it got wrong rather than a dead call.
+ * Returns the (possibly rewritten) name and the validated input.
+ */
+async function resolveToolCall(tools: Record<string, Tool>, name: string, input: unknown) {
+  const lower = name.toLowerCase()
+  const resolved = tools[name] ? name : Object.keys(tools).find((key) => key.toLowerCase() === lower)
+  const tool = resolved ? tools[resolved] : undefined
+  const invalid = (error: string) => ({
+    name: INVALID_TOOL,
+    input: { tool: name, error },
+  })
+  if (!resolved || !tool) return invalid(`Model tried to call unavailable tool '${name}'.`)
+  if (!tool.inputSchema) return { name: resolved, input }
+  const validated = await asSchema(tool.inputSchema).validate?.(input)
+  if (!validated) return { name: resolved, input }
+  if (!validated.success) return invalid(`Invalid input for tool ${name}: ${validated.error.message}`)
+  return { name: resolved, input: validated.value }
+}
+
+async function runTool(
+  ctx: ToolRunContext,
+  call: { toolCallId: string; toolName: string; input: unknown },
+): Promise<ToolRunResult> {
+  try {
+    const tool = ctx.tools[call.toolName]
+    if (!tool?.execute) throw new Error(`Tool ${call.toolName} has no execute handler`)
+    const executed = tool.execute(call.input as never, {
+      toolCallId: call.toolCallId,
+      messages: ctx.messages as ModelMessage[],
+      abortSignal: ctx.abort,
+    })
+    // `execute` may stream (an async iterable of partial results); the last value is the result.
+    let output: unknown
+    if (executed && typeof executed === "object" && Symbol.asyncIterator in executed) {
+      for await (const value of executed as AsyncIterable<unknown>) output = value
+    } else {
+      output = await executed
+    }
+    return { ok: true, input: call.input, output }
+  } catch (error) {
+    return { ok: false, input: call.input, error }
+  }
+}
+
+/**
+ * Run the session's client tools for a native stream.
+ *
+ * The native route only *streams the model*: it surfaces `tool-call` events and
+ * stops. Something has to run each tool's `execute` and emit
+ * `tool-result`/`tool-error`, and the processor only completes a tool part on
+ * those. This puts that back: each call starts executing as soon as it arrives
+ * (so tools overlap with the rest of the stream, as under the AI SDK) and every
+ * outcome is emitted ahead of `finish-step`, which is what closes the step.
+ *
+ * Provider-executed calls pass through untouched; the provider already ran them.
+ */
+export async function* executeTools(
+  events: AsyncIterable<ProcessorStreamEvent>,
+  ctx: ToolRunContext,
+): AsyncGenerator<ProcessorStreamEvent> {
+  const pending: Array<{ toolCallId: string; toolName: string; result: Promise<ToolRunResult> }> = []
+
+  const flush = async function* () {
+    // Settled in call order. A tool still running when the turn is aborted
+    // settles with the abort error, so this never waits on a cancelled turn.
+    for (const call of pending.splice(0)) {
+      const result = await call.result
+      yield (
+        result.ok
+          ? {
+              type: "tool-result",
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              input: result.input,
+              output: result.output,
+            }
+          : {
+              type: "tool-error",
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              input: result.input,
+              error: result.error,
+            }
+      ) as ProcessorStreamEvent
+    }
+  }
+
+  for await (const event of events) {
+    if (event.type === "tool-call" && !event.providerExecuted) {
+      const resolved = await resolveToolCall(ctx.tools, event.toolName, event.input)
+      const call = { toolCallId: event.toolCallId, toolName: resolved.name, input: resolved.input }
+      pending.push({ ...call, result: runTool(ctx, call) })
+      yield { ...event, toolName: resolved.name, input: resolved.input } as ProcessorStreamEvent
+      continue
+    }
+    if (event.type === "finish-step") yield* flush()
+    yield event
+  }
+  // A stream that ended without a finish-step (cut off) still owes its tool outcomes.
+  yield* flush()
 }
 
 export function suppressEmptyTextResult<
@@ -407,6 +813,76 @@ export function suppressEmptyTextResult<
 >(result: T): T {
   result.text.catch(() => {})
   return result
+}
+
+/**
+ * The result a native turn hands back: the processor's `fullStream`, and `text`.
+ *
+ * Several callers (titles, summaries, auto-mode) read `result.text` without ever iterating the stream,
+ * as `streamText` allowed. The native route only yields events, so something has to consume them and
+ * add the text up. Both are served from one pass over the source, started on first use of either (never
+ * at construction: nothing is requested until a consumer asks), with every event buffered so a consumer
+ * that iterates `fullStream` after reading `text` still sees the whole turn.
+ *
+ * `text` is created on first access, so a turn nobody asks the text of cannot leave an unhandled
+ * rejection behind; one that does ask owns handling it, as with the AI SDK.
+ */
+export function streamResult(source: AsyncIterable<ProcessorStreamEvent>) {
+  const buffer: ProcessorStreamEvent[] = []
+  let done = false
+  let failure: { readonly error: unknown } | undefined
+  let iterator: AsyncIterator<ProcessorStreamEvent> | undefined
+  let pulling: Promise<void> | undefined
+  let textRequested = false
+
+  // One source read at a time, shared by every consumer that has caught up with the buffer: the source is
+  // only advanced when someone is waiting for the next event, so it is not read ahead of its consumers.
+  const pull = () =>
+    (pulling ??= (async () => {
+      try {
+        iterator ??= source[Symbol.asyncIterator]()
+        const next = await iterator.next()
+        if (next.done) done = true
+        else buffer.push(next.value)
+      } catch (error) {
+        failure = { error }
+        done = true
+      } finally {
+        pulling = undefined
+      }
+    })())
+
+  async function* fullStream(): AsyncGenerator<ProcessorStreamEvent> {
+    try {
+      for (let index = 0; ; ) {
+        if (index < buffer.length) {
+          yield buffer[index++]!
+          continue
+        }
+        if (done) break
+        await pull()
+      }
+      if (failure) throw failure.error
+    } finally {
+      // A consumer that walks away mid-turn releases the source, as iterating it directly would; one that
+      // also asked for `text` needs the rest of the turn.
+      if (!done && !textRequested) void iterator?.return?.()
+    }
+  }
+
+  let text: Promise<string> | undefined
+  return {
+    fullStream: fullStream(),
+    get text(): Promise<string> {
+      text ??= (async () => {
+        textRequested = true
+        let out = ""
+        for await (const event of fullStream()) if (event.type === "text-delta") out += event.text
+        return out
+      })()
+      return text
+    },
+  }
 }
 
 export * as LLMEventAdapter from "./llm-event-adapter"

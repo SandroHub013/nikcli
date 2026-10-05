@@ -1,5 +1,5 @@
 import type { JsonValue } from "@/util/json"
-import { and, eq, gt, sql } from "drizzle-orm"
+import { and, eq, gt, or, sql } from "drizzle-orm"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiAuth } from "./security"
@@ -43,11 +43,24 @@ export namespace SyncHttpApi {
     since: Schema.optional(Schema.NumberFromString).annotate({
       description: "Return events with seq > since (default 0)",
     }),
+    afterAggregate: Schema.optional(Schema.String),
+    afterID: Schema.optional(Schema.String),
+    aggregate: Schema.optional(Schema.String).annotate({
+      description:
+        "Restrict the page to one aggregate. Optional and additive: without it the endpoint behaves exactly as before. It exists because `seq` counts per aggregate, so a project-wide `since` addresses every aggregate's own numbering at once — the mismatch behind the silent cross-aggregate loss in specs/effect-tui/15-sync-snapshots-watermarks.md. A consumer holding per-aggregate cursors can ask for one aggregate at a time instead of over-fetching everything above the lowest cursor and discarding the rest.",
+    }),
   })
 
   const OutboxResponse = Schema.Struct({
     events: Schema.Array(Schema.Unknown),
     hasMore: Schema.Boolean,
+    nextCursor: Schema.optional(
+      Schema.Struct({
+        seq: Schema.Int,
+        aggregate: Schema.String,
+        id: Schema.String,
+      }),
+    ),
   }).annotate({ identifier: "SyncOutboxResponse" })
 
   const SnapshotResponse = Schema.Struct({
@@ -132,6 +145,7 @@ export namespace SyncHttpApi {
       HttpApiEndpoint.get("stream", "/stream", {
         query: Schema.Struct({
           projectID: Schema.String,
+          readiness: Schema.optional(Schema.String),
           token: Schema.String.annotate({
             description: "Bearer token via query parameter — EventSource cannot send custom headers",
           }),
@@ -152,22 +166,19 @@ export namespace SyncHttpApi {
       }).annotate(OpenApi.Identifier, "sync.config.set"),
     )
     .add(
-      HttpApiEndpoint.post("connect", "/connect", { success: HttpApiSchema.NoContent }).annotate(
-        OpenApi.Identifier,
-        "sync.connect",
-      ),
+      HttpApiEndpoint.post("connect", "/connect", {
+        success: HttpApiSchema.NoContent,
+      }).annotate(OpenApi.Identifier, "sync.connect"),
     )
     .add(
-      HttpApiEndpoint.post("disconnect", "/disconnect", { success: HttpApiSchema.NoContent }).annotate(
-        OpenApi.Identifier,
-        "sync.disconnect",
-      ),
+      HttpApiEndpoint.post("disconnect", "/disconnect", {
+        success: HttpApiSchema.NoContent,
+      }).annotate(OpenApi.Identifier, "sync.disconnect"),
     )
     .add(
-      HttpApiEndpoint.post("drain", "/drain", { success: HttpApiSchema.NoContent }).annotate(
-        OpenApi.Identifier,
-        "sync.drain",
-      ),
+      HttpApiEndpoint.post("drain", "/drain", {
+        success: HttpApiSchema.NoContent,
+      }).annotate(OpenApi.Identifier, "sync.drain"),
     )
     .prefix("/sync")
 
@@ -188,7 +199,10 @@ export namespace SyncHttpApi {
       return { allowed: true, retryAfterMs: 0 }
     }
     if (window.count >= PUSH_LIMIT_PER_WINDOW) {
-      return { allowed: false, retryAfterMs: window.windowStart + PUSH_WINDOW_MS - now }
+      return {
+        allowed: false,
+        retryAfterMs: window.windowStart + PUSH_WINDOW_MS - now,
+      }
     }
     window.count++
     return { allowed: true, retryAfterMs: 0 }
@@ -229,10 +243,15 @@ export namespace SyncHttpApi {
     const identity = token?.id ?? "operator"
     const rate = pushAllowed(identity)
     if (!rate.allowed) {
-      log.warn("sync push rate limited", { identity, path: new URL(request.url).pathname })
+      log.warn("sync push rate limited", {
+        identity,
+        path: new URL(request.url).pathname,
+      })
       return new Response("Rate limit exceeded", {
         status: 429,
-        headers: { "retry-after": String(Math.ceil(rate.retryAfterMs / 1_000)) },
+        headers: {
+          "retry-after": String(Math.ceil(rate.retryAfterMs / 1_000)),
+        },
       })
     }
     const existing = Effect.runSync(
@@ -272,7 +291,10 @@ export namespace SyncHttpApi {
     )
     GlobalBus.emit("event", {
       directory: body.event.projectId,
-      payload: { type: "sync.received", properties: { eventID: body.event.id, seq: inserted } },
+      payload: {
+        type: "sync.received",
+        properties: { eventID: body.event.id, seq: inserted },
+      },
     })
     log.info("remote event accepted", {
       eventID: body.event.id,
@@ -291,19 +313,44 @@ export namespace SyncHttpApi {
     if (!projectID) return new Response("Invalid query", { status: 400 })
     const since = Number(url.searchParams.get("since") ?? 0)
     if (!Number.isInteger(since) || since < 0) return new Response("Invalid query", { status: 400 })
+    const aggregate = url.searchParams.get("afterAggregate")
+    const id = url.searchParams.get("afterID")
+    if ((aggregate === null) !== (id === null)) return new Response("Invalid cursor", { status: 400 })
+    // Additive: absent means no aggregate predicate, so every existing caller
+    // keeps the project-wide page it had. Present restricts the page, which is
+    // what lets a consumer holding per-aggregate cursors page one aggregate at a
+    // time instead of replaying every aggregate above the lowest cursor and
+    // discarding what it already had.
+    const onlyAggregate = url.searchParams.get("aggregate")
+    const position =
+      aggregate !== null && id !== null
+        ? or(
+            gt(syncEvent.seq, since),
+            and(eq(syncEvent.seq, since), gt(syncEvent.aggregate, aggregate)),
+            and(eq(syncEvent.seq, since), eq(syncEvent.aggregate, aggregate), gt(syncEvent.id, id)),
+          )
+        : gt(syncEvent.seq, since)
     const rows = Effect.runSync(
       Database.query("SyncRoutes.since", (db) =>
         db
           .select()
           .from(syncEvent)
-          .where(and(eq(syncEvent.projectId, projectID), gt(syncEvent.seq, since)))
-          .orderBy(syncEvent.seq)
-          .limit(500)
+          .where(
+            and(
+              eq(syncEvent.projectId, projectID),
+              onlyAggregate === null ? undefined : eq(syncEvent.aggregate, onlyAggregate),
+              position,
+            ),
+          )
+          .orderBy(syncEvent.seq, syncEvent.aggregate, syncEvent.id)
+          .limit(501)
           .all(),
       ),
     )
+    const page = rows.slice(0, 500)
+    const last = page.at(-1)
     return Response.json({
-      events: rows.map((row) => ({
+      events: page.map((row) => ({
         id: row.id,
         projectId: row.projectId,
         workspaceId: row.workspaceId ?? undefined,
@@ -315,7 +362,16 @@ export namespace SyncHttpApi {
         origin: row.origin,
         originSeq: row.originSeq ?? undefined,
       })),
-      hasMore: rows.length === 500,
+      hasMore: rows.length > 500,
+      ...(last
+        ? {
+            nextCursor: {
+              seq: last.seq,
+              aggregate: last.aggregate,
+              id: last.id,
+            },
+          }
+        : {}),
     })
   })
 
@@ -331,6 +387,7 @@ export namespace SyncHttpApi {
 
   const stats = raw(async (request) => {
     const projectID = new URL(request.url).searchParams.get("projectID") ?? ""
+    const readiness = new URL(request.url).searchParams.get("readiness") === "1"
     const remote = await SyncConfig.resolve()
     const url = remote.url
     const { RemoteSync } = await import("@/sync/remote-sync")
@@ -408,7 +465,9 @@ export namespace SyncHttpApi {
     if (body instanceof Response) return body
     const url = normalizeHubUrl(body.url)
     if (!url) return new Response("Invalid hub URL", { status: 400 })
-    const patch: { sync: { url: string; token?: string; autostart?: boolean } } = { sync: { url } }
+    const patch: {
+      sync: { url: string; token?: string; autostart?: boolean }
+    } = { sync: { url } }
     if (body.token) patch.sync.token = body.token
     patch.sync.autostart = body.autostart ?? true
     await configUpdateGlobal(patch)
@@ -419,13 +478,20 @@ export namespace SyncHttpApi {
     if (resolved.configured) {
       try {
         const { SyncCliInit } = await import("@/sync/cli-init")
-        const result = await SyncCliInit.startForAllProjects({ url: resolved.url!, token: resolved.token! })
+        const result = await SyncCliInit.startForAllProjects({
+          url: resolved.url!,
+          token: resolved.token!,
+        })
         started = result.count > 0
       } catch (cause) {
         error = cause instanceof Error ? cause.message : String(cause)
       }
     }
-    log.info("sync config saved from TUI", { url, configured: resolved.configured, started })
+    log.info("sync config saved from TUI", {
+      url,
+      configured: resolved.configured,
+      started,
+    })
     return Response.json({
       configured: resolved.configured,
       url: resolved.url,
@@ -440,7 +506,10 @@ export namespace SyncHttpApi {
     const resolved = await SyncConfig.resolve()
     if (resolved.configured) {
       const { SyncCliInit } = await import("@/sync/cli-init")
-      await SyncCliInit.startForAllProjects({ url: resolved.url!, token: resolved.token! }).catch((error) => {
+      await SyncCliInit.startForAllProjects({
+        url: resolved.url!,
+        token: resolved.token!,
+      }).catch((error) => {
         log.warn("sync connect failed", { error })
       })
     }
@@ -479,16 +548,25 @@ export namespace SyncHttpApi {
     const denied = await scopeDenied(request)
     if (denied) return denied
     const projectID = new URL(request.url).searchParams.get("projectID") ?? ""
+    // `readiness=1` is the fencing mode: the greeting is an explicit `ready`
+    // event and only `sync.received` wakeups are offered, so the subscriber is
+    // live before it reads the journal and no event can fall between the two.
+    const readiness = new URL(request.url).searchParams.get("readiness") === "1"
     const stream = EventFeed.filtered({
       signal: request.signal,
       envelope: (event) => event,
-      greeting: SSE_CONNECTED,
+      greeting: readiness ? sseEncoder.encode("event: ready\ndata: {}\n\n") : SSE_CONNECTED,
       heartbeat: { frame: SSE_PING, intervalMs: 15_000 },
       encode: (value) => sseEncoder.encode(`event: sync\ndata: ${JSON.stringify(value)}\n\n`),
       subscribe(offer) {
         const handler = (raw: unknown) => {
-          const envelope = raw as { directory?: string; payload?: { type?: string } }
-          if (envelope?.directory === projectID) offer(envelope.payload, envelope.payload?.type)
+          const envelope = raw as {
+            directory?: string
+            payload?: { type?: string }
+          }
+          if (envelope?.directory === projectID && (!readiness || envelope.payload?.type === "sync.received")) {
+            offer(envelope.payload, envelope.payload?.type)
+          }
         }
         GlobalBus.on("event", handler as never)
         return () => GlobalBus.off("event", handler as never)

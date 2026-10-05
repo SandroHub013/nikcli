@@ -29,6 +29,8 @@ export const dict = {
   "desktop.sidebar.emptyProjects": "Open a project to get started",
   "desktop.sidebar.configuredPlugins": "Configured plugins",
   "desktop.sidebar.noPlugins": "No plugins are configured in nikcli.json.",
+  "desktop.sidebar.mods": "Mods",
+  "desktop.sidebar.noMods": "No mods are loaded for this project.",
   "desktop.sidebar.noActions": "No actions are available in the current context.",
   "desktop.sidebar.closePanel": "Close panel",
   "desktop.sidebar.currentServer": "Current server",

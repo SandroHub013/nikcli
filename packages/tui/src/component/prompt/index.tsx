@@ -181,6 +181,42 @@ export function sessionRequestContext(input: {
   }
 }
 
+/**
+ * The prompt footer shares one row with the agent, mode and variant, so the
+ * model and provider names are shortened before layout ever has to squeeze
+ * them: long ids ("MiniMax-M3.1-Flash-Preview") and descriptive provider names
+ * ("MiniMax Token Plan (minimax.io)") otherwise push the row into wrapping.
+ * Layout truncation stays behind this as the last resort for narrow terminals.
+ */
+const FOOTER_MODEL_MAX = 22
+const FOOTER_PROVIDER_MAX = 18
+
+/**
+ * Drops what the rest of the row already says, then what carries no identity:
+ * - a vendor prefix the provider name repeats ("MiniMax-M3.1" beside
+ *   "MiniMax Token Plan" is "M3.1"), kept when nothing would be left;
+ * - a trailing release date ("-20251101", "-2025-11-01");
+ * and only then cuts, in the middle, because the end of an id ("-mini",
+ * "-preview", a version) is usually what tells two models apart.
+ */
+export function footerModel(model: string, provider = ""): string {
+  let name = model.trim()
+  const vendor = provider.trim().split(/[\s(]/, 1)[0]?.toLowerCase() ?? ""
+  if (vendor.length > 1) {
+    const escaped = vendor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const stripped = name.replace(new RegExp(`^${escaped}[-_/\\s]+`, "i"), "")
+    if (stripped.length > 0) name = stripped
+  }
+  name = name.replace(/[-_@](?:\d{8}|\d{4}-\d{2}-\d{2})$/, "")
+  return Locale.truncateMiddle(name, FOOTER_MODEL_MAX)
+}
+
+/** Drops a trailing "(domain)" qualifier — it repeats the name — then cuts at the end. */
+export function footerProvider(name: string): string {
+  const bare = name.replace(/\s*\([^)]*\)\s*$/, "").trim()
+  return Locale.truncate(bare || name.trim(), FOOTER_PROVIDER_MAX)
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -2100,14 +2136,18 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.foreground.default}
               syntaxStyle={syntax()}
             />
+            {/*
+              One row, always: names are shortened up front (footerModel /
+              footerProvider) and only then truncated by layout, never wrapped.
+            */}
             <box flexDirection="row" flexShrink={0} paddingTop={style().box.gap} gap={1}>
               <Show when={kv.get("show_agent", true)}>
-                <text fg={highlight()}>
+                <text fg={highlight()} flexShrink={0} wrapMode="none">
                   {store.mode === "shell" ? lang.t("prompt.shell") : Locale.titlecase(local.agent.current().name)}{" "}
                 </text>
               </Show>
               <Show when={store.mode === "normal" && kv.get("show_agent", true)}>
-                <box flexDirection="row" gap={1}>
+                <box flexDirection="row" gap={1} flexShrink={0}>
                   <text fg={theme.foreground.muted}>·</text>
                   <text fg={permissionModeColor(permissionMode(), theme)}>
                     {permissionModeShortLabel(permissionMode())}
@@ -2115,14 +2155,25 @@ export function Prompt(props: PromptProps) {
                 </box>
               </Show>
               <Show when={store.mode === "normal" && kv.get("show_model", true)}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.foreground.muted : theme.foreground.default}>
-                    {local.model.parsed().model}
+                <box flexDirection="row" gap={1} flexShrink={1} minWidth={0}>
+                  <text
+                    flexShrink={1}
+                    minWidth={0}
+                    wrapMode="none"
+                    truncate
+                    fg={keybind.leader ? theme.foreground.muted : theme.foreground.default}
+                  >
+                    {footerModel(local.model.parsed().model, local.model.parsed().provider)}
                   </text>
-                  <text fg={theme.foreground.muted}>{local.model.parsed().provider}</text>
+                  {/* The provider gives way first: it shrinks far faster than the model. */}
+                  <text fg={theme.foreground.muted} flexShrink={100} minWidth={0} wrapMode="none" truncate>
+                    {footerProvider(local.model.parsed().provider)}
+                  </text>
                   <Show when={showVariant()}>
-                    <text fg={theme.foreground.muted}>·</text>
-                    <text>
+                    <text fg={theme.foreground.muted} flexShrink={0}>
+                      ·
+                    </text>
+                    <text flexShrink={0} wrapMode="none">
                       <span style={{ fg: theme.status.warning.fg, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
@@ -2172,7 +2223,8 @@ export function Prompt(props: PromptProps) {
             />
           </box>
         </Show>
-        <box flexDirection="row" justifyContent="space-between">
+        {/* A blank row between the prompt and its status line (rec, web, commands). */}
+        <box flexDirection="row" justifyContent="space-between" paddingTop={1}>
           <Show
             when={status().type !== "idle"}
             fallback={

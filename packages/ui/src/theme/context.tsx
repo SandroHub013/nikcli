@@ -66,6 +66,40 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
   }
 }
 
+/**
+ * Moves the specular hot spot of [data-glass] surfaces with the pointer, so the glass reads
+ * as lit from where you are pointing. Purely decorative: skipped under reduced motion.
+ */
+function trackGlassPointer(): () => void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {}
+
+  let frame = 0
+  let last: PointerEvent | undefined
+
+  const flush = () => {
+    frame = 0
+    const event = last
+    if (!event || !(event.target instanceof Element)) return
+    const surface = event.target.closest<HTMLElement>("[data-glass]")
+    if (!surface) return
+    const rect = surface.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    surface.style.setProperty("--gx", `${Math.round(((event.clientX - rect.left) / rect.width) * 100)}%`)
+    surface.style.setProperty("--gy", `${Math.round(((event.clientY - rect.top) / rect.height) * 100)}%`)
+  }
+
+  const onMove = (event: PointerEvent) => {
+    last = event
+    if (!frame) frame = requestAnimationFrame(flush)
+  }
+
+  document.addEventListener("pointermove", onMove, { passive: true })
+  return () => {
+    document.removeEventListener("pointermove", onMove)
+    if (frame) cancelAnimationFrame(frame)
+  }
+}
+
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { defaultTheme?: string }) => {
@@ -79,6 +113,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     onMount(() => {
+      onCleanup(trackGlassPointer())
+
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
       const handler = () => {
         if (store.colorScheme === "system") {

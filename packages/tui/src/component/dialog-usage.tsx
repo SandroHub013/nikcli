@@ -639,7 +639,7 @@ export function DialogUsage() {
                           {Usage.formatTokens(source.tokens)}
                           <span style={{ fg: theme.foreground.muted }}>
                             {" "}
-                            {source.enabled ? tokenPct(source.tokens) : "(off)"}
+                            {source.enabled ? tokenPct(source.tokens) : source.deferred ? "(on demand)" : "(off)"}
                           </span>
                         </text>
                       </box>

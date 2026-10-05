@@ -1,6 +1,6 @@
 import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { UI } from "@/cli/ui"
 import { ModelsDev } from "@/provider/models"
 import path from "path"

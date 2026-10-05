@@ -1,12 +1,13 @@
 /**
  * Native runtime bridge to @nikcli-ai/llm.
  *
- * Request-only streaming: tools are advertised as schemas; session processor
- * executes tools (same contract as AI SDK streamText).
+ * Request-only streaming: tools are advertised as schemas and the model's calls
+ * come back as events. Running them is not done here: `executeTools` in
+ * `llm-event-adapter.ts` does it (what AI SDK `streamText` did via `execute`).
  */
 import type { Auth } from "@/auth"
-import type { Provider } from "@/provider/provider"
-import type { ModelMessage } from "ai"
+import { Provider } from "@/provider/provider"
+import type { ModelMessage } from "@/session/llm/types"
 import type { LLMEvent, LLMRequest, ModelRef } from "@nikcli-ai/llm"
 import { streamRequest as llmStreamRequest } from "@nikcli-ai/llm/runtime"
 
@@ -36,19 +37,12 @@ export function status(input: {
     return { type: "unsupported", reason: "model ref is not resolved" }
   }
 
-  // ADR (A4 / misty-moon 2026-07-08): OAuth sessions always use the AI SDK path.
-  // `@nikcli-ai/llm` streamRequest does not accept a provider `fetch` override yet,
-  // so openai OAuth (and any other oauth) stay unsupported here and fall back in llm.ts.
-  // Revisit when LLMRequest/runtime gains custom fetch; until then this is intentional.
-  if (input.auth?.type === "oauth") {
-    return {
-      type: "unsupported",
-      reason: "OAuth native streaming uses AI SDK (fetch override not wired into @nikcli-ai/llm)",
-    }
-  }
-
+  // A provider whose credential lives in its own `fetch` (OAuth renewal, account tokens) is sent through
+  // that fetch (`Provider.nativeFetch`), which sets the real Authorization per request, so a static key is
+  // only required when there is no such fetch. Replaces the earlier blanket refusal of OAuth sessions
+  // (A4, 2026-07-08), which existed because the runtime accepted no fetch override.
   const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
-  if (!apiKey) {
+  if (!apiKey && typeof input.provider.options.fetch !== "function") {
     return { type: "unsupported", reason: "API key is not configured" }
   }
 
@@ -114,7 +108,10 @@ export function streamRequestOnly(input: StreamInput): StreamResult {
 
   return {
     type: "supported",
-    events: abortableIterable(llmStreamRequest(input.llmRequest), input.abort),
+    events: abortableIterable(
+      llmStreamRequest(input.llmRequest, { fetch: Provider.nativeFetch(input.provider) }),
+      input.abort,
+    ),
   }
 }
 

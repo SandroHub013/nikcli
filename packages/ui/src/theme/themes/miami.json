@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Miami",
+  "id": "miami",
+  "light": {
+    "seeds": {
+      "neutral": "#eeeeef",
+      "primary": "#bf5395",
+      "success": "#22876a",
+      "warning": "#8c743d",
+      "error": "#d94e68",
+      "info": "#31839c",
+      "interactive": "#bf5395",
+      "diffAdd": "#22876a",
+      "diffDelete": "#d94e68"
+    },
+    "overrides": {
+      "background-base": "#eeeeef",
+      "background-weak": "#e4e4e5",
+      "background-strong": "#eeeeef",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#080c17",
+      "text-base": "#30343d",
+      "text-weak": "#7b7d83",
+      "text-weaker": "#9b9da1",
+      "border-weak-base": "#dfdfe0",
+      "border-base": "#cfcfd0",
+      "border-strong-base": "#898b8f"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0b1020",
+      "primary": "#ff6ec7",
+      "success": "#3df5c1",
+      "warning": "#ffd36e",
+      "error": "#ff5c7a",
+      "info": "#4cc9f0",
+      "interactive": "#ff6ec7",
+      "diffAdd": "#3df5c1",
+      "diffDelete": "#ff5c7a"
+    },
+    "overrides": {
+      "background-base": "#0b1020",
+      "background-weak": "#191e2d",
+      "background-strong": "#0b1020",
+      "background-stronger": "#121a33",
+      "surface-raised-stronger-non-alpha": "#121a33",
+      "text-strong": "#ecf4ff",
+      "text-base": "#c5d1e7",
+      "text-weak": "#7d8fba",
+      "text-weaker": "#556384",
+      "border-weak-base": "#161f3c",
+      "border-base": "#1f2b52",
+      "border-strong-base": "#67718f"
+    }
+  }
+}

@@ -10,6 +10,7 @@ import { reasoningSummary } from "@tui/context/thinking"
 import { MessageMarkdown } from "@tui/feature-plugins/math/markdown"
 import { Match, Show, Switch, createMemo, createSignal } from "solid-js"
 import type { ViewEntry } from "../view"
+import { Replace } from "../../../feature-plugins/mods/render"
 
 export function ReasoningPart(props: { last: boolean; streaming: boolean; entry: ViewEntry; sessionID: string }) {
   const { subtleSyntax, component } = useTheme()
@@ -147,7 +148,14 @@ export function ReasoningHeader(props: { done: boolean; title: string | null; du
     <Switch>
       <Match when={!props.done}>
         <box flexDirection="row">
-          <Spinner color={style().colors.heading}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+          {/* `Spinner` mods can rewrite the word, or draw the line themselves. */}
+          <Replace
+            component="Spinner"
+            requestId="reasoning"
+            props={{ word: props.title ? "Thinking: " + props.title : "Thinking" }}
+          >
+            {(site) => <Spinner color={style().colors.heading}>{String(site.word)}</Spinner>}
+          </Replace>
         </box>
       </Match>
       <Match when={props.done}>

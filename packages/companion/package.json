@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@nikcli-ai/companion",
-  "version": "1.406.0",
+  "version": "1.429.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -20,7 +20,7 @@
     "./ui": "./src/ui/index.ts"
   },
   "files": [
-    "dist"
+    "src"
   ],
   "dependencies": {
     "@hono/node-server": "1.19.15",
@@ -42,5 +42,8 @@
     "typescript": "catalog:",
     "@typescript/native": "catalog:",
     "wrangler": "4.103.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

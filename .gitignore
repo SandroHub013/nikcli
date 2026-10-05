@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
 .worktrees
+.deepsec
 .sst
 .env
 .env.local
@@ -66,3 +67,28 @@ packages/ade/.lavish/
 packages/ade/src-tauri/nikverse-assets/world/
 # Alta's 2K set is not in the installer (downloaded on its own); a developer copies it with `sync-nikverse-assets --alta`.
 packages/ade/src-tauri/nikverse-assets/levels/alta/
+# Caches, logs and test output
+.ruff_cache/
+__pycache__/
+*.pyc
+*.log
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Signing material — never commit
+*.pem
+*.p12
+*.mobileprovision
+
+# Claude Code local state (team-wide, not just .git/info/exclude)
+.claude/RESUME.md
+.claude/worktrees/
+.claude/settings.local.json
+
+# nikcli devhub scratch (junit reports, perf probes, playground scripts)
+.devhub/
+packages/devhub/src-tauri/target/
+packages/devhub/src-tauri/gen/
+packages/devhub/dist/

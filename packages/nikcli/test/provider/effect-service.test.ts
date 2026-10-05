@@ -220,18 +220,20 @@ describe("Provider.Service", () => {
       },
     })
 
-    const language = await Effect.runPromise(
+    const ref = await Effect.runPromise(
       InstanceScope.with(
         { directory },
         Effect.gen(function* () {
           const provider = yield* Provider.Service
           const model = yield* provider.getModel("xai", "grok-test")
-          return yield* provider.getLanguage(model)
+          return yield* provider.getModelRef(model)
         }).pipe(Effect.provide(Provider.defaultLayer)),
       ),
     )
 
-    expect(language.provider).toBe("xai.responses")
+    // xAI speaks the Responses API, whatever the credential type.
+    expect(String(ref?.provider)).toBe("xai")
+    expect(ref?.route).toBe("openai-responses")
   })
 })
 

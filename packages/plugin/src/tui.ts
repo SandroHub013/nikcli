@@ -19,7 +19,7 @@ import type { Store } from "solid-js/store"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 import type { Data as TuiV2Data } from "./v2/tui/context.js"
 
-export type { CliRenderer, SlotMode } from "@opentui/core"
+export type { CliRenderer, RGBA, SlotMode } from "@opentui/core"
 
 export type TuiRouteCurrent =
   | {
@@ -420,6 +420,17 @@ export type TuiSidebarFileItem = {
 
 export type TuiSlotMap = {
   app: {}
+  /**
+   * Behind the whole interface, inside the app box.
+   *
+   * The host mounts it inside a zero-size absolute box, as the app box's first
+   * child: a plugin's node is positioned against the app box's top-left corner
+   * and paints after the app's own background but before every UI sibling. It
+   * is the only place a plugin can draw something the interface does not cover
+   * — a node added to `renderer.root` instead sits behind the opaque app box
+   * and is never seen.
+   */
+  backdrop: {}
   home_logo: {}
   home_bottom: {}
   sidebar_title: {
@@ -473,6 +484,51 @@ export type TuiSlots = {
   register: (plugin: TuiSlotPlugin) => string
   /** Host-backed disposable registration used by the v2 compatibility runtime. */
   registerDisposable: (plugin: TuiSlotPlugin) => () => void
+}
+
+/**
+ * A Kitty image the terminal now holds, and the cells that composite it.
+ *
+ * The rows are the Kitty Unicode placeholder form: each cell is U+10EEEE plus
+ * the row and column diacritics that address its slice of the image, and every
+ * cell has to be painted with {@link fg} for the terminal to resolve the id.
+ */
+export type TuiKittyPlacement = {
+  readonly id: number
+  readonly columns: number
+  readonly rows: number
+  /** One string per row, to be rendered as a text cell run with {@link fg}. */
+  readonly lines: readonly string[]
+  /**
+   * The 24-bit foreground that addresses {@link id}.
+   *
+   * A real `RGBA`, not a colour triple: the renderer packs the same four
+   * channels the terminal reads back, and the channels are the id.
+   */
+  readonly fg: RGBA
+  /** Drops the image from the terminal. Idempotent — call it on dispose. */
+  readonly dispose: () => void
+}
+
+export type TuiGraphicsApi = {
+  /**
+   * Whether the terminal composites Kitty Unicode placeholder placements.
+   *
+   * Narrower than "speaks the Kitty graphics protocol": WezTerm and Warp
+   * implement the classic protocol but not virtual placements, and a placement
+   * is the only grid-safe way to show an image inside a TUI.
+   */
+  readonly kittyPlaceholders: boolean
+  /**
+   * Transmit a PNG and describe the cells that composite it.
+   *
+   * Nothing is drawn by the transmission itself (`U=1`), so this is safe to
+   * call mid-session, and the terminal scales the image into the
+   * `columns × rows` placement. `path` hands the terminal the file instead of
+   * the bytes — a ~100-byte write whatever the image weighs, at the cost of
+   * the terminal having to be able to read that file.
+   */
+  placeKittyImage(input: { bytes?: Uint8Array; path?: string; columns: number; rows: number }): TuiKittyPlacement
 }
 
 export type TuiEventBus = {
@@ -572,6 +628,17 @@ export type TuiPluginApi = {
   client: NikcliClient
   event: TuiEventBus
   renderer: CliRenderer
+  /**
+   * The terminal's own graphics protocols.
+   *
+   * The host owns this because it is the host's business: the terminal's
+   * capabilities were negotiated at startup, the id space of the terminal's
+   * image table belongs to whoever else is placing images, and the encoding is
+   * a 297-entry diacritic table a plugin would have to embed and could not
+   * check. A plugin decides *what* to show and where; the host says how to
+   * reach the terminal.
+   */
+  graphics: TuiGraphicsApi
   slots: TuiSlots
   plugins: {
     list: () => ReadonlyArray<TuiPluginStatus>

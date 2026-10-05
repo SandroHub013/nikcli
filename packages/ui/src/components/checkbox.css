@@ -25,9 +25,17 @@
     padding: 2px;
     aspect-ratio: 1;
     flex-shrink: 0;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-weak-base);
-    /* background-color: var(--surface-weak); */
+    border-radius: 6px;
+    border: 1px solid var(--border-base);
+    transition:
+      background-color 160ms var(--ease-out-strong),
+      border-color 160ms var(--ease-out-strong),
+      box-shadow 160ms var(--ease-out-strong),
+      scale 160ms var(--ease-out-strong);
+  }
+
+  &:active:not([data-disabled], [data-readonly]) [data-slot="checkbox-checkbox-control"] {
+    scale: 0.92;
   }
 
   [data-slot="checkbox-checkbox-indicator"] {
@@ -38,6 +46,10 @@
     height: 100%;
     color: var(--icon-base);
     opacity: 0;
+    transform: scale(0.6);
+    transition:
+      opacity 140ms var(--ease-out-strong),
+      transform 200ms var(--ease-out-strong);
   }
 
   /* [data-slot="checkbox-checkbox-content"] { */
@@ -99,6 +111,7 @@
   &[data-checked] [data-slot="checkbox-checkbox-indicator"],
   &[data-indeterminate] [data-slot="checkbox-checkbox-indicator"] {
     opacity: 1;
+    transform: scale(1);
     color: var(--icon-invert-base);
   }
 

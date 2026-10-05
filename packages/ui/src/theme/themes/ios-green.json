@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "iOS Green",
+  "id": "ios-green",
+  "light": {
+    "seeds": {
+      "neutral": "#f5f5f7",
+      "primary": "#34c759",
+      "success": "#34c759",
+      "warning": "#ff9500",
+      "error": "#ff3b30",
+      "info": "#30b0c7",
+      "interactive": "#34c759",
+      "diffAdd": "#34c759",
+      "diffDelete": "#ff3b30"
+    },
+    "overrides": {
+      "background-base": "#f5f5f7",
+      "background-weak": "#e4e4e8",
+      "background-strong": "#f5f5f7",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#1c1c1e",
+      "text-base": "#39393e",
+      "text-weak": "#6e6e78",
+      "text-weaker": "#9d9da4",
+      "border-weak-base": "#e4e4e8",
+      "border-base": "#d0d0d8",
+      "border-strong-base": "#34c759"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0d0d12",
+      "primary": "#30d158",
+      "success": "#30d158",
+      "warning": "#ff9f0a",
+      "error": "#ff453a",
+      "info": "#40cbe0",
+      "interactive": "#30d158",
+      "diffAdd": "#30d158",
+      "diffDelete": "#ff453a"
+    },
+    "overrides": {
+      "background-base": "#0d0d12",
+      "background-weak": "#15231e",
+      "background-strong": "#0d0d12",
+      "background-stronger": "#09150f",
+      "surface-raised-stronger-non-alpha": "#09150f",
+      "text-strong": "#e2e2ea",
+      "text-base": "#bebec8",
+      "text-weak": "#7c7c8a",
+      "text-weaker": "#555560",
+      "border-weak-base": "#09150f",
+      "border-base": "#20302c",
+      "border-strong-base": "#30d158"
+    }
+  }
+}

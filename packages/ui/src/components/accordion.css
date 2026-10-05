@@ -32,7 +32,7 @@
         user-select: none;
 
         background-color: var(--surface-base);
-        border: 1px solid var(--border-weak-base);
+        border: var(--hairline, 1px) solid var(--border-weak-base);
         border-radius: var(--radius-md);
         overflow: clip;
         color: var(--text-strong);
@@ -65,7 +65,7 @@
       }
 
       [data-slot="accordion-content"] {
-        border: 1px solid var(--border-weak-base);
+        border: var(--hairline, 1px) solid var(--border-weak-base);
         border-top: none;
         border-bottom-left-radius: var(--radius-md);
         border-bottom-right-radius: var(--radius-md);
@@ -77,11 +77,11 @@
       width: 100%;
 
       &[data-expanded] {
-        animation: slideDown 250ms ease-out;
+        animation: slideDown 250ms var(--ease-out-strong);
       }
 
       &[data-closed] {
-        animation: slideUp 250ms ease-out;
+        animation: slideUp 250ms var(--ease-out-strong);
       }
     }
   }

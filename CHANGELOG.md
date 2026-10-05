@@ -3,6 +3,214 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.429.0 (October 2026)
+
+- No notable changes
+
+## v1.428.0 (October 2026)
+
+## Core
+
+- Bitmap frames for panels without a layout engine, sidebar block (@claude)
+- Device SDK, bridge plugin, gadget tool and /gadget TUI commands (@claude)
+
+**Thank you to 2 community contributors:**
+
+- @claude:
+  - specs: EOT-21 gadgets device SDK, bridge and agent tool
+  - feat(gadgets): device SDK, bridge plugin, gadget tool and /gadget TUI commands
+  - feat(gadgets): bitmap frames for panels without a layout engine, sidebar block
+  - fix(gadgets): review findings, and a portable C client tested against the real bridge
+  - Merge remote-tracking branch 'origin/spec/eot-21-gadgets' into spec/eot-21-gadgets
+  - fix(gadgets): second review round
+  - fix(gadgets): no quantified regexes over external input (CodeQL)
+- @nikomatt69:
+  - Merge pull request #300 from nikcli/spec/eot-21-gadgets
+
+## v1.427.0 (October 2026)
+
+## Mobile
+
+- Call GET /mod without trailing slash (@claude)
+
+**Thank you to 1 community contributor:**
+
+- @claude:
+  - fix(mobile): call GET /mod without trailing slash
+
+## v1.426.0 (October 2026)
+
+## Core
+
+- Custom providers by protocol; drop ai from the workspace (@nikomatt69)
+- Add Google Vertex and Vercel Gateway providers; enhance runtime functionality (@nikomatt69)
+- Migrate from legacy AI SDK to new session LLM types (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor: migrate from legacy AI SDK to new session LLM types
+  - feat(llm): add Google Vertex and Vercel Gateway providers; enhance runtime functionality
+  - feat(provider): custom providers by protocol; drop ai from the workspace
+
+## v1.425.0 (October 2026)
+
+## Core
+
+- Make native @nikcli-ai/llm streaming the default; isolate the AI SDK (@nikomatt69)
+- Media input, adaptive thinking, fetch override; drop the ai dependency (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(llm): media input, adaptive thinking, fetch override; drop the ai dependency
+  - feat(session): make native @nikcli-ai/llm streaming the default; isolate the AI SDK
+
+## v1.424.0 (October 2026)
+
+## Core
+
+- Expand mod functionality with UI integration and localization (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mods): expand mod functionality with UI integration and localization
+
+## v1.423.0 (October 2026)
+
+## Core
+
+- Apply prettier to files failing ci-pipeline format:check (@nikomatt69)
+- Clean up test files and enhance plugin error handling (@nikomatt69)
+- Improve code formatting and consistency in test and plugin files (@nikomatt69)
+- Enhance mod functionality with new event handling and UI integration (@nikomatt69)
+- Enhance mod API with UI rendering and event handling (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mods): enhance mod API with UI rendering and event handling
+  - feat(mods): enhance mod functionality with new event handling and UI integration
+  - refactor(tui): improve code formatting and consistency in test and plugin files
+  - refactor(tui): clean up test files and enhance plugin error handling
+  - style(test): apply prettier to files failing ci-pipeline format:check
+
+## v1.422.0 (October 2026)
+
+## Core
+
+- Introduce mod functionality and validation (@nikomatt69)
+- Add aggregate filtering to /sync/outbox endpoint (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(sync): add aggregate filtering to /sync/outbox endpoint
+  - feat(mods): introduce mod functionality and validation
+
+## v1.421.0 (October 2026)
+
+- No notable changes
+
+## v1.420.0 (October 2026)
+
+- No notable changes
+
+## v1.419.0 (September 2026)
+
+- No notable changes
+
+## v1.418.0 (September 2026)
+
+## Desktop
+
+- Native Liquid Glass window and refined workbench (@nikomatt69)
+- Glass composer (@nikomatt69)
+- Use the pixel wordmark as the logo (@nikomatt69)
+- Start the sidecar from the home directory (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(desktop): start the sidecar from the home directory
+  - feat(ui): 225 more desktop themes from TUI, mobile and curated palettes
+  - feat(ui): use the pixel wordmark as the logo
+  - feat(ui): Liquid Glass material and refined primitives
+  - feat(app): glass composer
+  - feat(desktop): native Liquid Glass window and refined workbench
+  - feat(web): Liquid Glass across site, docs and studio
+
+## v1.417.0 (September 2026)
+
+## Core
+
+- Characterize provider retry, usage and error handling (EOT-11) (@nikomatt69)
+- Load todoread, lsp and artifact from the first request (@nikomatt69)
+
+## Mobile
+
+- Compact session view with wallpaper backdrop and empty-state hero (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mobile): compact session view with wallpaper backdrop and empty-state hero
+  - feat(tools): load todoread, lsp and artifact from the first request
+  - test(session): characterize provider retry, usage and error handling (EOT-11)
+
+## v1.416.0 (September 2026)
+
+## Core
+
+- Prompt closes on its own surface; footer stays on one row (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - fix(tui): prompt closes on its own surface; footer stays on one row
+
+## v1.415.0 (September 2026)
+
+## Core
+
+- Introduce deferred tool loading mechanism and enhance tool registry (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(tools): introduce deferred tool loading mechanism and enhance tool registry
+
+## v1.414.0 (September 2026)
+
+## Core
+
+- Strip the trailing space Prettier still flags in lifecycle-counters test (@nikomatt69)
+- Remove trailing whitespace in lifecycle-counters test file (@nikomatt69)
+- Authenticate the changelog release lookup; treat Windows EPERM as lock contention (@nikomatt69)
+- V2 plugin command surface; migrate internal:browser to v2 (EOT-14) (@nikomatt69)
+- Interrupt an instance scope from inside its ALS context; pin B31 by behaviour (@nikomatt69)
+- Pin the client event batch cap and correct EOT-04's stale 'uncapped' note (@nikomatt69)
+- Pin the exit-code seam, not just the lookup (@nikomatt69)
+- Unblock plugin storage eviction regression test (@nikomatt69)
+- Enhance performance baseline validation and reporting (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(perf): enhance performance baseline validation and reporting
+  - test(tui): unblock plugin storage eviction regression test
+  - test(cli): pin the exit-code seam, not just the lookup
+  - docs(specs): record headless prompt fix in EOT-18 and the read/write finding in EOT-19
+  - test(tui): pin the client event batch cap and correct EOT-04's stale 'uncapped' note
+  - fix(effect): interrupt an instance scope from inside its ALS context; pin B31 by behaviour
+  - docs(specs): EOT-14 is blocked on a v2 command surface, not on plugin order
+  - docs(specs): ledger for 2026-09-30 — what landed and what each open item is waiting for
+  - feat(tui): v2 plugin command surface; migrate internal:browser to v2 (EOT-14)
+  - fix(ci): authenticate the changelog release lookup; treat Windows EPERM as lock contention
+  - fix(test): remove trailing whitespace in lifecycle-counters test file
+  - fix(ci): strip the trailing space Prettier still flags in lifecycle-counters test
+
 ## v1.406.0 (September 2026)
 
 ## Core

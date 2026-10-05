@@ -1,6 +1,8 @@
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Effect, Layer, Schema } from "effect"
 import { Config } from "@/config/config"
+import { Log } from "@nikcli-ai/util/log"
+import type * as ChatBotModule from "@/chatbot"
 import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effect"
 
 /**
@@ -32,9 +34,13 @@ export namespace ChatbotHttpApi {
     removed: Schema.Boolean,
   }).annotate({ identifier: "ChatbotStopResult" })
 
-  const NamePath = Schema.Struct({ name: Schema.String }).annotate({ identifier: "ChatbotNamePath" })
+  const NamePath = Schema.Struct({ name: Schema.String }).annotate({
+    identifier: "ChatbotNamePath",
+  })
 
   const fromPromise = <A>(fn: () => Promise<A>) => Effect.promise(fn).pipe(Effect.orDie)
+
+  const log = Log.create({ service: "server.chatbot" })
 
   /**
    * Loaded on demand, never at module scope.
@@ -46,10 +52,44 @@ export namespace ChatbotHttpApi {
    */
   const chatbot = () => import("@/chatbot").then((module) => module.ChatBot)
 
+  type ChatBotModule = Awaited<ReturnType<typeof chatbot>>
+
+  /**
+   * The same load, for a read that must not fail because of it.
+   *
+   * `@/chatbot` pulls in every chat platform SDK, `@slack/web-api` among them,
+   * and that SDK's axios stack touches the network while it initialises. On a
+   * machine that cannot reach the registry or Slack, the import itself throws —
+   * and `GET /chatbot/bots`, which only reports which connectors are configured
+   * and which are up, answered 500. A listing that cannot reach a platform SDK
+   * still knows every other connector, so it degrades to an empty list and says
+   * why, rather than refusing the read.
+   */
+  async function chatbotOrEmpty(): Promise<ChatBotModule | undefined> {
+    try {
+      return await chatbot()
+    } catch (error) {
+      log.warn("chat platform SDKs unavailable; reporting no bots", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return undefined
+    }
+  }
+
   export const Group = HttpApiGroup.make("chatbot")
     .add(HttpApiEndpoint.get("bots", "/bots", { success: Schema.Array(Bot) }))
-    .add(HttpApiEndpoint.post("start", "/bots/:name/start", { params: NamePath, success: StartResult }))
-    .add(HttpApiEndpoint.post("stop", "/bots/:name/stop", { params: NamePath, success: StopResult }))
+    .add(
+      HttpApiEndpoint.post("start", "/bots/:name/start", {
+        params: NamePath,
+        success: StartResult,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("stop", "/bots/:name/stop", {
+        params: NamePath,
+        success: StopResult,
+      }),
+    )
     .prefix("/chatbot")
 
   export const Api = HttpApi.make("nikcli").add(Group)
@@ -89,8 +129,11 @@ export namespace ChatbotHttpApi {
      */
     bots: () =>
       fromPromise(async () => {
-        const ChatBot = await chatbot()
+        const ChatBot = await chatbotOrEmpty()
         const config = await configGet()
+        // Without the SDKs there is no platform to name, so the honest answer is
+        // an empty list — not a 500 on a read the caller cannot act on anyway.
+        if (!ChatBot) return []
         const running = ChatBot.getAllBots()
         const entries = []
         for (const [name, raw] of Object.entries(config.connectors ?? {})) {
@@ -111,25 +154,37 @@ export namespace ChatbotHttpApi {
       Effect.flatMap(InstanceState.context, (instance) =>
         fromPromise(async () => {
           const entry = await connector(params.name)
-          if (!entry) return { running: false, error: `No chat connector named ${params.name}` }
+          if (!entry)
+            return {
+              running: false,
+              error: `No chat connector named ${params.name}`,
+            }
           try {
             // Lazily imported: the handlers pull the agent and provider chain,
             // which no request that never starts a bot should pay for.
             const { BotHandlers } = await import("@/chatbot/handlers")
             const bot = await BotHandlers.ensureAiBot(instance, params.name, entry)
             if (!bot) {
-              return { running: false, error: `Could not start ${params.name} — check credentials (nikcli bot auth)` }
+              return {
+                running: false,
+                error: `Could not start ${params.name} — check credentials (nikcli bot auth)`,
+              }
             }
             return { running: true }
           } catch (cause) {
-            return { running: false, error: cause instanceof Error ? cause.message : String(cause) }
+            return {
+              running: false,
+              error: cause instanceof Error ? cause.message : String(cause),
+            }
           }
         }),
       ),
 
     // `removed: false` is not an error — the manager says "was not running".
     stop: ({ params }: { params: { name: string } }) =>
-      fromPromise(async () => ({ removed: (await chatbot()).removeBot(params.name) })),
+      fromPromise(async () => ({
+        removed: (await chatbot()).removeBot(params.name),
+      })),
   }
 
   export const HandlersLive = HttpApiBuilder.group(Api, "chatbot", (builder) =>

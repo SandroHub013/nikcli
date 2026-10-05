@@ -96,6 +96,7 @@ import {
 } from "./view"
 import { bodyColumns, chromeRows, type StyleOf } from "@tui/context/component-tokens"
 import { AssistantMessage, PendingUserMessage, UserMessage } from "./parts"
+import { Replace } from "../../feature-plugins/mods/render"
 import { formatInstructionDelta, visibleInstructionNotices } from "@nikcli-ai/util/instruction-delta"
 import { getScrollAcceleration, scrollChildIntoView } from "@tui/util/scroll"
 
@@ -1444,29 +1445,48 @@ export function Session() {
                       <></>
                     </Match>
                     <Match when={turn.role === "user"}>
-                      <UserMessage
-                        style={userStyle()}
-                        index={windowed().baseIndex + index()}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage
-                              messageID={turn.messageID}
-                              sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt.set(promptInfo)}
-                            />
-                          ))
-                        }}
-                        turn={turn}
-                        pending={pending()}
-                      />
+                      <Replace
+                        component="UserMessage"
+                        requestId={turn.messageID}
+                        sessionID={route.sessionID}
+                        props={{ text: String((turn.body[0] as { text?: string } | undefined)?.text ?? "") }}
+                      >
+                        <UserMessage
+                          style={userStyle()}
+                          index={windowed().baseIndex + index()}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            dialog.replace(() => (
+                              <DialogMessage
+                                messageID={turn.messageID}
+                                sessionID={route.sessionID}
+                                setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                              />
+                            ))
+                          }}
+                          turn={turn}
+                          pending={pending()}
+                        />
+                      </Replace>
                     </Match>
                     <Match when={turn.role === "assistant"}>
-                      <AssistantMessage
-                        last={lastAssistant()?.id === turn.messageID}
-                        turn={turn}
-                        usage={turnUsage()?.get(turn.messageID)}
-                      />
+                      <Replace
+                        component="AssistantMessage"
+                        requestId={turn.messageID}
+                        sessionID={route.sessionID}
+                        props={{
+                          text: (turn.body as Array<{ type?: string; text?: string }>)
+                            .filter((entry) => entry.type === "text")
+                            .map((entry) => entry.text ?? "")
+                            .join("\n"),
+                        }}
+                      >
+                        <AssistantMessage
+                          last={lastAssistant()?.id === turn.messageID}
+                          turn={turn}
+                          usage={turnUsage()?.get(turn.messageID)}
+                        />
+                      </Replace>
                     </Match>
                   </Switch>
                 )}

@@ -201,16 +201,14 @@ export function GitStatusBar({ gitState, loading = false, onPress, onRefresh }: 
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             style={{
-              minHeight: 44,
+              alignSelf: "flex-start",
+              height: 30,
               flexDirection: "row",
               alignItems: "center",
-              gap: 10,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 12,
-              backgroundColor: hexToRgba(palette.ink, isDark ? 0.06 : 0.04),
-              borderWidth: 1,
-              borderColor: palette.border,
+              gap: 8,
+              paddingHorizontal: 10,
+              borderRadius: 999,
+              backgroundColor: hexToRgba(palette.ink, isDark ? 0.08 : 0.06),
             }}
           >
             <GitBranch size={13} color={palette.accentLight} strokeWidth={2} />
@@ -244,20 +242,22 @@ export function GitStatusBar({ gitState, loading = false, onPress, onRefresh }: 
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={{
-          minHeight: 44,
+          alignSelf: "flex-start",
+          maxWidth: "100%",
+          height: 30,
           flexDirection: "row",
           alignItems: "center",
-          gap: 10,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 12,
-          backgroundColor: hexToRgba(palette.ink, isDark ? 0.06 : 0.04),
-          borderWidth: 1,
-          borderColor: palette.border,
+          gap: 8,
+          paddingLeft: 10,
+          paddingRight: 4,
+          borderRadius: 999,
+          backgroundColor: hexToRgba(palette.ink, isDark ? 0.08 : 0.06),
         }}
       >
         <GitBranch size={13} color={palette.accentLight} strokeWidth={2} />
-        <Text style={{ fontSize: 11, fontWeight: "600", color: palette.ink }}>{gitState.branch}</Text>
+        <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12, fontWeight: "600", color: palette.ink }}>
+          {gitState.branch}
+        </Text>
 
         {totalChanges > 0 && (
           <Animated.View style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: statusTransitionAnim }}>
@@ -335,7 +335,7 @@ export function GitStatusBar({ gitState, loading = false, onPress, onRefresh }: 
           </>
         )}
 
-        <Animated.View style={{ marginLeft: "auto", transform: [{ scale: refreshScaleAnim }] }}>
+        <Animated.View style={{ transform: [{ scale: refreshScaleAnim }] }}>
           <Pressable
             onPress={(e) => {
               e.stopPropagation()
@@ -343,11 +343,11 @@ export function GitStatusBar({ gitState, loading = false, onPress, onRefresh }: 
             }}
             onPressIn={handleRefreshPressIn}
             onPressOut={handleRefreshPressOut}
-            hitSlop={10}
+            hitSlop={8}
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 10,
+              width: 26,
+              height: 26,
+              borderRadius: 13,
               alignItems: "center",
               justifyContent: "center",
             }}

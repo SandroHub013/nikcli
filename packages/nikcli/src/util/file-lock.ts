@@ -62,6 +62,18 @@ export namespace FileLock {
     return stat ? Date.now() - stat.mtimeMs : undefined
   }
 
+  /**
+   * The lock is held. Windows reports a file whose unlink is still pending, or
+   * one a contender has open, as EPERM/EBUSY/EACCES rather than EEXIST — the
+   * holder is releasing it, so wait like any other contender. Elsewhere those
+   * codes are real permission errors and must surface.
+   */
+  function contended(error: unknown) {
+    const code = (error as { code?: string }).code
+    if (code === "EEXIST") return true
+    return process.platform === "win32" && (code === "EPERM" || code === "EBUSY" || code === "EACCES")
+  }
+
   function sleep(ms: number) {
     return new Promise<void>((resolve) => setTimeout(resolve, ms))
   }
@@ -96,7 +108,7 @@ export namespace FileLock {
           },
         }
       } catch (error) {
-        if ((error as { code?: string }).code !== "EEXIST") throw error
+        if (!contended(error)) throw error
       }
 
       const held = await age(file)

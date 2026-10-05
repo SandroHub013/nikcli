@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Sakura Night",
+  "id": "sakura-night",
+  "light": {
+    "seeds": {
+      "neutral": "#f4f4f6",
+      "primary": "#a02c53",
+      "success": "#3d7d58",
+      "warning": "#b35626",
+      "error": "#ac2d2e",
+      "info": "#3f7988",
+      "interactive": "#a02c53",
+      "diffAdd": "#395898",
+      "diffDelete": "#b94a4a"
+    },
+    "overrides": {
+      "background-base": "#f4f4f6",
+      "background-weak": "#e8e7eb",
+      "background-strong": "#f4f4f6",
+      "background-stronger": "#efeef1",
+      "surface-raised-stronger-non-alpha": "#efeef1",
+      "text-strong": "#191820",
+      "text-base": "#302e3a",
+      "text-weak": "#5b586a",
+      "text-weaker": "#918f9b",
+      "border-weak-base": "#cfced4",
+      "border-base": "#b5b4bb",
+      "border-strong-base": "#a02c53"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#0d0c12",
+      "primary": "#da628a",
+      "success": "#83c29d",
+      "warning": "#e18b60",
+      "error": "#de7476",
+      "info": "#7db5c5",
+      "interactive": "#da628a",
+      "diffAdd": "#829ad1",
+      "diffDelete": "#e06c75"
+    },
+    "overrides": {
+      "background-base": "#0d0c12",
+      "background-weak": "#1c1a28",
+      "background-strong": "#0d0c12",
+      "background-stronger": "#15131d",
+      "surface-raised-stronger-non-alpha": "#15131d",
+      "text-strong": "#edecee",
+      "text-base": "#cfcdd6",
+      "text-weak": "#9692aa",
+      "text-weaker": "#666375",
+      "border-weak-base": "#373347",
+      "border-base": "#504c61",
+      "border-strong-base": "#da628a"
+    }
+  }
+}

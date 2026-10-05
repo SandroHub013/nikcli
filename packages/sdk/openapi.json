@@ -16409,6 +16409,244 @@
         ]
       }
     },
+    "/mod": {
+      "get": {
+        "tags": ["mod"],
+        "operationId": "mod.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mod/ui/panes": {
+      "get": {
+        "tags": ["mod"],
+        "operationId": "mod.panes",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModPane"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.panes({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mod/ui/render": {
+      "post": {
+        "tags": ["mod"],
+        "operationId": "mod.render",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ModRenderOutput",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModRenderOutput"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModRenderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.render({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mod/ui/event": {
+      "post": {
+        "tags": ["mod"],
+        "operationId": "mod.event",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ModEventOutput",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModEventOutput"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModEventInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.event({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty": {
       "get": {
         "tags": ["pty"],
@@ -21569,6 +21807,52 @@
             "required": false
           },
           {
+            "name": "afterAggregate",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "afterID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "aggregate",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict the page to one aggregate. Optional and additive: without it the endpoint behaves exactly as before. It exists because `seq` counts per aggregate, so a project-wide `since` addresses every aggregate's own numbering at once — the mismatch behind the silent cross-aggregate loss in specs/effect-tui/15-sync-snapshots-watermarks.md. A consumer holding per-aggregate cursors can ask for one aggregate at a time instead of over-fetching everything above the lowest cursor and discarding the rest."
+            },
+            "required": false
+          },
+          {
             "name": "directory",
             "in": "query",
             "required": false,
@@ -21697,6 +21981,21 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "readiness",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           },
           {
             "name": "token",
@@ -30682,6 +30981,17 @@
                       }
                     ]
                   },
+                  "protocol": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["openai-compatible", "openai-responses", "anthropic", "gemini"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "timeout": {
                     "anyOf": [
                       {
@@ -31976,6 +32286,75 @@
               }
             ]
           },
+          "mod": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "prependPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "appendPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowManagedModsOnly": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowModsToOverrideDenyRules": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "disableAllMods": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "snapshot": {
             "anyOf": [
               {
@@ -32754,6 +33133,19 @@
                       {
                         "type": "object",
                         "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eager": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
                           "type": "string"
                         }
                       },
@@ -40285,6 +40677,17 @@
                       }
                     ]
                   },
+                  "protocol": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["openai-compatible", "openai-responses", "anthropic", "gemini"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "timeout": {
                     "anyOf": [
                       {
@@ -41579,6 +41982,75 @@
               }
             ]
           },
+          "mod": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "prependPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "appendPlugins": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowManagedModsOnly": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "allowModsToOverrideDenyRules": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "disableAllMods": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "snapshot": {
             "anyOf": [
               {
@@ -42357,6 +42829,19 @@
                       {
                         "type": "object",
                         "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "eager": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
                           "type": "string"
                         }
                       },
@@ -58782,6 +59267,285 @@
         "required": ["reply"],
         "additionalProperties": false
       },
+      "ModInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": ["prepend", "user", "append", "builtin"]
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["id", "name", "tier", "rank", "events", "tools", "commands"],
+        "additionalProperties": false
+      },
+      "ModPanePlacement": {
+        "type": "string",
+        "enum": ["dock", "inline"]
+      },
+      "ModPane": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/ModPanePlacement"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["id", "plugin", "title", "placement"],
+        "additionalProperties": false
+      },
+      "ModRenderInput": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "props": {
+            "type": "string"
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["terminal", "mobile", "desktop", "ade"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["component", "props"],
+        "additionalProperties": false
+      },
+      "ModRenderOutput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["default", "tree"]
+          },
+          "tree": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "props": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "ModEventInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["press", "input", "select", "close", "message"]
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "ModEventOutput": {
+        "type": "object",
+        "properties": {
+          "handled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["handled"],
+        "additionalProperties": false
+      },
       "Pty_1": {
         "type": "object",
         "properties": {
@@ -60223,6 +60987,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "deferred": {
+            "type": "boolean"
+          },
           "togglable": {
             "type": "boolean"
           },
@@ -61134,6 +61901,29 @@
           },
           "hasMore": {
             "type": "boolean"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "aggregate": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["seq", "aggregate", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["events", "hasMore"],
@@ -63746,6 +64536,9 @@
     },
     {
       "name": "permission"
+    },
+    {
+      "name": "mod"
     },
     {
       "name": "pty"

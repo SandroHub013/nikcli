@@ -25,7 +25,8 @@ import {
   Terminal,
   X,
 } from "lucide-react-native"
-import { SPRING_CONFIG, SPRING_MICRO, usePrefersReducedMotion } from "@/lib/animation"
+import { SPRING_CONFIG, SPRING_MICRO, usePrefersReducedMotion, usePrefersReducedTransparency } from "@/lib/animation"
+import { useUIStore } from "@/lib/store"
 import { triggerHaptic } from "@/lib/haptics"
 import { hexToRgba, useAppTheme } from "@/lib/theme"
 import { AdaptiveBlur } from "@/components/GlassView"
@@ -107,11 +108,11 @@ const CHAR_COUNT_THRESHOLD = 100
 const SEGMENT_W = 44
 // TextInput line metrics
 const INPUT_LINE_HEIGHT = 22
-const INPUT_PADDING_TOP = 14
-const INPUT_PADDING_BOTTOM = 12
-const INPUT_MIN_ROWS = 2
+const INPUT_PADDING_TOP = 12
+const INPUT_PADDING_BOTTOM = 8
+const INPUT_MIN_ROWS = 1
 const INPUT_MAX_ROWS = 6
-const INPUT_MIN_HEIGHT = INPUT_PADDING_TOP + INPUT_MIN_ROWS * INPUT_LINE_HEIGHT + INPUT_PADDING_BOTTOM // 68
+const INPUT_MIN_HEIGHT = INPUT_PADDING_TOP + INPUT_MIN_ROWS * INPUT_LINE_HEIGHT + INPUT_PADDING_BOTTOM // 42
 const INPUT_MAX_HEIGHT = INPUT_PADDING_TOP + INPUT_MAX_ROWS * INPUT_LINE_HEIGHT + INPUT_PADDING_BOTTOM // 156
 
 // Stable empty defaults so memo() on child components sees the same
@@ -167,6 +168,9 @@ export function SessionComposer({
   onDismissError,
 }: SessionComposerProps) {
   const { palette, isDark } = useAppTheme()
+  const wallpaper = useUIStore((state) => state.wallpaper)
+  const reducedTransparency = usePrefersReducedTransparency()
+  const hasWallpaper = !reducedTransparency && wallpaper.enabled && Boolean(wallpaper.uri)
   const prefersReducedMotion = usePrefersReducedMotion()
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
@@ -422,7 +426,7 @@ export function SessionComposer({
   return (
     <View
       style={{
-        backgroundColor: isDark ? palette.surface : palette.background,
+        backgroundColor: hasWallpaper ? "transparent" : isDark ? palette.surface : palette.background,
         paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 10),
         marginBottom: keyboardOpen ? keyboardHeight : 0,
       }}
@@ -522,8 +526,8 @@ export function SessionComposer({
         >
           <View
             style={{
-              borderRadius: 14,
-              borderWidth: 1,
+              borderRadius: 999,
+              borderWidth: StyleSheet.hairlineWidth,
               borderColor: cleaned
                 ? hexToRgba(palette.danger, 0.22)
                 : showOfflineBanner
@@ -538,21 +542,22 @@ export function SessionComposer({
                   : isDark
                     ? "rgba(255,255,255,0.045)"
                     : "rgba(255,255,255,0.72)",
-              paddingHorizontal: 14,
-              paddingVertical: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 5,
               flexDirection: "row",
               alignItems: "center",
-              gap: 8,
+              gap: 6,
             }}
           >
-            {cleaned ? <Lock size={14} color={palette.danger} strokeWidth={2.2} /> : null}
+            {cleaned ? <Lock size={12} color={palette.danger} strokeWidth={2.2} /> : null}
             <Text
               style={{
                 flex: 1,
                 color: cleaned ? palette.danger : showOfflineBanner ? palette.warn : palette.accentLight,
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: "600",
               }}
+              numberOfLines={1}
             >
               {cleaned
                 ? "This worktree was cleaned up"
@@ -1262,8 +1267,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
     paddingHorizontal: 12,
-    paddingBottom: 12,
-    paddingTop: 11,
+    paddingBottom: 8,
+    paddingTop: 6,
   },
   segment: {
     flexDirection: "row",

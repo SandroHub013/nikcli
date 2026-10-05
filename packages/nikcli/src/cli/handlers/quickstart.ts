@@ -3,7 +3,7 @@ import { Runtime } from "../framework/runtime"
 import { passthrough } from "../framework/args"
 import { Commands } from "../commands"
 import { UI } from "@/cli/ui"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { spawn } from "bun"
 import { EOL } from "os"
 

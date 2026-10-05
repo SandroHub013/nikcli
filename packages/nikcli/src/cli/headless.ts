@@ -16,8 +16,10 @@ export function isHeadless(input: { env?: NodeJS.ProcessEnv; stdinIsTTY?: boolea
   const value = env.NIKCLI_HEADLESS?.toLowerCase()
   if (value === "true" || value === "1") return true
   if (env.NIKCLI_TERMINAL === "1") return false
+  // A stream that is not a terminal has `isTTY === undefined`, never `false`,
+  // so the check has to be falsy or a pipe / `< /dev/null` reads as interactive.
   const stdinIsTTY = input.stdinIsTTY ?? process.stdin.isTTY
-  return stdinIsTTY === false
+  return !stdinIsTTY
 }
 
 /**

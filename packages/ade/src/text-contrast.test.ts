@@ -150,7 +150,8 @@ describe("no text colour resolves to transparent", () => {
       const lines = readFileSync(file, "utf-8").split(/\r?\n/)
       lines.forEach((line, i) => {
         const match = /(?<![-\w])color:\s*var\((--ade-[a-z-]+)\)/.exec(line)
-        if (match && clear.includes(match[1]!)) offenders.push(`${file.slice(import.meta.dir.length + 1)}:${i + 1} ${line.trim()}`)
+        if (match && clear.includes(match[1]!))
+          offenders.push(`${file.slice(import.meta.dir.length + 1)}:${i + 1} ${line.trim()}`)
       })
     }
     expect(offenders).toEqual([])

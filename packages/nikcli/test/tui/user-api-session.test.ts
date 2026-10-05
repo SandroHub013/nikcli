@@ -5,16 +5,16 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 
-// `UserSession` resolves the token file once, at import time, from
-// `Global.Path.data` — and the preload wipes `XDG_DATA_HOME`, which would land
-// it on the *real* one in this developer's home. Point it at an empty test home
-// before the module graph loads, so "no stored token" means what it says.
+// The preload wipes `XDG_DATA_HOME`, which would land the token file on the
+// *real* one in this developer's home. Point it at an empty test home before the
+// module graph loads, so "no stored token" means what it says.
 const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-user-api-home-"))
 process.env.NIKCLI_TEST_HOME = testHome
 preserveTestEnv(["NIKCLI_TEST_HOME"])
 await fs.mkdir(path.join(testHome, "data"), { recursive: true })
 
 const { UserApi } = await import("@tui/util/user-api")
+const { UserSession } = await import("@nikcli-ai/util/user-session")
 
 afterAll(async () => {
   await removeTestDir(testHome)
@@ -53,7 +53,10 @@ function sdk(answer: Response | (() => never), url = "http://nikcli.local") {
 describe("UserApi.session", () => {
   it("reports the account the server returns", async () => {
     const t = sdk(Response.json(user))
-    expect(await UserApi.session(t.sdk)).toEqual({ status: "signed-in", user: user as never })
+    expect(await UserApi.session(t.sdk)).toEqual({
+      status: "signed-in",
+      user: user as never,
+    })
   })
 
   it("asks even with no stored token", async () => {
@@ -97,5 +100,42 @@ describe("UserApi.session", () => {
     expect(await UserApi.me(sdk(Response.json(user)).sdk)).toEqual(user as never)
     expect(await UserApi.me(sdk(new Response("", { status: 401 })).sdk)).toBeNull()
     expect(await UserApi.me(sdk(new Response("", { status: 503 })).sdk)).toBeNull()
+  })
+})
+
+/**
+ * The token file is resolved per call, not bound at import.
+ *
+ * `Global.Path.data` is a getter so a host that sets `NIKCLI_TEST_HOME` after
+ * this module loads is still honoured. Binding it once at import time threw
+ * that away and made the answer depend on which file imported this one first:
+ * in a shared test process the earliest import fixed the path at the real
+ * machine's home, so a later test asking "is a token sent when the store is
+ * empty?" was answered with the developer's own token.
+ *
+ * This asserts the *late* half, which is the half that regressed: the home
+ * changes after the module is loaded, and the write and the read must follow it
+ * to the new home rather than to whichever one was in effect at import.
+ */
+describe("UserSession token path", () => {
+  it("follows a home that changes after import", async () => {
+    const late = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-user-session-late-"))
+    try {
+      await fs.mkdir(path.join(late, "data"), { recursive: true })
+      process.env.NIKCLI_TEST_HOME = late
+
+      await UserSession.save("late-token")
+      expect(await UserSession.get()).toBe("late-token")
+
+      // The file is under the *new* home, so the old home never saw a token.
+      const written = await fs.readdir(path.join(late, "data"))
+      expect(written).toContain("user-session.token")
+
+      await UserSession.clear()
+      expect(await UserSession.get()).toBeNull()
+    } finally {
+      process.env.NIKCLI_TEST_HOME = testHome
+      await removeTestDir(late)
+    }
   })
 })

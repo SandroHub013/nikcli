@@ -13,6 +13,7 @@ import { ConfigMarkdown } from "../config/markdown"
 import { EventError } from "./event-error"
 import { MessageV2 } from "./message-v2"
 import { Plugin } from "../plugin"
+import { Mod } from "../mod"
 import { Provider } from "../provider/provider"
 import { Session } from "."
 import { SessionGoal } from "./goal"
@@ -348,11 +349,98 @@ export namespace PromptCommands {
   const quoteTrimRegex = /^["']|["']$/g
 
   /**
+   * A slash command about to run. With no mod on `command.run` and no mod command, this is
+   * `commandImpl` exactly. A `command.run` mod can rewrite the arguments, or answer with
+   * `{ text }` (no model turn); a command a mod registered runs at once, also with no model
+   * turn, and its text is the reply.
+   */
+  export async function command(deps: Deps, payload: CommandInput): Promise<MessageV2.WithParts> {
+    const input = CommandInput.parse(payload)
+    const found = await deps.commandGet(input.command)
+    if (!found) throw new Error(`Command "${input.command}" not found`)
+    if (!found.mod && !(await Mod.handles("command.run"))) return commandImpl(deps, payload)
+
+    const out = await Mod.commandRun(
+      {
+        name: input.command,
+        arguments: input.arguments,
+        sessionID: input.sessionID,
+        kind: found.mod ? "mod" : "template",
+      },
+      async (event) => {
+        if (!found.mod) return commandImpl(deps, { ...payload, arguments: event.arguments })
+        const registered = await Mod.commandOf(input.command)
+        if (!registered) throw new Error(`Command "${input.command}" is no longer registered`)
+        return { text: Mod.commandText(await registered.run(event.arguments)) }
+      },
+    )
+    if ("info" in out) return out as MessageV2.WithParts
+    return modReply(deps, input, out.text)
+  }
+
+  /**
+   * The transcript of a command that ran without a model turn: what the user typed, and the
+   * text the command answered with. Persisted like any exchange, so it survives a reload.
+   */
+  async function modReply(deps: Deps, input: CommandInput, text: string | undefined): Promise<MessageV2.WithParts> {
+    const ctx = deps.currentContext()
+    const agent = input.agent ?? (await deps.defaultAgent())
+    const model = input.model ? Provider.parseModel(input.model) : await deps.lastModel(input.sessionID)
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: { created: Date.now() },
+      role: "user",
+      agent,
+      model: { providerID: model.providerID, modelID: model.modelID },
+    }
+    await deps.sessionUpdateMessage(userMsg)
+    await deps.sessionUpdatePart({
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      text: `/${input.command}${input.arguments ? ` ${input.arguments}` : ""}`,
+    })
+    const now = Date.now()
+    const info: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      parentID: userMsg.id,
+      mode: agent,
+      agent,
+      cost: 0,
+      path: { cwd: ctx.directory, root: ctx.worktree },
+      time: { created: now, completed: now },
+      role: "assistant",
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: model.modelID,
+      providerID: model.providerID,
+      finish: "stop",
+    }
+    await deps.sessionUpdateMessage(info)
+    const parts: MessageV2.Part[] = []
+    if (text) {
+      const part: MessageV2.Part = {
+        type: "text",
+        id: Identifier.ascending("part"),
+        messageID: info.id,
+        sessionID: input.sessionID,
+        text,
+        time: { start: now, end: now },
+      }
+      await deps.sessionUpdatePart(part)
+      parts.push(part)
+    }
+    return { info, parts }
+  }
+
+  /**
    * Resolve a slash command: parse arguments, expand `$N` placeholders,
    * inline any `!<shell>` snippets, pick the model, then call the model
    * loop with the resulting message parts.
    */
-  export async function command(deps: Deps, payload: CommandInput): Promise<MessageV2.WithParts> {
+  async function commandImpl(deps: Deps, payload: CommandInput): Promise<MessageV2.WithParts> {
     const input = CommandInput.parse(payload)
     const command = await deps.commandGet(input.command)
     if (!command) throw new Error(`Command "${input.command}" not found`)

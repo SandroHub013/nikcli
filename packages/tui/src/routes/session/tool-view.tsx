@@ -116,6 +116,7 @@ import {
 import { friendlyErrorMessage, shareErrorMessage } from "../../util/error-message"
 import { Link } from "../../ui/link"
 import { use } from "./session-context"
+import { Replace } from "../../feature-plugins/mods/render"
 
 /**
  * One line standing in for a finished run of read-only tool calls.
@@ -153,7 +154,33 @@ export type ToolEntry = {
   readonly state: ToolPart["state"]
 }
 
+/**
+ * A tool call's row. `ToolUse` mods can draw it instead (`ui.render`, request id = the call id); with
+ * none that does, this is `ToolPartViewDefault` exactly.
+ */
 export function ToolPartView(props: { last: boolean; streaming: boolean; entry: ToolEntry; sessionID: string }) {
+  const output = () => {
+    const state = props.entry.state
+    return state.status === "completed" ? state.output.slice(0, 4000) : undefined
+  }
+  return (
+    <Replace
+      component="ToolUse"
+      requestId={props.entry.callID}
+      sessionID={props.sessionID}
+      props={{
+        tool: props.entry.tool ?? props.entry.name ?? "",
+        status: props.entry.state.status,
+        input: props.entry.state.input ?? {},
+        output: output(),
+      }}
+    >
+      <ToolPartViewDefault {...props} />
+    </Replace>
+  )
+}
+
+function ToolPartViewDefault(props: { last: boolean; streaming: boolean; entry: ToolEntry; sessionID: string }) {
   const ctx = use()
   /** v1 parts name it `tool`, v2 entries name it `name`. */
   const toolName = createMemo(() => props.entry.tool ?? props.entry.name ?? "")

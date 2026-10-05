@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Paper",
+  "id": "paper",
+  "light": {
+    "seeds": {
+      "neutral": "#f7f3ea",
+      "primary": "#b7791f",
+      "success": "#4d7c2f",
+      "warning": "#b7791f",
+      "error": "#b94a36",
+      "info": "#2f7d99",
+      "interactive": "#b7791f",
+      "diffAdd": "#4d7c2f",
+      "diffDelete": "#b94a36"
+    },
+    "overrides": {
+      "background-base": "#f7f3ea",
+      "background-weak": "#ebe7de",
+      "background-strong": "#f7f3ea",
+      "background-stronger": "#fffdf7",
+      "surface-raised-stronger-non-alpha": "#fffdf7",
+      "text-strong": "#2b261d",
+      "text-base": "#474034",
+      "text-weak": "#7a705e",
+      "text-weaker": "#a69e8f",
+      "border-weak-base": "#ede6d7",
+      "border-base": "#e4dcc8",
+      "border-strong-base": "#a39c8c"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#1f1b16",
+      "primary": "#d9a441",
+      "success": "#8fb573",
+      "warning": "#e0a93d",
+      "error": "#e0705a",
+      "info": "#6fb0c9",
+      "interactive": "#d9a441",
+      "diffAdd": "#8fb573",
+      "diffDelete": "#e0705a"
+    },
+    "overrides": {
+      "background-base": "#1f1b16",
+      "background-weak": "#2b2722",
+      "background-strong": "#1f1b16",
+      "background-stronger": "#28231d",
+      "surface-raised-stronger-non-alpha": "#28231d",
+      "text-strong": "#efe6d6",
+      "text-base": "#d2c8b6",
+      "text-weak": "#9b8f7b",
+      "text-weaker": "#706658",
+      "border-weak-base": "#2e2821",
+      "border-base": "#3a332a",
+      "border-strong-base": "#797266"
+    }
+  }
+}

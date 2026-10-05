@@ -1,0 +1,59 @@
+{
+  "$schema": "https://nikcli-ai.dev/desktop-theme.json",
+  "name": "Oxocarbon",
+  "id": "oxocarbon",
+  "light": {
+    "seeds": {
+      "neutral": "#f0f0f5",
+      "primary": "#7aa2f7",
+      "success": "#9ece6a",
+      "warning": "#ff9e64",
+      "error": "#f7768e",
+      "info": "#7dcfff",
+      "interactive": "#7aa2f7",
+      "diffAdd": "#9ece6a",
+      "diffDelete": "#f7768e"
+    },
+    "overrides": {
+      "background-base": "#f0f0f5",
+      "background-weak": "#e4e4ec",
+      "background-strong": "#f0f0f5",
+      "background-stronger": "#ffffff",
+      "surface-raised-stronger-non-alpha": "#ffffff",
+      "text-strong": "#2a2d36",
+      "text-base": "#404450",
+      "text-weak": "#6a7080",
+      "text-weaker": "#999da9",
+      "border-weak-base": "#f5f5fa",
+      "border-base": "#d0d4dc",
+      "border-strong-base": "#7aa2f7"
+    }
+  },
+  "dark": {
+    "seeds": {
+      "neutral": "#23262b",
+      "primary": "#7aa2f7",
+      "success": "#9ece6a",
+      "warning": "#ff9e64",
+      "error": "#f7768e",
+      "info": "#7dcfff",
+      "interactive": "#7aa2f7",
+      "diffAdd": "#9ece6a",
+      "diffDelete": "#f7768e"
+    },
+    "overrides": {
+      "background-base": "#23262b",
+      "background-weak": "#2e323a",
+      "background-strong": "#23262b",
+      "background-stronger": "#1a1d21",
+      "surface-raised-stronger-non-alpha": "#1a1d21",
+      "text-strong": "#aeb2bc",
+      "text-base": "#8d929f",
+      "text-weak": "#717786",
+      "text-weaker": "#5a5e6a",
+      "border-weak-base": "#1a1d21",
+      "border-base": "#3b3e48",
+      "border-strong-base": "#7dcfff"
+    }
+  }
+}

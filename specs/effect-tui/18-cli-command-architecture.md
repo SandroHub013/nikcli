@@ -177,3 +177,103 @@ consumer, because the REPL they are for does not exist.
 What remains of requirement 12 is therefore the wrapper, not the rule: route `cli/effect/prompt.ts` through
 `isHeadless`, give a prompt with no default a typed failure, and map that failure onto requirement 9's exit codes —
 which are themselves still unimplemented (every failure exits `1`).
+
+## The Remediation Target Was Dead, and the Defect Was One File Over — 2026-09-28
+
+The section above says requirement 12's remaining work is to "route
+`cli/effect/prompt.ts` through `isHeadless`". Two things are wrong with that
+sentence, and both were found by checking the file it names.
+
+**`cli/effect/prompt.ts` has zero importers.** `src/cli/effect/` contains only
+that file, and nothing in `src`, `test`, or `script` imports it by any
+spelling. Its own header already said `Candidate removal: zero imports from
+src/ (plan neon-meadow 2.5)`. Guarding it would have been a guard on dead
+code — the same finding class as the dead `Lifecycle<T>` wrapper this document
+removed two sections ago, and the same reason that removal was right.
+
+**The live surface is 25 handler modules importing `@clack/prompts`
+directly.** One of them was missing the guard, and it is the highest-consequence
+one in the tree:
+
+```ts
+// src/cli/handlers/upgrade.ts, before
+const install = await prompts.select({ message: "Install anyways?", /* … */ initialValue: false })
+if (!install) {
+  prompts.outro("Done")
+  return
+} // never fires on cancel
+```
+
+`@clack/core` answers a cancelled prompt with `Symbol("clack:cancel")` —
+`cancelSymbol = Symbol("clack:cancel")` and `isCancel(x) { return x === cancelSymbol }`
+in `node_modules/@clack/core/dist/index.mjs`. **A symbol is truthy**, so
+`!install` is `false`, the guard is skipped, and the handler falls through to
+`installation.upgrade(...)` — replacing a binary on a package-manager-owned
+path after the user pressed Escape, pressed Ctrl+C, or ran with no TTY at all.
+`initialValue: false` does not help: the default is only used on submit, and a
+cancel submits nothing.
+
+That is the exact inverse of requirement 12. Fixed with the idiom
+`routine/delete.ts` already uses:
+
+```ts
+if (prompts.isCancel(install) || !install) { … }
+```
+
+### Why it survived review, and the rule that follows
+
+**clack cannot be driven without a TTY** — its `createInterface` throws on a
+non-TTY stdin, so the prompt is invisible to `bun test`. A defect that can only
+occur where a human is present, guarding a thing a human is asked about, and
+invisible to the suite, is a defect that review does not find by reading.
+
+Two rules, both already paid for elsewhere in this catalogue:
+
+1. **A cancelled prompt is a value, not an absence.** Any `await` on a clack
+   prompt is `Value | symbol`, and the symbol is truthy. Truthiness is not a
+   cancel check; `isCancel` is. This is `04-event-delivery.md`'s "absence is
+   not typed data" and `public-event-filter.md`'s "withheld means absent, not
+   typed", restated for a prompt.
+2. **Audit the file that is live, not the file the spec names.** The other 24
+   handler modules were already correct, which is what made the plan's
+   remediation look unnecessary rather than misdirected.
+
+`test/cli/prompt-cancel-guards.test.ts` now fails any module under
+`src/cli/handlers/` that calls `select`/`text`/`password`/`confirm`/
+`multiselect` without checking `isCancel`, and asserts the population is at
+least 20 files — so the gate cannot pass by measuring nothing after a refactor
+moves every prompt behind a wrapper.
+
+## Exit-Code Mapping, First Slice — 2026-09-30
+
+`src/cli/framework/runtime.ts` now exports `ExitCode` (requirement 9's table) and `exitCodeFor`, and the seam that
+runs every handler maps a raised `UI.CancelledError` — a cancelled prompt — to `130` without a report. It is the only
+typed failure mapped so far: any other defect is rethrown unchanged (`Effect.die`), so it keeps its report and its
+code `1`. The exit rides on `process.exitCode` because `runMain` lets a successful run exit naturally.
+
+Still open: `2` (usage), `64` (config), `66` (no input), `69` (service unavailable) have a name but no producer, and
+there is still no `CommandError.HeadlessFailure`. Pinned by `test/cli/exit-codes.test.ts`; `bun test test/cli/` (256
+tests) and `bun run typecheck` pass. End to end, on a real PTY (`nikcli connectors add`, Ctrl+C at the first prompt):
+before the change the process exited `1` and printed `ERROR UICancelledError`; after it, it exits `130` and prints
+nothing. Driven with a `pty.fork()` script, since clack cannot run under `bun test`.
+
+### Headless prompts hung instead of failing closed — 2026-09-30
+
+Measured, not read: `nikcli connectors add < /dev/null` did not exit in 120 s. Two causes, one layer each.
+
+1. **`isHeadless` never fired in production.** It tested `stdinIsTTY === false`, but a stream that is not a terminal
+   reports `isTTY === undefined` (`bun -e 'console.log(process.stdin.isTTY)' < /dev/null` prints `undefined`); only a
+   TTY sets the property. The tests injected `false`, so they passed on a value the runtime never produces. This also
+   meant the permission prompt in `run.ts` was not failing closed on a pipe. It now tests falsiness, and
+   `test/cli/headless.test.ts` pins the `undefined` case.
+2. **clack waits on a stdin nobody feeds.** `src/cli/prompts.ts` re-exports `@clack/prompts` and wraps the six
+   interactive prompts (`select`, `multiselect`, `autocomplete`, `text`, `password`, `confirm`) so that in headless mode
+   they reject with `UI.HeadlessFailure`; `intro`/`log`/`spinner`/`isCancel` are untouched. The handlers under
+   `src/cli/handlers/` import it instead of `@clack/prompts` (a mechanical swap of one import line).
+   `HeadlessFailure` maps to exit `66` and prints what it needs.
+
+After: `connectors add < /dev/null` exits `66` in ~1 s with `Cannot ask "Location" in headless mode…`; on a PTY, Ctrl+C
+still exits `130`. `bun test test/cli/` (262), `bun run typecheck`, prettier, oxlint and `check:routes --strict` pass.
+`src/session/{auth,uninstall}.ts` use the wrapper too (`uninstall < /dev/null` without `--force` now refuses instead of
+waiting on the confirmation). Not covered: `cli/headless.ts`'s own `select` (already behind `isHeadless`) and the
+output-only import in `handlers/plugin.ts`; neither can wait on input.

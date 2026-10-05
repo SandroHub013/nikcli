@@ -1,5 +1,5 @@
 import type { Argv } from "@/cli/cmd/argv"
-import * as prompts from "@clack/prompts"
+import * as prompts from "@/cli/prompts"
 import { Installation } from "../installation"
 import { Global } from "@nikcli-ai/util/global"
 import { $ } from "bun"

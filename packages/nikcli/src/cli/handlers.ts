@@ -163,6 +163,10 @@ export const Handlers = Runtime.handlers(Commands, {
   },
   usage: () => import("./handlers/usage"),
   plugin: () => import("./handlers/plugin"),
+  mod: {
+    create: () => import("./handlers/mod/create"),
+    validate: () => import("./handlers/mod/validate"),
+  },
   sync: {
     status: () => import("./handlers/sync/status"),
     connect: () => import("./handlers/sync/connect"),

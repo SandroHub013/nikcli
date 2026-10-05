@@ -1467,6 +1467,12 @@ export namespace Config {
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          protocol: z
+            .enum(["openai-compatible", "openai-responses", "anthropic", "gemini"])
+            .optional()
+            .describe(
+              "Wire protocol for a custom provider, used with baseURL: openai-compatible (Chat Completions), openai-responses, anthropic (Messages) or gemini. Takes precedence over npm. Auth that is not a static key (OAuth, signed requests) belongs in a plugin's auth loader, which supplies a fetch.",
+            ),
           timeout: z
             .union([
               z
@@ -1633,6 +1639,29 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      mod: z
+        .object({
+          prependPlugins: z
+            .string()
+            .array()
+            .optional()
+            .describe("Mods that run before every mod a user installs, in this order"),
+          appendPlugins: z
+            .string()
+            .array()
+            .optional()
+            .describe("Mods that run after every mod a user installs, in this order"),
+          allowManagedModsOnly: z.boolean().optional().describe("Only the organization's mods and built-in ones load"),
+          allowModsToOverrideDenyRules: z
+            .boolean()
+            .optional()
+            .describe("Let a mod approve a tool call that a deny rule refuses"),
+          disableAllMods: z.boolean().optional().describe("Turn every mod off"),
+        })
+        .optional()
+        .describe(
+          "Mod policy. Only managed settings count: the same block in a user or project config changes nothing.",
+        ),
       snapshot: z.boolean().optional(),
       sync: z
         .object({
@@ -1788,8 +1817,9 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       /**
        * Custom tool-file load policy for `{tool,tools}/*.{js,ts}` under
-       * config directories. Distinct from deprecated `tools` (enable/disable
-       * registered tool ids). See `ToolRegistry` + `NIKCLI_ALLOW_PLUGIN_AUTOLOAD`.
+       * config directories, and which registered tools the model gets up
+       * front. Distinct from deprecated `tools` (enable/disable registered
+       * tool ids). See `ToolRegistry` + `NIKCLI_ALLOW_PLUGIN_AUTOLOAD`.
        */
       tool: z
         .object({
@@ -1805,9 +1835,15 @@ export namespace Config {
             .describe(
               "Map of basename/absolute path → sha256 hex. When set, mismatch rejects the file and skips registration.",
             ),
+          eager: z
+            .array(z.string())
+            .optional()
+            .describe(
+              'Tool ids (wildcards allowed) whose schema is sent from the first request, on top of the core tools. Every other built-in and plugin tool is deferred: listed by search_tools and loaded when the model needs it. ["*"] turns deferral off.',
+            ),
         })
         .optional()
-        .describe("Filesystem tool autoload allowlist and integrity pins"),
+        .describe("Custom tool autoload allowlist and integrity pins, and the tools loaded up front"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
@@ -1925,9 +1961,7 @@ export namespace Config {
           nativeLlm: z
             .boolean()
             .optional()
-            .describe(
-              "Enable native @nikcli-ai/llm route streaming (requires resolvable ModelRef; falls back to AI SDK). Default off.",
-            ),
+            .describe("Deprecated and ignored: native @nikcli-ai/llm streaming is the only runtime."),
           tui: z
             .object({
               cacheEviction: z

@@ -15,6 +15,7 @@ import { PermissionNext } from "@/permission/next"
 import { Delegation } from "@/delegation/manager"
 import { BackgroundRun } from "@/background/run"
 import { Instance } from "../project/instance"
+import { Mod } from "../mod"
 import { Log } from "@nikcli-ai/util/log"
 import { Effect } from "effect"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
@@ -1190,6 +1191,19 @@ export async function runSubtask(params: TaskParams, ctx: Tool.Context<TaskMetad
   const agent = await agentGet(params.subagent_type)
   if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
+  // `agent.spawn` mods can refuse this subagent or choose its model.
+  if (await Mod.handles("agent.spawn")) {
+    const spawn = await Mod.agentSpawn({
+      sessionID: ctx.sessionID,
+      agent: agent.name,
+      description: params.description,
+      prompt: params.prompt,
+      model: params.model,
+    })
+    if (spawn.deny !== undefined) throw new Error(spawn.deny)
+    if (spawn.model !== undefined) params = { ...params, model: spawn.model }
+  }
+
   const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
   const parentSession = await runSession(
     Effect.gen(function* () {
@@ -1456,9 +1470,15 @@ export const TaskTool = Tool.define<typeof parameters, TaskMetadata>("task", asy
   const agents = await agentList().then((x) => x.filter((a) => a.mode !== "primary"))
 
   const caller = ctx?.agent
-  const accessibleAgents = caller
+  const permitted = caller
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
+  // `agent.offer` mods can withhold a subagent type from the model.
+  const accessibleAgents = (await Mod.handles("agent.offer"))
+    ? (await Promise.all(permitted.map(async (a) => ((await Mod.agentOffered(a)) ? a : undefined)))).filter(
+        (a): a is NonNullable<typeof a> => a !== undefined,
+      )
+    : permitted
 
   const description = DESCRIPTION.replace(
     "{agents}",

@@ -48,7 +48,7 @@
       padding-right: 4px;
 
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-weak-base);
+      border: var(--hairline, 1px) solid var(--border-weak-base);
       background: var(--input-base);
 
       &:focus-within:not(:has([data-readonly])) {
@@ -76,7 +76,7 @@
       color: var(--text-strong);
 
       display: flex;
-      height: 32px;
+      height: 34px;
       padding: 2px 12px;
       align-items: center;
       flex: 1;
@@ -104,8 +104,8 @@
 
     textarea[data-slot="input-input"] {
       height: auto;
-      min-height: 32px;
-      padding: 6px 12px;
+      min-height: 34px;
+      padding: 7px 12px;
       resize: none;
     }
 
