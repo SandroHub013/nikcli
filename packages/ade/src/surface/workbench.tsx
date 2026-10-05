@@ -9591,6 +9591,9 @@ export function Workbench() {
           onInstallKokoro={() => void kokoro.install()}
           onDeleteKokoro={() => void kokoro.remove()}
           onTestVoice={testReplyVoice}
+          maiBlocked={maiBlocked()}
+          onRetryMai={() => maiSpeaker.retry()}
+          testIdentity={testBuild}
           bindings={bindings}
           voiceSettingsNotice={voiceSettingsNotice()}
           themeState={themeState}
