@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { KeyInfo } from "./keys"
-import { XAI_KEY_ENV, xaiKeyDraft, xaiKeyEntry, xaiKeyUse } from "./xai-key"
+import { watchKeychain, XAI_KEY_ENV, xaiKeyChanged, xaiKeyDraft, xaiKeyEntry, xaiKeyUse } from "./xai-key"
 
 const key = (name: string, env: string, agents: string[] = []): KeyInfo =>
   ({ name, env, agents, masked: "••••0000", createdMs: 0 }) as KeyInfo
@@ -29,5 +29,45 @@ describe("la chiave xAI nel portachiavi", () => {
     expect(xaiKeyUse({ streaming: true, refused: false })).toBe("used")
     expect(xaiKeyUse({ streaming: true, refused: true })).toBe("refused")
     expect(xaiKeyUse({ streaming: false, refused: false })).toBe("idle")
+  })
+})
+
+describe("quando la chiave xAI cambia", () => {
+  const recorder = () => {
+    const calls: string[] = []
+    const effects = {
+      retryStream: () => calls.push("retry"),
+      markReady: () => calls.push("ready"),
+      cancelSocket: () => calls.push("cancel"),
+      refresh: () => calls.push("refresh"),
+    }
+    return { calls, effects }
+  }
+
+  test("una chiave nuova toglie il rifiuto e si rilegge", () => {
+    const { calls, effects } = recorder()
+    xaiKeyChanged("saved", effects)
+    expect(calls).toEqual(["retry", "ready", "refresh"])
+  })
+
+  test("una chiave tolta chiude il socket e poi toglie la pausa che la chiusura lascerebbe (T5b, B1)", () => {
+    const { calls, effects } = recorder()
+    xaiKeyChanged("removed", effects)
+    expect(calls).toEqual(["cancel", "retry", "ready", "refresh"])
+  })
+
+  test("con le impostazioni aperte il portachiavi si rilegge quando la finestra torna davanti, e a intervalli (T5b, B3)", async () => {
+    const target = new EventTarget()
+    let reads = 0
+    const stop = watchKeychain(() => reads++, target as unknown as Window, 20)
+    target.dispatchEvent(new Event("focus"))
+    expect(reads).toBe(1)
+    await new Promise((resolve) => setTimeout(resolve, 70))
+    expect(reads).toBeGreaterThanOrEqual(2)
+    stop()
+    const after = reads
+    target.dispatchEvent(new Event("focus"))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(reads).toBe(after)
   })
 })

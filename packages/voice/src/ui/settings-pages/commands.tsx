@@ -2,6 +2,7 @@
 import { Show, For, type JSX } from "solid-js"
 import { t } from "@nikcli-ai/ade/i18n"
 import { VOCABULARY } from "../../intent/vocabulary"
+import { intentName } from "../intent-name"
 import type { VoiceSettingsState } from "../settings-state"
 import { PageHead } from "./head"
 
@@ -72,7 +73,8 @@ export function CommandsPage(p: { state: VoiceSettingsState; bare?: boolean }): 
             <div data-slot="command-row">
               <div data-slot="command-info">
                 <span data-slot="command-name">
-                  {spec.intent}
+                  {intentName(spec.intent)}
+                  <code data-slot="command-id">{spec.intent}</code>
                   <Show when={spec.destructive}>
                     <span data-slot="command-flag">{t("vui.commands.confirms")}</span>
                   </Show>

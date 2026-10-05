@@ -69,16 +69,14 @@ export function LanguagePage(p: { state: VoiceSettingsState; bare?: boolean }): 
           </For>
         </select>
         <p id="voice-language-count" data-slot="hint">
-          {t("vui.language.count", filteredLanguages().length, currentLanguages().length, props.settings.backend)}
+          {t("vui.language.count", filteredLanguages().length, currentLanguages().length)}
         </p>
       </div>
 
       {/* Unsupported language alert and closest language recommendation */}
       <Show when={!isLangSupported()}>
         <div role="alert" data-slot="lang-warning">
-          <div data-slot="lang-warning-msg">
-            {t("vui.language.unsupported", props.settings.language, props.settings.backend)}
-          </div>
+          <div data-slot="lang-warning-msg">{t("vui.language.unsupported", props.settings.language)}</div>
           <Show when={langSuggestion()}>
             <button
               type="button"

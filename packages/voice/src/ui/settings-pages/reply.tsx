@@ -36,6 +36,12 @@ export function ReplyPage(p: { state: VoiceSettingsState; bare?: boolean }): JSX
   return (
     <>
       <PageHead id="section-reply-title" title={t("vui.reply.title")} desc={t("vui.reply.desc")} bare={p.bare} />
+      {/* A voice chosen here is heard only once Modalità reads replies aloud (review S5, B2). */}
+      <Show when={props.settings.speakReplies === false}>
+        <p data-slot="reason-box" data-tone="muted" role="status" data-replies-silent="">
+          {t("vui.reply.silent")}
+        </p>
+      </Show>
       <div data-slot="sub-choice-box">
         <span id="reply-backend-label" data-slot="sub-choice-label">
           {t("vui.replies.backend")}

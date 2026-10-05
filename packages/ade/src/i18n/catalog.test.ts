@@ -48,6 +48,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.backend.kokoro",
   "vui.backend.mai",
   "vui.backend.mai2",
+  "vui.mai.title",
   "vui.reply.mai.it-IT-Grant",
   "vui.reply.mai.it-IT-Harper",
   "vui.reply.mai.it-IT-Luca",
@@ -83,6 +84,28 @@ describe("the catalogs", () => {
 
   test("the English voice hint calls the configured name", () => {
     expect(en["vui.wake.hint"]("jarvis")).toStartWith('Just say "jarvis" to call it.')
+  })
+
+  test("the voice texts use the glossary: no «motore» in Italian, no engine in English (S7)", () => {
+    const voiceKeys = (Object.keys(it) as Key[]).filter((key) => key.startsWith("vui."))
+    expect(voiceKeys.length).toBeGreaterThan(100)
+    expect(voiceKeys.filter((key) => /motor/i.test(sample(it[key])))).toEqual([])
+    expect(voiceKeys.filter((key) => /\bengines?\b/i.test(sample(en[key])))).toEqual([])
+    expect(it["vui.engine.title"]).toBe("Agente vocale")
+    expect(it["vui.rail.engine"]).toBe("Riconoscimento")
+    expect(it["vui.reply.title"]).toBe("Voce delle risposte")
+    // The MAI box sits on Voce delle risposte: its title does not say it again.
+    expect(it["vui.mai.title"]).toBe("Microsoft MAI")
+  })
+
+  test("every voice command has a name in both languages (S7)", async () => {
+    const { VOCABULARY } = await import("@nikcli-ai/voice/core")
+    for (const spec of VOCABULARY) {
+      const key = `vui.intent.${spec.intent}` as Key
+      expect(typeof it[key], key).toBe("string")
+      expect(typeof en[key], key).toBe("string")
+      expect(sample(it[key])).not.toBe(spec.intent)
+    }
   })
 
   test("have the same keys", () => {

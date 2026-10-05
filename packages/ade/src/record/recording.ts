@@ -168,8 +168,8 @@ export function startProblem(state: RecordState, language: Locale = locale()): s
 export type RecordQuality = "alta" | "media" | "leggera"
 
 export interface QualityLevel {
+  /** Its name is `qualityLabel`, in the interface language. */
   readonly id: RecordQuality
-  readonly label: string
   /** Undefined keeps the window's own size. */
   readonly width?: number
   readonly height?: number
@@ -187,11 +187,10 @@ export interface QualityLevel {
 }
 
 export const QUALITY_LEVELS: readonly QualityLevel[] = [
-  { id: "alta", label: "Alta — schermo intero, 60 fps", fps: 60, bitrate: 8_000_000, megabytesPerMinute: 66 },
-  { id: "media", label: "Media — schermo intero, 30 fps", fps: 30, bitrate: 5_000_000, megabytesPerMinute: 43 },
+  { id: "alta", fps: 60, bitrate: 8_000_000, megabytesPerMinute: 66 },
+  { id: "media", fps: 30, bitrate: 5_000_000, megabytesPerMinute: 43 },
   {
     id: "leggera",
-    label: "Leggera — 1280×800, 30 fps",
     width: 1280,
     height: 800,
     fps: 30,
@@ -218,12 +217,17 @@ export function qualityLevel(id: RecordQuality | undefined): QualityLevel {
   return QUALITY_LEVELS.find((level) => level.id === id) ?? QUALITY_LEVELS[0]!
 }
 
-/** "circa 66 MB al minuto", as it is written beside the choice. */
-export function sizePerMinute(level: QualityLevel): string {
-  const rounded = Number.isInteger(level.megabytesPerMinute)
-    ? String(level.megabytesPerMinute)
-    : level.megabytesPerMinute.toFixed(1).replace(".", ",")
-  return `circa ${rounded} MB al minuto`
+/** «Alta — schermo intero, 60 fps», in the interface language. */
+export function qualityLabel(level: QualityLevel, language: Locale = locale()): string {
+  return translate(language, `record.quality.${level.id}`)
+}
+
+/** "circa 66 MB al minuto", as it is written beside the choice, in the interface language. */
+export function sizePerMinute(level: QualityLevel, language: Locale = locale()): string {
+  const rounded = new Intl.NumberFormat(language === "it" ? "it-IT" : "en-US", { maximumFractionDigits: 1 }).format(
+    level.megabytesPerMinute,
+  )
+  return translate(language, "record.sizePerMinute", rounded)
 }
 
 /** What a take of `seconds` will weigh, for a warning before a long one. */
