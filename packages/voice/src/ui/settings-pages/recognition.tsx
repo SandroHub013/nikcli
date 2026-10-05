@@ -45,33 +45,6 @@ export function RecognitionPage(p: { state: VoiceSettingsState; bare?: boolean }
           {/* Sub-fields under OpenRouter */}
           <Show when={props.settings.backend === "openrouter"}>
             <div data-slot="backend-subfields">
-              {/*
-               * The key is not typed here any more: it is an entry of the
-               * system keychain, on ADE's Chiavi API page, the one place for
-               * keys. This says whether there is one and where it is managed.
-               */}
-              <div data-slot="stack" data-key-status>
-                <span data-slot="label">{t("vui.key.title")}</span>
-                <div data-slot="key-status-badge">
-                  <span>
-                    {props.settings.openRouterApiKey
-                      ? t("vui.key.saved", formatMaskedApiKey(props.settings.openRouterApiKey))
-                      : t("vui.key.none")}
-                  </span>
-                  <Show when={props.onManageKeys}>
-                    <button
-                      type="button"
-                      data-slot="link-button"
-                      data-manage-keys=""
-                      onClick={() => props.onManageKeys?.()}
-                    >
-                      {t("vui.key.manage")}
-                    </button>
-                  </Show>
-                </div>
-                <p data-slot="hint">{t("vui.key.where")}</p>
-              </div>
-
               {/* Cost of the last request if exposed */}
               <Show when={resolvedCost() !== undefined}>
                 <div data-slot="cost-tag">
@@ -82,6 +55,31 @@ export function RecognitionPage(p: { state: VoiceSettingsState; bare?: boolean }
             </div>
           </Show>
         </div>
+      </div>
+
+      {/*
+       * The key is not typed here any more: it is an entry of the
+       * system keychain, on ADE's Chiavi API page, the one place for
+       * keys. This says whether there is one and where it is managed.
+       * Shown whatever recognises speech: Grok streaming is the default, but
+       * the batch fallback and MAI's replies spend this key, and without it
+       * the voice does not start.
+       */}
+      <div data-slot="stack" data-key-status>
+        <span data-slot="label">{t("vui.key.title")}</span>
+        <div data-slot="key-status-badge">
+          <span>
+            {props.settings.openRouterApiKey
+              ? t("vui.key.saved", formatMaskedApiKey(props.settings.openRouterApiKey))
+              : t("vui.key.none")}
+          </span>
+          <Show when={props.onManageKeys}>
+            <button type="button" data-slot="link-button" data-manage-keys="" onClick={() => props.onManageKeys?.()}>
+              {t("vui.key.manage")}
+            </button>
+          </Show>
+        </div>
+        <p data-slot="hint">{t("vui.key.where")}</p>
       </div>
     </>
   )

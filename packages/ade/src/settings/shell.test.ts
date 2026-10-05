@@ -702,31 +702,37 @@ describe("S5: le pagine della voce nella categoria Voce", () => {
 })
 
 describe("S6: la chiave OpenRouter sta in Chiavi API", () => {
-  test("Riconoscimento non ha più il campo della chiave: una riga di stato e il collegamento a Chiavi API", () => {
-    let managed = 0
-    renderSettingsSheet({
-      initialTarget: "voice/recognition",
-      voice: {
-        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, openRouterApiKey: "sk-or-finta-0000abcd" },
-        onManageKeys: () => {
-          managed++
+  // La riga si vede con ogni backend: il ripiego batch e MAI spendono la chiave anche quando trascrive Grok.
+  for (const backend of ["openrouter", "grok-stream"] as const) {
+    test(`Riconoscimento (${backend}): niente campo della chiave, una riga di stato e il collegamento a Chiavi API`, () => {
+      let managed = 0
+      renderSettingsSheet({
+        initialTarget: "voice/recognition",
+        voice: {
+          voiceSettings: { ...DEFAULT_VOICE_SETTINGS, backend, openRouterApiKey: "sk-or-finta-0000abcd" },
+          onManageKeys: () => {
+            managed++
+          },
         },
-      },
+      })
+      const row = document.body.querySelector("[data-key-status]")
+      expect(row).not.toBeNull()
+      expect(row!.textContent).toContain("abcd")
+      expect(row!.textContent).not.toContain("sk-or-finta")
+      expect(document.body.querySelector("#openrouter-key-field")).toBeNull()
+      expect(document.body.querySelector('[data-slot="settings-body"] input[type="password"]')).toBeNull()
+      document.body.querySelector<HTMLButtonElement>("[data-manage-keys]")!.click()
+      expect(managed).toBe(1)
     })
-    const row = document.body.querySelector("[data-key-status]")
-    expect(row).not.toBeNull()
-    expect(row!.textContent).toContain("abcd")
-    expect(row!.textContent).not.toContain("sk-or-finta")
-    expect(document.body.querySelector("#openrouter-key-field")).toBeNull()
-    expect(document.body.querySelector('[data-slot="settings-body"] input[type="password"]')).toBeNull()
-    document.body.querySelector<HTMLButtonElement>("[data-manage-keys]")!.click()
-    expect(managed).toBe(1)
-  })
 
-  test("senza chiave la riga lo dice", () => {
-    renderSettingsSheet({ initialTarget: "voice/recognition" })
-    expect(document.body.querySelector("[data-key-status]")!.textContent).toContain("Nessuna chiave OpenRouter")
-  })
+    test(`Riconoscimento (${backend}): senza chiave la riga lo dice`, () => {
+      renderSettingsSheet({
+        initialTarget: "voice/recognition",
+        voice: { voiceSettings: { ...DEFAULT_VOICE_SETTINGS, backend } },
+      })
+      expect(document.body.querySelector("[data-key-status]")?.textContent).toContain("Nessuna chiave OpenRouter")
+    })
+  }
 
   test("in conflitto, Chiavi API chiede quale chiave tenere e passa la risposta", async () => {
     const answers: string[] = []
