@@ -105,6 +105,7 @@ export function createLoweredStore(storage: LoweredStorage | undefined, now: () 
  * list the user chose after a failed opening.
  */
 export function worldQuery(options: { bench?: string; lowered?: boolean; list?: boolean }): string {
-  const parts = [options.bench, options.lowered ? "quality=bassa&lowered=1" : "", options.list ? "city=0" : ""].filter(Boolean)
+  // The lowered level first: the page reads the first `quality`, and a measuring trial's own (`quality=auto`) comes after.
+  const parts = [options.lowered ? "quality=bassa&lowered=1" : "", options.bench, options.list ? "city=0" : ""].filter(Boolean)
   return parts.length ? `?${parts.join("&")}` : ""
 }

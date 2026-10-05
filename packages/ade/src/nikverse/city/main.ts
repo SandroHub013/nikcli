@@ -574,6 +574,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
         .filter(([, down]) => down)
         .map(([key]) => key),
       speed: Math.round(player.speed * 1000) / 1000,
+      slowWatch: slowWatch ? { ...slowWatch.state(), vsyncMs: Math.round(vsyncMs * 10) / 10 } : null,
       sized,
       eye: eye !== undefined,
       running,

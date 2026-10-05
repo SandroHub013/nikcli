@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { LOWERED_FOR_MS, LOWERED_KEY, OPEN_TIMEOUT_MS, createLoweredStore, createOpenWatch, worldQuery } from "./opening"
 
 function clock() {
@@ -117,11 +119,24 @@ describe("the level ADE lowered the world to", () => {
   })
 })
 
+describe("the line of an opening that did not come", () => {
+  test("has its own rule: a row with padding, the text taking the room, and ADE's buttons", () => {
+    const css = readFileSync(join(import.meta.dir, "nikverse.css"), "utf8")
+    const rule = (selector: string) => css.match(new RegExp(`(^|\\n)${selector.replace(/[[\]"=]/g, "\\$&")} \\{([^}]*)\\}`))?.[2] ?? ""
+    const box = rule('[data-slot="nikverse-late"]')
+    for (const line of ["display: flex", "align-items: center", "padding: 8px 12px", "position: absolute"]) expect(box).toContain(line)
+    expect(rule('[data-slot="nikverse-late"] p')).toContain("margin: 0")
+    expect(rule('[data-slot="nikverse-late"] button')).toContain("border-radius: var(--ade-radius-sm)")
+  })
+})
+
 describe("the world's address", () => {
   test("the bench door, the lowered level and the list go in the query; nothing, no query", () => {
     expect(worldQuery({})).toBe("")
     expect(worldQuery({ bench: "bench=1&maxscale=0.9" })).toBe("?bench=1&maxscale=0.9")
     expect(worldQuery({ lowered: true })).toBe("?quality=bassa&lowered=1")
-    expect(worldQuery({ bench: "bench=1", lowered: true, list: true })).toBe("?bench=1&quality=bassa&lowered=1&city=0")
+    expect(worldQuery({ bench: "bench=1", lowered: true, list: true })).toBe("?quality=bassa&lowered=1&bench=1&city=0")
+    // A trial that also names a quality: the page reads the first one, which is the lowered level.
+    expect(new URLSearchParams(worldQuery({ bench: "bench=1&quality=auto&slowwatch=1", lowered: true }).slice(1)).get("quality")).toBe("bassa")
   })
 })

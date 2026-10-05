@@ -33,15 +33,16 @@ export function drawMode(state: { moving: boolean; sinceActivityMs: number }, im
 export const SLOW_FRAME_MS = 25
 /** The longest vsync the watch assumes: a display slower than 60 Hz is treated as 60 Hz. */
 export const VSYNC_60_MS = 1000 / 60
-/** More slow frames than this share of a second is a second whose p95 is above `SLOW_FRAME_MS`. */
+/** More slow frames than this share of the window is a p95 above `SLOW_FRAME_MS`. */
 export const SLOW_SHARE = 0.05
-/** That many such seconds in a row while moving, and the level is too much for the machine. */
+/** The window, in seconds of moving: over the last ten, a p95 above 25 ms and the level is too much for the machine. */
 export const SLOW_SECONDS = 10
 
 /**
  * Whether the machine keeps up with a 60 fps level: fed every display frame of the moving mode (the time since the one
- * before, and the display's vsync), it says yes once, when ten seconds of moving in a row missed vsyncs on more than one
- * frame in twenty: at 60 Hz, a p95 above 25 ms. A frame that came on its vsync is never slow, so a 75 or 144 Hz display
+ * before, and the display's vsync), it says yes once, when the last ten seconds of moving, taken as one window, missed
+ * vsyncs on more than one frame in twenty: at 60 Hz, a p95 above 25 ms. One window and not ten seconds each over the
+ * line: a machine near the line has its good and bad seconds, and a single good one used to start the count again. A frame that came on its vsync is never slow, so a 75 or 144 Hz display
  * pacing 60 fps (draws 13.3 or 26.7 ms apart, but a callback on every vsync) is not taken for a slow machine. Still and
  * immobile time is not fed: there the frames are slow on purpose. `pause` drops the second in progress, not the run.
  */
@@ -49,8 +50,13 @@ export function createSlowWatch() {
   let elapsed = 0
   let frames = 0
   let slow = 0
-  let run = 0
+  /** The last `SLOW_SECONDS` whole seconds of moving: frames, and slow ones. */
+  const seconds: { frames: number; slow: number }[] = []
   let said = false
+  const share = () => {
+    const total = seconds.reduce((sum, s) => sum + s.frames, 0)
+    return total ? seconds.reduce((sum, s) => sum + s.slow, 0) / total : 0
+  }
   return {
     push(ms: number, vsyncMs = VSYNC_60_MS): boolean {
       if (said) return false
@@ -58,15 +64,18 @@ export function createSlowWatch() {
       frames++
       if (ms > 1.5 * Math.min(vsyncMs, VSYNC_60_MS)) slow++
       if (elapsed < 1000) return false
-      run = slow / frames > SLOW_SHARE ? run + 1 : 0
+      seconds.push({ frames, slow })
+      if (seconds.length > SLOW_SECONDS) seconds.shift()
       elapsed = frames = slow = 0
-      if (run < SLOW_SECONDS) return false
+      if (seconds.length < SLOW_SECONDS || share() <= SLOW_SHARE) return false
       said = true
       return true
     },
     pause() {
       elapsed = frames = slow = 0
     },
+    /** Where the watch is, for `__nikverseWhy`: the seconds in the window, their share of slow frames, and whether it said so. */
+    state: () => ({ seconds: seconds.length, share: Math.round(share() * 1000) / 1000, said }),
   }
 }
 

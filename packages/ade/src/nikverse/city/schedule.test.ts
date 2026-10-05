@@ -144,12 +144,24 @@ describe("a machine that cannot keep up with 60 frames a second", () => {
     expect(said.filter(Boolean)).toHaveLength(1)
   })
 
-  test("a good second breaks the run; a few slow frames (a hitch) do not make a slow second", () => {
+  test("the ten seconds are one window: a good second among slow ones does not start the count again", () => {
+    // A machine near the line: nine slow seconds and one good one are still a p95 above 25 ms over the ten.
     const watch = createSlowWatch()
-    for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
-    expect(second(watch, 2)).toBe(false)
-    for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
+    for (let i = 0; i < 5; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 0)).toBe(false)
+    for (let i = 0; i < 3; i++) expect(second(watch, 5)).toBe(false)
     expect(second(watch, 5)).toBe(true)
+    expect(watch.state()).toEqual({ seconds: SLOW_SECONDS, share: expect.any(Number), said: true })
+  })
+
+  test("a few slow frames (a hitch, 2 in a second) for ten seconds are not slow; the window slides", () => {
+    const watch = createSlowWatch()
+    for (let i = 0; i < SLOW_SECONDS * 3; i++) expect(second(watch, 2)).toBe(false)
+    expect(watch.state().share).toBeLessThan(SLOW_SHARE)
+    // Then the machine slows down: the window fills with slow seconds and says so.
+    let said = false
+    for (let i = 0; i < SLOW_SECONDS; i++) said = second(watch, 6) || said
+    expect(said).toBe(true)
   })
 
   test("a 75 or 144 Hz display pacing 60 fps calls back on every vsync: never slow; a missed vsync there is", () => {
