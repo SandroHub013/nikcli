@@ -1171,7 +1171,27 @@ describe("S7: la barra di stato della voce resta in vista", () => {
     expect(decls.top).toBe("calc(-1 * var(--space-5, 20px))")
     // Opaque under every theme: the main area's ground, and the sheet's overlay where that is transparent (glass, S8).
     expect(decls["background-color"]).toBe("var(--ade-overlay)")
-    expect(decls["background-image"]).toBe("linear-gradient(var(--ade-bg), var(--ade-bg))")
+    expect(decls["background-image"]).toStartWith("linear-gradient(var(--ade-bg), var(--ade-bg))")
+    // Under glass, where --ade-bg is transparent and the overlay is not quite opaque,
+    // the layers stacked together must hide the rows: at least 99% (review S8, B1).
+    const glass: Record<string, string> = {}
+    postcss.parse(readFileSync(join(import.meta.dir, "..", "index.css"), "utf-8")).walkRules((rule) => {
+      if (rule.selector.split(",").some((s) => s.trim() === ':root[data-theme="glass"]'))
+        rule.walkDecls((d) => {
+          glass[d.prop] = d.value
+        })
+    })
+    const alpha = (token: string) => {
+      const value = glass[token]!
+      if (value === "transparent") return 0
+      const rgba = value.match(/rgba\([^)]*,\s*([\d.]+)\)/)
+      return rgba ? Number(rgba[1]) : 1
+    }
+    const layers = [decls["background-color"]!, ...decls["background-image"]!.split(/\)\s*,\s*/)].flatMap(
+      (layer) => [...layer.matchAll(/var\((--ade-[a-z-]+)\)/g)].slice(0, 1).map((m) => alpha(m[1]!)),
+    )
+    expect(alpha("--ade-overlay")).toBeLessThan(1)
+    expect(1 - layers.reduce((through, a) => through * (1 - a), 1)).toBeGreaterThanOrEqual(0.99)
     // Il selettore è la struttura vera: la barra è il primo figlio del corpo.
     renderSettingsSheet({ initialTarget: "voice/commands" })
     expect(document.body.querySelector('[data-slot="settings-body"] > [data-part="status"]')).not.toBeNull()
