@@ -1157,7 +1157,9 @@ describe("S7: la barra di stato della voce resta in vista", () => {
     })
     expect(decls.position).toBe("sticky")
     expect(decls.top).toBe("calc(-1 * var(--space-5, 20px))")
-    expect(decls["background-color"]).toBe("var(--ade-bg, #ffffff)")
+    // Opaque under every theme: the main area's ground, and the sheet's overlay where that is transparent (glass, S8).
+    expect(decls["background-color"]).toBe("var(--ade-overlay)")
+    expect(decls["background-image"]).toBe("linear-gradient(var(--ade-bg), var(--ade-bg))")
     // Il selettore è la struttura vera: la barra è il primo figlio del corpo.
     renderSettingsSheet({ initialTarget: "voice/commands" })
     expect(document.body.querySelector('[data-slot="settings-body"] > [data-part="status"]')).not.toBeNull()

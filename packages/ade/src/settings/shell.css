@@ -259,7 +259,13 @@
   z-index: 1;
   padding-top: var(--space-5, 20px);
   margin-top: calc(-1 * var(--space-5, 20px));
-  background-color: var(--ade-bg, #ffffff);
+  /*
+   * The ground the page is read on: the main area's colour where it has one,
+   * and under the glass theme, where that is transparent, the sheet's own
+   * overlay, so the rows scrolling under the bar do not show through (S8).
+   */
+  background-color: var(--ade-overlay);
+  background-image: linear-gradient(var(--ade-bg), var(--ade-bg));
 }
 
 /* Footer (Fatto, and «Avvia ascolto» in Voce) */
