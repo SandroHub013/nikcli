@@ -264,9 +264,13 @@
    * The ground the page is read on: the main area's colour where it has one,
    * and under the glass theme, where that is transparent, the sheet's own
    * overlay, so the rows scrolling under the bar do not show through (S8).
+   * Twice: the glass overlay is 92% opaque, and two layers of it hide the rows
+   * (about 99%) where one let them show faintly (review S8, B1).
    */
   background-color: var(--ade-overlay);
-  background-image: linear-gradient(var(--ade-bg), var(--ade-bg));
+  background-image:
+    linear-gradient(var(--ade-bg), var(--ade-bg)),
+    linear-gradient(var(--ade-overlay), var(--ade-overlay));
 }
 
 /* Footer (Fatto, and «Avvia ascolto» in Voce) */
@@ -338,5 +342,16 @@
    */
   [data-slot="settings-check-update"] {
     display: none;
+  }
+
+  /*
+   * Voce's eight tabs do not fit beside the folded rail: they go on two rows
+   * rather than scroll under a bar with the last one cut (S8, B3).
+   */
+  [data-slot="settings-tabs"] {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    column-gap: var(--space-1, 4px);
+    padding: 0 var(--space-4, 16px);
   }
 }

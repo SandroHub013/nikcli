@@ -87,6 +87,9 @@ export function CommandsPage(p: { state: VoiceSettingsState; bare?: boolean }): 
                     <button
                       type="button"
                       data-slot="phrase-chip"
+                      // Out of the Tab order: a mouse shortcut into the trial field, where the keyboard
+                      // types the same phrase. Three per command made ~100 stops before «Fatto» (S8).
+                      tabIndex={-1}
                       title={t("vui.commands.usePhrase")}
                       onClick={() => {
                         setTrialText(phrase)

@@ -972,6 +972,18 @@ describe("S7: i testi della voce", () => {
     }
   })
 
+  test("Comandi: le frasi non sono fermate di Tab, il campo di prova e il filtro sì (S8)", () => {
+    renderSettingsSheet({ initialTarget: "voice/commands" })
+    const chips = [...body().querySelectorAll<HTMLButtonElement>('[data-slot="phrase-chip"]')]
+    expect(chips.length).toBeGreaterThan(90)
+    expect(chips.filter((chip) => chip.tabIndex !== -1).map((chip) => chip.textContent)).toEqual([])
+    expect(body().querySelector<HTMLInputElement>("#voice-trial-input")!.tabIndex).toBe(0)
+    expect(body().querySelector<HTMLInputElement>("#voice-command-filter")!.tabIndex).toBe(0)
+    // Il clic resta: copia la frase nel campo di prova.
+    chips[0]!.click()
+    expect(body().querySelector<HTMLInputElement>("#voice-trial-input")!.value).toBe(chips[0]!.textContent!)
+  })
+
   test("Comandi: il filtro trova un comando anche dal suo nome", () => {
     renderSettingsSheet({ initialTarget: "voice/commands" })
     const filter = body().querySelector<HTMLInputElement>(
@@ -1116,6 +1128,25 @@ describe("S7: schede e corpo legati per chi usa uno screen reader", () => {
   })
 })
 
+/**
+ * The narrow layout's media query, whatever width it is written at: the one
+ * that folds the rail to its icons. A test that looked for «max-width: 760px»
+ * by hand would stop finding it the day the threshold moves (review S8, B2).
+ */
+function narrowMedia(): postcss.AtRule {
+  const found: postcss.AtRule[] = []
+  postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8")).walkAtRules("media", (media) => {
+    let rail = false
+    media.walkRules('[data-slot="settings-rail"]', () => {
+      rail = true
+    })
+    if (rail) found.push(media)
+  })
+  expect(found).toHaveLength(1)
+  expect(found[0]!.params).toMatch(/max-width/)
+  return found[0]!
+}
+
 describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   test("shell.css usa solo token che il tema definisce: niente ripieghi chiari nel tema scuro", () => {
     const shell = readFileSync(join(import.meta.dir, "shell.css"), "utf-8")
@@ -1126,14 +1157,10 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   })
 
   test("a finestra stretta il pulsante degli aggiornamenti non sta tagliato nella colonna: c'è in Sistema", () => {
-    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
     let display: string | undefined
-    parsed.walkAtRules("media", (media) => {
-      if (!media.params.includes("max-width: 760px")) return
-      media.walkRules('[data-slot="settings-check-update"]', (rule) => {
-        rule.walkDecls("display", (d) => {
-          display = d.value
-        })
+    narrowMedia().walkRules('[data-slot="settings-check-update"]', (rule) => {
+      rule.walkDecls("display", (d) => {
+        display = d.value
       })
     })
     expect(display).toBe("none")
@@ -1141,6 +1168,39 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
     expect(document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')?.getAttribute("data-tab")).toBe(
       "system/updates",
     )
+  })
+})
+
+describe("S8: la frase sotto il titolo della pagina parte dal bordo", () => {
+  test("niente rientro per un'icona che il titolo non ha più", () => {
+    renderSettingsSheet({ initialTarget: "voice/activation" })
+    const head = document.body.querySelector('[data-slot="settings-body"] [data-slot="section-head"]')!
+    expect(head.querySelector("svg, img, [data-slot*='icon']")).toBeNull()
+    const voiceCss = readFileSync(
+      join(import.meta.dir, "..", "..", "..", "voice", "src", "ui", "voice-settings.css"),
+      "utf-8",
+    )
+    const indents: string[] = []
+    postcss.parse(voiceCss).walkRules((rule) => {
+      if (!rule.selector.includes('[data-slot="section-desc"]')) return
+      rule.walkDecls(/^padding/, (d) => {
+        indents.push(`${d.prop}: ${d.value}`)
+      })
+    })
+    expect(indents).toEqual([])
+  })
+})
+
+describe("S8: a finestra stretta le schede vanno a capo", () => {
+  test("nessuna scheda tagliata sotto una barra di scorrimento: la riga si spezza in due", () => {
+    const decls: Record<string, string> = {}
+    narrowMedia().walkRules('[data-slot="settings-tabs"]', (rule) => {
+      rule.walkDecls((d) => {
+        decls[d.prop] = d.value
+      })
+    })
+    expect(decls["flex-wrap"]).toBe("wrap")
+    expect(decls["overflow-x"]).toBe("visible")
   })
 })
 
@@ -1159,7 +1219,27 @@ describe("S7: la barra di stato della voce resta in vista", () => {
     expect(decls.top).toBe("calc(-1 * var(--space-5, 20px))")
     // Opaque under every theme: the main area's ground, and the sheet's overlay where that is transparent (glass, S8).
     expect(decls["background-color"]).toBe("var(--ade-overlay)")
-    expect(decls["background-image"]).toBe("linear-gradient(var(--ade-bg), var(--ade-bg))")
+    expect(decls["background-image"]).toStartWith("linear-gradient(var(--ade-bg), var(--ade-bg))")
+    // Under glass, where --ade-bg is transparent and the overlay is not quite opaque,
+    // the layers stacked together must hide the rows: at least 99% (review S8, B1).
+    const glass: Record<string, string> = {}
+    postcss.parse(readFileSync(join(import.meta.dir, "..", "index.css"), "utf-8")).walkRules((rule) => {
+      if (rule.selector.split(",").some((s) => s.trim() === ':root[data-theme="glass"]'))
+        rule.walkDecls((d) => {
+          glass[d.prop] = d.value
+        })
+    })
+    const alpha = (token: string) => {
+      const value = glass[token]!
+      if (value === "transparent") return 0
+      const rgba = value.match(/rgba\([^)]*,\s*([\d.]+)\)/)
+      return rgba ? Number(rgba[1]) : 1
+    }
+    const layers = [decls["background-color"]!, ...decls["background-image"]!.split(/\)\s*,\s*/)].flatMap(
+      (layer) => [...layer.matchAll(/var\((--ade-[a-z-]+)\)/g)].slice(0, 1).map((m) => alpha(m[1]!)),
+    )
+    expect(alpha("--ade-overlay")).toBeLessThan(1)
+    expect(1 - layers.reduce((through, a) => through * (1 - a), 1)).toBeGreaterThanOrEqual(0.99)
     // Il selettore è la struttura vera: la barra è il primo figlio del corpo.
     renderSettingsSheet({ initialTarget: "voice/commands" })
     expect(document.body.querySelector('[data-slot="settings-body"] > [data-part="status"]')).not.toBeNull()
