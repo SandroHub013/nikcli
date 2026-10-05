@@ -1859,6 +1859,44 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          pruneBudget: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe(
+              "Prompt size (tokens, as the provider reported it for the last step) above which old tool outputs are cleared between steps (default: 64000)",
+            ),
+          pruneKeep: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Tokens of the most recent tool outputs the in-loop prune leaves intact (default: 24000)"),
+          pruneReasoning: z
+            .boolean()
+            .optional()
+            .describe(
+              "Also stop replaying the reasoning of the steps whose tool outputs the in-loop prune clears (default: true). Reasoning is most of a long task's prompt.",
+            ),
+          pruneDigest: z
+            .boolean()
+            .optional()
+            .describe(
+              "Fold old cleared steps into one line per call (tool and main argument) instead of a call and a notice each (default: true)",
+            ),
+          pruneDigestKeep: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Most recent cleared steps left as individual calls when folding (default: 30)"),
+          threshold: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe("Prompt size (tokens) that triggers summarizing compaction before the window overflows (default: off)"),
         })
         .optional(),
       experimental: z

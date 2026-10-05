@@ -711,6 +711,40 @@ export namespace MessageV2 {
     return walkImagePayload(messages, true, state) as ModelMessage[]
   }
 
+  /**
+   * Set by the in-loop prune on the metadata of a step's tool and reasoning parts once the step is
+   * old enough that its reasoning is no longer sent back. `providerMetadata` is where a provider's
+   * encrypted reasoning rides (OpenRouter `reasoning_details`, several KB a step), so it is left
+   * out of the prompt; the stored part, and the text the user sees, are untouched.
+   */
+  export const REPLAY_CLEARED = "nikcliReplayCleared"
+  export const replayCleared = (metadata: Record<string, unknown> | undefined) => metadata?.[REPLAY_CLEARED] === true
+
+  /**
+   * Set on a tool part that was cleared long ago: it is no longer sent as a call plus a notice
+   * (~80 tokens of arguments and wrapper each) but as one line in a digest of earlier calls.
+   */
+  export const DIGESTED = "nikcliDigested"
+  export const digested = (metadata: Record<string, unknown> | undefined) => metadata?.[DIGESTED] === true
+
+  const NOTICE_ARGS = ["filePath", "file_path", "path", "pattern", "command", "url", "query", "description"]
+
+  /**
+   * What the model sees where a tool output was cleared: which call it was, so it can decide
+   * whether to redo it. Deterministic, so the prompt prefix stays stable across steps.
+   */
+  function callArg(part: { state: { input?: unknown } }) {
+    const input = (part.state.input ?? {}) as Record<string, unknown>
+    const key = NOTICE_ARGS.find((k) => typeof input[k] === "string" && (input[k] as string).trim() !== "")
+    const raw = key ? (input[key] as string).replace(/\s+/g, " ").trim() : ""
+    return raw.length > 80 ? raw.slice(0, 77) + "..." : raw
+  }
+
+  export function compactedNotice(part: { tool: string; state: { input?: unknown } }) {
+    const arg = callArg(part)
+    return `[Output of ${part.tool}${arg ? `(${arg})` : ""} cleared to save context. Call it again if you need it.]`
+  }
+
   export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
@@ -718,6 +752,9 @@ export namespace MessageV2 {
   ): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
+    // Old cleared calls, one line each, in a single assistant message where the first of them was.
+    const digestLines: string[] = []
+    let digestSlot: UIMessage | undefined
     const remindAfter = options?.remindAfter
     const wrap = options?.wrap
     // Track media from tool results that need to be injected as user messages
@@ -836,10 +873,19 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "step-start",
             })
+          if (part.type === "tool" && part.state.status === "completed" && digested(part.metadata)) {
+            if (!digestSlot) {
+              digestSlot = { id: Identifier.ascending("message"), role: "assistant", parts: [{ type: "text", text: "" }] }
+              result.push(digestSlot)
+            }
+            const arg = callArg(part)
+            digestLines.push(`- ${part.tool}${arg ? `: ${arg}` : ""}`)
+            continue
+          }
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const outputText = part.state.time.compacted ? compactedNotice(part) : part.state.output
               const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
@@ -867,7 +913,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output,
-                ...(differentModel ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -877,7 +923,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                ...(differentModel ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
@@ -888,10 +934,11 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                ...(differentModel ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {
+            if (replayCleared(part.metadata)) continue
             // When the destination model differs from the one that produced
             // the reasoning, drop the reasoning shape entirely and pass the
             // raw text as a plain text part. This avoids two failure modes
@@ -952,7 +999,14 @@ export namespace MessageV2 {
 
     return boundImagePayload(
       convertToModelMessages(
-        result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+        (() => {
+          if (digestSlot) {
+            ;(digestSlot.parts[0] as { text: string }).text =
+              "Earlier tool calls in this task, oldest first. Their outputs and reasoning were cleared to save context; call one again if you need its result.\n" +
+              digestLines.join("\n")
+          }
+          return result.filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+        })(),
         {
           tools,
         },
