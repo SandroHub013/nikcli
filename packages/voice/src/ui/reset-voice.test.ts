@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { voiceSettingsSource } from "../test-support/voice-settings-source"
 
 /*
  * «Ripristina» sat in the settings rail, among the ADE entries, and read as one
@@ -12,7 +13,7 @@ import { join } from "node:path"
  * It now sits in the panel's own header and says what it resets. These are
  * `lint:` (TEAM.md rule 22): the rule is about what the panel's source says.
  */
-const panel = readFileSync(join(import.meta.dir, "voice-settings-panel.tsx"), "utf-8")
+const panel = voiceSettingsSource()
 
 test("lint: the reset button is in the panel's header, not in the settings rail", () => {
   const rail = /<nav[^>]*>([\s\S]*?)<\/nav>/.exec(panel)?.[1] ?? ""

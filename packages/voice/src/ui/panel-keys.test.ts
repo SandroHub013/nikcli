@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { panelEscape, panelFrame, panelListensEarly, panelTrapsTab } from "./panel-keys"
+import { voiceSettingsSource } from "../test-support/voice-settings-source"
 
 /*
  * kobalte-overlay, the Settings sheet: ADE now draws the dialog around the
@@ -49,7 +50,7 @@ describe("Tab and where the panel listens", () => {
 })
 
 describe("lint: the panel uses these rules", () => {
-  const panel = readFileSync(join(import.meta.dir, "voice-settings-panel.tsx"), "utf8")
+  const panel = voiceSettingsSource()
 
   test("lint: its keyboard handler asks panelEscape and panelTrapsTab", () => {
     expect(panel.includes("panelEscape({")).toBe(true)

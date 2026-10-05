@@ -97,6 +97,7 @@ export const LEGACY_TARGETS: Readonly<Record<string, { category: CategoryId; tab
   "voice-sec-language": { category: "voice", tab: "voice/language" },
   "voice-sec-devices": { category: "voice", tab: "voice/devices" },
   "voice-sec-backend": { category: "voice", tab: "voice/recognition" },
+  "voice-sec-reply": { category: "voice", tab: "voice/reply" },
   "voice-sec-commands": { category: "voice", tab: "voice/commands" },
   "set-sec-theme": { category: "general", tab: "general/appearance" },
   "set-sec-language": { category: "general", tab: "general/language" },

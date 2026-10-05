@@ -74,6 +74,8 @@ function renderSettingsSheet(
     initialTarget?: string
     onClose?: () => void
     version?: string
+    /** Voice props on top of the defaults: the settings, MAI's state, the engine. */
+    voice?: Record<string, unknown>
   } = {},
 ) {
   const host = document.createElement("div")
@@ -139,6 +141,7 @@ function renderSettingsSheet(
             calls.install++
           },
         },
+        ...options.voice,
       }),
     host,
   )
@@ -364,32 +367,24 @@ describe("settings shell", () => {
     )
     expect(resetBtn).not.toBeUndefined()
 
-    // In Voce, framed garantisce che ci siano la X e Fatto (A1)
-    const closeBtn = document.body.querySelector('[data-slot="close-btn"]')
-    expect(closeBtn).not.toBeNull()
-
-    const voiceDoneBtn = document.body.querySelector('[data-slot="solid-btn"]')
-    expect(voiceDoneBtn).not.toBeNull()
+    // S5: Voce ha la X e «Fatto» del guscio, come le altre categorie (A1)
+    expect(document.body.querySelector('[data-slot="settings-close"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-slot="settings-done"]')).not.toBeNull()
+    // …e niente del pannello vocale intero: né la sua testata né il suo menu.
+    expect(document.body.querySelector('[data-component="voice-settings-panel"] [data-slot="rail"]')).toBeNull()
+    expect(document.body.querySelector("#voice-panel-title")).toBeNull()
 
     dispose?.()
     document.body.innerHTML = ""
   })
 
-  test("lint: VoiceSettingsPanel è montato solo nel case 'voice' di settings-sheet.tsx ed ha framed senza inline", () => {
+  test("lint: settings-sheet.tsx non monta più il pannello vocale intero, ma le sue pagine (S5)", () => {
     const sheetCode = readFileSync(join(import.meta.dir, "settings-sheet.tsx"), "utf8")
-    const matches = [...sheetCode.matchAll(/<VoiceSettingsPanel\b([\s\S]*?)\/>/g)]
-    expect(matches.length).toBe(1)
-    const panelProps = matches[0]![1]!
-    expect(panelProps.includes("framed")).toBe(true)
-    expect(panelProps.includes("inline")).toBe(false)
-
-    // Verifica che stia dentro case "voice":
-    const caseVoiceIndex = sheetCode.indexOf('case "voice":')
-    expect(caseVoiceIndex).toBeGreaterThan(-1)
-    const panelIndex = sheetCode.indexOf("<VoiceSettingsPanel")
-    expect(panelIndex).toBeGreaterThan(caseVoiceIndex)
-    const caseGeneralIndex = sheetCode.indexOf('case "general":')
-    expect(panelIndex).toBeLessThan(caseGeneralIndex)
+    expect(sheetCode).not.toContain("<VoiceSettingsPanel")
+    expect(sheetCode).not.toContain("extraSections")
+    expect(sheetCode).toContain("<VoiceSettingsPage")
+    expect(sheetCode).toContain("<VoiceStatusBar")
+    expect(sheetCode).toContain("<VoiceListenButton")
   })
 
   test("larghezza fino a ~1100 px e misure del layout in shell.css", () => {
@@ -567,6 +562,141 @@ describe("settings shell", () => {
       expect(source).not.toContain('"settings.routine"')
       expect(source).not.toContain('"settings.routine.desc"')
       expect(source).not.toContain('"settings.routine.instead"')
+    }
+  })
+})
+
+describe("S5: le pagine della voce nella categoria Voce", () => {
+  const PROBES: Record<string, string> = {
+    "voice/mode": '[data-slot="mode-grid"]',
+    "voice/activation": '[data-slot="activation-list"]',
+    "voice/shortcuts": "#agent-chord-btn",
+    "voice/language": "#voice-language-select",
+    "voice/devices": "#voice-input-device",
+    "voice/recognition": '[data-slot="backend-list"]',
+    "voice/reply": '[data-component="mai-box"]',
+    "voice/commands": "#voice-trial-input",
+  }
+
+  test("ognuna delle 8 schede mostra la sua pagina, senza il pannello vocale intorno", () => {
+    for (const [tab, probe] of Object.entries(PROBES)) {
+      renderSettingsSheet({ initialTarget: tab })
+      const page = document.body.querySelector(`[data-slot="settings-body"] section[data-page="${tab.slice(6)}"]`)
+      expect(page, `pagina di ${tab}`).not.toBeNull()
+      expect(page!.querySelector(probe), `contenuto di ${tab}`).not.toBeNull()
+      expect(
+        document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')?.getAttribute("data-tab"),
+      ).toBe(tab)
+      // Il nome lo danno intestazione e schede: nessun h3 visibile nel corpo, nessun menu del pannello.
+      expect(document.body.querySelector('[data-slot="section-title"]'), `h3 in ${tab}`).toBeNull()
+      expect(document.body.querySelector('[data-slot="rail"]'), `menu del pannello in ${tab}`).toBeNull()
+      // La barra della voce sta sopra la pagina; «Avvia ascolto» nel piede del guscio.
+      const body = document.body.querySelector('[data-slot="settings-body"]')!
+      expect(body.firstElementChild?.getAttribute("data-part")).toBe("status")
+      expect(document.body.querySelector('[data-slot="settings-footer"] [data-slot="primary-btn"]')).not.toBeNull()
+      dispose?.()
+      document.body.innerHTML = ""
+    }
+  })
+
+  test("le schede Voce condividono uno stato: un filtro scritto c'è ancora al ritorno", () => {
+    renderSettingsSheet({ initialTarget: "voice/language" })
+    const filter = document.body.querySelector<HTMLInputElement>("#voice-language-filter")!
+    filter.value = "ital"
+    filter.dispatchEvent(new Event("input", { bubbles: true }))
+    document.body.querySelector<HTMLButtonElement>('[data-tab="voice/commands"]')!.click()
+    expect(document.body.querySelector("#voice-language-filter")).toBeNull()
+    document.body.querySelector<HTMLButtonElement>('[data-tab="voice/language"]')!.click()
+    expect(document.body.querySelector<HTMLInputElement>("#voice-language-filter")!.value).toBe("ital")
+  })
+
+  test("la UI di MAI sta in Voce delle risposte e si comporta come prima", () => {
+    const changes: { replyVoice?: string; replyVoiceOffer?: string }[] = []
+    let retried = 0
+    renderSettingsSheet({
+      initialTarget: "voice/reply",
+      voice: {
+        voiceSettings: {
+          ...DEFAULT_VOICE_SETTINGS,
+          replyVoice: "ugo",
+          replyBackend: "piper",
+          openRouterApiKey: "sk-or-finta",
+        },
+        onVoiceSettingsChange: (next: { replyVoice?: string; replyVoiceOffer?: string }) => changes.push(next),
+      },
+    })
+    document.body.querySelector<HTMLButtonElement>('[data-mai-offer="use"]')!.click()
+    expect(changes.at(-1)?.replyVoice).toBe("it-IT-Rosa")
+    expect(changes.at(-1)?.replyVoiceOffer).toBe("accepted")
+    dispose?.()
+    document.body.innerHTML = ""
+
+    renderSettingsSheet({
+      initialTarget: "voice/reply",
+      voice: {
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, replyVoice: "it-IT-Rosa", openRouterApiKey: "sk-or-finta" },
+        maiBlocked: "payment",
+        onRetryMai: () => {
+          retried++
+        },
+      },
+    })
+    document.body.querySelector<HTMLButtonElement>("[data-mai-retry]")!.click()
+    expect(retried).toBe(1)
+    // La scelta di Piper e Kokoro è qui anche lei, non più sotto Modalità.
+    expect(document.body.querySelector("#reply-backend-label")).not.toBeNull()
+  })
+
+  test("Modalità non porta più la scelta della voce delle risposte", () => {
+    renderSettingsSheet({ initialTarget: "voice/mode" })
+    expect(document.body.querySelector("#reply-backend-label")).toBeNull()
+    expect(document.body.querySelector("#agent-reply-label")).not.toBeNull()
+  })
+
+  test("«Avvia ascolto» nel piede accende la voce dello stesso engine", () => {
+    let toggled = 0
+    renderSettingsSheet({
+      initialTarget: "voice",
+      voice: {
+        voiceEngine: {
+          ...(fakeVoiceEngine as object),
+          toggle: () => {
+            toggled++
+          },
+        },
+      },
+    })
+    const listen = document.body.querySelector<HTMLButtonElement>(
+      '[data-slot="settings-footer"] [data-slot="primary-btn"]',
+    )!
+    expect(listen.textContent).toBe("Avvia ascolto")
+    listen.click()
+    expect(toggled).toBe(1)
+  })
+
+  test("VoiceSettingsPage si disegna da sola, senza guscio né barra", async () => {
+    const { VoiceSettingsPage } = await import("@nikcli-ai/voice")
+    const host = document.createElement("div")
+    document.body.append(host)
+    dispose = render(
+      () =>
+        createComponent(VoiceSettingsPage, {
+          page: "reply",
+          engine: fakeVoiceEngine,
+          settings: { ...DEFAULT_VOICE_SETTINGS },
+          onChange: () => {},
+        }),
+      host,
+    )
+    expect(host.querySelector('[data-component="mai-box"]')).not.toBeNull()
+    expect(host.querySelector('[data-slot="section-title"]')?.textContent).toBe("Voce delle risposte")
+    for (const chrome of [
+      '[data-slot="header"]',
+      '[data-slot="rail"]',
+      '[data-slot="status-pill"]',
+      '[data-slot="primary-btn"]',
+    ]) {
+      expect(host.querySelector(chrome), chrome).toBeNull()
     }
   })
 })

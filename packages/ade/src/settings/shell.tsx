@@ -19,6 +19,14 @@ export interface SettingsShellProps {
   version?: string
   onCheckUpdates?: () => void
   renderContent: (category: CategoryId, tab: string) => JSX.Element
+  /**
+   * The Voce category's body, mounted once while Voce is open: the voice's
+   * pages share a state (a chord being recorded, an armed reset) that a
+   * remount on every tab would drop. The tab is passed as an accessor.
+   */
+  renderVoice?: (tab: () => string) => JSX.Element
+  /** What the footer holds besides «Fatto», per category: «Avvia ascolto» in Voce, nothing elsewhere. */
+  footerExtra?: (category: CategoryId) => JSX.Element | undefined
 }
 
 export function SettingsShell(props: SettingsShellProps): JSX.Element {
@@ -127,7 +135,7 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
       component="settings-sheet"
       place="center"
       surface={false}
-      labelledBy={activeCategory() === "voice" ? "voice-panel-title" : "settings-panel-title"}
+      labelledBy="settings-panel-title"
       onClose={props.onClose}
     >
       <div data-component="settings-shell" class="settings-shell">
@@ -180,80 +188,77 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
 
         {/* Main Content Area */}
         <div data-slot="settings-main">
-          <Show
-            when={activeCategory() !== "voice"}
-            fallback={
-              <div data-slot="settings-body" data-category="voice" ref={bodyRef}>
-                {props.renderContent("voice", activeTab())}
-              </div>
-            }
-          >
-            {/* Header for non-voice categories */}
-            <header data-slot="settings-header">
-              <div data-slot="settings-header-text">
-                <h3 id="settings-panel-title" data-slot="settings-title" tabIndex={-1}>
-                  {t(currentCategory().labelKey)}
-                </h3>
-                <p data-slot="settings-subtitle">{t(currentCategory().descKey)}</p>
-              </div>
-              <button
-                type="button"
-                data-slot="settings-close"
-                onClick={props.onClose}
-                aria-label={t("sidebar.menu.close")}
-                title={t("sidebar.menu.close")}
-              >
-                <CloseIcon />
-              </button>
-            </header>
-
-            {/* Tab list for non-voice categories */}
-            <Show when={currentCategory().tabs.length > 0}>
-              <div
-                data-slot="settings-tabs"
-                role="tablist"
-                aria-label={t(currentCategory().labelKey)}
-              >
-                <For each={currentCategory().tabs}>
-                  {(tab, index) => {
-                    const isActive = () => activeTab() === tab.id
-                    return (
-                      <button
-                        type="button"
-                        role="tab"
-                        data-slot="settings-tab"
-                        data-tab={tab.id}
-                        data-active={isActive() ? "true" : undefined}
-                        aria-selected={isActive()}
-                        tabIndex={isActive() ? 0 : -1}
-                        ref={(el) => (tabRefs[index()] = el)}
-                        onClick={() => selectTab(tab.id)}
-                        onKeyDown={(e) => handleTabKeyDown(e, index())}
-                      >
-                        {t(tab.labelKey)}
-                      </button>
-                    )
-                  }}
-                </For>
-              </div>
-            </Show>
-
-            {/* Body */}
-            <div data-slot="settings-body" ref={bodyRef}>
-              {props.renderContent(activeCategory(), activeTab())}
+          {/* Header */}
+          <header data-slot="settings-header">
+            <div data-slot="settings-header-text">
+              <h3 id="settings-panel-title" data-slot="settings-title" tabIndex={-1}>
+                {t(currentCategory().labelKey)}
+              </h3>
+              <p data-slot="settings-subtitle">{t(currentCategory().descKey)}</p>
             </div>
+            <button
+              type="button"
+              data-slot="settings-close"
+              onClick={props.onClose}
+              aria-label={t("sidebar.menu.close")}
+              title={t("sidebar.menu.close")}
+            >
+              <CloseIcon />
+            </button>
+          </header>
 
-            {/* Footer */}
-            <footer data-slot="settings-footer">
-              <button
-                type="button"
-                data-slot="settings-done"
-                onClick={props.onClose}
-              >
-                {t("settings.done")}
-              </button>
-            </footer>
+          {/* Tab list */}
+          <Show when={currentCategory().tabs.length > 0}>
+            <div
+              data-slot="settings-tabs"
+              role="tablist"
+              aria-label={t(currentCategory().labelKey)}
+            >
+              <For each={currentCategory().tabs}>
+                {(tab, index) => {
+                  const isActive = () => activeTab() === tab.id
+                  return (
+                    <button
+                      type="button"
+                      role="tab"
+                      data-slot="settings-tab"
+                      data-tab={tab.id}
+                      data-active={isActive() ? "true" : undefined}
+                      aria-selected={isActive()}
+                      tabIndex={isActive() ? 0 : -1}
+                      ref={(el) => (tabRefs[index()] = el)}
+                      onClick={() => selectTab(tab.id)}
+                      onKeyDown={(e) => handleTabKeyDown(e, index())}
+                    >
+                      {t(tab.labelKey)}
+                    </button>
+                  )
+                }}
+              </For>
+            </div>
           </Show>
+
+          {/* Body */}
+          <div data-slot="settings-body" data-category={activeCategory()} ref={bodyRef}>
+            <Show
+              when={activeCategory() === "voice" && props.renderVoice}
+              fallback={props.renderContent(activeCategory(), activeTab())}
+            >
+              {(renderVoice) => renderVoice()(activeTab)}
+            </Show>
+          </div>
+
+          {/* Footer */}
+          <footer data-slot="settings-footer">
+            {props.footerExtra?.(activeCategory())}
+            <button
+              type="button"
+              data-slot="settings-done"
+              onClick={props.onClose}
+            >
+              {t("settings.done")}
+            </button>
+          </footer>
         </div>
       </div>
     </Sheet>

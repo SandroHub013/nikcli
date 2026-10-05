@@ -54,11 +54,6 @@ function mount(initialSection: string, framed = false) {
         // As ADE mounts it (workbench.tsx): framed by its Sheet, with a close.
         ...(framed ? { framed: true, onClose: () => {} } : { inline: true }),
         initialSection,
-        builtInGroup: "Voce",
-        extraGroup: "ADE",
-        extraSections: [
-          { id: "set-sec-theme", label: "Tema", glyph: "◐", render: () => document.createElement("div") },
-        ],
       }),
     host,
   )
@@ -75,12 +70,14 @@ document.body.innerHTML = ""
 const resetButton = (host: HTMLElement) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === t("vui.panel.resetVoice"))
 
-test("on one of ADE's own sections the header offers no voice reset", () => {
-  expect(Boolean(resetButton(mount("set-sec-theme")))).toBe(false)
-})
-
 test("on every voice section the header still offers it", () => {
-  for (const id of ["voice-sec-mode", "voice-sec-devices", "voice-sec-backend", "voice-sec-commands"]) {
+  for (const id of [
+    "voice-sec-mode",
+    "voice-sec-devices",
+    "voice-sec-backend",
+    "voice-sec-reply",
+    "voice-sec-commands",
+  ]) {
     const host = mount(id)
     expect([id, Boolean(resetButton(host))]).toEqual([id, true])
     dispose?.()

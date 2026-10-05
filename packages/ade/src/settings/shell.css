@@ -248,26 +248,14 @@
   padding: var(--space-5, 20px) var(--space-6, 24px);
 }
 
-[data-slot="settings-body"][data-category="voice"] {
-  padding: 0;
-  overflow: hidden;
-}
-
-[data-slot="settings-body"][data-category="voice"] .voice-settings-panel {
-  max-width: none;
-  width: 100%;
-  height: 100%;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* Footer (Fatto) */
+/* Footer (Fatto, and «Avvia ascolto» in Voce) */
 
 [data-slot="settings-footer"] {
   padding: var(--space-3, 12px) var(--space-6, 24px);
   border-top: 1px solid var(--ade-border, #e3e6eb);
   display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
   justify-content: flex-end;
   flex-shrink: 0;
 }

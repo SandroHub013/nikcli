@@ -172,6 +172,14 @@ export { NikLogo, type NikLogoProps } from "./ui/nik-logo"
 export { NikCube, type NikCubeProps } from "./ui/nik-cube"
 
 export { VoiceSettingsPanel, type VoiceSettingsPanelProps } from "./ui/voice-settings-panel"
+export { createVoiceSettingsState, type VoiceSettingsState, type VoiceSettingsStateProps } from "./ui/settings-state"
+export {
+  VoiceSettingsPage,
+  VOICE_SETTINGS_PAGES,
+  type VoiceSettingsPageId,
+  type VoiceSettingsPageProps,
+} from "./ui/settings-pages"
+export { VoiceListenButton, VoiceStatusBar } from "./ui/settings-pages/status"
 
 export { HowItWorks, type HowItWorksProps } from "./ui/how-it-works"
 
