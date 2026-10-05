@@ -1601,13 +1601,21 @@
 
 [data-component="voice-settings-panel"] [data-slot="command-name"] {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--ade-space-3);
-  font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-semibold);
   color: var(--ade-text);
   word-break: break-word;
+}
+
+/* The intent's id: small and grey beside its name, for whoever reads the logs. */
+[data-component="voice-settings-panel"] [data-slot="command-id"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  font-weight: normal;
+  color: var(--ade-text-weak);
 }
 
 [data-component="voice-settings-panel"] [data-slot="command-flag"] {

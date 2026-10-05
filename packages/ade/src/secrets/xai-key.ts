@@ -41,3 +41,48 @@ export function xaiKeyUse(input: { streaming: boolean; refused: boolean }): XaiK
   if (input.refused) return "refused"
   return input.streaming ? "used" : "idle"
 }
+
+/** What ADE does to the voice when the xAI entry changes. */
+export interface XaiKeyEffects {
+  /** `voiceEngine.retryStream()`: lifts a refusal or a pause on the open transcriber. */
+  retryStream: () => void
+  /** The page's state line goes back to «attivo» until the transcriber says otherwise. */
+  markReady: () => void
+  /** Closes the socket open right now (`sttTransport.cancel()`). */
+  cancelSocket: () => void
+  /** Reads the masked tail again for Riconoscimento. */
+  refresh: () => void
+}
+
+/**
+ * A new key lifts a refusal; a removed one closes the open socket and then
+ * lifts the pause that closing it would leave behind: cut under a `send`, the
+ * socket reads as a network failure, and a key saved a minute later (from
+ * outside this page) would wait out a pause it never earned (review T5b, B1).
+ */
+export function xaiKeyChanged(change: "saved" | "removed", effects: XaiKeyEffects): void {
+  if (change === "removed") effects.cancelSocket()
+  effects.retryStream()
+  effects.markReady()
+  effects.refresh()
+}
+
+/**
+ * Reads the keychain again while settings are open: when the window comes back
+ * to the front, and every `everyMs`. A key saved from outside this page (another
+ * window, a terminal) shows up without reopening it (review T5b, B3). Returns
+ * the stop.
+ */
+export function watchKeychain(
+  refresh: () => void,
+  target: Pick<Window, "addEventListener" | "removeEventListener">,
+  everyMs = 30_000,
+): () => void {
+  const onFocus = () => refresh()
+  target.addEventListener("focus", onFocus)
+  const timer = setInterval(refresh, everyMs)
+  return () => {
+    target.removeEventListener("focus", onFocus)
+    clearInterval(timer)
+  }
+}

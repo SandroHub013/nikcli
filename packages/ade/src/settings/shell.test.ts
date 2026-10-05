@@ -846,7 +846,7 @@ describe("T5b: lo streaming in Riconoscimento", () => {
   test("senza la chiave OpenRouter una riga dice che la voce non parte, anche con la chiave xAI (B3)", () => {
     recognition({ voiceSettings: { ...grok, openRouterApiKey: undefined }, xaiKeyMasked: "••••wxyz" })
     expect(document.body.querySelector("[data-needs-openrouter]")?.textContent).toBe(
-      "Senza la chiave OpenRouter la voce non parte, anche con la chiave xAI.",
+      "Serve la chiave OpenRouter: senza, la voce non si avvia, nemmeno con la chiave xAI.",
     )
     dispose?.()
     document.body.innerHTML = ""
@@ -953,6 +953,155 @@ describe("T5b: la chiave xAI in Chiavi API", () => {
     await tick()
     expect(keys.removed).toEqual(["xAI"])
     expect(block()!.querySelector("[data-xai-input]")).not.toBeNull()
+  })
+})
+
+describe("S7: i testi della voce", () => {
+  const body = () => document.body.querySelector('[data-slot="settings-body"]')!
+
+  test("Comandi: il titolo è il nome in italiano, l'id resta piccolo accanto", () => {
+    renderSettingsSheet({ initialTarget: "voice/commands" })
+    const first = body().querySelector('[data-slot="command-row"] [data-slot="command-name"]')!
+    expect(first.textContent).toStartWith("Nuova sessione")
+    expect(first.querySelector('[data-slot="command-id"]')?.textContent).toBe("session.new")
+    const names = [...body().querySelectorAll('[data-slot="command-name"]')]
+    expect(names.length).toBe(35)
+    for (const name of names) {
+      const id = name.querySelector('[data-slot="command-id"]')!.textContent!
+      expect(name.firstChild?.textContent).not.toBe(id)
+    }
+  })
+
+  test("Comandi: il filtro trova un comando anche dal suo nome", () => {
+    renderSettingsSheet({ initialTarget: "voice/commands" })
+    const filter = body().querySelector<HTMLInputElement>(
+      'input[type="search"], input[aria-describedby="voice-command-count"]',
+    )!
+    filter.value = "tavolozza comandi"
+    filter.dispatchEvent(new Event("input", { bubbles: true }))
+    const ids = [...body().querySelectorAll('[data-slot="command-id"]')].map((id) => id.textContent)
+    expect(ids).toContain("palette.open")
+  })
+
+  test("Attivazione: una frase per controllo, il costo in una riga, il resto in «Come funziona»", () => {
+    renderSettingsSheet({
+      initialTarget: "voice/activation",
+      voice: {
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, mode: "agent", activation: "wake-word", wakeWord: "nik" },
+      },
+    })
+    const text = () => body().textContent ?? ""
+    expect(text()).toContain("Inizia la frase con «nik», per esempio «nik, apri il browser».")
+    // Il costo è una riga a sé, con la stima e la spesa di oggi.
+    const cost = body().querySelector('[data-testid="listen-spend"]')!
+    expect(cost.getAttribute("data-slot")).toBe("cost-tag")
+    expect(cost.textContent).toStartWith("Costo: circa 0,02 $ l'ora")
+    // Il testo lungo non si vede finché non si apre.
+    expect(text()).not.toContain("staccato, con una pausa dopo il nome")
+    expect(text()).not.toContain("Consuma crediti")
+    const how = [...body().querySelectorAll("button")].find((b) => b.textContent?.includes("Come funziona"))!
+    how.click()
+    expect(text()).toContain("staccato, con una pausa dopo il nome")
+    expect(text()).toContain("dopo 30 secondi")
+  })
+
+  test("Lingua, Audio e Riconoscimento non parlano di motori", () => {
+    for (const tab of ["voice/language", "voice/devices", "voice/recognition", "voice/mode", "voice/reply"]) {
+      renderSettingsSheet({ initialTarget: tab })
+      expect(body().textContent, tab).not.toMatch(/motor/i)
+      expect(body().textContent, tab).not.toContain("sintesi riproducibile")
+      dispose?.()
+      document.body.innerHTML = ""
+    }
+  })
+
+  test("«Ripristina la voce» chiede conferma dicendo che le chiavi restano", () => {
+    renderSettingsSheet({ initialTarget: "voice/mode" })
+    const reset = [...document.body.querySelectorAll<HTMLButtonElement>('[data-part="status"] button')].find(
+      (b) => b.textContent === "Ripristina la voce",
+    )!
+    reset.click()
+    expect(reset.textContent).toBe("Confermi? Le chiavi restano in Chiavi API")
+  })
+
+  test("Voce delle risposte dice quando le risposte non si leggono", () => {
+    renderSettingsSheet({
+      initialTarget: "voice/reply",
+      voice: { voiceSettings: { ...DEFAULT_VOICE_SETTINGS, speakReplies: false } },
+    })
+    expect(body().querySelector("[data-replies-silent]")?.textContent).toContain("«Rispondi a voce» in Modalità")
+    dispose?.()
+    document.body.innerHTML = ""
+    renderSettingsSheet({ initialTarget: "voice/reply" })
+    expect(body().querySelector("[data-replies-silent]")).toBeNull()
+  })
+
+  test("una pausa dello streaming scaduta smette di dirsi da sola (T5b, B2)", async () => {
+    renderSettingsSheet({
+      initialTarget: "voice/recognition",
+      voice: {
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, backend: "grok-stream", openRouterApiKey: "sk-or-finta-0000abcd" },
+        xaiKeyMasked: "••••wxyz",
+        streamState: { kind: "paused", until: Date.now() + 40 },
+      },
+    })
+    const status = () => document.body.querySelector('[data-stream="status"]')?.textContent
+    expect(status()).toStartWith("Streaming in pausa dopo un errore")
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    expect(status()).toBe("Streaming attivo, chiave xAI ••••wxyz")
+  })
+})
+
+describe("S7: schede e corpo legati per chi usa uno screen reader", () => {
+  test("ogni scheda controlla il corpo, e il corpo è il pannello della scheda attiva", () => {
+    renderSettingsSheet({ initialTarget: "agents/keys" })
+    const body = document.body.querySelector('[data-slot="settings-body"]')!
+    expect(body.getAttribute("role")).toBe("tabpanel")
+    expect(body.id).toBe("settings-body")
+    const tabs = [...document.body.querySelectorAll('[data-slot="settings-tab"]')]
+    expect(tabs.length).toBe(4)
+    for (const tab of tabs) expect(tab.getAttribute("aria-controls")).toBe("settings-body")
+    const active = document.body.querySelector<HTMLElement>('[data-slot="settings-tab"][data-active="true"]')!
+    expect(body.getAttribute("aria-labelledby")).toBe(active.id)
+    expect(document.getElementById(active.id)).toBe(active)
+    for (const category of document.body.querySelectorAll('[data-slot="category-button"]')) {
+      expect(category.getAttribute("aria-controls")).toBe("settings-body")
+      expect(category.id).toStartWith("settings-category-")
+    }
+  })
+
+  test("le frecce sulle schede portano il fuoco sulla scheda giusta anche dopo un cambio di categoria", () => {
+    renderSettingsSheet({ initialTarget: "agents/keys" })
+    document.body.querySelector<HTMLButtonElement>('[data-category="record"]')!.click()
+    document.body.querySelector<HTMLButtonElement>('[data-category="system"]')!.click()
+    const tabs = () => [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="settings-tab"]')]
+    tabs()[0]!.focus()
+    tabs()[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))
+    expect(document.activeElement).toBe(tabs().at(-1)!)
+    expect(document.activeElement?.isConnected).toBe(true)
+    expect(document.body.querySelector('[data-slot="settings-body"]')!.getAttribute("aria-labelledby")).toBe(
+      tabs().at(-1)!.id,
+    )
+  })
+})
+
+describe("S7: la barra di stato della voce resta in vista", () => {
+  test("è appiccicata in cima al corpo, sopra le righe che scorrono, con lo sfondo dell'area", () => {
+    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
+    let found: postcss.Rule | undefined
+    parsed.walkRules((candidate) => {
+      if (candidate.selector === '[data-slot="settings-body"] > [data-part="status"]') found = candidate
+    })
+    const decls: Record<string, string> = {}
+    found?.walkDecls((d) => {
+      decls[d.prop] = d.value
+    })
+    expect(decls.position).toBe("sticky")
+    expect(decls.top).toBe("calc(-1 * var(--space-5, 20px))")
+    expect(decls["background-color"]).toBe("var(--ade-bg, #ffffff)")
+    // Il selettore è la struttura vera: la barra è il primo figlio del corpo.
+    renderSettingsSheet({ initialTarget: "voice/commands" })
+    expect(document.body.querySelector('[data-slot="settings-body"] > [data-part="status"]')).not.toBeNull()
   })
 })
 

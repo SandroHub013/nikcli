@@ -23,6 +23,7 @@ import {
   acceptMaiVoice,
 } from "../settings/reply-voices"
 import type { MaiPanelInput } from "./mai-panel"
+import { intentName } from "./intent-name"
 import type { StreamPanelInput } from "./stream-panel"
 import type { StreamState } from "../asr/grok-stream"
 import type { MaiFailureKind } from "../tts/mai"
@@ -325,6 +326,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     if (query.length === 0) return VOCABULARY
     return VOCABULARY.filter(
       (spec) =>
+        intentName(spec.intent).toLowerCase().includes(query) ||
         spec.intent.toLowerCase().includes(query) ||
         spec.readback.toLowerCase().includes(query) ||
         spec.phrases.some((phrase) => phrase.toLowerCase().includes(query)),
@@ -656,6 +658,20 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     ...(props.maiBlocked ? { blocked: props.maiBlocked } : {}),
     spend: props.engine.listenSpend(),
   })
+  /*
+   * A pause or a credit stop ends at `until`: a timer then redraws the state
+   * line, which otherwise kept saying «in pausa» until something else changed
+   * (review T5b, B2).
+   */
+  const [streamClock, setStreamClock] = createSignal(Date.now())
+  createEffect(() => {
+    const state = props.streamState
+    if (state?.kind !== "paused" && state?.kind !== "credit") return
+    const wait = state.until - Date.now()
+    if (wait <= 0) return
+    const timer = setTimeout(() => setStreamClock(Date.now()), wait + 1)
+    onCleanup(() => clearTimeout(timer))
+  })
   /* The streaming engine, in Riconoscimento: what it shows is decided in `stream-panel.ts`. */
   const streamInput = (): StreamPanelInput => ({
     backend: props.settings.backend,
@@ -664,7 +680,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     spend: props.engine.listenSpend(),
     ...(props.streamState ? { state: props.streamState } : {}),
     testIdentity: props.testIdentity === true,
-    now: Date.now(),
+    now: Math.max(streamClock(), Date.now()),
     language: locale(),
   })
   // «Usa» keeps Ugo as the local voice underneath, so the fallback is the voice the profile had.

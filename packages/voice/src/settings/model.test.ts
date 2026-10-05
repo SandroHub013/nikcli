@@ -63,7 +63,7 @@ describe("settings/model - normalizeSettings", () => {
 
     expect(res.corrections.some((c) => c.includes("Modalità"))).toBe(true)
     expect(res.corrections.some((c) => c.includes("Attivazione"))).toBe(true)
-    expect(res.corrections.some((c) => c.includes("Backend"))).toBe(true)
+    expect(res.corrections.some((c) => c.includes("Riconoscimento"))).toBe(true)
     expect(res.corrections.some((c) => c.includes("Scorciatoia"))).toBe(true)
   })
 

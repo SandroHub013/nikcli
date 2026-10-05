@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import type { AgentFile } from "../bots/nikcli"
 import { listBots, resolveRoots } from "../bots/store"
-import { QUALITY_LEVELS, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
+import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
 import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
@@ -406,7 +406,7 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
               aria-pressed={props.quality() === level.id}
               onClick={() => props.onQuality(level.id)}
             >
-              {level.label}
+              {qualityLabel(level)}
             </button>
           )}
         </For>

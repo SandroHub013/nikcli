@@ -4,6 +4,7 @@ import {
   bitrateFor,
   DEFAULT_QUALITY,
   estimatedMegabytes,
+  qualityLabel,
   qualityLevel,
   QUALITY_LEVELS,
   sizePerMinute,
@@ -91,6 +92,14 @@ describe("record/quality", () => {
     expect(sizePerMinute(qualityLevel("leggera"))).toBe("circa 21,5 MB al minuto")
     expect(estimatedMegabytes(qualityLevel("alta"), 90)).toBe(99)
     expect(estimatedMegabytes(qualityLevel("leggera"), 30)).toBe(11)
+  })
+
+  test("the levels and the size are said in the interface language, not always in Italian", () => {
+    expect(qualityLabel(qualityLevel("alta"), "it")).toBe("Alta — schermo intero, 60 fps")
+    expect(qualityLabel(qualityLevel("alta"), "en")).toBe("High — full screen, 60 fps")
+    expect(qualityLabel(qualityLevel("leggera"), "en")).toBe("Light — 1280×800, 30 fps")
+    expect(sizePerMinute(qualityLevel("leggera"), "it")).toBe("circa 21,5 MB al minuto")
+    expect(sizePerMinute(qualityLevel("leggera"), "en")).toBe("about 21.5 MB a minute")
   })
 })
 

@@ -68,7 +68,7 @@ import {
   type LegacyVoiceKey,
   type VoiceKeyHost,
 } from "../secrets/voice-key"
-import { XAI_KEY_ENV, xaiKeyEntry } from "../secrets/xai-key"
+import { watchKeychain, XAI_KEY_ENV, xaiKeyChanged, xaiKeyEntry, type XaiKeyEffects } from "../secrets/xai-key"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -271,6 +271,7 @@ import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
+  qualityLabel,
   qualityLevel,
   QUALITY_LEVELS,
   sizePerMinute,
@@ -933,11 +934,7 @@ export function Workbench() {
         clearOpenRouterKeyRemoved()
         void refreshVoiceKey()
       }
-      if (draft.env === XAI_KEY_ENV) {
-        voiceEngine.retryStream()
-        setStreamState({ kind: "ready" })
-        void refreshXaiKey()
-      }
+      if (draft.env === XAI_KEY_ENV) xaiKeyChanged("saved", xaiKeyEffects)
     },
     remove: async (name) => {
       const host = await withKeys()
@@ -947,10 +944,7 @@ export function Workbench() {
         markOpenRouterKeyRemoved()
         void refreshVoiceKey()
       }
-      if (env === XAI_KEY_ENV) {
-        sttTransport.cancel()
-        void refreshXaiKey()
-      }
+      if (env === XAI_KEY_ENV) xaiKeyChanged("removed", xaiKeyEffects)
     },
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
   }
@@ -1170,7 +1164,7 @@ export function Workbench() {
     setRecordQuality(next)
     saveRecordQuality(next)
     const level = qualityLevel(next)
-    report(t("record.quality.set", level.label, sizePerMinute(level)), "info")
+    report(t("record.quality.set", qualityLabel(level), sizePerMinute(level)), "info")
   }
   const applyRecordMic = (next: boolean) => {
     setRecordMic(next)
@@ -4945,6 +4939,12 @@ export function Workbench() {
   const [voiceKeyConflict, setVoiceKeyConflict] = createSignal(false)
   const [voiceSettingsOpen, setVoiceSettingsOpen] = createSignal(false)
   const [voiceSettingsSection, setVoiceSettingsSection] = createSignal<string | undefined>(undefined)
+  // While settings are open, a key saved outside this page shows up in Riconoscimento (T5b, B3).
+  createEffect(() => {
+    if (!voiceSettingsOpen() || !keysAvailable()) return
+    const stop = watchKeychain(() => void refreshXaiKey(), window)
+    onCleanup(stop)
+  })
   const closeVoiceSettings = () => {
     setVoiceSettingsSection(undefined)
     setVoiceSettingsOpen(false)
@@ -5355,6 +5355,12 @@ export function Workbench() {
   })
   // The socket the streaming backend speaks over: kept, so removing the xAI key can close it.
   const sttTransport = createSttStreamTransport()
+  const xaiKeyEffects: XaiKeyEffects = {
+    retryStream: () => voiceEngine.retryStream(),
+    markReady: () => setStreamState({ kind: "ready" }),
+    cancelSocket: () => sttTransport.cancel(),
+    refresh: () => void refreshXaiKey(),
+  }
   // ADE Test never spends a key: with no key, MAI reads locally in silence.
   const maiClient = {
     apiKey: () => (testBuild ? undefined : voiceSettings().openRouterApiKey || undefined),
@@ -6710,7 +6716,7 @@ export function Workbench() {
       ...(wb().focusedId ? { suspendCheck: suspendCheckFor(wb().focusedId!) } : {}),
       recording: recordState().status === "recording",
       recordMic: recordMic(),
-      recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
+      recordQuality: `${qualityLabel(qualityLevel(recordQuality()))} (${sizePerMinute(qualityLevel(recordQuality()))})`,
       // Read through the registry signal, so a plugin loading or being torn
       // down changes the palette without anything having to refresh it.
       pluginCommands: pluginRuntime.registry.commands().map((command) => ({

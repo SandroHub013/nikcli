@@ -5,6 +5,7 @@ import { wakeWordEnabled, shortcutActivationEnabled } from "../../settings/model
 import { describeShortcut } from "../../settings/shortcuts"
 import { formatSpendCost } from "../../settings/spend"
 import type { VoiceSettingsState } from "../settings-state"
+import { HowItWorks } from "../how-it-works"
 import { PageHead } from "./head"
 
 export function ActivationPage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.Element {
@@ -143,16 +144,20 @@ export function ActivationPage(p: { state: VoiceSettingsState; bare?: boolean })
                   </div>
                 </div>
                 <p id="wake-word-hint" data-slot="hint">
-                  {t("vui.wake.hint", props.settings.wakeWord)}
+                  {t("vui.wake.short", props.settings.wakeWord)}
                 </p>
-                {/* What listening has spent today, where the switch that spends it is. */}
-                <p data-slot="hint" data-testid="listen-spend">
+                {/* What listening costs and has spent today, on one line beside the switch that spends it. */}
+                <p data-slot="cost-tag" data-testid="listen-spend">
                   {t(
                     "vui.listen.spend",
                     props.engine.listenSpend().calls,
                     formatSpendCost(props.engine.listenSpend().cost),
                   )}
                 </p>
+                <HowItWorks title={t("settings.howItWorks")}>
+                  <p data-slot="hint">{t("vui.wake.hint", props.settings.wakeWord)}</p>
+                  <p data-slot="hint">{t("vui.activation.manualHow")}</p>
+                </HowItWorks>
               </div>
             </Show>
           </div>

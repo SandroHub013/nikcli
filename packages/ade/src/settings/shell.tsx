@@ -54,8 +54,21 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
   })
 
   const categoryRefs: (HTMLButtonElement | undefined)[] = []
-  const tabRefs: (HTMLButtonElement | undefined)[] = []
+  /*
+   * The tabs are looked up when a key is pressed, not kept in an array: the
+   * row is rebuilt at every category, and an array filled by refs kept the
+   * buttons of the category before (verifica S1-S3, punto 4).
+   */
+  let tabListRef: HTMLDivElement | undefined
+  const focusTab = (index: number) => tabListRef?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus()
   let bodyRef: HTMLDivElement | undefined
+  /** Ids that tie each tab to the panel it controls, and the panel back to its tab. */
+  const categoryButtonId = (id: string) => `settings-category-${id}`
+  const tabButtonId = (id: string) => `settings-tab-${id.replace(/[^a-z0-9-]/gi, "-")}`
+  const panelLabel = () =>
+    currentCategory().tabs.some((tab) => tab.id === activeTab())
+      ? tabButtonId(activeTab())
+      : categoryButtonId(activeCategory())
 
   const focusContent = () => {
     if (!bodyRef) return
@@ -109,21 +122,21 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
       const next = (index + 1) % total
       const nextTab = tabs[next]!
       selectTab(nextTab.id)
-      tabRefs[next]?.focus()
+      focusTab(next)
     } else if (e.key === "ArrowLeft") {
       e.preventDefault()
       const prev = (index - 1 + total) % total
       const prevTab = tabs[prev]!
       selectTab(prevTab.id)
-      tabRefs[prev]?.focus()
+      focusTab(prev)
     } else if (e.key === "Home") {
       e.preventDefault()
       selectTab(tabs[0]!.id)
-      tabRefs[0]?.focus()
+      focusTab(0)
     } else if (e.key === "End") {
       e.preventDefault()
       selectTab(tabs[total - 1]!.id)
-      tabRefs[total - 1]?.focus()
+      focusTab(total - 1)
     } else if (e.key === "Enter") {
       e.preventDefault()
       focusContent()
@@ -153,6 +166,8 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
                   <button
                     type="button"
                     role="tab"
+                    id={categoryButtonId(cat.id)}
+                    aria-controls="settings-body"
                     data-slot="category-button"
                     data-category={cat.id}
                     data-active={isActive() ? "true" : undefined}
@@ -212,6 +227,7 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
             <div
               data-slot="settings-tabs"
               role="tablist"
+              ref={tabListRef}
               aria-label={t(currentCategory().labelKey)}
             >
               <For each={currentCategory().tabs}>
@@ -221,12 +237,13 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
                     <button
                       type="button"
                       role="tab"
+                      id={tabButtonId(tab.id)}
+                      aria-controls="settings-body"
                       data-slot="settings-tab"
                       data-tab={tab.id}
                       data-active={isActive() ? "true" : undefined}
                       aria-selected={isActive()}
                       tabIndex={isActive() ? 0 : -1}
-                      ref={(el) => (tabRefs[index()] = el)}
                       onClick={() => selectTab(tab.id)}
                       onKeyDown={(e) => handleTabKeyDown(e, index())}
                     >
@@ -239,7 +256,14 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
           </Show>
 
           {/* Body */}
-          <div data-slot="settings-body" data-category={activeCategory()} ref={bodyRef}>
+          <div
+            id="settings-body"
+            role="tabpanel"
+            aria-labelledby={panelLabel()}
+            data-slot="settings-body"
+            data-category={activeCategory()}
+            ref={bodyRef}
+          >
             <Show
               when={activeCategory() === "voice" && props.renderVoice}
               fallback={props.renderContent(activeCategory(), activeTab())}

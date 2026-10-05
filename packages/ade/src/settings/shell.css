@@ -248,6 +248,20 @@
   padding: var(--space-5, 20px) var(--space-6, 24px);
 }
 
+/*
+ * Voce's status bar stays in view while a long page (Comandi) scrolls under
+ * it: stuck at the body's top edge, over its padding, on the main area's own
+ * background so the rows do not show through (review S5, B1).
+ */
+[data-slot="settings-body"] > [data-part="status"] {
+  position: sticky;
+  top: calc(-1 * var(--space-5, 20px));
+  z-index: 1;
+  padding-top: var(--space-5, 20px);
+  margin-top: calc(-1 * var(--space-5, 20px));
+  background-color: var(--ade-bg, #ffffff);
+}
+
 /* Footer (Fatto, and «Avvia ascolto» in Voce) */
 
 [data-slot="settings-footer"] {
