@@ -80,11 +80,18 @@ export function otherSpendText(spend: DaySpend, language: string): string {
 }
 
 /**
- * Whether listening on its own goes to the stream: Grok chosen, a key, a cap.
- * Then every voice in the room costs the stream's rate, not OpenRouter's.
+ * Whether listening on its own goes to the stream: Grok chosen, a key, a cap
+ * not yet reached. Then every voice in the room costs the stream's rate, not
+ * OpenRouter's; past the cap it is MAI-Transcribe-2 again (review S7b, B1).
  */
 export function listenStreams(input: StreamPanelInput): boolean {
-  return !input.testIdentity && input.backend === "grok-stream" && input.xaiKey !== null && input.capUsd > 0
+  return (
+    !input.testIdentity &&
+    input.backend === "grok-stream" &&
+    input.xaiKey !== null &&
+    input.capUsd > 0 &&
+    !streamCapped(input)
+  )
 }
 
 /**
