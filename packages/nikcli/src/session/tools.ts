@@ -425,14 +425,7 @@ export async function resolveTools(input: {
     const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters) as JSONSchema7)
     tools[item.id] = tool({
       id: String(item.id) as `${string}.${string}`,
-      description: describeTools
-        ? await Mod.describe(
-            item.id,
-            item.id === "search_tools" ? withDeferredIndex(item.description, deferredIndex) : item.description,
-          )
-        : item.id === "search_tools"
-          ? withDeferredIndex(item.description, deferredIndex)
-          : item.description,
+      description: describeTools ? await Mod.describe(item.id, item.description) : item.description,
       inputSchema: jsonSchema(schema),
       async execute(initialArgs, options) {
         const ctx = context(initialArgs, options)
@@ -447,8 +440,8 @@ export async function resolveTools(input: {
             callID: ctx.callID,
             args: initialArgs as Record<string, unknown>,
           },
-          (callArgs) => runTool(callArgs as typeof initialArgs),
-          (text) => ({ title: item.id, output: text, metadata: {} }) as Awaited<ReturnType<typeof runTool>>,
+          (callArgs) => runRegistryTool(item, callArgs as typeof initialArgs, ctx),
+          (text) => ({ title: item.id, output: text, metadata: {} }) as Awaited<ReturnType<typeof runRegistryTool>>,
           ctx.abort,
         )
       },

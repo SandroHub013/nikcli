@@ -327,19 +327,21 @@ export namespace LLM {
     const system = SystemPrompt.header(input.model.providerID)
     // The body of the system prompt as named sections, so `prompt.section` and `prompt.compose`
     // mods can see and change each. With no such mod this joins to exactly what it always did.
+    const providerPrompt = () =>
+      SystemPrompt.provider(input.model)
+        .filter((x) => x)
+        .join("\n")
     const sections: Mod.PromptSection[] = [
       // use agent prompt otherwise provider prompt
       // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-      input.agent.prompt
-        ? { id: "agent", text: input.agent.prompt }
-        : {
-            id: "provider",
-            text: isCodex
-              ? ""
-              : SystemPrompt.provider(input.model)
-                  .filter((x) => x)
-                  .join("\n"),
-          },
+      // The build agent's own prompt only adds monitor, delegation and research
+      // guidance; on its own it left the model without the provider prompt's
+      // coding workflow, so build gets both, the provider prompt first.
+      ...(input.agent.prompt
+        ? input.agent.name === "build" && !isCodex
+          ? [{ id: "provider", text: providerPrompt() }, { id: "agent", text: input.agent.prompt }]
+          : [{ id: "agent", text: input.agent.prompt }]
+        : [{ id: "provider", text: isCodex ? "" : providerPrompt() }]),
       // any custom prompt passed into this call
       { id: "system", text: input.system.filter((x) => x).join("\n") },
       // any custom prompt from last user message
