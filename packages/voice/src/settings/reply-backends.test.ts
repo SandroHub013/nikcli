@@ -17,7 +17,7 @@ import { normalizeSettings, type ReplyVoice, type ReplyVoiceMemory } from "./mod
  */
 describe("the reply voices, by backend", () => {
   test("three backends, in the order the panel shows them", () => {
-    expect(REPLY_BACKEND_CHOICES.map((choice) => choice.value)).toEqual(["piper", "kokoro", "system"])
+    expect(REPLY_BACKEND_CHOICES.map((choice) => choice.value)).toEqual(["piper", "kokoro", "mai", "system"])
     for (const choice of REPLY_BACKEND_CHOICES) expect(choice.desc.length).toBeGreaterThan(10)
   })
 
@@ -58,7 +58,7 @@ describe("the reply voices, by backend", () => {
 
   test("each backend lists its own voices and no other's", () => {
     for (const language of ["it", "en"] as const) {
-      for (const backend of ["piper", "kokoro", "system"] as const) {
+      for (const backend of ["piper", "kokoro", "mai", "system"] as const) {
         const voices = replyVoiceChoicesFor(backend, language)
         expect(voices.length).toBeGreaterThan(0)
         for (const choice of voices) expect(backendOf(choice.value)).toBe(backend)
@@ -114,10 +114,17 @@ describe("the reply voices, by backend", () => {
       replyVoice: "af_heart",
       replyVoiceByBackend: { piper: "paola", kokoro: "bf_emma" },
     })
-    expect(kept.replyVoiceByBackend).toEqual({ piper: "paola", kokoro: "bf_emma" })
+    expect(kept.replyVoiceByBackend).toEqual({
+      piper: "paola",
+      kokoro: "bf_emma",
+    })
     const wrong = normalizeSettings({
       replyVoice: "ugo",
-      replyVoiceByBackend: { piper: "af_heart", kokoro: "nessuna", system: "system" },
+      replyVoiceByBackend: {
+        piper: "af_heart",
+        kokoro: "nessuna",
+        system: "system",
+      },
     })
     expect(wrong.replyVoiceByBackend).toBeUndefined()
   })

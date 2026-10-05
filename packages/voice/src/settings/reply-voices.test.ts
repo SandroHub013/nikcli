@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { REPLY_VOICES } from "./model"
-import { activeReplyVoice, KOKORO_VOICES, REPLY_VOICE_CHOICES, replyVoiceChoicesForLocale } from "./reply-voices"
+import {
+  activeReplyVoice,
+  KOKORO_VOICES,
+  MAI_VOICES,
+  REPLY_VOICE_CHOICES,
+  replyVoiceChoicesForLocale,
+} from "./reply-voices"
 
 describe("settings/reply-voices", () => {
   test("D19: Maschile is Ugo and comes first, Femminile is Paola", () => {
@@ -19,7 +25,7 @@ describe("settings/reply-voices", () => {
    */
   test("every voice in the model is offered, or is a Kokoro one waiting for its label", () => {
     const offered = REPLY_VOICE_CHOICES.map((choice) => choice.value)
-    const waiting = KOKORO_VOICES.map((voice) => voice.id)
+    const waiting = [...KOKORO_VOICES, ...MAI_VOICES].map((voice) => voice.id)
     expect([...offered, ...waiting].sort()).toEqual([...REPLY_VOICES].sort())
     // And the overlap is empty: an id in both lists is a label rendered twice.
     for (const id of waiting) expect(offered).not.toContain(id)

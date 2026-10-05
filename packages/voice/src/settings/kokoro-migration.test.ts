@@ -18,14 +18,17 @@ function v7(over: Record<string, unknown> = {}): Record<string, unknown> {
  * not the eight that a half-written object earns on the way in.
  */
 function v8(over: Partial<VoiceSettings> = {}): Record<string, unknown> {
-  return { ...DEFAULT_VOICE_SETTINGS, version: CURRENT_SETTINGS_VERSION, ...over }
+  return {
+    ...DEFAULT_VOICE_SETTINGS,
+    version: CURRENT_SETTINGS_VERSION,
+    ...over,
+  }
 }
 
 describe("la migrazione a v8", () => {
-  test(" Kokoro è la versione dopo l'ultima, e la 8 è quella giusta", () => {
-    // Il piano Gemini prenota la versione dopo questa: se arriva secondo, il
-    // suo passo di migrazione è l'unico che deve aggiungere.
-    expect(CURRENT_SETTINGS_VERSION).toBe(8)
+  test("Kokoro è la versione 8, e chi arriva dopo aggiunge solo il suo passo", () => {
+    // MAI è arrivato secondo e ha preso la 9: questo passo resta dov'era.
+    expect(CURRENT_SETTINGS_VERSION).toBeGreaterThanOrEqual(8)
   })
 
   test("un profilo arriva su Piper, e non cambia niente di come parlava", () => {
@@ -93,7 +96,13 @@ describe("la coppia voce e backend", () => {
 
   test("una coppia già giusta non dice niente", () => {
     for (const voice of KOKORO_VOICES) {
-      const res = normalizeSettings(v8({ replyVoice: voice.id, replyBackend: "kokoro", ttsLocale: voice.locale }))
+      const res = normalizeSettings(
+        v8({
+          replyVoice: voice.id,
+          replyBackend: "kokoro",
+          ttsLocale: voice.locale,
+        }),
+      )
       expect(res.corrections).toEqual([])
       expect(res.replyVoice).toBe(voice.id)
     }
@@ -101,7 +110,11 @@ describe("la coppia voce e backend", () => {
 
   test("un id che non esiste torna alla voce che c'è", () => {
     const res = normalizeSettings(
-      v8({ replyVoice: "if_sara" as VoiceSettings["replyVoice"], replyBackend: "kokoro", ttsLocale: "it-IT" }),
+      v8({
+        replyVoice: "if_sara" as VoiceSettings["replyVoice"],
+        replyBackend: "kokoro",
+        ttsLocale: "it-IT",
+      }),
     )
     expect(res.replyVoice).toBe("ugo")
     expect(res.replyBackend).toBe("piper")
@@ -111,7 +124,13 @@ describe("la coppia voce e backend", () => {
 
 describe("Kokoro con una lingua che non può parlare", () => {
   test("la scelta dell'utente resta sul disco, e la correzione sparisce con lei", () => {
-    const res = normalizeSettings(v8({ replyVoice: "af_heart", replyBackend: "kokoro", ttsLocale: "it-IT" }))
+    const res = normalizeSettings(
+      v8({
+        replyVoice: "af_heart",
+        replyBackend: "kokoro",
+        ttsLocale: "it-IT",
+      }),
+    )
     // Niente viene riscritto: la voce che parla è decisa per ogni risposta, e
     // un profilo che ha scelto Kokoro resta su Kokoro anche se la finestra è
     // italiana. Il giorno in cui una risposta è in inglese, parla da sola.
@@ -126,7 +145,11 @@ describe("Kokoro con una lingua che non può parlare", () => {
   test("non ripete: due caricamenti dello stesso profilo dicono la stessa cosa", () => {
     // Il banner che si ripeteva a ogni avvio veniva da qui: la riscrittura non
     // cambiava la versione, e il risparmio del profilo è legato alla versione.
-    const stored = v8({ replyVoice: "am_fenrir", replyBackend: "kokoro", ttsLocale: "it-IT" })
+    const stored = v8({
+      replyVoice: "am_fenrir",
+      replyBackend: "kokoro",
+      ttsLocale: "it-IT",
+    })
     const first = normalizeSettings(stored)
     const second = normalizeSettings({ ...first.settings })
     expect(second.corrections).toEqual(first.corrections)
@@ -138,14 +161,24 @@ describe("Kokoro con una lingua che non può parlare", () => {
     // `speakingReplyVoice` e non il profilo. Il secondo argomento è la lingua
     // che il testo della risposta dice, quindi lo stesso profilo legge in Ugo su
     // una risposta italiana e in Kokoro su una inglese.
-    const res = normalizeSettings(v8({ replyVoice: "am_fenrir", replyBackend: "kokoro", ttsLocale: "it-IT" }))
+    const res = normalizeSettings(
+      v8({
+        replyVoice: "am_fenrir",
+        replyBackend: "kokoro",
+        ttsLocale: "it-IT",
+      }),
+    )
     expect(speakingReplyVoice(res.replyVoice, "it-IT", "it")).toBe("ugo")
     expect(speakingReplyVoice(res.replyVoice, "en-US", "it")).toBe("am_fenrir")
   })
 
   test("una lingua che non è nell'elenco non viene passata al runtime", () => {
     const res = normalizeSettings(
-      v8({ replyVoice: "af_heart", replyBackend: "kokoro", ttsLocale: "en-GB-x" as VoiceSettings["ttsLocale"] }),
+      v8({
+        replyVoice: "af_heart",
+        replyBackend: "kokoro",
+        ttsLocale: "en-GB-x" as VoiceSettings["ttsLocale"],
+      }),
     )
     expect(["it-IT", "en-US", "en-GB"]).toContain(res.ttsLocale)
     expect(res.corrections.length).toBeGreaterThan(0)
@@ -153,10 +186,10 @@ describe("Kokoro con una lingua che non può parlare", () => {
 })
 
 describe("un profilo nuovo", () => {
-  test("resta Ugo su Piper, in italiano", () => {
+  test("parte su Rosa, che è la voce cloud", () => {
     const res = normalizeSettings(undefined)
-    expect(res.replyVoice).toBe("ugo")
-    expect(res.replyBackend).toBe("piper")
+    expect(res.replyVoice).toBe("it-IT-Rosa")
+    expect(res.replyBackend).toBe("mai")
     expect(res.ttsLocale).toBe("it-IT")
   })
 
@@ -172,8 +205,8 @@ describe("un profilo nuovo", () => {
   test("i valori di default sono una coppia che può parlare", () => {
     const { replyVoice, replyBackend, ttsLocale }: Pick<VoiceSettings, "replyVoice" | "replyBackend" | "ttsLocale"> =
       normalizeSettings(undefined).settings
-    expect(replyBackend).toBe("piper")
+    expect(replyBackend).toBe("mai")
     expect(ttsLocale).toBe("it-IT")
-    expect(replyVoice).toBe("ugo")
+    expect(replyVoice).toBe("it-IT-Rosa")
   })
 })
