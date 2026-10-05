@@ -217,6 +217,20 @@ function localUnderMai(local: ReplyVoice): ReplyVoice {
   return isMaiVoice(local) ? "ugo" : local
 }
 
+/**
+ * The voice the local speaker is handed for a profile. For a MAI voice it is the
+ * local one underneath — the last Piper or Kokoro voice the profile picked,
+ * else Ugo — because Piper asked for `it-IT-Rosa` is a download of a voice that
+ * does not exist. Every other voice is itself.
+ */
+export function localReplyVoice(settings: {
+  replyVoice: ReplyVoice
+  replyVoiceByBackend?: Partial<Record<"piper" | "kokoro" | "mai", ReplyVoice>>
+}): ReplyVoice {
+  if (!isMaiVoice(settings.replyVoice)) return settings.replyVoice
+  return localUnderMai(settings.replyVoiceByBackend?.piper ?? settings.replyVoiceByBackend?.kokoro ?? "ugo")
+}
+
 /** Whether a plain string is one of the voices the catalog knows. */
 function isReplyVoice(voice: string): voice is ReplyVoice {
   return (REPLY_VOICES as readonly string[]).includes(voice)

@@ -13,6 +13,7 @@ import {
   saveVoiceSettings,
 } from "./storage"
 import { DEFAULT_VOICE_SETTINGS, setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./model"
+import { maiVoiceOfferPending } from "./reply-voices"
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>()
@@ -333,5 +334,31 @@ describe("after 0.7.0: a profile saved on the shortcut", () => {
     expect(first.migrations).toEqual(["name-only"])
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("wake-word")
     expect(loadVoiceSettings(store).migrations).toEqual([])
+  })
+})
+
+describe("ADE Test e la voce cloud", () => {
+  test("sotto l'identità di test un profilo nuovo parte su Piper, e la domanda non compare", () => {
+    const store = new MemoryStorage()
+    store.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
+    const loaded = loadVoiceSettings(store, { testIdentity: true })
+    expect(loaded.settings.replyVoice).toBe("ugo")
+    expect(loaded.settings.replyBackend).toBe("piper")
+    expect(
+      maiVoiceOfferPending({
+        replyVoice: loaded.settings.replyVoice,
+        hasKey: Boolean(loaded.settings.openRouterApiKey),
+        testIdentity: true,
+      }),
+    ).toBe(false)
+    // Fuori da ADE Test lo stesso profilo nuovo è Rosa.
+    expect(loadVoiceSettings(new MemoryStorage()).settings.replyVoice).toBe("it-IT-Rosa")
+  })
+
+  test("il primo salvataggio in ADE Test non scrive Rosa sul disco", () => {
+    const store = new MemoryStorage()
+    const saved = saveVoiceSettings({ speakReplies: true }, store, { testIdentity: true })
+    expect(saved.settings.replyVoice).toBe("ugo")
+    expect(JSON.parse(store.getItem(VOICE_SETTINGS_STORAGE_KEY)!).replyVoice).toBe("ugo")
   })
 })

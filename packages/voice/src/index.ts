@@ -349,6 +349,12 @@ export {
   speakingReplyVoice,
   voiceOnBackend,
   rememberReplyVoice,
+  isMaiVoice,
+  localReplyVoice,
+  maiReplyVoice,
+  maiVoiceOfferPending,
+  acceptMaiVoice,
+  MAI_VOICES,
   type KokoroVoice,
   type KokoroVoiceId,
   type ReplyLanguage,
@@ -382,6 +388,7 @@ export {
   markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
+  type VoiceSettingsLoadOptions,
 } from "./settings/storage"
 
 export {
@@ -409,3 +416,14 @@ export {
   type ChordRisk,
   type ChordRiskLevel,
 } from "./settings/shortcuts"
+
+// Microsoft MAI, the cloud voice of the replies, and what it spends.
+export {
+  createMaiSpeaker,
+  maiFallbackNotice,
+  MAI_MANUAL_KINDS,
+  type MaiSpeaker,
+  type MaiSpeakerDeps,
+} from "./tts/mai-speaker"
+export { MAI_DAILY_CAP_USD, settleMai, type MaiFailureKind } from "./tts/mai"
+export { createSpendTally, type DaySpend, type SpendTally } from "./settings/spend"

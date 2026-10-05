@@ -29,7 +29,12 @@ async function markTestBuild(): Promise<void> {
   const identifier = await import("@tauri-apps/api/app")
     .then(({ getIdentifier }) => getIdentifier())
     .catch(() => undefined)
-  if (identifier === undefined || !isTestIdentifier(identifier)) return
+  if (identifier === undefined) {
+    // Not `adeBuild`: the hook status reads that one as «another build». The voice reads this as a test build.
+    document.documentElement.dataset.adeIdentity = "unknown"
+    return
+  }
+  if (!isTestIdentifier(identifier)) return
   document.documentElement.dataset.adeBuild = "test"
   // Set by `bun run test:app`: which worktree this instance is running.
   const label = import.meta.env.VITE_ADE_TEST_LABEL

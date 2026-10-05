@@ -51,10 +51,18 @@ function resolveStorage(customStorage?: Storage): Storage | null {
  *
  * Guarantees: Never throws. Falls back to normalized default settings on failure.
  */
-export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
+/**
+ * `testIdentity` is ADE Test: a new profile there starts on Piper, and no
+ * stored voice that spends a key is read (see `normalizeSettings`).
+ */
+export interface VoiceSettingsLoadOptions {
+  readonly testIdentity?: boolean
+}
+
+export function loadVoiceSettings(storage?: Storage, options?: VoiceSettingsLoadOptions): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (!store) {
-    return normalizeSettings(null)
+    return normalizeSettings(null, options)
   }
 
   try {
@@ -80,7 +88,7 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
         ? null
         : { ...(typeof parsed === "object" && parsed !== null ? parsed : {}), openRouterApiKey: apiKey }
 
-    const normalized = normalizeSettings(merged)
+    const normalized = normalizeSettings(merged, options)
 
     /*
      * A profile the loader had to migrate is written back at once.
@@ -99,7 +107,7 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
 
     return normalized
   } catch {
-    return normalizeSettings(null)
+    return normalizeSettings(null, options)
   }
 }
 
@@ -157,10 +165,15 @@ export function clearOpenRouterKeyRemoved(storage = voiceStorage()): void {
  * Guarantees: Never throws. Returns the normalized settings that were stored
  * or recovered.
  */
-export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Storage): NormalizedVoiceSettings {
-  const current = loadVoiceSettings(storage)
+export function saveVoiceSettings(
+  patch: Partial<VoiceSettings>,
+  storage?: Storage,
+  options?: VoiceSettingsLoadOptions,
+): NormalizedVoiceSettings {
+  // The same identity as the load: in ADE Test, a first save must not write the new profile's Rosa to disk.
+  const current = loadVoiceSettings(storage, options)
   const merged = { ...current.settings, ...patch }
-  const normalized = normalizeSettings(merged)
+  const normalized = normalizeSettings(merged, options)
 
   const store = resolveStorage(storage)
   if (!store) {
@@ -184,7 +197,7 @@ export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Stora
 /**
  * Clears persistent settings from storage and returns default settings.
  */
-export function resetVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
+export function resetVoiceSettings(storage?: Storage, options?: VoiceSettingsLoadOptions): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (store) {
     const hadKey = Boolean(loadVoiceSettings(store).openRouterApiKey)
@@ -198,7 +211,7 @@ export function resetVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
       // ignore
     }
   }
-  return normalizeSettings(DEFAULT_VOICE_SETTINGS)
+  return normalizeSettings(DEFAULT_VOICE_SETTINGS, options)
 }
 
 /**

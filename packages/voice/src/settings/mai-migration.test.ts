@@ -4,6 +4,7 @@ import {
   MAI_VOICES,
   acceptMaiVoice,
   isMaiVoice,
+  localReplyVoice,
   maiReplyVoice,
   maiVoiceOfferPending,
   replyVoiceChain,
@@ -204,5 +205,15 @@ describe("una risposta non italiana su una voce MAI", () => {
   test("in italiano, sotto MAI c'è la voce locale italiana", () => {
     expect(replyVoiceChain("it-IT-Rosa", "it-IT")).toEqual(["it-IT-Rosa", "ugo", "system"])
     expect(replyVoiceChain("it-IT-Rosa", "it-IT", "paola")).toEqual(["it-IT-Rosa", "paola", "system"])
+  })
+})
+
+describe("la voce locale sotto MAI", () => {
+  test("è l'ultima voce Piper o Kokoro scelta, altrimenti Ugo; le altre voci sono sé stesse", () => {
+    expect(localReplyVoice({ replyVoice: "it-IT-Rosa" })).toBe("ugo")
+    expect(localReplyVoice({ replyVoice: "it-IT-Rosa", replyVoiceByBackend: { piper: "paola" } })).toBe("paola")
+    expect(localReplyVoice({ replyVoice: "it-IT-Luca", replyVoiceByBackend: { kokoro: "af_heart" } })).toBe("af_heart")
+    expect(localReplyVoice({ replyVoice: "paola", replyVoiceByBackend: { piper: "ugo" } })).toBe("paola")
+    expect(localReplyVoice({ replyVoice: "system" })).toBe("system")
   })
 })
