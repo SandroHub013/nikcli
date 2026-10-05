@@ -75,3 +75,65 @@ describe("the day's cost as money", () => {
     expect(formatSpendCost(1.5, "en-US")).toBe("$1.50")
   })
 })
+
+describe("la spesa della voce delle risposte nello stesso giorno", () => {
+  const at = new Date(2026, 9, 5, 12).getTime()
+
+  test("una risposta prenota prima della richiesta, nel giorno e nella sua parte", () => {
+    const tally = createSpendTally(null, at)
+    const day = tally.addReply(at, 0.0006)
+    expect(day.calls).toBe(1)
+    expect(day.cost).toBeCloseTo(0.0006)
+    expect(day.replyCalls).toBe(1)
+    expect(day.replyCost).toBeCloseTo(0.0006)
+  })
+
+  test("la regolazione corregge della differenza, e lo stesso id due volte non cambia niente", () => {
+    const tally = createSpendTally(null, at)
+    tally.addReply(at, 0.0006)
+    const once = tally.settleReply("gen-1", at, 0.0004 - 0.0006, at)
+    expect(once.replyCost).toBeCloseTo(0.0004)
+    expect(once.cost).toBeCloseTo(0.0004)
+    const twice = tally.settleReply("gen-1", at, 0.0004 - 0.0006, at)
+    expect(twice.replyCost).toBeCloseTo(0.0004)
+    expect(twice.cost).toBeCloseTo(0.0004)
+  })
+
+  test("una regolazione di ieri non tocca oggi", () => {
+    const tally = createSpendTally(null, at)
+    tally.addReply(at, 0.001)
+    const yesterday = at - 24 * 3_600_000
+    expect(tally.settleReply("gen-old", yesterday, -0.001, at).replyCost).toBeCloseTo(0.001)
+  })
+
+  test("ascolto e risposte intrecciati sullo stesso tally non si sovrascrivono", () => {
+    const store = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    } as unknown as Storage
+    const tally = createSpendTally(storage, at)
+    tally.add(at, undefined)
+    tally.addReply(at, 0.002)
+    tally.addCost(at, 0.01)
+    tally.addReply(at, 0.003)
+    tally.settleReply("gen-a", at, -0.001, at)
+    const day = tally.today(at)
+    expect(day.calls).toBe(3)
+    expect(day.cost).toBeCloseTo(0.014)
+    expect(day.replyCalls).toBe(2)
+    expect(day.replyCost).toBeCloseTo(0.004)
+    // Riletto dallo storage, come al prossimo avvio.
+    const again = createSpendTally(storage, at).today(at)
+    expect(again).toEqual(day)
+  })
+
+  test("chi ascolta il tally sente anche le scritture dell'altro", () => {
+    const tally = createSpendTally(null, at)
+    const seen: number[] = []
+    tally.onChange((day) => seen.push(day.calls))
+    tally.add(at, undefined)
+    tally.addReply(at, 0.001)
+    expect(seen).toEqual([1, 2])
+  })
+})
