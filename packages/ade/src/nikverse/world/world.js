@@ -203,7 +203,7 @@ const loadCityModule = () => import("./assets/world/city.js")
  * WebGPURenderer's own WebGL backend: it is never used.
  *
  * @returns {{ check: boolean, classic: boolean, quality: string | undefined, bench: boolean, shot: number | undefined,
- *   tune: { samples?: number, maxScale?: number, compile?: "async" } | undefined, list?: true, lowered?: true }}
+ *   tune: { samples?: number, maxScale?: number, compile?: "async", slowWatch?: true } | undefined, list?: true, lowered?: true }}
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
@@ -229,12 +229,14 @@ export function readOptions(search) {
 function tuneOf(params) {
   const samples = Number(params.get("samples"))
   const maxScale = Number(params.get("maxscale"))
-  /** @type {{ samples?: number, maxScale?: number, compile?: "async" }} */
+  /** @type {{ samples?: number, maxScale?: number, compile?: "async", slowWatch?: true }} */
   const tune = {}
   if (samples === 1 || samples === 4) tune.samples = samples
   if (Number.isFinite(maxScale) && maxScale >= 0.75 && maxScale <= 1 && params.get("maxscale") !== null) tune.maxScale = maxScale
   // A trial: the shaders of the first view compiled ahead of its first draw (`city/load-log.ts`).
   if (params.get("compile") === "async") tune.compile = "async"
+  // A trial of the slow-frames watch (`city/schedule.ts`), which a measuring page otherwise keeps off.
+  if (params.get("slowwatch") === "1") tune.slowWatch = true
   return Object.keys(tune).length ? tune : undefined
 }
 
@@ -299,6 +301,7 @@ export function boot(win, options = {}) {
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
         lowered: query.lowered,
+        measuring: query.bench || query.shot !== undefined,
         onDrawn: shown,
         onSlow: () => port?.postMessage({ type: "slow" }),
       }),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, VSYNC_60_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -150,6 +150,22 @@ describe("a machine that cannot keep up with 60 frames a second", () => {
     expect(second(watch, 2)).toBe(false)
     for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
     expect(second(watch, 5)).toBe(true)
+  })
+
+  test("a 75 or 144 Hz display pacing 60 fps calls back on every vsync: never slow; a missed vsync there is", () => {
+    for (const hz of [75, 144]) {
+      const watch = createSlowWatch()
+      const vsync = 1000 / hz
+      let said = false
+      for (let i = 0; i < hz * (SLOW_SECONDS + 2); i++) said = watch.push(vsync, vsync) || said
+      expect([hz, said]).toEqual([hz, false])
+    }
+    const busy = createSlowWatch()
+    let said = false
+    // Every tenth callback two vsyncs late on a 144 Hz display: 10 % of the frames missed theirs.
+    for (let i = 0; i < 144 * (SLOW_SECONDS + 2); i++) said = busy.push(i % 10 ? 1000 / 144 : 3000 / 144, 1000 / 144) || said
+    expect(said).toBe(true)
+    expect(Math.round(1.5 * VSYNC_60_MS)).toBe(SLOW_FRAME_MS)
   })
 
   test("a pause drops only the second in progress", () => {

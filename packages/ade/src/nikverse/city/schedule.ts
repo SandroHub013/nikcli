@@ -26,17 +26,24 @@ export function drawMode(state: { moving: boolean; sinceActivityMs: number }, im
   return state.sinceActivityMs >= immobileAfterMs ? "immobile" : "still"
 }
 
-/** A frame later than this after the one before, at a level that draws at 60, is a slow one (old PCs, point 2). */
+/**
+ * At 60 Hz a frame later than this after the one before is a slow one (old PCs, point 2): one and a half vsyncs, so a
+ * missed vsync. On another display the vsync is its own (`push`'s second argument), never longer than 60 Hz's.
+ */
 export const SLOW_FRAME_MS = 25
+/** The longest vsync the watch assumes: a display slower than 60 Hz is treated as 60 Hz. */
+export const VSYNC_60_MS = 1000 / 60
 /** More slow frames than this share of a second is a second whose p95 is above `SLOW_FRAME_MS`. */
 export const SLOW_SHARE = 0.05
 /** That many such seconds in a row while moving, and the level is too much for the machine. */
 export const SLOW_SECONDS = 10
 
 /**
- * Whether the machine keeps up with a 60 fps level: fed the moving mode's frames one by one (the time since the frame
- * before), it says yes once, when ten seconds of moving in a row had a p95 above 25 ms. Still and immobile time is not
- * fed: there the frames are slow on purpose. `pause` drops the second in progress, not the run of slow seconds.
+ * Whether the machine keeps up with a 60 fps level: fed every display frame of the moving mode (the time since the one
+ * before, and the display's vsync), it says yes once, when ten seconds of moving in a row missed vsyncs on more than one
+ * frame in twenty: at 60 Hz, a p95 above 25 ms. A frame that came on its vsync is never slow, so a 75 or 144 Hz display
+ * pacing 60 fps (draws 13.3 or 26.7 ms apart, but a callback on every vsync) is not taken for a slow machine. Still and
+ * immobile time is not fed: there the frames are slow on purpose. `pause` drops the second in progress, not the run.
  */
 export function createSlowWatch() {
   let elapsed = 0
@@ -45,11 +52,11 @@ export function createSlowWatch() {
   let run = 0
   let said = false
   return {
-    push(ms: number): boolean {
+    push(ms: number, vsyncMs = VSYNC_60_MS): boolean {
       if (said) return false
       elapsed += ms
       frames++
-      if (ms > SLOW_FRAME_MS) slow++
+      if (ms > 1.5 * Math.min(vsyncMs, VSYNC_60_MS)) slow++
       if (elapsed < 1000) return false
       run = slow / frames > SLOW_SHARE ? run + 1 : 0
       elapsed = frames = slow = 0

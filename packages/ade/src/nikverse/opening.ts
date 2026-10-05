@@ -21,11 +21,14 @@ export interface OpenWatchDeps {
 
 export function createOpenWatch(deps: OpenWatchDeps) {
   let cancel: (() => void) | undefined
+  /** Waiting for an opening (started, not opened yet). */
+  let waiting = false
   const arm = () => {
     cancel = deps.schedule(() => {
       cancel = undefined
       // Not seen at the end of the wait: the frames may have been held, so it waits again, whole.
       if (!deps.visible()) return arm()
+      waiting = false
       deps.late()
     }, OPEN_TIMEOUT_MS)
   }
@@ -33,14 +36,23 @@ export function createOpenWatch(deps: OpenWatchDeps) {
     /** A new load of the frame: the wait starts again. */
     start() {
       cancel?.()
+      waiting = true
+      arm()
+    },
+    /** The panel can be seen again: the time it was hidden does not count, the wait starts again, whole. */
+    seenAgain() {
+      if (!waiting) return
+      cancel?.()
       arm()
     },
     /** The world is on screen. */
     opened() {
+      waiting = false
       cancel?.()
       cancel = undefined
     },
     dispose() {
+      waiting = false
       cancel?.()
       cancel = undefined
     },

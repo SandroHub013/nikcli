@@ -71,7 +71,7 @@ export interface CityDeps {
    * For measuring, and only through the bench's door (`?bench=1` or `?shot=`): the samples of the antialiasing (4, or 1 for none; WebGPU has
    * no 2) and the ceiling of the dynamic resolution's scale. Absent, a level is what it is.
    */
-  tune?: { samples?: 1 | 4; maxScale?: number; compile?: "async" }
+  tune?: { samples?: 1 | 4; maxScale?: number; compile?: "async"; slowWatch?: boolean }
   /** The bench's shot (`?shot=N`, 1 to 8): the page draws the fixed scene from that camera once, and keeps the picture (`shot-handle.ts`). */
   shot?: number
   /** Where the assets are, with the final slash; the page's own `assets/` when not given. */
@@ -80,6 +80,8 @@ export interface CityDeps {
   savePosition?(spot: Spot): void
   /** ADE opens the world at Bassa because it was too slow at its own level (`?lowered=1`): the page says so, discreetly. */
   lowered?: boolean
+  /** The bench's door is open (`?bench=1` or `?shot=`): nothing changes the level by itself while it measures. */
+  measuring?: boolean
   /** The city drew its first frame: the world is on screen (ADE stops waiting for it). */
   onDrawn?(): void
   /** The frames stayed too slow at a 60 fps level the machine chose by itself: ADE opens it at Bassa from now on. */
@@ -272,8 +274,12 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       : undefined
   let compileTrial: "pending" | "running" | "done" = compileAsync ? "pending" : "done"
   // Only a 60 fps level the machine chose by itself is watched: not a level asked for by name, not the bench's.
-  const slowWatch = deps.onSlow && level.fps === MAX_FPS && !isLevelId(deps.quality) && !deps.tune ? createSlowWatch() : undefined
-  let lastMovingDraw = 0
+  // Not where the bench's door is open either (the gate measures what it asked for), unless a trial asks for it.
+  const slowWatch =
+    deps.onSlow && level.fps === MAX_FPS && !isLevelId(deps.quality) && (!deps.measuring || deps.tune?.slowWatch) ? createSlowWatch() : undefined
+  /** The last display frame of the moving mode, and the shortest gap seen between two: the display's vsync. */
+  let lastMovingFrame = 0
+  let vsyncMs = Number.POSITIVE_INFINITY
   doc.documentElement.dataset.renderScale = String(renderScale)
 
   const resize = () => {
@@ -360,6 +366,16 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
     const moving = busy()
     if (moving) lastActivity = ts
+    if (slowWatch) {
+      // Every display frame of the moving mode, drawn or not: a gap of more than a vsync and a half is a missed vsync.
+      // Anything but two moving frames in a row is a pause, not a slow frame.
+      const gap = ts - lastMovingFrame
+      if (moving && lastMovingFrame > 0 && gap < 250) {
+        vsyncMs = Math.min(vsyncMs, gap)
+        if (slowWatch.push(gap, vsyncMs)) deps.onSlow!()
+      } else slowWatch.pause()
+      lastMovingFrame = moving ? ts : 0
+    }
     const now: DrawMode = drawMode({ moving, sinceActivityMs: ts - lastActivity }, quietMs)
     if (now !== mode) {
       mode = now
@@ -409,13 +425,10 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       if (probe.after()) {
         doc.documentElement.dataset.ready = "1"
         deps.onDrawn?.()
-      }
-      if (slowWatch) {
-        // Two moving frames in a row: the time between them is the machine's. Anything else is a pause, not a slow frame.
-        if (mode === "moving" && lastMovingDraw > 0 && ts - lastMovingDraw < 250) {
-          if (slowWatch.push(ts - lastMovingDraw)) deps.onSlow!()
-        } else slowWatch.pause()
-        lastMovingDraw = mode === "moving" ? ts : 0
+        if (note) {
+          note.hidden = false
+          setTimeout(() => (note.hidden = true), 8000)
+        }
       }
     }
     schedule(mode === "moving")
@@ -512,15 +525,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   canvas.addEventListener("wheel", onWheel, { passive: false })
 
   town.sync(deps.picture())
-  if (deps.lowered) {
-    // One discreet line, for a few seconds: why the world looks plainer than before.
-    const note = doc.getElementById("note")
-    if (note) {
-      note.textContent = "NikVerse in qualità Bassa: a Media questo PC era lento"
-      note.hidden = false
-      setTimeout(() => (note.hidden = true), 8000)
-    }
-  }
+  // One discreet line, from the first frame drawn and for a few seconds: why the world looks plainer than before.
+  const note = deps.lowered ? doc.getElementById("note") : null
+  if (note) note.textContent = "NikVerse in qualità Bassa: al livello automatico questo PC era lento"
   // Until the loop draws: an opening stopped here is waiting for its first frame (a paused pane, a hidden frame).
   log.phase("first-frame")
   resize()

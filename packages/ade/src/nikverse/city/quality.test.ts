@@ -148,7 +148,8 @@ describe("asking the browser what GPU there is", () => {
     expect(asked).toEqual({ powerPreference: "high-performance" })
     expect([probe.webgpu, probe.dedicated]).toEqual([true, true])
     const soft = await probeGpu({ requestAdapter: async () => ({ info: { vendor: "nvidia" }, isFallbackAdapter: true }) })
-    expect([soft.webgpu, soft.dedicated]).toEqual([true, false])
+    // A software adapter is no GPU (old PCs, point 1): the level is Bassa, as without WebGPU.
+    expect([soft.webgpu, soft.dedicated]).toEqual([false, false])
   })
 })
 
@@ -185,5 +186,14 @@ describe("a renderer drawn in software", () => {
     expect(isSoftwareRenderer("ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)")).toBe(false)
     expect(isSoftwareRenderer("WebKit WebGL")).toBe(false)
     expect(isSoftwareRenderer(undefined)).toBe(false)
+  })
+})
+
+describe("a WebGPU adapter that is software", () => {
+  test("is no GPU: the automatic level is Bassa, and the probe says why", async () => {
+    const fallback = { requestAdapter: async () => ({ info: { vendor: "google", description: "SwiftShader" }, isFallbackAdapter: true }) }
+    const probe = await probeGpu(fallback)
+    expect([probe.webgpu, probe.dedicated, probe.why]).toEqual([false, false, "adattatore WebGPU software"])
+    expect(resolveLevel(undefined, probe, 16).level.id).toBe("bassa")
   })
 })

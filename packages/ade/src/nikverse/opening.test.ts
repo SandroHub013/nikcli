@@ -52,6 +52,25 @@ describe("waiting for the world to open", () => {
     expect(late).toBe(1)
   })
 
+  test("hidden for most of the wait and then seen: the 30 seconds start again from when it is seen", () => {
+    const c = clock()
+    let late = 0
+    const watch = createOpenWatch({ schedule: c.schedule, visible: () => true, late: () => late++ })
+    watch.start()
+    c.advance(28_000)
+    watch.seenAgain()
+    c.advance(OPEN_TIMEOUT_MS - 1)
+    expect(late).toBe(0)
+    c.advance(1)
+    expect(late).toBe(1)
+    // Once opened, being seen again starts nothing.
+    watch.start()
+    watch.opened()
+    watch.seenAgain()
+    c.advance(OPEN_TIMEOUT_MS * 2)
+    expect(late).toBe(1)
+  })
+
   test("a hidden panel holds the world's frames: that time is waited again, it is not a failed opening", () => {
     const c = clock()
     let late = 0

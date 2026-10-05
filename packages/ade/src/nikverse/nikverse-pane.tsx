@@ -72,8 +72,12 @@ export function NikversePane(props: {
       : ""
   /** The user chose the list after an opening that did not come: the next load is the page without the city. */
   let list = false
-  // A measuring run (the gate's `--tune`) is never lowered by what an earlier run left in the profile.
-  const tuned = () => Boolean((window as { __nikverseTune?: string }).__nikverseTune)
+  // A measuring run (the gate and the measures set `__nikverseTune`, even empty) is never lowered by what an earlier run
+  // left in the profile, unless it is a trial of the watch itself (`slowwatch=1`).
+  const tuned = () => {
+    const tune = (window as { __nikverseTune?: string }).__nikverseTune
+    return tune !== undefined && !/(^|&)slowwatch=1(&|$)/.test(tune)
+  }
   const sourceFor = (secret: string) =>
     `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list })}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
@@ -88,6 +92,9 @@ export function NikversePane(props: {
   const [assetsView, setAssetsView] = createSignal<AssetsView>({ kind: "ready" })
   let assetsFlow: AssetsFlow | undefined
   const reloadFrame = () => {
+    // The old document's port goes now: nothing it still says (an `opened`, say) may speak for the new one.
+    link?.close()
+    link = undefined
     nonce = newNonce()
     setFrameSrc(sourceFor(nonce))
   }
@@ -110,9 +117,11 @@ export function NikversePane(props: {
     openWatch.start()
   })
   const reopen = (asList: boolean) => {
+    // The list is for this load only: the next one (the panel coming back, a retry) tries the city again.
     list = asList
     setLate(false)
     reloadFrame()
+    list = false
   }
   const startAssets = async () => {
     if (!assetsFlow) {
@@ -232,7 +241,9 @@ export function NikversePane(props: {
     // Visible means the window is shown and the panel is on screen (not behind another section, nor scrolled away).
     let onScreen = true
     const apply = () => {
+      const was = seen
       seen = onScreen && document.visibilityState !== "hidden"
+      if (seen && !was) openWatch.seenAgain()
       lifecycle.setVisible(seen)
     }
     const observer =

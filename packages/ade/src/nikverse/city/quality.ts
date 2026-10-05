@@ -86,6 +86,8 @@ export async function probeGpu(gpu: { requestAdapter(options?: { powerPreference
     const adapter = (await gpu.requestAdapter({ powerPreference: "high-performance" })) as { info?: AdapterInfo; isFallbackAdapter?: boolean } | null
     if (!adapter) return { webgpu: false, dedicated: false, why: "nessun adattatore WebGPU" }
     const info: AdapterInfo = { ...adapter.info, isFallbackAdapter: adapter.info?.isFallbackAdapter ?? adapter.isFallbackAdapter }
+    // A software adapter (SwiftShader behind WebGPU) is no GPU: the level is Bassa, as without WebGPU.
+    if (info.isFallbackAdapter) return { webgpu: false, dedicated: false, info, why: "adattatore WebGPU software" }
     return { webgpu: true, dedicated: isDedicatedGpu(info), info }
   } catch (error) {
     return { webgpu: false, dedicated: false, why: `requestAdapter ha fallito: ${String((error as Error)?.message ?? error).slice(0, 120)}` }
