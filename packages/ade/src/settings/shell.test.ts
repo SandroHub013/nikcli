@@ -1124,6 +1124,24 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
     const defined = new Set([...(theme + shell).matchAll(/(--ade-[a-z0-9-]+)\s*:/g)].map((m) => m[1]!))
     expect([...used].filter((token) => !defined.has(token))).toEqual([])
   })
+
+  test("a finestra stretta il pulsante degli aggiornamenti non sta tagliato nella colonna: c'è in Sistema", () => {
+    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
+    let display: string | undefined
+    parsed.walkAtRules("media", (media) => {
+      if (!media.params.includes("max-width: 760px")) return
+      media.walkRules('[data-slot="settings-check-update"]', (rule) => {
+        rule.walkDecls("display", (d) => {
+          display = d.value
+        })
+      })
+    })
+    expect(display).toBe("none")
+    renderSettingsSheet({ initialTarget: "system/updates" })
+    expect(document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')?.getAttribute("data-tab")).toBe(
+      "system/updates",
+    )
+  })
 })
 
 describe("S7: la barra di stato della voce resta in vista", () => {

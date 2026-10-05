@@ -325,8 +325,11 @@
     display: none;
   }
 
+  /*
+   * Its words do not fit 56px, and a cut label is worse than none: the same
+   * check is in Sistema › Aggiornamenti (S8).
+   */
   [data-slot="settings-check-update"] {
-    font-size: var(--ade-font-xs);
-    padding: 4px;
+    display: none;
   }
 }
