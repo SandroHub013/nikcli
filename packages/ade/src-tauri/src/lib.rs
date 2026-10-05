@@ -13,6 +13,7 @@
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
 mod ade_prune;
+mod ask;
 mod agent_link;
 mod brand;
 mod append;
@@ -2375,6 +2376,7 @@ pub fn run() {
             shots::shot_delete,
             project_bytes::read_project_bytes,
             append::append_text_file,
+            ask::ade_ask,
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,

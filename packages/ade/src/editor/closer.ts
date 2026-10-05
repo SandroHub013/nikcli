@@ -26,6 +26,11 @@ export interface CloserDeps {
   readonly worktreeWork?: (id: string) => Promise<string | undefined>
   /** The user's answer: true closes the session anyway, and the folder stays on disk with its branch. */
   readonly askWorktree?: (reason: string) => Promise<boolean>
+  /**
+   * A close asked again while its question is open: the question is not asked a second time,
+   * and the user is shown the one that waits (the window comes back from the icon).
+   */
+  readonly remind?: () => void
 }
 
 /**
@@ -79,7 +84,10 @@ export function createCloser(deps: CloserDeps): Closer {
 
   const closeAsking = (id: string, how?: CloseHow): Promise<boolean> => {
     const open = asking.get(id)
-    if (open) return open
+    if (open) {
+      deps.remind?.()
+      return open
+    }
     const ask = question(id, how)
     if (ask === undefined) {
       deps.closeNow(id)

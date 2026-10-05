@@ -642,6 +642,8 @@ export const en: Messages = {
     `${count} ${count === 1 ? "session is working" : "sessions are working"}. Close anyway?`,
   "window.closeConfirm.ok": "Close",
   "window.closeConfirm.cancel": "Cancel",
+  "ask.yes": "Yes",
+  "ask.no": "No",
   "tray.hide.working": (count) =>
     `A gateway is on: ADE goes to the tray and stays open. ${count} ${count === 1 ? "session is working and will go on" : "sessions are working and will go on"} with the window hidden. To close ADE altogether: Exit, in its icon's menu.`,
   "tray.hide.keepSessions": "Hide, sessions go on",
