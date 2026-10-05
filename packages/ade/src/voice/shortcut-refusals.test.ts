@@ -79,7 +79,8 @@ describe("a chord on punctuation", () => {
 
 describe("lint: the refusal reaches the voice settings", () => {
   const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
-  const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/voice-settings-panel.tsx", import.meta.url), "utf8"))
+  // Since S5 the chord's problems are worked out in the voice settings' state, which the panel and ADE share.
+  const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/settings-state.ts", import.meta.url), "utf8"))
 
   test("the workbench keeps what the last registration refused, and hands it to the panel", () => {
     expect(workbench).toContain(codeOf("setShortcutRefusals(refusalsOf(failed))"))

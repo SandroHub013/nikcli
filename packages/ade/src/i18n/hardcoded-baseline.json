@@ -5,6 +5,6 @@
   "simulator/simulator-pane.tsx": 1,
   "surface/workbench.tsx": 2,
   "video/video-pane.tsx": 2,
-  "voice/ui/voice-hud.tsx": 3,
-  "voice/ui/voice-settings-panel.tsx": 1
+  "voice/ui/settings-pages/recognition.tsx": 1,
+  "voice/ui/voice-hud.tsx": 3
 }

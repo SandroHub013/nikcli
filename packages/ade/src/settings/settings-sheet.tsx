@@ -1,6 +1,12 @@
 import { lazy, For, Show, Suspense, type JSX } from "solid-js"
 import {
-  VoiceSettingsPanel,
+  createVoiceSettingsState,
+  VOICE_SETTINGS_PAGES,
+  VoiceListenButton,
+  VoiceSettingsPage,
+  VoiceStatusBar,
+  type VoiceSettingsPageId,
+  type VoiceSettingsStateProps,
   type VoiceEngine,
   type VoiceSettings,
   type ReplyVoice,
@@ -123,60 +129,101 @@ export interface SettingsSheetProps {
   }
 }
 
-function voiceSectionForTab(tab: string): string {
-  switch (tab) {
-    case "voice/mode":
-      return "voice-sec-mode"
-    case "voice/activation":
-      return "voice-sec-activation"
-    case "voice/shortcuts":
-      return "voice-sec-shortcuts"
-    case "voice/language":
-      return "voice-sec-language"
-    case "voice/devices":
-      return "voice-sec-devices"
-    case "voice/recognition":
-    case "voice/reply":
-      return "voice-sec-backend"
-    case "voice/commands":
-      return "voice-sec-commands"
-    default:
-      return "voice-sec-mode"
+/** The voice page a Voce tab shows: `voice/reply` is `reply`, and anything else the first one. */
+export function voicePageOf(tab: string): VoiceSettingsPageId {
+  const page = tab.startsWith("voice/") ? tab.slice("voice/".length) : ""
+  return VOICE_SETTINGS_PAGES.find((candidate) => candidate === page) ?? "mode"
+}
+
+/** What the voice's pages read from the sheet, as live getters: the settings change under them. */
+function voiceStateProps(props: SettingsSheetProps): VoiceSettingsStateProps {
+  return {
+    // ADE's Sheet is the dialog: its Escape, focus trap and press outside.
+    framed: true,
+    get engine() {
+      return props.voiceEngine
+    },
+    get settings() {
+      return props.voiceSettings
+    },
+    onChange: (next) => props.onVoiceSettingsChange(next),
+    onClose: () => props.onClose(),
+    get shortcutRefusals() {
+      return props.shortcutRefusals
+    },
+    get onOpenVoiceSource() {
+      return props.onOpenVoiceSource
+    },
+    get naturalVoiceError() {
+      return props.naturalVoiceError
+    },
+    get naturalVoiceDownloading() {
+      return props.naturalVoiceDownloading
+    },
+    get onDownloadNaturalVoice() {
+      return props.onDownloadNaturalVoice
+    },
+    get naturalVoiceProgress() {
+      return props.naturalVoiceProgress
+    },
+    get onCancelInstall() {
+      return props.onCancelInstall
+    },
+    get kokoroPack() {
+      return props.kokoroPack
+    },
+    get onInstallKokoro() {
+      return props.onInstallKokoro
+    },
+    get onDeleteKokoro() {
+      return props.onDeleteKokoro
+    },
+    get onTestVoice() {
+      return props.onTestVoice
+    },
+    get maiBlocked() {
+      return props.maiBlocked
+    },
+    get onRetryMai() {
+      return props.onRetryMai
+    },
+    get testIdentity() {
+      return props.testIdentity
+    },
+    get existingBindings() {
+      return props.bindings
+    },
+    get settingsNotice() {
+      return props.voiceSettingsNotice
+    },
   }
+}
+
+/**
+ * The Voce category's body: the voice's status bar, then the open tab's page.
+ *
+ * One state for every tab, made when Voce opens: a chord half recorded or a
+ * «Ripristina la voce» armed survives a look at another tab. «Avvia ascolto»
+ * is the footer's (`VoiceListenButton`), and none of the three is drawn in any
+ * other category.
+ */
+function VoiceCategory(props: { sheet: SettingsSheetProps; tab: () => string }): JSX.Element {
+  const stateProps = voiceStateProps(props.sheet)
+  const state = createVoiceSettingsState(stateProps)
+  return (
+    <>
+      <VoiceStatusBar state={state} />
+      <VoiceSettingsPage {...stateProps} state={state} page={voicePageOf(props.tab())} bare />
+    </>
+  )
 }
 
 export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
   const renderContent = (category: CategoryId, tab: string): JSX.Element => {
     switch (category) {
       case "voice":
-        return (
-          <VoiceSettingsPanel
-            framed
-            engine={props.voiceEngine}
-            settings={props.voiceSettings}
-            initialSection={voiceSectionForTab(tab)}
-            shortcutRefusals={props.shortcutRefusals}
-            onChange={props.onVoiceSettingsChange}
-            onClose={props.onClose}
-            onOpenVoiceSource={props.onOpenVoiceSource}
-            naturalVoiceError={props.naturalVoiceError}
-            naturalVoiceDownloading={props.naturalVoiceDownloading}
-            onDownloadNaturalVoice={props.onDownloadNaturalVoice}
-            {...(props.naturalVoiceProgress ? { naturalVoiceProgress: props.naturalVoiceProgress } : {})}
-            onCancelInstall={props.onCancelInstall}
-            kokoroPack={props.kokoroPack}
-            onInstallKokoro={props.onInstallKokoro}
-            onDeleteKokoro={props.onDeleteKokoro}
-            onTestVoice={props.onTestVoice}
-            {...(props.maiBlocked ? { maiBlocked: props.maiBlocked } : {})}
-            onRetryMai={props.onRetryMai}
-            testIdentity={props.testIdentity}
-            existingBindings={props.bindings}
-            settingsNotice={props.voiceSettingsNotice}
-            title={t("settings.title")}
-            subtitle={t("settings.category.voice.desc")}
-          />
-        )
+        // The shell mounts Voce through `renderVoice`; this is its body all the same.
+        return <VoiceCategory sheet={props} tab={() => tab} />
 
       case "general":
         if (tab === "general/language") {
@@ -287,6 +334,8 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
       version={props.version}
       onCheckUpdates={props.onCheckUpdates}
       renderContent={renderContent}
+      renderVoice={(tab) => <VoiceCategory sheet={props} tab={tab} />}
+      footerExtra={(category) => (category === "voice" ? <VoiceListenButton engine={props.voiceEngine} /> : undefined)}
     />
   )
 }

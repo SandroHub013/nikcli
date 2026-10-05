@@ -100,6 +100,50 @@
   animation: none;
 }
 
+/*
+ * Inside ADE's settings: the status bar, one page, or «Avvia ascolto», each a
+ * piece of the shell's Voce category. The shell draws the frame, the header
+ * and the scrolling, so a piece is a plain block with the panel's tokens and
+ * none of its chrome.
+ */
+[data-component="voice-settings-panel"][data-embedded="true"] {
+  max-width: none;
+  height: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+}
+
+[data-component="voice-settings-panel"][data-embedded="true"]::before {
+  content: none;
+}
+
+[data-component="voice-settings-panel"][data-part="status"] {
+  margin-bottom: var(--ade-space-6);
+}
+
+[data-component="voice-settings-panel"] [data-slot="status-bar"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding-bottom: var(--ade-space-5);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+[data-component="voice-settings-panel"] [data-slot="status-bar"] [data-slot="live-text"] {
+  flex: 1 1 auto;
+}
+
+[data-component="voice-settings-panel"][data-part="listen"] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ade-space-3);
+  margin-right: auto;
+}
+
 @keyframes ade-voice-panel-scale-in {
   from {
     opacity: 0;

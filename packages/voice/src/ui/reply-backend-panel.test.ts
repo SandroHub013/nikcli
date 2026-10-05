@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { codeOf } from "../test-support/source-text"
+import { voiceSettingsSource } from "../test-support/voice-settings-source"
 
 /*
  * K6, held on the panel's source: a `.tsx` cannot be imported under bun test
  * here (no JSX runtime), and what is checked is the wiring, while the rules it
  * draws are `packView`'s and `replyVoiceChoicesFor`'s, tested on their own.
  */
-const panel = readFileSync(join(import.meta.dir, "voice-settings-panel.tsx"), "utf8")
+const panel = voiceSettingsSource()
 const box = readFileSync(join(import.meta.dir, "voice-pack-box.tsx"), "utf8")
 
 describe("the reply voice in the panel", () => {

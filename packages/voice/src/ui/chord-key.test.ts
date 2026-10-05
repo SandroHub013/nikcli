@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { captureKeyboardEvent, checkShortcutConflict } from "./shortcut-capture"
 import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import { VOICE_COMMAND_TRANSCRIPTION, isSystemChord } from "../settings/shortcuts"
+import { voiceSettingsSource } from "../test-support/voice-settings-source"
 
 /*
  * The recorder wrote the character the layout makes, and the system-wide
@@ -56,7 +57,8 @@ describe("on Windows, a key the system cannot hold is refused when it is recorde
     (chord) => {
       expect(isSystemChord(chord, true)).toBe(true)
       expect(
-        checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], "other", true).hasConflict,
+        checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], "other", true)
+          .hasConflict,
       ).toBe(false)
     },
   )
@@ -75,7 +77,8 @@ describe("off Windows, the key table does not limit the chord", () => {
   ] as const)("%s: %s is accepted", (platform, chord) => {
     expect(isSystemChord(chord, false)).toBe(true)
     expect(
-      checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], platform, false).hasConflict,
+      checkShortcutConflict(chord, VOICE_COMMAND_TRANSCRIPTION, DEFAULT_VOICE_SETTINGS, [], platform, false)
+        .hasConflict,
     ).toBe(false)
   })
 
@@ -85,6 +88,6 @@ describe("off Windows, the key table does not limit the chord", () => {
 })
 
 test("lint: the settings hand the recorder the physical key too", () => {
-  const panel = readFileSync(join(import.meta.dir, "voice-settings-panel.tsx"), "utf8")
+  const panel = voiceSettingsSource()
   expect(panel).toContain("code: e.code,")
 })

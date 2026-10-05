@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { localePreference, setLocalePreference } from "@nikcli-ai/ade/i18n"
 import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import { dictationHint, orbTitle } from "./orb-title"
+import { voiceSettingsSource } from "../test-support/voice-settings-source"
 
 describe("ui/orb-title", () => {
   test("«Microfono · <chord>», with the chord of the mode the orb opens", () => {
@@ -47,7 +48,7 @@ describe("ui/orb-title: how the dictation chord opens", () => {
   })
 
   test("lint: the settings offer the two ways, and describe the chord by the one chosen", () => {
-    const panel = readFileSync(join(import.meta.dir, "voice-settings-panel.tsx"), "utf8")
+    const panel = voiceSettingsSource()
     expect(panel).toContain('updateSettings({ dictationPress: "hold" })')
     expect(panel).toContain('updateSettings({ dictationPress: "toggle" })')
     expect(panel).toContain('"vui.shortcuts.transcription.desc.toggle"')
