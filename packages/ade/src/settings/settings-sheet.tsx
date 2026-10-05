@@ -25,19 +25,25 @@ import {
   BotSection,
   GridSection,
   LanguageSection,
-  NotBuiltYet,
+  RecordVideoSection,
   SkillsSection,
   ThemeSection,
+  UpdatesSection,
 } from "./sections"
 import { AccountSection } from "./account"
+import type { RecordQuality } from "../record/recording"
 import { KeysSection } from "../secrets/keys-section"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import { PluginSection } from "../plugin/pane"
 import { SettingsShell } from "./shell"
 import type { CategoryId } from "./categories"
 
-const SpaceSection = lazy(() => import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })))
-const FramePluginRows = lazy(() => import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })))
+const SpaceSection = lazy(() =>
+  import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })),
+)
+const FramePluginRows = lazy(() =>
+  import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })),
+)
 
 export interface SettingsSheetProps {
   onClose: () => void
@@ -84,6 +90,33 @@ export interface SettingsSheetProps {
   openGuide: (url: string) => void
   openFramePluginPane: (id: string) => void
   askYesNo: (message: string, labels?: { ok?: string; cancel?: string }) => Promise<boolean>
+
+  /** Registrazione: the same workbench functions the `record.*` commands run. */
+  record: {
+    /** What the workbench will record at. */
+    quality: () => RecordQuality
+    /** The write behind `record.quality`. */
+    onQuality: (next: RecordQuality) => void
+    /** Whether takes start with the microphone on. */
+    mic: () => boolean
+    /** The write behind `record.mic`. */
+    onMic: (next: boolean) => void
+    /** The folder takes are saved to, or `undefined` when none was chosen. */
+    dir: () => string | undefined
+    /** The dialog behind `record.folder`. */
+    onPickFolder: () => void
+    /** The export behind `record.export`. */
+    onExport: () => void
+  }
+  /** Sistema: the check and the dialog the bell and the palette already use. */
+  updates: {
+    /** Whether the shared check is running. */
+    checking: () => boolean
+    /** The update the last check found, if any. */
+    available: () => { version: string } | undefined
+    /** Opens the same `UpdateDialog` a release notice opens. */
+    onInstall: () => void
+  }
 }
 
 function voiceSectionForTab(tab: string): string {
@@ -186,6 +219,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
       case "extensions":
         return (
           <ExtensionsPage
+            view={tab === "extensions/installed" ? "installati" : tab === "extensions/plugins" ? "plugin" : "catalogo"}
             projectRoot={props.project?.()?.root}
             io={props.extensionsIo()}
             pluginCount={props.pluginRuntime.registry.sections().length}
@@ -209,7 +243,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
         )
 
       case "record":
-        return <NotBuiltYet title={t("settings.tab.recordVideo")} what={t("settings.category.record.desc")} />
+        return <RecordVideoSection {...props.record} />
 
       case "system":
         if (tab === "system/space") {
@@ -227,7 +261,15 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
             </Suspense>
           )
         }
-        return <NotBuiltYet title={t("settings.tab.updates")} what={t("settings.category.system.desc")} />
+        return (
+          <UpdatesSection
+            version={props.version}
+            checking={props.updates.checking}
+            available={props.updates.available}
+            onCheck={() => props.onCheckUpdates?.()}
+            onInstall={() => props.updates.onInstall()}
+          />
+        )
     }
   }
 

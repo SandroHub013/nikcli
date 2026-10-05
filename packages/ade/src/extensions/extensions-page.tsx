@@ -72,14 +72,18 @@ function Logo(props: { entry?: McpCatalogEntry; name: string }) {
 export type ExtensionsTab = "installati" | "catalogo" | "plugin"
 
 /**
- * Impostazioni › Estensioni: MCP servers and ADE plugins on one page.
+ * Impostazioni › Estensioni: MCP servers and ADE plugins, one view per tab.
  *
- * Installing writes only the project's `.mcp.json`, which Claude Code and the
- * other CLIs read when a session starts there; nothing global, and no secret
- * values — a definition carries `${VARIABILE}` references the agent resolves
- * from its environment.
+ * Which view shows is the shell's tab bar's business (the three
+ * `extensions/*` tabs select it); this component only draws it. Installing
+ * writes only the project's `.mcp.json`, which Claude Code and the other CLIs
+ * read when a session starts there; nothing global, and no secret values — a
+ * definition carries `${VARIABILE}` references the agent resolves from its
+ * environment.
  */
 export function ExtensionsPage(props: {
+  /** Which of the three views to draw; set by the settings tab bar. */
+  view: ExtensionsTab
   projectRoot: string | undefined
   io: McpConfigIO | undefined
   /** The plugin rows, as the settings panel already renders them. */
@@ -87,7 +91,7 @@ export function ExtensionsPage(props: {
   pluginCount: number
   onOpenGuide: (url: string) => void
 }) {
-  const [tab, setTab] = createSignal<ExtensionsTab>("catalogo")
+  const tab = () => props.view
   const [query, setQuery] = createSignal("")
   const [filter, setFilter] = createSignal<CatalogFilter>("tutti")
   const [busy, setBusy] = createSignal<string>()
@@ -146,36 +150,10 @@ export function ExtensionsPage(props: {
       t("extensions.removed", server.name, MCP_CONFIG_FILENAME),
     )
 
-  const tabs: { id: ExtensionsTab; label: () => string }[] = [
-    { id: "installati", label: () => t("extensions.tab.installed", installed().servers.length + props.pluginCount) },
-    { id: "catalogo", label: () => t("extensions.tab.catalog", MCP_CATALOG.length) },
-    { id: "plugin", label: () => t("extensions.tab.plugins", props.pluginCount) },
-  ]
-
   return (
     <div data-component="extensions-page">
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.extensions")}
-        </h3>
         <p data-slot="section-desc">{t("extensions.desc", MCP_CONFIG_FILENAME)}</p>
-      </div>
-
-      <div data-slot="ext-tabs" role="tablist" aria-label={t("settings.extensions")}>
-        <For each={tabs}>
-          {(item) => (
-            <button
-              type="button"
-              role="tab"
-              data-slot="ext-tab"
-              aria-selected={tab() === item.id}
-              data-active={tab() === item.id ? "true" : undefined}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label()}
-            </button>
-          )}
-        </For>
       </div>
 
       <Show when={notice()}>
