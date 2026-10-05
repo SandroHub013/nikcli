@@ -132,6 +132,7 @@ export namespace SystemPrompt {
     return [
       [
         `<command_execution>`,
+        `Launch task-tool subagents in the background (the default) and keep working; launch independent ones together.`,
         `</command_execution>`,
       ].join("\n"),
     ]
