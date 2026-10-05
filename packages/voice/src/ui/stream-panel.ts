@@ -78,3 +78,29 @@ export function streamSpendText(input: Pick<StreamPanelInput, "spend" | "capUsd"
 export function otherSpendText(spend: DaySpend, language: string): string {
   return t("vui.stream.spendOther", spend.calls, formatSpendCost(spend.cost, localeOf(language)))
 }
+
+/**
+ * Whether listening on its own goes to the stream: Grok chosen, a key, a cap.
+ * Then every voice in the room costs the stream's rate, not OpenRouter's.
+ */
+export function listenStreams(input: StreamPanelInput): boolean {
+  return !input.testIdentity && input.backend === "grok-stream" && input.xaiKey !== null && input.capUsd > 0
+}
+
+/**
+ * The cost line beside «Sempre attivo», for the recognition that will carry it
+ * (review S7, M1): the stream's hourly rate and the day's cap, with its minutes
+ * and spend; otherwise OpenRouter's estimate, with its requests and spend.
+ * Streaming adds a second line when OpenRouter also spent today (the batch
+ * fallback, the planner, MAI).
+ */
+export function listenCostLines(input: StreamPanelInput): string[] {
+  const money = (value: number) => formatSpendCost(value, localeOf(input.language))
+  if (!listenStreams(input)) return [t("vui.listen.spend", input.spend.calls, money(input.spend.cost))]
+  const minutes = new Intl.NumberFormat(localeOf(input.language), { maximumFractionDigits: 1 }).format(
+    (input.spend.streamSeconds ?? 0) / 60,
+  )
+  const lines = [t("vui.listen.spendStream", money(input.capUsd), minutes, money(input.spend.streamCost ?? 0))]
+  if (input.spend.calls > 0) lines.push(otherSpendText(input.spend, input.language))
+  return lines
+}

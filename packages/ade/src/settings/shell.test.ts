@@ -977,7 +977,7 @@ describe("S7: i testi della voce", () => {
     const filter = body().querySelector<HTMLInputElement>(
       'input[type="search"], input[aria-describedby="voice-command-count"]',
     )!
-    filter.value = "tavolozza comandi"
+    filter.value = "tavolozza dei comandi"
     filter.dispatchEvent(new Event("input", { bubbles: true }))
     const ids = [...body().querySelectorAll('[data-slot="command-id"]')].map((id) => id.textContent)
     expect(ids).toContain("palette.open")
@@ -988,6 +988,8 @@ describe("S7: i testi della voce", () => {
       initialTarget: "voice/activation",
       voice: {
         voiceSettings: { ...DEFAULT_VOICE_SETTINGS, mode: "agent", activation: "wake-word", wakeWord: "nik" },
+        // Senza chiave xAI l'ascolto va a OpenRouter: la stima è la sua.
+        xaiKeyMasked: null,
       },
     })
     const text = () => body().textContent ?? ""
@@ -1003,6 +1005,35 @@ describe("S7: i testi della voce", () => {
     how.click()
     expect(text()).toContain("staccato, con una pausa dopo il nome")
     expect(text()).toContain("dopo 30 secondi")
+  })
+
+  test("Attivazione: con Grok e la chiave xAI il costo è quello dello streaming, fino al tetto (review S7, M1)", () => {
+    renderSettingsSheet({
+      initialTarget: "voice/activation",
+      voice: {
+        voiceSettings: {
+          ...DEFAULT_VOICE_SETTINGS,
+          mode: "agent",
+          activation: "wake-word",
+          backend: "grok-stream",
+          openRouterApiKey: "sk-or-finta-0000abcd",
+        },
+        xaiKeyMasked: "••••wxyz",
+      },
+    })
+    const cost = body().querySelector('[data-testid="listen-spend"]')!.textContent!
+    expect(cost).toStartWith("Costo: circa 0,20 $ l'ora di voci in stanza in tempo reale, fino a 0,50")
+    expect(cost).toContain("oggi 0 min")
+    dispose?.()
+    document.body.innerHTML = ""
+    renderSettingsSheet({
+      initialTarget: "voice/activation",
+      voice: {
+        voiceSettings: { ...DEFAULT_VOICE_SETTINGS, mode: "agent", activation: "wake-word", backend: "grok-stream" },
+        xaiKeyMasked: null,
+      },
+    })
+    expect(body().querySelector('[data-testid="listen-spend"]')!.textContent).toStartWith("Costo: circa 0,02 $ l'ora")
   })
 
   test("Lingua, Audio e Riconoscimento non parlano di motori", () => {

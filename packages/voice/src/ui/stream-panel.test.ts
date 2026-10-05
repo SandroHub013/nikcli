@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { t } from "@nikcli-ai/ade/i18n"
 import {
+  listenCostLines,
+  listenStreams,
   otherSpendText,
   streamCapped,
   streamRetryShown,
@@ -95,5 +97,39 @@ describe("la spesa del giorno in Riconoscimento", () => {
     expect(text).toContain("8 richieste")
     expect(text).toContain("0,03")
     expect(text).not.toContain("0,23")
+  })
+})
+
+describe("il costo dell'ascolto in Attivazione (review S7, M1)", () => {
+  test("con Grok e la chiave: la tariffa dello streaming, il tetto e i minuti di oggi", () => {
+    const spend = { ...today, calls: 0, cost: 0, streamSeconds: 900, streamCost: 0.05 }
+    expect(listenStreams({ ...base, spend })).toBe(true)
+    const lines = listenCostLines({ ...base, spend })
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toStartWith("Costo: circa 0,20 $ l'ora di voci in stanza in tempo reale, fino a 0,50")
+    expect(lines[0]).toContain("oggi 15 min, 0,05")
+  })
+
+  test("con Grok, quello che OpenRouter ha speso oggi sta su una seconda riga", () => {
+    const spend = { ...today, calls: 4, cost: 0.01, streamSeconds: 60, streamCost: 0.01 }
+    const lines = listenCostLines({ ...base, spend })
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain("4 richieste")
+  })
+
+  test("senza chiave xAI, con MAI-Transcribe-2, a tetto zero o in ADE Test: la stima di OpenRouter", () => {
+    const spend = { ...today, calls: 3, cost: 0.02 }
+    for (const input of [
+      { ...base, spend, xaiKey: null },
+      { ...base, spend, backend: "openrouter" as const },
+      { ...base, spend, capUsd: 0 },
+      { ...base, spend, testIdentity: true },
+    ]) {
+      expect(listenStreams(input)).toBe(false)
+      const lines = listenCostLines(input)
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toStartWith("Costo: circa 0,02 $ l'ora")
+      expect(lines[0]).toContain("oggi 3 richieste")
+    }
   })
 })
