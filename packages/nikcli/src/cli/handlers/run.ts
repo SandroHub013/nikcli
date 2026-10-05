@@ -824,6 +824,9 @@ export async function runWithArgs(args: any): Promise<void> {
     }
 
     await execute(sdk, sessionID)
+    // The work is done. Arm the watchdog before the instance is disposed, not after: a hang inside
+    // the dispose (a language server, monitor or plugin that never stops) would otherwise never
+    // reach a line placed after `bootstrap`. The timer is unref'd, so a clean exit never waits on it.
     armExitWatchdog()
   })
 }
